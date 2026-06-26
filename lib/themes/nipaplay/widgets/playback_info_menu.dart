@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -47,10 +48,12 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
           Map<String, dynamic>? meta;
           if (path.startsWith('jellyfin://')) {
             final itemId = path.replaceFirst('jellyfin://', '');
-            meta = await JellyfinService.instance.getServerMediaTechnicalInfo(itemId);
+            meta = await JellyfinService.instance
+                .getServerMediaTechnicalInfo(itemId);
           } else if (path.startsWith('emby://')) {
             final itemId = path.replaceFirst('emby://', '');
-            meta = await EmbyService.instance.getServerMediaTechnicalInfo(itemId);
+            meta =
+                await EmbyService.instance.getServerMediaTechnicalInfo(itemId);
           }
           if (meta != null && meta.isNotEmpty && mounted) {
             setState(() => _serverMeta = meta);
@@ -59,7 +62,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       }
     });
   }
-  
+
   Future<void> _loadPlayerKernelName() async {
     try {
       final kernelName = await PlayerKernelManager.getCurrentPlayerKernel();
@@ -73,6 +76,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       _playerKernelName = 'Unknown';
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -122,8 +126,10 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
   List<InfoItem> _getServerMetaInfo() {
     final m = _serverMeta ?? const {};
     final container = _normalizeText(m['container']) ?? '未知';
-    final v = (m['video'] is Map) ? Map<String, dynamic>.from(m['video']) : const {};
-    final a = (m['audio'] is Map) ? Map<String, dynamic>.from(m['audio']) : const {};
+    final v =
+        (m['video'] is Map) ? Map<String, dynamic>.from(m['video']) : const {};
+    final a =
+        (m['audio'] is Map) ? Map<String, dynamic>.from(m['audio']) : const {};
 
     String vCodec = _normalizeText(v['codec']) ?? '未知';
     final vProfile = _normalizeText(v['profile']);
@@ -141,18 +147,30 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     // 拼装视频行
     final List<InfoItem> items = [
       InfoItem('容器', container),
-      InfoItem('视频', _joinNonEmpty([
-        vCodec,
-        if (vProfile != null) 'Profile $vProfile',
-        if (vLevel != null) 'Level $vLevel',
-        if (vBitDepth is int) '${vBitDepth}bit',
-      ], sep: ' · ')),
-  InfoItem('分辨率', (vResW is int && vResH is int && vResW > 0 && vResH > 0) ? '${vResW}x${vResH}' : '未知'),
-      InfoItem('帧率', (vFps is num && vFps > 0) ? '${vFps.toStringAsFixed(2)} fps' : '未知'),
-      InfoItem('码率', (vBitrate is int && vBitrate > 0) ? '${(vBitrate / 1000).toStringAsFixed(0)} kbps' : '未知'),
+      InfoItem(
+          '视频',
+          _joinNonEmpty([
+            vCodec,
+            if (vProfile != null) 'Profile $vProfile',
+            if (vLevel != null) 'Level $vLevel',
+            if (vBitDepth is int) '${vBitDepth}bit',
+          ], sep: ' · ')),
+      InfoItem(
+          '分辨率',
+          (vResW is int && vResH is int && vResW > 0 && vResH > 0)
+              ? '${vResW}x${vResH}'
+              : '未知'),
+      InfoItem('帧率',
+          (vFps is num && vFps > 0) ? '${vFps.toStringAsFixed(2)} fps' : '未知'),
+      InfoItem(
+          '码率',
+          (vBitrate is int && vBitrate > 0)
+              ? '${(vBitrate / 1000).toStringAsFixed(0)} kbps'
+              : '未知'),
     ];
 
-    final colorLine = _joinNonEmpty([colorPrimaries, colorTransfer, colorSpace], sep: ' / ');
+    final colorLine =
+        _joinNonEmpty([colorPrimaries, colorTransfer, colorSpace], sep: ' / ');
     if (colorLine.isNotEmpty) {
       items.add(InfoItem('色彩', colorLine));
     }
@@ -167,69 +185,82 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     final aSample = a['sampleRate'];
     final aBitrate = a['bitRate'];
     items.addAll([
-      InfoItem('音频', _joinNonEmpty([
-        aCodec,
-        if (aLayout != null) aLayout,
-        if (aChannels is int && aChannels > 0) _formatChannels(aChannels),
-      ], sep: ' · ')),
+      InfoItem(
+          '音频',
+          _joinNonEmpty([
+            aCodec,
+            if (aLayout != null) aLayout,
+            if (aChannels is int && aChannels > 0) _formatChannels(aChannels),
+          ], sep: ' · ')),
       InfoItem('采样率', (aSample is int && aSample > 0) ? '$aSample Hz' : '未知'),
-      InfoItem('音频码率', (aBitrate is int && aBitrate > 0) ? '${(aBitrate / 1000).toStringAsFixed(0)} kbps' : '未知'),
+      InfoItem(
+          '音频码率',
+          (aBitrate is int && aBitrate > 0)
+              ? '${(aBitrate / 1000).toStringAsFixed(0)} kbps'
+              : '未知'),
     ]);
 
     return items;
   }
 
   Widget _buildInfoCard(String title, List<InfoItem> items) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: menuColors.controlBackground,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: menuColors.controlBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: menuColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          ...items.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    '${item.label}:',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
+          ...items
+              .map((item) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 80,
+                          child: Text(
+                            '${item.label}:',
+                            locale: Locale("zh-Hans", "zh"),
+                            style: TextStyle(
+                              color: menuColors.secondaryForeground,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            item.value,
+                            locale: Locale("zh-Hans", "zh"),
+                            style: TextStyle(
+                              color: item.isHighlighted
+                                  ? menuColors.selectedForeground
+                                  : menuColors.foreground,
+                              fontSize: 12,
+                              fontWeight: item.isHighlighted
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    item.value,
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: item.isHighlighted ? Colors.white : Colors.white.withOpacity(0.9),
-                      fontSize: 12,
-                      fontWeight: item.isHighlighted ? FontWeight.w500 : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )).toList(),
+                  ))
+              .toList(),
         ],
       ),
     );
@@ -243,7 +274,8 @@ style: TextStyle(
 
     return [
       InfoItem('状态', _getStatusText(status), _isStatusActive(status)),
-      InfoItem('进度', '${_formatDuration(position)} / ${_formatDuration(duration)}'),
+      InfoItem(
+          '进度', '${_formatDuration(position)} / ${_formatDuration(duration)}'),
       InfoItem('百分比', '${(progress * 100).toStringAsFixed(1)}%'),
       InfoItem('播放速度', '${videoState.playbackRate}x'),
     ];
@@ -253,7 +285,7 @@ style: TextStyle(
     final mediaInfo = videoState.player.mediaInfo;
     final videoStreams = mediaInfo.video;
     final playerKernelName = _playerKernelName; // 使用缓存的内核名称
-    
+
     if (videoStreams == null || videoStreams.isEmpty) {
       return [
         InfoItem('编解码器', '未知'),
@@ -262,25 +294,27 @@ style: TextStyle(
         InfoItem('码率', '未知'),
       ];
     }
-    
+
     final videoStream = videoStreams.first;
     final codec = videoStream.codec;
-    
+
     // 根据播放器内核类型处理信息
     if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串
       final codecParamsString = codec.name ?? '';
       final codecInfo = _parseVideoCodecParams(codecParamsString);
-      
-    // 优先用参数串中的 codec 字段；回退使用流的 codecName
-    final codecName = _normalizeText(RegExp(r'codec:\s*([\w\-\.]+)').firstMatch(codecParamsString)?.group(1))
-      ?? (videoStream.codecName ?? 'unknown');
-      final resolution = codec.width > 0 && codec.height > 0 
-          ? '${codec.width}x${codec.height}' 
+
+      // 优先用参数串中的 codec 字段；回退使用流的 codecName
+      final codecName = _normalizeText(RegExp(r'codec:\s*([\w\-\.]+)')
+              .firstMatch(codecParamsString)
+              ?.group(1)) ??
+          (videoStream.codecName ?? 'unknown');
+      final resolution = codec.width > 0 && codec.height > 0
+          ? '${codec.width}x${codec.height}'
           : '未知';
-    final frameRate = codecInfo['fps'] ?? codecInfo['frameRate'] ?? '未知';
+      final frameRate = codecInfo['fps'] ?? codecInfo['frameRate'] ?? '未知';
       final bitRate = codecInfo['bitRate'] ?? '未知';
-      
+
       return [
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
@@ -288,14 +322,15 @@ style: TextStyle(
         InfoItem('码率', bitRate),
       ];
     } else {
-  // Media Kit播放器：通过抽象层接口获取更详细信息
-  String frameRate = '未知';
-  String bitRate = '未知';
-  String colorSpace = '未知';
-  String decodeMethod = '未知';
+      // Media Kit播放器：通过抽象层接口获取更详细信息
+      String frameRate = '未知';
+      String bitRate = '未知';
+      String colorSpace = '未知';
+      String decodeMethod = '未知';
 
-      final detailedInfo = _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
-  // 使用详细信息（若异步已填充，则优先）
+      final detailedInfo =
+          _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+      // 使用详细信息（若异步已填充，则优先）
       if (detailedInfo.isNotEmpty) {
         final mpvProps = detailedInfo['mpvProperties'] as Map?;
         if (mpvProps != null && mpvProps.isNotEmpty) {
@@ -312,10 +347,10 @@ style: TextStyle(
           if (videoBitrate != null && videoBitrate > 0) {
             bitRate = '${(videoBitrate / 1000).toStringAsFixed(0)} kbps';
           } else if (_isStreamingSource(videoState)) {
-            final fallback = _toNum(mpvProps['bitrate'])
-                ?? _toNum(mpvProps['demuxer-bitrate'])
-                ?? _toNum(mpvProps['container-bitrate'])
-                ?? _toNum(mpvProps['audio-bitrate']);
+            final fallback = _toNum(mpvProps['bitrate']) ??
+                _toNum(mpvProps['demuxer-bitrate']) ??
+                _toNum(mpvProps['container-bitrate']) ??
+                _toNum(mpvProps['audio-bitrate']);
             if (fallback != null && fallback > 0) {
               bitRate = '${(fallback / 1000).toStringAsFixed(0)} kbps';
             }
@@ -330,9 +365,13 @@ style: TextStyle(
           // 解码方式：优先 hwdec-current（实际使用），否则根据 hwdec 判断
           final hwdecCurrent = mpvProps['hwdec-current'];
           final hwdec = mpvProps['hwdec'];
-          if (hwdecCurrent is String && hwdecCurrent.isNotEmpty && hwdecCurrent.toLowerCase() != 'no') {
+          if (hwdecCurrent is String &&
+              hwdecCurrent.isNotEmpty &&
+              hwdecCurrent.toLowerCase() != 'no') {
             decodeMethod = '硬件 ($hwdecCurrent)';
-          } else if (hwdec is String && hwdec.isNotEmpty && hwdec.toLowerCase() != 'no') {
+          } else if (hwdec is String &&
+              hwdec.isNotEmpty &&
+              hwdec.toLowerCase() != 'no') {
             decodeMethod = '硬件 ($hwdec)';
           } else {
             decodeMethod = '软件';
@@ -342,18 +381,18 @@ style: TextStyle(
         // 回退：从 videoParams 读取（若有）
         // （保留占位：若后续提供 fps 字段可加回）
       }
-      
+
       final codecName = videoStream.codecName ?? 'unknown';
-      final resolution = codec.width > 0 && codec.height > 0 
-          ? '${codec.width}x${codec.height}' 
+      final resolution = codec.width > 0 && codec.height > 0
+          ? '${codec.width}x${codec.height}'
           : '未知';
-      
+
       return [
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
         InfoItem('帧率', frameRate),
         InfoItem('码率', bitRate),
-  InfoItem('解码', decodeMethod),
+        InfoItem('解码', decodeMethod),
         if (colorSpace != '未知') InfoItem('色彩空间', colorSpace),
       ];
     }
@@ -372,8 +411,7 @@ style: TextStyle(
         _normalizeText(rawUpscaler['activeBackend']) ?? 'unknown';
     final fallbackCount = _toNum(rawUpscaler['fallbackCount'])?.toInt() ?? 0;
     final upscaledFrames = _toNum(rawUpscaler['upscaledFrames'])?.toInt() ?? 0;
-    final encodeMicros =
-        _toNum(rawUpscaler['lastEncodeMicros'])?.toInt() ?? 0;
+    final encodeMicros = _toNum(rawUpscaler['lastEncodeMicros'])?.toInt() ?? 0;
     final gpuMicros = _toNum(rawUpscaler['lastGpuMicros'])?.toInt() ?? 0;
     final activeFastPath = activeBackend == 'simdgroupMatrix';
 
@@ -438,7 +476,7 @@ style: TextStyle(
     final mediaInfo = videoState.player.mediaInfo;
     final audioStreams = mediaInfo.audio;
     final playerKernelName = _playerKernelName; // 使用缓存的内核名称
-    
+
     if (audioStreams == null || audioStreams.isEmpty) {
       return [
         InfoItem('编解码器', '未知'),
@@ -447,23 +485,23 @@ style: TextStyle(
         InfoItem('码率', '未知'),
       ];
     }
-    
+
     final audioStream = audioStreams.first;
     final codec = audioStream.codec;
-    
+
     // 根据播放器内核类型处理信息
     if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串
       final codecParamsString = codec.name ?? '';
       final codecInfo = _parseAudioCodecParams(codecParamsString);
-      
+
       final codecName = codecInfo['codec'] ?? 'aac';
       final profile = codecInfo['profile'] ?? '';
       final profileText = profile.isNotEmpty ? ' $profile' : '';
-      
+
       final sampleRate = codecInfo['sampleRate'] ?? '未知';
-      String channels = codec.channels != null && codec.channels! > 0 
-          ? _formatChannels(codec.channels!) 
+      String channels = codec.channels != null && codec.channels! > 0
+          ? _formatChannels(codec.channels!)
           : '未知';
       final bitRate = codecInfo['bitRate'] ?? '未知';
       // 声道回退：从解析结果中读取 channels 数字
@@ -471,7 +509,7 @@ style: TextStyle(
         final ch = int.tryParse(codecInfo['channels']!);
         if (ch != null && ch > 0) channels = _formatChannels(ch);
       }
-      
+
       return [
         InfoItem('编解码器', '$codecName$profileText'),
         InfoItem('采样率', sampleRate),
@@ -485,12 +523,14 @@ style: TextStyle(
       String channels = '未知';
       String bitRate = '未知';
 
-      final detailedInfo = _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
-  // 使用详细信息（若异步已填充，则优先）
+      final detailedInfo =
+          _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+      // 使用详细信息（若异步已填充，则优先）
       if (detailedInfo.isNotEmpty) {
         final mpvProps = detailedInfo['mpvProperties'] as Map?;
         if (mpvProps != null) {
-          final audioCodec = mpvProps['audio-codec'] ?? mpvProps['audio-codec-name'];
+          final audioCodec =
+              mpvProps['audio-codec'] ?? mpvProps['audio-codec-name'];
           if (audioCodec != null) {
             codecName = _sanitizeCodecName(audioCodec.toString());
           }
@@ -536,7 +576,7 @@ style: TextStyle(
           }
         }
       }
-      
+
       // 如果还是未知，尝试从基础信息获取
       if (codecName == '未知') {
         codecName = audioStream.codec.name ?? 'unknown';
@@ -544,7 +584,7 @@ style: TextStyle(
       if (channels == '未知' && codec.channels != null && codec.channels! > 0) {
         channels = _formatChannels(codec.channels!);
       }
-      
+
       return [
         InfoItem('编解码器', codecName),
         InfoItem('采样率', sampleRate),
@@ -559,9 +599,8 @@ style: TextStyle(
     final enabledMap = videoState.danmakuTrackEnabled;
     final mergedCount = videoState.danmakuList.length;
 
-    final enabledCount = tracks.keys
-        .where((trackId) => enabledMap[trackId] == true)
-        .length;
+    final enabledCount =
+        tracks.keys.where((trackId) => enabledMap[trackId] == true).length;
 
     Map<String, dynamic>? dandanTrack;
     for (final entry in tracks.entries) {
@@ -594,8 +633,7 @@ style: TextStyle(
       matchedTitle.isNotEmpty ? matchedTitle : '未知',
       if (animeId != null || episodeId != null)
         'animeId=${animeId ?? '-'}, episodeId=${episodeId ?? '-'}',
-      if (dandanTrack?['count'] != null)
-        '弹弹play条数: ${dandanTrack!['count']}',
+      if (dandanTrack?['count'] != null) '弹弹play条数: ${dandanTrack!['count']}',
     ];
 
     return [
@@ -616,8 +654,8 @@ style: TextStyle(
   List<InfoItem> _getNetworkInfo(VideoPlayerState videoState) {
     final currentPath = videoState.currentVideoPath;
     final isStreaming = currentPath?.startsWith('http') == true ||
-                       currentPath?.startsWith('jellyfin://') == true ||
-                       currentPath?.startsWith('emby://') == true;
+        currentPath?.startsWith('jellyfin://') == true ||
+        currentPath?.startsWith('emby://') == true;
 
     if (!isStreaming) {
       return [
@@ -648,20 +686,22 @@ style: TextStyle(
     final actualUrl = videoState.currentActualPlayUrl;
     bool isTranscoding = false;
     String transcodeType = '未知';
-    
+
     if (actualUrl != null) {
       if (actualUrl.contains('master.m3u8')) {
         isTranscoding = true;
         transcodeType = 'HLS 转码';
-      } else if (actualUrl.contains('stream.') || actualUrl.contains('/stream/')) {
+      } else if (actualUrl.contains('stream.') ||
+          actualUrl.contains('/stream/')) {
         isTranscoding = true;
         transcodeType = '流转码';
-      } else if (actualUrl.contains('/original/') || actualUrl.contains('original')) {
+      } else if (actualUrl.contains('/original/') ||
+          actualUrl.contains('original')) {
         isTranscoding = false;
         transcodeType = '直接播放';
       }
     }
-    
+
     if (isTranscoding) {
       return [
         InfoItem('状态', transcodeType, true),
@@ -680,15 +720,15 @@ style: TextStyle(
   bool _isTranscoding(VideoPlayerState videoState) {
     final currentPath = videoState.currentVideoPath;
     return currentPath?.startsWith('jellyfin://') == true ||
-           currentPath?.startsWith('emby://') == true;
+        currentPath?.startsWith('emby://') == true;
   }
 
   bool _isStreamingSource(VideoPlayerState videoState) {
     final currentPath = videoState.currentVideoPath;
     return currentPath?.startsWith('http') == true ||
-           currentPath?.startsWith('https') == true ||
-           currentPath?.startsWith('jellyfin://') == true ||
-           currentPath?.startsWith('emby://') == true;
+        currentPath?.startsWith('https') == true ||
+        currentPath?.startsWith('jellyfin://') == true ||
+        currentPath?.startsWith('emby://') == true;
   }
 
   String _getStatusText(PlayerStatus status) {
@@ -761,11 +801,11 @@ style: TextStyle(
   // 解析视频编解码器参数字符串
   Map<String, String> _parseVideoCodecParams(String codecString) {
     final Map<String, String> result = {};
-    
+
     // 解析 VideoCodecParameters(codec: h264, tag: 828601953, profile: 100, level: 50, bitRate: 2701394, 1920x1080, 23.976024627685547fps, format: yuv420p, bFrames:2)
     final RegExp regExp = RegExp(r'(\w+):\s*([^,)]+)');
     final matches = regExp.allMatches(codecString);
-    
+
     for (final match in matches) {
       final key = match.group(1);
       final value = match.group(2);
@@ -773,20 +813,21 @@ style: TextStyle(
         result[key] = value.trim();
       }
     }
-    
+
     // 特殊处理分辨率
     final resolutionMatch = RegExp(r'(\d+)x(\d+)').firstMatch(codecString);
     if (resolutionMatch != null) {
-      result['resolution'] = '${resolutionMatch.group(1)}x${resolutionMatch.group(2)}';
+      result['resolution'] =
+          '${resolutionMatch.group(1)}x${resolutionMatch.group(2)}';
     }
-    
+
     // 特殊处理帧率
     final fpsMatch = RegExp(r'([\d.]+)fps').firstMatch(codecString);
     if (fpsMatch != null) {
       final fps = double.tryParse(fpsMatch.group(1) ?? '') ?? 0;
       result['fps'] = '${fps.toStringAsFixed(1)} fps';
     }
-    
+
     // 特殊处理码率
     if (result['bitRate'] != null) {
       final bitRate = int.tryParse(result['bitRate']!) ?? 0;
@@ -794,18 +835,18 @@ style: TextStyle(
         result['bitRate'] = '${(bitRate / 1000000).toStringAsFixed(1)} Mbps';
       }
     }
-    
+
     return result;
   }
 
   // 解析音频编解码器参数字符串
   Map<String, String> _parseAudioCodecParams(String codecString) {
     final Map<String, String> result = {};
-    
+
     // 解析 AudioCodecParameters(codec: aac, tag: 1630826605, profile: 1, level: -99, bitRate: 128000, isFloat: true, isUnsigned: false, isPlanar: true, channels: 2 @44100Hz, blockAlign: 0, frameSize: 1024)
     final RegExp regExp = RegExp(r'(\w+):\s*([^,)]+)');
     final matches = regExp.allMatches(codecString);
-    
+
     for (final match in matches) {
       final key = match.group(1);
       final value = match.group(2);
@@ -813,15 +854,16 @@ style: TextStyle(
         result[key] = value.trim();
       }
     }
-    
+
     // 特殊处理采样率和声道
-    final channelMatch = RegExp(r'channels:\s*(\d+)\s*@\s*(\d+)Hz').firstMatch(codecString);
+    final channelMatch =
+        RegExp(r'channels:\s*(\d+)\s*@\s*(\d+)Hz').firstMatch(codecString);
     if (channelMatch != null) {
       final sampleRate = int.tryParse(channelMatch.group(2) ?? '') ?? 0;
       result['sampleRate'] = '${(sampleRate / 1000).toStringAsFixed(1)} kHz';
       result['channels'] = channelMatch.group(1) ?? '';
     }
-    
+
     // 特殊处理码率
     if (result['bitRate'] != null) {
       final bitRate = int.tryParse(result['bitRate']!) ?? 0;
@@ -829,7 +871,7 @@ style: TextStyle(
         result['bitRate'] = '${(bitRate / 1000).toStringAsFixed(0)} kbps';
       }
     }
-    
+
     // 格式化 profile
     if (result['profile'] != null) {
       final profile = result['profile'];
@@ -841,7 +883,7 @@ style: TextStyle(
         result['profile'] = 'Profile $profile';
       }
     }
-    
+
     return result;
   }
 }
@@ -881,16 +923,20 @@ String _joinNonEmpty(List<String?> parts, {String sep = ' '}) {
 
 // 清理编解码器名称中的 "(null)"
 String _sanitizeCodecName(String codec) {
-  return codec.replaceAll('(null)', '').replaceAll('()', '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  return codec
+      .replaceAll('(null)', '')
+      .replaceAll('()', '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 // 从 mpv 属性推断声道：优先数值，其次字符串（stereo/mono/5.1 等）
 int? _pickChannels(Map mpvProps) {
   final n = _toNum(mpvProps['audio-channels']);
   if (n != null && n > 0) return n.toInt();
-  final s = _normalizeText(mpvProps['audio-params/channel-layout'])
-      ?? _normalizeText(mpvProps['audio-channel-layout'])
-      ?? _normalizeText(mpvProps['audio-params/format']);
+  final s = _normalizeText(mpvProps['audio-params/channel-layout']) ??
+      _normalizeText(mpvProps['audio-channel-layout']) ??
+      _normalizeText(mpvProps['audio-params/format']);
   if (s != null) {
     final lower = s.toLowerCase();
     if (lower.contains('mono') || lower == '1.0') return 1;

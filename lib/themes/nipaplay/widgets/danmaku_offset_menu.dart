@@ -4,6 +4,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
+import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 
 class DanmakuOffsetMenu extends StatefulWidget {
@@ -22,7 +23,19 @@ class DanmakuOffsetMenu extends StatefulWidget {
 
 class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
   // 预设的偏移选项（秒）
-  static const List<double> _offsetOptions = [-10, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 10];
+  static const List<double> _offsetOptions = [
+    -10,
+    -5,
+    -2,
+    -1,
+    -0.5,
+    0,
+    0.5,
+    1,
+    2,
+    5,
+    10
+  ];
   final TextEditingController _customOffsetController = TextEditingController();
   String? _customOffsetError;
 
@@ -67,12 +80,13 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
   }
 
   Widget _buildOffsetButton(double offset, double currentOffset) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     final bool isSelected = (offset - currentOffset).abs() < 0.01;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Material(
-        color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+        color: isSelected ? menuColors.selectedBackground : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -83,18 +97,24 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(isSelected ? 0.15 : 0.05),
+              color: isSelected
+                  ? menuColors.selectedBackground
+                  : menuColors.controlBackground,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.white.withOpacity(isSelected ? 0.5 : 0.2),
+                color: isSelected
+                    ? menuColors.selectedBorder
+                    : menuColors.controlBorder,
                 width: 1,
               ),
             ),
             child: Text(
               _formatOffset(offset),
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                color: Colors.white,
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: isSelected
+                    ? menuColors.selectedForeground
+                    : menuColors.foreground,
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
@@ -109,6 +129,7 @@ style: TextStyle(
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         return BaseSettingsMenu(
           title: '弹幕偏移',
           onClose: widget.onClose,
@@ -122,23 +143,24 @@ style: TextStyle(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '当前偏移',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: menuColors.foreground,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: menuColors.controlBackground,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: menuColors.controlBorder,
                           width: 1,
                         ),
                       ),
@@ -151,14 +173,14 @@ style: TextStyle(
                                 : videoState.manualDanmakuOffset < 0
                                     ? Icons.fast_rewind
                                     : Icons.sync,
-                            color: Colors.white,
+                            color: menuColors.foreground,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
                           Text(
                             _formatOffset(videoState.manualDanmakuOffset),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: menuColors.foreground,
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
                             ),
@@ -177,29 +199,29 @@ style: TextStyle(
                   ],
                 ),
               ),
-              
+
               // 快速偏移选项
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '快速设置',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 12),
                     // 后退选项
-                    const Text(
+                    Text(
                       '弹幕后退',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: menuColors.secondaryForeground,
                         fontSize: 12,
                       ),
                     ),
@@ -212,26 +234,26 @@ style: TextStyle(
                           .toList(),
                     ),
                     const SizedBox(height: 8),
-                    
+
                     // 无偏移
-                    const Text(
+                    Text(
                       '默认',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: menuColors.secondaryForeground,
                         fontSize: 12,
                       ),
                     ),
                     const SizedBox(height: 4),
                     _buildOffsetButton(0, videoState.manualDanmakuOffset),
                     const SizedBox(height: 8),
-                    
+
                     // 前进选项
-                    const Text(
+                    Text(
                       '弹幕前进',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: menuColors.secondaryForeground,
                         fontSize: 12,
                       ),
                     ),
@@ -255,10 +277,10 @@ style: TextStyle(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '自定义偏移',
-style: TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -277,18 +299,18 @@ style: TextStyle(
                               signed: true,
                               decimal: true,
                             ),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: menuColors.foreground,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                             decoration: InputDecoration(
                               hintText: '例如 -2.5 或 1',
                               hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.4),
+                                color: menuColors.disabledForeground,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: menuColors.controlBackground,
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 10,
@@ -296,19 +318,19 @@ style: TextStyle(
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: menuColors.controlBorder,
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: menuColors.controlBorder,
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.6),
+                                  color: menuColors.accent,
                                 ),
                               ),
                               errorBorder: OutlineInputBorder(
@@ -324,8 +346,8 @@ style: TextStyle(
                                 ),
                               ),
                               suffixText: '秒',
-                              suffixStyle: const TextStyle(
-                                color: Colors.white,
+                              suffixStyle: TextStyle(
+                                color: menuColors.secondaryForeground,
                               ),
                               errorText: _customOffsetError,
                               errorStyle: const TextStyle(
@@ -358,7 +380,7 @@ style: TextStyle(
                   ],
                 ),
               ),
-              
+
               // 说明文字
               Container(
                 padding: const EdgeInsets.all(16),

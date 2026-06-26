@@ -1,5 +1,4 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,24 +11,18 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
-import 'package:nipaplay/services/file_picker_service.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -42,7 +35,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   static const String _selectedDecodersKey = 'selected_decoders';
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  static Color get _fluentAccentColor => AppAccentColors.current;
 
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
@@ -59,6 +51,29 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   final GlobalKey _spoilerAiApiFormatDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
   final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
+  final GlobalKey _seekStepDropdownKey = GlobalKey();
+  final GlobalKey _speedBoostDropdownKey = GlobalKey();
+
+  static const List<double> _seekStepPresetOptions = [
+    0.5,
+    1.0,
+    5.0,
+    10.0,
+    15.0,
+    30.0,
+    60.0,
+  ];
+  static const List<double> _speedBoostOptions = [
+    1.25,
+    1.5,
+    2.0,
+    2.5,
+    3.0,
+    4.0,
+    5.0,
+  ];
+  static const int _minSkipSeconds = 10;
+  static const int _maxSkipSeconds = 600;
 
   final TextEditingController _spoilerAiUrlController = TextEditingController();
   final TextEditingController _spoilerAiModelController =
@@ -521,6 +536,56 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
+  List<double> _buildSeekStepOptions(VideoPlayerState videoState) {
+    final min = videoState.seekStepMinSeconds;
+    final max = videoState.seekStepMaxSeconds;
+    final values = <double>[
+      min,
+      ..._seekStepPresetOptions,
+      videoState.seekStepSeconds
+    ];
+    final result = <double>[];
+    for (final raw in values) {
+      final clamped = raw.clamp(min, max).toDouble();
+      final exists = result.any(
+        (value) =>
+            (value - clamped).abs() <
+            VideoPlayerState.seekStepComparisonEpsilon,
+      );
+      if (!exists) {
+        result.add(clamped);
+      }
+    }
+    result.sort();
+    return result;
+  }
+
+  List<double> _buildSpeedBoostOptions(VideoPlayerState videoState) {
+    final values = <double>[..._speedBoostOptions, videoState.speedBoostRate];
+    final result = <double>[];
+    for (final raw in values) {
+      final clamped = raw
+          .clamp(
+            VideoPlayerState.minPlaybackRate,
+            VideoPlayerState.maxPlaybackRate,
+          )
+          .toDouble();
+      final exists = result.any((value) => (value - clamped).abs() < 0.0005);
+      if (!exists) {
+        result.add(clamped);
+      }
+    }
+    result.sort();
+    return result;
+  }
+
+  String _formatRateLabel(double value) {
+    if ((value - value.roundToDouble()).abs() < 0.0005) {
+      return '${value.round()}x';
+    }
+    return '${value.toStringAsFixed(2)}x';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -776,6 +841,90 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   labelFormatter: (value) => '${value.round()} 秒',
                 ),
               ],
+            );
+          },
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final items = _buildSeekStepOptions(videoState)
+                .map(
+                  (seconds) => DropdownMenuItemData<double>(
+                    title: videoState.formatSeekStepLabel(
+                      seconds,
+                      preferFrameLabel: true,
+                      includeFrameApproximation: true,
+                    ),
+                    value: seconds,
+                    isSelected: (videoState.seekStepSeconds - seconds).abs() <
+                        VideoPlayerState.seekStepComparisonEpsilon,
+                  ),
+                )
+                .toList();
+            return SettingsItem.dropdown(
+              title: '快进快退步长',
+              subtitle: '控制快进、快退按钮和方向键每次跳转的时间',
+              icon: Ionicons.play_skip_forward_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! double) return;
+                await videoState.setSeekStepSeconds(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  '快进快退步长已设为 ${videoState.formatSeekStepLabel(value, preferFrameLabel: true)}',
+                );
+              },
+              dropdownKey: _seekStepDropdownKey,
+            );
+          },
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final items = _buildSpeedBoostOptions(videoState)
+                .map(
+                  (rate) => DropdownMenuItemData<double>(
+                    title: _formatRateLabel(rate),
+                    value: rate,
+                    isSelected:
+                        (videoState.speedBoostRate - rate).abs() < 0.0005,
+                  ),
+                )
+                .toList();
+            return SettingsItem.dropdown(
+              title: '长按倍速倍率',
+              subtitle: '长按快进手势时临时切换到该播放速度',
+              icon: Ionicons.flash_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! double) return;
+                await videoState.setSpeedBoostRate(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                    context, '长按倍速倍率已设为 ${_formatRateLabel(value)}');
+              },
+              dropdownKey: _speedBoostDropdownKey,
+            );
+          },
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.slider(
+              title: '跳过时间',
+              subtitle: '控制播放器左上角和快捷键的跳过按钮前进秒数',
+              icon: Ionicons.play_skip_forward_outline,
+              value: videoState.skipSeconds
+                  .clamp(_minSkipSeconds, _maxSkipSeconds)
+                  .toDouble(),
+              min: _minSkipSeconds.toDouble(),
+              max: _maxSkipSeconds.toDouble(),
+              divisions: (_maxSkipSeconds - _minSkipSeconds) ~/ 10,
+              onChanged: (value) {
+                videoState.setSkipSeconds((value / 10).round() * 10);
+              },
+              labelFormatter: (value) => '${((value / 10).round() * 10)} 秒',
             );
           },
         ),

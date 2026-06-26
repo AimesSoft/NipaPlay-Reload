@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 
 class AudioTracksMenu extends StatelessWidget {
   final VoidCallback onClose;
@@ -31,7 +31,7 @@ class AudioTracksMenu extends StatelessWidget {
       'ita': '意大利语',
       'rus': '俄语',
     };
-    
+
     // 常见的语言标识符
     final Map<String, String> languagePatterns = {
       r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
@@ -73,9 +73,8 @@ class AudioTracksMenu extends StatelessWidget {
     for (final stream in streams) {
       if (stream['Type']?.toString() != 'Audio') continue;
       final index = stream['Index'];
-      final parsedIndex = index is int
-          ? index
-          : int.tryParse(index?.toString() ?? '');
+      final parsedIndex =
+          index is int ? index : int.tryParse(index?.toString() ?? '');
       if (parsedIndex == null) continue;
       tracks.add(
         _ServerAudioTrack(
@@ -134,13 +133,14 @@ class AudioTracksMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         final path = videoState.currentVideoPath ?? '';
         final isJellyfin = path.startsWith('jellyfin://');
         final isEmby = path.startsWith('emby://');
         final isServerStream = isJellyfin || isEmby;
-        final useServerTracks = (isJellyfin &&
-                JellyfinService.instance.isTranscodeEnabled) ||
-            (isEmby && EmbyService.instance.isTranscodeEnabled);
+        final useServerTracks =
+            (isJellyfin && JellyfinService.instance.isTranscodeEnabled) ||
+                (isEmby && EmbyService.instance.isTranscodeEnabled);
         final serverTracks = useServerTracks
             ? _getServerAudioTracks(videoState)
             : <_ServerAudioTrack>[];
@@ -151,7 +151,8 @@ class AudioTracksMenu extends StatelessWidget {
             final itemId = path.replaceFirst('jellyfin://', '');
             selectedIndex = videoState.getJellyfinServerAudioSelection(itemId);
             selectedIndex ??= serverTracks
-                .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+                .firstWhere((t) => t.isDefault,
+                    orElse: () => serverTracks.first)
                 .index;
           } else if (isEmby) {
             final embyPath = path.replaceFirst('emby://', '');
@@ -159,7 +160,8 @@ class AudioTracksMenu extends StatelessWidget {
             final itemId = parts.isNotEmpty ? parts.last : embyPath;
             selectedIndex = videoState.getEmbyServerAudioSelection(itemId);
             selectedIndex ??= serverTracks
-                .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+                .firstWhere((t) => t.isDefault,
+                    orElse: () => serverTracks.first)
                 .index;
           }
           return BaseSettingsMenu(
@@ -199,11 +201,11 @@ class AudioTracksMenu extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isActive
-                            ? Colors.white.withOpacity(0.1)
+                            ? menuColors.selectedBackground
                             : Colors.transparent,
                         border: Border(
                           bottom: BorderSide(
-                            color: Colors.white.withOpacity(0.5),
+                            color: menuColors.divider,
                             width: 0.5,
                           ),
                         ),
@@ -214,7 +216,9 @@ class AudioTracksMenu extends StatelessWidget {
                             isActive
                                 ? Icons.check_circle
                                 : Icons.radio_button_unchecked,
-                            color: Colors.white,
+                            color: isActive
+                                ? menuColors.selectedForeground
+                                : menuColors.foreground,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -224,16 +228,21 @@ class AudioTracksMenu extends StatelessWidget {
                               children: [
                                 Text(
                                   title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? menuColors.selectedForeground
+                                        : menuColors.foreground,
                                     fontSize: 14,
+                                    fontWeight: isActive
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
                                   ),
                                 ),
                                 Text(
                                   '语言: $language',
                                   locale: const Locale("zh", "Hans"),
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: menuColors.secondaryForeground,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -260,8 +269,9 @@ class AudioTracksMenu extends StatelessWidget {
                 ...audioTracks.asMap().entries.map((entry) {
                   final index = entry.key;
                   final track = entry.value; // track is PlayerAudioStreamInfo
-                  final isActive = videoState.player.activeAudioTracks.contains(index);
-                  
+                  final isActive =
+                      videoState.player.activeAudioTracks.contains(index);
+
                   // 从PlayerAudioStreamInfo获取标题和语言
                   String title = track.title ?? '轨道 $index';
                   String language = track.language ?? '未知';
@@ -271,7 +281,9 @@ class AudioTracksMenu extends StatelessWidget {
                     language = _getLanguageName(language);
                   }
                   // 如果标题是 "Audio track X" 并且元数据中有标题，优先使用元数据的标题
-                  if (title == '轨道 $index' && track.metadata['title'] != null && track.metadata['title']!.isNotEmpty) {
+                  if (title == '轨道 $index' &&
+                      track.metadata['title'] != null &&
+                      track.metadata['title']!.isNotEmpty) {
                     title = track.metadata['title']!;
                   }
 
@@ -284,18 +296,22 @@ class AudioTracksMenu extends StatelessWidget {
                     final samplerateInfo = track.metadata['samplerate'] ?? '';
                     final detailParts = <String>[];
                     if (codecInfo.isNotEmpty) detailParts.add(codecInfo);
-                    if (channelsInfo.isNotEmpty && channelsInfo != '0') detailParts.add(channelsInfo);
-                    if (samplerateInfo.isNotEmpty && samplerateInfo != '0') detailParts.add('${samplerateInfo}Hz');
+                    if (channelsInfo.isNotEmpty && channelsInfo != '0')
+                      detailParts.add(channelsInfo);
+                    if (samplerateInfo.isNotEmpty && samplerateInfo != '0')
+                      detailParts.add('${samplerateInfo}Hz');
                     if (detailParts.isNotEmpty && !title.contains(codecInfo)) {
                       title += ' (${detailParts.join(', ')})';
                     }
                   } else {
                     // 非外挂轨道：如果有编解码器名称，附加到标题上
-                    if (track.codec.name != null && track.codec.name!.isNotEmpty && track.codec.name != 'Unknown Audio Codec') {
+                    if (track.codec.name != null &&
+                        track.codec.name!.isNotEmpty &&
+                        track.codec.name != 'Unknown Audio Codec') {
                       title += " (${track.codec.name})";
                     }
                   }
-                  
+
                   return Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -313,10 +329,12 @@ class AudioTracksMenu extends StatelessWidget {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                          color: isActive
+                              ? menuColors.selectedBackground
+                              : Colors.transparent,
                           border: Border(
                             bottom: BorderSide(
-                              color: Colors.white.withOpacity(0.5),
+                              color: menuColors.divider,
                               width: 0.5,
                             ),
                           ),
@@ -324,8 +342,12 @@ class AudioTracksMenu extends StatelessWidget {
                         child: Row(
                           children: [
                             Icon(
-                              isActive ? Icons.check_circle : Icons.radio_button_unchecked,
-                              color: Colors.white,
+                              isActive
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: isActive
+                                  ? menuColors.selectedForeground
+                                  : menuColors.foreground,
                               size: 20,
                             ),
                             const SizedBox(width: 12),
@@ -335,16 +357,21 @@ class AudioTracksMenu extends StatelessWidget {
                                 children: [
                                   Text(
                                     title,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? menuColors.selectedForeground
+                                          : menuColors.foreground,
                                       fontSize: 14,
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
                                   ),
                                   Text(
                                     '语言: $language',
-                                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                    locale: Locale("zh-Hans", "zh"),
+                                    style: TextStyle(
+                                      color: menuColors.secondaryForeground,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -363,7 +390,7 @@ style: TextStyle(
       },
     );
   }
-} 
+}
 
 class _ServerAudioTrack {
   final int index;

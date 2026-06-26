@@ -255,6 +255,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _instantHidePlayerUiEnabledKey =
       'instant_hide_player_ui_enabled';
   bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
+  final String _playerTopSendDanmakuButtonVisibleKey =
+      'player_top_send_danmaku_button_visible';
+  final String _playerTopSkipButtonVisibleKey =
+      'player_top_skip_button_visible';
+  final String _playerTopResizeButtonVisibleKey =
+      'player_top_resize_button_visible';
+  final String _playerTopFrameStepButtonsVisibleKey =
+      'player_top_frame_step_buttons_visible';
+  bool _playerTopSendDanmakuButtonVisible = true;
+  bool _playerTopSkipButtonVisible = false;
+  bool _playerTopResizeButtonVisible = false;
+  bool _playerTopFrameStepButtonsVisible = false;
   // MKV 章节标记开关：显示 MKV 自带章节在进度条上的分割线标记/当前章节高亮/点击跳转
   final String _chapterMarkersEnabledKey = 'chapter_markers_enabled';
   bool _chapterMarkersEnabled = true; // 默认开启
@@ -956,6 +968,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   bool get hasSubtitleDelayDurationLimit => _duration.inMilliseconds > 0;
   bool get autoFullscreenEnabled => _autoFullscreenEnabled;
+  bool get playerTopSendDanmakuButtonVisible =>
+      _playerTopSendDanmakuButtonVisible;
+  bool get playerTopSkipButtonVisible => _playerTopSkipButtonVisible;
+  bool get playerTopResizeButtonVisible => _playerTopResizeButtonVisible;
+  bool get playerTopFrameStepButtonsVisible =>
+      _playerTopFrameStepButtonsVisible;
 
   double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
     final limit = subtitleDelayCustomLimitSeconds;

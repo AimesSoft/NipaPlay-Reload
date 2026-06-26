@@ -37,7 +37,6 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const double defaultUiScale = 1.0;
   static const double defaultTabletUiScale = 1.2;
 
-  late bool _enableWidgetBlurEffect;
   late AnimeCardAction _animeCardAction;
   late bool _showDanmakuDensityChart;
   late RecentWatchingStyle _recentWatchingStyle;
@@ -50,7 +49,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   // 页面滑动动画始终启用
   bool get enablePageAnimation => true;
 
-  bool get enableWidgetBlurEffect => _enableWidgetBlurEffect;
+  bool get enableWidgetBlurEffect => false;
   AnimeCardAction get animeCardAction => _animeCardAction;
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
@@ -62,7 +61,6 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   // 构造函数
   AppearanceSettingsProvider() {
     // 初始化默认值
-    _enableWidgetBlurEffect = true; // 默认开启控件毛玻璃效果
     _animeCardAction = AnimeCardAction.synopsis; // 默认行为是显示简介
     _showDanmakuDensityChart = true; // 默认显示弹幕密度曲线图
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
@@ -91,7 +89,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _enableWidgetBlurEffect = prefs.getBool(_widgetBlurEffectKey) ?? true;
+      await prefs.setBool(_widgetBlurEffectKey, false);
       _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityKey) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       _accentColorPreset = AppAccentColorPreset.fromStorageKey(
@@ -136,18 +134,12 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     }
   }
 
-  // 设置是否启用控件毛玻璃效果
   Future<void> setEnableWidgetBlurEffect(bool value) async {
-    if (_enableWidgetBlurEffect == value) return;
-
-    _enableWidgetBlurEffect = value;
-    notifyListeners();
-
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_widgetBlurEffectKey, value);
+      await prefs.setBool(_widgetBlurEffectKey, false);
     } catch (e) {
-      debugPrint('保存控件毛玻璃效果设置时出错: $e');
+      debugPrint('保存控件模糊效果关闭状态时出错: $e');
     }
   }
 

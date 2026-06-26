@@ -26,7 +26,6 @@ class MacosPlatformMenu extends StatelessWidget {
     this.onUploadVideo,
     this.onOpenSettings,
     this.onShowAbout,
-    this.onShowHelp,
     this.onOpenGitHub,
     this.onOpenWebsite,
     this.onCloseWindow,
@@ -52,9 +51,6 @@ class MacosPlatformMenu extends StatelessWidget {
 
   /// 关于 NipaPlay
   final VoidCallback? onShowAbout;
-
-  /// NipaPlay 帮助 (Cmd+?)
-  final VoidCallback? onShowHelp;
 
   /// 打开 GitHub 页面
   final VoidCallback? onOpenGitHub;
@@ -245,19 +241,6 @@ class MacosPlatformMenu extends StatelessWidget {
     return PlatformMenu(
       label: '帮助',
       menus: <PlatformMenuItem>[
-        PlatformMenuItemGroup(
-          members: <PlatformMenuItem>[
-            if (onShowHelp != null)
-              PlatformMenuItem(
-                label: 'NipaPlay 帮助',
-                shortcut: const SingleActivator(
-                  LogicalKeyboardKey.question,
-                  meta: true,
-                ),
-                onSelected: onShowHelp,
-              ),
-          ],
-        ),
         PlatformMenuItemGroup(
           members: <PlatformMenuItem>[
             if (onOpenGitHub != null)

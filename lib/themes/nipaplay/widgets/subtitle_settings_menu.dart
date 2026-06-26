@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
 import 'blur_dropdown.dart';
@@ -252,6 +253,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   Widget build(BuildContext context) {
     return Consumer<SubtitleSettingsPaneController>(
       builder: (context, controller, child) {
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         final videoState = controller.videoState;
         _syncSubtitleDelayController(videoState);
         _syncController(
@@ -281,10 +283,10 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           onHoverChanged: widget.onHoverChanged,
           extraButton: TextButton(
             onPressed: () => videoState.resetSubtitleSettings(),
-            child: const Text(
+            child: Text(
               '回到默认',
               locale: Locale('zh', 'CN'),
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: menuColors.accent),
             ),
           ),
           content: Column(
@@ -355,6 +357,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildDelaySection(VideoPlayerState videoState) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     final displayValue = _currentSubtitleDelayDisplayValue(videoState);
     return Container(
       padding: const EdgeInsets.all(16),
@@ -378,7 +381,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           Text(
             '手动输入秒数',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: menuColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -399,23 +402,23 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
                       RegExp(r'[0-9+\-.,，＋－]'),
                     ),
                   ],
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: menuColors.foreground),
                   decoration: InputDecoration(
                     hintText: '例如 -12.5 或 8',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(color: menuColors.disabledForeground),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.08),
+                    fillColor: menuColors.controlBackground,
                     suffixText: '秒',
-                    suffixStyle: const TextStyle(color: Colors.white70),
+                    suffixStyle: TextStyle(
+                      color: menuColors.secondaryForeground,
+                    ),
                     errorText: _subtitleDelayError,
                     enabledBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: Colors.white.withOpacity(0.2)),
+                      borderSide: BorderSide(color: menuColors.controlBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: Colors.white.withOpacity(0.6)),
+                      borderSide: BorderSide(color: menuColors.accent),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     errorBorder: OutlineInputBorder(
@@ -648,6 +651,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildFontSection(VideoPlayerState videoState) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
@@ -656,7 +660,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           Text(
             '字幕字体',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: menuColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -665,18 +669,18 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           TextField(
             controller: _fontNameController,
             focusNode: _fontNameFocus,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: menuColors.foreground),
             decoration: InputDecoration(
               hintText: '输入字体名称（留空为默认）',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+              hintStyle: TextStyle(color: menuColors.disabledForeground),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: menuColors.controlBackground,
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                borderSide: BorderSide(color: menuColors.controlBorder),
                 borderRadius: BorderRadius.circular(8),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.6)),
+                borderSide: BorderSide(color: menuColors.accent),
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
@@ -774,6 +778,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     required List<DropdownMenuItemData<T>> items,
     required ValueChanged<T> onSelected,
   }) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -782,7 +787,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           Text(
             title,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: menuColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -806,6 +811,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     DropdownMenuItemData<T> item,
     ValueChanged<T> onSelected,
   ) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     final isSelected = item.isSelected;
     return Material(
       color: Colors.transparent,
@@ -815,17 +821,23 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(isSelected ? 0.15 : 0.05),
+            color: isSelected
+                ? menuColors.selectedBackground
+                : menuColors.controlBackground,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withOpacity(isSelected ? 0.5 : 0.2),
+              color: isSelected
+                  ? menuColors.selectedBorder
+                  : menuColors.controlBorder,
               width: 1,
             ),
           ),
           child: Text(
             item.title,
             style: TextStyle(
-              color: Colors.white,
+              color: isSelected
+                  ? menuColors.selectedForeground
+                  : menuColors.foreground,
               fontSize: 13,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
@@ -840,12 +852,13 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: TextStyle(color: menuColors.foreground, fontSize: 14),
           ),
         ),
         FluentSettingsSwitch(
@@ -863,6 +876,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     required Color color,
     required ValueChanged<String> onSubmit,
   }) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Row(
       children: [
         Container(
@@ -871,14 +885,14 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.white24),
+            border: Border.all(color: menuColors.controlBorder),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+            style: TextStyle(color: menuColors.foreground, fontSize: 13),
           ),
         ),
         SizedBox(
@@ -886,19 +900,19 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           child: TextField(
             controller: controller,
             focusNode: focusNode,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(color: menuColors.foreground, fontSize: 12),
             decoration: InputDecoration(
               isDense: true,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: menuColors.controlBackground,
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                borderSide: BorderSide(color: menuColors.controlBorder),
                 borderRadius: BorderRadius.circular(6),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.6)),
+                borderSide: BorderSide(color: menuColors.accent),
                 borderRadius: BorderRadius.circular(6),
               ),
             ),

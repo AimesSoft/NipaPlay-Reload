@@ -43,7 +43,7 @@ class PlayerMenuDefinitionBuilder {
         title: '音频轨道',
         visibilityPredicate: (ctx) =>
             ctx.supportsAdvancedTracks && ctx.hasVideo,
-      ), 
+      ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.danmakuSettings,
         category: PlayerMenuCategory.danmaku,
@@ -73,13 +73,6 @@ class PlayerMenuDefinitionBuilder {
         visibilityPredicate: (ctx) => ctx.hasVideo,
       ),
       PlayerMenuItemDefinition(
-        paneId: PlayerMenuPaneId.controlBarSettings,
-        category: PlayerMenuCategory.player,
-        icon: PlayerMenuIconToken.controlBarSettings,
-        title: '控件设置',
-        visibilityPredicate: (ctx) => ctx.hasVideo,
-      ),
-      PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.playbackRate,
         category: PlayerMenuCategory.video,
         icon: PlayerMenuIconToken.playbackRate,
@@ -92,7 +85,7 @@ class PlayerMenuDefinitionBuilder {
         icon: PlayerMenuIconToken.jellyfinQuality,
         title: '清晰度',
         visibilityPredicate: (ctx) =>
-          ctx.isServerStreaming && ctx.isTranscodeEnabledForCurrentSource,
+            ctx.isServerStreaming && ctx.isTranscodeEnabledForCurrentSource,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.playbackInfo,
@@ -100,13 +93,6 @@ class PlayerMenuDefinitionBuilder {
         icon: PlayerMenuIconToken.playbackInfo,
         title: '播放信息',
         visibilityPredicate: (ctx) => ctx.hasVideoPath,
-      ),
-      PlayerMenuItemDefinition(
-        paneId: PlayerMenuPaneId.seekStep,
-        category: PlayerMenuCategory.playbackControl,
-        icon: PlayerMenuIconToken.seekStep,
-        title: '播放设置',
-        visibilityPredicate: (ctx) => ctx.hasVideo,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.playlist,
@@ -117,9 +103,10 @@ class PlayerMenuDefinitionBuilder {
       ),
     ];
 
+    final supportedPaneIds = _supportedPaneIds;
     return definitions.where((definition) {
-      if (_supportedPaneIds != null &&
-          !_supportedPaneIds!.contains(definition.paneId)) {
+      if (supportedPaneIds != null &&
+          !supportedPaneIds.contains(definition.paneId)) {
         return false;
       }
       return definition.isVisible(context);

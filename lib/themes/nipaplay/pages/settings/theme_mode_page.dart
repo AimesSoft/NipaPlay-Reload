@@ -21,6 +21,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -36,12 +37,18 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _dropdownKey = GlobalKey();
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
-  final GlobalKey _animationDropdownKey = GlobalKey();
   final GlobalKey _accentColorDropdownKey = GlobalKey();
   final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
   final GlobalKey _windowDisplayModeDropdownKey = GlobalKey();
   late BackgroundImageRenderMode _backgroundImageRenderMode;
   late double _backgroundImageOverlayOpacity;
+  static const List<_PlayerControlColorOption> _playerControlColorOptions = [
+    _PlayerControlColorOption(0xFFFF7274, '红色'),
+    _PlayerControlColorOption(0xFF40C7FF, '蓝色'),
+    _PlayerControlColorOption(0xFF6DFF69, '绿色'),
+    _PlayerControlColorOption(0xFF4CFFB1, '青色'),
+    _PlayerControlColorOption(0xFFFFFFFF, '白色'),
+  ];
 
   @override
   void initState() {
@@ -201,6 +208,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
     // 获取外观设置提供者
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final settingsProvider = context.watch<SettingsProvider>();
+    final videoState = context.watch<VideoPlayerState>();
     final colorScheme = Theme.of(context).colorScheme;
     final int scaleDivisions = ((AppearanceSettingsProvider.uiScaleMax -
                 AppearanceSettingsProvider.uiScaleMin) /
@@ -268,19 +276,68 @@ class _ThemeModePageState extends State<ThemeModePage> {
               dropdownKey: _accentColorDropdownKey,
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            if (!kIsWeb) ...[
-              SettingsItem.toggle(
-                title: "控件毛玻璃效果",
-                subtitle: "关闭后可提升性能，但会失去部分UI透明感",
-                icon: Ionicons.radio_button_on_outline,
-                value: appearanceSettings.enableWidgetBlurEffect,
-                onChanged: (value) {
-                  appearanceSettings.setEnableWidgetBlurEffect(value);
-                },
-              ),
-              Divider(
-                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            ],
+            SettingsItem.toggle(
+              title: "底部进度条",
+              subtitle: "播放时在播放器底部显示细进度条",
+              icon: Icons.linear_scale_rounded,
+              value: videoState.minimalProgressBarEnabled,
+              onChanged: (value) {
+                videoState.setMinimalProgressBarEnabled(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "弹幕密度曲线",
+              subtitle: "在播放器底部显示弹幕密度曲线",
+              icon: Icons.show_chart_rounded,
+              value: videoState.showDanmakuDensityChart,
+              onChanged: (value) {
+                videoState.setShowDanmakuDensityChart(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            _buildPlayerControlColorSetting(videoState, colorScheme),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "左上角发弹幕按钮",
+              subtitle: "在播放器左上角显示发弹幕按钮",
+              icon: Ionicons.chatbubble_ellipses_outline,
+              value: videoState.playerTopSendDanmakuButtonVisible,
+              onChanged: (value) {
+                videoState.setPlayerTopSendDanmakuButtonVisible(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "左上角跳过按钮",
+              subtitle: "在播放器左上角显示跳过按钮",
+              icon: Ionicons.play_skip_forward_outline,
+              value: videoState.playerTopSkipButtonVisible,
+              onChanged: (value) {
+                videoState.setPlayerTopSkipButtonVisible(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "左上角窗口适配视频",
+              subtitle: "在播放器左上角显示窗口适配视频按钮（桌面端）",
+              icon: Ionicons.resize_outline,
+              value: videoState.playerTopResizeButtonVisible,
+              onChanged: (value) {
+                videoState.setPlayerTopResizeButtonVisible(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "左上角逐帧后退/前进",
+              subtitle: "在播放器左上角显示逐帧后退和逐帧前进按钮",
+              icon: Ionicons.play_circle_outline,
+              value: videoState.playerTopFrameStepButtonsVisible,
+              onChanged: (value) {
+                videoState.setPlayerTopFrameStepButtonsVisible(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.toggle(
               title: "番剧卡片显示介绍",
               subtitle: "关闭后仅显示封面和标题",
@@ -473,6 +530,109 @@ class _ThemeModePageState extends State<ThemeModePage> {
     );
   }
 
+  Widget _buildPlayerControlColorSetting(
+    VideoPlayerState videoState,
+    ColorScheme colorScheme,
+  ) {
+    final selectedColor = videoState.minimalProgressBarColor.toARGB32();
+    return ListTile(
+      leading: Icon(
+        Icons.palette_outlined,
+        color: colorScheme.onSurface.withOpacity(0.7),
+      ),
+      title: Text(
+        '进度条和曲线颜色',
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      subtitle: Text(
+        '用于底部进度条和弹幕密度曲线',
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(
+          color: colorScheme.onSurface.withOpacity(0.7),
+        ),
+      ),
+      trailing: SizedBox(
+        width: 188,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: _playerControlColorOptions
+              .map(
+                (option) => _buildPlayerControlColorSwatch(
+                  option,
+                  selectedColor: selectedColor,
+                  videoState: videoState,
+                  colorScheme: colorScheme,
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerControlColorSwatch(
+    _PlayerControlColorOption option, {
+    required int selectedColor,
+    required VideoPlayerState videoState,
+    required ColorScheme colorScheme,
+  }) {
+    final color = Color(option.colorValue);
+    final isSelected = selectedColor == option.colorValue;
+    final checkColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+    return Tooltip(
+      message: option.label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            videoState.setMinimalProgressBarColor(option.colorValue);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected
+                    ? AppAccentColors.current
+                    : colorScheme.onSurface.withOpacity(0.22),
+                width: isSelected ? 3 : 1,
+              ),
+              boxShadow: [
+                if (isSelected)
+                  BoxShadow(
+                    color: AppAccentColors.current.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+              ],
+            ),
+            child: isSelected
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: checkColor,
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveThemeMode(ThemeMode mode) async {
     String modeString;
     switch (mode) {
@@ -491,4 +651,11 @@ class _ThemeModePageState extends State<ThemeModePage> {
   Future<void> _saveBackgroundImageMode(String mode) async {
     await SettingsStorage.saveString('backgroundImageMode', mode);
   }
+}
+
+class _PlayerControlColorOption {
+  const _PlayerControlColorOption(this.colorValue, this.label);
+
+  final int colorValue;
+  final String label;
 }

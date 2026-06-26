@@ -144,12 +144,6 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="帮助" systemMenu="help" id="help-menu">
                         <items>
-                            <menuItem title="NipaPlay 帮助" keyEquivalent="?" id="help-menu-item-main">
-                                <connections>
-                                    <action selector="showHelp:" target="Voe-Tx-rLC" id="help-action"/>
-                                </connections>
-                            </menuItem>
-                            <menuItem isSeparatorItem="YES" id="help-separator"/>
                             <menuItem title="GitHub" id="github-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>

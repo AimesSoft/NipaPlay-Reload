@@ -6,13 +6,14 @@ class SettingsHintText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white,
+        color: colorScheme.onSurfaceVariant,
         fontSize: 12,
       ),
       textAlign: TextAlign.left,
     );
   }
-} 
+}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 import 'blur_snackbar.dart';
 import 'fluent_settings_switch.dart';
@@ -42,15 +43,18 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
     try {
       // 根据当前播放协议使用对应 provider，保证两端持久化与默认值独立
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      if (videoState.currentVideoPath != null && videoState.currentVideoPath!.startsWith('emby://')) {
-        final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+      if (videoState.currentVideoPath != null &&
+          videoState.currentVideoPath!.startsWith('emby://')) {
+        final embyProv =
+            Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await embyProv.initialize();
         if (!mounted) return;
         setState(() {
           _currentQuality = embyProv.currentVideoQuality;
         });
       } else {
-        final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+        final transcodeProvider =
+            Provider.of<JellyfinTranscodeProvider>(context, listen: false);
         await transcodeProvider.initialize();
         if (!mounted) return;
         setState(() {
@@ -69,8 +73,9 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
         int? resolvedSelection = hasSavedSelection
             ? vp.getJellyfinServerSubtitleSelection(itemId)
             : null;
-        bool resolvedBurnIn =
-            hasSavedSelection ? vp.getJellyfinServerSubtitleBurnIn(itemId) : false;
+        bool resolvedBurnIn = hasSavedSelection
+            ? vp.getJellyfinServerSubtitleBurnIn(itemId)
+            : false;
         if (resolvedSelection != null &&
             !tracks.any((t) => t['index'] == resolvedSelection)) {
           resolvedSelection = null;
@@ -129,7 +134,7 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
 
   void _changeQuality(JellyfinVideoQuality quality) {
     if (_currentQuality == quality) return;
-    
+
     // 仅更新本地状态，不直接重载播放器
     setState(() {
       _currentQuality = quality;
@@ -138,36 +143,39 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
 
   Future<void> _applySelection() async {
     if (_currentQuality == null) return;
-    
+
     if (mounted) {
       setState(() {
         _isLoading = true;
       });
     }
-    
+
     try {
       // 先保存默认清晰度设置
       // 根据当前播放协议选择对应的 provider（保证两者持久化独立且行为一致）
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      if (videoState.currentVideoPath != null && videoState.currentVideoPath!.startsWith('emby://')) {
-        final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+      if (videoState.currentVideoPath != null &&
+          videoState.currentVideoPath!.startsWith('emby://')) {
+        final embyProv =
+            Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await embyProv.initialize();
         await embyProv.setDefaultVideoQuality(_currentQuality!);
-        
+
         // 当选择非原画质量时，自动启用转码
         if (_currentQuality! != JellyfinVideoQuality.original) {
           await embyProv.setTranscodeEnabled(true);
         }
       } else {
-        final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+        final transcodeProvider =
+            Provider.of<JellyfinTranscodeProvider>(context, listen: false);
         await transcodeProvider.setDefaultVideoQuality(_currentQuality!);
-        
+
         // 当选择非原画质量时，自动启用转码
         if (_currentQuality! != JellyfinVideoQuality.original) {
           await transcodeProvider.setTranscodeEnabled(true);
         }
       }
-      
+
       // 然后重载播放器
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
       final path = vp.currentVideoPath;
@@ -196,18 +204,18 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
           burnInSubtitle: _burnIn,
         );
       }
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
-      
+
       // 显示成功通知并关闭菜单
       if (mounted) {
         final qualityName = _getQualityDisplayName(_currentQuality!);
         String message = '已切换到$qualityName清晰度';
-        
+
         // 添加字幕信息到通知
         if (_selectedServerSubtitleIndex != null) {
           final selectedSubtitle = _serverSubtitles.firstWhere(
@@ -215,16 +223,16 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
             orElse: () => <String, dynamic>{},
           );
           if (selectedSubtitle.isNotEmpty) {
-            final subtitleName = selectedSubtitle['display'] as String? ?? 
-                                selectedSubtitle['title']?.toString() ?? 
-                                '字幕 ${selectedSubtitle['index']}';
+            final subtitleName = selectedSubtitle['display'] as String? ??
+                selectedSubtitle['title']?.toString() ??
+                '字幕 ${selectedSubtitle['index']}';
             message += '\n字幕: $subtitleName';
             if (_burnIn) {
               message += ' (烧录)';
             }
           }
         }
-        
+
         BlurSnackBar.show(context, message);
         widget.onClose();
       }
@@ -285,23 +293,27 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return BaseSettingsMenu(
       title: '清晰度设置',
       onClose: widget.onClose,
       onHoverChanged: widget.onHoverChanged,
       extraButton: TextButton(
         onPressed: _applySelection,
-        child: const Text('应用', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+        child: Text(
+          '应用',
+          locale: Locale("zh-Hans", "zh"),
+          style: TextStyle(color: menuColors.accent),
+        ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Center(
-                child: CircularProgressIndicator(color: Colors.blue),
+                child: CircularProgressIndicator(color: menuColors.accent),
               ),
             )
           else ...[
@@ -324,44 +336,53 @@ style: TextStyle(color: Colors.white)),
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: isSelected 
-                                  ? Colors.blue.withOpacity(0.2)
-                                  : Colors.white.withOpacity(0.05),
+                              color: isSelected
+                                  ? menuColors.selectedBackground
+                                  : menuColors.controlBackground,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: isSelected 
-                                    ? Colors.blue
-                                    : Colors.white.withOpacity(0.1),
+                                color: isSelected
+                                    ? menuColors.selectedBorder
+                                    : menuColors.controlBorder,
                                 width: 1,
                               ),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                  color: isSelected ? Colors.blue : Colors.white,
+                                  isSelected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  color: isSelected
+                                      ? menuColors.selectedForeground
+                                      : menuColors.foreground,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _getQualityDisplayName(quality),
-                                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                                          color: Colors.white,
+                                        locale: Locale("zh-Hans", "zh"),
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? menuColors.selectedForeground
+                                              : menuColors.foreground,
                                           fontSize: 14,
-                                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         _getQualityDescription(quality),
-                                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                                          color: Colors.white,
+                                        locale: Locale("zh-Hans", "zh"),
+                                        style: TextStyle(
+                                          color: menuColors.secondaryForeground,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -383,20 +404,29 @@ style: TextStyle(
                   _buildSubtitleOption(
                     title: '不指定字幕（沿用播放器选择或无）',
                     selected: _selectedServerSubtitleIndex == null,
-                    onTap: () => setState(() => _selectedServerSubtitleIndex = null),
+                    onTap: () =>
+                        setState(() => _selectedServerSubtitleIndex = null),
                   ),
                   const SizedBox(height: 6),
                   ..._serverSubtitles.map((t) => _buildSubtitleOption(
-                        title: (t['display'] as String?) ?? (t['title']?.toString() ?? '字幕 ${t['index']}'),
+                        title: (t['display'] as String?) ??
+                            (t['title']?.toString() ?? '字幕 ${t['index']}'),
                         selected: _selectedServerSubtitleIndex == t['index'],
-                        onTap: () => setState(() => _selectedServerSubtitleIndex = t['index'] as int),
+                        onTap: () => setState(() =>
+                            _selectedServerSubtitleIndex = t['index'] as int),
                       )),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('转码时烧录字幕', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontSize: 13)),
+                      Text(
+                        '转码时烧录字幕',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: menuColors.foreground,
+                          fontSize: 13,
+                        ),
+                      ),
                       FluentSettingsSwitch(
                         value: _burnIn,
                         onChanged: (v) => setState(() => _burnIn = v),
@@ -412,7 +442,11 @@ style: TextStyle(color: Colors.white, fontSize: 13)),
     );
   }
 
-  Widget _buildSubtitleOption({required String title, required bool selected, required VoidCallback onTap}) {
+  Widget _buildSubtitleOption(
+      {required String title,
+      required bool selected,
+      required VoidCallback onTap}) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -422,27 +456,37 @@ style: TextStyle(color: Colors.white, fontSize: 13)),
           width: double.infinity,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: selected ? Colors.blue.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+            color: selected
+                ? menuColors.selectedBackground
+                : menuColors.controlBackground,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? Colors.blue : Colors.white.withOpacity(0.1),
+              color: selected
+                  ? menuColors.selectedBorder
+                  : menuColors.controlBorder,
               width: 1,
             ),
           ),
           child: Row(
             children: [
               Icon(
-                selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: selected ? Colors.blue : Colors.white,
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: selected
+                    ? menuColors.selectedForeground
+                    : menuColors.foreground,
                 size: 18,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white,
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: selected
+                        ? menuColors.selectedForeground
+                        : menuColors.foreground,
                     fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,

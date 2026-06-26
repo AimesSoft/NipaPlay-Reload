@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -280,7 +281,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         ),
         actions: [
           HoverScaleTextButton(
-            child: const Text('取消', style: TextStyle(color: Colors.white)),
+            child: const Text('取消'),
             onPressed: () => Navigator.of(context).pop(null),
           ),
         ],
@@ -554,6 +555,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         // Access SubtitleManager through VideoPlayerState
         final subtitleManager = videoState.subtitleManager;
 
@@ -578,14 +580,14 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
               // 添加加载本地字幕文件的按钮
               if (!kIsWeb) ...[
                 _isLoading
-                    ? const Center(
+                    ? Center(
                         child: SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                menuColors.accent),
                           ),
                         ),
                       )
@@ -624,15 +626,15 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
               // 外部字幕列表
               if (_externalSubtitles.isNotEmpty) ...[
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
-                    padding: EdgeInsets.only(left: 16, bottom: 8),
+                    padding: const EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '外部字幕',
                       locale: Locale("zh-Hans", "zh"),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -667,11 +669,11 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                         ),
                         decoration: BoxDecoration(
                           color: isActive
-                              ? Colors.white.withOpacity(0.1)
+                              ? menuColors.selectedBackground
                               : Colors.transparent,
                           border: Border(
                             bottom: BorderSide(
-                              color: Colors.white.withOpacity(0.5),
+                              color: menuColors.divider,
                               width: 0.5,
                             ),
                           ),
@@ -682,7 +684,9 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                               isActive
                                   ? Icons.check_circle
                                   : Icons.radio_button_unchecked,
-                              color: Colors.white,
+                              color: isActive
+                                  ? menuColors.selectedForeground
+                                  : menuColors.foreground,
                               size: 20,
                             ),
                             const SizedBox(width: 12),
@@ -692,16 +696,21 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                 children: [
                                   Text(
                                     fileName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? menuColors.selectedForeground
+                                          : menuColors.foreground,
                                       fontSize: 14,
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
                                   ),
                                   Text(
                                     '类型: ${fileType.toUpperCase()}',
                                     locale: Locale("zh-Hans", "zh"),
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: menuColors.secondaryForeground,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -709,8 +718,11 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  color: Colors.white, size: 18),
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: menuColors.secondaryForeground,
+                                size: 18,
+                              ),
                               onPressed: () =>
                                   _removeExternalSubtitle(context, index),
                               padding: EdgeInsets.zero,
@@ -728,15 +740,15 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
               // 内嵌字幕列表
               if (hasEmbeddedSubtitles) ...[
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
-                    padding: EdgeInsets.only(left: 16, bottom: 8),
+                    padding: const EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '内嵌字幕',
                       locale: Locale("zh-Hans", "zh"),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -806,10 +818,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.transparent,
+                          color: isActive
+                              ? menuColors.selectedBackground
+                              : Colors.transparent,
                           border: Border(
                             bottom: BorderSide(
-                              color: Colors.white.withOpacity(0.5),
+                              color: menuColors.divider,
                               width: 0.5,
                             ),
                           ),
@@ -820,7 +834,9 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                               isActive
                                   ? Icons.check_circle
                                   : Icons.radio_button_unchecked,
-                              color: Colors.white,
+                              color: isActive
+                                  ? menuColors.selectedForeground
+                                  : menuColors.foreground,
                               size: 20,
                             ),
                             const SizedBox(width: 12),
@@ -830,16 +846,21 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                 children: [
                                   Text(
                                     title, // Display title from SubtitleManager (or fallback)
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? menuColors.selectedForeground
+                                          : menuColors.foreground,
                                       fontSize: 14,
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
                                   ),
                                   Text(
                                     '语言: $language', // Display language from SubtitleManager (or fallback)
                                     locale: Locale("zh-Hans", "zh"),
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: menuColors.secondaryForeground,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -856,13 +877,13 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
               // 没有字幕的情况
               if (!hasEmbeddedSubtitles && _externalSubtitles.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
                   child: Text(
                     '当前视频没有可用的字幕轨道。\n您可以通过"加载本地字幕文件"按钮添加外部字幕。',
                     locale: Locale("zh-Hans", "zh"),
                     style: TextStyle(
-                      color: Colors.white,
+                      color: menuColors.secondaryForeground,
                       fontSize: 14,
                     ),
                     textAlign: TextAlign.center,

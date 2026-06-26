@@ -6,6 +6,7 @@ import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'base_settings_menu.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
+import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 
 class PlaybackRateMenu extends StatefulWidget {
@@ -111,6 +112,7 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
     return Consumer<PlaybackRatePaneController>(
       builder: (context, controller, child) {
         _syncCustomRateController(controller);
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         return BaseSettingsMenu(
           title: '倍速设置',
           onClose: widget.onClose,
@@ -126,18 +128,18 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           '当前倍速',
                           locale: Locale("zh-Hans", "zh"),
                           style: TextStyle(
-                            color: Colors.white,
+                            color: menuColors.foreground,
                             fontSize: 14,
                           ),
                         ),
                         Text(
                           '${_formatRate(controller.currentRate)}x',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: menuColors.foreground,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -150,9 +152,9 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                           ? '正在倍速播放'
                           : '点击下方预设或输入精确倍速',
                       locale: Locale("zh-Hans", "zh"),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white,
+                        color: menuColors.secondaryForeground,
                       ),
                     ),
                   ],
@@ -163,11 +165,11 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '手动输入倍速',
                       locale: Locale("zh-Hans", "zh"),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -188,27 +190,28 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                                 RegExp(r'[0-9.,，]'),
                               ),
                             ],
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(color: menuColors.foreground),
                             decoration: InputDecoration(
                               hintText: '例如 0.01 / 1.25 / 3.5',
                               hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
+                                color: menuColors.disabledForeground,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: menuColors.controlBackground,
                               suffixText: 'x',
-                              suffixStyle:
-                                  const TextStyle(color: Colors.white70),
+                              suffixStyle: TextStyle(
+                                color: menuColors.secondaryForeground,
+                              ),
                               errorText: _customRateError,
                               enabledBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: menuColors.controlBorder,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.6),
+                                  color: menuColors.accent,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -246,7 +249,7 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                   ],
                 ),
               ),
-              const Divider(color: Colors.white24, height: 1),
+              Divider(color: menuColors.divider, height: 1),
               ...controller.speedOptions.map((speed) {
                 final isSelected =
                     (controller.currentRate - speed).abs() < 0.0001;
@@ -271,7 +274,7 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Colors.white.withOpacity(0.15)
+                            ? menuColors.selectedBackground
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -279,7 +282,9 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                         children: [
                           Icon(
                             _getSpeedIcon(speed, isNormalSpeed),
-                            color: Colors.white,
+                            color: isSelected
+                                ? menuColors.selectedForeground
+                                : menuColors.foreground,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -288,7 +293,9 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                               '${_formatRate(speed)}x ${_getSpeedDescription(speed, isNormalSpeed)}',
                               locale: Locale("zh-Hans", "zh"),
                               style: TextStyle(
-                                color: Colors.white,
+                                color: isSelected
+                                    ? menuColors.selectedForeground
+                                    : menuColors.foreground,
                                 fontSize: 14,
                                 fontWeight: isSelected
                                     ? FontWeight.w600
@@ -300,8 +307,8 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                             Container(
                               width: 6,
                               height: 6,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
+                              decoration: BoxDecoration(
+                                color: menuColors.selectedForeground,
                                 shape: BoxShape.circle,
                               ),
                             ),

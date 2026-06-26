@@ -64,10 +64,9 @@ class ArrowMenuContainer extends StatelessWidget {
       ),
     );
     final borderRadiusValue = BorderRadius.circular(borderRadius);
-    final bool isWeb = kIsWeb;
-    // Web 使用深灰色纯色背景
-    final Color effectiveBackgroundColor =
-        isWeb ? const Color(0xFF202020) : backgroundColor;
+    const bool isWeb = kIsWeb;
+    final bool shouldBlur = !isWeb && blurValue > 0;
+    final Color effectiveBackgroundColor = backgroundColor;
 
     final backgroundDecoration = BoxDecoration(
       color: effectiveBackgroundColor,
@@ -85,7 +84,7 @@ class ArrowMenuContainer extends StatelessWidget {
       child: child,
     );
 
-    final Widget blurredBody = isWeb
+    final Widget clippedBody = isWeb
         ? (useSimpleClip
             ? Container(
                 decoration: backgroundDecoration,
@@ -108,9 +107,9 @@ class ArrowMenuContainer extends StatelessWidget {
         : (useSimpleClip
             ? ClipRRect(
                 borderRadius: borderRadiusValue,
-                child: BackdropFilter(
-                  filter:
-                      ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                child: _MaybeBackdropFilter(
+                  enabled: shouldBlur,
+                  blurValue: blurValue,
                   child: DecoratedBox(
                     decoration: backgroundDecoration,
                     child: Padding(
@@ -122,9 +121,9 @@ class ArrowMenuContainer extends StatelessWidget {
               )
             : ClipPath(
                 clipper: ShapeBorderClipper(shape: shape),
-                child: BackdropFilter(
-                  filter:
-                      ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                child: _MaybeBackdropFilter(
+                  enabled: shouldBlur,
+                  blurValue: blurValue,
                   child: DecoratedBox(
                     decoration: ShapeDecoration(
                       shape: shape,
@@ -145,7 +144,7 @@ class ArrowMenuContainer extends StatelessWidget {
     return Stack(
       fit: StackFit.passthrough,
       children: [
-        blurredBody,
+        clippedBody,
         Positioned.fill(
           child: IgnorePointer(
             child: DecoratedBox(
@@ -157,6 +156,29 @@ class ArrowMenuContainer extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MaybeBackdropFilter extends StatelessWidget {
+  const _MaybeBackdropFilter({
+    required this.enabled,
+    required this.blurValue,
+    required this.child,
+  });
+
+  final bool enabled;
+  final double blurValue;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) {
+      return child;
+    }
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+      child: child,
     );
   }
 }

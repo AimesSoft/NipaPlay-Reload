@@ -7,7 +7,6 @@ import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_audio_tracks_pane.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_control_bar_settings_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_list_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_offset_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_settings_pane.dart';
@@ -15,7 +14,6 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_jellyfin_quality_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_info_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_rate_pane.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_seek_step_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playlist_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_list_pane.dart';
@@ -92,8 +90,8 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
             : _CupertinoPlayerMenuPaneView(
                 pane: paneLookup[_activePane]!,
                 onBack: _navigateBack,
-                content: _buildPaneContent(
-                    _activePane!, videoState, _navigateBack),
+                content:
+                    _buildPaneContent(_activePane!, videoState, _navigateBack),
               );
 
         return AnimatedSwitcher(
@@ -149,11 +147,6 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
         );
       case PlayerMenuPaneId.danmakuOffset:
         return CupertinoDanmakuOffsetPane(onBack: onBack);
-      case PlayerMenuPaneId.controlBarSettings:
-        return CupertinoControlBarSettingsPane(
-          videoState: videoState,
-          onBack: onBack,
-        );
       case PlayerMenuPaneId.playbackRate:
         return ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
@@ -177,11 +170,6 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
       case PlayerMenuPaneId.jellyfinQuality:
         return CupertinoJellyfinQualityPane(
           videoState: videoState,
-          onBack: onBack,
-        );
-      default:
-        return _CupertinoPlayerMenuPlaceholder(
-          message: '该功能的 Cupertino 样式正在适配中，请使用其他主题或稍后再试。',
           onBack: onBack,
         );
     }
@@ -297,8 +285,6 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
         return CupertinoIcons.list_bullet;
       case PlayerMenuIconToken.danmakuOffset:
         return CupertinoIcons.clock;
-      case PlayerMenuIconToken.controlBarSettings:
-        return CupertinoIcons.slider_horizontal_3;
       case PlayerMenuIconToken.playbackRate:
         return CupertinoIcons.speedometer;
       case PlayerMenuIconToken.playlist:
@@ -327,42 +313,5 @@ class _CupertinoPlayerMenuPaneView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return content;
-  }
-}
-
-class _CupertinoPlayerMenuPlaceholder extends StatelessWidget {
-  const _CupertinoPlayerMenuPlaceholder({
-    required this.message,
-    required this.onBack,
-  });
-
-  final String message;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoBottomSheetContentLayout(
-      sliversBuilder: (context, topSpacing) => [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                message,
-                textAlign: TextAlign.center,
-                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
-                    ),
-              ),
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: onBack),
-        ),
-      ],
-    );
   }
 }

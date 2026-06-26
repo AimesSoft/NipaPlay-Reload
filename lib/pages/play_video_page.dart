@@ -487,15 +487,20 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         child: BackButtonWidget(videoState: videoState),
                       ),
                       const SizedBox(width: 12.0),
-                      SendDanmakuButton(
-                        onPressed: () => _showSendDanmakuDialog(videoState),
-                      ),
-                      const SizedBox(width: 8.0),
-                      SkipButton(
-                        onPressed: () => videoState.skip(),
-                      ),
-                      const SizedBox(width: 8.0),
-                      if (globals.isDesktop) ...[
+                      if (videoState.playerTopSendDanmakuButtonVisible) ...[
+                        SendDanmakuButton(
+                          onPressed: () => _showSendDanmakuDialog(videoState),
+                        ),
+                        const SizedBox(width: 8.0),
+                      ],
+                      if (videoState.playerTopSkipButtonVisible) ...[
+                        SkipButton(
+                          onPressed: () => videoState.skip(),
+                        ),
+                        const SizedBox(width: 8.0),
+                      ],
+                      if (globals.isDesktop &&
+                          videoState.playerTopResizeButtonVisible) ...[
                         ShadowActionButton(
                           tooltip: ShortcutTooltipManager()
                               .formatActionWithShortcut(
@@ -506,6 +511,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           onPressed: () => videoState.resizeWindowToVideoSize(),
                         ),
                         const SizedBox(width: 8.0),
+                      ],
+                      if (globals.isDesktop &&
+                          videoState.playerTopFrameStepButtonsVisible) ...[
                         ShadowActionButton(
                           tooltip: ShortcutTooltipManager()
                               .formatActionWithShortcut(
@@ -524,8 +532,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           padding: EdgeInsets.zero,
                           onPressed: () => videoState.stepForward(),
                         ),
+                        const SizedBox(width: 8.0),
                       ],
-                      if (!globals.isDesktop) ...[
+                      if (!globals.isDesktop &&
+                          videoState.playerTopFrameStepButtonsVisible) ...[
                         ShadowActionButton(
                           tooltip: '逐帧后退',
                           icon: Ionicons.chevron_back_circle_outline,
@@ -541,8 +551,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           padding: EdgeInsets.zero,
                           onPressed: () => videoState.stepForward(),
                         ),
+                        const SizedBox(width: 8.0),
                       ],
-                      const SizedBox(width: 12.0),
+                      const SizedBox(width: 4.0),
                       MouseRegion(
                         cursor: _isHoveringAnimeInfo
                             ? SystemMouseCursors.click

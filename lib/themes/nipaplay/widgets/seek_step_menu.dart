@@ -6,6 +6,7 @@ import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'base_settings_menu.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
+import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 
 class SeekStepMenu extends StatefulWidget {
@@ -125,6 +126,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
     return Consumer<SeekStepPaneController>(
       builder: (context, controller, child) {
         _syncCustomSeekStepController(controller);
+        final menuColors = PlayerMenuTheme.colorsOf(context);
 
         return BaseSettingsMenu(
           title: '播放设置',
@@ -141,15 +143,18 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           '快进快退时间',
                           locale: Locale('zh', 'CN'),
-                          style: TextStyle(color: Colors.white, fontSize: 14),
+                          style: TextStyle(
+                            color: menuColors.foreground,
+                            fontSize: 14,
+                          ),
                         ),
                         Text(
                           controller.seekStepSummaryLabel,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: menuColors.foreground,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -157,10 +162,13 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       '支持预设与手动输入，最小值为 1 帧',
                       locale: Locale('zh', 'CN'),
-                      style: TextStyle(fontSize: 12, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: menuColors.secondaryForeground,
+                      ),
                     ),
                   ],
                 ),
@@ -170,11 +178,11 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '手动输入快进快退时间',
                       locale: Locale('zh', 'CN'),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: menuColors.foreground,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -195,28 +203,28 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                                 RegExp(r'[0-9.,，]'),
                               ),
                             ],
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(color: menuColors.foreground),
                             decoration: InputDecoration(
                               hintText: '例如 0.5 / 1 / 12.5',
                               hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
+                                color: menuColors.disabledForeground,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: menuColors.controlBackground,
                               suffixText: '秒',
-                              suffixStyle: const TextStyle(
-                                color: Colors.white70,
+                              suffixStyle: TextStyle(
+                                color: menuColors.secondaryForeground,
                               ),
                               errorText: _customSeekStepError,
                               enabledBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: menuColors.controlBorder,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.6),
+                                  color: menuColors.accent,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -255,7 +263,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                   ],
                 ),
               ),
-              const Divider(color: Colors.white24, height: 1),
+              Divider(color: menuColors.divider, height: 1),
               ...controller.seekStepOptions.map((seconds) {
                 final isSelected = controller.isSeekStepSelected(seconds);
                 final isFrame = controller.isFrameSeekStep(seconds);
@@ -276,13 +284,20 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                         horizontal: 16,
                         vertical: 12,
                       ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? menuColors.selectedBackground
+                            : Colors.transparent,
+                      ),
                       child: Row(
                         children: [
                           Icon(
                             isSelected
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_unchecked,
-                            color: Colors.white,
+                            color: isSelected
+                                ? menuColors.selectedForeground
+                                : menuColors.foreground,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -293,7 +308,9 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                                 Text(
                                   title,
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: isSelected
+                                        ? menuColors.selectedForeground
+                                        : menuColors.foreground,
                                     fontSize: 14,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
@@ -305,7 +322,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                                   Text(
                                     subtitle,
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.72),
+                                      color: menuColors.secondaryForeground,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -319,7 +336,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                   ),
                 );
               }),
-              const Divider(color: Colors.white24, height: 1),
+              Divider(color: menuColors.divider, height: 1),
               Container(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -328,15 +345,18 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           '长按右键倍速',
                           locale: Locale('zh', 'CN'),
-                          style: TextStyle(color: Colors.white, fontSize: 14),
+                          style: TextStyle(
+                            color: menuColors.foreground,
+                            fontSize: 14,
+                          ),
                         ),
                         Text(
                           '${controller.speedBoostRate}x',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: menuColors.foreground,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -344,15 +364,18 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       '设置长按右方向键时的播放倍速',
                       locale: Locale('zh', 'CN'),
-                      style: TextStyle(fontSize: 12, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: menuColors.secondaryForeground,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Divider(color: Colors.white24, height: 1),
+              Divider(color: menuColors.divider, height: 1),
               ...controller.speedBoostOptions.map((speed) {
                 final isSelected = controller.speedBoostRate == speed;
 
@@ -367,20 +390,29 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                         horizontal: 16,
                         vertical: 12,
                       ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? menuColors.selectedBackground
+                            : Colors.transparent,
+                      ),
                       child: Row(
                         children: [
                           Icon(
                             isSelected
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_unchecked,
-                            color: Colors.white,
+                            color: isSelected
+                                ? menuColors.selectedForeground
+                                : menuColors.foreground,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Text(
                             '${speed}x',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: isSelected
+                                  ? menuColors.selectedForeground
+                                  : menuColors.foreground,
                               fontSize: 14,
                               fontWeight: isSelected
                                   ? FontWeight.w600
@@ -393,7 +425,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                   ),
                 );
               }),
-              const Divider(color: Colors.white24, height: 1),
+              Divider(color: menuColors.divider, height: 1),
               Container(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -402,15 +434,18 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           '跳过时间',
                           locale: Locale('zh', 'CN'),
-                          style: TextStyle(color: Colors.white, fontSize: 14),
+                          style: TextStyle(
+                            color: menuColors.foreground,
+                            fontSize: 14,
+                          ),
                         ),
                         Text(
                           '${controller.skipSeconds}秒',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: menuColors.foreground,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -418,10 +453,13 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       '设置跳过功能的跳跃时间',
                       locale: Locale('zh', 'CN'),
-                      style: TextStyle(fontSize: 12, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: menuColors.secondaryForeground,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -445,11 +483,13 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                               height: 40,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white30),
+                                border: Border.all(
+                                  color: menuColors.controlBorder,
+                                ),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.remove,
-                                color: Colors.white,
+                                color: menuColors.foreground,
                                 size: 20,
                               ),
                             ),
@@ -461,34 +501,36 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                             controller: _skipSecondsController,
                             keyboardType: TextInputType.number,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: menuColors.foreground,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                             decoration: InputDecoration(
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Colors.white30,
+                                borderSide: BorderSide(
+                                  color: menuColors.controlBorder,
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Colors.white30,
+                                borderSide: BorderSide(
+                                  color: menuColors.controlBorder,
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Colors.white,
+                                borderSide: BorderSide(
+                                  color: menuColors.accent,
                                 ),
                               ),
                               filled: true,
-                              fillColor: Colors.white10,
+                              fillColor: menuColors.controlBackground,
                               suffixText: '秒',
-                              suffixStyle: const TextStyle(color: Colors.white),
+                              suffixStyle: TextStyle(
+                                color: menuColors.secondaryForeground,
+                              ),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
@@ -506,9 +548,8 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                             },
                             onTap: () {
                               if (_skipSecondsController.text.isEmpty) {
-                                _skipSecondsController.text = controller
-                                    .skipSeconds
-                                    .toString();
+                                _skipSecondsController.text =
+                                    controller.skipSeconds.toString();
                               }
                             },
                           ),
@@ -533,11 +574,13 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                               height: 40,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white30),
+                                border: Border.all(
+                                  color: menuColors.controlBorder,
+                                ),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.add,
-                                color: Colors.white,
+                                color: menuColors.foreground,
                                 size: 20,
                               ),
                             ),

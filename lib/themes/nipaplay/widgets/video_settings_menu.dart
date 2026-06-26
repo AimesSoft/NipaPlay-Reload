@@ -3,7 +3,6 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'subtitle_tracks_menu.dart';
 import 'subtitle_settings_menu.dart';
-import 'control_bar_settings_menu.dart';
 import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
 import 'danmaku_list_menu.dart';
@@ -20,6 +19,7 @@ import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -352,13 +352,6 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
           onHoverChanged: widget.onHoverChanged,
         );
         break;
-      case PlayerMenuPaneId.controlBarSettings:
-        child = ControlBarSettingsMenu(
-          onClose: onPaneClose,
-          videoState: videoState,
-          onHoverChanged: widget.onHoverChanged,
-        );
-        break;
       case PlayerMenuPaneId.playbackRate:
         child = ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
@@ -470,10 +463,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             child: ScaleTransition(
               alignment: scaleAlignment,
               scale: _menuScaleAnimation,
-              child: Theme(
-                data: Theme.of(context).copyWith(brightness: Brightness.dark),
-                child: menuContent,
-              ),
+              child: menuContent,
             ),
           ),
         );
@@ -508,9 +498,12 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
 
   Widget _buildSettingsItem(PlayerMenuItemDefinition item) {
     final bool isActive = _activePaneId == item.paneId;
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    final foregroundColor =
+        isActive ? menuColors.selectedForeground : menuColors.foreground;
 
     return Material(
-      color: isActive ? Colors.white.withOpacity(0.15) : Colors.transparent,
+      color: isActive ? menuColors.selectedBackground : Colors.transparent,
       child: InkWell(
         onTap: () => _handleItemTap(item.paneId),
         child: Container(
@@ -521,7 +514,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: Colors.white.withOpacity(0.2),
+                color: menuColors.divider,
                 width: 0.5,
               ),
             ),
@@ -530,15 +523,16 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             children: [
               Icon(
                 _resolveIcon(item.icon),
-                color: Colors.white,
+                color: foregroundColor,
                 size: 20,
               ),
               const SizedBox(width: 12),
               Text(
                 item.title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: foregroundColor,
                   fontSize: 14,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
               const Spacer(),
@@ -546,7 +540,9 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                 isActive
                     ? Icons.chevron_left_rounded
                     : Icons.chevron_right_rounded,
-                color: Colors.white.withOpacity(0.7),
+                color: isActive
+                    ? menuColors.selectedForeground
+                    : menuColors.secondaryForeground,
                 size: 20,
               ),
             ],
@@ -574,8 +570,6 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
         return Icons.list_alt_outlined;
       case PlayerMenuIconToken.danmakuOffset:
         return Icons.schedule;
-      case PlayerMenuIconToken.controlBarSettings:
-        return Icons.height;
       case PlayerMenuIconToken.playbackRate:
         return Icons.speed;
       case PlayerMenuIconToken.playlist:

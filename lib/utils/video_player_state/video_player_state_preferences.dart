@@ -193,6 +193,75 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<void> _loadPlayerTopButtonVisibilitySettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final sendDanmaku =
+        prefs.getBool(_playerTopSendDanmakuButtonVisibleKey) ?? true;
+    final skip = prefs.getBool(_playerTopSkipButtonVisibleKey) ?? false;
+    final resize = prefs.getBool(_playerTopResizeButtonVisibleKey) ?? false;
+    final frameStep =
+        prefs.getBool(_playerTopFrameStepButtonsVisibleKey) ?? false;
+    final changed = _playerTopSendDanmakuButtonVisible != sendDanmaku ||
+        _playerTopSkipButtonVisible != skip ||
+        _playerTopResizeButtonVisible != resize ||
+        _playerTopFrameStepButtonsVisible != frameStep;
+
+    _playerTopSendDanmakuButtonVisible = sendDanmaku;
+    _playerTopSkipButtonVisible = skip;
+    _playerTopResizeButtonVisible = resize;
+    _playerTopFrameStepButtonsVisible = frameStep;
+    if (changed) {
+      _notifyListeners();
+    }
+  }
+
+  Future<void> setPlayerTopSendDanmakuButtonVisible(bool visible) =>
+      _setPlayerTopButtonVisibility(
+        key: _playerTopSendDanmakuButtonVisibleKey,
+        currentValue: _playerTopSendDanmakuButtonVisible,
+        newValue: visible,
+        apply: () => _playerTopSendDanmakuButtonVisible = visible,
+      );
+
+  Future<void> setPlayerTopSkipButtonVisible(bool visible) =>
+      _setPlayerTopButtonVisibility(
+        key: _playerTopSkipButtonVisibleKey,
+        currentValue: _playerTopSkipButtonVisible,
+        newValue: visible,
+        apply: () => _playerTopSkipButtonVisible = visible,
+      );
+
+  Future<void> setPlayerTopResizeButtonVisible(bool visible) =>
+      _setPlayerTopButtonVisibility(
+        key: _playerTopResizeButtonVisibleKey,
+        currentValue: _playerTopResizeButtonVisible,
+        newValue: visible,
+        apply: () => _playerTopResizeButtonVisible = visible,
+      );
+
+  Future<void> setPlayerTopFrameStepButtonsVisible(bool visible) =>
+      _setPlayerTopButtonVisibility(
+        key: _playerTopFrameStepButtonsVisibleKey,
+        currentValue: _playerTopFrameStepButtonsVisible,
+        newValue: visible,
+        apply: () => _playerTopFrameStepButtonsVisible = visible,
+      );
+
+  Future<void> _setPlayerTopButtonVisibility({
+    required String key,
+    required bool currentValue,
+    required bool newValue,
+    required VoidCallback apply,
+  }) async {
+    if (currentValue == newValue) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, newValue);
+    apply();
+    _notifyListeners();
+  }
+
   /// 加载 MKV 章节标记开关（进度条分割线标记 + 当前章节高亮 + 点击跳转）。
   Future<void> _loadChapterMarkersEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -527,8 +596,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     // 修复：将锚点重设到当前 playbackTimeMs 和 elapsed，使新速率从当前位置平滑推进。
     if (!kReleaseMode) {
       final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
-      final predictedJumpMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
-      debugPrint('[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
+      final predictedJumpMs =
+          elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint(
+          '[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_JUMP=${predictedJumpMs.toStringAsFixed(1)}ms '
@@ -555,8 +626,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     // playbackTimeMs几乎不推进 → playerMs以1x继续推进 → 大drift → FORWARD SNAP
     if (!kReleaseMode) {
       final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
-      final predictedDriftMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
-      debugPrint('[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
+      final predictedDriftMs =
+          elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint(
+          '[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_DRIFT=${predictedDriftMs.toStringAsFixed(1)}ms '

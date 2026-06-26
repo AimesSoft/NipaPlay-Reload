@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async'; // 添加定时器支持
+import 'package:nipaplay/themes/nipaplay/widgets/player_menu_theme.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/player_overlay_surface.dart';
 
 // 全局气泡管理器 - 确保同一时间只有一个气泡显示
 class _TooltipManager {
@@ -410,13 +411,9 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   }
 
   Widget _buildBubble(Size size) {
-    final bool isWeb = kIsWeb;
-    final backgroundColor =
-        isWeb ? const Color(0xFF202020) : Colors.black.withValues(alpha: 0.58);
-    final borderColor = Colors.white.withValues(alpha: 0.2);
-
-    const textStyle = TextStyle(
-      color: Colors.white,
+    final colors = PlayerMenuTheme.colorsOf(context);
+    final textStyle = TextStyle(
+      color: colors.foreground,
       fontSize: 14,
       height: 1.4,
       fontWeight: FontWeight.w400,
@@ -430,36 +427,21 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
         minHeight: 40,
         maxHeight: 400,
       ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(bubbleRadius),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(bubbleRadius),
-        child: Container(
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(bubbleRadius),
-            border: Border.all(
-              color: borderColor,
-              width: 1,
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(widget.padding),
-            child: IntrinsicHeight(
-              child: IntrinsicWidth(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: widget.maxWidth - widget.padding * 2,
-                  ),
-                  child: Text(
-                    widget.text,
-                    style: textStyle,
-                    textAlign: TextAlign.left,
-                    softWrap: true,
-                    overflow: TextOverflow.visible,
-                  ),
-                ),
+      child: PlayerOverlaySurface(
+        borderRadius: bubbleRadius,
+        padding: EdgeInsets.all(widget.padding),
+        child: IntrinsicHeight(
+          child: IntrinsicWidth(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: widget.maxWidth - widget.padding * 2,
+              ),
+              child: Text(
+                widget.text,
+                style: textStyle,
+                textAlign: TextAlign.left,
+                softWrap: true,
+                overflow: TextOverflow.visible,
               ),
             ),
           ),

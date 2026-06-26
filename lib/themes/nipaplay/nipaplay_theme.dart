@@ -16,9 +16,9 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
           displayName: 'NipaPlay',
           preview: const ThemePreview(
             title: 'NipaPlay 主题',
-            icon: Icons.blur_on,
+            icon: Icons.color_lens_outlined,
             highlights: [
-              '磨砂玻璃效果',
+              '浅色/深色界面',
               '渐变背景',
               '圆角设计',
               '适合多媒体应用',

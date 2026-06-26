@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'dart:io';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -1260,6 +1261,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     return BaseSettingsMenu(
       title: '播放列表',
       onClose: widget.onClose,
@@ -1276,7 +1278,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                 _currentAnimeTitle!,
                 locale: const Locale("zh-Hans", "zh"),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: menuColors.foreground,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1294,17 +1296,18 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
   }
 
   Widget _buildContent() {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 16),
+            CircularProgressIndicator(color: menuColors.accent),
+            const SizedBox(height: 16),
             Text(
               '加载播放列表中...',
               locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: menuColors.secondaryForeground),
             ),
           ],
         ),
@@ -1324,7 +1327,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             const SizedBox(height: 16),
             Text(
               _error!,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: menuColors.foreground),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -1340,20 +1343,20 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
     }
 
     if (!_hasFileSystemData || _fileSystemEpisodes.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.folder_open,
-              color: Colors.white,
+              color: menuColors.secondaryForeground,
               size: 48,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               '目录中没有找到视频文件',
               locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: menuColors.secondaryForeground),
             ),
           ],
         ),
@@ -1377,11 +1380,13 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
                   color: isCurrentEpisode
-                      ? Colors.white.withValues(alpha: 0.2)
+                      ? menuColors.selectedBackground
                       : Colors.transparent,
                   border: isCurrentEpisode
                       ? Border.all(
-                          color: Colors.white.withValues(alpha: 0.5), width: 1)
+                          color: menuColors.selectedBorder,
+                          width: 1,
+                        )
                       : null,
                 ),
                 child: Material(
@@ -1396,8 +1401,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                       locale: const Locale("zh-Hans", "zh"),
                       style: TextStyle(
                         color: isCurrentEpisode
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.87),
+                            ? menuColors.selectedForeground
+                            : menuColors.foreground,
                         fontSize: 14,
                         fontWeight: isCurrentEpisode
                             ? FontWeight.bold
@@ -1407,9 +1412,9 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     trailing: isCurrentEpisode
-                        ? const Icon(
+                        ? Icon(
                             Icons.play_arrow,
-                            color: Colors.white,
+                            color: menuColors.selectedForeground,
                             size: 20,
                           )
                         : null,

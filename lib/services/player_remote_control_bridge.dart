@@ -265,28 +265,6 @@ class PlayerRemoteControlBridge {
       });
     }
 
-    void addInt({
-      required PlayerMenuPaneId paneId,
-      required String key,
-      required String label,
-      required int value,
-      int? min,
-      int? max,
-      int? step,
-    }) {
-      if (!paneVisible(paneId)) return;
-      params.add({
-        'paneId': paneId.name,
-        'key': key,
-        'label': label,
-        'type': 'int',
-        'value': value,
-        if (min != null) 'min': min,
-        if (max != null) 'max': max,
-        if (step != null) 'step': step,
-      });
-    }
-
     void addEnum({
       required PlayerMenuPaneId paneId,
       required String key,
@@ -773,27 +751,6 @@ class PlayerRemoteControlBridge {
       });
     }
 
-    if (paneVisible(PlayerMenuPaneId.controlBarSettings)) {
-      addBool(
-        paneId: PlayerMenuPaneId.controlBarSettings,
-        key: 'controlBar.minimalProgressBarEnabled',
-        label: '极简进度条',
-        value: state.minimalProgressBarEnabled,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.controlBarSettings,
-        key: 'controlBar.showDanmakuDensityChart',
-        label: '显示弹幕密度图',
-        value: state.showDanmakuDensityChart,
-      );
-      addString(
-        paneId: PlayerMenuPaneId.controlBarSettings,
-        key: 'controlBar.minimalProgressBarColor',
-        label: '进度条颜色',
-        value: _toHexColor(state.minimalProgressBarColor),
-      );
-    }
-
     if (paneVisible(PlayerMenuPaneId.playbackRate)) {
       addDouble(
         paneId: PlayerMenuPaneId.playbackRate,
@@ -803,60 +760,6 @@ class PlayerRemoteControlBridge {
         min: VideoPlayerState.minPlaybackRate,
         max: VideoPlayerState.maxPlaybackRate,
         step: 0.05,
-      );
-    }
-
-    if (paneVisible(PlayerMenuPaneId.seekStep)) {
-      addDouble(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'seek.stepSeconds',
-        label: '快进快退步长',
-        value: state.seekStepSeconds,
-        min: state.seekStepMinSeconds,
-        max: state.seekStepMaxSeconds,
-        step: 0.05,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'seek.speedBoostRate',
-        label: '长按倍速倍率',
-        value: state.speedBoostRate,
-        min: 1,
-        max: 5,
-        step: 0.25,
-      );
-      addInt(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'seek.skipSeconds',
-        label: '跳过时间（秒）',
-        value: state.skipSeconds,
-        min: 10,
-        max: 600,
-        step: 10,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'player.pauseOnBackground',
-        label: '后台自动暂停',
-        value: state.pauseOnBackground,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'player.desktopHoverSettingsMenuEnabled',
-        label: '右侧悬浮设置菜单',
-        value: state.desktopHoverSettingsMenuEnabled,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'player.instantHidePlayerUiEnabled',
-        label: '立即隐藏播放器 UI',
-        value: state.instantHidePlayerUiEnabled,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.seekStep,
-        key: 'player.useHardwareDecoder',
-        label: '硬件解码',
-        value: state.useHardwareDecoder,
       );
     }
 
@@ -1145,22 +1048,6 @@ class PlayerRemoteControlBridge {
       case 'danmaku.manualOffset':
         state.setManualDanmakuOffset(
             _asDouble(value, fallback: state.manualDanmakuOffset));
-        return;
-      case 'controlBar.minimalProgressBarEnabled':
-        await state.setMinimalProgressBarEnabled(
-          _asBool(value, fallback: state.minimalProgressBarEnabled),
-        );
-        return;
-      case 'controlBar.showDanmakuDensityChart':
-        await state.setShowDanmakuDensityChart(
-          _asBool(value, fallback: state.showDanmakuDensityChart),
-        );
-        return;
-      case 'controlBar.minimalProgressBarColor':
-        final color = _parseColor(value);
-        if (color != null) {
-          await state.setMinimalProgressBarColor(color.toARGB32());
-        }
         return;
       case 'playback.rate':
         await state

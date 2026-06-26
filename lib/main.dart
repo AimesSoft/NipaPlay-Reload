@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
+import 'themes/nipaplay/pages/settings/settings_entries.dart';
 import 'themes/nipaplay/pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
@@ -840,37 +841,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       onShowAbout: () {
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx != null) {
-          showAboutDialog(
-            context: ctx,
-            applicationName: 'NipaPlay',
-            applicationLegalese: '© AimesSoft',
-          );
-        }
-      },
-      onShowHelp: () {
-        final ctx = navigatorKey.currentState?.overlay?.context;
-        if (ctx != null) {
-          showDialog(
-            context: ctx,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('NipaPlay 帮助'),
-              content: const Text(
-                '快捷键：\n'
-                '• Cmd+U - 上传视频\n'
-                '• Cmd+W - 关闭窗口\n'
-                '• Cmd+Q - 退出应用\n'
-                '• Cmd+, - 偏好设置\n'
-                '• Cmd+1~N - 切换标签页（根据当前显示的标签动态分配）\n\n'
-                '支持的视频格式：\n'
-                'MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('确定'),
-                ),
-              ],
-            ),
+          SettingsPage.showWindow(
+            ctx,
+            initialEntryId: NipaplaySettingEntryIds.about,
           );
         }
       },

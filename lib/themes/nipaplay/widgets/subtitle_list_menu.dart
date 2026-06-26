@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
+import 'player_menu_theme.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:nipaplay/utils/subtitle_parser.dart';
@@ -112,7 +113,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       _currentTimeMs = videoState.position.inMilliseconds;
 
       // 检查是否有活跃的字幕（外部字幕在 media_kit 内核下可能不会体现在 activeSubtitleTracks 中）
-      final activeExternalSubtitlePath = videoState.getActiveExternalSubtitlePath();
+      final activeExternalSubtitlePath =
+          videoState.getActiveExternalSubtitlePath();
       if (videoState.player.activeSubtitleTracks.isEmpty &&
           (activeExternalSubtitlePath == null ||
               activeExternalSubtitlePath.isEmpty)) {
@@ -466,6 +468,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final menuColors = PlayerMenuTheme.colorsOf(context);
         // 当前是否有字幕轨道激活
         final subtitlePath = videoState.getActiveExternalSubtitlePath();
         final hasActiveSubtitles =
@@ -489,37 +492,45 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
           onClose: widget.onClose,
           onHoverChanged: widget.onHoverChanged,
           content: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        menuColors.accent,
+                      ),
                       strokeWidth: 2,
                     ),
                   ),
                 )
               : !hasActiveSubtitles
-                  ? const Padding(
-                      padding:
-                          EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 20,
+                        horizontal: 16,
+                      ),
                       child: Center(
                         child: Text(
                           '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
                           locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(
+                            color: menuColors.secondaryForeground,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
                     )
                   : _allSubtitleEntries.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(
                               vertical: 20, horizontal: 16),
                           child: Center(
                             child: Text(
                               '当前字幕轨道没有可显示的字幕内容',
                               locale: Locale("zh-Hans", "zh"),
-                              style: TextStyle(color: Colors.white),
+                              style: TextStyle(
+                                color: menuColors.secondaryForeground,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -576,9 +587,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
                                         return Material(
                                           color: isCurrentSubtitle
-                                              ? const Color.fromARGB(
-                                                      255, 255, 255, 255)
-                                                  .withOpacity(0.15)
+                                              ? menuColors.selectedBackground
                                               : Colors.transparent,
                                           child: InkWell(
                                             onTap: () =>
@@ -591,8 +600,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                               decoration: BoxDecoration(
                                                 border: Border(
                                                   bottom: BorderSide(
-                                                    color: Colors.white
-                                                        .withOpacity(0.1),
+                                                    color: menuColors.divider,
                                                     width: 0.5,
                                                   ),
                                                 ),
@@ -666,7 +674,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                       locale: Locale(
                                                           "zh-Hans", "zh"),
                                                       style: TextStyle(
-                                                        color: Colors.white,
+                                                        color: isCurrentSubtitle
+                                                            ? menuColors
+                                                                .selectedForeground
+                                                            : menuColors
+                                                                .foreground,
                                                         fontSize: 14,
                                                         fontWeight:
                                                             isCurrentSubtitle
@@ -737,9 +749,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
                                           return Material(
                                             color: isCurrentSubtitle
-                                                ? const Color.fromARGB(
-                                                        255, 255, 255, 255)
-                                                    .withOpacity(0.15)
+                                                ? menuColors.selectedBackground
                                                 : Colors.transparent,
                                             child: InkWell(
                                               onTap: () => _seekToTime(
@@ -752,8 +762,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                 decoration: BoxDecoration(
                                                   border: Border(
                                                     bottom: BorderSide(
-                                                      color: Colors.white
-                                                          .withOpacity(0.1),
+                                                      color: menuColors.divider,
                                                       width: 0.5,
                                                     ),
                                                   ),
@@ -825,7 +834,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                         locale: Locale(
                                                             "zh-Hans", "zh"),
                                                         style: TextStyle(
-                                                          color: Colors.white,
+                                                          color: isCurrentSubtitle
+                                                              ? menuColors
+                                                                  .selectedForeground
+                                                              : menuColors
+                                                                  .foreground,
                                                           fontSize: 14,
                                                           fontWeight:
                                                               isCurrentSubtitle
@@ -858,12 +871,13 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                     color: Colors.black.withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const SizedBox(
+                                  child: SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
+                                        menuColors.accent,
+                                      ),
                                       strokeWidth: 2,
                                     ),
                                   ),

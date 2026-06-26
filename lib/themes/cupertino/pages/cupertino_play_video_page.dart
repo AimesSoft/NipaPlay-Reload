@@ -846,12 +846,18 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                             ),
                           ),
                           const SizedBox(width: 12.0),
-                          SendDanmakuButton(
-                            onPressed: () => _showSendDanmakuDialog(videoState),
-                          ),
-                          const SizedBox(width: 8.0),
-                          SkipButton(onPressed: () => videoState.skip()),
-                          const SizedBox(width: 12.0),
+                          if (videoState.playerTopSendDanmakuButtonVisible) ...[
+                            SendDanmakuButton(
+                              onPressed: () =>
+                                  _showSendDanmakuDialog(videoState),
+                            ),
+                            const SizedBox(width: 8.0),
+                          ],
+                          if (videoState.playerTopSkipButtonVisible) ...[
+                            SkipButton(onPressed: () => videoState.skip()),
+                            const SizedBox(width: 8.0),
+                          ],
+                          const SizedBox(width: 4.0),
                           MouseRegion(
                             cursor: _isHoveringAnimeInfo
                                 ? SystemMouseCursors.click
@@ -1305,12 +1311,17 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 children: [
                   _buildBackButton(videoState),
                   const SizedBox(width: 12),
-                  if (videoState.hasVideo) ...[
+                  if (videoState.hasVideo &&
+                      videoState.playerTopSendDanmakuButtonVisible) ...[
                     _buildSendDanmakuButton(videoState),
                     const SizedBox(width: 8),
-                    _buildSkipButton(videoState),
-                    const SizedBox(width: 12),
                   ],
+                  if (videoState.hasVideo &&
+                      videoState.playerTopSkipButtonVisible) ...[
+                    _buildSkipButton(videoState),
+                    const SizedBox(width: 8),
+                  ],
+                  const SizedBox(width: 4),
                   Expanded(child: _buildTitleButton(context, videoState)),
                   if (!kIsWeb &&
                       defaultTargetPlatform == TargetPlatform.iOS) ...[

@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/player_menu_theme.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/player_overlay_surface.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
-import 'package:provider/provider.dart';
 import 'control_shadow.dart';
 
 class VideoProgressBar extends StatefulWidget {
@@ -19,11 +16,14 @@ class VideoProgressBar extends StatefulWidget {
   final Function(Offset) onPositionUpdate;
   final Function(bool) onDraggingStateChange;
   final String Function(Duration) formatDuration;
+
   /// MKV 章节列表（用于在轨道上画章节起点竖线标记 + 当前章节高亮段）。
   /// 参考 REFERENCE/mpv/player/lua/osc.lua:2512 markers。
   final List<PlayerChapter> chapters;
+
   /// 媒体总时长（毫秒），用于计算章节标记位置。
   final int durationMs;
+
   /// 当前章节索引（用于在轨道上高亮当前章节段）。-1 表示无/首章前。
   final int currentChapter;
 
@@ -52,9 +52,11 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   OverlayEntry? _overlayEntry;
   DateTime? _lastSeekTime;
   Timer? _previewDebounceTimer;
+
   /// 当前 hover/tap 命中的章节分割线索引（-1=未命中任何分割线）。
   /// 用于 _ChapterTickMarks 高亮放大该分割线。
   int _hitChapterTickIndex = -1;
+
   /// 章节分割线命中容差（像素）。点击/悬停在该像素范围内才触发章节跳转。
   static const double _chapterTickHitTolerance = 8.0;
   String? _hoverThumbnailPath;
@@ -103,133 +105,60 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             Positioned(
               left: bubbleX,
               top: bubbleY,
-              child: kIsWeb
-                  ? Container(
-                      padding: const EdgeInsets.all(8),
-                      width: bubbleWidth,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF202020),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: hasPreview
-                          ? Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: _buildPreviewImage(
-                                    thumbnailPath!,
-                                    previewWidth,
-                                    previewHeight,
-                                  ),
+              child: Builder(
+                builder: (context) {
+                  final colors = PlayerMenuTheme.colorsOf(context);
+                  final textStyle = TextStyle(
+                    color: colors.foreground,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  );
+                  return PlayerOverlaySurface(
+                    width: bubbleWidth,
+                    borderRadius: 8,
+                    padding: const EdgeInsets.all(8),
+                    child: hasPreview
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: _buildPreviewImage(
+                                  thumbnailPath!,
+                                  previewWidth,
+                                  previewHeight,
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 6, left: 4, right: 4, bottom: 2),
-                                  child: Text(
-                                    text,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    overflow: TextOverflow.visible,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Center(
-                              child: Text(
-                                text,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.visible,
                               ),
-                            ),
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(
-                            sigmaX: context
-                                    .watch<AppearanceSettingsProvider>()
-                                    .enableWidgetBlurEffect
-                                ? 10
-                                : 0,
-                            sigmaY: context
-                                    .watch<AppearanceSettingsProvider>()
-                                    .enableWidgetBlurEffect
-                                ? 10
-                                : 0),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.58),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              width: 0.5,
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 6,
+                                  left: 4,
+                                  right: 4,
+                                  bottom: 2,
+                                ),
+                                child: Text(
+                                  text,
+                                  style: textStyle,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.visible,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Center(
+                            child: Text(
+                              text,
+                              style: textStyle,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.visible,
                             ),
                           ),
-                          width: bubbleWidth,
-                          child: hasPreview
-                              ? Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: _buildPreviewImage(
-                                        thumbnailPath!,
-                                        previewWidth,
-                                        previewHeight,
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                          top: 6, left: 4, right: 4, bottom: 2),
-                                      child: Text(
-                                        text,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        overflow: TextOverflow.visible,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Center(
-                                  child: Text(
-                                    text,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    overflow: TextOverflow.visible,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -353,7 +282,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           // isTapGesture: true → 命中章节分割线走 seekToChapter（keyframe 对齐）。
           // drag 手势（onHorizontalDrag*）默认 false，始终走精确 seekTo，避免
           // 在章节边界 ±8px 内拖拽被章节跳转劫持。
-          _updateProgressFromPosition(details.localPosition, isTapGesture: true);
+          _updateProgressFromPosition(details.localPosition,
+              isTapGesture: true);
           _showOverlay(
             context,
             widget.videoState.progress,
@@ -419,7 +349,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         child: Opacity(
                           opacity: 0.3,
                           child: ControlShadow(
-                            borderRadius: BorderRadius.circular(trackHeight / 2),
+                            borderRadius:
+                                BorderRadius.circular(trackHeight / 2),
                             child: Container(
                               height: trackHeight,
                               decoration: BoxDecoration(
@@ -433,7 +364,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                       // 章节标记 overlay（竖线标记 + 当前章节高亮段）
                       // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
-                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
+                      ..._buildChapterOverlayWidgets(
+                          verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -521,7 +453,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         child: Opacity(
                           opacity: 0.5,
                           child: ControlShadow(
-                            borderRadius: BorderRadius.circular(trackHeight / 2),
+                            borderRadius:
+                                BorderRadius.circular(trackHeight / 2),
                             child: Container(
                               height: trackHeight,
                               decoration: BoxDecoration(
@@ -535,7 +468,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                       // 章节标记 overlay（竖线标记 + 当前章节高亮段）
                       // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
-                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
+                      ..._buildChapterOverlayWidgets(
+                          verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -623,7 +557,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   /// PR review 注意点3：进度条有 isDragging/非 isDragging 两种布局分支，
   /// 章节标记在两分支中重复。提取此公共方法消除重复，两分支复用同一构建逻辑。
   /// 返回 List<Widget>，由调用方 spread 进各自 Stack 的 children。
-  List<Widget> _buildChapterOverlayWidgets(double verticalMargin, double trackHeight) {
+  List<Widget> _buildChapterOverlayWidgets(
+      double verticalMargin, double trackHeight) {
     if (widget.chapters.isEmpty || widget.durationMs <= 0) {
       return const [];
     }
@@ -679,7 +614,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     return bestIdx;
   }
 
-  void _updateProgressFromPosition(Offset localPosition, {bool isTapGesture = false}) {
+  void _updateProgressFromPosition(Offset localPosition,
+      {bool isTapGesture = false}) {
     final RenderBox? sliderBox =
         _sliderKey.currentContext?.findRenderObject() as RenderBox?;
     if (sliderBox != null) {
@@ -828,6 +764,7 @@ class _ChapterTickMarks extends LeafRenderObjectWidget {
   final List<PlayerChapter> chapters;
   final int durationMs;
   final double trackHeight;
+
   /// 当前 hover/tap 命中的章节分割线索引（-1=未命中）。
   /// 命中的分割线会高亮放大，提示可点击跳转。
   final int hitIndex;

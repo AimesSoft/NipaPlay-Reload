@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/player_menu_theme.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/player_overlay_surface.dart';
 
 class TooltipBubble extends StatefulWidget {
   final String text;
@@ -237,80 +235,26 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   }
 
   Widget _buildBubble(double width) {
-    const textStyle = TextStyle(
-      color: Colors.white,
+    final colors = PlayerMenuTheme.colorsOf(context);
+    final textStyle = TextStyle(
+      color: colors.foreground,
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
 
-    if (kIsWeb) {
-      return Container(
-        width: width,
-        height: _getBubbleHeight(),
-        decoration: BoxDecoration(
-          color: const Color(0xFF202020),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.2),
-            width: 0.5,
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: widget.padding),
-            child: Text(
-              widget.text,
-              style: textStyle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
+    return PlayerOverlaySurface(
       width: width,
       height: _getBubbleHeight(),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-              sigmaX: context
-                      .watch<AppearanceSettingsProvider>()
-                      .enableWidgetBlurEffect
-                  ? 10
-                  : 0,
-              sigmaY: context
-                      .watch<AppearanceSettingsProvider>()
-                      .enableWidgetBlurEffect
-                  ? 10
-                  : 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.58),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
-                width: 0.5,
-              ),
-            ),
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: widget.padding),
-                child: Text(
-                  widget.text,
-                  style: textStyle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
+      borderRadius: 8,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: widget.padding),
+          child: Text(
+            widget.text,
+            style: textStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
         ),
       ),
