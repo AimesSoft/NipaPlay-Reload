@@ -11,6 +11,8 @@ class SettingsKeys {
 
   static const String autoMatchDanmakuOnPlay = 'danmaku_auto_match_on_play';
 
+  static const String danmakuAutoLoadStrategy = 'danmaku_auto_load_strategy';
+
   static const String useExternalPlayer = 'external_player_enabled';
 
   static const String externalPlayerPath = 'external_player_path';

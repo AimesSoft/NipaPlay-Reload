@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
@@ -52,6 +53,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   final GlobalKey _danmakuDisplayAreaDropdownKey = GlobalKey();
   final GlobalKey _danmakuOutlineStyleDropdownKey = GlobalKey();
   final GlobalKey _danmakuShadowStyleDropdownKey = GlobalKey();
+  final GlobalKey _danmakuAutoLoadStrategyDropdownKey = GlobalKey();
 
   final TextEditingController _spoilerAiUrlController = TextEditingController();
   final TextEditingController _spoilerAiModelController =
@@ -319,6 +321,32 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         return '标准阴影';
       case DanmakuShadowStyle.strong:
         return '增强阴影';
+    }
+  }
+
+  String _danmakuAutoLoadStrategyLabel(DanmakuAutoLoadStrategy strategy) {
+    switch (strategy) {
+      case DanmakuAutoLoadStrategy.remoteAndLocal:
+        return context.l10n.danmakuAutoLoadStrategyRemoteAndLocal;
+      case DanmakuAutoLoadStrategy.remote:
+        return context.l10n.danmakuAutoLoadStrategyRemote;
+      case DanmakuAutoLoadStrategy.local:
+        return context.l10n.danmakuAutoLoadStrategyLocal;
+      case DanmakuAutoLoadStrategy.manual:
+        return context.l10n.danmakuAutoLoadStrategyManual;
+    }
+  }
+
+  String _danmakuAutoLoadStrategyDescription(DanmakuAutoLoadStrategy strategy) {
+    switch (strategy) {
+      case DanmakuAutoLoadStrategy.remoteAndLocal:
+        return context.l10n.danmakuAutoLoadStrategyRemoteAndLocalDescription;
+      case DanmakuAutoLoadStrategy.remote:
+        return context.l10n.danmakuAutoLoadStrategyRemoteDescription;
+      case DanmakuAutoLoadStrategy.local:
+        return context.l10n.danmakuAutoLoadStrategyLocalDescription;
+      case DanmakuAutoLoadStrategy.manual:
+        return context.l10n.danmakuAutoLoadStrategyManualDescription;
     }
   }
 
@@ -1065,20 +1093,33 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
-            return SettingsItem.toggle(
-              title: '播放时自动匹配弹幕',
-              subtitle: '关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配',
+            final currentStrategy = settingsProvider.danmakuAutoLoadStrategy;
+            final items = DanmakuAutoLoadStrategy.values
+                .map(
+                  (strategy) => DropdownMenuItemData<DanmakuAutoLoadStrategy>(
+                    title: _danmakuAutoLoadStrategyLabel(strategy),
+                    value: strategy,
+                    isSelected: currentStrategy == strategy,
+                    description: _danmakuAutoLoadStrategyDescription(strategy),
+                  ),
+                )
+                .toList();
+            return SettingsItem.dropdown(
+              title: context.l10n.danmakuAutoLoadStrategyTitle,
+              subtitle: _danmakuAutoLoadStrategyDescription(currentStrategy),
               icon: Ionicons.sync_outline,
-              value: settingsProvider.autoMatchDanmakuOnPlay,
-              onChanged: (bool value) {
-                settingsProvider.setAutoMatchDanmakuOnPlay(value);
+              items: items,
+              onChanged: (dynamic value) {
+                if (value is! DanmakuAutoLoadStrategy) return;
+                settingsProvider.setDanmakuAutoLoadStrategy(value);
                 if (context.mounted) {
                   BlurSnackBar.show(
                     context,
-                    value ? '已开启播放时自动匹配弹幕' : '已关闭播放时自动匹配弹幕（可手动匹配）',
+                    context.l10n.danmakuAutoLoadStrategyUpdated,
                   );
                 }
               },
+              dropdownKey: _danmakuAutoLoadStrategyDropdownKey,
             );
           },
         ),

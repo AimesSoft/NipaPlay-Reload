@@ -682,6 +682,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
 
       //debugPrint('10. 开始识别视频和加载弹幕...');
+      final danmakuAutoLoadStrategy = await _resolveDanmakuAutoLoadStrategy();
+
       // 针对Jellyfin流媒体视频的特殊处理
       bool jellyfinDanmakuHandled = false;
       try {
@@ -697,44 +699,64 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 如果不是Jellyfin视频或者Jellyfin视频没有预设的弹幕IDs，则检查是否有手动匹配的弹幕
       if (!jellyfinDanmakuHandled) {
-        // 检查是否有手动匹配的弹幕ID
-        if (_episodeId != null &&
-            _animeId != null &&
-            _episodeId! > 0 &&
-            _animeId! > 0) {
-          debugPrint(
-            '检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId',
-          );
-          try {
-            _setStatus(PlayerStatus.recognizing, message: '正在加载手动匹配的弹幕...');
-            await loadDanmaku(_episodeId.toString(), _animeId.toString());
-          } catch (e) {
-            debugPrint('加载手动匹配的弹幕失败: $e');
-            // 如果手动匹配的弹幕加载失败，清空弹幕列表但不重新识别
-            _danmakuList = [];
-            _danmakuListVersion++;
-            _danmakuTracks.clear();
-            _danmakuTrackEnabled.clear();
-            _addStatusMessage('手动匹配的弹幕加载失败');
-          }
-        } else {
-          // 没有手动匹配的弹幕ID，使用常规方式识别和加载弹幕
-          try {
-            await _recognizeVideo(videoPath);
-          } catch (e) {
-            //debugPrint('弹幕加载失败: $e');
-            // 设置空弹幕列表，确保播放不受影响
-            _danmakuList = [];
-            _danmakuListVersion++;
-            _danmakuTracks.clear();
-            _danmakuTrackEnabled.clear();
-            _addStatusMessage('无法连接服务器，跳过加载弹幕');
+        Future<void> loadRemoteDanmakuForCurrentVideo() async {
+          // 检查是否有手动匹配的弹幕ID
+          if (_episodeId != null &&
+              _animeId != null &&
+              _episodeId! > 0 &&
+              _animeId! > 0) {
+            debugPrint(
+              '检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId',
+            );
+            try {
+              _setStatus(PlayerStatus.recognizing, message: '正在加载手动匹配的弹幕...');
+              await loadDanmaku(_episodeId.toString(), _animeId.toString());
+            } catch (e) {
+              debugPrint('加载手动匹配的弹幕失败: $e');
+              _clearDanmakuAutoLoadState();
+              _addStatusMessage('手动匹配的弹幕加载失败');
+            }
+          } else {
+            // 没有手动匹配的弹幕ID，使用常规方式识别和加载弹幕
+            try {
+              await _recognizeVideo(videoPath);
+            } catch (e) {
+              //debugPrint('弹幕加载失败: $e');
+              // 设置空弹幕列表，确保播放不受影响
+              _clearDanmakuAutoLoadState();
+              _addStatusMessage('无法连接服务器，跳过加载弹幕');
+            }
           }
         }
-      }
 
-      // 自动检测并加载视频同目录下的本地弹幕（JSON/XML）
-      await _autoDetectAndLoadLocalDanmakuFromVideoDirectory(videoPath);
+        switch (danmakuAutoLoadStrategy) {
+          case DanmakuAutoLoadStrategy.remoteAndLocal:
+            await loadRemoteDanmakuForCurrentVideo();
+            await _autoDetectAndLoadLocalDanmakuFromVideoDirectory(videoPath);
+            break;
+          case DanmakuAutoLoadStrategy.remote:
+            await loadRemoteDanmakuForCurrentVideo();
+            break;
+          case DanmakuAutoLoadStrategy.local:
+            _clearDanmakuAutoLoadState();
+            final localLoaded =
+                await _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
+              videoPath,
+            );
+            if (!localLoaded) {
+              _addStatusMessage('未找到同名本地弹幕，跳过弹幕');
+            }
+            break;
+          case DanmakuAutoLoadStrategy.manual:
+            _clearDanmakuAutoLoadState();
+            final handled =
+                await _tryManualMatchDanmaku(videoPath, initialFileName: null);
+            if (!handled) {
+              _addStatusMessage('已选择手动加载弹幕');
+            }
+            break;
+        }
+      }
 
       // 应用时间轴告知弹幕轨道：避免开关默认开启但轨道未生成导致“无效”
       _applyTimelineDanmakuTrackForCurrentVideo();

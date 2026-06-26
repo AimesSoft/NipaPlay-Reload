@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
+import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SettingsProvider with ChangeNotifier {
@@ -11,7 +12,7 @@ class SettingsProvider with ChangeNotifier {
   double _blurPower = 0.0; // Default blur power (无模糊)
   static const double _defaultBlur = 0.0;
   static const String _blurPowerKey = 'blurPower';
-  
+
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
   static const String _danmakuConvertKey = 'danmaku_convert_to_simplified';
@@ -21,6 +22,8 @@ class SettingsProvider with ChangeNotifier {
 
   // 播放时自动匹配弹幕
   bool _autoMatchDanmakuOnPlay = true; // 默认开启
+  DanmakuAutoLoadStrategy _danmakuAutoLoadStrategy =
+      DanmakuAutoLoadStrategy.remoteAndLocal;
 
   // 外部播放器设置
   bool _useExternalPlayer = false;
@@ -39,6 +42,8 @@ class SettingsProvider with ChangeNotifier {
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
   bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
+  DanmakuAutoLoadStrategy get danmakuAutoLoadStrategy =>
+      _danmakuAutoLoadStrategy;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
   String get githubProxyUrl => _githubProxyUrl;
@@ -69,8 +74,19 @@ class SettingsProvider with ChangeNotifier {
     _autoMatchDanmakuFirstSearchResultOnHashFail =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
             true;
-    _autoMatchDanmakuOnPlay =
-        _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
+    final savedAutoMatchDanmakuOnPlay =
+        _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay);
+    _autoMatchDanmakuOnPlay = savedAutoMatchDanmakuOnPlay ?? true;
+    _danmakuAutoLoadStrategy = danmakuAutoLoadStrategyFromPrefs(
+      _prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
+      legacyAutoMatchOnPlay: _autoMatchDanmakuOnPlay,
+    );
+    if (!_prefs.containsKey(SettingsKeys.danmakuAutoLoadStrategy)) {
+      await _prefs.setString(
+        SettingsKeys.danmakuAutoLoadStrategy,
+        _danmakuAutoLoadStrategy.prefsValue,
+      );
+    }
     _useExternalPlayer =
         _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
     _externalPlayerPath =
@@ -134,6 +150,30 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> setAutoMatchDanmakuOnPlay(bool enable) async {
     _autoMatchDanmakuOnPlay = enable;
+    _danmakuAutoLoadStrategy = enable
+        ? DanmakuAutoLoadStrategy.remoteAndLocal
+        : DanmakuAutoLoadStrategy.manual;
+    await _prefs.setBool(
+      SettingsKeys.autoMatchDanmakuOnPlay,
+      _autoMatchDanmakuOnPlay,
+    );
+    await _prefs.setString(
+      SettingsKeys.danmakuAutoLoadStrategy,
+      _danmakuAutoLoadStrategy.prefsValue,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setDanmakuAutoLoadStrategy(
+      DanmakuAutoLoadStrategy strategy) async {
+    if (_danmakuAutoLoadStrategy == strategy) return;
+    _danmakuAutoLoadStrategy = strategy;
+    _autoMatchDanmakuOnPlay = strategy == DanmakuAutoLoadStrategy.remote ||
+        strategy == DanmakuAutoLoadStrategy.remoteAndLocal;
+    await _prefs.setString(
+      SettingsKeys.danmakuAutoLoadStrategy,
+      _danmakuAutoLoadStrategy.prefsValue,
+    );
     await _prefs.setBool(
       SettingsKeys.autoMatchDanmakuOnPlay,
       _autoMatchDanmakuOnPlay,

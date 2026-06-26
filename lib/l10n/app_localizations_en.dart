@@ -1269,6 +1269,46 @@ class AppLocalizationsEn extends AppLocalizations {
       'Auto-match on play disabled (manual matching available)';
 
   @override
+  String get danmakuAutoLoadStrategyTitle => 'Danmaku Auto-Load';
+
+  @override
+  String get danmakuAutoLoadStrategySubtitle =>
+      'Choose what danmaku should be loaded automatically when opening a local video.';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocal =>
+      'Remote + Local Same-Name';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocalDescription =>
+      'Default: auto-load remote danmaku and also add same-name .xml/.json files from the video folder.';
+
+  @override
+  String get danmakuAutoLoadStrategyRemote => 'Remote Danmaku';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteDescription =>
+      'Auto-match and load danmaku from DanDanPlay.';
+
+  @override
+  String get danmakuAutoLoadStrategyLocal => 'Local Same-Name File';
+
+  @override
+  String get danmakuAutoLoadStrategyLocalDescription =>
+      'Load a same-name .xml or .json danmaku file from the video folder.';
+
+  @override
+  String get danmakuAutoLoadStrategyManual => 'Manual Selection';
+
+  @override
+  String get danmakuAutoLoadStrategyManualDescription =>
+      'Do not auto-load danmaku; choose a match manually.';
+
+  @override
+  String get danmakuAutoLoadStrategyUpdated =>
+      'Danmaku auto-load strategy updated';
+
+  @override
   String get autoMatchOnHashFailTitle => 'Auto-Match on Hash Failure';
 
   @override

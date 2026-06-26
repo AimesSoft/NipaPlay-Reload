@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -213,6 +214,43 @@ class _CupertinoDanmakuSettingsPageState
                 (engine != DanmakuRenderEngine.next2 &&
                     engine != DanmakuRenderEngine.dfmPlus),
             value: engine,
+          ),
+        )
+        .toList();
+  }
+
+  String _danmakuAutoLoadStrategyLabel(DanmakuAutoLoadStrategy strategy) {
+    switch (strategy) {
+      case DanmakuAutoLoadStrategy.remoteAndLocal:
+        return context.l10n.danmakuAutoLoadStrategyRemoteAndLocal;
+      case DanmakuAutoLoadStrategy.remote:
+        return context.l10n.danmakuAutoLoadStrategyRemote;
+      case DanmakuAutoLoadStrategy.local:
+        return context.l10n.danmakuAutoLoadStrategyLocal;
+      case DanmakuAutoLoadStrategy.manual:
+        return context.l10n.danmakuAutoLoadStrategyManual;
+    }
+  }
+
+  String _danmakuAutoLoadStrategyDescription(DanmakuAutoLoadStrategy strategy) {
+    switch (strategy) {
+      case DanmakuAutoLoadStrategy.remoteAndLocal:
+        return context.l10n.danmakuAutoLoadStrategyRemoteAndLocalDescription;
+      case DanmakuAutoLoadStrategy.remote:
+        return context.l10n.danmakuAutoLoadStrategyRemoteDescription;
+      case DanmakuAutoLoadStrategy.local:
+        return context.l10n.danmakuAutoLoadStrategyLocalDescription;
+      case DanmakuAutoLoadStrategy.manual:
+        return context.l10n.danmakuAutoLoadStrategyManualDescription;
+    }
+  }
+
+  List<AdaptivePopupMenuEntry> _danmakuAutoLoadStrategyMenuItems() {
+    return DanmakuAutoLoadStrategy.values
+        .map(
+          (strategy) => AdaptivePopupMenuItem<DanmakuAutoLoadStrategy>(
+            label: _danmakuAutoLoadStrategyLabel(strategy),
+            value: strategy,
           ),
         )
         .toList();
@@ -535,40 +573,40 @@ class _CupertinoDanmakuSettingsPageState
               ),
               CupertinoSettingsTile(
                 leading: Icon(
-                  CupertinoIcons.refresh,
+                  CupertinoIcons.arrow_2_circlepath,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: Text(context.l10n.autoMatchDanmakuOnPlayTitle),
-                subtitle: Text(context.l10n.autoMatchDanmakuOnPlaySubtitle),
-                trailing: AdaptiveSwitch(
-                  value: settingsProvider.autoMatchDanmakuOnPlay,
-                  onChanged: (value) {
-                    settingsProvider.setAutoMatchDanmakuOnPlay(value);
-                    if (mounted) {
-                      AdaptiveSnackBar.show(
-                        context,
-                        message: value
-                            ? context.l10n.autoMatchDanmakuOnPlayEnabled
-                            : context.l10n.autoMatchDanmakuOnPlayDisabledManual,
-                        type: AdaptiveSnackBarType.success,
-                      );
-                    }
-                  },
+                title: Text(context.l10n.danmakuAutoLoadStrategyTitle),
+                subtitle: Text(
+                  _danmakuAutoLoadStrategyDescription(
+                    settingsProvider.danmakuAutoLoadStrategy,
+                  ),
                 ),
-                onTap: () {
-                  final bool newValue =
-                      !settingsProvider.autoMatchDanmakuOnPlay;
-                  settingsProvider.setAutoMatchDanmakuOnPlay(newValue);
-                  if (mounted) {
+                trailing:
+                    AdaptivePopupMenuButton.widget<DanmakuAutoLoadStrategy>(
+                  items: _danmakuAutoLoadStrategyMenuItems(),
+                  buttonStyle: PopupButtonStyle.gray,
+                  child: _buildMenuChip(
+                    context,
+                    _danmakuAutoLoadStrategyLabel(
+                      settingsProvider.danmakuAutoLoadStrategy,
+                    ),
+                  ),
+                  onSelected: (index, entry) {
+                    final strategy =
+                        entry.value ?? settingsProvider.danmakuAutoLoadStrategy;
+                    if (strategy == settingsProvider.danmakuAutoLoadStrategy) {
+                      return;
+                    }
+                    settingsProvider.setDanmakuAutoLoadStrategy(strategy);
+                    if (!mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: newValue
-                          ? context.l10n.autoMatchDanmakuOnPlayEnabled
-                          : context.l10n.autoMatchDanmakuOnPlayDisabledManual,
+                      message: context.l10n.danmakuAutoLoadStrategyUpdated,
                       type: AdaptiveSnackBarType.success,
                     );
-                  }
-                },
+                  },
+                ),
                 backgroundColor: tileBackground,
               ),
               CupertinoSettingsTile(

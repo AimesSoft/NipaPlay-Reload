@@ -75,16 +75,34 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     _syncNativeDanmakuGlobalOffset();
   }
 
-  Future<void> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
+  Future<DanmakuAutoLoadStrategy> _resolveDanmakuAutoLoadStrategy() async {
+    final prefs = await SharedPreferences.getInstance();
+    return danmakuAutoLoadStrategyFromPrefs(
+      prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
+      legacyAutoMatchOnPlay:
+          prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true,
+    );
+  }
+
+  void _clearDanmakuAutoLoadState() {
+    _danmakuList = [];
+    _danmakuListVersion++;
+    _danmakuTracks.clear();
+    _danmakuTrackEnabled.clear();
+    danmakuController?.clearDanmaku();
+    _updateMergedDanmakuList();
+  }
+
+  Future<bool> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
       String videoPath) async {
-    if (_isDisposed || kIsWeb) return;
+    if (_isDisposed || kIsWeb) return false;
 
     if (videoPath.startsWith('http://') ||
         videoPath.startsWith('https://') ||
         videoPath.startsWith('jellyfin://') ||
         videoPath.startsWith('emby://') ||
         SharedRemoteHistoryHelper.isSharedRemoteStreamPath(videoPath)) {
-      return;
+      return false;
     }
 
     final targetVideoPath = _currentVideoPath;
@@ -93,13 +111,13 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     try {
       final dirPath = p.dirname(videoPath);
       final dir = Directory(dirPath);
-      if (!await dir.exists()) return;
+      if (!await dir.exists()) return false;
 
       final videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
 
       final candidates = <_LocalDanmakuCandidate>[];
       await for (final entity in dir.list(followLinks: false)) {
-        if (!canContinue()) return;
+        if (!canContinue()) return false;
         if (entity is! File) continue;
 
         final filePath = entity.path;
@@ -128,6 +146,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
         // 轻微偏好 XML（更常见的B站格式）
         if (ext == '.xml') score += 3;
+        if (score <= 0) continue;
 
         candidates.add(_LocalDanmakuCandidate(
           filePath: filePath,
@@ -136,8 +155,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         ));
       }
 
-      if (!canContinue()) return;
-      if (candidates.isEmpty) return;
+      if (!canContinue()) return false;
+      if (candidates.isEmpty) return false;
 
       candidates.sort((a, b) {
         final scoreCompare = b.score.compareTo(a.score);
@@ -147,7 +166,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
       const maxTryCount = 8;
       for (final candidate in candidates.take(maxTryCount)) {
-        if (!canContinue()) return;
+        if (!canContinue()) return false;
         final filePath = candidate.filePath;
 
         // 避免同一文件在一次初始化里被重复加载
@@ -177,7 +196,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
             setStatusMessage: false,
           );
           debugPrint('自动识别本地弹幕：已加载 $filePath -> $trackName');
-          return; // 只自动加载最匹配的一份，避免重复弹幕
+          return true; // 只自动加载最匹配的一份，避免重复弹幕
         } catch (e) {
           debugPrint('自动识别本地弹幕：加载失败，跳过 $filePath: $e');
           continue;
@@ -187,6 +206,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 自动加载不应影响正常播放
       debugPrint('自动识别本地弹幕出错: $e');
     }
+    return false;
   }
 
   Future<Map<String, dynamic>> _readLocalDanmakuFileAsJsonData(

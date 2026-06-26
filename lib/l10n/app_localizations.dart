@@ -2256,6 +2256,72 @@ abstract class AppLocalizations {
   /// **'已关闭播放时自动匹配弹幕（可手动匹配）'**
   String get autoMatchDanmakuOnPlayDisabledManual;
 
+  /// No description provided for @danmakuAutoLoadStrategyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕自动加载策略'**
+  String get danmakuAutoLoadStrategyTitle;
+
+  /// No description provided for @danmakuAutoLoadStrategySubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开本地视频时选择自动加载远程弹幕、同目录同名本地弹幕，或保持手动选择。'**
+  String get danmakuAutoLoadStrategySubtitle;
+
+  /// No description provided for @danmakuAutoLoadStrategyRemoteAndLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'远程 + 同名本地'**
+  String get danmakuAutoLoadStrategyRemoteAndLocal;
+
+  /// No description provided for @danmakuAutoLoadStrategyRemoteAndLocalDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认策略：自动加载远程弹幕，同时叠加视频同目录下同名的 .xml 或 .json 弹幕文件。'**
+  String get danmakuAutoLoadStrategyRemoteAndLocalDescription;
+
+  /// No description provided for @danmakuAutoLoadStrategyRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'远程网络弹幕'**
+  String get danmakuAutoLoadStrategyRemote;
+
+  /// No description provided for @danmakuAutoLoadStrategyRemoteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别并加载弹弹play网络弹幕。'**
+  String get danmakuAutoLoadStrategyRemoteDescription;
+
+  /// No description provided for @danmakuAutoLoadStrategyLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'同名本地弹幕'**
+  String get danmakuAutoLoadStrategyLocal;
+
+  /// No description provided for @danmakuAutoLoadStrategyLocalDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动加载视频同目录下同名的 .xml 或 .json 弹幕文件。'**
+  String get danmakuAutoLoadStrategyLocalDescription;
+
+  /// No description provided for @danmakuAutoLoadStrategyManual.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动选择'**
+  String get danmakuAutoLoadStrategyManual;
+
+  /// No description provided for @danmakuAutoLoadStrategyManualDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'不自动加载弹幕，需要时手动选择匹配。'**
+  String get danmakuAutoLoadStrategyManualDescription;
+
+  /// No description provided for @danmakuAutoLoadStrategyUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕自动加载策略已更新'**
+  String get danmakuAutoLoadStrategyUpdated;
+
   /// No description provided for @autoMatchOnHashFailTitle.
   ///
   /// In zh, this message translates to:

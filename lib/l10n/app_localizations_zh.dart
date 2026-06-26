@@ -1191,6 +1191,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoMatchDanmakuOnPlayDisabledManual => '已关闭播放时自动匹配弹幕（可手动匹配）';
 
   @override
+  String get danmakuAutoLoadStrategyTitle => '弹幕自动加载策略';
+
+  @override
+  String get danmakuAutoLoadStrategySubtitle =>
+      '打开本地视频时选择自动加载远程弹幕、同目录同名本地弹幕，或保持手动选择。';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocal => '远程 + 同名本地';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocalDescription =>
+      '默认策略：自动加载远程弹幕，同时叠加视频同目录下同名的 .xml 或 .json 弹幕文件。';
+
+  @override
+  String get danmakuAutoLoadStrategyRemote => '远程网络弹幕';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteDescription => '自动识别并加载弹弹play网络弹幕。';
+
+  @override
+  String get danmakuAutoLoadStrategyLocal => '同名本地弹幕';
+
+  @override
+  String get danmakuAutoLoadStrategyLocalDescription =>
+      '自动加载视频同目录下同名的 .xml 或 .json 弹幕文件。';
+
+  @override
+  String get danmakuAutoLoadStrategyManual => '手动选择';
+
+  @override
+  String get danmakuAutoLoadStrategyManualDescription => '不自动加载弹幕，需要时手动选择匹配。';
+
+  @override
+  String get danmakuAutoLoadStrategyUpdated => '弹幕自动加载策略已更新';
+
+  @override
   String get autoMatchOnHashFailTitle => '哈希匹配失败自动匹配弹幕';
 
   @override
@@ -2897,6 +2933,42 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get autoMatchDanmakuOnPlayDisabledManual => '已關閉播放時自動匹配彈幕（可手動匹配）';
+
+  @override
+  String get danmakuAutoLoadStrategyTitle => '彈幕自動載入策略';
+
+  @override
+  String get danmakuAutoLoadStrategySubtitle =>
+      '開啟本地影片時選擇自動載入遠端彈幕、同目錄同名本地彈幕，或保持手動選擇。';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocal => '遠端 + 同名本地';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteAndLocalDescription =>
+      '預設策略：自動載入遠端彈幕，同時疊加影片同目錄下同名的 .xml 或 .json 彈幕檔案。';
+
+  @override
+  String get danmakuAutoLoadStrategyRemote => '遠端網路彈幕';
+
+  @override
+  String get danmakuAutoLoadStrategyRemoteDescription => '自動識別並載入彈彈play網路彈幕。';
+
+  @override
+  String get danmakuAutoLoadStrategyLocal => '同名本地彈幕';
+
+  @override
+  String get danmakuAutoLoadStrategyLocalDescription =>
+      '自動載入影片同目錄下同名的 .xml 或 .json 彈幕檔案。';
+
+  @override
+  String get danmakuAutoLoadStrategyManual => '手動選擇';
+
+  @override
+  String get danmakuAutoLoadStrategyManualDescription => '不自動載入彈幕，需要時手動選擇匹配。';
+
+  @override
+  String get danmakuAutoLoadStrategyUpdated => '彈幕自動載入策略已更新';
 
   @override
   String get autoMatchOnHashFailTitle => '哈希匹配失敗自動匹配彈幕';

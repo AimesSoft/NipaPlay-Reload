@@ -96,22 +96,6 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
         return;
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      final autoMatchEnabled =
-          prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
-      if (!autoMatchEnabled) {
-        _danmakuList = [];
-        _danmakuListVersion++;
-        _danmakuTracks.clear();
-        _danmakuTrackEnabled.clear();
-        final handled =
-            await _tryManualMatchDanmaku(videoPath, initialFileName: null);
-        if (!handled) {
-          _setStatus(PlayerStatus.recognizing, message: '已关闭自动匹配弹幕，跳过弹幕');
-        }
-        return;
-      }
-
       _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
 
       // 使用超时处理网络请求
