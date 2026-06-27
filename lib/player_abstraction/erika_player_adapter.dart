@@ -213,6 +213,8 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   List<ErikaTrackInfo> _subtitleTrackInfos = const <ErikaTrackInfo>[];
   List<int> _activeAudioTracks = const <int>[];
   List<int> _activeSubtitleTracks = const <int>[];
+  final Set<int> _externalSubtitleTrackIds = <int>{};
+  int _externalSubtitleGeneration = 0;
 
   static bool get _isSupported =>
       !kIsWeb &&
@@ -338,18 +340,24 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {}
 
   @override
-  bool get supportsExternalSubtitles => false;
+  bool get supportsExternalSubtitles => _isSupported;
 
   @override
   Future<int?> updateTexture() async => null;
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    if (type == PlayerMediaType.subtitle) {
+      _setExternalSubtitle(path);
+      return;
+    }
     if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
       _mediaInfo = PlayerMediaInfo(duration: 0);
+      _externalSubtitleTrackIds.clear();
+      _externalSubtitleGeneration++;
     }
   }
 
@@ -401,7 +409,10 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       return null;
     }
     try {
-      final Uint8List? bytes = await _player.screenshot();
+      final Uint8List? bytes = await _player.screenshot(
+        width: width > 0 ? width : null,
+        height: height > 0 ? height : null,
+      );
       if (bytes == null || bytes.isEmpty) {
         return null;
       }
@@ -468,6 +479,46 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     _playbackRate = rate <= 0 ? 1.0 : rate;
     if (_isSupported) {
       unawaited(_player.setPlaybackRate(_playbackRate));
+    }
+  }
+
+  void _setExternalSubtitle(String path) {
+    if (!_isSupported || _disposed) {
+      return;
+    }
+    final generation = ++_externalSubtitleGeneration;
+    final oldTrackIds = Set<int>.from(_externalSubtitleTrackIds);
+    _externalSubtitleTrackIds.clear();
+
+    for (final trackId in oldTrackIds) {
+      unawaited(_player.removeSubtitleTrack(trackId).catchError((Object error) {
+        debugPrint('Erika: remove external subtitle failed: $error');
+      }));
+    }
+
+    if (path.trim().isEmpty) {
+      _activeSubtitleTracks = const <int>[];
+      unawaited(_player.selectSubtitleTrack(null));
+      return;
+    }
+
+    unawaited(_addAndSelectExternalSubtitle(path, generation));
+  }
+
+  Future<void> _addAndSelectExternalSubtitle(
+    String path,
+    int generation,
+  ) async {
+    try {
+      final trackId = await _player.addExternalSubtitle(path);
+      if (_disposed || generation != _externalSubtitleGeneration) {
+        await _player.removeSubtitleTrack(trackId);
+        return;
+      }
+      _externalSubtitleTrackIds.add(trackId);
+      await _player.selectSubtitleTrack(trackId);
+    } catch (error) {
+      debugPrint('Erika: add external subtitle failed: $error');
     }
   }
 

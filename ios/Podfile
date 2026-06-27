@@ -34,6 +34,7 @@ def erika_ios_cabi_linker_flags
     erika_presenter_add_danmaku_track_json
     erika_presenter_add_external_subtitle
     erika_presenter_attach_metal_layer
+    erika_presenter_capture_frame_rgba
     erika_presenter_clear_danmaku
     erika_presenter_close
     erika_presenter_create

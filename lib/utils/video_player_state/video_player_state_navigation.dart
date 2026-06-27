@@ -1,5 +1,14 @@
 part of video_player_state;
 
+const bool _enablePlaybackDiagnostics = false;
+
+void _playbackDiag(String Function() messageBuilder) {
+  if (!_enablePlaybackDiagnostics) {
+    return;
+  }
+  debugPrint(messageBuilder());
+}
+
 extension VideoPlayerStateNavigation on VideoPlayerState {
   // 播放上一话
   Future<void> playPreviousEpisode() async {
@@ -494,7 +503,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
   // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
   void _startUiUpdateTimer() {
     if (!kReleaseMode) {
-      debugPrint('[LOOP-RESTART-DIAG] _startUiUpdateTimer() CALLED: '
+      _playbackDiag(() => '[LOOP-RESTART-DIAG] _startUiUpdateTimer() CALLED: '
           '_status=$_status _seekTargetMs=$_seekTargetMs '
           '_lastRawPlayerMs=$_lastRawPlayerMs '
           'tickerExisted=${_uiUpdateTicker != null}');
@@ -517,7 +526,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // 假设：此时 playbackTimeMs=0（由 _resetVideoState 设置），
     // Ticker 首帧锚定到 player.position（可能也是0），导致弹幕从头播放
     if (!kReleaseMode) {
-      debugPrint('[VIDEO-OPEN-PTM-DIAG] _startUiUpdateTimer: '
+      _playbackDiag(() => '[VIDEO-OPEN-PTM-DIAG] _startUiUpdateTimer: '
           'playbackTimeMs=${_playbackTimeMs.value.toStringAsFixed(1)} '
           '_position=${_position.inMilliseconds} '
           '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
@@ -595,7 +604,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 // 采样阶段：收集最小帧间隔作为基线
                 _diagFrameSampleCount++;
                 if (frameDeltaUs > 0 &&
-                    (_diagBaselineFrameUs == 0 || frameDeltaUs < _diagBaselineFrameUs)) {
+                    (_diagBaselineFrameUs == 0 ||
+                        frameDeltaUs < _diagBaselineFrameUs)) {
                   _diagBaselineFrameUs = frameDeltaUs;
                 }
               } else if (_diagBaselineFrameUs > 0 &&
@@ -603,9 +613,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 final now = DateTime.now().millisecondsSinceEpoch;
                 if (now - _lastDiagFrameSkipTimeMs >= 2000) {
                   _lastDiagFrameSkipTimeMs = now;
-                  debugPrint('[NEXT-DIAG] FRAME SKIP: $frameDeltaUs μs '
-                      '(baseline=${_diagBaselineFrameUs}μs) '
-                      'at playback=${playerPosition}ms');
+                  _playbackDiag(
+                      () => '[NEXT-DIAG] FRAME SKIP: $frameDeltaUs μs '
+                          '(baseline=${_diagBaselineFrameUs}μs) '
+                          'at playback=${playerPosition}ms');
                 }
               }
             }
@@ -619,7 +630,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 // player.position 已追上 seek 目标，恢复正常插值
                 // [LOOP-RESTART-DIAG] 诊断：seek 保护结束
                 if (!kReleaseMode) {
-                  debugPrint('[LOOP-RESTART-DIAG] SEEK CAUGHT UP: '
+                  _playbackDiag(() => '[LOOP-RESTART-DIAG] SEEK CAUGHT UP: '
                       'playerMs=${playerMs.toStringAsFixed(1)} '
                       'seekTargetMs=${_seekTargetMs!.toStringAsFixed(1)} '
                       'ptm=${_playbackTimeMs.value.toStringAsFixed(1)}');
@@ -631,8 +642,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _anchorSetBySeek = false; // seek 完成，锚点已对齐到实际位置
               } else {
                 // 还在等待 player.position 追上，从 seekTarget 插值推进
-                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
+                final elapsedDeltaUs =
+                    currentElapsedUs - _smoothAnchorElapsedUs;
+                _playbackTimeMs.value = (_smoothAnchorMs +
+                        elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
                     .clamp(0.0, _duration.inMilliseconds.toDouble());
               }
             } else if (_lastRawPlayerMs < 0) {
@@ -640,98 +653,107 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               // ✅ P3 修复：暂停恢复场景下，play() 已设置 _smoothAnchorMs = 暂停时的值，
               // _smoothAnchorElapsedUs = 0。此时不应让 player.position 覆盖锚点，
               // 而是直接用已设置的锚点插值推进，让漂移修正自然校准。
-              final isResumeFromPause = _smoothAnchorElapsedUs == 0 && _playbackTimeMs.value > 100.0;
+              final isResumeFromPause =
+                  _smoothAnchorElapsedUs == 0 && _playbackTimeMs.value > 100.0;
 
               if (isResumeFromPause) {
                 // 暂停恢复：锚点已在 play() 中设置，直接插值推进
-                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-                final newPtm = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
+                final elapsedDeltaUs =
+                    currentElapsedUs - _smoothAnchorElapsedUs;
+                final newPtm = (_smoothAnchorMs +
+                        elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
                     .clamp(0.0, _duration.inMilliseconds.toDouble());
                 _playbackTimeMs.value = newPtm;
                 // 标记 _lastRawPlayerMs 让下一帧走漂移修正路径
                 // 但不立即锚定到 playerMs，让漂移修正渐进收敛
                 _lastRawPlayerMs = playerPosition;
                 if (!kReleaseMode) {
-                  debugPrint('[RESUME-PAUSE-DIAG] Resume from pause: '
+                  _playbackDiag(() => '[RESUME-PAUSE-DIAG] Resume from pause: '
                       'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
                       'playerMs=${playerMs.toStringAsFixed(1)} '
                       'ptm=${newPtm.toStringAsFixed(1)} '
                       'delta=${(newPtm - playerMs).toStringAsFixed(1)}ms');
                 }
               } else {
-              // ✅ 防御性修复(V3)：检测过期 playerMs
-              // 核心判断：如果 playbackTimeMs ≈ 0（刚被重置）且 playerMs >> 0，
-              // 则 playerMs 一定是过期数据（旧视频/旧位置），无论 _anchorSetBySeek 是什么值。
-              // 没有合法场景会同时出现 playbackTimeMs=0 和 playerMs=1420007。
-              // 合法首帧加载：playbackTimeMs=恢复位置, playerMs=恢复位置 → 信任
-              // 合法从头播放：playbackTimeMs=0, playerMs≈0 → 信任
-              // 过期数据：playbackTimeMs=0(刚重置), playerMs=旧末尾 → 不信任
-              final anchorDelta = (playerMs - _smoothAnchorMs).abs();
-              final prevPtm = _playbackTimeMs.value;
-              final ptmDelta = (playerMs - prevPtm).abs();
-              // 过期检测：playbackTimeMs 接近 0 且 playerMs 远离 0 → playerMs 是旧值
-              // 扩展（2026-06-21）：覆盖切集反向场景
-              // 原判定 prevPtm<100 && playerMs>1000 只覆盖"playbackTimeMs 归零 + playerMs 旧末尾"
-              // 切集反向场景：prevPtm=旧集末尾(大) + playerMs=新集开头(小) → 原判定不触发
-              // → 走 FIRST-ANCHOR 把新集 playerMs 当有效值 → playbackTimeMs 突跌 → 回弹
-              // 扩展：prevPtm>1000 且 playerMs<prevPtm-1000 也视为污染，启用 seek 保护
-              final isStalePlayerMs = (prevPtm < 100.0 && playerMs > 1000.0) ||
-                  (prevPtm > 1000.0 && playerMs < prevPtm - 1000.0);
-              if (!kReleaseMode) {
-                debugPrint('[LOOP-RESTART-DIAG] TICKER LAST_RAW<0: '
-                    'playerMs=${playerMs.toStringAsFixed(1)} '
-                    'prevPtm=${prevPtm.toStringAsFixed(1)} '
-                    'ptmDelta=${ptmDelta.toStringAsFixed(1)} '
-                    'smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
-                    'anchorDelta=${anchorDelta.toStringAsFixed(1)} '
-                    'seekTargetMs=$_seekTargetMs '
-                    'anchorSetBySeek=$_anchorSetBySeek '
-                    'isStale=$isStalePlayerMs');
-              }
-              if (isStalePlayerMs) {
-                // playerMs 是过期数据（旧视频位置），不信任它
-                // 保持 playbackTimeMs 不变，启用 seek 保护等待 player.position 追上
-                _smoothAnchorElapsedUs = currentElapsedUs;
-                _seekTargetMs = prevPtm > 0.0 ? prevPtm : _smoothAnchorMs;
-                _lastRawPlayerMs = -1; // 保持负值，让 seek 保护分支接管下一帧
-                // playbackTimeMs 保持当前值（不跳到过期 playerMs）
-                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-                _playbackTimeMs.value = (_seekTargetMs! + elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
-                    .clamp(0.0, _duration.inMilliseconds.toDouble());
+                // ✅ 防御性修复(V3)：检测过期 playerMs
+                // 核心判断：如果 playbackTimeMs ≈ 0（刚被重置）且 playerMs >> 0，
+                // 则 playerMs 一定是过期数据（旧视频/旧位置），无论 _anchorSetBySeek 是什么值。
+                // 没有合法场景会同时出现 playbackTimeMs=0 和 playerMs=1420007。
+                // 合法首帧加载：playbackTimeMs=恢复位置, playerMs=恢复位置 → 信任
+                // 合法从头播放：playbackTimeMs=0, playerMs≈0 → 信任
+                // 过期数据：playbackTimeMs=0(刚重置), playerMs=旧末尾 → 不信任
+                final anchorDelta = (playerMs - _smoothAnchorMs).abs();
+                final prevPtm = _playbackTimeMs.value;
+                final ptmDelta = (playerMs - prevPtm).abs();
+                // 过期检测：playbackTimeMs 接近 0 且 playerMs 远离 0 → playerMs 是旧值
+                // 扩展（2026-06-21）：覆盖切集反向场景
+                // 原判定 prevPtm<100 && playerMs>1000 只覆盖"playbackTimeMs 归零 + playerMs 旧末尾"
+                // 切集反向场景：prevPtm=旧集末尾(大) + playerMs=新集开头(小) → 原判定不触发
+                // → 走 FIRST-ANCHOR 把新集 playerMs 当有效值 → playbackTimeMs 突跌 → 回弹
+                // 扩展：prevPtm>1000 且 playerMs<prevPtm-1000 也视为污染，启用 seek 保护
+                final isStalePlayerMs =
+                    (prevPtm < 100.0 && playerMs > 1000.0) ||
+                        (prevPtm > 1000.0 && playerMs < prevPtm - 1000.0);
                 if (!kReleaseMode) {
-                  debugPrint('[LOOP-RESTART-DIAG] STALE PLAYER: '
-                      'rejecting stale playerMs=${playerMs.toStringAsFixed(1)} '
-                      'anchoring to seekTargetMs=${_seekTargetMs?.toStringAsFixed(1)} '
-                      'prevPtm=${prevPtm.toStringAsFixed(1)}');
+                  _playbackDiag(() => '[LOOP-RESTART-DIAG] TICKER LAST_RAW<0: '
+                      'playerMs=${playerMs.toStringAsFixed(1)} '
+                      'prevPtm=${prevPtm.toStringAsFixed(1)} '
+                      'ptmDelta=${ptmDelta.toStringAsFixed(1)} '
+                      'smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+                      'anchorDelta=${anchorDelta.toStringAsFixed(1)} '
+                      'seekTargetMs=$_seekTargetMs '
+                      'anchorSetBySeek=$_anchorSetBySeek '
+                      'isStale=$isStalePlayerMs');
                 }
-              } else {
-                // playerMs 合法：首帧加载/恢复位置/从头播放 → 正常锚定
-                // ✅ P7修复：首帧锚定路径添加P1单调递增保护
-                // 根因：暂停恢复后 player.position 可能回退（比暂停前小），
-                // 直接赋值 _playbackTimeMs.value = playerMs 会导致 playbackTimeMs 回退 → 弹幕回弹。
-                // 修复：与锚点过期重锚路径（line 712-729）保持一致的单调递增保护逻辑。
-                final newPtmCandidate = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
-                if (newPtmCandidate < _playbackTimeMs.value - 0.5 && _playbackTimeMs.value > 100.0) {
-                  // playerMs 回退 → 保持 prevPtm，锚定到 prevPtm 使后续帧正常推进
-                  _smoothAnchorMs = _playbackTimeMs.value;
+                if (isStalePlayerMs) {
+                  // playerMs 是过期数据（旧视频位置），不信任它
+                  // 保持 playbackTimeMs 不变，启用 seek 保护等待 player.position 追上
                   _smoothAnchorElapsedUs = currentElapsedUs;
-                  _lastRawPlayerMs = playerPosition;
-                  _anchorSetBySeek = false;
-                  // playbackTimeMs 保持不变（hold）
+                  _seekTargetMs = prevPtm > 0.0 ? prevPtm : _smoothAnchorMs;
+                  _lastRawPlayerMs = -1; // 保持负值，让 seek 保护分支接管下一帧
+                  // playbackTimeMs 保持当前值（不跳到过期 playerMs）
+                  final elapsedDeltaUs =
+                      currentElapsedUs - _smoothAnchorElapsedUs;
+                  _playbackTimeMs.value = (_seekTargetMs! +
+                          elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
+                      .clamp(0.0, _duration.inMilliseconds.toDouble());
                   if (!kReleaseMode) {
-                    debugPrint('[FIRST-ANCHOR-DIAG] BACKWARD PREVENTED: '
-                        'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
-                        'delta=${(newPtmCandidate - _playbackTimeMs.value).toStringAsFixed(1)}ms '
-                        'rate=$effectivePlaybackRate ← held at prevPtm, anchor=prevPtm');
+                    _playbackDiag(() => '[LOOP-RESTART-DIAG] STALE PLAYER: '
+                        'rejecting stale playerMs=${playerMs.toStringAsFixed(1)} '
+                        'anchoring to seekTargetMs=${_seekTargetMs?.toStringAsFixed(1)} '
+                        'prevPtm=${prevPtm.toStringAsFixed(1)}');
                   }
                 } else {
-                  _smoothAnchorMs = playerMs;
-                  _smoothAnchorElapsedUs = currentElapsedUs;
-                  _lastRawPlayerMs = playerPosition;
-                  _anchorSetBySeek = false;
-                  _playbackTimeMs.value = newPtmCandidate;
+                  // playerMs 合法：首帧加载/恢复位置/从头播放 → 正常锚定
+                  // ✅ P7修复：首帧锚定路径添加P1单调递增保护
+                  // 根因：暂停恢复后 player.position 可能回退（比暂停前小），
+                  // 直接赋值 _playbackTimeMs.value = playerMs 会导致 playbackTimeMs 回退 → 弹幕回弹。
+                  // 修复：与锚点过期重锚路径（line 712-729）保持一致的单调递增保护逻辑。
+                  final newPtmCandidate =
+                      playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+                  if (newPtmCandidate < _playbackTimeMs.value - 0.5 &&
+                      _playbackTimeMs.value > 100.0) {
+                    // playerMs 回退 → 保持 prevPtm，锚定到 prevPtm 使后续帧正常推进
+                    _smoothAnchorMs = _playbackTimeMs.value;
+                    _smoothAnchorElapsedUs = currentElapsedUs;
+                    _lastRawPlayerMs = playerPosition;
+                    _anchorSetBySeek = false;
+                    // playbackTimeMs 保持不变（hold）
+                    if (!kReleaseMode) {
+                      _playbackDiag(() =>
+                          '[FIRST-ANCHOR-DIAG] BACKWARD PREVENTED: '
+                          'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
+                          'delta=${(newPtmCandidate - _playbackTimeMs.value).toStringAsFixed(1)}ms '
+                          'rate=$effectivePlaybackRate ← held at prevPtm, anchor=prevPtm');
+                    }
+                  } else {
+                    _smoothAnchorMs = playerMs;
+                    _smoothAnchorElapsedUs = currentElapsedUs;
+                    _lastRawPlayerMs = playerPosition;
+                    _anchorSetBySeek = false;
+                    _playbackTimeMs.value = newPtmCandidate;
+                  }
                 }
-              }
               }
             } else {
               // 正常播放：检测锚点是否过期（seek/暂停恢复后第一帧）
@@ -749,7 +771,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     final now = DateTime.now().millisecondsSinceEpoch;
                     if (now - _lastDiagPtmBackwardMs >= 500) {
                       _lastDiagPtmBackwardMs = now;
-                      debugPrint('[PTM-ANCHOR-EXPIRE-DIAG] ANCHOR EXPIRE causes ptm BACKWARD: '
+                      _playbackDiag(() =>
+                          '[PTM-ANCHOR-EXPIRE-DIAG] ANCHOR EXPIRE causes ptm BACKWARD: '
                           'anchorAge=${anchorAgeMs.toStringAsFixed(1)}ms > 50ms → snap to playerMs '
                           'prevPtm=${prevPtm.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
                           'delta=${(playerMs - prevPtm).toStringAsFixed(1)}ms '
@@ -761,8 +784,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _smoothAnchorElapsedUs = currentElapsedUs;
                 _lastRawPlayerMs = playerPosition;
                 // ✅ P1 单调递增保护：锚点过期重锚定时，确保 playbackTimeMs 不回退
-                final _anchorExpireNewPtm = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
-                if (_anchorExpireNewPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                final _anchorExpireNewPtm =
+                    playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+                if (_anchorExpireNewPtm < _playbackTimeMs.value &&
+                    _playbackTimeMs.value > 100.0) {
                   // playerMs 回退 → 保持 prevPtm，锚定到 prevPtm 使后续帧正常推进
                   _smoothAnchorMs = _playbackTimeMs.value;
                   _playbackTimeMs.value = _playbackTimeMs.value; // hold
@@ -770,7 +795,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     final now = DateTime.now().millisecondsSinceEpoch;
                     if (now - _lastDiagPtmBackwardMs >= 500) {
                       _lastDiagPtmBackwardMs = now;
-                      debugPrint('[PTM-MONOTONICITY-DIAG] ANCHOR-EXPIRE backward prevented: '
+                      _playbackDiag(() =>
+                          '[PTM-MONOTONICITY-DIAG] ANCHOR-EXPIRE backward prevented: '
                           'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} '
                           'playerMs=${playerMs.toStringAsFixed(1)} → held at prevPtm');
                     }
@@ -780,7 +806,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 }
               } else if (playerPosition != _lastRawPlayerMs) {
                 // player.position 更新了：检查平滑时钟与实际位置的漂移
-                final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate;
+                final smoothMs = _smoothAnchorMs +
+                    elapsedDeltaUs / 1000.0 * effectivePlaybackRate;
                 final drift = smoothMs - playerMs;
                 // [CHAIN-A] 记录 drift 修正前的 playbackTimeMs，供末尾聚合输出使用
                 final chainAPrevPtm = _playbackTimeMs.value;
@@ -792,7 +819,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   // 正常播放时平滑时钟超前但 playerMs 落后。
                   // 前进场景：seek 后 playerMs 大幅领先 → 立即对齐正确。
                   final prevPtm = _playbackTimeMs.value;
-                  final isBackward = playerMs < prevPtm - 5.0; // playerMs 比 playbackTimeMs 小 >5ms
+                  final isBackward = playerMs <
+                      prevPtm - 5.0; // playerMs 比 playbackTimeMs 小 >5ms
                   if (isBackward) {
                     // ✅ 回退保护：渐进修正而非立即对齐
                     // P3 优化：提高修正速率到 35%，让暂停恢复后的时间偏差更快收敛。
@@ -800,19 +828,23 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     // 期间弹幕时间与视频不同步。35% 可在 ~8 帧内收敛。
                     final correctionMs = drift * 0.35;
                     _smoothAnchorMs = smoothMs - correctionMs;
-                    final correctionUsExact = correctionMs * 1000.0 / effectivePlaybackRate;
+                    final correctionUsExact =
+                        correctionMs * 1000.0 / effectivePlaybackRate;
                     _smoothAnchorElapsedUs =
                         currentElapsedUs - correctionUsExact.round();
                     // [PTM-MONOTONICITY-DIAG] 检测渐进修正是否导致 playbackTimeMs 回退
                     if (!kReleaseMode) {
-                      final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-                      final newPtm = (_smoothAnchorMs + newDeltaUs / 1000.0 * effectivePlaybackRate)
+                      final newDeltaUs =
+                          currentElapsedUs - _smoothAnchorElapsedUs;
+                      final newPtm = (_smoothAnchorMs +
+                              newDeltaUs / 1000.0 * effectivePlaybackRate)
                           .clamp(0.0, _duration.inMilliseconds.toDouble());
                       if (newPtm < prevPtm - 0.5 && prevPtm > 100.0) {
                         final now = DateTime.now().millisecondsSinceEpoch;
                         if (now - _lastDiagPtmBackwardMs >= 200) {
                           _lastDiagPtmBackwardMs = now;
-                          debugPrint('[PTM-MONOTONICITY-DIAG] PROGRESSIVE CORRECTION causes ptm BACKWARD: '
+                          _playbackDiag(() =>
+                              '[PTM-MONOTONICITY-DIAG] PROGRESSIVE CORRECTION causes ptm BACKWARD: '
                               'prevPtm=${prevPtm.toStringAsFixed(1)} → newPtm=${newPtm.toStringAsFixed(1)} '
                               'delta=${(newPtm - prevPtm).toStringAsFixed(3)}ms '
                               'drift=${drift.toStringAsFixed(1)}ms correction=${correctionMs.toStringAsFixed(1)}ms '
@@ -824,7 +856,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                       final now2 = DateTime.now().millisecondsSinceEpoch;
                       if (now2 - _lastDiagDriftSnapMs >= 500) {
                         _lastDiagDriftSnapMs = now2;
-                        debugPrint('[DRIFT-SNAP-DIAG] BACKWARD PROTECTED: '
+                        _playbackDiag(() =>
+                            '[DRIFT-SNAP-DIAG] BACKWARD PROTECTED: '
                             'drift=${drift.toStringAsFixed(1)}ms > 30ms BUT playerMs(${playerMs.toStringAsFixed(1)}) < ptm(${prevPtm.toStringAsFixed(1)}) '
                             '→ progressive correction 20% instead of snap '
                             'smoothMs=${smoothMs.toStringAsFixed(1)} rate=$effectivePlaybackRate '
@@ -852,7 +885,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                         final now = DateTime.now().millisecondsSinceEpoch;
                         if (now - _lastDiagDriftSnapMs >= 500) {
                           _lastDiagDriftSnapMs = now;
-                          debugPrint('[DRIFT-SNAP-DIAG] FORWARD PROGRESSIVE: '
+                          _playbackDiag(() =>
+                              '[DRIFT-SNAP-DIAG] FORWARD PROGRESSIVE: '
                               'drift=${drift.toStringAsFixed(1)}ms → 0.35 progressive (was snap): '
                               'prevPtm=${prevPtm.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
                               'delta=${snapDeltaMs.toStringAsFixed(1)}ms '
@@ -874,7 +908,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   // 锚点时间需设置为 currentElapsedUs - correctionMs*1000/rate，
                   // 使得当前帧输出 = smoothMs（保持连续性），
                   // 下一帧的插值从修正后的锚点自然推进。
-                  final correctionUsExact = correctionMs * 1000.0 / effectivePlaybackRate;
+                  final correctionUsExact =
+                      correctionMs * 1000.0 / effectivePlaybackRate;
                   final correctionUsRounded = correctionUsExact.round();
                   _smoothAnchorElapsedUs =
                       currentElapsedUs - correctionUsRounded;
@@ -882,9 +917,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   // 假设：.round() 将微小的 correctionUs（倍速时<100μs）截断为整数，
                   // 误差被后续帧 * _playbackRate 放大 → 周期性振荡 → playbackTimeMs 微回退
                   if (!kReleaseMode) {
-                    final roundErrorUs = (correctionUsExact - correctionUsRounded).abs();
+                    final roundErrorUs =
+                        (correctionUsExact - correctionUsRounded).abs();
                     final prevPtmValue = _playbackTimeMs.value;
-                    final newPtmValue = (_smoothAnchorMs + (currentElapsedUs - _smoothAnchorElapsedUs) / 1000.0 * effectivePlaybackRate)
+                    final newPtmValue = (_smoothAnchorMs +
+                            (currentElapsedUs - _smoothAnchorElapsedUs) /
+                                1000.0 *
+                                effectivePlaybackRate)
                         .clamp(0.0, _duration.inMilliseconds.toDouble());
                     final ptmDelta = newPtmValue - prevPtmValue;
                     // 仅在舍入误差>0.5μs 或 playbackTimeMs 回退时输出
@@ -892,7 +931,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                       final now = DateTime.now().millisecondsSinceEpoch;
                       if (now - _lastDiagRoundTimeMs >= 500) {
                         _lastDiagRoundTimeMs = now;
-                        debugPrint('[DRIFT-ROUND-DIAG] correctionMs=${correctionMs.toStringAsFixed(4)} '
+                        _playbackDiag(() =>
+                            '[DRIFT-ROUND-DIAG] correctionMs=${correctionMs.toStringAsFixed(4)} '
                             'correctionUsExact=${correctionUsExact.toStringAsFixed(2)} '
                             'correctionUsRounded=$correctionUsRounded '
                             'roundError=${roundErrorUs.toStringAsFixed(2)}μs '
@@ -906,7 +946,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 }
                 _lastRawPlayerMs = playerPosition;
                 final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-                final newPtm = (_smoothAnchorMs + newDeltaUs / 1000.0 * effectivePlaybackRate)
+                final newPtm = (_smoothAnchorMs +
+                        newDeltaUs / 1000.0 * effectivePlaybackRate)
                     .clamp(0.0, _duration.inMilliseconds.toDouble());
                 // [DRIFT-ROUND-DIAG] 追踪 playbackTimeMs 回退（无论走哪个分支）
                 if (!kReleaseMode) {
@@ -916,7 +957,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     final now = DateTime.now().millisecondsSinceEpoch;
                     if (now - _lastDiagPtmBackwardMs >= 500) {
                       _lastDiagPtmBackwardMs = now;
-                      debugPrint('[PTM-BACKWARD-DIAG] playbackTimeMs 回退: '
+                      _playbackDiag(() =>
+                          '[PTM-BACKWARD-DIAG] playbackTimeMs 回退: '
                           '${prevPtm.toStringAsFixed(1)} → ${newPtm.toStringAsFixed(1)} '
                           'delta=${(newPtm - prevPtm).toStringAsFixed(3)}ms '
                           'rate=$effectivePlaybackRate '
@@ -926,7 +968,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   }
                 }
                 // ✅ P1 单调递增保护：漂移修正后确保 playbackTimeMs 不回退
-                if (newPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                if (newPtm < _playbackTimeMs.value &&
+                    _playbackTimeMs.value > 100.0) {
                   _smoothAnchorMs = _playbackTimeMs.value;
                   _smoothAnchorElapsedUs = currentElapsedUs;
                   // playbackTimeMs 保持不变（hold），锚点重设到 prevPtm 使后续帧正常推进
@@ -934,7 +977,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     final now = DateTime.now().millisecondsSinceEpoch;
                     if (now - _lastDiagPtmBackwardMs >= 200) {
                       _lastDiagPtmBackwardMs = now;
-                      debugPrint('[PTM-MONOTONICITY-DIAG] DRIFT-CORRECTION backward prevented: '
+                      _playbackDiag(() =>
+                          '[PTM-MONOTONICITY-DIAG] DRIFT-CORRECTION backward prevented: '
                           'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} '
                           'newPtm=${newPtm.toStringAsFixed(1)} → held at prevPtm, anchor reset');
                     }
@@ -950,14 +994,19 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 //         big-fwd=drift>30且前进snap; hold=P1单调保护卡住一帧
                 if (!kReleaseMode) {
                   final finalPtm = _playbackTimeMs.value;
-                  final held = (newPtm < chainAPrevPtm && chainAPrevPtm > 100.0);
+                  final held =
+                      (newPtm < chainAPrevPtm && chainAPrevPtm > 100.0);
                   final branch = drift.abs() > 30.0
-                      ? (playerMs < chainAPrevPtm - 5.0 ? 'big-back' : 'big-fwd')
+                      ? (playerMs < chainAPrevPtm - 5.0
+                          ? 'big-back'
+                          : 'big-fwd')
                       : 'small';
                   // 仅在发生 hold/回退/大drift时输出，避免正常帧刷屏
-                  if (held || drift.abs() > 15.0 || newPtm < chainAPrevPtm - 0.5) {
+                  if (held ||
+                      drift.abs() > 15.0 ||
+                      newPtm < chainAPrevPtm - 0.5) {
                     final now = DateTime.now().millisecondsSinceEpoch;
-                    debugPrint('[CHAIN-A] t=$now '
+                    _playbackDiag(() => '[CHAIN-A] t=$now '
                         'ptm ${chainAPrevPtm.toStringAsFixed(1)}→${finalPtm.toStringAsFixed(1)} '
                         'drift=${drift.toStringAsFixed(1)}ms '
                         'playerMs=${playerMs.toStringAsFixed(1)} '
@@ -969,9 +1018,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               } else {
                 // player.position 未变，正常插值推进
                 // ✅ P1 单调递增保护：正常插值也确保不回退
-                final _interpPtm = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
+                final _interpPtm = (_smoothAnchorMs +
+                        elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
                     .clamp(0.0, _duration.inMilliseconds.toDouble());
-                if (_interpPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                if (_interpPtm < _playbackTimeMs.value &&
+                    _playbackTimeMs.value > 100.0) {
                   // 插值回退 → 重锚到 prevPtm
                   _smoothAnchorMs = _playbackTimeMs.value;
                   _smoothAnchorElapsedUs = currentElapsedUs;

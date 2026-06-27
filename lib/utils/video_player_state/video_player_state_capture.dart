@@ -143,6 +143,14 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     );
   }
 
+  Uint8List? _encodeFrameToPngBytes(PlayerFrame frame) {
+    final decoded = _decodeFrameToImage(frame);
+    if (decoded == null) {
+      return null;
+    }
+    return Uint8List.fromList(img.encodePng(decoded));
+  }
+
   _ThumbnailTargetSize _resolveThumbnailTargetSize() {
     int targetHeight = _thumbnailMaxHeight;
     int targetWidth = (_thumbnailMaxHeight * 16 / 9).round();
@@ -166,6 +174,17 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     targetWidth = targetWidth.clamp(1, _thumbnailMaxWidth).toInt();
     targetHeight = targetHeight.clamp(1, _thumbnailMaxHeight).toInt();
     return _ThumbnailTargetSize(width: targetWidth, height: targetHeight);
+  }
+
+  _ThumbnailTargetSize _resolveScreenshotTargetSize() {
+    final videoTracks = player.mediaInfo.video;
+    if (videoTracks != null && videoTracks.isNotEmpty) {
+      final codec = videoTracks.first.codec;
+      if (codec.width > 0 && codec.height > 0) {
+        return _ThumbnailTargetSize(width: codec.width, height: codec.height);
+      }
+    }
+    return _resolveThumbnailTargetSize();
   }
 
   _RawFrameSpec? _matchRawFrameSpec(PlayerFrame frame) {
@@ -449,6 +468,24 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       return null;
     }
 
+    if (player.getPlayerKernelName() == 'Erika') {
+      try {
+        final targetSize = _resolveScreenshotTargetSize();
+        final frame = await player.snapshot(
+          width: targetSize.width,
+          height: targetSize.height,
+        );
+        if (frame != null) {
+          final bytes = _encodeFrameToPngBytes(frame);
+          if (bytes != null && bytes.isNotEmpty) {
+            return bytes;
+          }
+        }
+      } catch (e) {
+        debugPrint('Erika截图失败，回退到界面截图: $e');
+      }
+    }
+
     final boundaryContext = screenshotBoundaryKey.currentContext;
     if (boundaryContext == null) {
       debugPrint('截图失败: screenshotBoundaryKey 未挂载到组件树');
@@ -552,6 +589,8 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     }
     // 避免文件名过长导致某些文件系统写入失败
     const maxLength = 80;
-    return sanitized.length > maxLength ? sanitized.substring(0, maxLength) : sanitized;
+    return sanitized.length > maxLength
+        ? sanitized.substring(0, maxLength)
+        : sanitized;
   }
 }
