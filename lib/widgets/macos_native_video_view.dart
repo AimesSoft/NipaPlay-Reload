@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +48,34 @@ Duration _nativeVideoAttachRetryDelay(int attempt) {
     return const Duration(milliseconds: 1200);
   }
   return const Duration(seconds: 2);
+}
+
+Rect _transformedGlobalRectOf(RenderBox box) {
+  final topLeft = box.localToGlobal(Offset.zero);
+  final topRight = box.localToGlobal(Offset(box.size.width, 0));
+  final bottomLeft = box.localToGlobal(Offset(0, box.size.height));
+  final bottomRight = box.localToGlobal(
+    Offset(box.size.width, box.size.height),
+  );
+
+  final left = math.min(
+    math.min(topLeft.dx, topRight.dx),
+    math.min(bottomLeft.dx, bottomRight.dx),
+  );
+  final top = math.min(
+    math.min(topLeft.dy, topRight.dy),
+    math.min(bottomLeft.dy, bottomRight.dy),
+  );
+  final right = math.max(
+    math.max(topLeft.dx, topRight.dx),
+    math.max(bottomLeft.dx, bottomRight.dx),
+  );
+  final bottom = math.max(
+    math.max(topLeft.dy, topRight.dy),
+    math.max(bottomLeft.dy, bottomRight.dy),
+  );
+
+  return Rect.fromLTRB(left, top, right, bottom);
 }
 
 class MacOSNativeVideoView extends StatefulWidget {
@@ -356,7 +385,8 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       return;
     }
 
-    final Rect rect;
+    final Rect platformRect;
+    final Rect? cutoutRect;
     if (visible) {
       if (!mounted) {
         return;
@@ -370,17 +400,19 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         return;
       }
       final origin = box.localToGlobal(Offset.zero);
-      rect = origin & box.size;
+      platformRect = _transformedGlobalRectOf(box);
+      cutoutRect = origin & box.size;
     } else {
-      rect = Rect.zero;
+      platformRect = Rect.zero;
+      cutoutRect = null;
     }
 
     final signature = [
       visible,
-      rect.left.toStringAsFixed(2),
-      rect.top.toStringAsFixed(2),
-      rect.width.toStringAsFixed(2),
-      rect.height.toStringAsFixed(2),
+      platformRect.left.toStringAsFixed(2),
+      platformRect.top.toStringAsFixed(2),
+      platformRect.width.toStringAsFixed(2),
+      platformRect.height.toStringAsFixed(2),
     ].join('|');
     if (signature == _lastFrameSignature) {
       return;
@@ -391,10 +423,10 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       return;
     }
     _lastFrameSignature = signature;
-    widget.onFrameRectChanged?.call(visible ? rect : null);
+    widget.onFrameRectChanged?.call(cutoutRect);
     if (!visible || force) {
       _logMacOSHdrExitTrace(
-        'setOverlayFrame state=${identityHashCode(this)} visible=$visible force=$force rect=$rect label=${widget.debugLabel}',
+        'setOverlayFrame state=${identityHashCode(this)} visible=$visible force=$force rect=$platformRect label=${widget.debugLabel}',
       );
     }
 
@@ -405,10 +437,10 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
           'generation': _surfaceGeneration,
-          'x': rect.left,
-          'y': rect.top,
-          'width': rect.width,
-          'height': rect.height,
+          'x': platformRect.left,
+          'y': platformRect.top,
+          'width': platformRect.width,
+          'height': platformRect.height,
           'visible': visible,
           if (widget.debugLabel != null) 'debugLabel': widget.debugLabel,
         },

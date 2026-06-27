@@ -47,6 +47,7 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
@@ -578,6 +579,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
           ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
           ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => RemoteAccessSettingsProvider()),
           ChangeNotifierProvider(create: (_) => PluginService()),
           ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),

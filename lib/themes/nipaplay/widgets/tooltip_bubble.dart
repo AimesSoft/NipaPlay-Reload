@@ -46,27 +46,53 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   Timer? _enterTimer;
   Timer? _exitTimer;
 
-  void _recalculatePosition() {
-    final RenderBox renderBox =
-        _childKey.currentContext?.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
+  RenderBox? _overlayRenderBox() {
+    final renderObject = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      return renderObject;
+    }
+    return null;
+  }
+
+  Offset _toOverlayPosition(Offset globalPosition, RenderBox? overlayBox) {
+    if (overlayBox == null) {
+      return globalPosition;
+    }
+    return overlayBox.globalToLocal(globalPosition);
+  }
+
+  bool _recalculatePosition() {
+    final RenderObject? renderObject =
+        _childKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return false;
+    }
+
+    final overlayBox = _overlayRenderBox();
+    final position = overlayBox == null
+        ? renderObject.localToGlobal(Offset.zero)
+        : renderObject.localToGlobal(Offset.zero, ancestor: overlayBox);
+    final size = renderObject.size;
     final bubbleWidth = _getBubbleWidth();
     final bubbleHeight = _getBubbleHeight();
+    final mousePosition = _mousePosition == null
+        ? null
+        : _toOverlayPosition(_mousePosition!, overlayBox);
 
     double left;
     double top;
 
     if (widget.position != null) {
-      left = widget.position! - bubbleWidth / 2;
+      left = _toOverlayPosition(Offset(widget.position!, 0), overlayBox).dx -
+          bubbleWidth / 2;
       top = widget.showOnTop
           ? position.dy - bubbleHeight - widget.verticalOffset
           : position.dy + size.height + widget.verticalOffset;
-    } else if (widget.followMouse && _mousePosition != null) {
-      left = _mousePosition!.dx - bubbleWidth / 2;
+    } else if (widget.followMouse && mousePosition != null) {
+      left = mousePosition.dx - bubbleWidth / 2;
       top = widget.showOnTop
-          ? _mousePosition!.dy - bubbleHeight - widget.verticalOffset
-          : _mousePosition!.dy + widget.verticalOffset;
+          ? mousePosition.dy - bubbleHeight - widget.verticalOffset
+          : mousePosition.dy + widget.verticalOffset;
     } else if (widget.showOnRight) {
       left = position.dx + size.width + widget.verticalOffset;
       top = position.dy + (size.height - bubbleHeight) / 2;
@@ -77,7 +103,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
           : position.dy + size.height + widget.verticalOffset;
     }
 
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = overlayBox?.size ?? MediaQuery.of(context).size;
     final maxLeft = screenSize.width - bubbleWidth - 10.0;
     if (maxLeft <= 10.0) {
       left = 10.0;
@@ -93,6 +119,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
 
     _overlayOffset = Offset(left, top);
     _overlayWidth = bubbleWidth;
+    return true;
   }
 
   void _updateOverlay(BuildContext context, [Offset? newMousePosition]) {
@@ -105,7 +132,10 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       return;
     }
 
-    _recalculatePosition();
+    if (!_recalculatePosition()) {
+      _hideOverlay();
+      return;
+    }
 
     if (_overlayEntry != null) {
       // Overlay already exists — update in place without removing/reinserting

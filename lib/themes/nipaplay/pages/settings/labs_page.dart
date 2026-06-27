@@ -31,19 +31,6 @@ class LabsPage extends StatelessWidget {
               height: 1,
             ),
             SettingsItem.toggle(
-              title: '显示远程访问二维码',
-              subtitle: '开启后，远程访问服务页面会显示供手机扫码连接的二维码',
-              icon: Ionicons.qr_code_outline,
-              value: labsSettings.showRemoteAccessQrCode,
-              onChanged: (bool value) {
-                labsSettings.setShowRemoteAccessQrCode(value);
-              },
-            ),
-            Divider(
-              color: colorScheme.onSurface.withValues(alpha: 0.12),
-              height: 1,
-            ),
-            SettingsItem.toggle(
               title: '显示 Next2和 DFM+ 弹幕内核',
               subtitle: '开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2 和 DFM+',
               icon: Ionicons.flask_outline,

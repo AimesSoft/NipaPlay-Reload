@@ -64,32 +64,11 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                       ),
                       CupertinoSettingsTile(
                         leading: Icon(
-                          CupertinoIcons.qrcode,
-                          color: resolveSettingsIconColor(context),
-                        ),
-                        title: const Text('显示远程访问二维码'),
-                        subtitle: const Text('开启后，远程访问服务页面会显示供手机扫码连接的二维码'),
-                        trailing: AdaptiveSwitch(
-                          value: labsSettings.showRemoteAccessQrCode,
-                          onChanged: (value) {
-                            labsSettings.setShowRemoteAccessQrCode(value);
-                          },
-                        ),
-                        onTap: () {
-                          labsSettings.setShowRemoteAccessQrCode(
-                            !labsSettings.showRemoteAccessQrCode,
-                          );
-                        },
-                        backgroundColor: resolveSettingsTileBackground(context),
-                      ),
-                      CupertinoSettingsTile(
-                        leading: Icon(
                           CupertinoIcons.lab_flask,
                           color: resolveSettingsIconColor(context),
                         ),
                         title: const Text('显示 Next2 弹幕内核'),
-                        subtitle:
-                            const Text('开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2'),
+                        subtitle: const Text('开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2'),
                         trailing: AdaptiveSwitch(
                           value: labsSettings.enableNext2DanmakuKernel,
                           onChanged: (value) {
@@ -131,8 +110,7 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                           color: resolveSettingsIconColor(context),
                         ),
                         title: const Text('Next++ 激进优化引擎'),
-                        subtitle: const Text(
-                            '激进优化，推荐。关闭则回退至 Next 原始引擎路径'),
+                        subtitle: const Text('激进优化，推荐。关闭则回退至 Next 原始引擎路径'),
                         trailing: AdaptiveSwitch(
                           value: labsSettings.enableNextPlusPlusEngine,
                           onChanged: (value) {

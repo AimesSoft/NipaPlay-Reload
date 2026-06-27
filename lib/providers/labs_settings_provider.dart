@@ -9,14 +9,12 @@ class LabsSettingsProvider extends ChangeNotifier {
   }
 
   bool _enableLargeScreenMode = false;
-  bool _showRemoteAccessQrCode = false;
   bool _enableNext2DanmakuKernel = false;
   bool _enableErikaPlayerKernel = false;
   bool _enableNextPlusPlusEngine = false; // 默认关闭：Next++ 激进优化引擎
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
-  bool get showRemoteAccessQrCode => _showRemoteAccessQrCode;
   bool get enableNext2DanmakuKernel => _enableNext2DanmakuKernel;
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableNextPlusPlusEngine => _enableNextPlusPlusEngine;
@@ -25,10 +23,6 @@ class LabsSettingsProvider extends ChangeNotifier {
   Future<void> _loadSettings() async {
     _enableLargeScreenMode = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableLargeScreenMode,
-      defaultValue: false,
-    );
-    _showRemoteAccessQrCode = await SettingsStorage.loadBool(
-      SettingsKeys.labsShowRemoteAccessQrCode,
       defaultValue: false,
     );
     _enableNext2DanmakuKernel = await SettingsStorage.loadBool(
@@ -54,16 +48,6 @@ class LabsSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsEnableLargeScreenMode,
-      enabled,
-    );
-  }
-
-  Future<void> setShowRemoteAccessQrCode(bool enabled) async {
-    if (_showRemoteAccessQrCode == enabled) return;
-    _showRemoteAccessQrCode = enabled;
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsShowRemoteAccessQrCode,
       enabled,
     );
   }

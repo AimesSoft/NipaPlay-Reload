@@ -1,7 +1,7 @@
 // remote_access_page.dart
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
@@ -416,8 +416,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
 
   Widget _buildWebServerSection() {
     final colorScheme = Theme.of(context).colorScheme;
-    final showRemoteAccessQrCode =
-        context.watch<LabsSettingsProvider>().showRemoteAccessQrCode;
+    final remoteAccessSettings = context.watch<RemoteAccessSettingsProvider>();
+    final showRemoteAccessQrCode = remoteAccessSettings.showRemoteAccessQrCode;
     return DefaultTextStyle.merge(
       style: _pageTextStyle(context),
       child: Column(
@@ -503,6 +503,16 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             trailing: FluentSettingsSwitch(
               value: _ipv6Enabled,
               onChanged: _toggleIpv6,
+            ),
+          ),
+
+          _buildSettingItem(
+            icon: Icons.qr_code_2,
+            title: '显示远程访问二维码',
+            subtitle: '开启后，远程访问服务页面会显示供手机扫码连接的二维码',
+            trailing: FluentSettingsSwitch(
+              value: showRemoteAccessQrCode,
+              onChanged: remoteAccessSettings.setShowRemoteAccessQrCode,
             ),
           ),
 
