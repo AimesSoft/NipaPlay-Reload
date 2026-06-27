@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    name: Build macOS DMG
+    name: Build macOS Packages
     runs-on: macos-26
     outputs:
       version: ${{ steps.setup.outputs.version }}
@@ -191,10 +191,11 @@ jobs:
         shell: bash
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
-      - name: Build macOS DMG
+      - name: Build macOS Packages
         uses: ./.github/actions/build-macos
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          build-architectures: universal arm64 x86_64
           macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
@@ -213,7 +214,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-macOS
-          path: NipaPlay_*_macOS_Universal.dmg
+          path: |
+            NipaPlay_*_macOS_*.dmg
+            NipaPlay_*_macOS_*.zip
+            NipaPlay_*_macOS_*.pkg
 
       - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
         uses: actions/upload-artifact@v4
