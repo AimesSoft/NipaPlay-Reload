@@ -308,7 +308,7 @@ class _CupertinoPlayerSettingsPageState
       case PlayerKernelType.mediaKit:
         return context.l10n.playerKernelDescriptionLibmpv;
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）：iOS/macOS 原生 Metal 输出，播放、渲染和音频由 Rust 内核负责。';
+        return 'Erika Rust 播放器（实验性）：iOS/macOS 原生 Metal 输出，Windows 原生 D3D11 输出，播放、渲染和音频由 Rust 内核负责。';
     }
   }
 

@@ -441,7 +441,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）\niOS/macOS 原生 Metal 输出，播放、渲染和音频由 Rust 内核负责';
+        return 'Erika Rust 播放器（实验性）\niOS/macOS 原生 Metal 输出，Windows 原生 D3D11 输出，播放、渲染和音频由 Rust 内核负责';
     }
   }
 
@@ -656,7 +656,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   .toList();
               return SettingsItem.dropdown(
                 title: 'Erika 超分辨率',
-                subtitle: '使用 Erika Metal ART-CNN 对视频帧做实时超分',
+                subtitle: '使用 Erika ART-CNN 对视频帧做实时超分',
                 icon: Ionicons.sparkles_outline,
                 items: items,
                 onChanged: (dynamic value) async {

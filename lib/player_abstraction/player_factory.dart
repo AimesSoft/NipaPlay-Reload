@@ -42,7 +42,8 @@ class PlayerFactory {
   static bool get isErikaKernelSupported {
     if (kIsWeb) return false;
     return defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.iOS;
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.windows;
   }
 
   // 初始化方法，在应用启动时调用
