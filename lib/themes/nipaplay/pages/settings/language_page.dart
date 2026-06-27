@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -81,6 +83,16 @@ class LanguagePage extends StatelessWidget {
     required String title,
   }) {
     final bool selected = provider.mode == mode;
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return SettingsItem.button(
+        title: title,
+        icon: Ionicons.language_outline,
+        trailingIcon:
+            selected ? Icons.check_rounded : Ionicons.chevron_forward_outline,
+        onTap: () => context.read<AppLanguageProvider>().setMode(mode),
+      );
+    }
+
     return ListTile(
       dense: false,
       leading: Icon(Ionicons.language_outline),

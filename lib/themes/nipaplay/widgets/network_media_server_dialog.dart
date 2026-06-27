@@ -7,6 +7,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/multi_address_manager_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:provider/provider.dart';
@@ -266,6 +267,7 @@ class _LibrarySelectionTile extends StatefulWidget {
 class _LibrarySelectionTileState extends State<_LibrarySelectionTile> {
   bool _isHovered = false;
   bool _isPressed = false;
+  bool _isFocused = false;
 
   void _setHovered(bool value) {
     if (_isHovered == value) return;
@@ -281,9 +283,17 @@ class _LibrarySelectionTileState extends State<_LibrarySelectionTile> {
     });
   }
 
+  void _setFocused(bool value) {
+    if (_isFocused == value) return;
+    setState(() {
+      _isFocused = value;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isActive = widget.isSelected || _isHovered || _isPressed;
+    final bool isActive =
+        widget.isSelected || _isHovered || _isFocused || _isPressed;
     final Color titleColor = isActive ? widget.accentColor : widget.textColor;
     final Color subtitleColor =
         isActive ? widget.accentColor.withOpacity(0.7) : widget.subTextColor;
@@ -292,48 +302,52 @@ class _LibrarySelectionTileState extends State<_LibrarySelectionTile> {
     return MouseRegion(
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: isActive ? 1.03 : 1.0,
-          alignment: Alignment.centerLeft,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Icon(widget.icon, color: iconColor, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: TextStyle(
-                          color: titleColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+      child: KeyboardActivatable(
+        onActivate: widget.onTap,
+        onFocusChange: _setFocused,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: isActive ? 1.03 : 1.0,
+            alignment: Alignment.centerLeft,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(widget.icon, color: iconColor, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          style: TextStyle(
+                            color: titleColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        widget.subtitle,
-                        locale: const Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                          color: subtitleColor,
-                          fontSize: 12,
+                        SizedBox(height: 2),
+                        Text(
+                          widget.subtitle,
+                          locale: const Locale("zh-Hans", "zh"),
+                          style: TextStyle(
+                            color: subtitleColor,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

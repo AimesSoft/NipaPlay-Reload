@@ -222,87 +222,91 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             : null;
         final statusColor =
             host.isOnline ? Colors.greenAccent : Colors.orangeAccent;
-        return GestureDetector(
-          onTap: () async {
-            await provider.setActiveHost(host.id);
-            if (context.mounted) Navigator.of(context).pop();
-          },
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isActive
-                    ? Colors.lightBlueAccent.withOpacity(0.5)
-                    : borderColor,
-                width: isActive ? 1.2 : 0.6,
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () async {
+              await provider.setActiveHost(host.id);
+              if (context.mounted) Navigator.of(context).pop();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isActive
+                      ? Colors.lightBlueAccent.withOpacity(0.5)
+                      : borderColor,
+                  width: isActive ? 1.2 : 0.6,
+                ),
+                color: itemColor,
               ),
-              color: itemColor,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      host.isOnline
-                          ? Ionicons.checkmark_circle_outline
-                          : Ionicons.alert_circle_outline,
-                      color: statusColor,
-                      size: 18,
-                    ),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        displayName,
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        host.isOnline
+                            ? Ionicons.checkmark_circle_outline
+                            : Ionicons.alert_circle_outline,
+                        color: statusColor,
+                        size: 18,
                       ),
-                    ),
-                    if (isActive)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.lightBlueAccent.withOpacity(0.24),
-                        ),
-                        child: const Text(
-                          '当前使用',
-                          locale: Locale('zh', 'CN'),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          displayName,
                           style: TextStyle(
-                              color: Colors.lightBlueAccent, fontSize: 11),
+                            color: textColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      )
-                    else
-                      Icon(Ionicons.chevron_forward,
-                          color: textColor.withOpacity(0.5), size: 16),
-                  ],
-                ),
-                SizedBox(height: 6),
-                Text(
-                  host.baseUrl,
-                  style: TextStyle(color: subTextColor, fontSize: 12),
-                ),
-                if (host.lastError != null && host.lastError!.isNotEmpty) ...[
-                  SizedBox(height: 8),
+                      ),
+                      if (isActive)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.lightBlueAccent.withOpacity(0.24),
+                          ),
+                          child: const Text(
+                            '当前使用',
+                            locale: Locale('zh', 'CN'),
+                            style: TextStyle(
+                                color: Colors.lightBlueAccent, fontSize: 11),
+                          ),
+                        )
+                      else
+                        Icon(Ionicons.chevron_forward,
+                            color: textColor.withOpacity(0.5), size: 16),
+                    ],
+                  ),
+                  SizedBox(height: 6),
                   Text(
-                    host.lastError!,
-                    locale: const Locale('zh', 'CN'),
-                    style: TextStyle(
-                        color: Colors.orangeAccent, fontSize: 12),
+                    host.baseUrl,
+                    style: TextStyle(color: subTextColor, fontSize: 12),
+                  ),
+                  if (host.lastError != null && host.lastError!.isNotEmpty) ...[
+                    SizedBox(height: 8),
+                    Text(
+                      host.lastError!,
+                      locale: const Locale('zh', 'CN'),
+                      style:
+                          TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                    ),
+                  ],
+                  SizedBox(height: 6),
+                  Text(
+                    lastSync != null ? '最后同步: $lastSync' : '最后同步: 尚未成功连接',
+                    style: TextStyle(color: mutedTextColor, fontSize: 11),
                   ),
                 ],
-                SizedBox(height: 6),
-                Text(
-                  lastSync != null ? '最后同步: $lastSync' : '最后同步: 尚未成功连接',
-                  style: TextStyle(color: mutedTextColor, fontSize: 11),
-                ),
-              ],
+              ),
             ),
           ),
         );

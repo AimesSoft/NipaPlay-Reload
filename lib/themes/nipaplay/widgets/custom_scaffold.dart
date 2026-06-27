@@ -196,13 +196,13 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       currentIndex: currentIndex,
       physics: const PageScrollPhysics(),
       onPageChanged: _handlePageChangedBySwitchableView,
-      children: widget.pages.asMap().entries.map((entry) {
-        final index = entry.key;
-        final page = entry.value;
-        final bool useLargeScreenHomePage =
-            useLargeScreenLayout && widget.pageIsHome && index == 0;
-        if (useLargeScreenHomePage) {
-          return const RepaintBoundary(child: NipaplayLargeScreenHomePage());
+      children: widget.pages.map((page) {
+        final bool wrapLargeScreenContent =
+            useLargeScreenLayout && widget.pageIsHome;
+        if (wrapLargeScreenContent) {
+          return RepaintBoundary(
+            child: NipaplayLargeScreenContentPage(child: page),
+          );
         }
         return RepaintBoundary(child: page);
       }).toList(),

@@ -15,6 +15,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -588,47 +589,61 @@ class _ThemeModePageState extends State<ThemeModePage> {
         ThemeData.estimateBrightnessForColor(color) == Brightness.dark
             ? Colors.white
             : Colors.black87;
+    bool isFocused = false;
     return Tooltip(
       message: option.label,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            videoState.setMinimalProgressBarColor(option.colorValue);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected
-                    ? AppAccentColors.current
-                    : colorScheme.onSurface.withOpacity(0.22),
-                width: isSelected ? 3 : 1,
-              ),
-              boxShadow: [
-                if (isSelected)
-                  BoxShadow(
-                    color: AppAccentColors.current.withValues(alpha: 0.22),
-                    blurRadius: 8,
-                    spreadRadius: 1,
+      child: StatefulBuilder(
+        builder: (context, setLocalState) {
+          final isActive = isSelected || isFocused;
+          return KeyboardActivatable(
+            onActivate: () {
+              videoState.setMinimalProgressBarColor(option.colorValue);
+            },
+            onFocusChange: (focused) =>
+                setLocalState(() => isFocused = focused),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  videoState.setMinimalProgressBarColor(option.colorValue);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isActive
+                          ? AppAccentColors.current
+                          : colorScheme.onSurface.withOpacity(0.22),
+                      width: isActive ? 3 : 1,
+                    ),
+                    boxShadow: [
+                      if (isActive)
+                        BoxShadow(
+                          color:
+                              AppAccentColors.current.withValues(alpha: 0.22),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                    ],
                   ),
-              ],
+                  child: isSelected
+                      ? Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: checkColor,
+                        )
+                      : null,
+                ),
+              ),
             ),
-            child: isSelected
-                ? Icon(
-                    Icons.check_rounded,
-                    size: 16,
-                    color: checkColor,
-                  )
-                : null,
-          ),
-        ),
+          );
+        },
       ),
     );
   }

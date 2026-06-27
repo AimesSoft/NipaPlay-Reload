@@ -18,6 +18,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -608,11 +611,24 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final visibleTasks = _visibleTasks;
+    final useLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
 
     if (_isLoading) {
+      if (useLargeScreen) {
+        return const NipaplayLargeScreenPageScaffold(
+          title: '下载',
+          subtitle: '正在读取种子任务',
+          icon: Ionicons.cloud_download_outline,
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
       return Center(
         child: CircularProgressIndicator(color: AppAccentColors.current),
       );
+    }
+
+    if (useLargeScreen) {
+      return _buildLargeScreenTorrentPage(colorScheme, visibleTasks);
     }
 
     return Column(
@@ -631,6 +647,193 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
               : _buildTaskList(visibleTasks),
         ),
       ],
+    );
+  }
+
+  Widget _buildLargeScreenTorrentPage(
+    ColorScheme colorScheme,
+    List<TorrentTask> visibleTasks,
+  ) {
+    final activeTasks = _tasks.where((task) => task.isActive).length;
+    final finishedTasks = _tasks.where((task) => task.finished).length;
+    final downloadingSpeed = _tasks.fold<int>(
+      0,
+      (sum, task) => sum + task.downloadSpeedBytesPerSecond,
+    );
+    final subtitle =
+        '${_tasks.length} 个任务 / $activeTasks 个下载中 / $finishedTasks 个已完成';
+
+    return NipaplayLargeScreenPageScaffold(
+      title: '下载',
+      subtitle: subtitle,
+      icon: Ionicons.cloud_download_outline,
+      actions: [
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.refresh_outline,
+          label: '刷新',
+          onPressed: () => _refreshTasks(),
+        ),
+        NipaplayLargeScreenActionButton(
+          icon: _viewMode == _TorrentTaskViewMode.cards
+              ? Ionicons.list_outline
+              : Ionicons.grid_outline,
+          label: _viewMode == _TorrentTaskViewMode.cards ? '列表' : '网格',
+          onPressed: _toggleViewMode,
+        ),
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.add_circle_outline,
+          label: '添加链接',
+          onPressed: _isBusy ? null : _showAddMagnetDialog,
+        ),
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.document_attach_outline,
+          label: '选择种子',
+          onPressed: _isBusy ? null : _pickTorrentFile,
+        ),
+      ],
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: NipaplayLargeScreenTextInput(
+                  controller: _searchController,
+                  hintText: '搜索任务、路径、状态或扫描结果',
+                  onChanged: _updateSearchQuery,
+                  suffix: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: Icon(
+                            Icons.clear_rounded,
+                            color:
+                                colorScheme.onSurface.withValues(alpha: 0.60),
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            _updateSearchQuery('');
+                          },
+                        ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                flex: 3,
+                child: _buildLargeScreenSortRail(colorScheme),
+              ),
+              const SizedBox(width: 14),
+              _LargeScreenTorrentStat(
+                label: '下载速度',
+                value: '${_TorrentTaskCard.formatBytes(downloadingSpeed)}/s',
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Expanded(
+            child: visibleTasks.isEmpty
+                ? NipaplayLargeScreenEmptyState(
+                    icon: Ionicons.cloud_download_outline,
+                    title: _tasks.isEmpty ? '暂无下载任务' : '没有匹配的下载任务',
+                    subtitle: _tasks.isEmpty
+                        ? '添加 magnet 链接或 .torrent 文件后，任务会显示在这里。'
+                        : '换一个关键词或清空搜索后再查看。',
+                    action: _tasks.isEmpty
+                        ? NipaplayLargeScreenActionButton(
+                            icon: Ionicons.add_circle_outline,
+                            label: '添加链接',
+                            onPressed: _isBusy ? null : _showAddMagnetDialog,
+                            autofocus: true,
+                          )
+                        : null,
+                  )
+                : _viewMode == _TorrentTaskViewMode.list
+                    ? _buildLargeScreenTorrentList(colorScheme, visibleTasks)
+                    : _buildLargeScreenTorrentGrid(colorScheme, visibleTasks),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSortRail(ColorScheme colorScheme) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final entry in _torrentTaskSortLabels.entries) ...[
+            _LargeScreenTorrentSortButton(
+              label: entry.value,
+              selected: entry.key == _sort,
+              onPressed: () => _applySort(entry.key),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenTorrentGrid(
+    ColorScheme colorScheme,
+    List<TorrentTask> tasks,
+  ) {
+    return GridView.builder(
+      padding: const EdgeInsets.only(bottom: 24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 460,
+        mainAxisExtent: 286,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+      ),
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return _LargeScreenTorrentTaskCard(
+          task: task,
+          scanSummary: _scanSummaries[task.autoScanKey],
+          isAutoScanning: _autoScanningTaskKeys.contains(task.autoScanKey),
+          isAutoScanned:
+              _autoScannedCompletedTaskKeys.contains(task.autoScanKey),
+          autofocus: index == 0,
+          onPrimary:
+              task.finished ? () => _playTask(task) : () => _toggleTask(task),
+          onPlay: () => _playTask(task),
+          onToggle: () => _toggleTask(task),
+          onOpenFolder: () => _openTaskFolder(task),
+          onForget: () => _forgetTask(task),
+          onDelete: () => _deleteTask(task),
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeScreenTorrentList(
+    ColorScheme colorScheme,
+    List<TorrentTask> tasks,
+  ) {
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 24),
+      itemCount: tasks.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return _LargeScreenTorrentTaskCard(
+          task: task,
+          scanSummary: _scanSummaries[task.autoScanKey],
+          isAutoScanning: _autoScanningTaskKeys.contains(task.autoScanKey),
+          isAutoScanned:
+              _autoScannedCompletedTaskKeys.contains(task.autoScanKey),
+          autofocus: index == 0,
+          compact: true,
+          onPrimary:
+              task.finished ? () => _playTask(task) : () => _toggleTask(task),
+          onPlay: () => _playTask(task),
+          onToggle: () => _toggleTask(task),
+          onOpenFolder: () => _openTaskFolder(task),
+          onForget: () => _forgetTask(task),
+          onDelete: () => _deleteTask(task),
+        );
+      },
     );
   }
 
@@ -2047,6 +2250,364 @@ class _StateBadge extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
+      ),
+    );
+  }
+}
+
+class _LargeScreenTorrentTaskCard extends StatelessWidget {
+  const _LargeScreenTorrentTaskCard({
+    required this.task,
+    required this.scanSummary,
+    required this.isAutoScanning,
+    required this.isAutoScanned,
+    required this.onPrimary,
+    required this.onPlay,
+    required this.onToggle,
+    required this.onOpenFolder,
+    required this.onForget,
+    required this.onDelete,
+    this.autofocus = false,
+    this.compact = false,
+  });
+
+  final TorrentTask task;
+  final TorrentTaskScanSummary? scanSummary;
+  final bool isAutoScanning;
+  final bool isAutoScanned;
+  final VoidCallback onPrimary;
+  final VoidCallback onPlay;
+  final VoidCallback onToggle;
+  final VoidCallback onOpenFolder;
+  final VoidCallback onForget;
+  final VoidCallback onDelete;
+  final bool autofocus;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF161922);
+    final mutedColor = textColor.withValues(alpha: 0.62);
+    final accent = AppAccentColors.current;
+    final progress = task.progress;
+    final heightBudget = compact ? null : const Spacer();
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: onPrimary,
+      borderRadius: BorderRadius.circular(8),
+      focusScale: 1.025,
+      padding: EdgeInsets.all(compact ? 16 : 18),
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.78),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                task.finished
+                    ? Icons.download_done_rounded
+                    : Ionicons.cloud_download_outline,
+                color: task.hasError ? Colors.redAccent : accent,
+                size: compact ? 28 : 34,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.name,
+                      maxLines: compact ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: compact ? 16 : 18,
+                        fontWeight: FontWeight.w900,
+                        height: 1.12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      task.outputFolder,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              _LargeScreenTorrentBadge(task: task),
+            ],
+          ),
+          SizedBox(height: compact ? 12 : 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: compact ? 5 : 7,
+              color: task.hasError ? Colors.redAccent : accent,
+              backgroundColor: textColor.withValues(alpha: 0.14),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              _LargeScreenTorrentMetric(
+                label: '进度',
+                value: _TorrentTaskCard._formatPercent(progress),
+              ),
+              _LargeScreenTorrentMetric(
+                label: '已下载',
+                value:
+                    '${_TorrentTaskCard.formatBytes(task.progressBytes)} / ${_TorrentTaskCard.formatBytes(task.totalBytes)}',
+              ),
+              _LargeScreenTorrentMetric(
+                label: '下载',
+                value:
+                    '${_TorrentTaskCard.formatBytes(task.downloadSpeedBytesPerSecond)}/s',
+              ),
+              _LargeScreenTorrentMetric(
+                label: '上传',
+                value:
+                    '${_TorrentTaskCard.formatBytes(task.uploadSpeedBytesPerSecond)}/s',
+              ),
+            ],
+          ),
+          if (task.error?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 8),
+            Text(
+              task.error!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (isAutoScanning || scanSummary != null || isAutoScanned) ...[
+            const SizedBox(height: 8),
+            _TorrentTaskScanText(
+              summary: scanSummary,
+              isScanning: isAutoScanning,
+              isScanned: isAutoScanned,
+            ),
+          ],
+          if (heightBudget != null) heightBudget,
+          if (!compact) const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (task.finished)
+                NipaplayLargeScreenActionButton(
+                  icon: Ionicons.play_circle_outline,
+                  label: '播放',
+                  compact: true,
+                  onPressed: onPlay,
+                )
+              else
+                NipaplayLargeScreenActionButton(
+                  icon: task.isPaused
+                      ? Ionicons.play_outline
+                      : Ionicons.pause_outline,
+                  label: task.isPaused ? '继续' : '暂停',
+                  compact: true,
+                  onPressed: onToggle,
+                ),
+              NipaplayLargeScreenIconButton(
+                icon: Ionicons.folder_open_outline,
+                tooltip: '打开文件夹',
+                onPressed: onOpenFolder,
+              ),
+              NipaplayLargeScreenIconButton(
+                icon: Ionicons.remove_circle_outline,
+                tooltip: '移除任务',
+                onPressed: onForget,
+              ),
+              NipaplayLargeScreenIconButton(
+                icon: Ionicons.trash_outline,
+                tooltip: '删除任务和文件',
+                onPressed: onDelete,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LargeScreenTorrentBadge extends StatelessWidget {
+  const _LargeScreenTorrentBadge({required this.task});
+
+  final TorrentTask task;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = task.hasError
+        ? Colors.redAccent
+        : task.finished
+            ? Colors.greenAccent
+            : task.isPaused
+                ? Colors.orangeAccent
+                : AppAccentColors.current;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.36)),
+      ),
+      child: Text(
+        task.displayState,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _LargeScreenTorrentMetric extends StatelessWidget {
+  const _LargeScreenTorrentMetric({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF161922);
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$label ',
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.52),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.88),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LargeScreenTorrentSortButton extends StatelessWidget {
+  const _LargeScreenTorrentSortButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: selected ? null : onPressed,
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? AppAccentColors.current.withValues(alpha: 0.24)
+            : Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: selected
+            ? AppAccentColors.current.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.78),
+        contentColorDark: Colors.white,
+        contentColorLight: const Color(0xFF161922),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _LargeScreenTorrentStat extends StatelessWidget {
+  const _LargeScreenTorrentStat({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF161922);
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.58),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }

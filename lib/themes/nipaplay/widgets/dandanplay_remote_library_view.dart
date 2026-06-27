@@ -11,10 +11,13 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -63,11 +66,14 @@ class _DandanplayRemoteLibraryViewState
   Widget build(BuildContext context) {
     return Consumer<DandanplayRemoteProvider>(
       builder: (context, provider, child) {
+        final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
         if (!provider.isInitialized && provider.isLoading) {
-          return Center(
-              child: CircularProgressIndicator(color: _accentColor));
+          return Center(child: CircularProgressIndicator(color: _accentColor));
         }
         if (!provider.isConnected) {
+          if (isLargeScreen) {
+            return _buildLargeScreenDisconnectedState(provider);
+          }
           return _buildDisconnectedState(provider);
         }
 
@@ -75,7 +81,14 @@ class _DandanplayRemoteLibraryViewState
             _filterGroups(provider.animeGroups);
 
         if (provider.animeGroups.isEmpty && !provider.isLoading) {
+          if (isLargeScreen) {
+            return _buildLargeScreenEmptyState(provider);
+          }
           return _buildEmptyState(provider);
+        }
+
+        if (isLargeScreen) {
+          return _buildLargeScreenRemoteLibrary(groups, provider);
         }
 
         return Column(
@@ -95,6 +108,329 @@ class _DandanplayRemoteLibraryViewState
         );
       },
     );
+  }
+
+  Widget _buildLargeScreenRemoteLibrary(
+    List<DandanplayRemoteAnimeGroup> groups,
+    DandanplayRemoteProvider provider,
+  ) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: NipaplayLargeScreenTextInput(
+                controller: _searchController,
+                hintText: '搜索弹弹play远程媒体',
+                onChanged: _updateSearchQueryDebounced,
+                onSubmitted: _commitSearchQuery,
+                suffix: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清空搜索',
+                        onPressed: _clearSearchQuery,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: provider.isLoading ? '刷新中' : '刷新',
+              onPressed: provider.isLoading
+                  ? null
+                  : () async {
+                      try {
+                        await provider.refresh();
+                      } catch (e) {
+                        if (mounted) {
+                          BlurSnackBar.show(context, '刷新失败: $e');
+                        }
+                      }
+                    },
+            ),
+            const SizedBox(width: 10),
+            NipaplayLargeScreenActionButton(
+              icon: Ionicons.link_outline,
+              label: '连接',
+              onPressed: () => _showConnectDialog(context, provider),
+            ),
+          ],
+        ),
+        if ((provider.errorMessage?.isNotEmpty ?? false) &&
+            !provider.isLoading) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenDandanErrorBanner(provider.errorMessage!),
+        ],
+        const SizedBox(height: 18),
+        Expanded(
+          child: provider.isLoading && groups.isEmpty
+              ? Center(child: CircularProgressIndicator(color: _accentColor))
+              : groups.isEmpty
+                  ? const NipaplayLargeScreenEmptyState(
+                      icon: Icons.search_off_rounded,
+                      title: '没有匹配结果',
+                      subtitle: '换个关键词再试试',
+                    )
+                  : GridView.builder(
+                      controller: _gridScrollController,
+                      padding: const EdgeInsets.only(bottom: 96),
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 244,
+                        mainAxisExtent: 468,
+                        crossAxisSpacing: 18,
+                        mainAxisSpacing: 18,
+                      ),
+                      itemCount: groups.length,
+                      itemBuilder: (context, index) {
+                        return _buildLargeScreenAnimeCard(
+                          groups[index],
+                          provider,
+                          autofocus: index == 0,
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenAnimeCard(
+    DandanplayRemoteAnimeGroup group,
+    DandanplayRemoteProvider provider, {
+    required bool autofocus,
+  }) {
+    final coverUrl = _resolveCoverUrlForGroup(group, provider);
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () => _openAnimeDetail(group, provider),
+      borderRadius: BorderRadius.circular(8),
+      padding: EdgeInsets.zero,
+      focusScale: 1.035,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.07),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.82),
+        focusStrokeWidth: 2.4,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 2 / 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImageWidget(
+                    imageUrl: coverUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __) =>
+                        _buildLargeScreenDandanFallbackPoster(textColor),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.74),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: _buildLargeScreenDandanBadge('弹弹play'),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: _buildLargeScreenDandanBadge(
+                      '${group.episodeCount} 集',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      height: 1.15,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _formatLargeScreenDandanSubtitle(group),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.52),
+                      fontSize: 12,
+                      height: 1.26,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenDisconnectedState(
+    DandanplayRemoteProvider provider,
+  ) {
+    return NipaplayLargeScreenEmptyState(
+      icon: Ionicons.cloud_offline_outline,
+      title: '尚未连接弹弹play远程服务',
+      subtitle: '连接后可以在大屏模式中浏览家中弹弹play媒体库',
+      action: NipaplayLargeScreenActionButton(
+        icon: Ionicons.link_outline,
+        label: '连接弹弹play',
+        onPressed: () => _showConnectDialog(context, provider),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenEmptyState(DandanplayRemoteProvider provider) {
+    return NipaplayLargeScreenEmptyState(
+      icon: Ionicons.tv_outline,
+      title: '远程媒体库为空',
+      subtitle: '请确认弹弹play远程访问已同步媒体，稍候片刻后刷新列表',
+      action: NipaplayLargeScreenActionButton(
+        icon: Icons.refresh_rounded,
+        label: '刷新',
+        onPressed: provider.isLoading
+            ? null
+            : () async {
+                try {
+                  await provider.refresh();
+                } catch (e) {
+                  if (mounted) {
+                    BlurSnackBar.show(context, '刷新失败: $e');
+                  }
+                }
+              },
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenDandanErrorBanner(String message) {
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Ionicons.warning_outline,
+              color: Colors.redAccent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenDandanFallbackPoster(Color textColor) {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.08),
+      child: Center(
+        child: Icon(
+          Icons.movie_creation_outlined,
+          color: textColor.withValues(alpha: 0.46),
+          size: 52,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenDandanBadge(String label) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatLargeScreenDandanSubtitle(DandanplayRemoteAnimeGroup group) {
+    final latest = group.latestPlayTime;
+    if (latest == null) {
+      return '共 ${group.episodeCount} 集';
+    }
+    return '共 ${group.episodeCount} 集 · 最近播放 ${latest.year}-${latest.month.toString().padLeft(2, '0')}-${latest.day.toString().padLeft(2, '0')}';
+  }
+
+  void _updateSearchQueryDebounced(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = value.trim();
+      });
+    });
+  }
+
+  void _commitSearchQuery(String value) {
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchQuery = value.trim();
+    });
+  }
+
+  void _clearSearchQuery() {
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchQuery = '';
+      _searchController.clear();
+    });
   }
 
   Widget _buildToolbar() {

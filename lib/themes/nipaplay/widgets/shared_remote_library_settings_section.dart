@@ -9,6 +9,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -507,6 +509,38 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     required String label,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        focusScale: 1.018,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        style: NipaplayLargeScreenFocusableStyle(
+          idleBackgroundDark: Colors.white.withOpacity(0.10),
+          idleBackgroundLight: Colors.white.withOpacity(0.82),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: colorScheme.onSurface, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final disableBlur = SettingsVisualScope.isBlurDisabled(context);
     final container = Container(
       decoration: BoxDecoration(

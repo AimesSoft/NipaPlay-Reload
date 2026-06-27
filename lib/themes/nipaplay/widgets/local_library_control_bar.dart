@@ -43,7 +43,6 @@ class LocalLibraryControlBar extends StatefulWidget {
 class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   final GlobalKey _dropdownKey = GlobalKey();
   final FocusNode _searchFocusNode = FocusNode();
-  bool _isBackHovered = false;
 
   @override
   void initState() {
@@ -86,27 +85,12 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
       child: Row(
         children: [
           if (widget.showBackButton) ...[
-            MouseRegion(
-              onEnter: (_) => setState(() => _isBackHovered = true),
-              onExit: (_) => setState(() => _isBackHovered = false),
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: widget.onBack,
-                behavior: HitTestBehavior.opaque,
-                child: AnimatedScale(
-                  scale: _isBackHovered ? 1.2 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: Icon(
-                      Ionicons.arrow_back,
-                      size: 24,
-                      color: primaryTextColor,
-                    ),
-                  ),
-                ),
-              ),
+            SearchBarActionButton(
+              icon: Ionicons.arrow_back,
+              size: 24,
+              color: primaryTextColor,
+              tooltip: '返回',
+              onPressed: widget.onBack,
             ),
             SizedBox(width: 12),
           ],

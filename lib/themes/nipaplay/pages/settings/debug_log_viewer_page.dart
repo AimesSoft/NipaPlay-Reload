@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
@@ -17,7 +18,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -40,6 +40,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage>
   bool _showTimestamp = true;
   bool _autoScroll = false;
   bool _isMoreOptionsHovered = false;
+  bool _isMoreOptionsFocused = false;
   String _selectedLevel = '全部';
   String _selectedTag = '全部';
   String _searchQuery = '';
@@ -784,22 +785,29 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage>
                     SizedBox(width: 16),
 
                     // 选项按钮
-                    MouseRegion(
-                      onEnter: (_) =>
-                          setState(() => _isMoreOptionsHovered = true),
-                      onExit: (_) =>
-                          setState(() => _isMoreOptionsHovered = false),
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () => _showMoreOptions(context),
-                        child: BounceHoverScale(
-                          isHovered: _isMoreOptionsHovered,
-                          isPressed: false,
-                          child: Icon(
-                            Ionicons.ellipsis_vertical,
-                            color: _isMoreOptionsHovered
-                                ? AppAccentColors.current
-                                : colorScheme.onSurface,
+                    KeyboardActivatable(
+                      onActivate: () => _showMoreOptions(context),
+                      onFocusChange: (focused) =>
+                          setState(() => _isMoreOptionsFocused = focused),
+                      child: MouseRegion(
+                        onEnter: (_) =>
+                            setState(() => _isMoreOptionsHovered = true),
+                        onExit: (_) =>
+                            setState(() => _isMoreOptionsHovered = false),
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => _showMoreOptions(context),
+                          child: BounceHoverScale(
+                            isHovered:
+                                _isMoreOptionsHovered || _isMoreOptionsFocused,
+                            isPressed: false,
+                            child: Icon(
+                              Ionicons.ellipsis_vertical,
+                              color: (_isMoreOptionsHovered ||
+                                      _isMoreOptionsFocused)
+                                  ? AppAccentColors.current
+                                  : colorScheme.onSurface,
+                            ),
                           ),
                         ),
                       ),

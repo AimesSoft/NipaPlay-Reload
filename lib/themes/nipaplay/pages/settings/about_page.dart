@@ -8,6 +8,7 @@ import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -355,27 +356,31 @@ class _AboutPageState extends State<AboutPage> {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      GestureDetector(
-                        onTap: _updateInfo?.hasUpdate == true
-                            ? () => _launchURL(_updateInfo!.releaseUrl)
-                            : null,
-                        child: MouseRegion(
-                          cursor: _updateInfo?.hasUpdate == true
-                              ? SystemMouseCursors.click
-                              : SystemMouseCursors.basic,
-                          child: AboutVersionBannerText(
-                            text: l10n.aboutVersionBanner(
-                                _displayVersionText(context)),
-                            targetLabel: _buildTargetLabel,
-                            style: textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onSurface,
-                                ) ??
-                                TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onSurface,
-                                ),
-                            textAlign: TextAlign.start,
+                      KeyboardActivatable(
+                        enabled: _updateInfo?.hasUpdate == true,
+                        onActivate: () => _launchURL(_updateInfo!.releaseUrl),
+                        child: GestureDetector(
+                          onTap: _updateInfo?.hasUpdate == true
+                              ? () => _launchURL(_updateInfo!.releaseUrl)
+                              : null,
+                          child: MouseRegion(
+                            cursor: _updateInfo?.hasUpdate == true
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.basic,
+                            child: AboutVersionBannerText(
+                              text: l10n.aboutVersionBanner(
+                                  _displayVersionText(context)),
+                              targetLabel: _buildTargetLabel,
+                              style: textTheme.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ) ??
+                                  TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
+                              textAlign: TextAlign.start,
+                            ),
                           ),
                         ),
                       ),
@@ -535,81 +540,29 @@ class _AboutPageState extends State<AboutPage> {
                 TextSpan(text: l10n.aboutCommunityHint),
               ]),
               SizedBox(height: 16),
-              GestureDetector(
-                onTap: () => _launchURL(
+              _buildActionLink(
+                context: context,
+                icon: Ionicons.logo_github,
+                label: 'AimesSoft/NipaPlay-Reload',
+                color: Colors.cyanAccent[100] ?? AppAccentColors.current,
+                onPressed: () => _launchURL(
                     'https://www.github.com/AimesSoft/NipaPlay-Reload'),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.logo_github,
-                          color: colorScheme.onSurface.withOpacity(0.8),
-                          size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'AimesSoft/NipaPlay-Reload',
-                        locale: Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                          color: Colors.cyanAccent[100],
-                          decoration: TextDecoration.underline,
-                          decorationColor:
-                              Colors.cyanAccent[100]?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
               SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.chatbubbles_outline,
-                          color: colorScheme.onSurface.withOpacity(0.8),
-                          size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        l10n.aboutQqGroup('961207150'),
-                        style: TextStyle(
-                          color: Colors.cyanAccent[100],
-                          decoration: TextDecoration.underline,
-                          decorationColor:
-                              Colors.cyanAccent[100]?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _buildActionLink(
+                context: context,
+                icon: Ionicons.chatbubbles_outline,
+                label: l10n.aboutQqGroup('961207150'),
+                color: Colors.cyanAccent[100] ?? AppAccentColors.current,
+                onPressed: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
               ),
               SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => _launchURL('https://nipaplay.aimes-soft.com'),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.globe_outline,
-                          color: colorScheme.onSurface.withOpacity(0.8),
-                          size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        l10n.aboutOfficialWebsite,
-                        style: TextStyle(
-                          color: Colors.cyanAccent[100],
-                          decoration: TextDecoration.underline,
-                          decorationColor:
-                              Colors.cyanAccent[100]?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _buildActionLink(
+                context: context,
+                icon: Ionicons.globe_outline,
+                label: l10n.aboutOfficialWebsite,
+                color: Colors.cyanAccent[100] ?? AppAccentColors.current,
+                onPressed: () => _launchURL('https://nipaplay.aimes-soft.com'),
               ),
             ],
           ),
@@ -626,52 +579,20 @@ class _AboutPageState extends State<AboutPage> {
                 ),
               ]),
               SizedBox(height: 16),
-              GestureDetector(
-                onTap: () => _launchURL('https://afdian.com/a/irigas'),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.heart,
-                          color: Colors.pinkAccent[100], size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        l10n.aboutAfdianSponsorPage,
-                        style: TextStyle(
-                          color: Colors.pinkAccent[100],
-                          decoration: TextDecoration.underline,
-                          decorationColor:
-                              Colors.pinkAccent[100]?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _buildActionLink(
+                context: context,
+                icon: Ionicons.heart,
+                label: l10n.aboutAfdianSponsorPage,
+                color: Colors.pinkAccent[100] ?? AppAccentColors.current,
+                onPressed: () => _launchURL('https://afdian.com/a/irigas'),
               ),
               SizedBox(height: 12),
-              GestureDetector(
-                onTap: _showAppreciationQR,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.qr_code,
-                          color: Colors.orangeAccent[100], size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        l10n.appreciationCode,
-                        style: TextStyle(
-                          color: Colors.orangeAccent[100],
-                          decoration: TextDecoration.underline,
-                          decorationColor:
-                              Colors.orangeAccent[100]?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _buildActionLink(
+                context: context,
+                icon: Ionicons.qr_code,
+                label: l10n.appreciationCode,
+                color: Colors.orangeAccent[100] ?? AppAccentColors.current,
+                onPressed: _showAppreciationQR,
               ),
             ],
           ),
@@ -701,6 +622,50 @@ class _AboutPageState extends State<AboutPage> {
               ),
         ),
       ],
+    );
+  }
+
+  Widget _buildActionLink({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: HoverScaleTextButton(
+        onPressed: onPressed,
+        idleColor: color,
+        hoverColor: color,
+        hoverScale: 1.035,
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: colorScheme.onSurface.withOpacity(0.8),
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Text(
+                label,
+                locale: Locale("zh-Hans", "zh"),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  decoration: TextDecoration.underline,
+                  decorationColor: color.withOpacity(0.7),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

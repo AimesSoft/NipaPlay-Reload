@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/remote_control_settings.dart';
@@ -1054,6 +1055,7 @@ class _HoverScaleIconButton extends StatefulWidget {
 
 class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1063,22 +1065,27 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
     const padding = EdgeInsets.all(6);
     final baseColor =
         widget.idleColor ?? Theme.of(context).colorScheme.onSurface;
-    final color = _isHovered ? hoverColor : baseColor;
+    final isActive = _isHovered || _isFocused;
+    final color = isActive ? hoverColor : baseColor;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _isHovered ? hoverScale : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          child: Padding(
-            padding: padding,
-            child: Icon(widget.icon, size: iconSize, color: color),
+    return KeyboardActivatable(
+      onActivate: widget.onPressed,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: isActive ? hoverScale : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutBack,
+            child: Padding(
+              padding: padding,
+              child: Icon(widget.icon, size: iconSize, color: color),
+            ),
           ),
         ),
       ),

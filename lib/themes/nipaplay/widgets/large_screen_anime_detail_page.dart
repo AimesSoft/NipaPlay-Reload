@@ -36,7 +36,8 @@ class NipaplayLargeScreenAnimeDetailPage extends StatefulWidget {
   final int animeId;
   final SharedRemoteAnimeSummary? sharedSummary;
   final Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader;
-  final PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder;
+  final PlayableItem Function(SharedRemoteEpisode episode)?
+      sharedEpisodeBuilder;
   final String? sharedSourceLabel;
 
   @override
@@ -237,8 +238,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
 
   Future<BangumiAnime> _fetchAnimeDetails() async {
     if (kIsWeb) {
-      final apiUri =
-          WebRemoteAccessService.apiUri('/api/bangumi/detail/${widget.animeId}');
+      final apiUri = WebRemoteAccessService.apiUri(
+          '/api/bangumi/detail/${widget.animeId}');
       if (apiUri == null) {
         throw Exception('未配置远程访问地址');
       }
@@ -323,7 +324,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
   }
 
   Future<void> _loadSharedEpisodes() async {
-    if (widget.sharedEpisodeLoader == null || widget.sharedEpisodeBuilder == null) {
+    if (widget.sharedEpisodeLoader == null ||
+        widget.sharedEpisodeBuilder == null) {
       return;
     }
 
@@ -428,8 +430,9 @@ class _NipaplayLargeScreenAnimeDetailPageState
 
     final sharedEpisode = _sharedEpisodeMap[episode.id];
     final sharedPlayable = _sharedPlayableMap[episode.id];
-    final sharedPlayableAvailable =
-        sharedEpisode != null && sharedPlayable != null && sharedEpisode.fileExists;
+    final sharedPlayableAvailable = sharedEpisode != null &&
+        sharedPlayable != null &&
+        sharedEpisode.fileExists;
 
     if (sharedPlayableAvailable) {
       await PlaybackService().play(sharedPlayable);
@@ -501,8 +504,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
       return;
     }
     final targetIndex = _clampInt(index, 0, _episodeFocusNodes.length - 1);
-    final targetOffset =
-        targetIndex * (_kLargeScreenEpisodeCardWidth + _kLargeScreenEpisodeCardGap);
+    final targetOffset = targetIndex *
+        (_kLargeScreenEpisodeCardWidth + _kLargeScreenEpisodeCardGap);
 
     final clamped = targetOffset.clamp(
       _episodeScrollController.position.minScrollExtent,
@@ -635,6 +638,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
 
     switch (command) {
       case NipaplayLargeScreenInputCommand.toggleMenu:
+      case NipaplayLargeScreenInputCommand.back:
         Navigator.of(context).maybePop();
         return KeyEventResult.handled;
       case NipaplayLargeScreenInputCommand.navigateLeft:
@@ -956,10 +960,12 @@ class _NipaplayLargeScreenAnimeDetailPageState
     Color progressColor = mutedColor;
     if (history != null && history.watchProgress > 0.01) {
       progressLabel = '${(history.watchProgress * 100).toStringAsFixed(0)}%';
-      progressColor = isDarkMode ? Colors.orangeAccent : const Color(0xFFB45309);
+      progressColor =
+          isDarkMode ? Colors.orangeAccent : const Color(0xFFB45309);
     } else if (hasSharedPlayable) {
       progressLabel = '共享媒体';
-      progressColor = isDarkMode ? Colors.lightBlueAccent : const Color(0xFF1565C0);
+      progressColor =
+          isDarkMode ? Colors.lightBlueAccent : const Color(0xFF1565C0);
     }
 
     return NipaplayLargeScreenFocusableAction(
@@ -1099,7 +1105,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: episodes.length,
-        separatorBuilder: (_, __) => const SizedBox(width: _kLargeScreenEpisodeCardGap),
+        separatorBuilder: (_, __) =>
+            const SizedBox(width: _kLargeScreenEpisodeCardGap),
         itemBuilder: (context, index) {
           return SizedBox(
             width: _kLargeScreenEpisodeCardWidth,

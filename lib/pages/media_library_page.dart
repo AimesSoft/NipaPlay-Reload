@@ -7,7 +7,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'dart:async';
@@ -23,12 +22,14 @@ import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sh
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'dart:ui' as ui;
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -871,21 +872,35 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   Widget _buildLocalMediaLibrary() {
     if (_isLoadingInitial) {
-      return SizedBox(
-        height: 200,
-        child: Center(child: CircularProgressIndicator(color: _accentColor)),
+      return Center(
+        child: SizedBox(
+          height: 42,
+          width: 42,
+          child: CircularProgressIndicator(color: _accentColor),
+        ),
       );
     }
 
     if (_error != null) {
+      if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+        return NipaplayLargeScreenEmptyState(
+          icon: Icons.error_outline_rounded,
+          title: '加载失败',
+          subtitle: _error!,
+          action: NipaplayLargeScreenActionButton(
+            icon: Icons.refresh_rounded,
+            label: '重试',
+            onPressed: _loadInitialMediaLibraryData,
+          ),
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('加载媒体库失败: $_error',
-                  style: TextStyle(color: Colors.white70)),
+              Text('加载媒体库失败: $_error', style: TextStyle(color: Colors.white70)),
               SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _loadInitialMediaLibraryData,
@@ -898,6 +913,20 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     }
 
     if (_uniqueLibraryItems.isEmpty) {
+      if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+        return NipaplayLargeScreenEmptyState(
+          icon: Icons.video_library_outlined,
+          title: _sourceDisplayName,
+          subtitle: _emptyMessage.replaceAll('\n', ' '),
+          action: widget.sourceType == MediaLibrarySourceType.local
+              ? NipaplayLargeScreenActionButton(
+                  icon: Icons.sync_rounded,
+                  label: '同步媒体库',
+                  onPressed: _isSyncing ? null : _syncLocalLibrary,
+                )
+              : null,
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -915,6 +944,10 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           ),
         ),
       );
+    }
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return _buildLargeScreenLocalMediaLibrary();
     }
 
     return Column(
@@ -1122,5 +1155,366 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildLargeScreenLocalMediaLibrary() {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final syncAction = switch (widget.sourceType) {
+      MediaLibrarySourceType.webdav => _syncWebDavLibrary,
+      MediaLibrarySourceType.smb => _syncSmbLibrary,
+      MediaLibrarySourceType.local => _syncLocalLibrary,
+    };
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: NipaplayLargeScreenTextInput(
+                controller: _searchController,
+                hintText: '搜索 ${_sourceDisplayName}',
+                onChanged: (_) => _applyFilter(),
+                suffix: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清空搜索',
+                        onPressed: () {
+                          _searchController.clear();
+                          _applyFilter();
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            NipaplayLargeScreenActionButton(
+              icon: Icons.sync_rounded,
+              label: _isSyncing ? '同步中' : '同步',
+              onPressed: _isSyncing ? null : syncAction,
+            ),
+            if (widget.sourceType == MediaLibrarySourceType.local) ...[
+              const SizedBox(width: 10),
+              NipaplayLargeScreenActionButton(
+                icon: Icons.add_to_queue_rounded,
+                label: '添加来源',
+                onPressed: _showServerSelectionDialog,
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _buildLargeScreenSortChip(
+              label: '最近观看',
+              icon: Icons.schedule_rounded,
+              type: LocalLibrarySortType.dateAdded,
+              autofocus: true,
+            ),
+            const SizedBox(width: 10),
+            _buildLargeScreenSortChip(
+              label: '名称',
+              icon: Icons.sort_by_alpha_rounded,
+              type: LocalLibrarySortType.name,
+            ),
+            const SizedBox(width: 10),
+            _buildLargeScreenSortChip(
+              label: '评分',
+              icon: Icons.star_rounded,
+              type: LocalLibrarySortType.rating,
+            ),
+            const Spacer(),
+            Text(
+              '${_filteredItems.length} 部',
+              style: TextStyle(
+                color: textColor.withValues(alpha: 0.62),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Expanded(
+          child: _filteredItems.isEmpty
+              ? NipaplayLargeScreenEmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: '没有匹配结果',
+                  subtitle: '换个关键词再试试',
+                )
+              : GridView.builder(
+                  controller: _gridScrollController,
+                  padding: const EdgeInsets.only(bottom: 96),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 248,
+                    mainAxisExtent: 476,
+                    mainAxisSpacing: 18,
+                    crossAxisSpacing: 18,
+                  ),
+                  itemCount: _filteredItems.length,
+                  itemBuilder: (context, index) {
+                    return _buildLargeScreenLibraryCard(
+                      _filteredItems[index],
+                      autofocus: index == 0,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSortChip({
+    required String label,
+    required IconData icon,
+    required LocalLibrarySortType type,
+    bool autofocus = false,
+  }) {
+    final selected = _currentSort == type;
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () {
+        if (_currentSort == type) return;
+        _currentSort = type;
+        _applyFilter();
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      focusScale: 1.04,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.26)
+            : Colors.white.withValues(alpha: 0.09),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenLibraryCard(
+    WatchHistoryItem historyItem, {
+    bool autofocus = false,
+  }) {
+    final animeId = historyItem.animeId;
+    final detailData = animeId == null ? null : _fetchedFullAnimeData[animeId];
+    final imageUrl =
+        _resolveLargeScreenLibraryImage(historyItem, detailData: detailData);
+    final title =
+        _resolveLargeScreenLibraryTitle(historyItem, detailData: detailData);
+    final rating = detailData?.rating;
+    final summary = detailData?.summary;
+    final progress = _getWatchProgress(animeId);
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () {
+        if (animeId != null) {
+          _navigateToAnimeDetail(animeId);
+        } else {
+          BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: EdgeInsets.zero,
+      focusScale: 1.035,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.07),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.82),
+        focusStrokeWidth: 2.4,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 2 / 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImageWidget(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __) => Container(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      child: Center(
+                        child: Icon(
+                          Icons.movie_creation_outlined,
+                          color: textColor.withValues(alpha: 0.42),
+                          size: 46,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.72),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (rating != null && rating > 0)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: _buildLargeScreenCardBadge(
+                        Icons.star_rounded,
+                        rating.toStringAsFixed(1),
+                      ),
+                    ),
+                  if (progress != null)
+                    Positioned(
+                      left: 10,
+                      right: 10,
+                      bottom: 10,
+                      child: Text(
+                        progress,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      height: 1.16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.58),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (summary != null && summary.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.52),
+                        fontSize: 12,
+                        height: 1.26,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenCardBadge(IconData icon, String label) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: Colors.amberAccent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _resolveLargeScreenLibraryImage(
+    WatchHistoryItem historyItem, {
+    BangumiAnime? detailData,
+  }) {
+    if (detailData != null && detailData.imageUrl.isNotEmpty) {
+      return detailData.imageUrl;
+    }
+    final animeId = historyItem.animeId;
+    if (animeId != null && _persistedImageUrls.containsKey(animeId)) {
+      return _persistedImageUrls[animeId]!;
+    }
+    return historyItem.thumbnailPath ?? '';
+  }
+
+  String _resolveLargeScreenLibraryTitle(
+    WatchHistoryItem historyItem, {
+    BangumiAnime? detailData,
+  }) {
+    if (detailData != null) {
+      if (detailData.name.isNotEmpty) {
+        return detailData.name;
+      }
+      if (detailData.nameCn.isNotEmpty) {
+        return detailData.nameCn;
+      }
+    }
+    if (historyItem.animeName.isNotEmpty) {
+      return historyItem.animeName;
+    }
+    return historyItem.episodeTitle ?? '未知动画';
   }
 }

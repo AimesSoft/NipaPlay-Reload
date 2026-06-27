@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -21,6 +19,7 @@ import 'package:path/path.dart' as path;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -610,35 +609,42 @@ class _AnimatedTrashButton extends StatefulWidget {
 
 class _AnimatedTrashButtonState extends State<_AnimatedTrashButton> {
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final Color nipaColor = AppAccentColors.current;
+    final bool isActive = _isHovered || _isFocused;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _isHovered ? 1.2 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeInOut,
-          child: AnimatedDefaultTextStyle(
+    return KeyboardActivatable(
+      onActivate: widget.onTap,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedScale(
+            scale: isActive ? 1.2 : 1.0,
             duration: const Duration(milliseconds: 150),
-            style: TextStyle(
-              color: _isHovered
-                  ? nipaColor
-                  : colorScheme.onSurface.withOpacity(0.4),
-            ),
-            child: Icon(
-              Ionicons.trash_outline,
-              size: 16,
-              color: _isHovered
-                  ? nipaColor
-                  : colorScheme.onSurface.withOpacity(0.4),
+            curve: Curves.easeInOut,
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 150),
+              style: TextStyle(
+                color: isActive
+                    ? nipaColor
+                    : colorScheme.onSurface.withOpacity(0.4),
+              ),
+              child: Icon(
+                Ionicons.trash_outline,
+                size: 16,
+                color: isActive
+                    ? nipaColor
+                    : colorScheme.onSurface.withOpacity(0.4),
+              ),
             ),
           ),
         ),

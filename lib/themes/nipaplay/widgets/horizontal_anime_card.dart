@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:provider/provider.dart';
 
 class HorizontalAnimeCard extends StatelessWidget {
@@ -59,6 +61,32 @@ class HorizontalAnimeCard extends StatelessWidget {
     );
   }
 
+  Widget _buildInteractiveCard(
+    BuildContext context, {
+    required Widget child,
+    required BorderRadius borderRadius,
+  }) {
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: child,
+      );
+    }
+
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onTap,
+      borderRadius: borderRadius,
+      focusScale: 1.03,
+      style: const NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.transparent,
+        idleBackgroundLight: Colors.transparent,
+        focusStrokeWidth: 2,
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -66,9 +94,9 @@ class HorizontalAnimeCard extends StatelessWidget {
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
 
     if (!showSummary) {
-      return GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
+      return _buildInteractiveCard(
+        context,
+        borderRadius: BorderRadius.circular(8),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final cardHeight = constraints.hasBoundedHeight
@@ -112,9 +140,9 @@ class HorizontalAnimeCard extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
+    return _buildInteractiveCard(
+      context,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         height: detailedCardHeight,
         color: Colors.transparent, // Ensure hit test works

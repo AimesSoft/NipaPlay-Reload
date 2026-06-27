@@ -28,16 +28,15 @@ import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/startup_notification_controller.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
@@ -57,7 +56,6 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -137,7 +135,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   // 待处理的刷新请求
   bool _pendingRefreshAfterLoad = false;
-  String _pendingRefreshReason = '';
 
   // 播放器状态追踪，用于检测退出播放器时触发刷新
   bool _wasPlayerActive = false;
@@ -194,9 +191,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   int _currentHeroBannerIndex = 0;
   late final ValueNotifier<int> _heroBannerIndexNotifier;
   int? _hoveredIndicatorIndex;
-
-  // 缓存映射，用于存储已绘制的缩略图和最后绘制时间
-  final Map<String, Map<String, dynamic>> _thumbnailCache = {};
 
   // 追踪已绘制的文件路径
   // ignore: unused_field
@@ -322,7 +316,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: 收到 Jellyfin Provider ready 信号');
         // ready 后立即清理待处理请求，避免重复刷新
         _pendingRefreshAfterLoad = false;
-        _pendingRefreshReason = '';
         // 先触发首次加载，避免激活监听后立即触发状态变化导致重复刷新
         _triggerLoadIfIdle('Jellyfin Provider ready');
         // 等待首次加载完成后再激活监听，避免加载期间的状态变化被捕获
@@ -344,7 +337,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: 收到 Emby Provider ready 信号');
         // ready 后立即清理待处理请求，避免重复刷新
         _pendingRefreshAfterLoad = false;
-        _pendingRefreshReason = '';
         // 先触发首次加载，避免激活监听后立即触发状态变化导致重复刷新
         _triggerLoadIfIdle('Emby Provider ready');
         // 等待首次加载完成后再激活监听，避免加载期间的状态变化被捕获
@@ -490,7 +482,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     if (_isLoadingRecommended) {
       _pendingRefreshAfterLoad = true;
-      _pendingRefreshReason = reason;
       return;
     }
     _loadData();
@@ -687,7 +678,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
       if (_isLoadingRecommended) {
         _pendingRefreshAfterLoad = true;
-        _pendingRefreshReason = 'Jellyfin连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Jellyfin刷新请求待稍后处理');
       } else {
         debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
@@ -749,7 +739,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
       if (_isLoadingRecommended) {
         _pendingRefreshAfterLoad = true;
-        _pendingRefreshReason = 'Emby连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Emby刷新请求待稍后处理');
       } else {
         debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
@@ -793,7 +782,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (!mounted || _isVideoPlayerActive()) return;
       if (_isLoadingRecommended) {
         _pendingRefreshAfterLoad = true;
-        _pendingRefreshReason = '弹弹play状态变化';
         return;
       }
       _loadData(forceRefreshRecommended: true);
@@ -974,6 +962,47 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     super.build(context);
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
+
+    if (_isLargeScreenModeActive) {
+      return NipaplayLargeScreenPageScaffold(
+        title: '主页',
+        subtitle: '继续观看、今日新番和媒体库推荐',
+        icon: Icons.home_rounded,
+        actions: [
+          NipaplayLargeScreenActionButton(
+            icon: Icons.refresh_rounded,
+            label: '刷新',
+            onPressed: _onDashboardRefreshPressed,
+          ),
+        ],
+        padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
+        headerBottomSpacing: 14,
+        child: Consumer2<JellyfinProvider, EmbyProvider>(
+          builder: (context, jellyfinProvider, embyProvider, child) {
+            final configuredSections = _buildConfiguredSections(
+              isPhone: false,
+              sectionsProvider: homeSections,
+            );
+            return SingleChildScrollView(
+              controller: _mainScrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: PrimaryScrollController(
+                controller: _mainScrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeroBanner(isPhone: false),
+                    const SizedBox(height: 24),
+                    ...configuredSections,
+                    const SizedBox(height: 56),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,

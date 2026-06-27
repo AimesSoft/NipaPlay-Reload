@@ -5,6 +5,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -75,8 +77,9 @@ class _AnimeCardState extends State<AnimeCard> {
 
   void _updateDisplayImageUrl() {
     if (kIsWeb && widget.imageUrl.startsWith('http')) {
-      _displayImageUrl = WebRemoteAccessService.imageProxyUrl(widget.imageUrl) ??
-          widget.imageUrl;
+      _displayImageUrl =
+          WebRemoteAccessService.imageProxyUrl(widget.imageUrl) ??
+              widget.imageUrl;
     } else {
       _displayImageUrl = widget.imageUrl;
     }
@@ -85,14 +88,15 @@ class _AnimeCardState extends State<AnimeCard> {
   // 格式化评分信息用于显示
   String _formatRatingInfo() {
     List<String> ratingInfo = [];
-    
+
     // 添加来源信息
     if (widget.source != null) {
       ratingInfo.add('来源：${widget.source}');
     }
-    
+
     // 添加Bangumi评分（优先显示）
-    if (widget.ratingDetails != null && widget.ratingDetails!.containsKey('Bangumi评分')) {
+    if (widget.ratingDetails != null &&
+        widget.ratingDetails!.containsKey('Bangumi评分')) {
       final bangumiRating = widget.ratingDetails!['Bangumi评分'];
       if (bangumiRating is num && bangumiRating > 0) {
         ratingInfo.add('Bangumi评分：${bangumiRating.toStringAsFixed(1)}');
@@ -102,22 +106,25 @@ class _AnimeCardState extends State<AnimeCard> {
     else if (widget.rating != null && widget.rating! > 0) {
       ratingInfo.add('评分：${widget.rating!.toStringAsFixed(1)}');
     }
-    
+
     // 添加其他平台评分（排除Bangumi评分）
     if (widget.ratingDetails != null) {
       final otherRatings = widget.ratingDetails!.entries
-          .where((entry) => entry.key != 'Bangumi评分' && entry.value is num && (entry.value as num) > 0)
+          .where((entry) =>
+              entry.key != 'Bangumi评分' &&
+              entry.value is num &&
+              (entry.value as num) > 0)
           .take(2) // 最多显示2个其他平台评分
           .map((entry) {
-            String siteName = entry.key;
-            if (siteName.endsWith('评分')) {
-              siteName = siteName.substring(0, siteName.length - 2);
-            }
-            return '$siteName：${(entry.value as num).toStringAsFixed(1)}';
-          });
+        String siteName = entry.key;
+        if (siteName.endsWith('评分')) {
+          siteName = siteName.substring(0, siteName.length - 2);
+        }
+        return '$siteName：${(entry.value as num).toStringAsFixed(1)}';
+      });
       ratingInfo.addAll(otherRatings);
     }
-    
+
     return ratingInfo.isNotEmpty ? ratingInfo.join('\n') : '';
   }
 
@@ -134,7 +141,7 @@ class _AnimeCardState extends State<AnimeCard> {
       ),
     );
   }
-  
+
   // 创建图片组件（网络图片或本地文件）
   Widget _buildImage(BuildContext context, bool isBackground) {
     if (widget.imageUrl.isEmpty) {
@@ -170,6 +177,28 @@ class _AnimeCardState extends State<AnimeCard> {
         },
       );
     }
+  }
+
+  Widget _buildInteractiveCard(Widget child) {
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: child,
+      );
+    }
+
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: widget.onTap,
+      borderRadius: BorderRadius.circular(12),
+      focusScale: 1.04,
+      style: const NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.transparent,
+        idleBackgroundLight: Colors.transparent,
+        focusStrokeWidth: 2,
+      ),
+      child: child,
+    );
   }
 
   @override
@@ -257,10 +286,8 @@ class _AnimeCardState extends State<AnimeCard> {
       ),
     );
 
-    final Widget card = GestureDetector(
-      onTap: widget.onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
+    final Widget card = _buildInteractiveCard(
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -268,9 +295,9 @@ class _AnimeCardState extends State<AnimeCard> {
           Expanded(
             child: imageCard,
           ),
-          
+
           const SizedBox(height: 8),
-          
+
           // 标题部分
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2.0),
@@ -304,4 +331,4 @@ class _AnimeCardState extends State<AnimeCard> {
       return card;
     }
   }
-} 
+}

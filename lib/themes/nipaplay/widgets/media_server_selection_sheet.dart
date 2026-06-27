@@ -180,11 +180,13 @@ class MediaServerSelectionSheet extends StatelessWidget {
     required Color cardColor,
     required VoidCallback onTap,
   }) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
+        borderRadius: BorderRadius.circular(12),
+        focusColor: accentColor.withOpacity(0.12),
+        hoverColor: accentColor.withOpacity(0.08),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(

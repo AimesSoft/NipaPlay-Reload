@@ -298,25 +298,29 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
             children: List.generate(10, (index) {
               final rating = index + 1;
               final isActive = rating <= _selectedRating;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedRating = rating),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
-                        : _panelAltColor,
-                    border: Border.all(
-                      color: isActive ? _accentColor : _borderColor,
-                      width: 1,
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _selectedRating = rating),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
+                          : _panelAltColor,
+                      border: Border.all(
+                        color: isActive ? _accentColor : _borderColor,
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    isActive ? Ionicons.star : Ionicons.star_outline,
-                    color: isActive ? _accentColor : _mutedTextColor,
-                    size: 18,
+                    child: Icon(
+                      isActive ? Ionicons.star : Ionicons.star_outline,
+                      color: isActive ? _accentColor : _mutedTextColor,
+                      size: 18,
+                    ),
                   ),
                 ),
               );
@@ -329,29 +333,33 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
           children: List.generate(10, (index) {
             final rating = index + 1;
             final isSelected = rating == _selectedRating;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedRating = rating),
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
-                      : _panelAltColor,
-                  border: Border.all(
-                    color: isSelected ? _accentColor : _borderColor,
-                    width: 1,
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() => _selectedRating = rating),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
+                        : _panelAltColor,
+                    border: Border.all(
+                      color: isSelected ? _accentColor : _borderColor,
+                      width: 1,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Center(
-                  child: Text(
-                    '$rating',
-                    style: TextStyle(
-                      color: isSelected ? _accentColor : _textColor,
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+                  child: Center(
+                    child: Text(
+                      '$rating',
+                      style: TextStyle(
+                        color: isSelected ? _accentColor : _textColor,
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
                     ),
                   ),
                 ),

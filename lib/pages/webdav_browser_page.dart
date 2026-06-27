@@ -10,8 +10,10 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 
 /// WebDAV 文件浏览器页面
 /// 用于快捷 Tab，提供快速浏览和播放 WebDAV 视频的功能
@@ -265,7 +267,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
           if (tmdbId != null) {
             final seasonNumber = _extractSeasonNumber(file.name);
-            final result = await DandanplayService.getBangumiByTmdbId(tmdbId, seasonNumber: seasonNumber);
+            final result = await DandanplayService.getBangumiByTmdbId(tmdbId,
+                seasonNumber: seasonNumber);
 
             if (result != null && result['bangumi'] != null) {
               final bangumi = result['bangumi'] as Map<String, dynamic>;
@@ -278,7 +281,6 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               int targetNumber = episodeNumber ?? 0;
 
               if (episodes != null && episodeNumber != null) {
-
                 // 剧集漂移修正（实验功能）
                 if (provider.episodeOffsetEnabled) {
                   final mainEps = episodes.where((ep) {
@@ -289,8 +291,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   if (mainEps.isNotEmpty) {
                     int minNum = 99999;
                     for (final ep in mainEps) {
-                      final n = int.tryParse(
-                          ep['episodeNumber']?.toString() ?? '');
+                      final n =
+                          int.tryParse(ep['episodeNumber']?.toString() ?? '');
                       if (n != null && n > 0 && n < minNum) {
                         minNum = n;
                       }
@@ -327,8 +329,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
     // 创建观看历史项用于播放
     final historyItem = WatchHistoryItem(
-      animeName: quickMatchAnimeTitle ??
-          file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      animeName:
+          quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
       filePath: videoUrl,
       watchProgress: 0,
@@ -342,8 +344,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     // 使用 PlaybackService 播放视频
     final playableItem = PlayableItem(
       videoPath: videoUrl,
-      title: quickMatchAnimeTitle ??
-          file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      title:
+          quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: file.name,
       historyItem: historyItem,
     );
@@ -464,8 +466,17 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
     final accentColor = AppAccentColors.current;
+    final useLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
 
     if (_isInitializing) {
+      if (useLargeScreen) {
+        return const NipaplayLargeScreenPageScaffold(
+          title: 'WebDAV',
+          subtitle: '正在连接远程文件库',
+          icon: Icons.cloud_queue_rounded,
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
       return Scaffold(
         backgroundColor: backgroundColor,
         body: Center(
@@ -476,6 +487,24 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
     // 没有配置任何 WebDAV 服务器
     if (_currentConnection == null) {
+      if (useLargeScreen) {
+        return NipaplayLargeScreenPageScaffold(
+          title: 'WebDAV',
+          subtitle: '远程文件浏览器',
+          icon: Icons.cloud_off_rounded,
+          child: NipaplayLargeScreenEmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: '没有配置 WebDAV 服务器',
+            subtitle: '添加服务器后即可浏览远程目录并直接播放视频。',
+            action: NipaplayLargeScreenActionButton(
+              icon: Icons.add_rounded,
+              label: '添加服务器',
+              onPressed: _showAddServerDialog,
+              autofocus: true,
+            ),
+          ),
+        );
+      }
       return Scaffold(
         backgroundColor: backgroundColor,
         body: Center(
@@ -515,6 +544,22 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               ),
             ],
           ),
+        ),
+      );
+    }
+
+    if (useLargeScreen) {
+      return PopScope(
+        canPop: !_canNavigateBack,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && _canNavigateBack) {
+            _navigateBack();
+          }
+        },
+        child: _buildLargeScreenWebDavPage(
+          textColor: textColor,
+          secondaryTextColor: secondaryTextColor,
+          accentColor: accentColor,
         ),
       );
     }
@@ -577,6 +622,508 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLargeScreenWebDavPage({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    final provider = Provider.of<WebDAVQuickAccessProvider>(context);
+    final subtitle = [
+      _currentConnection?.name ?? '未选择服务器',
+      if (_currentPath.trim().isNotEmpty) _currentPath,
+    ].join(' / ');
+
+    return NipaplayLargeScreenPageScaffold(
+      title: 'WebDAV',
+      subtitle: subtitle,
+      icon: Icons.cloud_queue_rounded,
+      actions: [
+        if (_canNavigateBack)
+          NipaplayLargeScreenActionButton(
+            icon: Icons.arrow_back_rounded,
+            label: '上一级',
+            onPressed: _navigateBack,
+          ),
+        NipaplayLargeScreenActionButton(
+          icon: Icons.dns_rounded,
+          label: '服务器',
+          onPressed: _showServerSelector,
+        ),
+        if (provider.enableSearch)
+          NipaplayLargeScreenActionButton(
+            icon: _isSearchMode ? Icons.close_rounded : Icons.search_rounded,
+            label: _isSearchMode ? '退出搜索' : '搜索',
+            onPressed: () {
+              setState(() {
+                if (_isSearchMode) {
+                  _isSearchMode = false;
+                  _stopSearchRequested = true;
+                  _searchResults = [];
+                  _searchController.clear();
+                  _searchKeyword = '';
+                } else {
+                  _isSearchMode = true;
+                }
+              });
+            },
+          ),
+        NipaplayLargeScreenActionButton(
+          icon: Icons.add_rounded,
+          label: '添加服务器',
+          onPressed: _showAddServerDialog,
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isSearchMode) ...[
+            _buildLargeScreenSearchBar(
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              accentColor: accentColor,
+            ),
+            const SizedBox(height: 18),
+          ] else if (provider.showPathBreadcrumb) ...[
+            _buildLargeScreenBreadcrumb(
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              accentColor: accentColor,
+            ),
+            const SizedBox(height: 18),
+          ],
+          Expanded(
+            child: _isSearchMode
+                ? _buildLargeScreenSearchResults(
+                    textColor: textColor,
+                    secondaryTextColor: secondaryTextColor,
+                    accentColor: accentColor,
+                  )
+                : _buildLargeScreenFileGrid(
+                    textColor: textColor,
+                    secondaryTextColor: secondaryTextColor,
+                    accentColor: accentColor,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSearchBar({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    final provider =
+        Provider.of<WebDAVQuickAccessProvider>(context, listen: true);
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            child: NipaplayLargeScreenTextInput(
+              controller: _searchController,
+              hintText: '搜索当前目录下的视频或文件夹',
+              onChanged: (value) {
+                setState(() {
+                  _searchKeyword = value;
+                });
+              },
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  _startSearch();
+                }
+              },
+              suffix: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon:
+                          Icon(Icons.clear_rounded, color: secondaryTextColor),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _searchKeyword = '';
+                          _searchResults = [];
+                        });
+                      },
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          NipaplayLargeScreenActionButton(
+            icon: _isSearching
+                ? Icons.hourglass_top_rounded
+                : Icons.search_rounded,
+            label: _isSearching ? '搜索中' : '开始搜索',
+            onPressed: _isSearching || _searchController.text.trim().isEmpty
+                ? null
+                : _startSearch,
+            autofocus: true,
+          ),
+          const SizedBox(width: 14),
+          Flexible(
+            child: Text(
+              '${provider.searchScope.displayName} ${provider.searchDepthLimit}层 / ${provider.searchTargets.map((t) => t.displayName).join(', ')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: secondaryTextColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenBreadcrumb({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    final segments =
+        _currentPath.split('/').where((segment) => segment.isNotEmpty).toList();
+    final chips = <Widget>[
+      _LargeScreenPathChip(
+        label: '根目录',
+        selected: segments.isEmpty,
+        onPressed: () => _navigateToPath('/'),
+      ),
+    ];
+    for (var index = 0; index < segments.length; index++) {
+      final path = '/' + segments.sublist(0, index + 1).join('/');
+      chips.add(_LargeScreenPathChip(
+        label: segments[index],
+        selected: index == segments.length - 1,
+        onPressed:
+            index == segments.length - 1 ? null : () => _navigateToPath(path),
+      ));
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final chip in chips) ...[
+            chip,
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenFileGrid({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(color: AppAccentColors.current),
+      );
+    }
+    if (_currentFiles.isEmpty) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Icons.folder_open_rounded,
+        title: '当前目录为空',
+        subtitle: '可以返回上一级目录，或切换服务器继续浏览。',
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.only(bottom: 24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 360,
+        mainAxisExtent: 170,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+      ),
+      itemCount: _currentFiles.length,
+      itemBuilder: (context, index) {
+        final file = _currentFiles[index];
+        return _buildLargeScreenFileCard(
+          file: file,
+          textColor: textColor,
+          secondaryTextColor: secondaryTextColor,
+          accentColor: accentColor,
+          autofocus: index == 0,
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeScreenFileCard({
+    required WebDAVFile file,
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+    required bool autofocus,
+  }) {
+    final isDirectory = file.isDirectory;
+    String? seasonEpisode;
+    if (!isDirectory) {
+      final match = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,2})').firstMatch(file.name);
+      if (match != null) {
+        seasonEpisode = 'S${match.group(1)}E${match.group(2)}';
+      }
+    }
+
+    final videoUrl = _currentConnection != null
+        ? WebDAVService.instance.getFileUrl(_currentConnection!, file.path)
+        : null;
+    final historyProvider =
+        Provider.of<WatchHistoryProvider>(context, listen: false);
+    WatchHistoryItem? historyItem;
+    if (videoUrl != null) {
+      for (final item in historyProvider.history) {
+        if (item.filePath == videoUrl) {
+          historyItem = item;
+          break;
+        }
+      }
+    }
+    final hasProgress = historyItem != null &&
+        historyItem.duration > 0 &&
+        historyItem.watchProgress > 0.01 &&
+        historyItem.watchProgress < 0.95;
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: isDirectory
+          ? () => _navigateToDirectory(file.path)
+          : () => _playVideo(file),
+      borderRadius: BorderRadius.circular(8),
+      focusScale: 1.035,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.78),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isDirectory
+                    ? Icons.folder_rounded
+                    : Icons.movie_creation_outlined,
+                color: isDirectory ? Colors.amberAccent : accentColor,
+                size: 34,
+              ),
+              const Spacer(),
+              Icon(
+                isDirectory
+                    ? Icons.chevron_right_rounded
+                    : Icons.play_arrow_rounded,
+                color: textColor.withValues(alpha: 0.76),
+                size: 28,
+              ),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            file.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              height: 1.16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isDirectory
+                      ? '文件夹'
+                      : (file.size != null && file.size! > 0
+                          ? _formatFileSize(file.size!)
+                          : '视频文件'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: secondaryTextColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (seasonEpisode != null)
+                Text(
+                  seasonEpisode,
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
+          ),
+          if (hasProgress) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: historyItem.watchProgress,
+                minHeight: 4,
+                color: accentColor,
+                backgroundColor: textColor.withValues(alpha: 0.14),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSearchResults({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    if (_isSearching) {
+      return Column(
+        children: [
+          NipaplayLargeScreenPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '搜索中... 已扫描 $_searchedCount 个目录，找到 $_foundCount 个结果',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                NipaplayLargeScreenActionButton(
+                  icon: Icons.stop_rounded,
+                  label: '停止',
+                  compact: true,
+                  onPressed: () {
+                    setState(() {
+                      _stopSearchRequested = true;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _searchResults.isEmpty
+                ? NipaplayLargeScreenEmptyState(
+                    icon: Icons.search_rounded,
+                    title: '正在搜索',
+                    subtitle: '找到的结果会立即出现在这里。',
+                  )
+                : _buildLargeScreenSearchResultGrid(
+                    textColor: textColor,
+                    secondaryTextColor: secondaryTextColor,
+                    accentColor: accentColor,
+                  ),
+          ),
+        ],
+      );
+    }
+    if (_searchResults.isEmpty) {
+      return NipaplayLargeScreenEmptyState(
+        icon: _searchKeyword.isEmpty
+            ? Icons.search_rounded
+            : Icons.search_off_rounded,
+        title: _searchKeyword.isEmpty ? '输入关键词搜索文件' : '未找到匹配的文件',
+        subtitle: _searchKeyword.isEmpty
+            ? '支持按文件名、目录名和视频扩展名搜索。'
+            : '关键词：$_searchKeyword',
+      );
+    }
+    return _buildLargeScreenSearchResultGrid(
+      textColor: textColor,
+      secondaryTextColor: secondaryTextColor,
+      accentColor: accentColor,
+    );
+  }
+
+  Widget _buildLargeScreenSearchResultGrid({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    return GridView.builder(
+      padding: const EdgeInsets.only(bottom: 24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 400,
+        mainAxisExtent: 180,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+      ),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return NipaplayLargeScreenFocusableAction(
+          autofocus: index == 0,
+          onActivate: result.file.isDirectory
+              ? () {
+                  final parentPath = result.file.path;
+                  _navigateToPathFromSearch(parentPath);
+                }
+              : () => _playSearchResult(result),
+          borderRadius: BorderRadius.circular(8),
+          focusScale: 1.035,
+          padding: const EdgeInsets.all(18),
+          style: NipaplayLargeScreenFocusableStyle(
+            idleBackgroundDark: Colors.white.withValues(alpha: 0.08),
+            idleBackgroundLight: Colors.white.withValues(alpha: 0.78),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                result.file.isDirectory
+                    ? Icons.folder_rounded
+                    : Icons.movie_creation_outlined,
+                color:
+                    result.file.isDirectory ? Colors.amberAccent : accentColor,
+                size: 34,
+              ),
+              const Spacer(),
+              Text(
+                result.file.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                result.relativePath.isEmpty ? '/' : result.relativePath,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: secondaryTextColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -987,7 +1534,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     required Color secondaryTextColor,
     required Color accentColor,
   }) {
-    final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: true);
+    final provider =
+        Provider.of<WebDAVQuickAccessProvider>(context, listen: true);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1007,17 +1555,20 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   fillColor: Colors.transparent,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                    borderSide:
+                        BorderSide(color: secondaryTextColor.withOpacity(0.3)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                    borderSide:
+                        BorderSide(color: secondaryTextColor.withOpacity(0.3)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(color: accentColor),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: secondaryTextColor),
@@ -1052,7 +1603,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: accentColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1111,7 +1663,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red.withOpacity(0.8),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -1186,7 +1739,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             SizedBox(height: 8),
             Text(
               '关键词: $_searchKeyword',
-              style: TextStyle(color: secondaryTextColor.withOpacity(0.7), fontSize: 14),
+              style: TextStyle(
+                  color: secondaryTextColor.withOpacity(0.7), fontSize: 14),
             ),
           ],
         ),
@@ -1209,7 +1763,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               SizedBox(width: 8),
               Text(
                 '找到 ${_searchResults.length} 个结果',
-                style: TextStyle(color: accentColor, fontWeight: FontWeight.w600),
+                style:
+                    TextStyle(color: accentColor, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -1261,7 +1816,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             Row(
               children: [
                 Icon(
-                  isDirectory ? Icons.folder_outlined : Icons.video_file_outlined,
+                  isDirectory
+                      ? Icons.folder_outlined
+                      : Icons.video_file_outlined,
                   color: isDirectory ? Colors.amber : accentColor,
                   size: 24,
                 ),
@@ -1298,13 +1855,16 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               children: [
                 // 跳转到目录按钮
                 TextButton.icon(
-                  icon: Icon(Icons.folder_open, size: 18, color: secondaryTextColor),
-                  label: Text('跳转', style: TextStyle(color: secondaryTextColor)),
+                  icon: Icon(Icons.folder_open,
+                      size: 18, color: secondaryTextColor),
+                  label:
+                      Text('跳转', style: TextStyle(color: secondaryTextColor)),
                   onPressed: () {
                     // 获取父目录路径
                     final parentPath = isDirectory
                         ? result.file.path
-                        : result.file.path.substring(0, result.file.path.lastIndexOf('/') + 1);
+                        : result.file.path.substring(
+                            0, result.file.path.lastIndexOf('/') + 1);
                     _navigateToPathFromSearch(parentPath);
                   },
                 ),
@@ -1317,7 +1877,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accentColor,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1336,7 +1897,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     if (_currentConnection == null || _searchController.text.isEmpty) return;
     if (_isSearching) return; // 防止 onSubmitted 重复触发
 
-    final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+    final provider =
+        Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
     final keyword = _searchController.text.trim();
     final maxResults = provider.searchMaxResults;
 
@@ -1368,7 +1930,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             // 节流 UI 更新
             final now = DateTime.now();
             if (_lastUIUpdate == null ||
-                now.difference(_lastUIUpdate!).inMilliseconds >= _uiUpdateThrottleMs) {
+                now.difference(_lastUIUpdate!).inMilliseconds >=
+                    _uiUpdateThrottleMs) {
               _lastUIUpdate = now;
               setState(() {
                 _searchedCount = searched;
@@ -1392,7 +1955,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               // 节流 UI 更新
               final now = DateTime.now();
               if (_lastUIUpdate == null ||
-                  now.difference(_lastUIUpdate!).inMilliseconds >= _uiUpdateThrottleMs) {
+                  now.difference(_lastUIUpdate!).inMilliseconds >=
+                      _uiUpdateThrottleMs) {
                 _lastUIUpdate = now;
                 setState(() {});
               }
@@ -1500,73 +2064,129 @@ class _ServerSelectorSheet extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 拖动指示器
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: secondaryTextColor.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              '选择 WebDAV 服务器',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 拖动指示器
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: secondaryTextColor.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-          ),
-          const Divider(height: 1),
-          ListView.builder(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: connections.length,
-            itemBuilder: (context, index) {
-              final connection = connections[index];
-              final isSelected = connection.name == currentConnection?.name;
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '选择 WebDAV 服务器',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: connections.length,
+              itemBuilder: (context, index) {
+                final connection = connections[index];
+                final isSelected = connection.name == currentConnection?.name;
 
-              return ListTile(
-                leading: Icon(
-                  isSelected ? Icons.cloud : Icons.cloud_outlined,
-                  color: isSelected ? accentColor : secondaryTextColor,
-                ),
-                title: Text(
-                  connection.name,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
+                return ListTile(
+                  leading: Icon(
+                    isSelected ? Icons.cloud : Icons.cloud_outlined,
+                    color: isSelected ? accentColor : secondaryTextColor,
                   ),
-                ),
-                subtitle: Text(
-                  connection.url,
-                  style: TextStyle(
-                    color: secondaryTextColor,
-                    fontSize: 12,
+                  title: Text(
+                    connection.name,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: isSelected
-                    ? Icon(Icons.check_circle, color: accentColor)
-                    : null,
-                onTap: () {
-                  Navigator.pop(context);
-                  onSelected(connection);
-                },
-              );
-            },
-          ),
-          // 底部安全区域
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-        ],
+                  subtitle: Text(
+                    connection.url,
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: isSelected
+                      ? Icon(Icons.check_circle, color: accentColor)
+                      : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    onSelected(connection);
+                  },
+                );
+              },
+            ),
+            // 底部安全区域
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _LargeScreenPathChip extends StatelessWidget {
+  const _LargeScreenPathChip({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF161922);
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? AppAccentColors.current.withValues(alpha: 0.26)
+            : Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: selected
+            ? AppAccentColors.current.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.78),
+        contentColorDark: selected ? Colors.white : textColor,
+        contentColorLight: selected ? Colors.black87 : textColor,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!selected) ...[
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: textColor.withValues(alpha: 0.50),
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }

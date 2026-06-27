@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -434,7 +435,10 @@ class NipaplayWindow {
     if (useLargeScreenSubPage) {
       result = Navigator.of(context).push<T>(
         NipaplayLargeScreenWindowPageRoute<T>(
-          builder: (_) => child,
+          builder: (_) => NipaplayLargeScreenContentPage(
+            closeOnBack: true,
+            child: child,
+          ),
           enableAnimation: enableAnimation,
           dismissible: barrierDismissible,
         ),

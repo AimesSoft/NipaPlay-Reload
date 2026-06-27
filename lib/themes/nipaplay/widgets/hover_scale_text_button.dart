@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class HoverScaleTextButton extends StatefulWidget {
@@ -33,10 +35,14 @@ class HoverScaleTextButton extends StatefulWidget {
 
 class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
     final bool isEnabled = widget.onPressed != null;
+    final bool isLargeScreenModeActive =
+        NipaplayLargeScreenModeScope.isActiveOf(context);
+    final bool isActive = isEnabled && (_isHovered || _isFocused);
     TextStyle? childTextStyle;
     Color? childTextColor;
     if (widget.child is Text) {
@@ -51,8 +57,7 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
     final Color resolvedBaseColor =
         isEnabled ? baseColor : baseColor.withOpacity(0.5);
     final Color hoverColor = widget.hoverColor ?? AppAccentColors.current;
-    final Color textColor =
-        _isHovered && isEnabled ? hoverColor : resolvedBaseColor;
+    final Color textColor = isActive ? hoverColor : resolvedBaseColor;
     final TextStyle defaultStyle =
         Theme.of(context).textTheme.labelLarge ?? TextStyle(fontSize: 14);
     final TextStyle effectiveBaseStyle =
@@ -63,20 +68,55 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
       baseStyle: effectiveBaseStyle,
     );
 
-    return MouseRegion(
-      onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
-      onExit: (_) => isEnabled ? setState(() => _isHovered = false) : null,
-      cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: widget.padding,
-          child: AnimatedScale(
-            scale: _isHovered && isEnabled ? widget.hoverScale : 1.0,
-            duration: widget.duration,
-            curve: widget.curve,
-            child: content,
+    return FocusableActionDetector(
+      enabled: isEnabled,
+      onShowFocusHighlight: (value) {
+        if (_isFocused == value) return;
+        setState(() {
+          _isFocused = value;
+        });
+      },
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            widget.onPressed?.call();
+            return null;
+          },
+        ),
+      },
+      child: MouseRegion(
+        onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
+        onExit: (_) => isEnabled ? setState(() => _isHovered = false) : null,
+        cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isLargeScreenModeActive && _isFocused
+                    ? AppAccentColors.current
+                    : Colors.transparent,
+                width: isLargeScreenModeActive && _isFocused ? 1.5 : 0,
+                strokeAlign: BorderSide.strokeAlignInside,
+              ),
+            ),
+            child: AnimatedScale(
+              scale: isActive ? widget.hoverScale : 1.0,
+              duration: widget.duration,
+              curve: widget.curve,
+              child: content,
+            ),
           ),
         ),
       ),

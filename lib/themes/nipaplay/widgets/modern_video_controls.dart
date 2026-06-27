@@ -17,6 +17,7 @@ import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
 import 'package:nipaplay/services/desktop_pip_window_service.dart';
+import 'keyboard_activatable.dart';
 
 class ModernVideoControls extends StatefulWidget {
   final bool showFullscreenButton;
@@ -83,6 +84,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     required String tooltip,
     bool useAnimatedSwitcher = false,
     bool useCustomAnimation = false,
+    bool enabled = true,
   }) {
     Widget iconWidget = icon;
     if (useAnimatedSwitcher) {
@@ -119,19 +121,28 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       text: tooltip,
       showOnTop: true,
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => onHover(true),
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) {
+          if (enabled) {
+            onHover(true);
+          }
+        },
         onExit: (_) => onHover(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => onPressed(true),
-          onTapUp: (_) => onPressed(false),
-          onTapCancel: () => onPressed(false),
-          onTap: onTap,
-          child: BounceHoverScale(
-            isHovered: isHovered,
-            isPressed: isPressed,
-            child: ControlIconShadow(child: iconWidget),
+        child: KeyboardActivatable(
+          enabled: enabled,
+          onActivate: onTap,
+          onFocusChange: onHover,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: enabled ? (_) => onPressed(true) : null,
+            onTapUp: enabled ? (_) => onPressed(false) : null,
+            onTapCancel: enabled ? () => onPressed(false) : null,
+            onTap: enabled ? onTap : null,
+            child: BounceHoverScale(
+              isHovered: enabled && isHovered,
+              isPressed: enabled && isPressed,
+              child: ControlIconShadow(child: iconWidget),
+            ),
           ),
         ),
       ),
@@ -391,6 +402,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                         .playPreviousEpisode();
                                                   }
                                                 : () {},
+                                            enabled: canPlayPrevious,
                                             isPressed:
                                                 _isPreviousEpisodePressed,
                                             isHovered:
@@ -523,6 +535,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                         .playNextEpisode();
                                                   }
                                                 : () {},
+                                            enabled: canPlayNext,
                                             isPressed: _isNextEpisodePressed,
                                             isHovered: _isNextEpisodeHovered,
                                             onHover: (value) => setState(() =>

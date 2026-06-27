@@ -30,6 +30,7 @@ class NipaplayLargeScreenFocusableAction extends StatefulWidget {
     this.borderRadius = BorderRadius.zero,
     this.padding,
     this.style = const NipaplayLargeScreenFocusableStyle(),
+    this.focusScale = 1.0,
   });
 
   final Widget child;
@@ -39,6 +40,7 @@ class NipaplayLargeScreenFocusableAction extends StatefulWidget {
   final BorderRadius borderRadius;
   final EdgeInsetsGeometry? padding;
   final NipaplayLargeScreenFocusableStyle style;
+  final double focusScale;
 
   @override
   State<NipaplayLargeScreenFocusableAction> createState() =>
@@ -64,6 +66,7 @@ class _NipaplayLargeScreenFocusableActionState
     return FocusableActionDetector(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
+      enabled: widget.onActivate != null,
       onShowFocusHighlight: (value) {
         if (_isFocused == value) return;
         setState(() {
@@ -92,29 +95,34 @@ class _NipaplayLargeScreenFocusableActionState
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onActivate,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: widget.borderRadius,
-          ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: widget.borderRadius,
-            border: Border.all(
-              color: isActive
-                  ? (style.focusStrokeColor ?? AppAccentColors.current)
-                  : Colors.transparent,
-              width: style.focusStrokeWidth,
-              strokeAlign: BorderSide.strokeAlignInside,
+        child: AnimatedScale(
+          scale: isActive ? widget.focusScale : 1.0,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: widget.borderRadius,
             ),
-          ),
-          child: IconTheme.merge(
-            data: IconThemeData(color: contentColor),
-            child: DefaultTextStyle.merge(
-              style: TextStyle(color: contentColor),
-              child: widget.child,
+            foregroundDecoration: BoxDecoration(
+              borderRadius: widget.borderRadius,
+              border: Border.all(
+                color: isActive
+                    ? (style.focusStrokeColor ?? AppAccentColors.current)
+                    : Colors.transparent,
+                width: style.focusStrokeWidth,
+                strokeAlign: BorderSide.strokeAlignInside,
+              ),
+            ),
+            child: IconTheme.merge(
+              data: IconThemeData(color: contentColor),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(color: contentColor),
+                child: widget.child,
+              ),
             ),
           ),
         ),

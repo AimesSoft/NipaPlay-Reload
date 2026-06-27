@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -12,10 +11,13 @@ import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
@@ -52,6 +54,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories =
       {};
   final Set<String> _loadingRemoteDirectories = {};
+  String? _largeScreenSelectedRemoteFolderPath;
 
   @override
   bool get wantKeepAlive => true;
@@ -128,6 +131,18 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             widget.mode == SharedRemoteViewMode.libraryManagement;
         final managementBusy = provider.isManagementLoading ||
             provider.scanStatus?.isScanning == true;
+
+        if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+          return _buildLargeScreenSharedRemoteView(
+            context: context,
+            provider: provider,
+            animeSummaries: animeSummaries,
+            scannedFolders: scannedFolders,
+            hasHosts: hasHosts,
+            isManagement: isManagement,
+            managementBusy: managementBusy,
+          );
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,6 +253,756 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     );
   }
 
+  Widget _buildLargeScreenSharedRemoteView({
+    required BuildContext context,
+    required SharedRemoteLibraryProvider provider,
+    required List<SharedRemoteAnimeSummary> animeSummaries,
+    required List<SharedRemoteScannedFolder> scannedFolders,
+    required bool hasHosts,
+    required bool isManagement,
+    required bool managementBusy,
+  }) {
+    return Column(
+      children: [
+        _buildLargeScreenTopBar(
+          provider: provider,
+          isManagement: isManagement,
+          managementBusy: managementBusy,
+        ),
+        const SizedBox(height: 14),
+        _buildLargeScreenSortRow(isManagement: isManagement),
+        if (isManagement && provider.scanStatus?.isScanning == true) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenScanningIndicator(provider),
+        ],
+        if (isManagement && provider.managementErrorMessage != null) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenNotice(
+            message: provider.managementErrorMessage!,
+            onClose: provider.clearManagementError,
+          ),
+        ],
+        if (!isManagement && provider.errorMessage != null) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenNotice(
+            message: provider.errorMessage!,
+            onClose: provider.clearError,
+          ),
+        ],
+        const SizedBox(height: 18),
+        Expanded(
+          child: isManagement
+              ? _buildLargeScreenManagementBody(
+                  context,
+                  provider,
+                  hasHosts,
+                  scannedFolders,
+                )
+              : _buildLargeScreenMediaBody(
+                  context,
+                  provider,
+                  animeSummaries,
+                  hasHosts,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenTopBar({
+    required SharedRemoteLibraryProvider provider,
+    required bool isManagement,
+    required bool managementBusy,
+  }) {
+    final title = isManagement ? '共享库管理' : '共享媒体库';
+    return Row(
+      children: [
+        Expanded(
+          child: NipaplayLargeScreenTextInput(
+            controller: _searchController,
+            hintText: '搜索 $title',
+            onChanged: (_) => setState(() {}),
+            suffix: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: '清空搜索',
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.refresh_outline,
+          label: '刷新',
+          onPressed: () {
+            if (!provider.hasActiveHost) {
+              BlurSnackBar.show(context, '请先添加并选择共享客户端');
+              return;
+            }
+            if (isManagement) {
+              provider.refreshManagement(userInitiated: true);
+            } else {
+              provider.refreshLibrary(userInitiated: true);
+            }
+          },
+        ),
+        if (isManagement) ...[
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Ionicons.add_circle_outline,
+            label: '添加',
+            onPressed: managementBusy
+                ? null
+                : () => _openAddFolderDialog(context, provider),
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Ionicons.flash_outline,
+            label: '智能刷新',
+            onPressed: managementBusy
+                ? null
+                : () async {
+                    await provider.rescanRemoteAll(
+                      skipPreviouslyMatchedUnwatched: true,
+                    );
+                    _startScanStatusPolling();
+                  },
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Ionicons.trash_outline,
+            label: '清理',
+            onPressed: managementBusy
+                ? null
+                : () => _cleanupLargeScreenSharedRemote(provider),
+          ),
+        ],
+        const SizedBox(width: 10),
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.link_outline,
+          label: '客户端',
+          onPressed: () => SharedRemoteHostSelectionSheet.show(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSortRow({required bool isManagement}) {
+    return Row(
+      children: [
+        _buildLargeScreenSortChip(
+          label: isManagement ? '路径' : '最近观看',
+          icon: Icons.schedule_rounded,
+          type: LocalLibrarySortType.dateAdded,
+        ),
+        const SizedBox(width: 10),
+        _buildLargeScreenSortChip(
+          label: '名称',
+          icon: Icons.sort_by_alpha_rounded,
+          type: LocalLibrarySortType.name,
+        ),
+        if (!isManagement) ...[
+          const SizedBox(width: 10),
+          _buildLargeScreenSortChip(
+            label: '评分',
+            icon: Icons.star_rounded,
+            type: LocalLibrarySortType.rating,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSortChip({
+    required String label,
+    required IconData icon,
+    required LocalLibrarySortType type,
+  }) {
+    final selected = _currentSort == type;
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: () {
+        if (_currentSort == type) return;
+        setState(() {
+          _currentSort = type;
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      focusScale: 1.04,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.26)
+            : Colors.white.withValues(alpha: 0.09),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenScanningIndicator(
+    SharedRemoteLibraryProvider provider,
+  ) {
+    final status = provider.scanStatus;
+    final progress = (status?.progress ?? 0.0).clamp(0.0, 1.0);
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            status?.message ?? '正在扫描...',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.white10,
+            valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenNotice({
+    required String message,
+    required VoidCallback onClose,
+  }) {
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Ionicons.warning_outline,
+              color: Colors.orangeAccent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenIconButton(
+            icon: Ionicons.close_outline,
+            tooltip: '关闭',
+            onPressed: onClose,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenMediaBody(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    List<SharedRemoteAnimeSummary> animeSummaries,
+    bool hasHosts,
+  ) {
+    if (provider.isInitializing ||
+        (provider.isLoading && animeSummaries.isEmpty && hasHosts)) {
+      return Center(child: CircularProgressIndicator(color: _accentColor));
+    }
+
+    if (!hasHosts) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Ionicons.cloud_outline,
+        title: '尚未添加共享客户端',
+        subtitle: '添加客户端后可以从大屏模式浏览远程媒体库',
+        action: NipaplayLargeScreenActionButton(
+          icon: Ionicons.link_outline,
+          label: '添加客户端',
+          onPressed: () => SharedRemoteHostSelectionSheet.show(context),
+        ),
+      );
+    }
+
+    if (animeSummaries.isEmpty) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Ionicons.folder_open_outline,
+        title: provider.activeHost == null ? '请选择共享客户端' : '该客户端尚未扫描番剧',
+        subtitle: '切换客户端或进入库管理添加远程文件夹',
+      );
+    }
+
+    return GridView.builder(
+      controller: _gridScrollController,
+      padding: const EdgeInsets.only(bottom: 96),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 244,
+        mainAxisExtent: 468,
+        mainAxisSpacing: 18,
+        crossAxisSpacing: 18,
+      ),
+      itemCount: animeSummaries.length,
+      itemBuilder: (context, index) {
+        return _buildLargeScreenSharedAnimeCard(
+          context,
+          provider,
+          animeSummaries[index],
+          autofocus: index == 0,
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeScreenSharedAnimeCard(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    SharedRemoteAnimeSummary anime, {
+    required bool autofocus,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final title = anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name;
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () => _openEpisodeSheet(context, provider, anime),
+      borderRadius: BorderRadius.circular(8),
+      padding: EdgeInsets.zero,
+      focusScale: 1.035,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.07),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.82),
+        focusStrokeWidth: 2.4,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 2 / 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImageWidget(
+                    imageUrl: anime.imageUrl ?? '',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __) =>
+                        _buildLargeScreenSharedFallbackPoster(textColor),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.74),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: _buildLargeScreenSharedBadge(
+                      provider.activeHost?.displayName ?? '共享',
+                    ),
+                  ),
+                  if (anime.episodeCount > 0)
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: _buildLargeScreenSharedBadge(
+                        '${anime.episodeCount} 集',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      height: 1.15,
+                    ),
+                  ),
+                  if (anime.summary?.trim().isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      anime.summary!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.52),
+                        fontSize: 12,
+                        height: 1.26,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenManagementBody(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    bool hasHosts,
+    List<SharedRemoteScannedFolder> folders,
+  ) {
+    if (provider.isInitializing ||
+        (provider.isManagementLoading &&
+            folders.isEmpty &&
+            provider.scanStatus == null)) {
+      return Center(child: CircularProgressIndicator(color: _accentColor));
+    }
+
+    if (!hasHosts) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Ionicons.cloud_outline,
+        title: '尚未添加共享客户端',
+        subtitle: '请先添加客户端，再管理远程媒体文件夹',
+        action: NipaplayLargeScreenActionButton(
+          icon: Ionicons.link_outline,
+          label: '添加客户端',
+          onPressed: () => SharedRemoteHostSelectionSheet.show(context),
+        ),
+      );
+    }
+
+    if (!provider.hasActiveHost) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Ionicons.folder_open_outline,
+        title: '请选择一个共享客户端',
+        subtitle: '切换客户端后再进入库管理',
+      );
+    }
+
+    if (provider.managementErrorMessage != null &&
+        folders.isEmpty &&
+        provider.scanStatus == null) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Ionicons.warning_outline,
+        title: '库管理不可用',
+        subtitle: provider.managementErrorMessage!,
+      );
+    }
+
+    if (folders.isEmpty) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Ionicons.folder_open_outline,
+        title: '远程端未添加媒体文件夹',
+        subtitle: '添加文件夹后可以在这里扫描、浏览和播放远程视频',
+        action: NipaplayLargeScreenActionButton(
+          icon: Ionicons.add_circle_outline,
+          label: '添加文件夹',
+          onPressed: () => _openAddFolderDialog(context, provider),
+        ),
+      );
+    }
+
+    final selectedPath = folders.any(
+            (folder) => folder.path == _largeScreenSelectedRemoteFolderPath)
+        ? _largeScreenSelectedRemoteFolderPath
+        : folders.first.path;
+    final selectedFolder =
+        folders.firstWhere((folder) => folder.path == selectedPath);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 390,
+          child: ListView.separated(
+            controller: _managementScrollController,
+            padding: const EdgeInsets.only(bottom: 96),
+            itemCount: folders.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final folder = folders[index];
+              return _buildLargeScreenRemoteFolderCard(
+                provider,
+                folder,
+                selected: folder.path == selectedPath,
+                autofocus: index == 0,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: _buildLargeScreenRemoteFolderDetail(
+            context,
+            provider,
+            selectedFolder,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenRemoteFolderCard(
+    SharedRemoteLibraryProvider provider,
+    SharedRemoteScannedFolder folder, {
+    required bool selected,
+    required bool autofocus,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final busy =
+        provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+    final title = folder.name.isNotEmpty ? folder.name : folder.path;
+    final statusColor = folder.exists ? _accentColor : Colors.orangeAccent;
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () => _selectLargeScreenRemoteFolder(provider, folder.path),
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.all(14),
+      focusScale: 1.025,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.22)
+            : Colors.white.withValues(alpha: 0.075),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                folder.exists
+                    ? Icons.folder_open_outlined
+                    : Ionicons.warning_outline,
+                color: statusColor,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            folder.path,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.58),
+              fontSize: 12,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              NipaplayLargeScreenIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: '扫描',
+                onPressed: busy
+                    ? null
+                    : () async {
+                        await provider.addRemoteFolder(
+                          folderPath: folder.path,
+                          scan: true,
+                          skipPreviouslyMatchedUnwatched: false,
+                        );
+                        _startScanStatusPolling();
+                      },
+              ),
+              const SizedBox(width: 8),
+              NipaplayLargeScreenIconButton(
+                icon: Icons.delete_outline_rounded,
+                tooltip: '移除',
+                onPressed: busy
+                    ? null
+                    : () => provider.removeRemoteFolder(folder.path),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenRemoteFolderDetail(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    SharedRemoteScannedFolder folder,
+  ) {
+    final folderPath = folder.path;
+    final loading = _loadingRemoteDirectories.contains(folderPath);
+    final expanded = _expandedRemoteDirectories.containsKey(folderPath);
+    if (!loading && !expanded) {
+      Future.microtask(() => _loadRemoteDirectory(provider, folderPath));
+    }
+
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: folder.name.isNotEmpty ? folder.name : folder.path,
+            subtitle: folder.path,
+            trailing: NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '扫描',
+              compact: true,
+              onPressed: provider.scanStatus?.isScanning == true
+                  ? null
+                  : () async {
+                      await provider.addRemoteFolder(
+                        folderPath: folder.path,
+                        scan: true,
+                        skipPreviouslyMatchedUnwatched: false,
+                      );
+                      _startScanStatusPolling();
+                    },
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: loading
+                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    children: _buildRemoteDirectoryChildren(
+                      context,
+                      provider,
+                      folderPath,
+                      1,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSharedFallbackPoster(Color textColor) {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.08),
+      child: Center(
+        child: Icon(
+          Icons.movie_creation_outlined,
+          color: textColor.withValues(alpha: 0.46),
+          size: 52,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSharedBadge(String label) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectLargeScreenRemoteFolder(
+    SharedRemoteLibraryProvider provider,
+    String folderPath,
+  ) {
+    setState(() {
+      _largeScreenSelectedRemoteFolderPath = folderPath;
+    });
+    if (!_expandedRemoteDirectories.containsKey(folderPath) &&
+        !_loadingRemoteDirectories.contains(folderPath)) {
+      _loadRemoteDirectory(provider, folderPath);
+    }
+  }
+
+  Future<void> _cleanupLargeScreenSharedRemote(
+    SharedRemoteLibraryProvider provider,
+  ) async {
+    final removedCount = await provider.cleanupMissingRemoteFolders();
+    if (!mounted) return;
+    final error = provider.managementErrorMessage;
+    if (error != null && error.isNotEmpty) {
+      BlurSnackBar.show(context, error);
+      return;
+    }
+    BlurSnackBar.show(
+      context,
+      removedCount > 0 ? '已清理 $removedCount 个不存在的文件夹' : '没有需要清理的不存在文件夹',
+    );
+  }
+
   Widget _buildScanningIndicator(SharedRemoteLibraryProvider provider) {
     final status = provider.scanStatus;
     final progress = (status?.progress ?? 0.0).clamp(0.0, 1.0);
@@ -278,8 +1043,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     bool hasHosts,
   ) {
     if (provider.isInitializing) {
-      return Center(
-          child: CircularProgressIndicator(color: _accentColor));
+      return Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
@@ -287,8 +1051,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isLoading && animeSummaries.isEmpty) {
-      return Center(
-          child: CircularProgressIndicator(color: _accentColor));
+      return Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (animeSummaries.isEmpty) {
@@ -666,8 +1429,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
               child: Text(
                 message,
                 locale: const Locale('zh', 'CN'),
-                style:
-                    TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
               ),
             ),
             IconButton(
@@ -688,8 +1450,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
-      return Center(
-          child: CircularProgressIndicator(color: _accentColor));
+      return Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
@@ -699,8 +1460,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     if (provider.isManagementLoading &&
         folders.isEmpty &&
         provider.scanStatus == null) {
-      return Center(
-          child: CircularProgressIndicator(color: _accentColor));
+      return Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!provider.hasActiveHost) {

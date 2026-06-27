@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'tooltip_bubble.dart';
 import 'control_shadow.dart';
+import 'keyboard_activatable.dart';
 
 class LockControlsButton extends StatefulWidget {
   final bool locked;
@@ -21,6 +22,7 @@ class _LockControlsButtonState extends State<LockControlsButton>
     with SingleTickerProviderStateMixin {
   bool _isPressed = false;
   bool _isHovered = false;
+  bool _isFocused = false;
   late final AnimationController _animationController;
   late final Animation<Offset> _slideAnimation;
 
@@ -52,8 +54,10 @@ class _LockControlsButtonState extends State<LockControlsButton>
   @override
   Widget build(BuildContext context) {
     final tooltipText = widget.locked ? '解锁' : '锁定';
-    final iconData =
-        widget.locked ? Ionicons.lock_closed_outline : Ionicons.lock_open_outline;
+    final iconData = widget.locked
+        ? Ionicons.lock_closed_outline
+        : Ionicons.lock_open_outline;
+    final isActive = _isHovered || _isFocused;
 
     return SlideTransition(
       position: _slideAnimation,
@@ -64,21 +68,25 @@ class _LockControlsButtonState extends State<LockControlsButton>
         child: MouseRegion(
           onEnter: (_) => setState(() => _isHovered = true),
           onExit: (_) => setState(() => _isHovered = false),
-          child: GestureDetector(
-            onTapDown: (_) => setState(() => _isPressed = true),
-            onTapUp: (_) {
-              setState(() => _isPressed = false);
-              widget.onPressed();
-            },
-            onTapCancel: () => setState(() => _isPressed = false),
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 120),
-              scale: _isPressed ? 0.9 : (_isHovered ? 1.1 : 1.0),
-              child: ControlIconShadow(
-                child: Icon(
-                  iconData,
-                  color: Colors.white,
-                  size: 28,
+          child: KeyboardActivatable(
+            onActivate: widget.onPressed,
+            onFocusChange: (value) => setState(() => _isFocused = value),
+            child: GestureDetector(
+              onTapDown: (_) => setState(() => _isPressed = true),
+              onTapUp: (_) {
+                setState(() => _isPressed = false);
+                widget.onPressed();
+              },
+              onTapCancel: () => setState(() => _isPressed = false),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                scale: _isPressed ? 0.9 : (isActive ? 1.1 : 1.0),
+                child: ControlIconShadow(
+                  child: Icon(
+                    iconData,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
               ),
             ),

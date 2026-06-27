@@ -12,6 +12,10 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
@@ -335,8 +339,21 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     final provider = _provider;
     final service = _service;
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
 
     if (!provider.isConnected || provider.selectedLibraryIds.isEmpty) {
+      if (isLargeScreen) {
+        return NipaplayLargeScreenEmptyState(
+          icon: Icons.dns_outlined,
+          title: '还没有连接 $_serverName',
+          subtitle: '添加服务器后可以在大屏模式中浏览、搜索并播放媒体库内容',
+          action: NipaplayLargeScreenActionButton(
+            icon: Icons.cloud_outlined,
+            label: '添加媒体服务器',
+            onPressed: _showServerDialog,
+          ),
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -362,10 +379,631 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
 
     // 根据当前状态决定显示内容
+    if (isLargeScreen) {
+      if (_isShowingLibraryContent) {
+        return _buildLargeScreenLibraryContentView(provider, service);
+      }
+      return _buildLargeScreenLibrariesView(provider, service);
+    }
+
     if (_isShowingLibraryContent) {
       return _buildLibraryContentView(provider, service);
     } else {
       return _buildLibrariesView(provider, service);
+    }
+  }
+
+  Widget _buildLargeScreenLibrariesView(dynamic provider, dynamic service) {
+    final selectedLibraries = _getSelectedLibraries(provider);
+
+    if (selectedLibraries.isEmpty) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.video_library_outlined,
+        title: '没有可用的媒体库',
+        subtitle: '刷新服务器媒体库，或在服务器设置中选择要显示的库',
+        action: NipaplayLargeScreenActionButton(
+          icon: Icons.refresh_rounded,
+          label: '刷新媒体库',
+          onPressed: _loadData,
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        _buildLargeScreenRemoteTopBar(
+          title: '$_serverName 媒体库',
+          onSearchChanged: _onMainSearchChanged,
+          showBack: false,
+          showRemoteSort: false,
+        ),
+        if (_isSearching) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenLocalSortRow(),
+        ],
+        const SizedBox(height: 18),
+        Expanded(
+          child: _isSearching
+              ? _buildLargeScreenMediaGrid(_searchResults)
+              : GridView.builder(
+                  controller: _gridScrollController,
+                  padding: const EdgeInsets.only(bottom: 96),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 420,
+                    mainAxisExtent: 210,
+                    crossAxisSpacing: 18,
+                    mainAxisSpacing: 18,
+                  ),
+                  itemCount: selectedLibraries.length,
+                  itemBuilder: (context, index) {
+                    return _buildLargeScreenLibraryCard(
+                      selectedLibraries[index],
+                      autofocus: index == 0,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenLibraryContentView(
+      dynamic provider, dynamic service) {
+    if (_isLoadingLibraryContent) {
+      return Center(child: CircularProgressIndicator(color: _accentColor));
+    }
+
+    if (_error != null) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: '加载媒体库失败',
+        subtitle: _error!,
+        action: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '重试',
+              onPressed: _retryCurrentView,
+            ),
+            const SizedBox(width: 12),
+            NipaplayLargeScreenActionButton(
+              icon: Icons.arrow_back_rounded,
+              label: '返回',
+              onPressed: _handleBackNavigation,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final items = _isSearching ? _searchResults : _filteredMediaItems;
+    final title = _getCurrentViewTitle(provider);
+
+    return Column(
+      children: [
+        _buildLargeScreenRemoteTopBar(
+          title: title,
+          onSearchChanged: _onSearchChanged,
+          showBack: true,
+          showRemoteSort: _showRemoteSortDropdown,
+        ),
+        if (!_showRemoteSortDropdown) ...[
+          const SizedBox(height: 14),
+          _buildLargeScreenLocalSortRow(),
+        ],
+        const SizedBox(height: 18),
+        Expanded(
+          child: _mediaItems.isEmpty
+              ? NipaplayLargeScreenEmptyState(
+                  icon: _isFolderNavigation
+                      ? Icons.folder_off_outlined
+                      : Icons.video_library_outlined,
+                  title: _isFolderNavigation ? '该文件夹为空' : '该媒体库为空',
+                  subtitle: '返回上一级或刷新服务器内容后再试',
+                  action: NipaplayLargeScreenActionButton(
+                    icon: Icons.arrow_back_rounded,
+                    label: _isFolderNavigation && !_isAtFolderRoot
+                        ? '返回上级文件夹'
+                        : '返回媒体库列表',
+                    onPressed: _handleBackNavigation,
+                  ),
+                )
+              : _buildLargeScreenMediaGrid(items),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenRemoteTopBar({
+    required String title,
+    required ValueChanged<String> onSearchChanged,
+    required bool showBack,
+    required bool showRemoteSort,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return Row(
+      children: [
+        if (showBack) ...[
+          NipaplayLargeScreenIconButton(
+            icon: Icons.arrow_back_rounded,
+            tooltip: '返回',
+            onPressed: _handleBackNavigation,
+            autofocus: true,
+          ),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: NipaplayLargeScreenTextInput(
+            controller: _searchController,
+            hintText: '搜索 $title',
+            onChanged: onSearchChanged,
+            suffix: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: '清空搜索',
+                    onPressed: _clearSearch,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        if (showRemoteSort) ...[
+          NipaplayLargeScreenActionButton(
+            icon: Icons.sort_rounded,
+            label: '排序',
+            onPressed: _showLargeScreenRemoteSortDialog,
+          ),
+          const SizedBox(width: 10),
+        ],
+        NipaplayLargeScreenActionButton(
+          icon: Ionicons.settings_outline,
+          label: '服务器',
+          onPressed: _showServerDialog,
+        ),
+        const SizedBox(width: 14),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.68),
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenLocalSortRow() {
+    return Row(
+      children: [
+        _buildLargeScreenSortChip(
+          label: '最近更新',
+          icon: Icons.schedule_rounded,
+          type: LocalLibrarySortType.dateAdded,
+        ),
+        const SizedBox(width: 10),
+        _buildLargeScreenSortChip(
+          label: '名称',
+          icon: Icons.sort_by_alpha_rounded,
+          type: LocalLibrarySortType.name,
+        ),
+        const SizedBox(width: 10),
+        _buildLargeScreenSortChip(
+          label: '评分',
+          icon: Icons.star_rounded,
+          type: LocalLibrarySortType.rating,
+        ),
+        const Spacer(),
+        if (_isSearchLoading)
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              color: _accentColor,
+              strokeWidth: 2,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSortChip({
+    required String label,
+    required IconData icon,
+    required LocalLibrarySortType type,
+  }) {
+    final selected = _currentSort == type;
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: () {
+        if (_currentSort == type) return;
+        setState(() => _currentSort = type);
+        _applySortAndFilter();
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      focusScale: 1.04,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.26)
+            : Colors.white.withValues(alpha: 0.09),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenLibraryCard(
+    NetworkMediaLibrary library, {
+    required bool autofocus,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final typeLabel = library.type.isEmpty ? '媒体库' : library.type;
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () => _selectLibrary(library),
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.all(18),
+      focusScale: 1.025,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.82),
+        focusStrokeWidth: 2.4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.video_library_outlined, color: _accentColor, size: 34),
+              const Spacer(),
+              _buildLargeScreenTinyBadge(typeLabel),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            library.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '浏览 $_serverName 中的内容',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.58),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenMediaGrid(List<NetworkMediaItem> items) {
+    if (items.isEmpty) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '没有匹配结果',
+        subtitle: '换个关键词再试试',
+      );
+    }
+
+    return GridView.builder(
+      controller: _gridScrollController,
+      padding: const EdgeInsets.only(bottom: 96),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 242,
+        mainAxisExtent: 466,
+        crossAxisSpacing: 18,
+        mainAxisSpacing: 18,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        return _buildLargeScreenMediaCard(
+          items[index],
+          autofocus: index == 0,
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeScreenMediaCard(
+    NetworkMediaItem item, {
+    required bool autofocus,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final imageUrl = _getNetworkMediaImageUrl(item, width: 460);
+
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: () => _openMediaDetail(item),
+      borderRadius: BorderRadius.circular(8),
+      padding: EdgeInsets.zero,
+      focusScale: 1.035,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.white.withValues(alpha: 0.07),
+        idleBackgroundLight: Colors.white.withValues(alpha: 0.82),
+        focusStrokeWidth: 2.4,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 2 / 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (item.isFolder)
+                    _buildLargeScreenFolderPoster(textColor)
+                  else
+                    CachedNetworkImageWidget(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __) =>
+                          _buildLargeScreenFallbackPoster(textColor),
+                    ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.74),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: _buildLargeScreenTinyBadge(
+                      item.isFolder ? '文件夹' : _serverName,
+                    ),
+                  ),
+                  if (item.progress != null)
+                    Positioned(
+                      left: 10,
+                      right: 10,
+                      bottom: 10,
+                      child: Text(
+                        item.progress!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      height: 1.15,
+                    ),
+                  ),
+                  if (item.overview != null &&
+                      item.overview!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      item.overview!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.52),
+                        fontSize: 12,
+                        height: 1.26,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenFolderPoster(Color textColor) {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.08),
+      child: Center(
+        child: Icon(
+          Icons.folder_open_rounded,
+          color: textColor.withValues(alpha: 0.56),
+          size: 74,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenFallbackPoster(Color textColor) {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.08),
+      child: Center(
+        child: Icon(
+          Icons.movie_creation_outlined,
+          color: textColor.withValues(alpha: 0.46),
+          size: 52,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenTinyBadge(String label) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getNetworkMediaImageUrl(NetworkMediaItem item, {int width = 300}) {
+    switch (widget.serverType) {
+      case NetworkMediaServerType.jellyfin:
+        final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
+        return jellyfinItem.imagePrimaryTag != null
+            ? JellyfinService.instance
+                .getImageUrl(jellyfinItem.id, width: width)
+            : '';
+      case NetworkMediaServerType.emby:
+        final embyItem = (item as EmbyMediaItemAdapter).originalItem;
+        return embyItem.imagePrimaryTag != null
+            ? EmbyService.instance.getImageUrl(embyItem.id, width: width)
+            : '';
+    }
+  }
+
+  Future<void> _showLargeScreenRemoteSortDialog() async {
+    final provider = _provider;
+    final currentSortSettings = _getCurrentRemoteSortSettings(provider);
+    final items = _buildRemoteSortItems(
+      currentSortSettings['sortBy']!,
+      currentSortSettings['sortOrder']!,
+    );
+    final selection = await showDialog<_RemoteSortSelection>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.54),
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 240, vertical: 120),
+          child: NipaplayLargeScreenPanel(
+            padding: const EdgeInsets.all(18),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 560, maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const NipaplayLargeScreenSectionHeader(
+                    title: '排序',
+                    subtitle: '选择当前媒体库的排序方式',
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final value = item.value;
+                        final description = value.description;
+                        return NipaplayLargeScreenFocusableAction(
+                          autofocus: index == 0,
+                          onActivate: () => Navigator.of(context).pop(value),
+                          borderRadius: BorderRadius.circular(8),
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              if (description?.isNotEmpty == true) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  description!,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.62),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selection != null) {
+      _applyRemoteSortSelection(selection);
     }
   }
 
@@ -467,8 +1105,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     if (_isLoadingLibraryContent) {
-      return Center(
-          child: CircularProgressIndicator(color: _accentColor));
+      return Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (_error != null) {

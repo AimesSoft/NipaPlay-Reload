@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -775,8 +776,8 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.check, size: 18),
                           label: Text(
@@ -963,8 +964,8 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.check, size: 18),
                         label: Text(
@@ -1015,41 +1016,47 @@ class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
   static Color get _nipaAccentColor => AppAccentColors.current;
 
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textColor = _isHovered
+    final isActive = _isHovered || _isFocused;
+    final textColor = isActive
         ? _nipaAccentColor
         : colorScheme.onSurface.withValues(alpha: 0.78);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _isHovered ? 1.08 : 1.0,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutBack,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.icon != null)
-                  Icon(widget.icon, color: textColor, size: 20),
-                if (widget.icon != null) const SizedBox(width: 8),
-                Text(
-                  widget.text,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w600,
+    return KeyboardActivatable(
+      onActivate: widget.onPressed,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: isActive ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutBack,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.icon != null)
+                    Icon(widget.icon, color: textColor, size: 20),
+                  if (widget.icon != null) const SizedBox(width: 8),
+                  Text(
+                    widget.text,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1077,14 +1084,16 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
   static Color get _nipaAccentColor => AppAccentColors.current;
 
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
     final isEnabled = widget.onPressed != null;
     final colorScheme = Theme.of(context).colorScheme;
+    final isActive = _isHovered || _isFocused;
     final iconColor = !isEnabled
         ? colorScheme.onSurface.withValues(alpha: 0.35)
-        : (_isHovered
+        : (isActive
             ? _nipaAccentColor
             : colorScheme.onSurface.withValues(alpha: 0.7));
 
@@ -1094,21 +1103,28 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
         button: true,
         enabled: isEnabled,
         label: widget.tooltip,
-        child: MouseRegion(
-          onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
-          onExit: (_) => isEnabled ? setState(() => _isHovered = false) : null,
-          cursor:
-              isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onPressed,
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: AnimatedScale(
-                scale: _isHovered && isEnabled ? 1.1 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutBack,
-                child: Icon(widget.icon, size: 20, color: iconColor),
+        child: KeyboardActivatable(
+          enabled: isEnabled,
+          onActivate: widget.onPressed ?? () {},
+          onFocusChange: (focused) => setState(() => _isFocused = focused),
+          child: MouseRegion(
+            onEnter: (_) =>
+                isEnabled ? setState(() => _isHovered = true) : null,
+            onExit: (_) =>
+                isEnabled ? setState(() => _isHovered = false) : null,
+            cursor:
+                isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onPressed,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: AnimatedScale(
+                  scale: isActive && isEnabled ? 1.1 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutBack,
+                  child: Icon(widget.icon, size: 20, color: iconColor),
+                ),
               ),
             ),
           ),

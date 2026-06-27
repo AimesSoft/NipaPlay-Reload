@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 
 enum NipaplayLargeScreenInputCommand {
   toggleMenu,
+  back,
   navigateUp,
   navigateDown,
   navigateLeft,
@@ -16,6 +17,11 @@ class NipaplayLargeScreenInputControls {
     LogicalKeyboardKey.escape,
     LogicalKeyboardKey.gameButtonSelect,
     LogicalKeyboardKey.gameButtonStart,
+  };
+
+  static final Set<LogicalKeyboardKey> _backKeys = {
+    LogicalKeyboardKey.goBack,
+    LogicalKeyboardKey.gameButtonB,
   };
 
   static final Set<LogicalKeyboardKey> _navigateUpKeys = {
@@ -49,6 +55,9 @@ class NipaplayLargeScreenInputControls {
     final key = event.logicalKey;
     if (_toggleMenuKeys.contains(key)) {
       return NipaplayLargeScreenInputCommand.toggleMenu;
+    }
+    if (_backKeys.contains(key)) {
+      return NipaplayLargeScreenInputCommand.back;
     }
     if (_navigateUpKeys.contains(key)) {
       return NipaplayLargeScreenInputCommand.navigateUp;

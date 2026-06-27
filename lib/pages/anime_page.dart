@@ -1,9 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -11,7 +8,6 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import '../providers/appearance_settings_provider.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
@@ -19,7 +15,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/history_all_modal.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
@@ -37,6 +32,10 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -208,18 +207,6 @@ class _AnimePageState extends State<AnimePage>
     await PlaybackService().play(playableItem);
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = twoDigits(duration.inHours);
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    if (duration.inHours > 0) {
-      return '$hours:$minutes:$seconds';
-    } else {
-      return '$minutes:$seconds';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -227,7 +214,7 @@ class _AnimePageState extends State<AnimePage>
       builder: (context, historyProvider, child) {
         return Builder(
           builder: (context) {
-            final scanService = Provider.of<ScanService>(context);
+            context.watch<ScanService>();
 
             // 移除DefaultTabController，直接使用Stack
             return Stack(
@@ -298,9 +285,6 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
   String? _remoteManagementHostId;
 
   // 添加变量追踪“添加媒体服务器”入口的悬停状态
-  bool _isAddEntryHovered = false;
-  bool _isRemoteAccessHovered = false;
-
   bool get _showLocalTabs => !kIsWeb;
   bool get _showSharedRemoteTabs => _hasSharedRemoteHosts || kIsWeb;
 
@@ -426,7 +410,6 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
         case MediaLibrarySourceType.smb:
           return MediaSourceUtils.isSmbPath(item.filePath);
         case MediaLibrarySourceType.local:
-        default:
           return false;
       }
     });
@@ -715,82 +698,58 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
   }
 
   Widget _buildRemoteAccessEntry({
-    required Color iconColor,
     required Color textColor,
   }) {
-    final Color hoverColor = AppAccentColors.current;
-    final Color displayColor = _isRemoteAccessHovered ? hoverColor : textColor;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _isRemoteAccessHovered = true),
-        onExit: (_) => setState(() => _isRemoteAccessHovered = false),
-        child: GestureDetector(
-          onTap: _openRemoteAccessSettings,
-          child: AnimatedScale(
-            scale: _isRemoteAccessHovered ? 1.1 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.link, size: 18, color: displayColor),
-                SizedBox(width: 6),
-                Text(
-                  '远程访问',
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: displayColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+      child: HoverScaleTextButton(
+        onPressed: _openRemoteAccessSettings,
+        idleColor: textColor,
+        hoverColor: AppAccentColors.current,
+        padding: EdgeInsets.zero,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.link, size: 18),
+            SizedBox(width: 6),
+            Text(
+              '远程访问',
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildAddMediaServerEntry({
-    required Color iconColor,
     required Color textColor,
   }) {
-    final Color hoverColor = AppAccentColors.current;
-    final Color displayColor = _isAddEntryHovered ? hoverColor : textColor;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _isAddEntryHovered = true),
-        onExit: (_) => setState(() => _isAddEntryHovered = false),
-        child: GestureDetector(
-          onTap: _showServerSelectionDialog,
-          child: AnimatedScale(
-            scale: _isAddEntryHovered ? 1.1 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.cloud_outlined, size: 18, color: displayColor),
-                SizedBox(width: 6),
-                Text(
-                  '添加媒体',
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: displayColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+      child: HoverScaleTextButton(
+        onPressed: _showServerSelectionDialog,
+        idleColor: textColor,
+        hoverColor: AppAccentColors.current,
+        padding: EdgeInsets.zero,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_outlined, size: 18),
+            SizedBox(width: 6),
+            Text(
+              '添加媒体',
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1149,6 +1108,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
               '警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
         }
 
+        if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+          return _buildLargeScreenLibraryLayout(
+            pageChildren: pageChildren,
+            destinations: _buildLargeScreenLibraryDestinations(),
+          );
+        }
+
         return LayoutBuilder(
           builder: (context, constraints) {
             // 检查可用高度，如果太小则使用最小安全布局
@@ -1209,13 +1175,11 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
                         SizedBox(width: 8),
                         if (!globals.isPhone) ...[
                           _buildRemoteAccessEntry(
-                            iconColor: activeColor,
                             textColor: unselectedLabelColor,
                           ),
                           SizedBox(width: 12),
                         ],
                         _buildAddMediaServerEntry(
-                          iconColor: activeColor,
                           textColor: unselectedLabelColor,
                         ),
                       ],
@@ -1250,6 +1214,174 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
         );
       },
     );
+  }
+
+  List<_LargeScreenLibraryDestination> _buildLargeScreenLibraryDestinations() {
+    final destinations = <_LargeScreenLibraryDestination>[];
+    void add(String label, IconData icon, String subtitle) {
+      destinations.add(_LargeScreenLibraryDestination(
+        label: label,
+        icon: icon,
+        subtitle: subtitle,
+      ));
+    }
+
+    if (_showLocalTabs) {
+      add('本地媒体库', Icons.tv_rounded, '浏览本机已入库番剧');
+      add('本地库管理', Icons.folder_open_rounded, '扫描、维护和播放本地目录');
+    }
+    if (_hasWebDAVLibrary) {
+      add('WebDAV媒体库', Icons.cloud_queue_rounded, '来自 WebDAV 的番剧库');
+    }
+    if (_hasWebDAVConnections) {
+      add('WebDAV库管理', Icons.cloud_sync_rounded, '管理 WebDAV 目录入库');
+    }
+    if (_hasSMBLibrary) {
+      add('SMB媒体库', Icons.lan_rounded, '来自 SMB 的番剧库');
+    }
+    if (_hasSMBConnections) {
+      add('SMB库管理', Icons.settings_ethernet_rounded, '管理 SMB 目录入库');
+    }
+    if (_showSharedRemoteTabs) {
+      add('共享媒体库', Icons.hub_rounded, '浏览局域网共享库');
+      add('共享库管理', Icons.settings_suggest_rounded, '管理共享媒体源');
+    }
+    if (_isDandanConnected) {
+      add('弹弹play', Icons.connected_tv_rounded, '远程弹弹play媒体库');
+    }
+    if (_isJellyfinConnected) {
+      add('Jellyfin', Icons.video_library_rounded, 'Jellyfin 媒体服务器');
+    }
+    if (_isEmbyConnected) {
+      add('Emby', Icons.movie_filter_rounded, 'Emby 媒体服务器');
+    }
+    return destinations;
+  }
+
+  Widget _buildLargeScreenLibraryLayout({
+    required List<Widget> pageChildren,
+    required List<_LargeScreenLibraryDestination> destinations,
+  }) {
+    final resolvedDestinations =
+        destinations.length == pageChildren.length && destinations.isNotEmpty
+            ? destinations
+            : List<_LargeScreenLibraryDestination>.generate(
+                pageChildren.length,
+                (index) => _LargeScreenLibraryDestination(
+                  label: '媒体库 ${index + 1}',
+                  icon: Icons.video_library_rounded,
+                  subtitle: '媒体库来源',
+                ),
+              );
+    final selectedIndex = pageChildren.isEmpty
+        ? 0
+        : _currentIndex.clamp(0, pageChildren.length - 1);
+    final selectedDestination = resolvedDestinations.isEmpty
+        ? null
+        : resolvedDestinations[selectedIndex];
+
+    if (pageChildren.isEmpty) {
+      return NipaplayLargeScreenPageScaffold(
+        title: '媒体库',
+        subtitle: '还没有可用的媒体来源',
+        icon: Icons.video_library_rounded,
+        actions: [
+          NipaplayLargeScreenActionButton(
+            icon: Icons.add_rounded,
+            label: '添加媒体源',
+            onPressed: _showServerSelectionDialog,
+            autofocus: true,
+          ),
+        ],
+        child: NipaplayLargeScreenEmptyState(
+          icon: Icons.video_library_rounded,
+          title: '还没有媒体库',
+          subtitle: '添加本地目录、WebDAV、SMB、Jellyfin、Emby 或共享服务器后即可开始浏览。',
+          action: NipaplayLargeScreenActionButton(
+            icon: Icons.add_rounded,
+            label: '添加媒体源',
+            onPressed: _showServerSelectionDialog,
+          ),
+        ),
+      );
+    }
+
+    return NipaplayLargeScreenPageScaffold(
+      title: '媒体库',
+      subtitle: selectedDestination?.subtitle ?? '番剧和媒体源',
+      icon: Icons.video_library_rounded,
+      actions: [
+        NipaplayLargeScreenActionButton(
+          icon: Icons.settings_remote_rounded,
+          label: '远程访问',
+          onPressed: _openRemoteAccessSettings,
+        ),
+        NipaplayLargeScreenActionButton(
+          icon: Icons.add_rounded,
+          label: '添加媒体源',
+          onPressed: _showServerSelectionDialog,
+        ),
+      ],
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 282,
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 24),
+              itemCount: resolvedDestinations.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final destination = resolvedDestinations[index];
+                return _LargeScreenLibraryNavItem(
+                  destination: destination,
+                  selected: index == selectedIndex,
+                  autofocus: index == selectedIndex,
+                  onPressed: () => _activateLargeScreenLibraryIndex(index),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: NipaplayLargeScreenPanel(
+              padding: EdgeInsets.zero,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SwitchableView(
+                  enableAnimation: false,
+                  currentIndex: selectedIndex,
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (index) {
+                    if (_currentIndex == index) {
+                      return;
+                    }
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                    _tabController.animateTo(index);
+                  },
+                  children: pageChildren,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _activateLargeScreenLibraryIndex(int index) {
+    if (index < 0 || index >= _tabController.length) {
+      return;
+    }
+    if (_currentIndex != index) {
+      setState(() {
+        _currentIndex = index;
+      });
+    }
+    _tabController.animateTo(index);
   }
 
   void _updateTabController(
@@ -1307,6 +1439,101 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
     });
 
     print('TabController已更新：新长度=$_tabCount, 当前索引=$_currentIndex');
+  }
+}
+
+class _LargeScreenLibraryDestination {
+  const _LargeScreenLibraryDestination({
+    required this.label,
+    required this.icon,
+    required this.subtitle,
+  });
+
+  final String label;
+  final IconData icon;
+  final String subtitle;
+}
+
+class _LargeScreenLibraryNavItem extends StatelessWidget {
+  const _LargeScreenLibraryNavItem({
+    required this.destination,
+    required this.selected,
+    required this.onPressed,
+    this.autofocus = false,
+  });
+
+  final _LargeScreenLibraryDestination destination;
+  final bool selected;
+  final VoidCallback onPressed;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF161922);
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      focusScale: 1.025,
+      padding: const EdgeInsets.all(14),
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? AppAccentColors.current.withValues(alpha: 0.22)
+            : Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: selected
+            ? AppAccentColors.current.withValues(alpha: 0.17)
+            : Colors.white.withValues(alpha: 0.78),
+        contentColorDark: Colors.white,
+        contentColorLight: textColor,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            destination.icon,
+            size: 26,
+            color: selected
+                ? AppAccentColors.current
+                : textColor.withValues(alpha: 0.82),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  destination.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: selected ? 0.72 : 0.56),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (selected)
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppAccentColors.current,
+              size: 24,
+            ),
+        ],
+      ),
+    );
   }
 }
 

@@ -10,7 +10,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overla
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_network_status.dart';
 
 class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
-  const NipaplayLargeScreenTopStatusOverlay({super.key, required this.isDarkMode});
+  const NipaplayLargeScreenTopStatusOverlay(
+      {super.key, required this.isDarkMode});
 
   final bool isDarkMode;
 

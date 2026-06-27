@@ -81,7 +81,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
   void _checkPendingRefresh() {
     if (_pendingRefreshAfterLoad && mounted) {
       _pendingRefreshAfterLoad = false;
-      _pendingRefreshReason = '';
       // 使用短延迟避免连续调用，并检查播放器状态
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && !_isLoadingRecommended && !_isVideoPlayerActive()) {

@@ -31,6 +31,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
@@ -138,6 +141,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
   final Set<String> _expandedSMBFolders = {};
   final Set<String> _loadingSMBFolders = {};
+  String? _largeScreenSelectedLocalFolder;
+  String? _largeScreenSelectedWebDAVConnectionName;
+  String? _largeScreenSelectedSMBConnectionName;
 
   bool get _isRemoteMode =>
       kIsWeb &&
@@ -1877,6 +1883,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         isDark ? Colors.white.withOpacity(0.2) : Colors.black12;
     // final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false); // Keep if needed for other actions
 
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return _buildLargeScreenManagementView(
+        scanService: scanService,
+        sharedProvider: sharedProvider,
+        isRemoteMode: isRemoteMode,
+        scanProgressBackground: scanProgressBackground,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1905,8 +1920,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       child: LinearProgressIndicator(
                         value: scanService!.scanProgress,
                         backgroundColor: scanProgressBackground,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(_accentColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
                       ),
                     ),
                   if (!scanService!.isScanning &&
@@ -1991,8 +2005,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       SizedBox(height: 8),
                       Text(
                         scanService!.getChangeDetectionSummary(),
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 14),
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                       SizedBox(height: 12),
                       ...scanService!.detectedChanges.map((change) => Padding(
@@ -2090,8 +2103,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       child: LinearProgressIndicator(
                         value: _remoteScrapeProgress,
                         backgroundColor: scanProgressBackground,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(_accentColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
                       ),
                     ),
                 ],
@@ -2113,6 +2125,993 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildLargeScreenManagementView({
+    required ScanService? scanService,
+    required SharedRemoteLibraryProvider? sharedProvider,
+    required bool isRemoteMode,
+    required Color scanProgressBackground,
+  }) {
+    final bool isBusy = isRemoteMode
+        ? (sharedProvider?.isManagementLoading == true ||
+            sharedProvider?.scanStatus?.isScanning == true)
+        : (scanService?.isScanning == true || _isRemoteScraping);
+    final title = switch (widget.section) {
+      LibraryManagementSection.webdav => 'WebDAV服务器',
+      LibraryManagementSection.smb => 'SMB服务器',
+      LibraryManagementSection.local => '本地文件夹',
+    };
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: NipaplayLargeScreenTextInput(
+                controller: _searchController,
+                hintText: '搜索 $title',
+                onChanged: (_) => setState(() {}),
+                suffix: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清空搜索',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            ..._buildLargeScreenManagementActions(
+              scanService: scanService,
+              isRemoteMode: isRemoteMode,
+              isBusy: isBusy,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildLargeScreenManagementStatus(
+          scanService: scanService,
+          scanProgressBackground: scanProgressBackground,
+        ),
+        Expanded(
+          child: switch (widget.section) {
+            LibraryManagementSection.webdav =>
+              _buildLargeScreenWebDAVManagementBody(
+                isRemoteMode: isRemoteMode,
+                sharedProvider: sharedProvider,
+              ),
+            LibraryManagementSection.smb => _buildLargeScreenSMBManagementBody(
+                isRemoteMode: isRemoteMode,
+                sharedProvider: sharedProvider,
+              ),
+            LibraryManagementSection.local =>
+              _buildLargeScreenLocalManagementBody(scanService!),
+          },
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildLargeScreenManagementActions({
+    required ScanService? scanService,
+    required bool isRemoteMode,
+    required bool isBusy,
+  }) {
+    final cleanupAction = () => _cleanupLargeScreenMissingSources(
+          scanService: scanService,
+          isRemoteMode: isRemoteMode,
+        );
+
+    switch (widget.section) {
+      case LibraryManagementSection.webdav:
+        return [
+          NipaplayLargeScreenActionButton(
+            icon: Icons.cloud_outlined,
+            label: '添加',
+            onPressed: isBusy ? null : () => _showWebDAVConnectionDialog(),
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.folder_delete_outlined,
+            label: '清理',
+            onPressed: isBusy ? null : cleanupAction,
+          ),
+        ];
+      case LibraryManagementSection.smb:
+        return [
+          NipaplayLargeScreenActionButton(
+            icon: Icons.lan_outlined,
+            label: '添加',
+            onPressed: isBusy ? null : () => _showSMBConnectionDialog(),
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.folder_delete_outlined,
+            label: '清理',
+            onPressed: isBusy ? null : cleanupAction,
+          ),
+        ];
+      case LibraryManagementSection.local:
+      default:
+        return [
+          NipaplayLargeScreenActionButton(
+            icon: Icons.create_new_folder_outlined,
+            label: '添加',
+            onPressed: isBusy ? null : _pickAndScanDirectory,
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.sort_rounded,
+            label: _sortOptionLabels[_sortOption],
+            onPressed: isBusy ? null : _showSortOptionsDialog,
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.refresh_rounded,
+            label: '智能刷新',
+            onPressed: isBusy
+                ? null
+                : () => _confirmLargeScreenRescanAll(scanService!),
+          ),
+          const SizedBox(width: 10),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.folder_delete_outlined,
+            label: '清理',
+            onPressed: isBusy ? null : cleanupAction,
+          ),
+        ];
+    }
+  }
+
+  Widget _buildLargeScreenManagementStatus({
+    required ScanService? scanService,
+    required Color scanProgressBackground,
+  }) {
+    final statusCards = <Widget>[];
+    if (widget.section == LibraryManagementSection.local &&
+        scanService != null) {
+      if (scanService.scanMessage.isNotEmpty || scanService.isScanning) {
+        statusCards.add(
+          _buildLargeScreenProgressPanel(
+            message: scanService.scanMessage.isEmpty
+                ? '正在扫描媒体文件夹'
+                : scanService.scanMessage,
+            progress: scanService.isScanning && scanService.scanProgress > 0
+                ? scanService.scanProgress
+                : null,
+            scanProgressBackground: scanProgressBackground,
+          ),
+        );
+      }
+      if (!scanService.isScanning && scanService.failedScanFiles.isNotEmpty) {
+        statusCards.add(
+          _buildLargeScreenInlineNotice(
+            icon: Icons.error_outline_rounded,
+            title: '扫描失败 ${scanService.failedScanFiles.length} 个文件',
+            actionLabel: '查看',
+            onAction: () => _showFailedScanFilesDialog(scanService),
+          ),
+        );
+      }
+      if (!scanService.isScanning && scanService.detectedChanges.isNotEmpty) {
+        statusCards.add(
+          _buildLargeScreenInlineNotice(
+            icon: Icons.notification_important_outlined,
+            title: scanService.getChangeDetectionSummary(),
+            actionLabel: '扫描变化',
+            onAction: () async {
+              for (final change in scanService.detectedChanges) {
+                if (change.changeType != 'deleted') {
+                  await scanService.startDirectoryScan(
+                    change.folderPath,
+                    skipPreviouslyMatchedUnwatched: false,
+                  );
+                }
+              }
+              scanService.clearDetectedChanges();
+              if (mounted) {
+                BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
+              }
+            },
+          ),
+        );
+      }
+    }
+
+    if (widget.section != LibraryManagementSection.local &&
+        (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)) {
+      statusCards.add(
+        _buildLargeScreenProgressPanel(
+          message:
+              _remoteScrapeMessage.isEmpty ? '正在刮削远程媒体' : _remoteScrapeMessage,
+          progress: _isRemoteScraping ? _remoteScrapeProgress : null,
+          scanProgressBackground: scanProgressBackground,
+        ),
+      );
+    }
+
+    if (statusCards.isEmpty) {
+      return const SizedBox(height: 0);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        children: [
+          for (final card in statusCards) ...[
+            card,
+            if (card != statusCards.last) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenProgressPanel({
+    required String message,
+    required double? progress,
+    required Color scanProgressBackground,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: scanProgressBackground,
+              valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenInlineNotice({
+    required IconData icon,
+    required String title,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.orangeAccent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          NipaplayLargeScreenActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: actionLabel,
+            onPressed: onAction,
+            compact: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenLocalManagementBody(ScanService scanService) {
+    final filteredFolders = _filterFolderPaths(scanService.scannedFolders);
+    if (scanService.scannedFolders.isEmpty && !scanService.isScanning) {
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.folder_open_outlined,
+        title: '还没有媒体文件夹',
+        subtitle: '添加文件夹后可以在大屏模式中直接扫描、浏览和匹配弹幕',
+        action: NipaplayLargeScreenActionButton(
+          icon: Icons.create_new_folder_outlined,
+          label: '添加文件夹',
+          onPressed: _pickAndScanDirectory,
+        ),
+      );
+    }
+    if (filteredFolders.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '没有匹配的文件夹',
+        subtitle: '换个关键词再试试',
+      );
+    }
+
+    final sortedFolders = _sortFolderPaths(filteredFolders);
+    final selectedFolder =
+        sortedFolders.contains(_largeScreenSelectedLocalFolder)
+            ? _largeScreenSelectedLocalFolder
+            : sortedFolders.first;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 390,
+          child: ListView.separated(
+            controller: _listScrollController,
+            padding: const EdgeInsets.only(bottom: 96),
+            itemCount: sortedFolders.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final folderPath = sortedFolders[index];
+              return _buildLargeScreenLocalFolderCard(
+                folderPath,
+                scanService,
+                selected: folderPath == selectedFolder,
+                autofocus: index == 0,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: selectedFolder == null
+              ? const SizedBox.shrink()
+              : _buildLargeScreenLocalFolderDetail(
+                  selectedFolder,
+                  scanService,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenLocalFolderCard(
+    String folderPath,
+    ScanService scanService, {
+    required bool selected,
+    required bool autofocus,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return FutureBuilder<String>(
+      future: _getDisplayPath(folderPath),
+      builder: (context, snapshot) {
+        final displayPath = snapshot.data ?? folderPath;
+        return NipaplayLargeScreenFocusableAction(
+          autofocus: autofocus,
+          onActivate: () {
+            _selectLargeScreenLocalFolder(folderPath);
+          },
+          borderRadius: BorderRadius.circular(8),
+          padding: const EdgeInsets.all(14),
+          focusScale: 1.025,
+          style: NipaplayLargeScreenFocusableStyle(
+            idleBackgroundDark: selected
+                ? _accentColor.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.075),
+            idleBackgroundLight: selected
+                ? _accentColor.withValues(alpha: 0.14)
+                : Colors.white.withValues(alpha: 0.82),
+            focusStrokeColor: selected ? _accentColor : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.folder_open_outlined,
+                      color: selected ? _accentColor : null, size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      p.basename(folderPath),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                displayPath,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.58),
+                  fontSize: 12,
+                  height: 1.25,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  NipaplayLargeScreenIconButton(
+                    icon: Icons.refresh_rounded,
+                    tooltip: '扫描文件夹',
+                    onPressed: scanService.isScanning
+                        ? null
+                        : () => _confirmLargeScreenScanFolder(
+                              scanService,
+                              folderPath,
+                            ),
+                  ),
+                  const SizedBox(width: 8),
+                  NipaplayLargeScreenIconButton(
+                    icon: Icons.delete_outline_rounded,
+                    tooltip: '移除文件夹',
+                    onPressed: scanService.isScanning
+                        ? null
+                        : () => _handleRemoveFolder(folderPath),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeScreenLocalFolderDetail(
+    String folderPath,
+    ScanService scanService,
+  ) {
+    final isLoading = _loadingFolders.contains(folderPath);
+    final files = _expandedFolderContents[folderPath] ?? const [];
+    if (!isLoading && !_expandedFolderContents.containsKey(folderPath)) {
+      Future.microtask(() => _loadFolderChildren(folderPath));
+    }
+
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: p.basename(folderPath),
+            subtitle: folderPath,
+            trailing: NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '扫描',
+              onPressed: scanService.isScanning
+                  ? null
+                  : () =>
+                      _confirmLargeScreenScanFolder(scanService, folderPath),
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: isLoading
+                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    children: [
+                      _buildBatchDanmakuMatchFolderAction(folderPath, files),
+                      ..._buildFileSystemNodes(files, folderPath, 1),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenWebDAVManagementBody({
+    required bool isRemoteMode,
+    required SharedRemoteLibraryProvider? sharedProvider,
+  }) {
+    final connections =
+        isRemoteMode ? sharedProvider!.webdavConnections : _webdavConnections;
+    if (connections.isEmpty) {
+      if (isRemoteMode && sharedProvider!.isManagementLoading) {
+        return Center(child: CircularProgressIndicator(color: _accentColor));
+      }
+      final error =
+          isRemoteMode ? sharedProvider!.managementErrorMessage : null;
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: error ?? '还没有 WebDAV 服务器',
+        subtitle: error == null ? '添加服务器后可以浏览、刮削和播放远程视频' : '请检查远程访问服务',
+        action: error == null
+            ? NipaplayLargeScreenActionButton(
+                icon: Icons.cloud_outlined,
+                label: '添加服务器',
+                onPressed: _showWebDAVConnectionDialog,
+              )
+            : null,
+      );
+    }
+    final filteredConnections = _filterWebDAVConnections(connections);
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '没有匹配的 WebDAV 服务器',
+        subtitle: '换个关键词再试试',
+      );
+    }
+    final selectedConnection = filteredConnections.firstWhere(
+      (connection) =>
+          connection.name == _largeScreenSelectedWebDAVConnectionName,
+      orElse: () => filteredConnections.first,
+    );
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 390,
+          child: ListView.separated(
+            controller: _webdavScrollController,
+            padding: const EdgeInsets.only(bottom: 96),
+            itemCount: filteredConnections.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final connection = filteredConnections[index];
+              return _buildLargeScreenWebDAVConnectionCard(
+                connection,
+                selected: connection.name == selectedConnection.name,
+                autofocus: index == 0,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: _buildLargeScreenWebDAVConnectionDetail(selectedConnection),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenWebDAVConnectionCard(
+    WebDAVConnection connection, {
+    required bool selected,
+    required bool autofocus,
+  }) {
+    return _buildLargeScreenRemoteConnectionCard(
+      icon: Icons.cloud_outlined,
+      title: connection.name,
+      subtitle: connection.url,
+      connected: connection.isConnected,
+      selected: selected,
+      autofocus: autofocus,
+      onActivate: () => _selectLargeScreenWebDAVConnection(connection),
+      actions: [
+        NipaplayLargeScreenIconButton(
+          icon: Icons.edit_rounded,
+          tooltip: '编辑连接',
+          onPressed: () => _editWebDAVConnection(connection),
+        ),
+        const SizedBox(width: 8),
+        NipaplayLargeScreenIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: '测试连接',
+          onPressed: () => _testWebDAVConnection(connection),
+        ),
+        const SizedBox(width: 8),
+        NipaplayLargeScreenIconButton(
+          icon: Icons.delete_outline_rounded,
+          tooltip: '删除连接',
+          onPressed: () => _removeWebDAVConnection(connection),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenWebDAVConnectionDetail(WebDAVConnection connection) {
+    final key = '${connection.name}:/';
+    final isLoading = _loadingWebDAVFolders.contains(key);
+    if (!isLoading && !_webdavFolderContents.containsKey(connection.name)) {
+      Future.microtask(() => _loadWebDAVFolderChildren(connection, '/'));
+    }
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: connection.name,
+            subtitle: connection.url,
+            trailing: NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '测试',
+              onPressed: () => _testWebDAVConnection(connection),
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: isLoading
+                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    children: _buildWebDAVFileNodes(connection, '/', 1),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenSMBManagementBody({
+    required bool isRemoteMode,
+    required SharedRemoteLibraryProvider? sharedProvider,
+  }) {
+    final connections =
+        isRemoteMode ? sharedProvider!.smbConnections : _smbConnections;
+    if (connections.isEmpty) {
+      if (isRemoteMode && sharedProvider!.isManagementLoading) {
+        return Center(child: CircularProgressIndicator(color: _accentColor));
+      }
+      final error =
+          isRemoteMode ? sharedProvider!.managementErrorMessage : null;
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.lan_outlined,
+        title: error ?? '还没有 SMB 服务器',
+        subtitle: error == null ? '添加服务器后可以浏览、刮削和播放局域网视频' : '请检查远程访问服务',
+        action: error == null
+            ? NipaplayLargeScreenActionButton(
+                icon: Icons.lan_outlined,
+                label: '添加服务器',
+                onPressed: () => _showSMBConnectionDialog(),
+              )
+            : null,
+      );
+    }
+    final filteredConnections = _filterSMBConnections(connections);
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return const NipaplayLargeScreenEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '没有匹配的 SMB 服务器',
+        subtitle: '换个关键词再试试',
+      );
+    }
+    final selectedConnection = filteredConnections.firstWhere(
+      (connection) => connection.name == _largeScreenSelectedSMBConnectionName,
+      orElse: () => filteredConnections.first,
+    );
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 390,
+          child: ListView.separated(
+            controller: _smbScrollController,
+            padding: const EdgeInsets.only(bottom: 96),
+            itemCount: filteredConnections.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final connection = filteredConnections[index];
+              return _buildLargeScreenSMBConnectionCard(
+                connection,
+                selected: connection.name == selectedConnection.name,
+                autofocus: index == 0,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+            child: _buildLargeScreenSMBConnectionDetail(selectedConnection)),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSMBConnectionCard(
+    SMBConnection connection, {
+    required bool selected,
+    required bool autofocus,
+  }) {
+    final hostLabel = connection.port != 445
+        ? '${connection.host}:${connection.port}'
+        : connection.host;
+    return _buildLargeScreenRemoteConnectionCard(
+      icon: Icons.lan_outlined,
+      title: connection.name,
+      subtitle: hostLabel,
+      connected: connection.isConnected,
+      selected: selected,
+      autofocus: autofocus,
+      onActivate: () => _selectLargeScreenSMBConnection(connection),
+      actions: [
+        NipaplayLargeScreenIconButton(
+          icon: Icons.edit_rounded,
+          tooltip: '编辑连接',
+          onPressed: () => _showSMBConnectionDialog(editConnection: connection),
+        ),
+        const SizedBox(width: 8),
+        NipaplayLargeScreenIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: '刷新连接',
+          onPressed: () => _refreshSMBConnection(connection),
+        ),
+        const SizedBox(width: 8),
+        NipaplayLargeScreenIconButton(
+          icon: Icons.delete_outline_rounded,
+          tooltip: '删除连接',
+          onPressed: () => _removeSMBConnection(connection),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenSMBConnectionDetail(SMBConnection connection) {
+    final key = '${connection.name}:/';
+    final isLoading = _loadingSMBFolders.contains(key);
+    final hostLabel = connection.port != 445
+        ? '${connection.host}:${connection.port}'
+        : connection.host;
+    if (!isLoading && !_smbFolderContents.containsKey(connection.name)) {
+      Future.microtask(() => _loadSMBFolderChildren(connection, '/'));
+    }
+    return NipaplayLargeScreenPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: connection.name,
+            subtitle: hostLabel,
+            trailing: NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '刷新',
+              onPressed: () => _refreshSMBConnection(connection),
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: isLoading
+                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    children: _buildSMBFileNodes(connection, '/', 1),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenRemoteConnectionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool connected,
+    required bool selected,
+    required bool autofocus,
+    required VoidCallback onActivate,
+    required List<Widget> actions,
+  }) {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    return NipaplayLargeScreenFocusableAction(
+      autofocus: autofocus,
+      onActivate: onActivate,
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.all(14),
+      focusScale: 1.025,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.22)
+            : Colors.white.withValues(alpha: 0.075),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: selected ? _accentColor : null, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildLargeScreenConnectionBadge(connected),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.58),
+              fontSize: 12,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(children: actions),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenConnectionBadge(bool connected) {
+    final color = connected ? Colors.lightGreenAccent : Colors.orangeAccent;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          connected ? '已连接' : '未连接',
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectLargeScreenLocalFolder(String folderPath) {
+    setState(() {
+      _largeScreenSelectedLocalFolder = folderPath;
+    });
+    if (_expandedFolderContents[folderPath] == null &&
+        !_loadingFolders.contains(folderPath)) {
+      _loadFolderChildren(folderPath);
+    }
+  }
+
+  void _selectLargeScreenWebDAVConnection(WebDAVConnection connection) {
+    setState(() {
+      _largeScreenSelectedWebDAVConnectionName = connection.name;
+    });
+    if (_webdavFolderContents[connection.name] == null &&
+        !_loadingWebDAVFolders.contains('${connection.name}:/')) {
+      _loadWebDAVFolderChildren(connection, '/');
+    }
+  }
+
+  void _selectLargeScreenSMBConnection(SMBConnection connection) {
+    setState(() {
+      _largeScreenSelectedSMBConnectionName = connection.name;
+    });
+    if (_smbFolderContents[connection.name] == null &&
+        !_loadingSMBFolders.contains('${connection.name}:/')) {
+      _loadSMBFolderChildren(connection, '/');
+    }
+  }
+
+  Future<void> _confirmLargeScreenScanFolder(
+    ScanService scanService,
+    String folderPath,
+  ) async {
+    if (scanService.isScanning) {
+      BlurSnackBar.show(context, '已有扫描任务在进行中。');
+      return;
+    }
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '扫描文件夹',
+      content: '将对 "${p.basename(folderPath)}" 进行智能扫描，检测新增、删除和修改的视频文件。',
+      actions: <Widget>[
+        HoverScaleTextButton(
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        HoverScaleTextButton(
+          child: const Text('扫描',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.lightBlueAccent)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    if (confirm == true) {
+      await scanService.startDirectoryScan(
+        folderPath,
+        skipPreviouslyMatchedUnwatched: false,
+      );
+      if (mounted) {
+        BlurSnackBar.show(context, '已开始智能扫描: ${p.basename(folderPath)}');
+      }
+    }
+  }
+
+  Future<void> _confirmLargeScreenRescanAll(ScanService scanService) async {
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '智能刷新',
+      content: '将重新检查所有已添加的媒体文件夹，只扫描有内容变化的文件夹。',
+      actions: <Widget>[
+        HoverScaleTextButton(
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        HoverScaleTextButton(
+          child: const Text('智能刷新',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.lightBlueAccent)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    if (confirm == true) {
+      await scanService.rescanAllFolders();
+    }
+  }
+
+  Future<void> _cleanupLargeScreenMissingSources({
+    required ScanService? scanService,
+    required bool isRemoteMode,
+  }) async {
+    if (isRemoteMode) {
+      final provider = context.read<SharedRemoteLibraryProvider>();
+      final removedCount = await provider.cleanupMissingRemoteFolders();
+      if (!mounted) return;
+      final error = provider.managementErrorMessage;
+      if (error != null && error.isNotEmpty) {
+        BlurSnackBar.show(context, error);
+        return;
+      }
+      BlurSnackBar.show(
+        context,
+        removedCount > 0 ? '已清理 $removedCount 个不存在的文件夹' : '没有需要清理的不存在文件夹',
+      );
+      return;
+    }
+
+    if (scanService == null) return;
+    final removedCount = await scanService.cleanupMissingScannedFolders();
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      removedCount > 0 ? '已清理 $removedCount 个不存在的文件夹' : '没有需要清理的不存在文件夹',
     );
   }
 
@@ -3211,7 +4210,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                             tooltip: '自定义媒体信息',
                             onPressed: () async {
                               // 显示自定义媒体信息对话框
-                              final result = await CustomMediaInfoDialog.show(
+                              await CustomMediaInfoDialog.show(
                                 context,
                                 p.dirname(fileUrl!),
                                 initialVideoPath: fileUrl!,
@@ -3419,7 +4418,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                             final fileUrl = SMBProxyService.instance
                                 .buildStreamUrl(connection, file.path);
                             // 显示自定义媒体信息对话框
-                            final result = await CustomMediaInfoDialog.show(
+                            await CustomMediaInfoDialog.show(
                               context,
                               p.dirname(file.path),
                               initialVideoPath: fileUrl,
@@ -3554,10 +4553,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: preserveProgress
-              ? existingHistory!.watchProgress
+              ? existingHistory.watchProgress
               : (existingHistory?.watchProgress ?? 0.0),
           lastPosition: preserveProgress
-              ? existingHistory!.lastPosition
+              ? existingHistory.lastPosition
               : (existingHistory?.lastPosition ?? 0),
           duration: durationFromMatch,
           lastWatchTime: DateTime.now(),

@@ -2,23 +2,27 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-const double kNipaplayLargeScreenBottomHintHeight = 40;
+const double kNipaplayLargeScreenBottomHintHeight = 56;
 
 class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   const NipaplayLargeScreenBottomHintOverlay({
     super.key,
     required this.isDarkMode,
     required this.onToggleMenu,
-    this.onOpenSettings,
+    this.onOpenContext,
     this.menuLabel = '菜单',
-    this.settingsLabel = '设置',
+    this.contextLabel = '设置',
+    this.contextIcon = Icons.settings_rounded,
+    this.contextKey,
   });
 
   final bool isDarkMode;
   final VoidCallback onToggleMenu;
-  final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenContext;
   final String menuLabel;
-  final String settingsLabel;
+  final String contextLabel;
+  final IconData contextIcon;
+  final Key? contextKey;
 
   @override
   Widget build(BuildContext context) {
@@ -28,75 +32,82 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
         ? Colors.black.withValues(alpha: 0.18)
         : Colors.white.withValues(alpha: 0.14);
 
+    Widget buildAction({
+      required Widget icon,
+      required String label,
+      required VoidCallback onTap,
+      Key? key,
+    }) {
+      return InkWell(
+        key: key,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused) ||
+              states.contains(WidgetState.hovered)) {
+            return textColor.withValues(alpha: 0.08);
+          }
+          return Colors.transparent;
+        }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(width: 9),
+              Text(
+                label,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-            child: ColoredBox(
-              color: backgroundTint,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    InkWell(
-                      onTap: onToggleMenu,
-                      borderRadius: BorderRadius.zero,
-                      splashFactory: NoSplash.splashFactory,
-                      overlayColor: WidgetStateProperty.all(Colors.transparent),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.menu_rounded,
-                            size: 22,
-                            color: iconColor,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            menuLabel,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+          child: ColoredBox(
+            color: backgroundTint,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  buildAction(
+                    onTap: onToggleMenu,
+                    label: menuLabel,
+                    icon: Icon(
+                      Icons.menu_rounded,
+                      size: 24,
+                      color: iconColor,
+                    ),
+                  ),
+                  if (onOpenContext != null)
+                    buildAction(
+                      key: contextKey,
+                      onTap: onOpenContext!,
+                      label: contextLabel,
+                      icon: Icon(
+                        contextIcon,
+                        size: 24,
+                        color: iconColor,
                       ),
                     ),
-                    if (onOpenSettings != null)
-                      InkWell(
-                        onTap: onOpenSettings,
-                        borderRadius: BorderRadius.zero,
-                        splashFactory: NoSplash.splashFactory,
-                        overlayColor:
-                            WidgetStateProperty.all(Colors.transparent),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.settings_rounded,
-                              size: 22,
-                              color: iconColor,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              settingsLabel,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
+        ),
       ),
     );
   }

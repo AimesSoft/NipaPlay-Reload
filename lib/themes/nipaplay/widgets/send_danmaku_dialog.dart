@@ -1,12 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SendDanmakuDialogContent extends StatefulWidget {
@@ -35,6 +34,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   bool _isSending = false;
   bool _isSendButtonHovered = false;
   bool _isSendButtonPressed = false;
+  bool _isSendButtonFocused = false;
 
   final List<Color> _presetColors = DanmakuColorPresets.sendPresetColors;
 
@@ -229,24 +229,15 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                         borderColor = _darken(color);
                       }
                     }
-                    return GestureDetector(
-                      onTap: () {
+                    return _DanmakuColorSwatch(
+                      color: color,
+                      borderColor: borderColor,
+                      size: 32,
+                      onSelected: () {
                         setState(() {
                           selectedColor = color;
                         });
                       },
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: borderColor,
-                            width: 2,
-                          ),
-                        ),
-                      ),
                     );
                   }).toList(),
                 ),
@@ -327,44 +318,12 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: _isSending
-                      ? CircularProgressIndicator()
-                      : MouseRegion(
-                          onEnter: (_) =>
-                              setState(() => _isSendButtonHovered = true),
-                          onExit: (_) =>
-                              setState(() => _isSendButtonHovered = false),
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            onTapDown: (_) =>
-                                setState(() => _isSendButtonPressed = true),
-                            onTapUp: (_) =>
-                                setState(() => _isSendButtonPressed = false),
-                            onTapCancel: () =>
-                                setState(() => _isSendButtonPressed = false),
-                            onTap: _isSending ? null : _sendDanmaku,
-                            child: BounceHoverScale(
-                              isHovered: _isSendButtonHovered,
-                              isPressed: _isSendButtonPressed,
-                              child: Container(
-                                width: 120,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(25),
-                                  color: inputThemeColor,
-                                ),
-                                alignment: Alignment.center,
-                                child: const Text(
-                                  '发送',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                  child: _buildSendButton(
+                    width: 120,
+                    label: '发送',
+                    height: 50,
+                    color: inputThemeColor,
+                  ),
                 ),
               ],
             ),
@@ -539,36 +498,42 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     required double width,
     required String label,
     required double height,
+    Color? color,
   }) {
     if (_isSending) {
       return Center(child: CircularProgressIndicator());
     }
+    final isActive = _isSendButtonHovered || _isSendButtonFocused;
     return MouseRegion(
       onEnter: (_) => setState(() => _isSendButtonHovered = true),
       onExit: (_) => setState(() => _isSendButtonHovered = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _isSendButtonPressed = true),
-        onTapUp: (_) => setState(() => _isSendButtonPressed = false),
-        onTapCancel: () => setState(() => _isSendButtonPressed = false),
-        onTap: _isSending ? null : _sendDanmaku,
-        child: BounceHoverScale(
-          isHovered: _isSendButtonHovered,
-          isPressed: _isSendButtonPressed,
-          child: Container(
-            width: width,
-            height: height,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(height / 2),
-              color: AppAccentColors.current,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+      child: KeyboardActivatable(
+        onActivate: _sendDanmaku,
+        onFocusChange: (value) => setState(() => _isSendButtonFocused = value),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isSendButtonPressed = true),
+          onTapUp: (_) => setState(() => _isSendButtonPressed = false),
+          onTapCancel: () => setState(() => _isSendButtonPressed = false),
+          onTap: _sendDanmaku,
+          child: BounceHoverScale(
+            isHovered: isActive,
+            isPressed: _isSendButtonPressed,
+            child: Container(
+              width: width,
+              height: height,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(height / 2),
+                color: color ?? AppAccentColors.current,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -685,24 +650,15 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 borderColor = _darken(color);
               }
             }
-            return GestureDetector(
-              onTap: () {
+            return _DanmakuColorSwatch(
+              color: color,
+              borderColor: borderColor,
+              size: 28,
+              onSelected: () {
                 setState(() {
                   selectedColor = color;
                 });
               },
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: borderColor,
-                    width: 2,
-                  ),
-                ),
-              ),
             );
           }).toList(),
         ),
@@ -722,6 +678,72 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DanmakuColorSwatch extends StatefulWidget {
+  final Color color;
+  final Color borderColor;
+  final double size;
+  final VoidCallback onSelected;
+
+  const _DanmakuColorSwatch({
+    required this.color,
+    required this.borderColor,
+    required this.size,
+    required this.onSelected,
+  });
+
+  @override
+  State<_DanmakuColorSwatch> createState() => _DanmakuColorSwatchState();
+}
+
+class _DanmakuColorSwatchState extends State<_DanmakuColorSwatch> {
+  bool _isHovered = false;
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = _isHovered || _isFocused;
+
+    return KeyboardActivatable(
+      onActivate: widget.onSelected,
+      onFocusChange: (value) => setState(() => _isFocused = value),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onSelected,
+          child: AnimatedScale(
+            scale: isActive ? 1.15 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              width: widget.size,
+              height: widget.size,
+              decoration: BoxDecoration(
+                color: widget.color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isActive ? Colors.white : widget.borderColor,
+                  width: isActive ? 3 : 2,
+                ),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -48,6 +48,7 @@ class BlurButton extends StatefulWidget {
 
 class _BlurButtonState extends State<BlurButton> {
   bool _isHovered = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +69,7 @@ class _BlurButtonState extends State<BlurButton> {
     final hoverForegroundColor = widget.hoverForegroundColor ??
         (widget.flatStyle || useThemeStyle ? _nipaAccentColor : Colors.white);
     final effectiveForegroundColor =
-        _isHovered ? hoverForegroundColor : baseForegroundColor;
+        (_isHovered || _isFocused) ? hoverForegroundColor : baseForegroundColor;
 
     Widget buttonContent = MouseRegion(
       onEnter: (_) {
@@ -114,7 +115,9 @@ class _BlurButtonState extends State<BlurButton> {
       style: DefaultTextStyle.of(context).style.copyWith(
             color: effectiveForegroundColor,
             fontSize: widget.fontSize,
-            fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
+            fontWeight: (_isHovered || _isFocused)
+                ? FontWeight.w500
+                : FontWeight.normal,
           ),
       child: Text(widget.text),
     );
@@ -129,7 +132,9 @@ class _BlurButtonState extends State<BlurButton> {
         if (widget.icon != null) ...[
           Icon(
             widget.icon,
-            size: _isHovered ? widget.iconSize + 1 : widget.iconSize,
+            size: (_isHovered || _isFocused)
+                ? widget.iconSize + 1
+                : widget.iconSize,
             color: effectiveForegroundColor,
           ),
           SizedBox(width: 4),
@@ -142,6 +147,12 @@ class _BlurButtonState extends State<BlurButton> {
       type: MaterialType.transparency,
       child: InkWell(
         onTap: widget.onTap,
+        onFocusChange: (focused) {
+          if (_isFocused == focused) return;
+          setState(() {
+            _isFocused = focused;
+          });
+        },
         borderRadius: borderRadius,
         overlayColor: WidgetStateProperty.all(Colors.transparent),
         splashColor: Colors.transparent,
@@ -151,7 +162,7 @@ class _BlurButtonState extends State<BlurButton> {
         child: Padding(
           padding: widget.padding,
           child: AnimatedScale(
-            scale: _isHovered ? widget.hoverScale : 1.0,
+            scale: (_isHovered || _isFocused) ? widget.hoverScale : 1.0,
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             child: row,
@@ -174,24 +185,24 @@ class _BlurButtonState extends State<BlurButton> {
       decoration: BoxDecoration(
         color: useThemeStyle
             ? Colors.transparent
-            : (_isHovered
+            : ((_isHovered || _isFocused)
                 ? Colors.white.withOpacity(0.4)
                 : Colors.white.withOpacity(0.18)),
         borderRadius: borderRadius,
         border: Border.all(
           color: useThemeStyle
-              ? (_isHovered
+              ? ((_isHovered || _isFocused)
                   ? _nipaAccentColor.withValues(alpha: 0.80)
                   : Theme.of(context)
                       .colorScheme
                       .outline
                       .withValues(alpha: 0.35))
-              : (_isHovered
+              : ((_isHovered || _isFocused)
                   ? Colors.white.withOpacity(0.7)
                   : Colors.white.withOpacity(0.25)),
-          width: _isHovered ? 1.0 : 0.5,
+          width: (_isHovered || _isFocused) ? 1.0 : 0.5,
         ),
-        boxShadow: _isHovered
+        boxShadow: (_isHovered || _isFocused)
             ? [
                 BoxShadow(
                   color: useThemeStyle

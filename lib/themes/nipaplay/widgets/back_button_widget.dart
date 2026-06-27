@@ -5,6 +5,7 @@ import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'blur_snackbar.dart';
 import 'control_shadow.dart';
+import 'keyboard_activatable.dart';
 
 class BackButtonWidget extends StatefulWidget {
   final VideoPlayerState videoState;
@@ -23,6 +24,7 @@ class BackButtonWidget extends StatefulWidget {
 class _BackButtonWidgetState extends State<BackButtonWidget> {
   bool _isBackButtonPressed = false;
   bool _isHovered = false;
+  bool _isFocused = false;
 
   void _setHovered(bool value) {
     if (_isHovered == value) {
@@ -31,11 +33,42 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
     setState(() => _isHovered = value);
   }
 
+  void _setFocused(bool value) {
+    if (_isFocused == value) {
+      return;
+    }
+    setState(() => _isFocused = value);
+  }
+
+  Future<void> _handleBackAction() async {
+    if (mounted) {
+      setState(() => _isBackButtonPressed = false);
+    }
+    try {
+      // 先调用handleBackButton处理截图
+      final shouldExit = await widget.videoState.handleBackButton();
+      if (widget.onExit != null) {
+        if (!shouldExit) return;
+        await widget.videoState.resetPlayer();
+        await widget.onExit!();
+        return;
+      }
+      // 然后重置播放器状态
+      await widget.videoState.resetPlayer();
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '重置播放器时出错: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!(widget.videoState.hasVideo && !(globals.isDesktop && widget.videoState.isFullscreen))) {
+    if (!(widget.videoState.hasVideo &&
+        !(globals.isDesktop && widget.videoState.isFullscreen))) {
       return const SizedBox.shrink();
     }
+    final isActive = _isHovered || _isFocused;
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 200),
@@ -56,36 +89,26 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
             text: '返回',
             showOnRight: false,
             verticalOffset: 8,
-            child: GestureDetector(
-              onTapDown: (_) => setState(() => _isBackButtonPressed = true),
-              onTapUp: (_) async {
-                setState(() => _isBackButtonPressed = false);
-                try {
-                  // 先调用handleBackButton处理截图
-                  final shouldExit = await widget.videoState.handleBackButton();
-                  if (widget.onExit != null) {
-                    if (!shouldExit) return;
-                    await widget.videoState.resetPlayer();
-                    await widget.onExit!();
-                    return;
-                  }
-                  // 然后重置播放器状态
-                  await widget.videoState.resetPlayer();
-                } catch (e) {
-                  if (mounted) {
-                    BlurSnackBar.show(context, '重置播放器时出错: $e');
-                  }
-                }
+            child: KeyboardActivatable(
+              onActivate: () {
+                _handleBackAction();
               },
-              onTapCancel: () => setState(() => _isBackButtonPressed = false),
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 120),
-                scale: _isBackButtonPressed ? 0.9 : (_isHovered ? 1.1 : 1.0),
-                child: ControlIconShadow(
-                  child: const Icon(
-                    Ionicons.chevron_back_outline,
-                    color: Colors.white,
-                    size: 28,
+              onFocusChange: _setFocused,
+              child: GestureDetector(
+                onTapDown: (_) => setState(() => _isBackButtonPressed = true),
+                onTapUp: (_) {
+                  _handleBackAction();
+                },
+                onTapCancel: () => setState(() => _isBackButtonPressed = false),
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 120),
+                  scale: _isBackButtonPressed ? 0.9 : (isActive ? 1.1 : 1.0),
+                  child: ControlIconShadow(
+                    child: const Icon(
+                      Ionicons.chevron_back_outline,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
                 ),
               ),
@@ -95,4 +118,4 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
       ),
     );
   }
-} 
+}

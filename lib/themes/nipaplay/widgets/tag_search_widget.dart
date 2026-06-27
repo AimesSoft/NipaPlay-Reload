@@ -20,6 +20,7 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -176,6 +177,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
   final SearchService _searchService = SearchService.instance;
   _TagSearchMode _lastSearchMode = _TagSearchMode.none;
   bool _isAddTagHovered = false;
+  bool _isAddTagFocused = false;
 
   // 文本标签搜索相关
   final TextEditingController _textTagController = TextEditingController();
@@ -803,47 +805,51 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 spacing: 8,
                 runSpacing: 8,
                 children: widget.preselectedTags!
-                    .map((tag) => GestureDetector(
-                          onTap: () {
-                            // 从当前标签添加到已添加标签
-                            if (!_textTags.contains(tag)) {
-                              setState(() {
-                                _textTags.add(tag);
-                              });
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _textTags.contains(tag)
-                                  ? style.chipSelectedColor
-                                  : style.chipColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: style.chipBorderColor,
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_textTags.contains(tag))
-                                  Icon(
-                                    Ionicons.checkmark_circle,
-                                    color: style.accentColor,
-                                    size: 14,
-                                  ),
-                                if (_textTags.contains(tag))
-                                  SizedBox(width: 4),
-                                Text(
-                                  tag,
-                                  style: TextStyle(
-                                    color: style.textPrimary,
-                                    fontSize: 12,
-                                  ),
+                    .map((tag) => Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              // 从当前标签添加到已添加标签
+                              if (!_textTags.contains(tag)) {
+                                setState(() {
+                                  _textTags.add(tag);
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _textTags.contains(tag)
+                                    ? style.chipSelectedColor
+                                    : style.chipColor,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: style.chipBorderColor,
+                                  width: 1,
                                 ),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_textTags.contains(tag))
+                                    Icon(
+                                      Ionicons.checkmark_circle,
+                                      color: style.accentColor,
+                                      size: 14,
+                                    ),
+                                  if (_textTags.contains(tag))
+                                    SizedBox(width: 4),
+                                  Text(
+                                    tag,
+                                    style: TextStyle(
+                                      color: style.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ))
@@ -909,19 +915,25 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   onEnter: (_) => setState(() => _isAddTagHovered = true),
                   onExit: (_) => setState(() => _isAddTagHovered = false),
                   cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: _addTextTag,
-                    behavior: HitTestBehavior.opaque,
+                  child: KeyboardActivatable(
+                    onActivate: _addTextTag,
+                    onFocusChange: (value) =>
+                        setState(() => _isAddTagFocused = value),
                     child: AnimatedScale(
-                      scale: _isAddTagHovered ? 1.15 : 1.0,
+                      scale:
+                          (_isAddTagHovered || _isAddTagFocused) ? 1.15 : 1.0,
                       duration: const Duration(milliseconds: 150),
                       curve: Curves.easeOut,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(
-                          Ionicons.add_circle,
-                          color: style.accentColor,
-                          size: 22,
+                      child: GestureDetector(
+                        onTap: _addTextTag,
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Icon(
+                            Ionicons.add_circle,
+                            color: style.accentColor,
+                            size: 22,
+                          ),
                         ),
                       ),
                     ),
@@ -940,42 +952,52 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 spacing: 8,
                 runSpacing: 8,
                 children: _textTags
-                    .map((tag) => GestureDetector(
-                          onTap: () {
-                            // 点击标签填充到输入框
-                            _textTagController.text = tag;
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: style.chipColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: style.chipBorderColor,
-                                width: 1,
+                    .map((tag) => Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              // 点击标签填充到输入框
+                              _textTagController.text = tag;
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: style.chipColor,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: style.chipBorderColor,
+                                  width: 1,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  tag,
-                                  style: TextStyle(
-                                    color: style.textPrimary,
-                                    fontSize: 12,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    tag,
+                                    style: TextStyle(
+                                      color: style.textPrimary,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                                SizedBox(width: 6),
-                                GestureDetector(
-                                  onTap: () => _removeTextTag(tag),
-                                  child: Icon(
-                                    Ionicons.close,
-                                    color: style.textSecondary,
-                                    size: 16,
+                                  SizedBox(width: 6),
+                                  IconButton(
+                                    tooltip: '移除标签',
+                                    onPressed: () => _removeTextTag(tag),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 20,
+                                      minHeight: 20,
+                                    ),
+                                    iconSize: 16,
+                                    icon: Icon(
+                                      Ionicons.close,
+                                      color: style.textSecondary,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ))

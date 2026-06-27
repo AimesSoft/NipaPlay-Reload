@@ -333,16 +333,19 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                           ),
                           // 删除按钮（本地轨道才显示）
                           if (source == 'local')
-                            GestureDetector(
-                              onTap: () =>
+                            IconButton(
+                              tooltip: '删除弹幕轨道',
+                              onPressed: () =>
                                   videoState.removeDanmakuTrack(trackId),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  Icons.delete_outline,
-                                  color: menuColors.secondaryForeground,
-                                  size: 18,
-                                ),
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              iconSize: 18,
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: menuColors.secondaryForeground,
                               ),
                             ),
                         ],

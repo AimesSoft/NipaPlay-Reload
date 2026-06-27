@@ -14,6 +14,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -136,44 +139,55 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           children: [
             // 显示错误信息（如果有的话）
             if (hasJellyfinError || hasEmbyError || hasDandanError) ...[
-              _buildErrorCard(
-                jellyfinProvider,
-                embyProvider,
-                dandanProvider,
-                hasDandanError,
+              _buildRemoteSectionCard(
+                _buildErrorCard(
+                  jellyfinProvider,
+                  embyProvider,
+                  dandanProvider,
+                  hasDandanError,
+                ),
               ),
               SizedBox(height: 20),
             ],
 
             // Jellyfin服务器配置部分
-            _buildJellyfinSection(jellyfinProvider),
+            _buildRemoteSectionCard(_buildJellyfinSection(jellyfinProvider)),
 
             SizedBox(height: 20),
 
             // Emby服务器配置部分
-            _buildEmbySection(embyProvider),
+            _buildRemoteSectionCard(_buildEmbySection(embyProvider)),
 
             SizedBox(height: 20),
 
             // 弹弹play 远程服务
-            _buildDandanplaySection(dandanProvider),
+            _buildRemoteSectionCard(_buildDandanplaySection(dandanProvider)),
 
             SizedBox(height: 20),
 
-            const SharedRemoteLibrarySettingsSection(),
+            _buildRemoteSectionCard(
+              const SharedRemoteLibrarySettingsSection(),
+            ),
 
             SizedBox(height: 20),
 
             // 其他远程媒体库服务 (预留)
-            _buildOtherServicesSection(),
+            _buildRemoteSectionCard(_buildOtherServicesSection()),
 
             SizedBox(height: 20),
 
             // 设备标识（Jellyfin/Emby）
-            _buildDeviceIdSection(),
+            _buildRemoteSectionCard(_buildDeviceIdSection()),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildRemoteSectionCard(Widget child) {
+    return SettingsCard(
+      margin: EdgeInsets.zero,
+      child: child,
     );
   }
 
@@ -1489,6 +1503,50 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
     required String label,
     bool isDestructive = false,
   }) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      final colorScheme = Theme.of(context).colorScheme;
+      final bool isDisabled = onPressed == null;
+      final Color enabledColor =
+          isDestructive ? colorScheme.error : colorScheme.onSurface;
+      final Color contentColor =
+          isDisabled ? colorScheme.onSurface.withOpacity(0.42) : enabledColor;
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        focusScale: 1.018,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        style: NipaplayLargeScreenFocusableStyle(
+          idleBackgroundDark: isDestructive
+              ? colorScheme.error.withOpacity(isDisabled ? 0.06 : 0.14)
+              : Colors.white.withOpacity(isDisabled ? 0.045 : 0.10),
+          idleBackgroundLight: isDestructive
+              ? colorScheme.error.withOpacity(isDisabled ? 0.05 : 0.10)
+              : Colors.white.withOpacity(isDisabled ? 0.58 : 0.82),
+          contentColorDark: contentColor,
+          contentColorLight: contentColor,
+          focusStrokeColor: isDestructive ? colorScheme.error : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     bool isHovered = false;
     return StatefulBuilder(
       builder: (context, setState) {

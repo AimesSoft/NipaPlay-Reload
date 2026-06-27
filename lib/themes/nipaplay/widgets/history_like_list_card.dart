@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 
 class HistoryLikeListCard extends StatelessWidget {
   final Widget child;
@@ -19,10 +21,31 @@ class HistoryLikeListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor =
-        isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
-    final borderColor =
-        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
+    final backgroundColor = isDark
+        ? Colors.white.withOpacity(0.05)
+        : Colors.black.withOpacity(0.03);
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.08)
+        : Colors.black.withOpacity(0.08);
+    final isLargeScreenModeActive =
+        NipaplayLargeScreenModeScope.isActiveOf(context);
+
+    if (isLargeScreenModeActive) {
+      return Container(
+        margin: margin,
+        child: NipaplayLargeScreenFocusableAction(
+          onActivate: onTap,
+          borderRadius: borderRadius,
+          focusScale: 1.012,
+          padding: padding,
+          style: NipaplayLargeScreenFocusableStyle(
+            idleBackgroundDark: backgroundColor,
+            idleBackgroundLight: backgroundColor,
+          ),
+          child: child,
+        ),
+      );
+    }
 
     return Container(
       margin: margin,

@@ -7,6 +7,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -334,23 +336,552 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
     return fluent.FluentTheme(
       data: _buildFluentThemeData(context),
-      child: fluent.ScaffoldPage(
-        padding: EdgeInsets.zero,
-        content: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _buildDandanplayPage()),
-              Container(
-                width: 1,
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                color: colorScheme.onSurface.withOpacity(0.12),
+      child: NipaplayLargeScreenModeScope.isActiveOf(context)
+          ? _buildLargeScreenAccountPage(colorScheme)
+          : fluent.ScaffoldPage(
+              padding: EdgeInsets.zero,
+              content: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _buildDandanplayPage()),
+                    Container(
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      color: colorScheme.onSurface.withOpacity(0.12),
+                    ),
+                    Expanded(child: _buildBangumiPage()),
+                  ],
+                ),
               ),
-              Expanded(child: _buildBangumiPage()),
+            ),
+    );
+  }
+
+  Widget _buildLargeScreenAccountPage(ColorScheme colorScheme) {
+    final loginState = isLoggedIn ? '已登录 $username' : '未登录弹弹play账号';
+    final bangumiState = isBangumiLoggedIn ? 'Bangumi 已连接' : 'Bangumi 未连接';
+    return NipaplayLargeScreenPageScaffold(
+      title: '账号',
+      subtitle: '$loginState / $bangumiState',
+      actions: [
+        if (!isLoggedIn)
+          NipaplayLargeScreenActionButton(
+            icon: fluent.FluentIcons.signin,
+            label: '登录',
+            onPressed: showLoginDialog,
+          )
+        else
+          NipaplayLargeScreenActionButton(
+            icon: fluent.FluentIcons.sign_out,
+            label: '退出',
+            onPressed: performLogout,
+          ),
+        NipaplayLargeScreenActionButton(
+          icon: fluent.FluentIcons.sync,
+          label: '同步 Bangumi',
+          onPressed: isBangumiLoggedIn && !isBangumiSyncing
+              ? () => performBangumiSync(forceFullSync: false)
+              : null,
+        ),
+      ],
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: NipaplayLargeScreenPanel(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  NipaplayLargeScreenSectionHeader(
+                    title: '弹弹play账号',
+                    subtitle: isLoggedIn ? username : '登录后同步观看记录和个人设置',
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(child: _buildLargeScreenDandanplayContent()),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: NipaplayLargeScreenPanel(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  NipaplayLargeScreenSectionHeader(
+                    title: 'Bangumi同步',
+                    subtitle: isBangumiLoggedIn
+                        ? '可同步收藏、评分与评价'
+                        : '连接 Bangumi 访问令牌后启用',
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(child: _buildLargeScreenBangumiContent()),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLargeScreenDandanplayContent() {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+
+    if (!isLoggedIn) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                '未登录弹弹play账号',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '登录后可以同步观看记录、使用弹弹play内置 Bangumi 绑定和账号活动记录。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.62),
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  NipaplayLargeScreenActionButton(
+                    icon: fluent.FluentIcons.signin,
+                    label: '登录',
+                    onPressed: showLoginDialog,
+                    autofocus: true,
+                  ),
+                  const SizedBox(width: 12),
+                  NipaplayLargeScreenActionButton(
+                    icon: fluent.FluentIcons.add_friend,
+                    label: '注册',
+                    onPressed: showRegisterDialog,
+                  ),
+                ],
+              ),
             ],
           ),
         ),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            avatarUrl != null
+                ? ClipOval(
+                    child: Image.network(
+                      avatarUrl!,
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(
+                          fluent.FluentIcons.contact,
+                          size: 58,
+                          color: textColor.withValues(alpha: 0.58),
+                        );
+                      },
+                    ),
+                  )
+                : Icon(
+                    fluent.FluentIcons.contact,
+                    size: 58,
+                    color: textColor.withValues(alpha: 0.58),
+                  ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '弹弹play账号已登录',
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.60),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.sign_out,
+              label: '退出',
+              onPressed: performLogout,
+            ),
+            const SizedBox(width: 10),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.delete,
+              label: isLoading ? '处理中' : '注销账号',
+              onPressed: isLoading ? null : startDeleteAccount,
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Expanded(
+          child: MaterialUserActivity(key: ValueKey(username)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenBangumiContent() {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 80),
+      children: [
+        _buildLargeScreenDandanplayBangumiSection(),
+        const SizedBox(height: 24),
+        _buildLargeScreenNipaBangumiSection(),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenDandanplayBangumiSection() {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+    final linked = dandanLinkedBangumiInfo;
+    final expiresAt = dandanLinkedBangumiExpireTime;
+    final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
+    final displayRaw = linked?['display']?.toString();
+    final displayName = (displayRaw != null && displayRaw.trim().isNotEmpty)
+        ? displayRaw.trim()
+        : linked?['userName']?.toString();
+    final userId = linked?['userId']?.toString();
+
+    String statusText;
+    if (!isLoggedIn) {
+      statusText = '请先登录弹弹play账号后再绑定。';
+    } else if (linked == null) {
+      statusText = '当前未绑定 Bangumi 账号。';
+    } else {
+      final label = (displayName == null || displayName.isEmpty)
+          ? 'Bangumi用户'
+          : displayName;
+      statusText = userId == null || userId.isEmpty
+          ? '已绑定：$label'
+          : '已绑定：$label（ID: $userId）';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        NipaplayLargeScreenSectionHeader(
+          title: '弹弹play内置绑定',
+          subtitle: '由弹弹play服务器自动同步进度',
+          trailing: NipaplayLargeScreenIconButton(
+            icon: Icons.help_outline_rounded,
+            tooltip: '查看说明',
+            onPressed: () =>
+                _showBangumiSyncHelpDialog(_BangumiSyncHelpService.dandanplay),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          statusText,
+          style: TextStyle(
+            color: isExpired ? Colors.orangeAccent : textColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        if (expiresAt != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            '授权过期时间：${_formatAbsoluteDateTime(expiresAt)}',
+            style: TextStyle(
+              color: isExpired
+                  ? Colors.orangeAccent
+                  : textColor.withValues(alpha: 0.62),
+              fontSize: 13,
+            ),
+          ),
+        ],
+        if (isExpired) ...[
+          const SizedBox(height: 6),
+          const Text(
+            '授权已过期或续期失败，请重新授权。',
+            style: TextStyle(
+              color: Colors.orangeAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.link,
+              label: isRequestingDandanBangumiAuth
+                  ? '获取授权中'
+                  : (linked == null ? '绑定 Bangumi' : '重新授权'),
+              onPressed: (!isLoggedIn || isRequestingDandanBangumiAuth)
+                  ? null
+                  : _startDandanBangumiAuthorize,
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.settings,
+              label: linked == null ? '管理设置' : '管理同步',
+              onPressed: (!isLoggedIn ||
+                      linked == null ||
+                      isRequestingDandanBangumiAuth)
+                  ? null
+                  : _openDandanBangumiManagePage,
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.sync,
+              label: '刷新状态',
+              onPressed: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenNipaBangumiSection() {
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF151820);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        NipaplayLargeScreenSectionHeader(
+          title: 'NipaPlay Bangumi同步',
+          subtitle: '支持收藏、评分与评价',
+          trailing: NipaplayLargeScreenIconButton(
+            icon: Icons.help_outline_rounded,
+            tooltip: '查看说明',
+            onPressed: () =>
+                _showBangumiSyncHelpDialog(_BangumiSyncHelpService.nipaplay),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (isBangumiLoggedIn)
+          _buildLargeScreenBangumiLoggedIn(textColor)
+        else
+          _buildLargeScreenBangumiLoggedOut(textColor),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenBangumiLoggedIn(Color textColor) {
+    final displayName = bangumiUserInfo?['nickname'] ??
+        bangumiUserInfo?['username'] ??
+        'Bangumi';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                color: Colors.lightGreenAccent, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '已连接到 $displayName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (lastBangumiSyncTime != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            '上次同步: ${_formatDateTime(lastBangumiSyncTime!)}',
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.62),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+        if (isBangumiSyncing) ...[
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  color: _accentColor,
+                  strokeWidth: 2,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  bangumiSyncStatus,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: textColor, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.sync,
+              label: '同步',
+              onPressed: isBangumiSyncing
+                  ? null
+                  : () => performBangumiSync(forceFullSync: false),
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.sync_folder,
+              label: '全量同步',
+              onPressed: isBangumiSyncing
+                  ? null
+                  : () => performBangumiSync(forceFullSync: true),
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.wifi,
+              label: '验证令牌',
+              onPressed: isLoading ? null : testBangumiConnection,
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.clear,
+              label: '清缓存',
+              onPressed: clearBangumiSyncCache,
+            ),
+            NipaplayLargeScreenActionButton(
+              icon: fluent.FluentIcons.sign_out,
+              label: '删除令牌',
+              onPressed: clearBangumiToken,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenBangumiLoggedOut(Color textColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '同步本地观看历史到 Bangumi 收藏前，需要先创建并保存访问令牌。',
+          style: TextStyle(
+            color: textColor.withValues(alpha: 0.70),
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 14),
+        NipaplayLargeScreenActionButton(
+          icon: fluent.FluentIcons.link,
+          label: '打开访问令牌页面',
+          onPressed: () async {
+            const url = 'https://next.bgm.tv/demo/access-token';
+            await _openExternalUrl(url, cannotOpenMessage: '无法打开链接');
+          },
+        ),
+        const SizedBox(height: 8),
+        SelectableText(
+          'https://next.bgm.tv/demo/access-token',
+          style: TextStyle(
+            color: textColor.withValues(alpha: 0.62),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildLargeScreenPasswordInput(
+          controller: bangumiTokenController,
+          hintText: '请输入 Bangumi 访问令牌',
+        ),
+        const SizedBox(height: 14),
+        NipaplayLargeScreenActionButton(
+          icon: fluent.FluentIcons.save,
+          label: '保存令牌',
+          onPressed: isLoading ? null : saveBangumiToken,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLargeScreenPasswordInput({
+    required TextEditingController controller,
+    required String hintText,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF171923);
+    return TextField(
+      controller: controller,
+      obscureText: true,
+      style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: textColor.withValues(alpha: 0.48)),
+        prefixIcon: Icon(
+          Icons.key_rounded,
+          color: textColor.withValues(alpha: 0.58),
+        ),
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.09)
+            : Colors.white.withValues(alpha: 0.82),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: textColor.withValues(alpha: 0.10)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: textColor.withValues(alpha: 0.10)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: _accentColor, width: 2),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

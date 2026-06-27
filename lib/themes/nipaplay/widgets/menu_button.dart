@@ -1,5 +1,6 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
+import 'keyboard_activatable.dart';
 
 class WindowControlButtons extends StatelessWidget {
   static const double buttonWidth = 46;
@@ -80,6 +81,7 @@ class _WindowControlIconButton extends StatefulWidget {
 class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
   bool _isHovered = false;
   bool _isPressed = false;
+  bool _isFocused = false;
 
   void _setHovered(bool value) {
     if (_isHovered == value) {
@@ -87,6 +89,15 @@ class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
     }
     setState(() {
       _isHovered = value;
+    });
+  }
+
+  void _setFocused(bool value) {
+    if (_isFocused == value) {
+      return;
+    }
+    setState(() {
+      _isFocused = value;
     });
   }
 
@@ -99,12 +110,14 @@ class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
     final Color pressedBackground = isDarkMode
         ? Colors.white.withOpacity(0.18)
         : Colors.black.withOpacity(0.14);
-    final bool showActiveState = _isHovered || _isPressed;
+    final bool showActiveState = _isHovered || _isFocused || _isPressed;
     final Color backgroundColor = widget.isCloseButton && showActiveState
         ? (_isPressed ? const Color(0xFFC50F1F) : const Color(0xFFE81123))
         : (_isPressed
             ? pressedBackground
-            : (_isHovered ? hoverBackground : Colors.transparent));
+            : ((_isHovered || _isFocused)
+                ? hoverBackground
+                : Colors.transparent));
     final Color iconColor = widget.isCloseButton && showActiveState
         ? Colors.white
         : (isDarkMode ? Colors.white : Colors.black87);
@@ -128,20 +141,24 @@ class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
       child: MouseRegion(
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _isPressed = true),
-          onTapUp: (_) => setState(() => _isPressed = false),
-          onTapCancel: () => setState(() => _isPressed = false),
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            width: WindowControlButtons.buttonWidth,
-            height: WindowControlButtons.buttonHeight,
-            duration: const Duration(milliseconds: 90),
-            curve: Curves.easeOutCubic,
-            color: backgroundColor,
-            alignment: Alignment.center,
-            child: iconWidget,
+        child: KeyboardActivatable(
+          onActivate: widget.onPressed,
+          onFocusChange: _setFocused,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) => setState(() => _isPressed = true),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTapCancel: () => setState(() => _isPressed = false),
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              width: WindowControlButtons.buttonWidth,
+              height: WindowControlButtons.buttonHeight,
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOutCubic,
+              color: backgroundColor,
+              alignment: Alignment.center,
+              child: iconWidget,
+            ),
           ),
         ),
       ),
