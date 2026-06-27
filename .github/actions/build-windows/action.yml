@@ -27,6 +27,10 @@ runs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: UCRT64
+        # Operate on the runner's pre-installed C:\msys64 (the path Erika's xtask
+        # and the check below hard-code) instead of a fresh MSYS2 under RUNNER_TEMP,
+        # so the installed packages land in C:\msys64\usr\bin.
+        release: false
         update: false
         path-type: inherit
         install: >-
