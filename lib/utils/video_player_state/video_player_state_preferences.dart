@@ -2110,7 +2110,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
     try {
-      if (player.getPlayerKernelName() != 'Media Kit') {
+      final playerKernelName = player.getPlayerKernelName();
+      if (playerKernelName == 'Erika') {
+        player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
+        return;
+      }
+      if (playerKernelName != 'Media Kit') {
         return;
       }
       player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));

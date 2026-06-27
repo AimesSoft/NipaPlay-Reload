@@ -1,4 +1,3 @@
-import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
 
 class PlayerMenuDefinitionBuilder {
@@ -18,7 +17,7 @@ class PlayerMenuDefinitionBuilder {
         icon: PlayerMenuIconToken.subtitleSettings,
         title: '字幕设置',
         visibilityPredicate: (ctx) =>
-            ctx.kernelType == PlayerKernelType.mediaKit && ctx.hasVideo,
+            ctx.supportsSubtitleSettings && ctx.hasVideo,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.subtitleTracks,

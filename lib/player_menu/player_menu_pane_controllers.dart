@@ -149,11 +149,12 @@ class SeekStepPaneController extends PlayerMenuPaneController {
     double seconds, {
     bool preferFrameLabel = false,
     bool includeFrameApproximation = false,
-  }) => videoState.formatSeekStepLabel(
-    seconds,
-    preferFrameLabel: preferFrameLabel,
-    includeFrameApproximation: includeFrameApproximation,
-  );
+  }) =>
+      videoState.formatSeekStepLabel(
+        seconds,
+        preferFrameLabel: preferFrameLabel,
+        includeFrameApproximation: includeFrameApproximation,
+      );
 
   bool isSeekStepSelected(double seconds) =>
       (seekStepSeconds - seconds).abs() <
@@ -194,8 +195,17 @@ class SubtitleSettingsPaneController extends PlayerMenuPaneController {
 
   double get subtitleScale => videoState.subtitleScale;
 
+  bool get supportsFullSubtitleStyle =>
+      videoState.player.getPlayerKernelName() == 'Media Kit';
+
+  bool get supportsScaleOnlySubtitleStyle =>
+      videoState.player.getPlayerKernelName() == 'Erika';
+
   Future<void> setSubtitleScale(double scale) =>
       videoState.setSubtitleScale(scale);
+
+  Future<void> resetSubtitleScale() =>
+      setSubtitleScale(VideoPlayerState.defaultSubtitleScale);
 
   double get minScale => VideoPlayerState.minSubtitleScale;
 
@@ -205,15 +215,15 @@ class SubtitleSettingsPaneController extends PlayerMenuPaneController {
   PlayerMenuPaneId get paneId => PlayerMenuPaneId.subtitleSettings;
 }
 
-typedef PlayerMenuPaneControllerBuilder =
-    PlayerMenuPaneController Function(VideoPlayerState videoState);
+typedef PlayerMenuPaneControllerBuilder = PlayerMenuPaneController Function(
+    VideoPlayerState videoState);
 
 /// 注册已经完成逻辑解耦的 Pane，方便主题统一取用
 class PlayerMenuPaneControllerFactory {
   PlayerMenuPaneControllerFactory._();
 
   static final Map<PlayerMenuPaneId, PlayerMenuPaneControllerBuilder>
-  _builders = {
+      _builders = {
     PlayerMenuPaneId.playbackRate: (videoState) =>
         PlaybackRatePaneController(videoState: videoState),
     PlayerMenuPaneId.seekStep: (videoState) =>
