@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:media_kit/media_kit.dart';
@@ -111,6 +112,33 @@ final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
 final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
 
+void _installFrameTimingTrace() {
+  const enabled = bool.fromEnvironment('NIPAPLAY_FRAME_TIMING_TRACE');
+  if (!enabled) {
+    return;
+  }
+
+  var frameCount = 0;
+  SchedulerBinding.instance.addTimingsCallback((timings) {
+    for (final timing in timings) {
+      frameCount += 1;
+      final buildMs = timing.buildDuration.inMicroseconds / 1000.0;
+      final rasterMs = timing.rasterDuration.inMicroseconds / 1000.0;
+      final totalMs = timing.totalSpan.inMicroseconds / 1000.0;
+      final isSlowFrame = buildMs > 8.0 || rasterMs > 8.0 || totalMs > 16.7;
+      if (isSlowFrame || frameCount % 60 == 0) {
+        debugPrint(
+          '[nipa-frame-trace] frame=$frameCount '
+          'build_ms=${buildMs.toStringAsFixed(2)} '
+          'raster_ms=${rasterMs.toStringAsFixed(2)} '
+          'total_ms=${totalMs.toStringAsFixed(2)} '
+          'slow=$isSlowFrame',
+        );
+      }
+    }
+  });
+}
+
 bool get _macosHdrVideoOnlyMode {
   return !kIsWeb &&
       (Platform.isMacOS || Platform.isWindows) &&
@@ -136,6 +164,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  _installFrameTimingTrace();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
   debugPaintBaselinesEnabled = false;
@@ -783,8 +812,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         final webdav = ctx.read<WebDAVQuickAccessProvider>();
         final downloader = ctx.read<DownloaderSettingsProvider>();
         final showWebDAV = webdav.showWebDAVTab;
-        final showDownloader = globals.isDownloaderSupportedPlatform &&
-            downloader.enabled;
+        final showDownloader =
+            globals.isDownloaderSupportedPlatform && downloader.enabled;
         final mediaLibIdx = showWebDAV ? 3 : 2;
         final downloaderIdx = showWebDAV ? 4 : 3;
         final accountIdx = showWebDAV
@@ -810,7 +839,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           ));
         }
         items.add(NavigationItem(
-            label: l10n?.tabMediaLibrary ?? '媒体库',
+          label: l10n?.tabMediaLibrary ?? '媒体库',
           onSelected: () => _navigateToPage(ctx, mediaLibIdx),
         ));
         if (showDownloader) {
@@ -865,131 +894,130 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         }
       },
       child: DropTarget(
-      onDragEntered: (details) {
-        setState(() {
-          _isDragging = true;
-        });
-        debugPrint('[DragDrop] onDragEntered');
-      },
-      onDragExited: (details) {
-        setState(() {
-          _isDragging = false;
-        });
-        debugPrint('[DragDrop] onDragExited');
-      },
-      onDragDone: (details) {
-        setState(() {
-          _isDragging = false;
-        });
-        debugPrint('[DragDrop] onDragDone: ${details.files.length} files');
-        if (details.files.isNotEmpty) {
-          final filePath = details.files.first.path;
-          debugPrint('[DragDrop] Handling file: $filePath');
-          _handleDroppedFile(filePath);
-        }
-      },
-      child: Consumer3<ThemeNotifier, UIThemeProvider, AppLanguageProvider>(
-        builder:
-            (context, themeNotifier, uiThemeProvider, appLanguageProvider, _) {
-          final localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ];
-          const supportedLocales = AppLocaleUtils.supportedLocales;
-          final locale = appLanguageProvider.locale;
-
-          final effectiveBrightness = _resolveEffectiveBrightness(
-            themeNotifier.themeMode,
-            _platformBrightness,
-          );
-          final overlayStyle =
-              _buildMobileSystemUiOverlayStyle(effectiveBrightness);
-          _logSystemUiOverlayDecision(
-            themeMode: themeNotifier.themeMode,
-            platformBrightness: _platformBrightness,
-            effectiveBrightness: effectiveBrightness,
-            uiThemeId: uiThemeProvider.currentThemeId,
-            uiThemeInitialized: uiThemeProvider.isInitialized,
-            overlayStyle: overlayStyle,
-          );
-          if (overlayStyle != null) {
-            SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+        onDragEntered: (details) {
+          setState(() {
+            _isDragging = true;
+          });
+          debugPrint('[DragDrop] onDragEntered');
+        },
+        onDragExited: (details) {
+          setState(() {
+            _isDragging = false;
+          });
+          debugPrint('[DragDrop] onDragExited');
+        },
+        onDragDone: (details) {
+          setState(() {
+            _isDragging = false;
+          });
+          debugPrint('[DragDrop] onDragDone: ${details.files.length} files');
+          if (details.files.isNotEmpty) {
+            final filePath = details.files.first.path;
+            debugPrint('[DragDrop] Handling file: $filePath');
+            _handleDroppedFile(filePath);
           }
+        },
+        child: Consumer3<ThemeNotifier, UIThemeProvider, AppLanguageProvider>(
+          builder: (context, themeNotifier, uiThemeProvider,
+              appLanguageProvider, _) {
+            final localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ];
+            const supportedLocales = AppLocaleUtils.supportedLocales;
+            final locale = appLanguageProvider.locale;
 
-          if (!uiThemeProvider.isInitialized) {
-            return _wrapWithSystemUiOverlay(
-              MaterialApp(
-                title: 'NipaPlay',
-                debugShowCheckedModeBanner: false,
-                theme: ThemeData(
-                  fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+            final effectiveBrightness = _resolveEffectiveBrightness(
+              themeNotifier.themeMode,
+              _platformBrightness,
+            );
+            final overlayStyle =
+                _buildMobileSystemUiOverlayStyle(effectiveBrightness);
+            _logSystemUiOverlayDecision(
+              themeMode: themeNotifier.themeMode,
+              platformBrightness: _platformBrightness,
+              effectiveBrightness: effectiveBrightness,
+              uiThemeId: uiThemeProvider.currentThemeId,
+              uiThemeInitialized: uiThemeProvider.isInitialized,
+              overlayStyle: overlayStyle,
+            );
+            if (overlayStyle != null) {
+              SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+            }
+
+            if (!uiThemeProvider.isInitialized) {
+              return _wrapWithSystemUiOverlay(
+                MaterialApp(
+                  title: 'NipaPlay',
+                  debugShowCheckedModeBanner: false,
+                  theme: ThemeData(
+                    fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+                  ),
+                  locale: locale,
+                  localizationsDelegates: localizationsDelegates,
+                  supportedLocales: supportedLocales,
+                  home: const SplashScreen(),
+                  builder: (context, appChild) {
+                    return _buildGlobalAppOverlay(
+                      appChild ?? const SizedBox.shrink(),
+                      isDragging: _isDragging,
+                    );
+                  },
                 ),
-                locale: locale,
-                localizationsDelegates: localizationsDelegates,
-                supportedLocales: supportedLocales,
-                home: const SplashScreen(),
-                builder: (context, appChild) {
-                  return _buildGlobalAppOverlay(
-                    appChild ?? const SizedBox.shrink(),
-                    isDragging: _isDragging,
-                  );
-                },
-              ),
+                overlayStyle,
+              );
+            }
+
+            final descriptor = uiThemeProvider.currentThemeDescriptor;
+            final environment = ThemeEnvironment(
+              isDesktop: globals.isDesktop,
+              isPhone: globals.isPhone,
+              isWeb: kIsWeb,
+              isIOS: !kIsWeb && Platform.isIOS,
+              isTablet: globals.isTablet,
+            );
+            Widget overlayBuilder(Widget child) {
+              return _buildGlobalAppOverlay(child, isDragging: _isDragging);
+            }
+
+            final themeContext = ThemeBuildContext(
+              themeNotifier: themeNotifier,
+              navigatorKey: navigatorKey,
+              launchFilePath: widget.launchFilePath,
+              environment: environment,
+              locale: locale,
+              supportedLocales: supportedLocales,
+              localizationsDelegates: localizationsDelegates,
+              settings: uiThemeProvider.currentThemeSettings,
+              overlayBuilder: overlayBuilder,
+              materialHomeBuilder: () => kIsWeb
+                  ? WebRemoteAccessGate(
+                      child: MainPage(launchFilePath: widget.launchFilePath),
+                    )
+                  : MainPage(launchFilePath: widget.launchFilePath),
+              fluentHomeBuilder: () => kIsWeb
+                  ? WebRemoteAccessGate(
+                      child: MainPage(launchFilePath: widget.launchFilePath),
+                    )
+                  : MainPage(launchFilePath: widget.launchFilePath),
+              cupertinoHomeBuilder: () => kIsWeb
+                  ? WebRemoteAccessGate(
+                      child: CupertinoMainPage(
+                          launchFilePath: widget.launchFilePath),
+                    )
+                  : CupertinoMainPage(launchFilePath: widget.launchFilePath),
+            );
+
+            return _wrapWithSystemUiOverlay(
+              descriptor.buildApp(themeContext),
               overlayStyle,
             );
-          }
-
-          final descriptor = uiThemeProvider.currentThemeDescriptor;
-          final environment = ThemeEnvironment(
-            isDesktop: globals.isDesktop,
-            isPhone: globals.isPhone,
-            isWeb: kIsWeb,
-            isIOS: !kIsWeb && Platform.isIOS,
-            isTablet: globals.isTablet,
-          );
-          Widget overlayBuilder(Widget child) {
-            return _buildGlobalAppOverlay(child, isDragging: _isDragging);
-          }
-
-          final themeContext = ThemeBuildContext(
-            themeNotifier: themeNotifier,
-            navigatorKey: navigatorKey,
-            launchFilePath: widget.launchFilePath,
-            environment: environment,
-            locale: locale,
-            supportedLocales: supportedLocales,
-            localizationsDelegates: localizationsDelegates,
-            settings: uiThemeProvider.currentThemeSettings,
-            overlayBuilder: overlayBuilder,
-            materialHomeBuilder: () => kIsWeb
-                ? WebRemoteAccessGate(
-                    child: MainPage(launchFilePath: widget.launchFilePath),
-                  )
-                : MainPage(launchFilePath: widget.launchFilePath),
-            fluentHomeBuilder: () => kIsWeb
-                ? WebRemoteAccessGate(
-                    child: MainPage(launchFilePath: widget.launchFilePath),
-                  )
-                : MainPage(launchFilePath: widget.launchFilePath),
-            cupertinoHomeBuilder: () => kIsWeb
-                ? WebRemoteAccessGate(
-                    child: CupertinoMainPage(
-                        launchFilePath: widget.launchFilePath),
-                  )
-                : CupertinoMainPage(launchFilePath: widget.launchFilePath),
-          );
-
-          return _wrapWithSystemUiOverlay(
-            descriptor.buildApp(themeContext),
-            overlayStyle,
-          );
-        },
+          },
+        ),
       ),
-    ),
-  );
-    
+    );
   }
 
   void _logSystemUiOverlayDecision({

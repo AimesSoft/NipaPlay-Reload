@@ -333,12 +333,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // MediaKit/mpv: 通过audio-add命令在主媒体加载后添加外部音频
       if (isMediaKitKernel) {
-        if (kDebugMode) debugPrint('[MKA_DEBUG] MediaKit内核: 开始检测外挂音轨, videoPath=$videoPath');
-        final mkaPath = await _audioTrackManager.detectExternalAudioPath(videoPath);
-        if (kDebugMode) debugPrint('[MKA_DEBUG] MediaKit内核: detectExternalAudioPath 返回 mkaPath=$mkaPath');
+        if (kDebugMode)
+          debugPrint('[MKA_DEBUG] MediaKit内核: 开始检测外挂音轨, videoPath=$videoPath');
+        final mkaPath =
+            await _audioTrackManager.detectExternalAudioPath(videoPath);
+        if (kDebugMode)
+          debugPrint(
+              '[MKA_DEBUG] MediaKit内核: detectExternalAudioPath 返回 mkaPath=$mkaPath');
         if (mkaPath != null) {
           _audioTrackManager.preloadExternalAudioForMediaKit(mkaPath);
-          if (kDebugMode) debugPrint('[MKA_DEBUG] MediaKit内核: 已预加载外部音频: $mkaPath');
+          if (kDebugMode)
+            debugPrint('[MKA_DEBUG] MediaKit内核: 已预加载外部音频: $mkaPath');
         } else {
           if (kDebugMode) debugPrint('[MKA_DEBUG] MediaKit内核: 未检测到外挂音轨');
         }
@@ -579,15 +584,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _subtitleManager.onSubtitleTrackChanged();
       }
 
-      // 针对Jellyfin流媒体，自动加载外挂字幕
-      if (videoPath.startsWith('jellyfin://')) {
-        await _loadJellyfinExternalSubtitles(videoPath);
-      }
-      // 针对Emby流媒体，自动加载外挂字幕
-      if (videoPath.startsWith('emby://')) {
-        await _loadEmbyExternalSubtitles(videoPath);
-      }
-
       //debugPrint('7. 更新视频状态...');
       // 更新状态
       _currentVideoPath = videoPath;
@@ -679,6 +675,16 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 对于非流媒体，在获取播放位置后初始化观看记录
       if (!isJellyfinStream && !isEmbyStream) {
         await _initializeWatchHistory(videoPath);
+      }
+
+      // Streaming servers provide external subtitle tracks independently of
+      // the media stream. Activate them only after resume-position seeking has
+      // settled so external subtitle readers start at the same timeline.
+      if (isJellyfinStream) {
+        await _loadJellyfinExternalSubtitles(videoPath);
+      }
+      if (isEmbyStream) {
+        await _loadEmbyExternalSubtitles(videoPath);
       }
 
       //debugPrint('10. 开始识别视频和加载弹幕...');

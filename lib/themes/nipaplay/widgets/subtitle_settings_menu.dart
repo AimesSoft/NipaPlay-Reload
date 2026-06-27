@@ -282,28 +282,34 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           onClose: widget.onClose,
           onHoverChanged: widget.onHoverChanged,
           extraButton: TextButton(
-            onPressed: () => videoState.resetSubtitleSettings(),
+            onPressed: () => controller.supportsFullSubtitleStyle
+                ? videoState.resetSubtitleSettings()
+                : controller.resetSubtitleScale(),
             child: Text(
               '回到默认',
-              locale: Locale('zh', 'CN'),
+              locale: const Locale('zh', 'CN'),
               style: TextStyle(color: menuColors.accent),
             ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildOverrideModeSection(videoState),
-              _buildScaleSection(controller),
-              _buildDelaySection(videoState),
-              _buildPositionSection(videoState),
-              _buildAlignSection(videoState),
-              _buildMarginSection(videoState),
-              _buildOpacitySection(videoState),
-              _buildBorderShadowSection(videoState),
-              _buildStyleSwitches(videoState),
-              _buildColorSection(videoState),
-              _buildFontSection(videoState),
-            ],
+            children: controller.supportsFullSubtitleStyle
+                ? [
+                    _buildOverrideModeSection(videoState),
+                    _buildScaleSection(controller),
+                    _buildDelaySection(videoState),
+                    _buildPositionSection(videoState),
+                    _buildAlignSection(videoState),
+                    _buildMarginSection(videoState),
+                    _buildOpacitySection(videoState),
+                    _buildBorderShadowSection(videoState),
+                    _buildStyleSwitches(videoState),
+                    _buildColorSection(videoState),
+                    _buildFontSection(videoState),
+                  ]
+                : [
+                    _buildScaleSection(controller),
+                  ],
           ),
         );
       },

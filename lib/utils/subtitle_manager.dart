@@ -26,6 +26,8 @@ class SubtitleManager extends ChangeNotifier {
     milliseconds: 300,
   );
   static const int _subtitlePreviewMaxChars = 80;
+  static const bool _erikaSubtitleTraceEnabled =
+      bool.fromEnvironment('NIPAPLAY_ERIKA_SUBTITLE_TRACE');
 
   Player _player;
   String? _currentVideoPath;
@@ -358,6 +360,11 @@ class SubtitleManager extends ChangeNotifier {
       }
 
       debugPrint('SubtitleManager: 设置外部字幕: $path, 手动设置: $isManualSetting');
+      _erikaSubtitleTrace(
+        'setExternalSubtitle token=$loadToken kernel=${_player.getPlayerKernelName()} '
+        'path=${_describeSubtitlePath(path)} manual=$isManualSetting '
+        'supportsExternal=${_player.supportsExternalSubtitles}',
+      );
 
       // 如果字幕文件存在
       if (path.isNotEmpty && File(path).existsSync()) {
@@ -526,6 +533,10 @@ class SubtitleManager extends ChangeNotifier {
     int loadToken, {
     List<String>? previousSubtitleTrackSignatures,
   }) {
+    _erikaSubtitleTrace(
+      'loadExternalSubtitleIntoPlayer token=$loadToken '
+      'kernel=${_player.getPlayerKernelName()} path=${_describeSubtitlePath(path)}',
+    );
     if (_isMdkKernel()) {
       try {
         _player.setProperty('subtitle', '1');
@@ -536,6 +547,11 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     _player.setMedia(path, MediaType.subtitle);
+    _erikaSubtitleTrace(
+      'loadExternalSubtitleIntoPlayer setMedia returned token=$loadToken '
+      'active=${_player.activeSubtitleTracks} '
+      'subtitle_count=${_player.mediaInfo.subtitle?.length ?? 0}',
+    );
 
     if (_isMdkKernel()) {
       unawaited(
@@ -903,10 +919,14 @@ class SubtitleManager extends ChangeNotifier {
             videoPath,
           )) {
         try {
-          if (kDebugMode) debugPrint('[FONT_DEBUG] autoDetectAndLoadSubtitle: 检测到远程视频路径: $videoPath');
+          if (kDebugMode)
+            debugPrint(
+                '[FONT_DEBUG] autoDetectAndLoadSubtitle: 检测到远程视频路径: $videoPath');
           final candidates = await RemoteSubtitleService.instance
               .listCandidatesForVideo(videoPath);
-          if (kDebugMode) debugPrint('[FONT_DEBUG] listCandidatesForVideo 返回 ${candidates.length} 个字幕候选');
+          if (kDebugMode)
+            debugPrint(
+                '[FONT_DEBUG] listCandidatesForVideo 返回 ${candidates.length} 个字幕候选');
           if (candidates.isNotEmpty) {
             final resolvedMatchPath = RemoteSubtitleService.instance
                 .resolveVideoPathForMatching(videoPath);
@@ -916,7 +936,9 @@ class SubtitleManager extends ChangeNotifier {
               candidates,
               matchPath,
             );
-            if (kDebugMode) debugPrint('[FONT_DEBUG] 选中字幕: ${selected.name}, extension=${selected.extension}');
+            if (kDebugMode)
+              debugPrint(
+                  '[FONT_DEBUG] 选中字幕: ${selected.name}, extension=${selected.extension}');
             final cachedPath = await RemoteSubtitleService.instance
                 .ensureSubtitleCached(selected);
             if (kDebugMode) debugPrint('[FONT_DEBUG] 字幕已缓存: $cachedPath');
@@ -936,7 +958,8 @@ class SubtitleManager extends ChangeNotifier {
               if (kDebugMode) debugPrint('[FONT_DEBUG] 远程字体预取完成，重新加载字幕以应用字体');
               setExternalSubtitle(cachedPath, isManualSetting: false);
             }).catchError((e) {
-              if (kDebugMode) debugPrint('[FONT_DEBUG] 远程字体预取失败（字幕仍可用备用字体）: $e');
+              if (kDebugMode)
+                debugPrint('[FONT_DEBUG] 远程字体预取失败（字幕仍可用备用字体）: $e');
             });
 
             // 保存这个自动找到的字幕路径，下次可以直接使用
@@ -1349,7 +1372,9 @@ class SubtitleManager extends ChangeNotifier {
     try {
       // 仅对 ASS/SSA 字幕检查字体引用
       final ext = p.extension(cachedSubtitlePath).toLowerCase();
-      if (kDebugMode) debugPrint('[FONT_DEBUG] _prefetchRemoteFontsForSubtitle: videoPath=$videoPath, subtitle=$cachedSubtitlePath, ext=$ext');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] _prefetchRemoteFontsForSubtitle: videoPath=$videoPath, subtitle=$cachedSubtitlePath, ext=$ext');
       if (ext != '.ass' && ext != '.ssa') {
         if (kDebugMode) debugPrint('[FONT_DEBUG] 非ASS/SSA字幕，跳过字体预取');
         return;
@@ -1361,12 +1386,16 @@ class SubtitleManager extends ChangeNotifier {
       // （ASS 中的 Fontname 可能是中文名如"思源黑体 CN"，而文件名是英文如
       //  "SourceHanSansCN-Regular.ttf"，按名称匹配几乎不可能成功）
       if (kDebugMode) debugPrint('[FONT_DEBUG] 正在调用 listFontsForVideo...');
-      final fontCandidates = await RemoteSubtitleService.instance
-          .listFontsForVideo(videoPath);
-      if (kDebugMode) debugPrint('[FONT_DEBUG] listFontsForVideo 返回 ${fontCandidates.length} 个候选');
+      final fontCandidates =
+          await RemoteSubtitleService.instance.listFontsForVideo(videoPath);
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] listFontsForVideo 返回 ${fontCandidates.length} 个候选');
       for (int i = 0; i < fontCandidates.length; i++) {
         final c = fontCandidates[i];
-        if (kDebugMode) debugPrint('[FONT_DEBUG] 候选[$i]: name=${c.name}, ext=${c.extension}, isLikelyMatch=${c.isLikelyMatch}, fontUri=${c.fontUri}');
+        if (kDebugMode)
+          debugPrint(
+              '[FONT_DEBUG] 候选[$i]: name=${c.name}, ext=${c.extension}, isLikelyMatch=${c.isLikelyMatch}, fontUri=${c.fontUri}');
       }
       if (fontCandidates.isEmpty) {
         if (kDebugMode) debugPrint('[FONT_DEBUG] 远程媒体库未提供字体文件，跳过');
@@ -1376,20 +1405,26 @@ class SubtitleManager extends ChangeNotifier {
       bool anyFontCached = false;
       for (final candidate in fontCandidates) {
         try {
-          if (kDebugMode) debugPrint('[FONT_DEBUG] 开始下载字体: ${candidate.name} from ${candidate.fontUri}');
-          final cachedFontPath = await RemoteSubtitleService.instance
-              .ensureFontCached(candidate);
+          if (kDebugMode)
+            debugPrint(
+                '[FONT_DEBUG] 开始下载字体: ${candidate.name} from ${candidate.fontUri}');
+          final cachedFontPath =
+              await RemoteSubtitleService.instance.ensureFontCached(candidate);
           anyFontCached = true;
           // 验证文件确实存在且大小正确
           final cachedFile = File(cachedFontPath);
           if (await cachedFile.exists()) {
             final size = await cachedFile.length();
-            if (kDebugMode) debugPrint('[FONT_DEBUG] 字体已缓存: $cachedFontPath (size=$size bytes)');
+            if (kDebugMode)
+              debugPrint(
+                  '[FONT_DEBUG] 字体已缓存: $cachedFontPath (size=$size bytes)');
           } else {
-            if (kDebugMode) debugPrint('[FONT_DEBUG] 字体缓存路径返回但文件不存在: $cachedFontPath');
+            if (kDebugMode)
+              debugPrint('[FONT_DEBUG] 字体缓存路径返回但文件不存在: $cachedFontPath');
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('[FONT_DEBUG] 下载远程字体 ${candidate.name} 失败: $e');
+          if (kDebugMode)
+            debugPrint('[FONT_DEBUG] 下载远程字体 ${candidate.name} 失败: $e');
         }
       }
 
@@ -1399,20 +1434,25 @@ class SubtitleManager extends ChangeNotifier {
         try {
           final baseDir = await StorageService.getAppStorageDirectory();
           final fontsDir = p.join(baseDir.path, 'subtitle_fonts');
-          if (kDebugMode) debugPrint('[FONT_DEBUG] 准备设置 sub-fonts-dir=$fontsDir');
+          if (kDebugMode)
+            debugPrint('[FONT_DEBUG] 准备设置 sub-fonts-dir=$fontsDir');
           _player.setProperty('sub-fonts-dir', fontsDir);
-          if (kDebugMode) debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$fontsDir');
+          if (kDebugMode)
+            debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$fontsDir');
 
           // 列出 subtitle_fonts 目录下所有文件
           final fontsDirectory = Directory(fontsDir);
           if (await fontsDirectory.exists()) {
             await for (final entity in fontsDirectory.list()) {
               if (entity is File) {
-                if (kDebugMode) debugPrint('[FONT_DEBUG] subtitle_fonts 内文件: ${p.basename(entity.path)} (${await entity.length()} bytes)');
+                if (kDebugMode)
+                  debugPrint(
+                      '[FONT_DEBUG] subtitle_fonts 内文件: ${p.basename(entity.path)} (${await entity.length()} bytes)');
               }
             }
           } else {
-            if (kDebugMode) debugPrint('[FONT_DEBUG] subtitle_fonts 目录不存在: $fontsDir');
+            if (kDebugMode)
+              debugPrint('[FONT_DEBUG] subtitle_fonts 目录不存在: $fontsDir');
           }
         } catch (e) {
           if (kDebugMode) debugPrint('[FONT_DEBUG] 更新 sub-fonts-dir 失败: $e');
@@ -1420,6 +1460,27 @@ class SubtitleManager extends ChangeNotifier {
       }
     } catch (e, stackTrace) {
       if (kDebugMode) debugPrint('[FONT_DEBUG] 预取远程字体失败: $e\n$stackTrace');
+    }
+  }
+
+  static void _erikaSubtitleTrace(String message) {
+    if (_erikaSubtitleTraceEnabled) {
+      debugPrint('[nipa-erika-subtitle-trace] manager $message');
+    }
+  }
+
+  static String _describeSubtitlePath(String path) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      return '<empty>';
+    }
+    try {
+      final file = File(trimmed);
+      final stat = file.statSync();
+      return '$trimmed exists=${stat.type != FileSystemEntityType.notFound} '
+          'size=${stat.size} modified=${stat.modified.toIso8601String()}';
+    } catch (error) {
+      return '$trimmed stat_error=$error';
     }
   }
 }

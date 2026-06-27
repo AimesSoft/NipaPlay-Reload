@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
@@ -100,27 +101,21 @@ class _ErikaDanmakuConfigPatch {
     );
   }
 
-  _ErikaDanmakuConfigPatch differenceFrom(
-    _ErikaDanmakuConfigPatch? previous,
-  ) {
+  _ErikaDanmakuConfigPatch differenceFrom(_ErikaDanmakuConfigPatch? previous) {
     return _ErikaDanmakuConfigPatch(
       enabled: _changed(enabled, previous?.enabled) ? enabled : null,
       fontSize: _changed(fontSize, previous?.fontSize) ? fontSize : null,
       opacity: _changed(opacity, previous?.opacity) ? opacity : null,
       displayArea:
           _changed(displayArea, previous?.displayArea) ? displayArea : null,
-      scrollDurationSeconds: _changed(
-        scrollDurationSeconds,
-        previous?.scrollDurationSeconds,
-      )
-          ? scrollDurationSeconds
-          : null,
-      scrollSpeedFactor: _changed(
-        scrollSpeedFactor,
-        previous?.scrollSpeedFactor,
-      )
-          ? scrollSpeedFactor
-          : null,
+      scrollDurationSeconds:
+          _changed(scrollDurationSeconds, previous?.scrollDurationSeconds)
+              ? scrollDurationSeconds
+              : null,
+      scrollSpeedFactor:
+          _changed(scrollSpeedFactor, previous?.scrollSpeedFactor)
+              ? scrollSpeedFactor
+              : null,
       trackGapRatio: _changed(trackGapRatio, previous?.trackGapRatio)
           ? trackGapRatio
           : null,
@@ -198,8 +193,9 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   DateTime? _seekFenceUntil;
   bool _disposed = false;
 
-  static const Duration _danmakuConfigCoalesceDelay =
-      Duration(milliseconds: 50);
+  static const Duration _danmakuConfigCoalesceDelay = Duration(
+    milliseconds: 50,
+  );
   Timer? _danmakuConfigTimer;
   bool _danmakuConfigInFlight = false;
   _ErikaDanmakuConfigPatch? _pendingDanmakuConfig;
@@ -215,6 +211,10 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   List<int> _activeSubtitleTracks = const <int>[];
   final Set<int> _externalSubtitleTrackIds = <int>{};
   int _externalSubtitleGeneration = 0;
+
+  static const bool _subtitleTraceEnabled = bool.fromEnvironment(
+    'NIPAPLAY_ERIKA_SUBTITLE_TRACE',
+  );
 
   static bool get _isSupported =>
       !kIsWeb &&
@@ -288,17 +288,31 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   @override
   set activeSubtitleTracks(List<int> value) {
     _activeSubtitleTracks = List<int>.from(value);
+    _subtitleTrace(
+      'activeSubtitleTracks set value=$value '
+      'known=${_subtitleTrackInfos.map(_subtitleTrackLabel).join(', ')}',
+    );
     if (!_isSupported) {
       return;
     }
     // Empty selection means "no subtitle".
     if (value.isEmpty) {
-      unawaited(_player.selectSubtitleTrack(null));
+      unawaited(_selectSubtitleTrack(null, reason: 'activeSubtitleTracks=off'));
       return;
     }
     final index = value.first;
     if (index >= 0 && index < _subtitleTrackInfos.length) {
-      unawaited(_player.selectSubtitleTrack(_subtitleTrackInfos[index].id));
+      unawaited(
+        _selectSubtitleTrack(
+          _subtitleTrackInfos[index].id,
+          reason: 'activeSubtitleTracks index=$index',
+        ),
+      );
+    } else {
+      _subtitleTrace(
+        'activeSubtitleTracks ignored out-of-range index=$index '
+        'known_count=${_subtitleTrackInfos.length}',
+      );
     }
   }
 
@@ -349,10 +363,12 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   @override
   void setMedia(String path, PlayerMediaType type) {
     if (type == PlayerMediaType.subtitle) {
+      _subtitleTrace('setMedia subtitle path=${_describeSubtitlePath(path)}');
       _setExternalSubtitle(path);
       return;
     }
     if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
+      _subtitleTrace('setMedia video path=$path clears external tracks');
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
@@ -370,6 +386,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
     await _player.ensureCreated();
     await _player.open(_media);
+    _subtitleTrace('prepare open complete media=$_media');
     _state = PlayerPlaybackState.paused;
   }
 
@@ -443,6 +460,20 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   @override
   void setProperty(String key, String value) {
     _properties[key] = value;
+    if (!_isSupported || _disposed) {
+      return;
+    }
+    switch (key) {
+      case 'sub-scale':
+        final scale = double.tryParse(value);
+        if (scale != null && scale.isFinite) {
+          unawaited(
+            _player.setSubtitleScale(scale).catchError((Object error) {
+              debugPrint('Erika: set subtitle scale failed: $error');
+            }),
+          );
+        }
+    }
   }
 
   @override
@@ -487,16 +518,22 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     final generation = ++_externalSubtitleGeneration;
     final oldTrackIds = Set<int>.from(_externalSubtitleTrackIds);
     _externalSubtitleTrackIds.clear();
+    _subtitleTrace(
+      'setExternalSubtitle generation=$generation '
+      'path=${_describeSubtitlePath(path)} old_track_ids=$oldTrackIds',
+    );
 
     for (final trackId in oldTrackIds) {
-      unawaited(_player.removeSubtitleTrack(trackId).catchError((Object error) {
-        debugPrint('Erika: remove external subtitle failed: $error');
-      }));
+      unawaited(
+        _player.removeSubtitleTrack(trackId).catchError((Object error) {
+          debugPrint('Erika: remove external subtitle failed: $error');
+        }),
+      );
     }
 
     if (path.trim().isEmpty) {
       _activeSubtitleTracks = const <int>[];
-      unawaited(_player.selectSubtitleTrack(null));
+      unawaited(_selectSubtitleTrack(null, reason: 'clear external subtitle'));
       return;
     }
 
@@ -508,15 +545,58 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     int generation,
   ) async {
     try {
+      final addWatch = Stopwatch()..start();
+      _subtitleTrace(
+        'addExternalSubtitle begin generation=$generation '
+        'path=${_describeSubtitlePath(path)}',
+      );
       final trackId = await _player.addExternalSubtitle(path);
+      addWatch.stop();
+      _subtitleTrace(
+        'addExternalSubtitle ok generation=$generation track_id=$trackId '
+        'elapsed_ms=${addWatch.elapsedMilliseconds}',
+      );
       if (_disposed || generation != _externalSubtitleGeneration) {
         await _player.removeSubtitleTrack(trackId);
+        _subtitleTrace(
+          'addExternalSubtitle stale generation=$generation '
+          'current=$_externalSubtitleGeneration removed track_id=$trackId',
+        );
         return;
       }
       _externalSubtitleTrackIds.add(trackId);
-      await _player.selectSubtitleTrack(trackId);
+      await _selectSubtitleTrack(trackId, reason: 'after addExternalSubtitle');
     } catch (error) {
       debugPrint('Erika: add external subtitle failed: $error');
+      _subtitleTrace(
+        'addExternalSubtitle failed generation=$generation '
+        'path=${_describeSubtitlePath(path)} error=$error',
+      );
+    }
+  }
+
+  Future<void> _selectSubtitleTrack(
+    int? trackId, {
+    required String reason,
+  }) async {
+    final watch = Stopwatch()..start();
+    try {
+      _subtitleTrace(
+        'selectSubtitleTrack begin track_id=$trackId reason=$reason',
+      );
+      await _player.selectSubtitleTrack(trackId);
+      watch.stop();
+      _subtitleTrace(
+        'selectSubtitleTrack ok track_id=$trackId '
+        'elapsed_ms=${watch.elapsedMilliseconds} reason=$reason',
+      );
+    } catch (error) {
+      watch.stop();
+      debugPrint('Erika: select subtitle track failed: $error');
+      _subtitleTrace(
+        'selectSubtitleTrack failed track_id=$trackId '
+        'elapsed_ms=${watch.elapsedMilliseconds} reason=$reason error=$error',
+      );
     }
   }
 
@@ -882,8 +962,9 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
     var updatedInfo = _mediaInfo;
     if (event.duration > Duration.zero) {
-      updatedInfo =
-          updatedInfo.copyWith(duration: event.duration.inMilliseconds);
+      updatedInfo = updatedInfo.copyWith(
+        duration: event.duration.inMilliseconds,
+      );
     }
     if (event.video.width > 0 && event.video.height > 0) {
       updatedInfo = updatedInfo.copyWith(
@@ -909,6 +990,10 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       final subtitleInfos = event.trackList
           .where((t) => t.kind == ErikaTrackKind.subtitle)
           .toList(growable: false);
+      _subtitleTrace(
+        'event trackList kind=${event.kind} '
+        'subtitles=${subtitleInfos.map(_subtitleTrackLabel).join(', ')}',
+      );
       _audioTrackInfos = audioInfos;
       _subtitleTrackInfos = subtitleInfos;
       updatedInfo = updatedInfo.copyWith(
@@ -942,13 +1027,45 @@ class ErikaPlayerAdapter implements AbstractPlayer {
         for (var i = 0; i < subtitleInfos.length; i++)
           if (subtitleInfos[i].selected) i,
       ];
+      _subtitleTrace(
+        'event activeSubtitleTracks=$_activeSubtitleTracks '
+        'external_track_ids=$_externalSubtitleTrackIds',
+      );
     }
     _mediaInfo = updatedInfo;
   }
 
+  static void _subtitleTrace(String message) {
+    if (_subtitleTraceEnabled) {
+      debugPrint('[nipa-erika-subtitle-trace] $message');
+    }
+  }
+
+  static String _subtitleTrackLabel(ErikaTrackInfo track) {
+    return '{id=${track.id}, source=${track.source.name}, '
+        'selected=${track.selected}, canRemove=${track.canRemove}, '
+        'title=${track.title}, lang=${track.language}, codec=${track.codec}}';
+  }
+
+  static String _describeSubtitlePath(String path) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      return '<empty>';
+    }
+    try {
+      final file = File(trimmed);
+      final stat = file.statSync();
+      return '$trimmed exists=${stat.type != FileSystemEntityType.notFound} '
+          'size=${stat.size} modified=${stat.modified.toIso8601String()}';
+    } catch (error) {
+      return '$trimmed stat_error=$error';
+    }
+  }
+
   void _ensureSupported() {
     if (!_isSupported) {
-      throw UnsupportedError('Erika is currently only wired on macOS/iOS/Windows.');
+      throw UnsupportedError(
+          'Erika is currently only wired on macOS/iOS/Windows.');
     }
   }
 }
