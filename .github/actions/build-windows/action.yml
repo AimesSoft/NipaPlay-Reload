@@ -14,6 +14,77 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Precache Flutter Windows artifacts
+      shell: pwsh
+      run: flutter precache --windows
+
+    - name: Setup Rust for Erika native core
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+
+    - name: Setup MSYS2 tools for Erika native dependencies
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        path-type: inherit
+        install: >-
+          make
+          tar
+          diffutils
+
+    - name: Configure Erika Windows native build
+      shell: pwsh
+      run: |
+        git config --global core.longpaths true
+        "CARGO_NET_GIT_FETCH_WITH_CLI=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+        $llvmBin = "C:\Program Files\LLVM\bin"
+        $msysLlvmBin = "C:\msys64\mingw64\bin"
+        if (-not (Test-Path (Join-Path $llvmBin "libclang.dll")) -and
+            -not (Test-Path (Join-Path $msysLlvmBin "libclang.dll"))) {
+          choco install llvm -y --no-progress
+        }
+
+        if (Test-Path (Join-Path $llvmBin "libclang.dll")) {
+          "LIBCLANG_PATH=$llvmBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Add-Content -Path $env:GITHUB_PATH -Value $llvmBin
+        } elseif (Test-Path (Join-Path $msysLlvmBin "libclang.dll")) {
+          "LIBCLANG_PATH=$msysLlvmBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Add-Content -Path $env:GITHUB_PATH -Value $msysLlvmBin
+        } else {
+          throw "libclang.dll was not found after installing LLVM"
+        }
+
+        rustc --version
+        cargo --version
+        if (-not (Test-Path "C:\msys64\usr\bin\sh.exe")) {
+          throw "MSYS2 sh.exe was not found"
+        }
+        if (-not (Test-Path "C:\msys64\usr\bin\make.exe")) {
+          throw "MSYS2 make.exe was not found"
+        }
+
+    - name: Cache Erika Cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.USERPROFILE }}\.cargo\registry
+          ${{ env.USERPROFILE }}\.cargo\git
+        key: windows-erika-cargo-${{ hashFiles('pubspec.lock') }}-v1
+        restore-keys: |
+          windows-erika-cargo-
+
+    - name: Restore Erika native dependency bundle
+      id: restore-erika-native-deps
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
+        key: windows-erika-native-${{ hashFiles('pubspec.lock') }}-v1
+
     - name: Setup Chinese Font for Windows
       shell: pwsh
       run: |
@@ -139,6 +210,17 @@ runs:
         chmod +x build_and_copy_web.sh
         ./build_and_copy_web.sh
 
+    - name: Refresh Pub dependencies (post-web build)
+      shell: bash
+      run: |
+        if [ ! -f "pubspec.lock" ]; then
+          echo "❌ pubspec.lock 不存在，无法使用 --enforce-lockfile。"
+          echo "当前目录: $(pwd)"
+          ls -la
+          exit 1
+        fi
+        flutter pub get --enforce-lockfile
+
     - name: Download full libmpv package
       shell: pwsh
       run: |
@@ -217,7 +299,7 @@ runs:
       run: |
         # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
         # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
-        flutter build windows --release --obfuscate --split-debug-info=build/symbols-windows
+        flutter build windows --release --no-pub --obfuscate --split-debug-info=build/symbols-windows
         $arch = "x64"
         $version = "${{ inputs.app-version }}"
         $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
@@ -237,6 +319,15 @@ runs:
         $zipPath = "build\windows\NipaPlay_${version}_Windows_x64.zip"
         Compress-Archive -Path $DestDir -DestinationPath $zipPath -Force
         echo "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+
+    - name: Save Erika native dependency bundle
+      if: steps.restore-erika-native-deps.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
+        key: ${{ steps.restore-erika-native-deps.outputs.cache-primary-key }}
 
     - name: Install Inno Setup
       shell: pwsh
