@@ -14,7 +14,7 @@ class CupertinoRemoteControllerSettingTile extends StatelessWidget {
     return CupertinoSettingsTile(
       leading: Icon(CupertinoIcons.dot_radiowaves_left_right, color: iconColor),
       title: const Text('远程访问'),
-      subtitle: const Text('控制局域网内的播放设备（自动扫描）'),
+      subtitle: const Text('本机被控端、共享媒体库与局域网遥控器'),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {
