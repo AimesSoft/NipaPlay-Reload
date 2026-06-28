@@ -1,33 +1,5 @@
 part of dashboard_home_page;
 
-const _blockedRandomRecommendationKeywords = <String>[
-  '我的英雄学院',
-  '我的英雄學院',
-  '僕のヒーローアカデミア',
-  'ヒロアカ',
-  'my hero academia',
-  'boku no hero academia',
-  'hero academia',
-  'mha',
-];
-
-class RandomRecommendationItem {
-  final String tag;
-  final SearchResultAnime anime;
-
-  const RandomRecommendationItem({
-    required this.tag,
-    required this.anime,
-  });
-}
-
-class _RandomTagSearchResult {
-  final String tag;
-  final List<SearchResultAnime> animes;
-
-  const _RandomTagSearchResult(this.tag, this.animes);
-}
-
 extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
   ScrollController _getRandomRecommendationsScrollController() {
     _randomRecommendationsScrollController ??= ScrollController();
@@ -36,91 +8,29 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
 
   Future<void> _loadRandomRecommendations({bool forceRefresh = false}) async {
     if (!mounted || _isLoadingRandomRecommendations) return;
+    if (forceRefresh && _randomRecommendationGroups.isNotEmpty) {
+      _showNextRandomRecommendationGroup();
+      return;
+    }
     if (!forceRefresh && _randomRecommendations.isNotEmpty) return;
 
     setState(() => _isLoadingRandomRecommendations = true);
 
     try {
-      final config = await SearchService.instance.getSearchConfig();
-      final tags = config.tags
-          .map((tag) => tag.value.trim())
-          .where((value) => value.isNotEmpty)
-          .toList();
-
-      if (tags.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _randomRecommendations = [];
-            _isLoadingRandomRecommendations = false;
-          });
-        }
-        return;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final bool filterAdultContentGlobally =
-          prefs.getBool('global_filter_adult_content') ?? true;
-
-      final random = math.Random();
-      tags.shuffle(random);
-
-      final items = <RandomRecommendationItem>[];
-      final usedAnimeIds = <int>{};
-
-      for (int start = 0; start < tags.length && items.length < 5; start += 5) {
-        final batch = tags.sublist(start, math.min(start + 5, tags.length));
-        final futures = batch.map((tag) async {
-          try {
-            final result =
-                await SearchService.instance.searchAnimeByTags([tag]);
-            return _RandomTagSearchResult(tag, result.animes);
-          } catch (e) {
-            debugPrint('随机推荐标签搜索失败: $tag, error: $e');
-            return null;
-          }
-        }).toList();
-
-        final results = await Future.wait(futures, eagerError: false);
-        for (final entry in results) {
-          if (entry == null) continue;
-
-          final cappedResults = entry.animes.take(100).toList();
-          final candidates = cappedResults.where((anime) {
-            if (anime.animeId <= 0 || anime.animeTitle.isEmpty) return false;
-            if (anime.imageUrl == null || anime.imageUrl!.isEmpty) return false;
-            if (filterAdultContentGlobally && anime.isRestricted == true) {
-              return false;
-            }
-            if (_isMyHeroAcademiaRelated(anime)) return false;
-            return true;
-          }).toList();
-
-          if (candidates.isEmpty) continue;
-
-          candidates.shuffle(random);
-          SearchResultAnime? selected;
-          for (final anime in candidates) {
-            if (!usedAnimeIds.contains(anime.animeId)) {
-              selected = anime;
-              break;
-            }
-          }
-
-          if (selected != null) {
-            usedAnimeIds.add(selected.animeId);
-            items
-                .add(RandomRecommendationItem(tag: entry.tag, anime: selected));
-          }
-
-          if (items.length >= 5) break;
-        }
-      }
+      final daily = await RandomRecommendationService.instance
+          .fetchDailyRecommendations();
+      final groups =
+          daily.groups.where((group) => group.items.isNotEmpty).toList();
+      final groupIndex = _randomRecommendationGroupIndex % groups.length;
 
       if (mounted) {
         setState(() {
-          _randomRecommendations = items;
+          _randomRecommendationGroups = groups;
+          _randomRecommendationGroupIndex = groupIndex;
+          _randomRecommendations = groups[groupIndex].items;
           _isLoadingRandomRecommendations = false;
         });
+        _resetRandomRecommendationScroll();
       }
     } catch (e) {
       debugPrint('加载随机推荐失败: $e');
@@ -246,11 +156,26 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
     return '#${tag.substring(0, maxLength)}...';
   }
 
-  bool _isMyHeroAcademiaRelated(SearchResultAnime anime) {
-    final title = anime.animeTitle.trim();
-    if (title.isEmpty) return false;
-    final normalizedTitle = title.toLowerCase();
-    return _blockedRandomRecommendationKeywords
-        .any((keyword) => normalizedTitle.contains(keyword));
+  void _showNextRandomRecommendationGroup() {
+    final groups = _randomRecommendationGroups
+        .where((group) => group.items.isNotEmpty)
+        .toList();
+    if (groups.isEmpty) return;
+    final nextIndex = (_randomRecommendationGroupIndex + 1) % groups.length;
+    setState(() {
+      _randomRecommendationGroupIndex = nextIndex;
+      _randomRecommendations = groups[nextIndex].items;
+    });
+    _resetRandomRecommendationScroll();
+  }
+
+  void _resetRandomRecommendationScroll() {
+    final controller = _randomRecommendationsScrollController;
+    if (controller == null || !controller.hasClients) return;
+    controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
   }
 }

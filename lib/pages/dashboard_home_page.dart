@@ -19,13 +19,12 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/random_recommendation_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
-import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
@@ -165,6 +164,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   // 随机推荐数据
   List<RandomRecommendationItem> _randomRecommendations = [];
+  List<RandomRecommendationGroup> _randomRecommendationGroups = [];
+  int _randomRecommendationGroupIndex = 0;
   bool _isLoadingRandomRecommendations = false;
   ScrollController? _randomRecommendationsScrollController;
 
