@@ -80,10 +80,11 @@ runs:
       uses: actions/cache@v4
       with:
         path: |
-          ${{ env.USERPROFILE }}\.cargo\registry
-          ${{ env.USERPROFILE }}\.cargo\git
-        key: windows-erika-cargo-${{ hashFiles('pubspec.lock') }}-v1
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: windows-erika-cargo-${{ env.ERIKA_SHA || hashFiles('pubspec.lock') }}-v1
         restore-keys: |
+          windows-erika-cargo-${{ env.ERIKA_SHA }}-
           windows-erika-cargo-
 
     - name: Restore Erika native dependency bundle
@@ -91,9 +92,17 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
-        key: windows-erika-native-${{ hashFiles('pubspec.lock') }}-v1
+          ~/.pub-cache/git/Erika-*/third_party/dist/x86_64-pc-windows-msvc/lgpl
+        key: windows-erika-native-x86_64-pc-windows-msvc-lgpl-${{ env.ERIKA_SHA || hashFiles('pubspec.lock') }}-v1
+        restore-keys: |
+          windows-erika-native-x86_64-pc-windows-msvc-lgpl-
+
+    - name: Restore Erika native source archives
+      id: restore-erika-native-sources
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.pub-cache/git/Erika-*/third_party/cache
+        key: windows-erika-native-sources-v1
 
     - name: Setup Chinese Font for Windows
       shell: pwsh
@@ -411,9 +420,15 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
+          ~/.pub-cache/git/Erika-*/third_party/dist/x86_64-pc-windows-msvc/lgpl
         key: ${{ steps.restore-erika-native-deps.outputs.cache-primary-key }}
+
+    - name: Save Erika native source archives
+      if: always() && steps.restore-erika-native-sources.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.pub-cache/git/Erika-*/third_party/cache
+        key: ${{ steps.restore-erika-native-sources.outputs.cache-primary-key }}
 
     - name: Install Inno Setup
       shell: pwsh
