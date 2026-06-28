@@ -11,6 +11,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/themes/cupertino/pages/settings/widgets/cupertino_remote_access_receiver_section.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:provider/provider.dart';
 
@@ -241,6 +242,10 @@ class _CupertinoRemoteControllerSettingsPageState
               parent: AlwaysScrollableScrollPhysics(),
             ),
             children: [
+              const CupertinoRemoteAccessReceiverSection(),
+              const SizedBox(height: 24),
+              _buildSectionLabel('控制其他设备'),
+              const SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -342,6 +347,21 @@ class _CupertinoRemoteControllerSettingsPageState
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSectionLabel(String text) {
+    final style = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+          fontSize: 13,
+          color: CupertinoDynamicColor.resolve(
+            CupertinoColors.systemGrey,
+            context,
+          ),
+          letterSpacing: 0.2,
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(text, style: style),
     );
   }
 }

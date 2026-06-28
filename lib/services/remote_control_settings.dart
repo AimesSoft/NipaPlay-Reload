@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RemoteControlSettings {
@@ -15,21 +13,11 @@ class RemoteControlSettings {
   static const String trustedDevicesKey = 'remote_control_trusted_devices';
 
   static Future<bool> isReceiverEnabled() async {
-    // 在移动端（phone）禁用被控监听
-    if (globals.isPhone) {
-      return false;
-    }
-    
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(receiverEnabledKey) ?? true;
   }
 
   static Future<void> setReceiverEnabled(bool enabled) async {
-    // 在移动端（phone）不允许设置为启用状态
-    if (globals.isPhone) {
-      return;
-    }
-    
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(receiverEnabledKey, enabled);
   }
@@ -102,14 +90,15 @@ class RemoteControlSettings {
   static Future<void> addTrustedDevice(Map<String, dynamic> device) async {
     final devices = await getTrustedDevices();
     final clientKey = device['clientKey'] as String;
-    final existingIndex = devices.indexWhere((d) => d['clientKey'] == clientKey);
-    
+    final existingIndex =
+        devices.indexWhere((d) => d['clientKey'] == clientKey);
+
     if (existingIndex >= 0) {
       devices[existingIndex] = device;
     } else {
       devices.add(device);
     }
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(trustedDevicesKey, jsonEncode(devices));
   }
@@ -117,7 +106,7 @@ class RemoteControlSettings {
   static Future<void> removeTrustedDevice(String clientKey) async {
     final devices = await getTrustedDevices();
     devices.removeWhere((d) => d['clientKey'] == clientKey);
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(trustedDevicesKey, jsonEncode(devices));
   }
