@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' show Rect;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show Widget;
+import 'package:flutter/widgets.dart';
 import 'package:erika_flutter/erika_flutter.dart';
 
 import './abstract_player.dart';
@@ -156,6 +156,272 @@ class _ErikaDanmakuConfigPatch {
 
   static bool _changedList(List<String>? value, List<String>? previous) =>
       value != null && !listEquals(value, previous);
+}
+
+Rect _transformedGlobalRectOf(RenderBox box) {
+  final topLeft = box.localToGlobal(Offset.zero);
+  final topRight = box.localToGlobal(Offset(box.size.width, 0));
+  final bottomLeft = box.localToGlobal(Offset(0, box.size.height));
+  final bottomRight = box.localToGlobal(
+    Offset(box.size.width, box.size.height),
+  );
+
+  final left = math.min(
+    math.min(topLeft.dx, topRight.dx),
+    math.min(bottomLeft.dx, bottomRight.dx),
+  );
+  final top = math.min(
+    math.min(topLeft.dy, topRight.dy),
+    math.min(bottomLeft.dy, bottomRight.dy),
+  );
+  final right = math.max(
+    math.max(topLeft.dx, topRight.dx),
+    math.max(bottomLeft.dx, bottomRight.dx),
+  );
+  final bottom = math.max(
+    math.max(topLeft.dy, topRight.dy),
+    math.max(bottomLeft.dy, bottomRight.dy),
+  );
+
+  return Rect.fromLTRB(left, top, right, bottom);
+}
+
+Rect _screenRectToScaledFlutterRect(BuildContext context, Rect rect) {
+  final view = View.maybeOf(context);
+  if (view == null) {
+    return rect;
+  }
+  final mediaSize = MediaQuery.maybeSizeOf(context);
+  if (mediaSize == null || mediaSize.isEmpty) {
+    return rect;
+  }
+  final screenSize = view.physicalSize / view.devicePixelRatio;
+  final scaleX = screenSize.width / mediaSize.width;
+  final scaleY = screenSize.height / mediaSize.height;
+  if (!scaleX.isFinite || !scaleY.isFinite || scaleX <= 0 || scaleY <= 0) {
+    return rect;
+  }
+  return Rect.fromLTRB(
+    rect.left / scaleX,
+    rect.top / scaleY,
+    rect.right / scaleX,
+    rect.bottom / scaleY,
+  );
+}
+
+class _NipaplayErikaWindowOverlayVideoView extends StatefulWidget {
+  const _NipaplayErikaWindowOverlayVideoView({
+    required this.player,
+    this.debugLabel,
+    this.onPlatformViewIdChanged,
+    this.onFrameRectChanged,
+  });
+
+  final ErikaPlayer player;
+  final String? debugLabel;
+  final ValueChanged<int?>? onPlatformViewIdChanged;
+  final ValueChanged<Rect?>? onFrameRectChanged;
+
+  @override
+  State<_NipaplayErikaWindowOverlayVideoView> createState() =>
+      _NipaplayErikaWindowOverlayVideoViewState();
+}
+
+class _NipaplayErikaWindowOverlayVideoViewState
+    extends State<_NipaplayErikaWindowOverlayVideoView>
+    with WidgetsBindingObserver {
+  Timer? _retryTimer;
+  Timer? _frameTimer;
+  int _bindAttempts = 0;
+  bool _isBound = false;
+  late final int _surfaceGeneration;
+  String? _lastFrameSignature;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _surfaceGeneration = identityHashCode(this);
+    widget.onPlatformViewIdChanged?.call(ErikaPlayer.windowOverlayViewId);
+    _startFrameTimer();
+    _scheduleAttach();
+  }
+
+  @override
+  void didUpdateWidget(
+      covariant _NipaplayErikaWindowOverlayVideoView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.player != widget.player) {
+      _retryTimer?.cancel();
+      _bindAttempts = 0;
+      _isBound = false;
+      _lastFrameSignature = null;
+      unawaited(
+        oldWidget.player.detachWindowOverlay(generation: _surfaceGeneration),
+      );
+      widget.onPlatformViewIdChanged?.call(ErikaPlayer.windowOverlayViewId);
+      _scheduleAttach();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    _scheduleFrameUpdate(force: true);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _retryTimer?.cancel();
+    _frameTimer?.cancel();
+    widget.onPlatformViewIdChanged?.call(null);
+    unawaited(_hideOverlayFrame());
+    unawaited(
+      widget.player.detachWindowOverlay(generation: _surfaceGeneration),
+    );
+    super.dispose();
+  }
+
+  void _startFrameTimer() {
+    _frameTimer?.cancel();
+    final interval = defaultTargetPlatform == TargetPlatform.windows
+        ? const Duration(milliseconds: 16)
+        : const Duration(milliseconds: 250);
+    _frameTimer = Timer.periodic(
+      interval,
+      (_) => _scheduleFrameUpdate(),
+    );
+  }
+
+  void _scheduleAttach() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_attachOverlaySurface());
+      _scheduleFrameUpdate(force: true);
+    });
+  }
+
+  Future<void> _attachOverlaySurface() async {
+    if (!mounted || _isBound || kIsWeb) {
+      return;
+    }
+
+    try {
+      await widget.player.attachWindowOverlay();
+      _isBound = true;
+      _scheduleFrameUpdate(force: true);
+    } catch (error) {
+      debugPrint('NipaplayErikaWindowOverlayVideoView: bind failed: $error');
+      _scheduleRetry();
+    }
+  }
+
+  void _scheduleRetry() {
+    if (_isBound || !mounted) {
+      return;
+    }
+    final attempt = _bindAttempts;
+    _bindAttempts += 1;
+    final delay = switch (attempt) {
+      0 => const Duration(milliseconds: 150),
+      1 => const Duration(milliseconds: 300),
+      2 => const Duration(milliseconds: 600),
+      3 => const Duration(milliseconds: 1200),
+      _ => const Duration(seconds: 2),
+    };
+    _retryTimer?.cancel();
+    _retryTimer = Timer(delay, () => unawaited(_attachOverlaySurface()));
+  }
+
+  void _scheduleFrameUpdate({bool force = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_sendOverlayFrame(visible: true, force: force));
+    });
+  }
+
+  Future<void> _sendOverlayFrame({
+    required bool visible,
+    bool force = false,
+  }) async {
+    if (kIsWeb) {
+      return;
+    }
+
+    final Rect nativeFrame;
+    Rect? flutterCutout;
+    if (visible) {
+      if (!mounted) {
+        return;
+      }
+      final renderObject = context.findRenderObject();
+      if (renderObject is! RenderBox) {
+        return;
+      }
+      final box = renderObject;
+      if (!box.hasSize || box.size.isEmpty) {
+        return;
+      }
+      nativeFrame = _transformedGlobalRectOf(box);
+      flutterCutout = _screenRectToScaledFlutterRect(context, nativeFrame);
+    } else {
+      nativeFrame = Rect.zero;
+    }
+
+    final signature = <Object>[
+      visible,
+      nativeFrame.left.toStringAsFixed(2),
+      nativeFrame.top.toStringAsFixed(2),
+      nativeFrame.width.toStringAsFixed(2),
+      nativeFrame.height.toStringAsFixed(2),
+    ].join('|');
+    if (!force && signature == _lastFrameSignature) {
+      return;
+    }
+    _lastFrameSignature = signature;
+    widget.onFrameRectChanged?.call(visible ? flutterCutout : null);
+
+    try {
+      await widget.player.setWindowOverlayFrame(
+        frame: nativeFrame,
+        visible: visible,
+        generation: _surfaceGeneration,
+        debugLabel: widget.debugLabel,
+      );
+    } catch (error) {
+      debugPrint(
+        'NipaplayErikaWindowOverlayVideoView: frame update failed: $error',
+      );
+    }
+  }
+
+  Future<void> _hideOverlayFrame() async {
+    try {
+      await widget.player.setWindowOverlayFrame(
+        frame: Rect.zero,
+        visible: false,
+        generation: _surfaceGeneration,
+        debugLabel: widget.debugLabel,
+      );
+    } catch (error) {
+      debugPrint(
+        'NipaplayErikaWindowOverlayVideoView: hide overlay failed: $error',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
+    _scheduleFrameUpdate();
+    return const SizedBox.expand();
+  }
 }
 
 class ErikaPlayerAdapter implements AbstractPlayer {
@@ -674,7 +940,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
-    return ErikaWindowOverlayVideoView(
+    return _NipaplayErikaWindowOverlayVideoView(
       player: _player,
       debugLabel: debugLabel,
       onPlatformViewIdChanged: onPlatformViewIdChanged,

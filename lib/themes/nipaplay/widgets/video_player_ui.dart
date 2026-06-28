@@ -307,15 +307,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
     if (_shouldUseWindowHostedVideoOverlay(videoState)) {
-      // iOS only: the native plane must not extend under the notch, so we
-      // letterbox the video into a centered safe-area sub-rect here and keep
-      // the surroundings transparent; Erika owns the black window background,
-      // which shows through as the bars.
+      // iOS only: the window-overlay plane mirrors this Flutter rect, so keep
+      // it sized to the video aspect ratio and centered. This preserves the
+      // iPhone notch-safe path and keeps iPad video from anchoring at the
+      // top-left of a full-bleed native plane.
       //
-      // macOS keeps the full-bleed surface: there is no notch and Erika
-      // letterboxes natively into a full-screen plane. Flutter must NOT shrink
-      // the plane or paint around it, or the app UI behind shows through the
-      // (now transparent) bars.
+      // macOS keeps the full-bleed surface: Erika letterboxes natively into
+      // the reserved plane. Flutter must NOT shrink the plane or paint around
+      // it, or the app UI behind shows through the transparent bars.
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         return Center(
           child: AspectRatio(
