@@ -5,21 +5,23 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class LogShareService {
-  static const String _baseUrl = 'https://www.aimes-soft.com/nipaplay.php';  // 这个地址是正确的
+  static const String _baseUrl = 'https://nipaplay.aimes-soft.com/nipaplay.php';
 
   /// 上传日志并获取查看URL
   static Future<String> uploadLogs() async {
     try {
       final logService = DebugLogService();
-      final logs = logService.logEntries.map((entry) => {
-        'timestamp': entry.timestamp.toIso8601String(),
-        'level': entry.level,
-        'tag': entry.tag,
-        'message': entry.message,
-      }).toList();
+      final logs = logService.logEntries
+          .map((entry) => {
+                'timestamp': entry.timestamp.toIso8601String(),
+                'level': entry.level,
+                'tag': entry.tag,
+                'message': entry.message,
+              })
+          .toList();
 
       debugPrint('[LogShareService] 开始上传日志...');
-      
+
       final response = await http.post(
         WebRemoteAccessService.proxyUri(Uri.parse(_baseUrl)),
         headers: {
@@ -46,7 +48,7 @@ class LogShareService {
           throw '服务器返回错误: $error';
         }
       }
-      
+
       debugPrint('[LogShareService] 服务器返回非200状态码: ${response.statusCode}');
       throw '上传失败: HTTP ${response.statusCode}';
     } catch (e) {
@@ -54,4 +56,4 @@ class LogShareService {
       throw '上传日志失败: $e';
     }
   }
-} 
+}
