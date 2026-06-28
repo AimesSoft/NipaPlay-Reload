@@ -187,6 +187,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   double _volume = 1.0;
   double _playbackRate = 1.0;
   PlayerUpscalerStatus _lastUpscalerStatus = const PlayerUpscalerStatus.off();
+  Map<String, dynamic> _lastPresenterStats = const <String, dynamic>{};
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
   int? _pendingSeekTargetMs;
@@ -205,6 +206,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
   // Real Erika track descriptors, kept so the UI's index-based
   // activeAudioTracks/activeSubtitleTracks can be mapped back to native ids.
+  List<ErikaTrackInfo> _videoTrackInfos = const <ErikaTrackInfo>[];
   List<ErikaTrackInfo> _audioTrackInfos = const <ErikaTrackInfo>[];
   List<ErikaTrackInfo> _subtitleTrackInfos = const <ErikaTrackInfo>[];
   List<int> _activeAudioTracks = const <int>[];
@@ -867,6 +869,12 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       'position': position,
       'duration': _mediaInfo.duration,
       'upscaler': _lastUpscalerStatus.toMap(),
+      'presenterStats': _lastPresenterStats,
+      'tracks': <String, dynamic>{
+        'video': _videoTrackInfos.map(_erikaTrackToDebugMap).toList(),
+        'audio': _audioTrackInfos.map(_erikaTrackToDebugMap).toList(),
+        'subtitle': _subtitleTrackInfos.map(_erikaTrackToDebugMap).toList(),
+      },
       'videoWidth': _mediaInfo.video?.isNotEmpty == true
           ? _mediaInfo.video!.first.codec.width
           : null,
@@ -878,7 +886,20 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
   Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
     await getUpscalerStatus();
+    await _refreshPresenterStats();
     return getDetailedMediaInfo();
+  }
+
+  Future<void> _refreshPresenterStats() async {
+    if (!_isSupported) {
+      return;
+    }
+    try {
+      final stats = await _player.getPresenterStats();
+      _lastPresenterStats = Map<String, dynamic>.from(stats.toMap());
+    } catch (error) {
+      debugPrint('Erika: get presenter stats failed: $error');
+    }
   }
 
   ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
@@ -999,6 +1020,9 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     // selected flag) on TracksChanged/TrackSelectionChanged. Use it to build
     // mediaInfo so the UI's index-based track selection maps to real ids.
     if (event.trackList.isNotEmpty) {
+      final videoInfos = event.trackList
+          .where((t) => t.kind == ErikaTrackKind.video)
+          .toList(growable: false);
       final audioInfos = event.trackList
           .where((t) => t.kind == ErikaTrackKind.audio)
           .toList(growable: false);
@@ -1010,17 +1034,44 @@ class ErikaPlayerAdapter implements AbstractPlayer {
         'subtitles=${subtitleInfos.map(_subtitleTrackLabel).join(', ')}',
       );
       _audioTrackInfos = audioInfos;
+      _videoTrackInfos = videoInfos;
       _subtitleTrackInfos = subtitleInfos;
       updatedInfo = updatedInfo.copyWith(
+        video: videoInfos.isEmpty
+            ? null
+            : <PlayerVideoStreamInfo>[
+                for (var i = 0; i < videoInfos.length; i++)
+                  PlayerVideoStreamInfo(
+                    codec: PlayerVideoCodecParams(
+                      width: videoInfos[i].width > 0
+                          ? videoInfos[i].width
+                          : event.video.width,
+                      height: videoInfos[i].height > 0
+                          ? videoInfos[i].height
+                          : event.video.height,
+                      name: _formatErikaVideoCodecParams(videoInfos[i]),
+                    ),
+                    codecName: videoInfos[i].codec ?? 'unknown',
+                  ),
+              ],
         audio: <PlayerAudioStreamInfo>[
           for (var i = 0; i < audioInfos.length; i++)
             PlayerAudioStreamInfo(
               codec: PlayerAudioCodecParams(
                 name: audioInfos[i].codec ?? 'unknown',
+                channels:
+                    audioInfos[i].channels > 0 ? audioInfos[i].channels : null,
+                sampleRate: audioInfos[i].sampleRate > 0
+                    ? audioInfos[i].sampleRate
+                    : null,
               ),
               title: audioInfos[i].title ?? 'Audio ${i + 1}',
               language: audioInfos[i].language,
-              metadata: <String, String>{'id': '${audioInfos[i].id}'},
+              metadata: <String, String>{
+                'id': '${audioInfos[i].id}',
+                if (audioInfos[i].sampleFormat != null)
+                  'sampleFormat': audioInfos[i].sampleFormat!,
+              },
               rawRepresentation: 'Erika Audio ${i + 1}',
             ),
         ],
@@ -1048,6 +1099,38 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       );
     }
     _mediaInfo = updatedInfo;
+  }
+
+  static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
+    final parts = <String>[
+      if (track.codec != null) 'codec: ${track.codec}',
+      if (track.profile != null) 'profile: ${track.profile}',
+      if (track.level > 0) 'level: ${track.level}',
+      if (track.width > 0 && track.height > 0) '${track.width}x${track.height}',
+      if (track.pixelFormat != null) 'format: ${track.pixelFormat}',
+    ];
+    return parts.isEmpty ? 'Erika Video' : parts.join(', ');
+  }
+
+  static Map<String, dynamic> _erikaTrackToDebugMap(ErikaTrackInfo track) {
+    return <String, dynamic>{
+      'id': track.id,
+      'kind': track.kind.name,
+      'source': track.source.name,
+      'selected': track.selected,
+      'canRemove': track.canRemove,
+      if (track.title != null) 'title': track.title,
+      if (track.language != null) 'language': track.language,
+      if (track.codec != null) 'codec': track.codec,
+      if (track.width > 0) 'width': track.width,
+      if (track.height > 0) 'height': track.height,
+      if (track.sampleRate > 0) 'sampleRate': track.sampleRate,
+      if (track.channels > 0) 'channels': track.channels,
+      if (track.pixelFormat != null) 'pixelFormat': track.pixelFormat,
+      if (track.sampleFormat != null) 'sampleFormat': track.sampleFormat,
+      if (track.profile != null) 'profile': track.profile,
+      if (track.level > 0) 'level': track.level,
+    };
   }
 
   static void _subtitleTrace(String message) {
