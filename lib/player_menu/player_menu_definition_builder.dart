@@ -17,7 +17,9 @@ class PlayerMenuDefinitionBuilder {
         icon: PlayerMenuIconToken.subtitleSettings,
         title: '字幕设置',
         visibilityPredicate: (ctx) =>
-            ctx.supportsSubtitleSettings && ctx.hasVideo,
+            ctx.supportsSubtitleSettings &&
+            ctx.hasVideo &&
+            ctx.hasSubtitleTracks,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.subtitleTracks,
@@ -33,7 +35,7 @@ class PlayerMenuDefinitionBuilder {
         icon: PlayerMenuIconToken.subtitleList,
         title: '字幕列表',
         visibilityPredicate: (ctx) =>
-            ctx.supportsAdvancedTracks && ctx.hasVideo,
+            ctx.supportsAdvancedTracks && ctx.hasVideo && ctx.hasSubtitleTracks,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.audioTracks,

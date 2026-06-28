@@ -90,6 +90,17 @@ class PlayerMenuContext {
 
   bool get hasVideo => videoState.hasVideo;
 
+  bool get hasSubtitleTracks {
+    final embeddedSubtitleTracks = videoState.player.mediaInfo.subtitle;
+    if (embeddedSubtitleTracks != null && embeddedSubtitleTracks.isNotEmpty) {
+      return true;
+    }
+
+    final currentExternalSubtitlePath = videoState.currentExternalSubtitlePath;
+    return currentExternalSubtitlePath != null &&
+        currentExternalSubtitlePath.isNotEmpty;
+  }
+
   bool get hasVideoPath => videoState.currentVideoPath != null;
 
   bool get hasPlaylist =>
