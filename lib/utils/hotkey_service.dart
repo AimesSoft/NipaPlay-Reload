@@ -13,7 +13,6 @@ import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 class HotkeyService extends ChangeNotifier {
   static final HotkeyService _instance = HotkeyService._internal();
   static const String _shortcutsKey = 'keyboard_shortcuts';
-  static const int _debounceTime = 300; // 防抖时间（毫秒）
   static const int _longPressThreshold = 800; // 长按阈值（毫秒）
 
   bool get _supportsHotkeys {
@@ -48,6 +47,8 @@ class HotkeyService extends ChangeNotifier {
 
   // overlay 计数器，>0 时表示有对话框/overlay 在视频播放界面上方
   static int _overlayCount = 0;
+
+  static bool get hasActiveOverlay => _overlayCount > 0;
 
   /// overlay 打开时调用：0→1 时注销热键
   static void overlayPush() {
@@ -92,6 +93,10 @@ class HotkeyService extends ChangeNotifier {
   // 注册热键
   Future<void> registerHotkeys() async {
     if (!_supportsHotkeys) return;
+    if (hasActiveOverlay) {
+      await unregisterHotkeys();
+      return;
+    }
     // 先清理已注册的热键，再重新注册
     if (_registeredHotkeys.isNotEmpty) {
       //debugPrint('[HotkeyService] 清理现有热键后重新注册');
@@ -106,12 +111,12 @@ class HotkeyService extends ChangeNotifier {
       _registeredHotkeys.clear();
       return;
     }
+    await hotKeyManager.unregisterAll();
     if (_registeredHotkeys.isEmpty) {
       //debugPrint('[HotkeyService] 没有已注册的热键需要注销');
       return;
     }
     //debugPrint('[HotkeyService] 开始注销 ${_registeredHotkeys.length} 个热键');
-    await hotKeyManager.unregisterAll();
     // 清空已注册列表，以便下次可以重新注册
     _registeredHotkeys.clear();
     //debugPrint('[HotkeyService] 热键注销完成');
@@ -178,6 +183,10 @@ class HotkeyService extends ChangeNotifier {
   // 注册所有热键
   Future<void> registerAllHotkeys() async {
     if (!_supportsHotkeys) return;
+    if (hasActiveOverlay) {
+      await unregisterHotkeys();
+      return;
+    }
     //debugPrint('[HotkeyService] 开始注册所有热键');
     // 先清除所有已注册的热键
     await hotKeyManager.unregisterAll();
@@ -283,6 +292,9 @@ class HotkeyService extends ChangeNotifier {
   }
 
   bool _shouldBlockHotkeyInTextInput() {
+    if (hasActiveOverlay) {
+      return true;
+    }
     if (_isEditableTextFocused()) {
       return true;
     }
@@ -806,9 +818,15 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
+          if (_shouldBlockHotkeyInTextInput()) {
+            return;
+          }
           _handleForwardKeyDown();
         },
         keyUpHandler: (HotKey hotKey) {
+          if (_shouldBlockHotkeyInTextInput()) {
+            return;
+          }
           _handleForwardKeyUp();
         },
       );
@@ -829,7 +847,8 @@ class HotkeyService extends ChangeNotifier {
     _longPressTimer?.cancel();
 
     // 启动长按检测计时器
-    _longPressTimer = Timer(Duration(milliseconds: _longPressThreshold), () {
+    _longPressTimer =
+        Timer(const Duration(milliseconds: _longPressThreshold), () {
       if (_isForwardKeyPressed && !_isSpeedBoostActive) {
         _startSpeedBoost();
       }
@@ -892,7 +911,9 @@ class HotkeyService extends ChangeNotifier {
     ////debugPrint('[HotkeyService] 更新快捷键: $action -> $shortcut');
     _shortcuts[action] = shortcut;
     await saveShortcuts();
-    await registerAllHotkeys(); // 重新注册所有热键
+    if (!hasActiveOverlay) {
+      await registerAllHotkeys(); // 重新注册所有热键
+    }
     notifyListeners(); // 通知监听者
   }
 
