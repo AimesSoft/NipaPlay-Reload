@@ -365,6 +365,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _mergeDanmaku = merge;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_mergeDanmakuKey, merge);
+      _syncErikaDanmakuConfig();
       _notifyListeners();
     }
   }
@@ -415,6 +416,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuStacking = stacking;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_danmakuStackingKey, stacking);
+      _syncErikaDanmakuConfig();
       _notifyListeners();
     }
   }
@@ -1565,6 +1567,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, '');
     await prefs.setString(_danmakuFontFamilyKey, normalized);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 
@@ -1590,6 +1593,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, persistedPath);
     await prefs.setString(_danmakuFontFamilyKey, runtimeFamily);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
     return true;
   }
@@ -1603,6 +1607,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, '');
     await prefs.setString(_danmakuFontFamilyKey, '');
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 
@@ -1634,6 +1639,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _next2DanmakuOutlineWidth = sanitized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_next2DanmakuOutlineWidthKey, sanitized);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 
@@ -2309,6 +2315,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuSpeedMultiplier = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_danmakuSpeedMultiplierKey, normalized);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 
@@ -2327,6 +2334,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuDfmPlusTrackGap = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_danmakuDfmPlusTrackGapKey, normalized);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 

@@ -12,7 +12,6 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
@@ -26,9 +25,9 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
-import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/random_recommendation_service.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:http/http.dart' as http;
@@ -77,7 +76,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   List<BangumiAnime> _todayAnimes = [];
   bool _isLoadingTodayAnimes = false;
-  List<_CupertinoRandomRecommendationItem> _randomRecommendations = [];
+  List<RandomRecommendationItem> _randomRecommendations = [];
+  List<RandomRecommendationGroup> _randomRecommendationGroups = [];
+  int _randomRecommendationGroupIndex = 0;
   bool _isLoadingRandomRecommendations = false;
   
   // 最近添加数据
@@ -518,92 +519,26 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<void> _loadRandomRecommendations({bool forceRefresh = false}) async {
     if (!mounted || _isLoadingRandomRecommendations) return;
+    if (forceRefresh && _randomRecommendationGroups.isNotEmpty) {
+      _showNextRandomRecommendationGroup();
+      return;
+    }
     if (!forceRefresh && _randomRecommendations.isNotEmpty) return;
 
     setState(() => _isLoadingRandomRecommendations = true);
 
     try {
-      final config = await SearchService.instance.getSearchConfig();
-      final tags = config.tags
-          .map((tag) => tag.value.trim())
-          .where((value) => value.isNotEmpty)
-          .toList();
-
-      if (tags.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _randomRecommendations = [];
-            _isLoadingRandomRecommendations = false;
-          });
-        }
-        return;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final bool filterAdultContentGlobally =
-          prefs.getBool('global_filter_adult_content') ?? true;
-
-      final random = math.Random();
-      tags.shuffle(random);
-
-      final items = <_CupertinoRandomRecommendationItem>[];
-      final usedAnimeIds = <int>{};
-
-      for (int start = 0; start < tags.length && items.length < 5; start += 5) {
-        final batch = tags.sublist(start, math.min(start + 5, tags.length));
-        final futures = batch.map((tag) async {
-          try {
-            final result = await SearchService.instance.searchAnimeByTags([tag]);
-            return _CupertinoRandomTagSearchResult(tag, result.animes);
-          } catch (e) {
-            debugPrint('CupertinoHomePage: 随机推荐标签搜索失败: $tag, error: $e');
-            return null;
-          }
-        }).toList();
-
-        final results = await Future.wait(futures, eagerError: false);
-        for (final entry in results) {
-          if (entry == null) continue;
-
-          final cappedResults = entry.animes.take(100).toList();
-          final candidates = cappedResults.where((anime) {
-            if (anime.animeId <= 0 || anime.animeTitle.isEmpty) return false;
-            if (anime.imageUrl == null || anime.imageUrl!.isEmpty) return false;
-            if (filterAdultContentGlobally && anime.isRestricted == true) {
-              return false;
-            }
-            if (_isMyHeroAcademiaRelated(anime)) return false;
-            return true;
-          }).toList();
-
-          if (candidates.isEmpty) continue;
-
-          candidates.shuffle(random);
-          SearchResultAnime? selected;
-          for (final anime in candidates) {
-            if (!usedAnimeIds.contains(anime.animeId)) {
-              selected = anime;
-              break;
-            }
-          }
-
-          if (selected != null) {
-            usedAnimeIds.add(selected.animeId);
-            items.add(
-              _CupertinoRandomRecommendationItem(
-                tag: entry.tag,
-                anime: selected,
-              ),
-            );
-          }
-
-          if (items.length >= 5) break;
-        }
-      }
+      final daily =
+          await RandomRecommendationService.instance.fetchDailyRecommendations();
+      final groups =
+          daily.groups.where((group) => group.items.isNotEmpty).toList();
+      final groupIndex = _randomRecommendationGroupIndex % groups.length;
 
       if (mounted) {
         setState(() {
-          _randomRecommendations = items;
+          _randomRecommendationGroups = groups;
+          _randomRecommendationGroupIndex = groupIndex;
+          _randomRecommendations = groups[groupIndex].items;
           _isLoadingRandomRecommendations = false;
         });
       }
@@ -1304,7 +1239,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildRandomRecommendationCard(
-      _CupertinoRandomRecommendationItem item) {
+      RandomRecommendationItem item) {
     final anime = item.anime;
     final summary = (anime.intro != null && anime.intro!.isNotEmpty)
         ? anime.intro!
@@ -2211,12 +2146,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     return '#${tag.substring(0, maxLength)}...';
   }
 
-  bool _isMyHeroAcademiaRelated(SearchResultAnime anime) {
-    final title = anime.animeTitle.trim();
-    if (title.isEmpty) return false;
-    final normalizedTitle = title.toLowerCase();
-    return _blockedRandomRecommendationKeywords
-        .any((keyword) => normalizedTitle.contains(keyword));
+  void _showNextRandomRecommendationGroup() {
+    final groups = _randomRecommendationGroups
+        .where((group) => group.items.isNotEmpty)
+        .toList();
+    if (groups.isEmpty) return;
+    final nextIndex = (_randomRecommendationGroupIndex + 1) % groups.length;
+    setState(() {
+      _randomRecommendationGroupIndex = nextIndex;
+      _randomRecommendations = groups[nextIndex].items;
+    });
   }
 
   Widget _buildEmptyRecentPlaceholder() {
@@ -3150,34 +3089,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return;
     }
   }
-}
-
-const _blockedRandomRecommendationKeywords = <String>[
-  '我的英雄学院',
-  '我的英雄學院',
-  '僕のヒーローアカデミア',
-  'ヒロアカ',
-  'my hero academia',
-  'boku no hero academia',
-  'hero academia',
-  'mha',
-];
-
-class _CupertinoRandomRecommendationItem {
-  final String tag;
-  final SearchResultAnime anime;
-
-  const _CupertinoRandomRecommendationItem({
-    required this.tag,
-    required this.anime,
-  });
-}
-
-class _CupertinoRandomTagSearchResult {
-  final String tag;
-  final List<SearchResultAnime> animes;
-
-  const _CupertinoRandomTagSearchResult(this.tag, this.animes);
 }
 
 class _CupertinoRecommendedItem {

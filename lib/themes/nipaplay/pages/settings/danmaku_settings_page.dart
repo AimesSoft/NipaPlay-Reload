@@ -8,6 +8,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
@@ -377,9 +378,14 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isErikaPlayerKernel =
+        PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
     final showNext2 = next2Supported &&
         context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
+    final showRendererSupersample = !isErikaPlayerKernel &&
+        (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus);
     final renderEngineItems = _buildDanmakuRenderEngineItems(
       showNext2: showNext2,
       next2Supported: next2Supported,
@@ -387,24 +393,25 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
 
     return ListView(
       children: [
-        SettingsItem.dropdown(
-          title: '弹幕渲染引擎',
-          subtitle: '选择弹幕的渲染方式',
-          icon: Ionicons.hardware_chip_outline,
-          items: renderEngineItems,
-          onChanged: (dynamic value) {
-            if (value is! DanmakuRenderEngine) return;
-            if ((!showNext2 || !next2Supported) &&
-                value == DanmakuRenderEngine.next2) {
-              return;
-            }
-            _saveDanmakuRenderEngineSettings(value);
-          },
-          dropdownKey: _danmakuRenderEngineDropdownKey,
-        ),
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-        if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
-            _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus)
+        if (!isErikaPlayerKernel) ...[
+          SettingsItem.dropdown(
+            title: '弹幕渲染引擎',
+            subtitle: '选择弹幕的渲染方式',
+            icon: Ionicons.hardware_chip_outline,
+            items: renderEngineItems,
+            onChanged: (dynamic value) {
+              if (value is! DanmakuRenderEngine) return;
+              if ((!showNext2 || !next2Supported) &&
+                  value == DanmakuRenderEngine.next2) {
+                return;
+              }
+              _saveDanmakuRenderEngineSettings(value);
+            },
+            dropdownKey: _danmakuRenderEngineDropdownKey,
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+        if (showRendererSupersample)
           Consumer<SettingsProvider>(
             builder: (context, settingsProvider, child) {
               final currentValue = settingsProvider.danmakuSupersample;
@@ -447,8 +454,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
               );
             },
           ),
-        if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
-            _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus)
+        if (showRendererSupersample)
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -525,6 +531,23 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                   ),
                 )
                 .toList();
+            final showBinaryDanmakuEffectToggles =
+                isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
+            final binaryDanmakuEffectKernelName =
+                isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
+            final showTrackGapSlider = isErikaPlayerKernel || _isDfmPlusKernel;
+            final showMergeToggle = isErikaPlayerKernel ||
+                DanmakuKernelFactory.getKernelType() !=
+                    DanmakuRenderEngine.canvas;
+            final showStackingToggle = isErikaPlayerKernel ||
+                (DanmakuKernelFactory.getKernelType() !=
+                        DanmakuRenderEngine.canvas &&
+                    DanmakuKernelFactory.getKernelType() !=
+                        DanmakuRenderEngine.nipaplayNext &&
+                    DanmakuKernelFactory.getKernelType() !=
+                        DanmakuRenderEngine.next2 &&
+                    DanmakuKernelFactory.getKernelType() !=
+                        DanmakuRenderEngine.dfmPlus);
 
             return Column(
               children: [
@@ -655,10 +678,10 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 ),
                 Divider(
                     color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (_usesBinaryDanmakuEffectToggles)
+                if (showBinaryDanmakuEffectToggles)
                   SettingsItem.toggle(
                     title: '弹幕描边',
-                    subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加描边',
+                    subtitle: '开启后为 $binaryDanmakuEffectKernelName 弹幕添加描边',
                     icon: Ionicons.text_outline,
                     value: videoState.next2DanmakuOutlineWidth > 0.0,
                     onChanged: (value) {
@@ -679,35 +702,38 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     },
                     dropdownKey: _danmakuOutlineStyleDropdownKey,
                   ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (_usesBinaryDanmakuEffectToggles)
-                  SettingsItem.toggle(
-                    title: '弹幕阴影',
-                    subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加阴影',
-                    icon: Ionicons.color_wand_outline,
-                    value: videoState.danmakuShadowStyle !=
-                        DanmakuShadowStyle.none,
-                    onChanged: (value) {
-                      videoState.setDanmakuShadowStyle(
-                        value
-                            ? DanmakuShadowStyle.strong
-                            : DanmakuShadowStyle.none,
-                      );
-                    },
-                  )
-                else
-                  SettingsItem.dropdown(
-                    title: '弹幕阴影样式',
-                    subtitle: '选择弹幕文字的阴影强度',
-                    icon: Ionicons.color_wand_outline,
-                    items: shadowItems,
-                    onChanged: (dynamic value) {
-                      if (value is! DanmakuShadowStyle) return;
-                      videoState.setDanmakuShadowStyle(value);
-                    },
-                    dropdownKey: _danmakuShadowStyleDropdownKey,
-                  ),
+                if (!isErikaPlayerKernel) ...[
+                  Divider(
+                      color: colorScheme.onSurface.withOpacity(0.12),
+                      height: 1),
+                  if (_usesBinaryDanmakuEffectToggles)
+                    SettingsItem.toggle(
+                      title: '弹幕阴影',
+                      subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加阴影',
+                      icon: Ionicons.color_wand_outline,
+                      value: videoState.danmakuShadowStyle !=
+                          DanmakuShadowStyle.none,
+                      onChanged: (value) {
+                        videoState.setDanmakuShadowStyle(
+                          value
+                              ? DanmakuShadowStyle.strong
+                              : DanmakuShadowStyle.none,
+                        );
+                      },
+                    )
+                  else
+                    SettingsItem.dropdown(
+                      title: '弹幕阴影样式',
+                      subtitle: '选择弹幕文字的阴影强度',
+                      icon: Ionicons.color_wand_outline,
+                      items: shadowItems,
+                      onChanged: (dynamic value) {
+                        if (value is! DanmakuShadowStyle) return;
+                        videoState.setDanmakuShadowStyle(value);
+                      },
+                      dropdownKey: _danmakuShadowStyleDropdownKey,
+                    ),
+                ],
                 Divider(
                     color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.slider(
@@ -738,7 +764,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                   },
                   dropdownKey: _danmakuDisplayAreaDropdownKey,
                 ),
-                if (_isDfmPlusKernel) ...[
+                if (showTrackGapSlider) ...[
                   Divider(
                       color: colorScheme.onSurface.withOpacity(0.12),
                       height: 1),
@@ -756,8 +782,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     labelFormatter: (value) => '${(value * 100).round()}%',
                   ),
                 ],
-                if (DanmakuKernelFactory.getKernelType() !=
-                    DanmakuRenderEngine.canvas) ...[
+                if (showMergeToggle) ...[
                   Divider(
                       color: colorScheme.onSurface.withOpacity(0.12),
                       height: 1),
@@ -771,14 +796,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     },
                   ),
                 ],
-                if (DanmakuKernelFactory.getKernelType() !=
-                        DanmakuRenderEngine.canvas &&
-                    DanmakuKernelFactory.getKernelType() !=
-                        DanmakuRenderEngine.nipaplayNext &&
-                    DanmakuKernelFactory.getKernelType() !=
-                        DanmakuRenderEngine.next2 &&
-                    DanmakuKernelFactory.getKernelType() !=
-                        DanmakuRenderEngine.dfmPlus) ...[
+                if (showStackingToggle) ...[
                   Divider(
                       color: colorScheme.onSurface.withOpacity(0.12),
                       height: 1),

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
@@ -7,6 +10,7 @@ import 'player_menu_theme.dart';
 import 'settings_hint_text.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 class PlaybackInfoMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -82,6 +86,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final erikaUpscalerInfo = _getErikaUpscalerInfo(videoState);
+        final erikaRuntimeInfo = _getErikaRuntimeInfo(videoState);
         return BaseSettingsMenu(
           title: '播放信息',
           onClose: widget.onClose,
@@ -93,6 +98,15 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SettingsHintText('当前播放状态和媒体信息'),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _copyPlaybackDiagnostics(videoState),
+                    icon: const Icon(Icons.content_copy, size: 16),
+                    label: const Text('复制诊断'),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 _buildInfoCard('播放状态', _getPlaybackStatusInfo(videoState)),
                 const SizedBox(height: 12),
@@ -100,6 +114,10 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
                 if (erikaUpscalerInfo.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   _buildInfoCard('Erika 超分', erikaUpscalerInfo),
+                ],
+                if (erikaRuntimeInfo.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildInfoCard('Erika 运行', erikaRuntimeInfo),
                 ],
                 const SizedBox(height: 12),
                 _buildInfoCard('音频信息', _getAudioInfo(videoState)),
@@ -121,6 +139,66 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
         );
       },
     );
+  }
+
+  Future<void> _copyPlaybackDiagnostics(VideoPlayerState videoState) async {
+    try {
+      final detailedInfo = await videoState.player.getDetailedMediaInfoAsync();
+      final mediaInfo = videoState.player.mediaInfo;
+      final payload = <String, dynamic>{
+        'exportedAt': DateTime.now().toIso8601String(),
+        'kernel': _playerKernelName,
+        'status': videoState.status.name,
+        'path': videoState.currentVideoPath,
+        'actualUrl': videoState.currentActualPlayUrl,
+        'positionMs': videoState.position.inMilliseconds,
+        'durationMs': videoState.duration.inMilliseconds,
+        'playbackRate': videoState.playbackRate,
+        'mediaInfo': <String, dynamic>{
+          'durationMs': mediaInfo.duration,
+          'video': [
+            for (final video in mediaInfo.video ?? const [])
+              <String, dynamic>{
+                'codec': video.codecName,
+                'width': video.codec.width,
+                'height': video.codec.height,
+                'raw': video.codec.name,
+              },
+          ],
+          'audio': [
+            for (final audio in mediaInfo.audio ?? const [])
+              <String, dynamic>{
+                'title': audio.title,
+                'language': audio.language,
+                'codec': audio.codec.name,
+                'sampleRate': audio.codec.sampleRate,
+                'channels': audio.codec.channels,
+                'bitRate': audio.codec.bitRate,
+                'metadata': audio.metadata,
+              },
+          ],
+          'subtitle': [
+            for (final subtitle in mediaInfo.subtitle ?? const [])
+              <String, dynamic>{
+                'title': subtitle.title,
+                'language': subtitle.language,
+                'metadata': subtitle.metadata,
+              },
+          ],
+        },
+        'detailedInfo': detailedInfo,
+        if (_serverMeta != null) 'serverMeta': _serverMeta,
+      };
+      const encoder = JsonEncoder.withIndent('  ');
+      await Clipboard.setData(ClipboardData(text: encoder.convert(payload)));
+      if (mounted) {
+        BlurSnackBar.show(context, '播放诊断已复制');
+      }
+    } catch (error) {
+      if (mounted) {
+        BlurSnackBar.show(context, '复制诊断失败: $error');
+      }
+    }
   }
 
   List<InfoItem> _getServerMetaInfo() {
@@ -299,7 +377,29 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     final codec = videoStream.codec;
 
     // 根据播放器内核类型处理信息
-    if (playerKernelName.toLowerCase().contains('mdk')) {
+    if (_isErikaKernel) {
+      final codecParamsString = codec.name ?? '';
+      final codecInfo = _parseVideoCodecParams(codecParamsString);
+      final codecName =
+          videoStream.codecName ?? codecInfo['codec'] ?? 'unknown';
+      final resolution = codec.width > 0 && codec.height > 0
+          ? '${codec.width}x${codec.height}'
+          : '未知';
+      final details = _joinNonEmpty(
+        [
+          codecInfo['profile'],
+          codecInfo['level'] != null ? 'Level ${codecInfo['level']}' : null,
+          codecInfo['format'],
+        ],
+        sep: ' · ',
+      );
+      return [
+        InfoItem('编解码器', codecName),
+        InfoItem('分辨率', resolution),
+        InfoItem('解码', 'Erika'),
+        if (details.isNotEmpty) InfoItem('参数', details),
+      ];
+    } else if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串
       final codecParamsString = codec.name ?? '';
       final codecInfo = _parseVideoCodecParams(codecParamsString);
@@ -431,6 +531,41 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     ];
   }
 
+  List<InfoItem> _getErikaRuntimeInfo(VideoPlayerState videoState) {
+    if (!_isErikaKernel) {
+      return const <InfoItem>[];
+    }
+    final detailedInfo =
+        _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+    final stats = detailedInfo['presenterStats'];
+    if (stats is! Map || stats.isEmpty) {
+      return const <InfoItem>[];
+    }
+    final rendered = _toNum(stats['renderedVideoFrames'])?.toInt() ?? 0;
+    final decoded = _toNum(stats['decodedVideoFrames'])?.toInt() ?? 0;
+    final hardware = _toNum(stats['hardwareVideoFrames'])?.toInt() ?? 0;
+    final software = _toNum(stats['softwareVideoFrames'])?.toInt() ?? 0;
+    final zeroCopy = _toNum(stats['zeroCopyVideoFrames'])?.toInt() ?? 0;
+    final cpuFallback = _toNum(stats['cpuVideoFrameFallbacks'])?.toInt() ?? 0;
+    final audioUnderflow =
+        _toNum(stats['audioClockUnderflowFrames'])?.toInt() ?? 0;
+    final audioQueued = _toNum(stats['audioClockQueuedFrames'])?.toInt() ?? 0;
+    final renderMicros = _toNum(stats['lastRenderMicros'])?.toInt() ?? 0;
+    final hdrActive = stats['hdr10OutputActive'] == true;
+
+    return [
+      InfoItem('视频帧', 'decoded $decoded / rendered $rendered'),
+      InfoItem('硬解帧', '$hardware', hardware > 0),
+      InfoItem('软解帧', '$software'),
+      InfoItem('零拷贝', '$zeroCopy', zeroCopy > 0),
+      InfoItem('CPU回退', '$cpuFallback', cpuFallback == 0),
+      InfoItem('音频队列', 'queued $audioQueued / underflow $audioUnderflow',
+          audioUnderflow == 0),
+      InfoItem('最近渲染', _formatMicrosAsMs(renderMicros)),
+      InfoItem('HDR10输出', hdrActive ? '开启' : '关闭', hdrActive),
+    ];
+  }
+
   String _formatErikaUpscalerMode(String mode) {
     switch (mode) {
       case 'erikaArtCnnC4F16':
@@ -472,6 +607,8 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     return '${(micros / 1000.0).toStringAsFixed(2)} ms';
   }
 
+  bool get _isErikaKernel => _playerKernelName.toLowerCase().contains('erika');
+
   List<InfoItem> _getAudioInfo(VideoPlayerState videoState) {
     final mediaInfo = videoState.player.mediaInfo;
     final audioStreams = mediaInfo.audio;
@@ -490,7 +627,23 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     final codec = audioStream.codec;
 
     // 根据播放器内核类型处理信息
-    if (playerKernelName.toLowerCase().contains('mdk')) {
+    if (_isErikaKernel) {
+      final codecName = codec.name ?? 'unknown';
+      final sampleRate = codec.sampleRate != null && codec.sampleRate! > 0
+          ? '${codec.sampleRate} Hz'
+          : '未知';
+      final channels = codec.channels != null && codec.channels! > 0
+          ? _formatChannels(codec.channels!)
+          : '未知';
+      final sampleFormat = audioStream.metadata['sampleFormat'];
+      return [
+        InfoItem('编解码器', codecName),
+        InfoItem('采样率', sampleRate),
+        InfoItem('声道', channels),
+        if (sampleFormat != null) InfoItem('采样格式', sampleFormat),
+        InfoItem('码率', '未知'),
+      ];
+    } else if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串
       final codecParamsString = codec.name ?? '';
       final codecInfo = _parseAudioCodecParams(codecParamsString);
