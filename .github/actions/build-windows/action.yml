@@ -37,6 +37,9 @@ runs:
           make
           tar
           diffutils
+          coreutils
+          pkgconf
+          perl
 
     - name: Configure Erika Windows native build
       shell: pwsh
@@ -68,6 +71,9 @@ runs:
         }
         if (-not (Test-Path "C:\msys64\usr\bin\make.exe")) {
           throw "MSYS2 make.exe was not found"
+        }
+        if (-not (Test-Path "C:\msys64\usr\bin\false.exe")) {
+          throw "MSYS2 false.exe was not found"
         }
 
     - name: Cache Erika Cargo dependencies
