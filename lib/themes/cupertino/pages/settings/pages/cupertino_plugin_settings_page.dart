@@ -489,9 +489,9 @@ class _CupertinoPluginSettingsPageState
                                           updatedPlugin.manifest.id,
                                           entry.id,
                                           !switchValue);
-                                      await _invokePluginAction(
-                                          sheetContext, updatedPlugin, entry,
-                                          showResult: false);
+                                      // switch 状态由宿主单一管理，setSwitchSettingValue 会
+                                      // emit settingsChanged 通知插件即时重读，无需再调用插件
+                                      // 动作（否则插件内部 params 翻转会与即时同步产生双取反冲突）。
                                     },
                                   ),
                                 );
