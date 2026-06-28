@@ -16,6 +16,7 @@ import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;

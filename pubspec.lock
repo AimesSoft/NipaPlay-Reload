@@ -283,8 +283,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/erika_flutter"
-      ref: "codex/windows-native-core"
-      resolved-ref: f8283395f0a45ba818a33e5a8cb5d8214e1c073f
+      ref: main
+      resolved-ref: a5704e0983de3ec5df984ca5b8cb93ea6e69e10e
       url: "https://github.com/AimesSoft/Erika.git"
     source: git
     version: "0.0.1"

@@ -132,9 +132,42 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     return img.copyResize(image, height: _thumbnailMaxHeight);
   }
 
+  bool _isLikelyBlankThumbnailFrame(img.Image image) {
+    const sampleLimit = 4096;
+    const brightThreshold = 18;
+    final totalPixels = image.width * image.height;
+    if (totalPixels <= 0) return true;
+
+    final sampleStep = (totalPixels / sampleLimit).ceil().clamp(1, totalPixels);
+    var index = 0;
+    var sampled = 0;
+    var brightPixels = 0;
+
+    for (final pixel in image) {
+      if (index % sampleStep == 0) {
+        sampled++;
+        final maxChannel = math.max(
+          pixel.r.toInt(),
+          math.max(pixel.g.toInt(), pixel.b.toInt()),
+        );
+        if (maxChannel > brightThreshold) {
+          brightPixels++;
+        }
+      }
+      index++;
+    }
+
+    if (sampled == 0) return true;
+    return brightPixels / sampled < 0.002;
+  }
+
   Uint8List? _encodeFrameToThumbnailBytes(PlayerFrame frame) {
     final decoded = _decodeFrameToImage(frame);
     if (decoded == null) {
+      return null;
+    }
+    if (_isLikelyBlankThumbnailFrame(decoded)) {
+      debugPrint('截图失败: 捕获到近似全黑帧，跳过保存缩略图');
       return null;
     }
     final resized = _resizeThumbnailImage(decoded);
@@ -481,8 +514,11 @@ extension VideoPlayerStateCapture on VideoPlayerState {
             return bytes;
           }
         }
+        debugPrint('Erika截图失败: native snapshot 未返回可编码帧');
+        return null;
       } catch (e) {
-        debugPrint('Erika截图失败，回退到界面截图: $e');
+        debugPrint('Erika截图失败: $e');
+        return null;
       }
     }
 

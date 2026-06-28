@@ -427,9 +427,24 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       return null;
     }
     try {
-      final Uint8List? bytes = await _player.screenshot();
+      final captureWidth = width > 0 ? width : null;
+      final captureHeight = height > 0 ? height : null;
+      final Uint8List? bytes = await _player.screenshot(
+        width: captureWidth,
+        height: captureHeight,
+      );
       if (bytes == null || bytes.isEmpty) {
         return null;
+      }
+      if (captureWidth != null && captureHeight != null) {
+        final expectedRgbaBytes = captureWidth * captureHeight * 4;
+        if (bytes.length != expectedRgbaBytes) {
+          debugPrint(
+            'Erika: screenshot native capture unavailable '
+            '(expected $expectedRgbaBytes RGBA bytes, got ${bytes.length})',
+          );
+          return null;
+        }
       }
       final video = _mediaInfo.video;
       final codec =
