@@ -268,6 +268,12 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   bool get _isDfmPlusKernel =>
       DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
 
+  bool get _usesBinaryDanmakuEffectToggles =>
+      _isNext2Kernel || _isDfmPlusKernel;
+
+  String get _binaryDanmakuEffectKernelName =>
+      _isDfmPlusKernel ? 'DFM+' : 'Next2';
+
   Future<void> _pickDanmakuFontFile(VideoPlayerState videoState) async {
     final selected = await openFile(
       acceptedTypeGroups: const [
@@ -649,10 +655,10 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 ),
                 Divider(
                     color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (_isNext2Kernel)
+                if (_usesBinaryDanmakuEffectToggles)
                   SettingsItem.toggle(
                     title: '弹幕描边',
-                    subtitle: '开启后为 Next2 弹幕添加描边',
+                    subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加描边',
                     icon: Ionicons.text_outline,
                     value: videoState.next2DanmakuOutlineWidth > 0.0,
                     onChanged: (value) {
@@ -675,10 +681,10 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                   ),
                 Divider(
                     color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (_isNext2Kernel)
+                if (_usesBinaryDanmakuEffectToggles)
                   SettingsItem.toggle(
                     title: '弹幕阴影',
-                    subtitle: '开启后为 Next2 弹幕添加阴影',
+                    subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加阴影',
                     icon: Ionicons.color_wand_outline,
                     value: videoState.danmakuShadowStyle !=
                         DanmakuShadowStyle.none,
