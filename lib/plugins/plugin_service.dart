@@ -123,6 +123,7 @@ class PluginService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_textSettingPrefix$key', value);
     notifyListeners();
+    _emitSettingsChanged(pluginId, entryId, 'text', value);
   }
 
   bool getSwitchSettingValue(String pluginId, String entryId) {
@@ -136,6 +137,18 @@ class PluginService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('$_switchSettingPrefix$key', value);
     notifyListeners();
+    _emitSettingsChanged(pluginId, entryId, 'switch', value);
+  }
+
+  /// 设置发生外部变更时通知插件，使其能即时重读配置，无需重载插件。
+  void _emitSettingsChanged(
+      String pluginId, String entryId, String type, dynamic value) {
+    _eventBus.emit(PluginEventType.settingsChanged, <String, dynamic>{
+      'pluginId': pluginId,
+      'entryId': entryId,
+      'type': type,
+      'value': value,
+    });
   }
 
   Future<void> _loadTextSettingValues() async {
@@ -669,6 +682,7 @@ class PluginService extends ChangeNotifier {
     final enabledIds = await _loadEnabledIds();
     final discoveredPlugins = await _discoverPlugins();
 
+    // 第一遍：解析清单并登记描述符（暂不加载运行时）。
     for (final discovered in discoveredPlugins) {
       try {
         final parsed = _parsePluginMetadata(discovered.script);
@@ -691,11 +705,6 @@ class PluginService extends ChangeNotifier {
           uiEntries: parsed.uiEntries,
         );
         _plugins.add(descriptor);
-
-        if (enabled) {
-          await _loadPluginRuntime(manifest.id);
-          await _invokeLifecycleEvent(manifest.id, 'initialize');
-        }
       } catch (_) {}
     }
 
@@ -703,8 +712,20 @@ class PluginService extends ChangeNotifier {
       return;
     }
 
+    // 关键：必须在加载运行时、触发 pluginOnInitialize 之前，先把用户保存的设置
+    // 读入内存。否则插件初始化时读取到的是空值，只能回退到默认值——表现为打开软件
+    // 后插件用默认配置生效，必须到设置里关闭再打开才读取到真实配置。
     await _loadTextSettingValues();
     await _loadSwitchSettingValues();
+
+    // 第二遍：加载运行时并触发 pluginOnInitialize，此时设置已就绪。
+    for (final plugin in _plugins) {
+      if (!plugin.enabled) continue;
+      try {
+        await _loadPluginRuntime(plugin.manifest.id);
+        await _invokeLifecycleEvent(plugin.manifest.id, 'initialize');
+      } catch (_) {}
+    }
 
     final existingIds = _plugins.map((e) => e.manifest.id).toSet();
     final sanitizedEnabled = enabledIds.where(existingIds.contains).toList();
