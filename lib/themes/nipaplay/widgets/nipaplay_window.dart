@@ -136,6 +136,19 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     });
   }
 
+  void _toggleWindowDisplayMode(AppearanceSettingsProvider settings) {
+    final nextMode =
+        settings.windowDisplayMode == NipaplayWindowDisplayMode.filledScreen
+            ? NipaplayWindowDisplayMode.windowed
+            : NipaplayWindowDisplayMode.filledScreen;
+    if (_offset != Offset.zero) {
+      setState(() {
+        _offset = Offset.zero;
+      });
+    }
+    settings.setWindowDisplayMode(nextMode);
+  }
+
   VoidCallback _resolveCloseHandler(BuildContext context) {
     return widget.onClose ?? () => Navigator.of(context).maybePop();
   }
@@ -326,6 +339,10 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                   style: windowTextStyle,
                                   child: NipaplayWindowPositionProvider(
                                     onMove: _applyWindowOffset,
+                                    onToggleDisplayMode: () =>
+                                        _toggleWindowDisplayMode(
+                                      appearanceSettings,
+                                    ),
                                     child: Padding(
                                       padding: const EdgeInsets.only(
                                         top: _contentTopPadding,
@@ -341,6 +358,9 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                   height: _contentTopPadding,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.translucent,
+                                    onDoubleTap: () => _toggleWindowDisplayMode(
+                                      appearanceSettings,
+                                    ),
                                     onPanUpdate: (details) =>
                                         _applyWindowOffset(details.delta),
                                   ),
@@ -399,9 +419,11 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
 /// 用于在窗口内容中处理拖动的手势提供者
 class NipaplayWindowPositionProvider extends InheritedWidget {
   final Function(Offset delta) onMove;
+  final VoidCallback onToggleDisplayMode;
 
   const NipaplayWindowPositionProvider({
     required this.onMove,
+    required this.onToggleDisplayMode,
     required super.child,
     super.key,
   });

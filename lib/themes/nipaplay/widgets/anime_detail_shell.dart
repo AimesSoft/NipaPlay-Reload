@@ -57,6 +57,9 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
           onPanUpdate: (details) {
             NipaplayWindowPositionProvider.of(context)?.onMove(details.delta);
           },
+          onDoubleTap: () {
+            NipaplayWindowPositionProvider.of(context)?.onToggleDisplayMode();
+          },
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
             child: Row(

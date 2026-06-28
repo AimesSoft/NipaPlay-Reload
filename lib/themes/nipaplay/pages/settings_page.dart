@@ -55,6 +55,10 @@ class SettingsPage extends StatefulWidget {
                     NipaplayWindowPositionProvider.of(innerContext)
                         ?.onMove(details.delta);
                   },
+                  onDoubleTap: () {
+                    NipaplayWindowPositionProvider.of(innerContext)
+                        ?.onToggleDisplayMode();
+                  },
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     child: Text(
