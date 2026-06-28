@@ -1,0 +1,53 @@
+name: Erika Windows Native Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/erika-windows-native-smoke.yml'
+  push:
+    branches:
+      - codex/release-ci-smoke
+    paths:
+      - '.github/workflows/erika-windows-native-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: erika-windows-native-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ffmpeg-make:
+    name: FFmpeg Make Shell Smoke
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup MSYS2 tools
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: false
+          update: false
+          path-type: inherit
+          install: >-
+            make
+            coreutils
+            gawk
+
+      - name: Run Erika FFmpeg make smoke
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/AimesSoft/Erika.git "$env:RUNNER_TEMP\Erika"
+          cd "$env:RUNNER_TEMP\Erika"
+          git rev-parse HEAD
+          cargo run -p xtask -- deps smoke-ffmpeg-make --target x86_64-pc-windows-msvc
