@@ -10,7 +10,7 @@ on:
         type: boolean
       run_windows:
         description: 'Run Windows release build, including Erika native core'
-        default: true
+        default: false
         required: true
         type: boolean
       run_linux:
@@ -88,7 +88,7 @@ jobs:
 
   build-windows:
     name: Windows Release Build
-    if: github.event_name == 'pull_request' || inputs.run_windows
+    if: github.event_name == 'workflow_dispatch' && inputs.run_windows
     uses: ./.github/workflows/build-windows.yml
 
   build-linux:
