@@ -1,0 +1,97 @@
+name: Release CI Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_validation:
+        description: 'Run Flutter analyze/test gate'
+        default: true
+        required: true
+        type: boolean
+      run_windows:
+        description: 'Run Windows release build, including Erika native core'
+        default: true
+        required: true
+        type: boolean
+      run_linux:
+        description: 'Run Linux amd64 release build'
+        default: false
+        required: true
+        type: boolean
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.fvmrc'
+      - '.github/actions/**'
+      - '.github/workflows/build-*.yml'
+      - '.github/workflows/release-ci-smoke.yml'
+      - 'assets/**'
+      - 'build_and_copy_web.sh'
+      - 'cpp_native/**'
+      - 'lib/**'
+      - 'pubspec.lock'
+      - 'pubspec.yaml'
+      - 'rust/**'
+      - 'rust_builder/**'
+      - 'test/**'
+      - 'third_party/**'
+      - 'web/**'
+      - 'windows/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ci-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Analyze and Test
+    if: github.event_name == 'pull_request' || inputs.run_validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter Environment
+        uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib
+
+      - name: Detect root test files
+        id: detect_tests
+        shell: bash
+        run: |
+          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run flutter test
+        if: steps.detect_tests.outputs.has_tests == 'true'
+        run: flutter test --no-pub --reporter expanded
+
+      - name: Skip flutter test
+        if: steps.detect_tests.outputs.has_tests != 'true'
+        run: echo "No root-level *_test.dart files found. Skipping flutter test."
+
+  build-windows:
+    name: Windows Release Build
+    if: github.event_name == 'pull_request' || inputs.run_windows
+    uses: ./.github/workflows/build-windows.yml
+
+  build-linux:
+    name: Linux amd64 Release Build
+    if: github.event_name == 'workflow_dispatch' && inputs.run_linux
+    uses: ./.github/workflows/build-linux.yml

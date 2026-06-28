@@ -194,6 +194,7 @@ runs:
         )
         PY
 
+        echo "ERIKA_SHA=${ERIKA_SHA}" >> "$GITHUB_ENV"
         echo "Erika main resolved to ${ERIKA_SHA}."
     
     - name: Flutter Pub Get

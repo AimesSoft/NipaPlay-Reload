@@ -37,6 +37,9 @@ runs:
           make
           tar
           diffutils
+          coreutils
+          pkgconf
+          perl
 
     - name: Configure Erika Windows native build
       shell: pwsh
@@ -69,15 +72,19 @@ runs:
         if (-not (Test-Path "C:\msys64\usr\bin\make.exe")) {
           throw "MSYS2 make.exe was not found"
         }
+        if (-not (Test-Path "C:\msys64\usr\bin\false.exe")) {
+          throw "MSYS2 false.exe was not found"
+        }
 
     - name: Cache Erika Cargo dependencies
       uses: actions/cache@v4
       with:
         path: |
-          ${{ env.USERPROFILE }}\.cargo\registry
-          ${{ env.USERPROFILE }}\.cargo\git
-        key: windows-erika-cargo-${{ hashFiles('pubspec.lock') }}-v1
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: windows-erika-cargo-${{ env.ERIKA_SHA || hashFiles('pubspec.lock') }}-v1
         restore-keys: |
+          windows-erika-cargo-${{ env.ERIKA_SHA }}-
           windows-erika-cargo-
 
     - name: Restore Erika native dependency bundle
@@ -85,9 +92,17 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
-        key: windows-erika-native-${{ hashFiles('pubspec.lock') }}-v1
+          ~/.pub-cache/git/Erika-*/third_party/dist/x86_64-pc-windows-msvc/lgpl
+        key: windows-erika-native-x86_64-pc-windows-msvc-lgpl-${{ env.ERIKA_SHA || hashFiles('pubspec.lock') }}-v1
+        restore-keys: |
+          windows-erika-native-x86_64-pc-windows-msvc-lgpl-
+
+    - name: Restore Erika native source archives
+      id: restore-erika-native-sources
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.pub-cache/git/Erika-*/third_party/cache
+        key: windows-erika-native-sources-v1
 
     - name: Setup Chinese Font for Windows
       shell: pwsh
@@ -301,9 +316,85 @@ runs:
       id: build
       shell: pwsh
       run: |
+        function Show-ErikaNativeDiagnostics {
+          Write-Host "::group::Erika native diagnostics"
+          try {
+            $patterns = @()
+            if ($env:LOCALAPPDATA) {
+              $patterns += Join-Path $env:LOCALAPPDATA "Pub\Cache\git\Erika-*"
+            }
+            if ($env:USERPROFILE) {
+              $patterns += Join-Path $env:USERPROFILE ".pub-cache\git\Erika-*"
+            }
+            $patterns += "windows\flutter\ephemeral\.plugin_symlinks\erika_flutter"
+
+            $roots = @()
+            foreach ($pattern in $patterns) {
+              $roots += Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue
+            }
+            if (-not $roots) {
+              Write-Host "No Erika checkout found in Pub cache or plugin symlinks."
+              return
+            }
+
+            $roots = $roots | Sort-Object FullName -Unique
+            foreach ($root in $roots) {
+              Write-Host "Erika root: $($root.FullName)"
+              $thirdParty = Join-Path $root.FullName "third_party"
+              if (-not (Test-Path $thirdParty)) {
+                Write-Host "third_party directory is missing."
+                continue
+              }
+
+              Write-Host "third_party top-level directories:"
+              Get-ChildItem -Path $thirdParty -Directory -ErrorAction SilentlyContinue |
+                Select-Object -First 20 |
+                ForEach-Object { Write-Host "  $($_.FullName)" }
+
+              $metadataFiles = Get-ChildItem -Path $thirdParty -Recurse -File -Filter "erika-native-deps.txt" -ErrorAction SilentlyContinue
+              foreach ($file in $metadataFiles) {
+                Write-Host "--- $($file.FullName) ---"
+                Get-Content -Path $file.FullName -Tail 200 -ErrorAction SilentlyContinue
+              }
+
+              $logFiles = Get-ChildItem -Path $thirdParty -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.FullName -match "[\\/]ffbuild[\\/]config\.log$" -or
+                  $_.Name -in @("config.log", "build.log")
+                } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 8
+              foreach ($file in $logFiles) {
+                Write-Host "--- tail $($file.FullName) ---"
+                Get-Content -Path $file.FullName -Tail 300 -ErrorAction SilentlyContinue
+              }
+            }
+          } finally {
+            Write-Host "::endgroup::"
+          }
+        }
+
         # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
         # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
-        flutter build windows --release --no-pub --obfuscate --split-debug-info=build/symbols-windows
+        $flutterArgs = @(
+          "build",
+          "windows",
+          "--release",
+          "--no-pub",
+          "--obfuscate",
+          "--split-debug-info=build/symbols-windows"
+        )
+        if ($env:NIPAPLAY_VERBOSE_WINDOWS_BUILD -ne "0") {
+          $flutterArgs += "--verbose"
+        }
+        Write-Host "Running: flutter $($flutterArgs -join ' ')"
+        & flutter @flutterArgs
+        $flutterExitCode = $LASTEXITCODE
+        if ($flutterExitCode -ne 0) {
+          Show-ErikaNativeDiagnostics
+          throw "flutter build windows failed with exit code $flutterExitCode"
+        }
+
         $arch = "x64"
         $version = "${{ inputs.app-version }}"
         $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
@@ -329,9 +420,15 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\cache
-          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\Erika-*\third_party\dist\x86_64-pc-windows-msvc\lgpl
+          ~/.pub-cache/git/Erika-*/third_party/dist/x86_64-pc-windows-msvc/lgpl
         key: ${{ steps.restore-erika-native-deps.outputs.cache-primary-key }}
+
+    - name: Save Erika native source archives
+      if: always() && steps.restore-erika-native-sources.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.pub-cache/git/Erika-*/third_party/cache
+        key: ${{ steps.restore-erika-native-sources.outputs.cache-primary-key }}
 
     - name: Install Inno Setup
       shell: pwsh
