@@ -107,6 +107,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The changelog pipeline (gather commits/PRs -> call AI -> write notes) is
+          # wrapped in a subshell so ANY failure (missing config, AI 429/timeout,
+          # jq parse error) cannot abort the release. On failure release_notes.md is
+          # left empty to be filled in manually after the release is published.
+          if ! (
           AI_API_URL=$(printf '%s' "$AI_API_URL" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
           AI_MODEL=$(printf '%s' "$AI_MODEL" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
           AI_API_TOKEN=$(printf '%s' "$AI_API_TOKEN" | tr -d '\r\n')
@@ -339,6 +344,10 @@ jobs:
           echo "--- Generated Release Notes ---"
           cat release_notes.md
           echo "-------------------------------"
+          ); then
+            echo "::warning::Changelog generation failed or was skipped. Leaving release_notes.md empty; please fill in the release notes manually after the release is published."
+            : > release_notes.md
+          fi
 
       - name: Upload to release
         uses: ncipollo/release-action@v1
