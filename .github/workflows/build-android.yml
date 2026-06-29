@@ -94,9 +94,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-Android
-          path: |
-            build/app/outputs/apk/release/NipaPlay-*.apk
-            build/symbols-android-*/
+          # Keep this a single path. upload-artifact@v4 uses the least common
+          # ancestor of all matched files as the artifact root; adding more paths
+          # (e.g. build/symbols-android-*/) here lifts that root up to build/,
+          # which nests the APKs under app/outputs/apk/release/ and breaks the
+          # release-Android/*.apk glob in main.yml. Native symbols are uploaded
+          # separately as dart-symbols-Android below.
+          path: build/app/outputs/apk/release/NipaPlay-*.apk
 
       - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
         uses: actions/upload-artifact@v4
