@@ -315,7 +315,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       // macOS keeps the full-bleed surface: Erika letterboxes natively into
       // the reserved plane. Flutter must NOT shrink the plane or paint around
       // it, or the app UI behind shows through the transparent bars.
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final useLegacyIosAspectSurface = !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.iOS &&
+          Platform.environment['NIPAPLAY_IOS_ERIKA_ASPECT_SURFACE'] == '1';
+      if (useLegacyIosAspectSurface) {
         return Center(
           child: AspectRatio(
             aspectRatio: videoState.aspectRatio,
