@@ -2,78 +2,11 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CPP_NATIVE_DIR="$(dirname "$SCRIPT_DIR")"
-NIPAPLAY_ROOT="$(cd "${CPP_NATIVE_DIR}/.." && pwd)"
-ERIKA_NATIVE_PROFILE="${ERIKA_NATIVE_PROFILE:-lgpl}"
-HOST_JOBS="$(sysctl -n hw.ncpu)"
-ERIKA_RUST_TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin")
+HOST_JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 # Xcode Run Script 阶段的 PATH 不会继承 shell 配置，显式补上 Homebrew 路径
 # 让 Apple Silicon (/opt/homebrew) 和 Intel (/usr/local) 都能找到 cmake 等工具
 export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
-
-resolve_erika_root() {
-    if [ -n "${ERIKA_ROOT:-}" ]; then
-        if [ -f "${ERIKA_ROOT}/Cargo.toml" ]; then
-            (cd "${ERIKA_ROOT}" && pwd -P)
-            return
-        fi
-        echo "error: ERIKA_ROOT does not point to Erika source: ${ERIKA_ROOT}" >&2
-        return 1
-    fi
-
-    local vendored_root="${NIPAPLAY_ROOT}/third_party/erika"
-    if [ -f "${vendored_root}/Cargo.toml" ]; then
-        (cd "${vendored_root}" && pwd -P)
-        return
-    fi
-
-    local package_config="${NIPAPLAY_ROOT}/.dart_tool/package_config.json"
-    if [ ! -f "${package_config}" ]; then
-        echo "error: ${package_config} not found. Run flutter pub get first." >&2
-        return 1
-    fi
-
-    local erika_flutter_root
-    erika_flutter_root="$(python3 - "${package_config}" <<'PY'
-import json
-import pathlib
-import sys
-import urllib.parse
-
-package_config = pathlib.Path(sys.argv[1]).resolve()
-with package_config.open("r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-for package in data.get("packages", []):
-    if package.get("name") != "erika_flutter":
-        continue
-    root_uri = package.get("rootUri", "")
-    parsed = urllib.parse.urlparse(root_uri)
-    if parsed.scheme == "file":
-        root = pathlib.Path(urllib.parse.unquote(parsed.path))
-    elif parsed.scheme:
-        raise SystemExit(f"unsupported erika_flutter rootUri: {root_uri}")
-    else:
-        root = (package_config.parent / urllib.parse.unquote(root_uri)).resolve()
-    print(root)
-    break
-else:
-    raise SystemExit("erika_flutter not found in package_config.json")
-PY
-)"
-
-    local resolved_root
-    resolved_root="$(cd "${erika_flutter_root}/../.." && pwd -P)"
-    if [ -f "${resolved_root}/Cargo.toml" ]; then
-        echo "${resolved_root}"
-        return
-    fi
-
-    echo "error: Could not resolve Erika source root from erika_flutter package at ${erika_flutter_root}" >&2
-    return 1
-}
-
-ERIKA_ROOT="$(resolve_erika_root)"
 
 # Map Xcode configuration to CMake build type
 if [ "${CONFIGURATION}" = "Debug" ]; then
@@ -110,62 +43,19 @@ cmake -S "${CPP_NATIVE_DIR}" -B "${BUILD_DIR}/x86_64" \
 
 cmake --build "${BUILD_DIR}/x86_64" -j"${HOST_JOBS}"
 
-# 3) lipo 合并为 universal dylib
+# 3) lipo 合并为 universal dylib。Erika C ABI 由 erika_flutter 的
+# CocoaPods script phase 负责下载/构建并复制到 app Frameworks 目录。
 mkdir -p "${BUILD_DIR}"
 lipo -create \
     "${BUILD_DIR}/arm64/libnipaplay_native.dylib" \
     "${BUILD_DIR}/x86_64/libnipaplay_native.dylib" \
     -output "${BUILD_DIR}/libnipaplay_native.dylib"
 
-if [ "${CONFIGURATION}" = "Debug" ]; then
-    ERIKA_CARGO_PROFILE="debug"
-    ERIKA_CARGO_ARGS=()
-else
-    ERIKA_CARGO_PROFILE="release"
-    ERIKA_CARGO_ARGS=(--release)
-fi
-
-echo "Building Erika C API from ${ERIKA_ROOT} (${ERIKA_CARGO_PROFILE})"
-if command -v rustup >/dev/null 2>&1; then
-    rustup target add "${ERIKA_RUST_TARGETS[@]}"
-fi
-
-ERIKA_DYLIB_INPUTS=()
-for RUST_TARGET in "${ERIKA_RUST_TARGETS[@]}"; do
-    ERIKA_TARGET_DIST="${ERIKA_ROOT}/third_party/dist/${RUST_TARGET}/${ERIKA_NATIVE_PROFILE}"
-    ERIKA_FFMPEG_DIR="${ERIKA_ROOT}/third_party/dist/${RUST_TARGET}/${ERIKA_NATIVE_PROFILE}/ffmpeg"
-    ERIKA_LIBASS_DIR="${ERIKA_TARGET_DIST}/libass"
-    ERIKA_FREETYPE_DIR="${ERIKA_TARGET_DIST}/freetype"
-    ERIKA_HARFBUZZ_DIR="${ERIKA_TARGET_DIST}/harfbuzz"
-    ERIKA_FRIBIDI_DIR="${ERIKA_TARGET_DIST}/fribidi"
-    ERIKA_FFMPEG_HEADERS="${ERIKA_FFMPEG_DIR}/include/libavformat/avformat.h"
-    ERIKA_LIBASS_ARCHIVE="${ERIKA_LIBASS_DIR}/lib/libass.a"
-    if [ ! -f "${ERIKA_FFMPEG_HEADERS}" ] || [ ! -f "${ERIKA_LIBASS_ARCHIVE}" ]; then
-        echo "Erika native dependencies not found for ${RUST_TARGET}; building ${ERIKA_NATIVE_PROFILE} dependency profile with libass"
-        (cd "${ERIKA_ROOT}" && cargo run -p xtask -- deps build --all --profile "${ERIKA_NATIVE_PROFILE}" --target "${RUST_TARGET}" --jobs "${HOST_JOBS}")
-    fi
-
-    echo "Building Erika C API for ${RUST_TARGET}"
-    (cd "${ERIKA_ROOT}" && ERIKA_NATIVE_PROFILE="${ERIKA_NATIVE_PROFILE}" ERIKA_NATIVE_TARGET="${RUST_TARGET}" ERIKA_FFMPEG_DIR="${ERIKA_FFMPEG_DIR}" ERIKA_LIBASS_DIR="${ERIKA_LIBASS_DIR}" ERIKA_FREETYPE_DIR="${ERIKA_FREETYPE_DIR}" ERIKA_HARFBUZZ_DIR="${ERIKA_HARFBUZZ_DIR}" ERIKA_FRIBIDI_DIR="${ERIKA_FRIBIDI_DIR}" cargo build -p erika_capi --target "${RUST_TARGET}" --no-default-features --features libass "${ERIKA_CARGO_ARGS[@]}")
-
-    ERIKA_DYLIB="${ERIKA_ROOT}/target/${RUST_TARGET}/${ERIKA_CARGO_PROFILE}/liberika_capi.dylib"
-    if [ ! -f "${ERIKA_DYLIB}" ]; then
-        echo "error: ${ERIKA_DYLIB} was not produced by Erika build." >&2
-        exit 1
-    fi
-    ERIKA_DYLIB_INPUTS+=("${ERIKA_DYLIB}")
-done
-
 # 复制 dylib 到 Frameworks
+mkdir -p "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}"
 cp "${BUILD_DIR}/libnipaplay_native.dylib" \
     "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/"
-
-ERIKA_BUNDLED_DYLIB="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/liberika_capi.dylib"
-lipo -create "${ERIKA_DYLIB_INPUTS[@]}" -output "${ERIKA_BUNDLED_DYLIB}"
-install_name_tool -id "@rpath/liberika_capi.dylib" "${ERIKA_BUNDLED_DYLIB}"
 
 # Code sign the dylib (required for macOS app notarization)
 codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" \
     "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libnipaplay_native.dylib"
-
-codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" "${ERIKA_BUNDLED_DYLIB}"

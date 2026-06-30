@@ -130,9 +130,17 @@ runs:
           exit 1
         fi
 
-        ERIKA_SHA="$(git ls-remote https://github.com/AimesSoft/Erika.git refs/heads/main | awk '{print $1}')"
+        ERIKA_REF="${ERIKA_REF:-main}"
+        ERIKA_REMOTE="https://github.com/AimesSoft/Erika.git"
+        ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/heads/${ERIKA_REF}" | awk '{print $1}')"
         if [ -z "${ERIKA_SHA}" ]; then
-          echo "❌ 无法解析 Erika main 最新提交。"
+          ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}^{}" | awk '{print $1}')"
+        fi
+        if [ -z "${ERIKA_SHA}" ]; then
+          ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}" | awk '{print $1}')"
+        fi
+        if [ -z "${ERIKA_SHA}" ]; then
+          echo "❌ 无法解析 Erika ref: ${ERIKA_REF}。"
           exit 1
         fi
 
@@ -141,10 +149,11 @@ runs:
           PYTHON_BIN="python"
         fi
 
-        ERIKA_SHA="${ERIKA_SHA}" "${PYTHON_BIN}" - <<'PY'
+        ERIKA_REF="${ERIKA_REF}" ERIKA_SHA="${ERIKA_SHA}" "${PYTHON_BIN}" - <<'PY'
         import os
         from pathlib import Path
 
+        erika_ref = os.environ["ERIKA_REF"]
         erika_sha = os.environ["ERIKA_SHA"]
 
         def update_erika_block(path, replacements):
@@ -184,18 +193,19 @@ runs:
 
             Path(path).write_text("".join(output), encoding='utf-8')
 
-        update_erika_block("pubspec.yaml", {"ref": "main"})
+        update_erika_block("pubspec.yaml", {"ref": erika_ref})
         update_erika_block(
             "pubspec.lock",
             {
-                "ref": "main",
+                "ref": erika_ref,
                 "resolved-ref": f'"{erika_sha}"',
             },
         )
         PY
 
+        echo "ERIKA_REF=${ERIKA_REF}" >> "$GITHUB_ENV"
         echo "ERIKA_SHA=${ERIKA_SHA}" >> "$GITHUB_ENV"
-        echo "Erika main resolved to ${ERIKA_SHA}."
+        echo "Erika ${ERIKA_REF} resolved to ${ERIKA_SHA}."
     
     - name: Flutter Pub Get
       shell: bash

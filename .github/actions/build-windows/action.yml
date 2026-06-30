@@ -19,11 +19,13 @@ runs:
       run: flutter precache --windows
 
     - name: Setup Rust for Erika native core
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: x86_64-pc-windows-msvc
 
     - name: Setup MSYS2 tools for Erika native dependencies
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       uses: msys2/setup-msys2@v2
       with:
         msystem: UCRT64
@@ -42,6 +44,7 @@ runs:
           perl
 
     - name: Configure Erika Windows native build
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       shell: pwsh
       run: |
         git config --global core.longpaths true
@@ -77,6 +80,7 @@ runs:
         }
 
     - name: Cache Erika Cargo dependencies
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       uses: actions/cache@v4
       with:
         path: |
@@ -88,6 +92,7 @@ runs:
           windows-erika-cargo-
 
     - name: Restore Erika native dependency bundle
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       id: restore-erika-native-deps
       uses: actions/cache/restore@v4
       with:
@@ -98,6 +103,7 @@ runs:
           windows-erika-native-x86_64-pc-windows-msvc-lgpl-
 
     - name: Restore Erika native source archives
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       id: restore-erika-native-sources
       uses: actions/cache/restore@v4
       with:
@@ -416,7 +422,7 @@ runs:
         echo "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
 
     - name: Save Erika native dependency bundle
-      if: steps.restore-erika-native-deps.outputs.cache-hit != 'true'
+      if: (env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1') && steps.restore-erika-native-deps.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: |
@@ -424,7 +430,7 @@ runs:
         key: ${{ steps.restore-erika-native-deps.outputs.cache-primary-key }}
 
     - name: Save Erika native source archives
-      if: always() && steps.restore-erika-native-sources.outputs.cache-hit != 'true'
+      if: always() && (env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1') && steps.restore-erika-native-sources.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ~/.pub-cache/git/Erika-*/third_party/cache
