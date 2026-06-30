@@ -25,6 +25,9 @@ jobs:
       # CI runners that fatally breaks extraction. The mdk-sdk is pre-downloaded
       # by the build-windows action, so fvp must trust it and skip downloads.
       FVP_DEPS_LATEST: 0
+      ERIKA_REF: v0.1.1
+      ERIKA_PREBUILT: "1"
+      ERIKA_PREBUILT_TAG: v0.1.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
