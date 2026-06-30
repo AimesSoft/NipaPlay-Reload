@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
@@ -7,7 +9,9 @@ import 'settings_hint_text.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'blur_button.dart';
+import 'blur_dropdown.dart';
 import 'fluent_settings_switch.dart';
+import 'settings_slider.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -36,6 +40,23 @@ class DanmakuSettingsMenu extends StatefulWidget {
 }
 
 class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
+  static const List<double> _danmakuDisplayAreaOptions = <double>[
+    0.0,
+    0.125,
+    0.25,
+    0.33,
+    0.67,
+    1.0,
+  ];
+  static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
+    0.0: '单行显示',
+    0.125: '1/8 屏幕',
+    0.25: '1/4 屏幕',
+    0.33: '1/3 屏幕',
+    0.67: '2/3 屏幕',
+    1.0: '全屏',
+  };
+
   final TextEditingController _blockWordController = TextEditingController();
   bool _hasBlockWordError = false;
   String? _blockWordErrorMessage;
@@ -257,6 +278,92 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         '${twoDigits(time.second)}';
   }
 
+  bool get _isNext2Kernel =>
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.next2;
+
+  bool get _isDfmPlusKernel =>
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
+
+  bool get _usesBinaryDanmakuEffectToggles =>
+      _isNext2Kernel || _isDfmPlusKernel;
+
+  String get _binaryDanmakuEffectKernelName =>
+      _isDfmPlusKernel ? 'DFM+' : 'Next2';
+
+  Future<void> _pickDanmakuFontFile(VideoPlayerState videoState) async {
+    final selected = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'Font',
+          extensions: ['ttf', 'otf', 'ttc', 'otc'],
+        ),
+      ],
+    );
+    if (selected == null) return;
+
+    final success = await videoState.importDanmakuFontFile(selected.path);
+    if (!mounted) return;
+    if (success) {
+      BlurSnackBar.show(context, '已应用字体: ${p.basename(selected.path)}');
+    } else {
+      BlurSnackBar.show(context, '字体加载失败，请选择有效的字体文件');
+    }
+  }
+
+  Future<void> _resetDanmakuFont(VideoPlayerState videoState) async {
+    await videoState.resetDanmakuFont();
+    if (!mounted) return;
+    BlurSnackBar.show(context, '已恢复为系统默认字体');
+  }
+
+  String _danmakuFontLabel(VideoPlayerState videoState) {
+    final fontPath = videoState.danmakuFontFilePath.trim();
+    if (fontPath.isEmpty) return '系统默认字体';
+    return p.basename(fontPath);
+  }
+
+  String _shadowStyleLabel(DanmakuShadowStyle style) {
+    switch (style) {
+      case DanmakuShadowStyle.none:
+        return '无阴影';
+      case DanmakuShadowStyle.soft:
+        return '柔和阴影';
+      case DanmakuShadowStyle.medium:
+        return '标准阴影';
+      case DanmakuShadowStyle.strong:
+        return '增强阴影';
+    }
+  }
+
+  String _outlineStyleLabel(DanmakuOutlineStyle style) {
+    switch (style) {
+      case DanmakuOutlineStyle.none:
+        return '无描边';
+      case DanmakuOutlineStyle.stroke:
+        return '标准描边';
+      case DanmakuOutlineStyle.uniform:
+        return '均匀描边';
+    }
+  }
+
+  double _snapDanmakuDisplayArea(double value) {
+    double best = _danmakuDisplayAreaOptions.first;
+    double bestDiff = (value - best).abs();
+    for (final option in _danmakuDisplayAreaOptions.skip(1)) {
+      final diff = (value - option).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = option;
+      }
+    }
+    return best;
+  }
+
+  String _danmakuDisplayAreaText(double value) {
+    final snapped = _snapDanmakuDisplayArea(value);
+    return _danmakuDisplayAreaLabels[snapped] ?? '全屏';
+  }
+
   // 检查是否是正则表达式规则格式: 规则名称/表达式/
   bool _isRegexRule(String word) {
     if (!word.contains('/')) return false;
@@ -335,6 +442,406 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     );
   }
 
+  Widget _buildDanmakuStyleSection(VideoPlayerState videoState) {
+    final isErikaPlayerKernel =
+        PlayerFactory.getKernelType() == PlayerKernelType.erika;
+    final showBinaryDanmakuEffectToggles =
+        isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
+    final binaryDanmakuEffectKernelName =
+        isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
+    final showMergeToggle = isErikaPlayerKernel ||
+        DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '弹幕样式',
+            style: TextStyle(
+              color: PlayerMenuTheme.colorsOf(context).foreground,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildSliderSection(
+            label: '弹幕不透明度',
+            value: videoState.danmakuOpacity,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            displayTextBuilder: (value) => '${(value * 100).round()}%',
+            onChanged: videoState.setDanmakuOpacity,
+            hint: '调整弹幕文字透明度',
+          ),
+          _buildSliderSection(
+            label: '弹幕字体大小',
+            value: videoState.danmakuFontSize <= 0
+                ? videoState.actualDanmakuFontSize
+                : videoState.danmakuFontSize,
+            min: 12,
+            max: 60,
+            step: 0.5,
+            displayTextBuilder: (value) => '${value.toStringAsFixed(1)}px',
+            onChanged: videoState.setDanmakuFontSize,
+            onChangeEnd: (value) =>
+                videoState.setDanmakuFontSize(value, commit: true),
+            hint: '调整弹幕文字大小，轨道间距会自动适配',
+          ),
+          _buildFontSection(videoState),
+          _buildOutlineSection(
+            videoState,
+            useBinaryToggle: showBinaryDanmakuEffectToggles,
+            kernelName: binaryDanmakuEffectKernelName,
+          ),
+          if (!isErikaPlayerKernel) _buildShadowSection(videoState),
+          _buildSliderSection(
+            label: '滚动弹幕速度',
+            value: videoState.danmakuSpeedMultiplier,
+            min: 0.5,
+            max: 2,
+            step: 0.05,
+            displayTextBuilder: (value) => '${value.toStringAsFixed(2)}x',
+            onChanged: videoState.setDanmakuSpeedMultiplier,
+            hint: '向左减慢滚动弹幕速度，向右加快',
+          ),
+          _buildDisplayAreaSection(videoState),
+          if (showMergeToggle)
+            _buildSwitchSection(
+              label: '合并相同弹幕',
+              value: videoState.mergeDanmaku,
+              onChanged: videoState.setMergeDanmaku,
+              hint: '将内容相同的弹幕合并为一条显示',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDanmakuBlockModeSection(VideoPlayerState videoState) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '弹幕屏蔽',
+            style: TextStyle(
+              color: PlayerMenuTheme.colorsOf(context).foreground,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildSwitchSection(
+            label: '屏蔽顶部弹幕',
+            value: videoState.blockTopDanmaku,
+            onChanged: videoState.setBlockTopDanmaku,
+            hint: '不显示顶部固定弹幕',
+          ),
+          _buildSwitchSection(
+            label: '屏蔽底部弹幕',
+            value: videoState.blockBottomDanmaku,
+            onChanged: videoState.setBlockBottomDanmaku,
+            hint: '不显示底部固定弹幕',
+          ),
+          _buildSwitchSection(
+            label: '屏蔽滚动弹幕',
+            value: videoState.blockScrollDanmaku,
+            onChanged: videoState.setBlockScrollDanmaku,
+            hint: '不显示从右向左滚动的弹幕',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliderSection({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required double step,
+    required String Function(double) displayTextBuilder,
+    required ValueChanged<double> onChanged,
+    ValueChanged<double>? onChangeEnd,
+    required String hint,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsSlider(
+            value: value,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+            label: label,
+            displayTextBuilder: displayTextBuilder,
+            min: min,
+            max: max,
+            step: step,
+          ),
+          const SizedBox(height: 4),
+          SettingsHintText(hint),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFontSection(VideoPlayerState videoState) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '字体选择',
+            style: TextStyle(
+              color: menuColors.foreground,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '当前字体：${_danmakuFontLabel(videoState)}',
+            style: TextStyle(
+              color: menuColors.secondaryForeground,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: BlurButton(
+                  text: '选择字体文件',
+                  icon: Icons.folder_open,
+                  onTap: () => _pickDanmakuFontFile(videoState),
+                  expandHorizontally: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BlurButton(
+                  text: '恢复默认',
+                  icon: Icons.restart_alt,
+                  onTap: () => _resetDanmakuFont(videoState),
+                  expandHorizontally: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const SettingsHintText('支持 ttf、otf、ttc、otc 字体文件'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutlineSection(
+    VideoPlayerState videoState, {
+    required bool useBinaryToggle,
+    required String kernelName,
+  }) {
+    if (useBinaryToggle) {
+      return _buildSwitchSection(
+        label: '弹幕描边',
+        value: videoState.next2DanmakuOutlineWidth > 0.0,
+        onChanged: (value) {
+          videoState.setNext2DanmakuOutlineWidth(value ? 1.0 : 0.0);
+        },
+        hint: '开启后为 $kernelName 弹幕添加描边',
+      );
+    }
+
+    final items = DanmakuOutlineStyle.values
+        .map(
+          (style) => DropdownMenuItemData<DanmakuOutlineStyle>(
+            title: _outlineStyleLabel(style),
+            value: style,
+            isSelected: videoState.danmakuOutlineStyle == style,
+          ),
+        )
+        .toList();
+
+    return _buildOptionButtonsSection(
+      title: '弹幕描边',
+      description: '选择弹幕文字外缘的描边方式',
+      items: items,
+      onSelected: videoState.setDanmakuOutlineStyle,
+    );
+  }
+
+  Widget _buildShadowSection(VideoPlayerState videoState) {
+    if (_usesBinaryDanmakuEffectToggles) {
+      return _buildSwitchSection(
+        label: '弹幕阴影',
+        value: videoState.danmakuShadowStyle != DanmakuShadowStyle.none,
+        onChanged: (value) {
+          videoState.setDanmakuShadowStyle(
+            value ? DanmakuShadowStyle.strong : DanmakuShadowStyle.none,
+          );
+        },
+        hint: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加阴影',
+      );
+    }
+
+    final items = DanmakuShadowStyle.values
+        .map(
+          (style) => DropdownMenuItemData<DanmakuShadowStyle>(
+            title: _shadowStyleLabel(style),
+            value: style,
+            isSelected: videoState.danmakuShadowStyle == style,
+          ),
+        )
+        .toList();
+
+    return _buildOptionButtonsSection(
+      title: '弹幕阴影',
+      description: '选择弹幕文字的阴影强度',
+      items: items,
+      onSelected: videoState.setDanmakuShadowStyle,
+    );
+  }
+
+  Widget _buildDisplayAreaSection(VideoPlayerState videoState) {
+    final selectedArea = _snapDanmakuDisplayArea(videoState.danmakuDisplayArea);
+    final items = _danmakuDisplayAreaOptions
+        .map(
+          (area) => DropdownMenuItemData<double>(
+            title: _danmakuDisplayAreaText(area),
+            value: area,
+            isSelected: selectedArea == area,
+          ),
+        )
+        .toList();
+
+    return _buildOptionButtonsSection(
+      title: '轨道显示区域',
+      description: '设置弹幕轨道在屏幕上的显示范围',
+      items: items,
+      onSelected: (value) {
+        videoState.setDanmakuDisplayArea(_snapDanmakuDisplayArea(value));
+      },
+    );
+  }
+
+  Widget _buildOptionButtonsSection<T>({
+    required String title,
+    required String description,
+    required List<DropdownMenuItemData<T>> items,
+    required ValueChanged<T> onSelected,
+  }) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: menuColors.foreground,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map((item) => _buildOptionButton(item, onSelected))
+                .toList(),
+          ),
+          const SizedBox(height: 4),
+          SettingsHintText(description),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionButton<T>(
+    DropdownMenuItemData<T> item,
+    ValueChanged<T> onSelected,
+  ) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    final isSelected = item.isSelected;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onSelected(item.value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? menuColors.selectedBackground
+                : menuColors.controlBackground,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? menuColors.selectedBorder
+                  : menuColors.controlBorder,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            item.title,
+            style: TextStyle(
+              color: isSelected
+                  ? menuColors.selectedForeground
+                  : menuColors.foreground,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchSection({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required String hint,
+  }) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: menuColors.foreground,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FluentSettingsSwitch(value: value, onChanged: onChanged),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SettingsHintText(hint),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -375,6 +882,8 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              _buildDanmakuStyleSection(videoState),
+              _buildDanmakuBlockModeSection(videoState),
               // 手动匹配弹幕
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
@@ -562,49 +1071,58 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
 
   Widget _buildDesktopBlockWordInput() {
     final menuColors = PlayerMenuTheme.colorsOf(context);
-    return Container(
+    final borderColor = _hasBlockWordError
+        ? Colors.redAccent.withOpacity(0.8)
+        : menuColors.controlBorder;
+
+    return SizedBox(
       height: 80,
-      decoration: BoxDecoration(
-        color: menuColors.controlBackground,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _hasBlockWordError
-              ? Colors.redAccent.withOpacity(0.8)
-              : menuColors.controlBorder,
-          width: 1,
-        ),
-      ),
-      child: Center(
-        child: TextField(
-          controller: _blockWordController,
-          style: TextStyle(color: menuColors.foreground, fontSize: 13),
-          textAlignVertical: TextAlignVertical.center,
-          maxLines: 3,
-          decoration: InputDecoration(
-            hintText: '输入要屏蔽的关键词\n（支持正则，以"规则名称/表达式/"形式输入；支持逗号分隔批量添加）',
-            hintStyle: TextStyle(
-              color: menuColors.disabledForeground,
-              fontSize: 13,
-            ),
-            border: InputBorder.none,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            isDense: true,
-            suffixIcon: IconButton(
-              icon: Icon(
-                Icons.clear,
-                color: menuColors.secondaryForeground,
-                size: 18,
-              ),
-              onPressed: () => _blockWordController.clear(),
-              tooltip: '',
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(),
-            ),
+      child: TextField(
+        controller: _blockWordController,
+        style: TextStyle(color: menuColors.foreground, fontSize: 13),
+        textAlignVertical: TextAlignVertical.center,
+        maxLines: 3,
+        decoration: InputDecoration(
+          hintText: '输入要屏蔽的关键词\n（支持正则，以"规则名称/表达式/"形式输入；支持逗号分隔批量添加）',
+          hintStyle: TextStyle(
+            color: menuColors.disabledForeground,
+            fontSize: 13,
           ),
-          onSubmitted: (_) => _addBlockWord(),
+          filled: true,
+          fillColor: menuColors.controlBackground,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          isDense: true,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: borderColor, width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: menuColors.accent, width: 1),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: borderColor, width: 1),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: borderColor, width: 1),
+          ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              Icons.clear,
+              color: menuColors.secondaryForeground,
+              size: 18,
+            ),
+            onPressed: () => _blockWordController.clear(),
+            tooltip: '',
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+          ),
         ),
+        onSubmitted: (_) => _addBlockWord(),
       ),
     );
   }

@@ -1,8 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
@@ -30,30 +28,11 @@ class DanmakuSettingsPage extends StatefulWidget {
 
 class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   static Color get _fluentAccentColor => AppAccentColors.current;
-  static const List<double> _danmakuDisplayAreaOptions = <double>[
-    0.0,
-    0.125,
-    0.25,
-    0.33,
-    0.67,
-    1.0,
-  ];
-  static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
-    0.0: '单行显示',
-    0.125: '1/8 屏幕',
-    0.25: '1/4 屏幕',
-    0.33: '1/3 屏幕',
-    0.67: '2/3 屏幕',
-    1.0: '全屏',
-  };
 
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
 
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
   final GlobalKey _spoilerAiApiFormatDropdownKey = GlobalKey();
-  final GlobalKey _danmakuDisplayAreaDropdownKey = GlobalKey();
-  final GlobalKey _danmakuOutlineStyleDropdownKey = GlobalKey();
-  final GlobalKey _danmakuShadowStyleDropdownKey = GlobalKey();
   final GlobalKey _danmakuAutoLoadStrategyDropdownKey = GlobalKey();
 
   final TextEditingController _spoilerAiUrlController = TextEditingController();
@@ -263,73 +242,8 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     return items;
   }
 
-  bool get _isNext2Kernel =>
-      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.next2;
-
   bool get _isDfmPlusKernel =>
       DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
-
-  bool get _usesBinaryDanmakuEffectToggles =>
-      _isNext2Kernel || _isDfmPlusKernel;
-
-  String get _binaryDanmakuEffectKernelName =>
-      _isDfmPlusKernel ? 'DFM+' : 'Next2';
-
-  Future<void> _pickDanmakuFontFile(VideoPlayerState videoState) async {
-    final selected = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(
-          label: 'Font',
-          extensions: ['ttf', 'otf', 'ttc', 'otc'],
-        ),
-      ],
-    );
-    if (selected == null) return;
-
-    final success = await videoState.importDanmakuFontFile(selected.path);
-    if (!mounted) return;
-    if (success) {
-      BlurSnackBar.show(context, '已应用字体: ${p.basename(selected.path)}');
-    } else {
-      BlurSnackBar.show(context, '字体加载失败，请选择有效的字体文件');
-    }
-  }
-
-  Future<void> _resetDanmakuFont(VideoPlayerState videoState) async {
-    await videoState.resetDanmakuFont();
-    if (!mounted) return;
-    BlurSnackBar.show(context, '已恢复为系统默认字体');
-  }
-
-  String _danmakuFontLabel(VideoPlayerState videoState) {
-    final fontPath = videoState.danmakuFontFilePath.trim();
-    if (fontPath.isEmpty) return '系统默认字体';
-    return p.basename(fontPath);
-  }
-
-  String _outlineStyleLabel(DanmakuOutlineStyle style) {
-    switch (style) {
-      case DanmakuOutlineStyle.none:
-        return '无描边';
-      case DanmakuOutlineStyle.stroke:
-        return '标准描边';
-      case DanmakuOutlineStyle.uniform:
-        return '均匀描边';
-    }
-  }
-
-  String _shadowStyleLabel(DanmakuShadowStyle style) {
-    switch (style) {
-      case DanmakuShadowStyle.none:
-        return '无阴影';
-      case DanmakuShadowStyle.soft:
-        return '柔和阴影';
-      case DanmakuShadowStyle.medium:
-        return '标准阴影';
-      case DanmakuShadowStyle.strong:
-        return '增强阴影';
-    }
-  }
 
   String _danmakuAutoLoadStrategyLabel(DanmakuAutoLoadStrategy strategy) {
     switch (strategy) {
@@ -355,24 +269,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
       case DanmakuAutoLoadStrategy.manual:
         return context.l10n.danmakuAutoLoadStrategyManualDescription;
     }
-  }
-
-  double _snapDanmakuDisplayArea(double value) {
-    double best = _danmakuDisplayAreaOptions.first;
-    double bestDiff = (value - best).abs();
-    for (final option in _danmakuDisplayAreaOptions.skip(1)) {
-      final diff = (value - option).abs();
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = option;
-      }
-    }
-    return best;
-  }
-
-  String _danmakuDisplayAreaText(double value) {
-    final snapped = _snapDanmakuDisplayArea(value);
-    return _danmakuDisplayAreaLabels[snapped] ?? '全屏';
   }
 
   @override
@@ -501,44 +397,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            final outlineItems = DanmakuOutlineStyle.values
-                .map(
-                  (style) => DropdownMenuItemData<DanmakuOutlineStyle>(
-                    title: _outlineStyleLabel(style),
-                    value: style,
-                    isSelected: videoState.danmakuOutlineStyle == style,
-                  ),
-                )
-                .toList();
-            final shadowItems = DanmakuShadowStyle.values
-                .map(
-                  (style) => DropdownMenuItemData<DanmakuShadowStyle>(
-                    title: _shadowStyleLabel(style),
-                    value: style,
-                    isSelected: videoState.danmakuShadowStyle == style,
-                  ),
-                )
-                .toList();
-            final displayAreaItems = _danmakuDisplayAreaOptions
-                .map(
-                  (area) => DropdownMenuItemData<double>(
-                    title: _danmakuDisplayAreaText(area),
-                    value: area,
-                    isSelected: _snapDanmakuDisplayArea(
-                          videoState.danmakuDisplayArea,
-                        ) ==
-                        area,
-                  ),
-                )
-                .toList();
-            final showBinaryDanmakuEffectToggles =
-                isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
-            final binaryDanmakuEffectKernelName =
-                isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
             final showTrackGapSlider = isErikaPlayerKernel || _isDfmPlusKernel;
-            final showMergeToggle = isErikaPlayerKernel ||
-                DanmakuKernelFactory.getKernelType() !=
-                    DanmakuRenderEngine.canvas;
             final showStackingToggle = isErikaPlayerKernel ||
                 (DanmakuKernelFactory.getKernelType() !=
                         DanmakuRenderEngine.canvas &&
@@ -571,199 +430,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     videoState.toggleTimelineDanmaku(value);
                   },
                 ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.slider(
-                  title: '弹幕不透明度',
-                  subtitle: '调整弹幕文字透明度',
-                  icon: Ionicons.contrast_outline,
-                  value: videoState.danmakuOpacity,
-                  min: 0.0,
-                  max: 1.0,
-                  divisions: 100,
-                  onChanged: (value) {
-                    videoState.setDanmakuOpacity(value);
-                  },
-                  labelFormatter: (value) => '${(value * 100).round()}%',
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.slider(
-                  title: '弹幕字体大小',
-                  subtitle: '调整弹幕文字大小，轨道间距会自动适配',
-                  icon: Ionicons.text_outline,
-                  value: videoState.danmakuFontSize <= 0
-                      ? videoState.actualDanmakuFontSize
-                      : videoState.danmakuFontSize,
-                  min: 12.0,
-                  max: 60.0,
-                  divisions: 96,
-                  onChanged: (value) {
-                    videoState.setDanmakuFontSize(value, commit: true);
-                  },
-                  labelFormatter: (value) => '${value.toStringAsFixed(1)}px',
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12.0,
-                  ),
-                  child: SettingsCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Ionicons.text_outline,
-                              color: colorScheme.onSurface,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '弹幕字体',
-                              style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '当前字体：${_danmakuFontLabel(videoState)}',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: BlurButton(
-                                icon: Ionicons.folder_open_outline,
-                                text: '选择字体文件',
-                                onTap: () => _pickDanmakuFontFile(videoState),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                fontSize: 13,
-                                iconSize: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: BlurButton(
-                                icon: Ionicons.refresh_outline,
-                                text: '恢复默认',
-                                onTap: () => _resetDanmakuFont(videoState),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                fontSize: 13,
-                                iconSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (showBinaryDanmakuEffectToggles)
-                  SettingsItem.toggle(
-                    title: '弹幕描边',
-                    subtitle: '开启后为 $binaryDanmakuEffectKernelName 弹幕添加描边',
-                    icon: Ionicons.text_outline,
-                    value: videoState.next2DanmakuOutlineWidth > 0.0,
-                    onChanged: (value) {
-                      videoState.setNext2DanmakuOutlineWidth(
-                        value ? 1.0 : 0.0,
-                      );
-                    },
-                  )
-                else
-                  SettingsItem.dropdown(
-                    title: '弹幕描边样式',
-                    subtitle: '选择弹幕文字外缘的描边方式',
-                    icon: Ionicons.text_outline,
-                    items: outlineItems,
-                    onChanged: (dynamic value) {
-                      if (value is! DanmakuOutlineStyle) return;
-                      videoState.setDanmakuOutlineStyle(value);
-                    },
-                    dropdownKey: _danmakuOutlineStyleDropdownKey,
-                  ),
-                if (!isErikaPlayerKernel) ...[
-                  Divider(
-                      color: colorScheme.onSurface.withOpacity(0.12),
-                      height: 1),
-                  if (_usesBinaryDanmakuEffectToggles)
-                    SettingsItem.toggle(
-                      title: '弹幕阴影',
-                      subtitle: '开启后为 $_binaryDanmakuEffectKernelName 弹幕添加阴影',
-                      icon: Ionicons.color_wand_outline,
-                      value: videoState.danmakuShadowStyle !=
-                          DanmakuShadowStyle.none,
-                      onChanged: (value) {
-                        videoState.setDanmakuShadowStyle(
-                          value
-                              ? DanmakuShadowStyle.strong
-                              : DanmakuShadowStyle.none,
-                        );
-                      },
-                    )
-                  else
-                    SettingsItem.dropdown(
-                      title: '弹幕阴影样式',
-                      subtitle: '选择弹幕文字的阴影强度',
-                      icon: Ionicons.color_wand_outline,
-                      items: shadowItems,
-                      onChanged: (dynamic value) {
-                        if (value is! DanmakuShadowStyle) return;
-                        videoState.setDanmakuShadowStyle(value);
-                      },
-                      dropdownKey: _danmakuShadowStyleDropdownKey,
-                    ),
-                ],
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.slider(
-                  title: '滚动弹幕速度',
-                  subtitle: '向左减慢滚动弹幕速度，向右加快',
-                  icon: Ionicons.speedometer_outline,
-                  value: videoState.danmakuSpeedMultiplier,
-                  min: 0.5,
-                  max: 2.0,
-                  divisions: 30,
-                  onChanged: (value) {
-                    videoState.setDanmakuSpeedMultiplier(value);
-                  },
-                  labelFormatter: (value) => '${value.toStringAsFixed(2)}x',
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.dropdown(
-                  title: '轨道显示区域',
-                  subtitle: '设置弹幕轨道在屏幕上的显示范围',
-                  icon: Ionicons.resize_outline,
-                  items: displayAreaItems,
-                  onChanged: (dynamic value) {
-                    if (value is! double) return;
-                    videoState.setDanmakuDisplayArea(
-                      _snapDanmakuDisplayArea(value),
-                    );
-                  },
-                  dropdownKey: _danmakuDisplayAreaDropdownKey,
-                ),
                 if (showTrackGapSlider) ...[
                   Divider(
                       color: colorScheme.onSurface.withOpacity(0.12),
@@ -782,20 +448,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     labelFormatter: (value) => '${(value * 100).round()}%',
                   ),
                 ],
-                if (showMergeToggle) ...[
-                  Divider(
-                      color: colorScheme.onSurface.withOpacity(0.12),
-                      height: 1),
-                  SettingsItem.toggle(
-                    title: '合并相同弹幕',
-                    subtitle: '将内容相同的弹幕合并为一条显示',
-                    icon: Ionicons.git_merge_outline,
-                    value: videoState.mergeDanmaku,
-                    onChanged: (value) {
-                      videoState.setMergeDanmaku(value);
-                    },
-                  ),
-                ],
                 if (showStackingToggle) ...[
                   Divider(
                       color: colorScheme.onSurface.withOpacity(0.12),
@@ -810,39 +462,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     },
                   ),
                 ],
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.toggle(
-                  title: '屏蔽顶部弹幕',
-                  subtitle: '不显示顶部固定弹幕',
-                  icon: Ionicons.arrow_up_outline,
-                  value: videoState.blockTopDanmaku,
-                  onChanged: (value) {
-                    videoState.setBlockTopDanmaku(value);
-                  },
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.toggle(
-                  title: '屏蔽底部弹幕',
-                  subtitle: '不显示底部固定弹幕',
-                  icon: Ionicons.arrow_down_outline,
-                  value: videoState.blockBottomDanmaku,
-                  onChanged: (value) {
-                    videoState.setBlockBottomDanmaku(value);
-                  },
-                ),
-                Divider(
-                    color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.toggle(
-                  title: '屏蔽滚动弹幕',
-                  subtitle: '不显示从右向左滚动的弹幕',
-                  icon: Ionicons.swap_horizontal_outline,
-                  value: videoState.blockScrollDanmaku,
-                  onChanged: (value) {
-                    videoState.setBlockScrollDanmaku(value);
-                  },
-                ),
               ],
             );
           },

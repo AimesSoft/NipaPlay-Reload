@@ -11,6 +11,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_s
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
@@ -33,6 +34,23 @@ class CupertinoDanmakuSettingsPane extends StatefulWidget {
 
 class _CupertinoDanmakuSettingsPaneState
     extends State<CupertinoDanmakuSettingsPane> {
+  static const List<double> _danmakuDisplayAreaOptions = <double>[
+    0.0,
+    0.125,
+    0.25,
+    0.33,
+    0.67,
+    1.0,
+  ];
+  static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
+    0.0: '单行显示',
+    0.125: '1/8 屏幕',
+    0.25: '1/4 屏幕',
+    0.33: '1/3 屏幕',
+    0.67: '2/3 屏幕',
+    1.0: '全屏',
+  };
+
   final TextEditingController _blockWordController = TextEditingController();
   String? _blockWordError;
   bool _isSavingDanmaku = false;
@@ -186,8 +204,100 @@ class _CupertinoDanmakuSettingsPaneState
     BlurSnackBar.show(context, message);
   }
 
+  Future<void> _pickDanmakuFontFile() async {
+    final selected = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'Font',
+          extensions: ['ttf', 'otf', 'ttc', 'otc'],
+        ),
+      ],
+    );
+    if (selected == null) return;
+
+    final success =
+        await widget.videoState.importDanmakuFontFile(selected.path);
+    if (!mounted) return;
+    _showMessage(
+      success ? '已应用字体: ${p.basename(selected.path)}' : '字体加载失败，请选择有效的字体文件',
+    );
+  }
+
+  Future<void> _resetDanmakuFont() async {
+    await widget.videoState.resetDanmakuFont();
+    if (!mounted) return;
+    _showMessage('已恢复为系统默认字体');
+  }
+
+  String _danmakuFontLabel() {
+    final fontPath = widget.videoState.danmakuFontFilePath.trim();
+    if (fontPath.isEmpty) return '系统默认字体';
+    return p.basename(fontPath);
+  }
+
+  String _shadowStyleLabel(DanmakuShadowStyle style) {
+    switch (style) {
+      case DanmakuShadowStyle.none:
+        return '无阴影';
+      case DanmakuShadowStyle.soft:
+        return '柔和阴影';
+      case DanmakuShadowStyle.medium:
+        return '标准阴影';
+      case DanmakuShadowStyle.strong:
+        return '增强阴影';
+    }
+  }
+
+  String _outlineStyleLabel(DanmakuOutlineStyle style) {
+    switch (style) {
+      case DanmakuOutlineStyle.none:
+        return '无描边';
+      case DanmakuOutlineStyle.stroke:
+        return '标准描边';
+      case DanmakuOutlineStyle.uniform:
+        return '均匀描边';
+    }
+  }
+
+  bool get _isNext2Kernel =>
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.next2;
+
+  bool get _isDfmPlusKernel =>
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
+
+  bool get _usesBinaryDanmakuEffectToggles =>
+      _isNext2Kernel || _isDfmPlusKernel;
+
+  String get _binaryDanmakuEffectKernelName =>
+      _isDfmPlusKernel ? 'DFM+' : 'Next2';
+
+  double _snapDanmakuDisplayArea(double value) {
+    double best = _danmakuDisplayAreaOptions.first;
+    double bestDiff = (value - best).abs();
+    for (final option in _danmakuDisplayAreaOptions.skip(1)) {
+      final diff = (value - option).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = option;
+      }
+    }
+    return best;
+  }
+
+  String _danmakuDisplayAreaText(double value) {
+    final snapped = _snapDanmakuDisplayArea(value);
+    return _danmakuDisplayAreaLabels[snapped] ?? '全屏';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isErikaPlayerKernel =
+        PlayerFactory.getKernelType() == PlayerKernelType.erika;
+    final showBinaryDanmakuEffectToggles =
+        isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
+    final binaryDanmakuEffectKernelName =
+        isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
+
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
         SliverPadding(
@@ -284,12 +394,27 @@ class _CupertinoDanmakuSettingsPaneState
                 _buildSliderTile(
                   context,
                   title: '字体大小',
-                  description: '${widget.videoState.danmakuFontSize.round()}px',
-                  value: widget.videoState.danmakuFontSize,
+                  description:
+                      '${(widget.videoState.danmakuFontSize <= 0 ? widget.videoState.actualDanmakuFontSize : widget.videoState.danmakuFontSize).round()}px',
+                  value: widget.videoState.danmakuFontSize <= 0
+                      ? widget.videoState.actualDanmakuFontSize
+                      : widget.videoState.danmakuFontSize,
                   min: 12.0,
-                  max: 36.0,
-                  divisions: 24,
+                  max: 60.0,
+                  divisions: 96,
                   onChanged: widget.videoState.setDanmakuFontSize,
+                ),
+                CupertinoListTile(
+                  title: const Text('字体选择'),
+                  subtitle: Text('当前字体：${_danmakuFontLabel()}'),
+                  trailing: const Icon(CupertinoIcons.right_chevron),
+                  onTap: _pickDanmakuFontFile,
+                ),
+                CupertinoListTile(
+                  title: const Text('恢复默认字体'),
+                  subtitle: const Text('使用系统默认弹幕字体'),
+                  trailing: const Icon(CupertinoIcons.refresh),
+                  onTap: _resetDanmakuFont,
                 ),
                 _buildSliderTile(
                   context,
@@ -302,6 +427,60 @@ class _CupertinoDanmakuSettingsPaneState
                   divisions: 15,
                   onChanged: widget.videoState.setDanmakuSpeedMultiplier,
                 ),
+                if (showBinaryDanmakuEffectToggles)
+                  _buildSwitchTile(
+                    context,
+                    title: '弹幕描边',
+                    subtitle: '开启后为 $binaryDanmakuEffectKernelName 弹幕添加描边',
+                    value: widget.videoState.next2DanmakuOutlineWidth > 0.0,
+                    onChanged: (value) {
+                      widget.videoState
+                          .setNext2DanmakuOutlineWidth(value ? 1.0 : 0.0);
+                    },
+                  )
+                else
+                  _buildOptionButtonsTile<DanmakuOutlineStyle>(
+                    context,
+                    title: '弹幕描边',
+                    subtitle: '选择弹幕文字外缘的描边方式',
+                    values: DanmakuOutlineStyle.values,
+                    selectedValue: widget.videoState.danmakuOutlineStyle,
+                    labelBuilder: _outlineStyleLabel,
+                    onSelected: widget.videoState.setDanmakuOutlineStyle,
+                  ),
+                _buildOptionButtonsTile<DanmakuShadowStyle>(
+                  context,
+                  title: '弹幕阴影',
+                  subtitle: '选择弹幕文字的阴影强度',
+                  values: DanmakuShadowStyle.values,
+                  selectedValue: widget.videoState.danmakuShadowStyle,
+                  labelBuilder: _shadowStyleLabel,
+                  onSelected: widget.videoState.setDanmakuShadowStyle,
+                ),
+                _buildOptionButtonsTile<double>(
+                  context,
+                  title: '轨道显示区域',
+                  subtitle: '设置弹幕轨道在屏幕上的显示范围',
+                  values: _danmakuDisplayAreaOptions,
+                  selectedValue: _snapDanmakuDisplayArea(
+                    widget.videoState.danmakuDisplayArea,
+                  ),
+                  labelBuilder: _danmakuDisplayAreaText,
+                  onSelected: (value) {
+                    widget.videoState.setDanmakuDisplayArea(
+                      _snapDanmakuDisplayArea(value),
+                    );
+                  },
+                ),
+                if (DanmakuKernelFactory.getKernelType() !=
+                    DanmakuRenderEngine.canvas)
+                  _buildSwitchTile(
+                    context,
+                    title: '合并相同弹幕',
+                    subtitle: '将内容相同的弹幕合并为一条显示',
+                    value: widget.videoState.mergeDanmaku,
+                    onChanged: widget.videoState.setMergeDanmaku,
+                  ),
                 if (DanmakuKernelFactory.getKernelType() ==
                     DanmakuRenderEngine.dfmPlus)
                   _buildSliderTile(
@@ -315,6 +494,32 @@ class _CupertinoDanmakuSettingsPaneState
                     divisions: 50,
                     onChanged: widget.videoState.setDanmakuDfmPlusTrackGap,
                   ),
+              ],
+            ),
+            CupertinoListSection.insetGrouped(
+              header: const Text('弹幕屏蔽'),
+              children: [
+                _buildSwitchTile(
+                  context,
+                  title: '屏蔽顶部弹幕',
+                  subtitle: '不显示顶部固定弹幕',
+                  value: widget.videoState.blockTopDanmaku,
+                  onChanged: widget.videoState.setBlockTopDanmaku,
+                ),
+                _buildSwitchTile(
+                  context,
+                  title: '屏蔽底部弹幕',
+                  subtitle: '不显示底部固定弹幕',
+                  value: widget.videoState.blockBottomDanmaku,
+                  onChanged: widget.videoState.setBlockBottomDanmaku,
+                ),
+                _buildSwitchTile(
+                  context,
+                  title: '屏蔽滚动弹幕',
+                  subtitle: '不显示从右向左滚动的弹幕',
+                  value: widget.videoState.blockScrollDanmaku,
+                  onChanged: widget.videoState.setBlockScrollDanmaku,
+                ),
               ],
             ),
             CupertinoListSection.insetGrouped(
@@ -424,6 +629,79 @@ class _CupertinoDanmakuSettingsPaneState
             max: max,
             divisions: divisions,
             onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionButtonsTile<T>(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required List<T> values,
+    required T selectedValue,
+    required String Function(T value) labelBuilder,
+    required ValueChanged<T> onSelected,
+  }) {
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+    final selectedColor = CupertinoTheme.of(context).primaryColor;
+    final borderColor = CupertinoColors.separator.resolveFrom(context);
+    final selectedTextColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.white,
+      context,
+    );
+    final normalTextColor = CupertinoColors.label.resolveFrom(context);
+
+    return CupertinoListTile(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 16),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: textTheme.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: textTheme.copyWith(
+              fontSize: 13,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: values.map((value) {
+              final selected = value == selectedValue;
+              return GestureDetector(
+                onTap: () => onSelected(value),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? selectedColor
+                        : CupertinoColors.systemGrey6.resolveFrom(context),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? selectedColor : borderColor,
+                    ),
+                  ),
+                  child: Text(
+                    labelBuilder(value),
+                    style: textTheme.copyWith(
+                      fontSize: 13,
+                      color: selected ? selectedTextColor : normalTextColor,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),

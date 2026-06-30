@@ -379,9 +379,8 @@ class _CupertinoDanmakuSettingsPageState
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, _) {
                 final supersampleValue = settingsProvider.danmakuSupersample;
-                final label = supersampleValue == 0.0
-                    ? '关闭'
-                    : '${supersampleValue}x';
+                final label =
+                    supersampleValue == 0.0 ? '关闭' : '${supersampleValue}x';
                 return CupertinoSettingsTile(
                   leading: Icon(
                     CupertinoIcons.fullscreen,
@@ -468,6 +467,44 @@ class _CupertinoDanmakuSettingsPageState
                         message: newValue
                             ? context.l10n.rememberDanmakuOffsetEnabled
                             : context.l10n.rememberDanmakuOffsetDisabled,
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                    backgroundColor: tileBackground,
+                  );
+                },
+              ),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.paintbrush,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('随机染色'),
+                    subtitle: const Text('忽略弹幕原始颜色，按发送弹幕预设色随机分配'),
+                    trailing: AdaptiveSwitch(
+                      value: videoState.danmakuRandomColorEnabled,
+                      onChanged: (value) async {
+                        final message = value ? '已开启随机染色' : '已关闭随机染色';
+                        await videoState.setDanmakuRandomColorEnabled(value);
+                        if (!context.mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: message,
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      },
+                    ),
+                    onTap: () async {
+                      final bool newValue =
+                          !videoState.danmakuRandomColorEnabled;
+                      final message = newValue ? '已开启随机染色' : '已关闭随机染色';
+                      await videoState.setDanmakuRandomColorEnabled(newValue);
+                      if (!context.mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: message,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
