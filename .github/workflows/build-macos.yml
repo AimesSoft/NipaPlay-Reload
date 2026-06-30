@@ -40,6 +40,9 @@ jobs:
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
+      ERIKA_REF: v0.1.1
+      ERIKA_PREBUILT: "1"
+      ERIKA_PREBUILT_TAG: v0.1.1
     steps:
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
