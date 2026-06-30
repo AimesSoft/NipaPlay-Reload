@@ -174,6 +174,18 @@ runs:
           return $true
         }
 
+        function Get-MdkSdkReleaseAsset {
+          param(
+            [object]$Release,
+            [string[]]$Patterns
+          )
+          foreach ($pattern in $Patterns) {
+            $asset = $Release.assets | Where-Object { $_.name -match $pattern } | Select-Object -First 1
+            if ($asset) { return $asset }
+          }
+          return $null
+        }
+
         $candidates = @(
           "https://sourceforge.net/projects/mdk-sdk/files/nightly/$mdkSdkPkg/download",
           "https://downloads.sourceforge.net/project/mdk-sdk/nightly/$mdkSdkPkg",
@@ -204,10 +216,35 @@ runs:
         }
 
         if (-not $downloaded) {
-          $ghPkg = "mdk-sdk-windows-x64.7z"
-          $ghUrl = "https://github.com/wang-bin/mdk-sdk/releases/latest/download/$ghPkg"
+          $releaseApi = "https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest"
+          $headers = @{
+            "User-Agent" = "NipaPlay-Build"
+            "Accept" = "application/vnd.github+json"
+          }
+          if ($env:GITHUB_TOKEN) {
+            $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+          }
+          try {
+            $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -UseBasicParsing -TimeoutSec 60
+          } catch {
+            throw "Unable to query mdk-sdk latest release: $($_.Exception.Message)"
+          }
+          $assetPatterns = @(
+            "^mdk-sdk-windows-x64-vs[0-9]+\.7z$",
+            "^mdk-sdk-windows-vs[0-9]+\.7z$",
+            "^mdk-sdk-windows-x64\.7z$",
+            "^mdk-sdk-windows\.7z$",
+            "^mdk-sdk-windows-vs[0-9]+-ltl\.7z$"
+          )
+          $asset = Get-MdkSdkReleaseAsset -Release $release -Patterns $assetPatterns
+          if (-not $asset) {
+            $available = ($release.assets | ForEach-Object { $_.name }) -join ", "
+            throw "No compatible Windows mdk-sdk asset found in $($release.tag_name). Available assets: $available"
+          }
+          $ghPkg = $asset.name
+          $ghUrl = $asset.browser_download_url
           $archivePath = Join-Path $fvpDir "windows\$ghPkg"
-          Write-Host "SourceForge mirrors unavailable; falling back to GitHub release $ghUrl ..."
+          Write-Host "SourceForge mirrors unavailable; falling back to GitHub release $($release.tag_name) asset $ghPkg ..."
           Invoke-WebRequest -Uri $ghUrl -OutFile $archivePath -UseBasicParsing -TimeoutSec 180 -Headers $ua
           if (-not (Test-SevenZip $archivePath)) {
             throw "GitHub fallback download was not a valid 7z archive: $archivePath"
