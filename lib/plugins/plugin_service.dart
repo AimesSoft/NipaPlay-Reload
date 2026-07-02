@@ -389,8 +389,12 @@ class PluginService extends ChangeNotifier {
     // here with a wrong captured pluginId.  Prefer the pluginId embedded in
     // the message itself when present.
     final msgPluginId = args['__pluginId']?.toString();
-    if (msgPluginId != null && msgPluginId.isNotEmpty) {
+    if (msgPluginId != null &&
+        msgPluginId.isNotEmpty &&
+        _plugins.any((p) => p.manifest.id == msgPluginId)) {
       pluginId = msgPluginId;
+    } else if (msgPluginId != null && msgPluginId.isNotEmpty) {
+      debugPrint('[PluginService] Received invalid pluginId "$msgPluginId" from bridge, ignoring.');
     }
 
     switch (method) {
