@@ -384,6 +384,19 @@ class PluginService extends ChangeNotifier {
     final method = args['method'] as String? ?? '';
     final callArgs = (args['args'] as List?)?.cast<dynamic>() ?? <dynamic>[];
 
+    // On iOS/macOS (JavaScriptCore) the native bridge dispatches to the
+    // *last* created runtime's handler, so calls from earlier runtimes arrive
+    // here with a wrong captured pluginId.  Prefer the pluginId embedded in
+    // the message itself when present.
+    final msgPluginId = args['__pluginId']?.toString();
+    if (msgPluginId != null &&
+        msgPluginId.isNotEmpty &&
+        _plugins.any((p) => p.manifest.id == msgPluginId)) {
+      pluginId = msgPluginId;
+    } else if (msgPluginId != null && msgPluginId.isNotEmpty) {
+      debugPrint('[PluginService] Received invalid pluginId "$msgPluginId" from bridge, ignoring.');
+    }
+
     switch (method) {
       // ---- 播放器控制 ----
       case 'playerPlay':
@@ -912,7 +925,12 @@ class PluginService extends ChangeNotifier {
         for (var i = 1; i < arguments.length; i++) {
           args.push(arguments[i]);
         }
-        var result = sendMessage('PluginBridge', JSON.stringify({ method: method, args: args }));
+        // JSC (iOS/macOS) shares a single static native callback across all JS
+        // runtimes, so a bridge call may be dispatched by the *wrong* runtime's
+        // handler. Including __pluginId in the message lets the Dart side route
+        // correctly regardless of which runtime ends up handling the call.
+        var payload = { method: method, args: args, __pluginId: ${json.encode(pluginId)} };
+        var result = sendMessage('PluginBridge', JSON.stringify(payload));
         return result;
       }
 
