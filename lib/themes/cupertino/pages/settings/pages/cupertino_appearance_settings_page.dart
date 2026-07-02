@@ -8,6 +8,7 @@ import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -89,6 +90,7 @@ class _CupertinoAppearanceSettingsPageState
     }
 
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
+    final videoState = context.watch<VideoPlayerState>();
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGroupedBackground,
       context,
@@ -135,7 +137,60 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '播放器左上角按钮',
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
+                backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
+                children: [
+                  _buildPlayerTopButtonToggleTile(
+                    icon: CupertinoIcons.chat_bubble_2,
+                    title: '左上角发弹幕按钮',
+                    subtitle: '在播放器左上角显示发弹幕按钮',
+                    enabled: videoState.playerTopSendDanmakuButtonVisible,
+                    onChanged: videoState.setPlayerTopSendDanmakuButtonVisible,
+                  ),
+                  _buildPlayerTopButtonToggleTile(
+                    icon: CupertinoIcons.forward_end,
+                    title: '左上角跳过按钮',
+                    subtitle: '在播放器左上角显示跳过按钮',
+                    enabled: videoState.playerTopSkipButtonVisible,
+                    onChanged: videoState.setPlayerTopSkipButtonVisible,
+                  ),
+                  _buildPlayerTopButtonToggleTile(
+                    icon: CupertinoIcons.resize,
+                    title: '左上角窗口适配视频',
+                    subtitle: '在播放器左上角显示窗口适配视频按钮（桌面端）',
+                    enabled: videoState.playerTopResizeButtonVisible,
+                    onChanged: videoState.setPlayerTopResizeButtonVisible,
+                  ),
+                  _buildPlayerTopButtonToggleTile(
+                    icon: CupertinoIcons.play_circle,
+                    title: '左上角逐帧后退/前进',
+                    subtitle: '在播放器左上角显示逐帧后退和逐帧前进按钮',
+                    enabled: videoState.playerTopFrameStepButtonsVisible,
+                    onChanged: videoState.setPlayerTopFrameStepButtonsVisible,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -151,7 +206,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -161,7 +216,7 @@ class _CupertinoAppearanceSettingsPageState
                   ...AppAccentColorPreset.values.map(_buildAccentPresetTile),
                 ],
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -177,7 +232,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -196,7 +251,7 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -212,7 +267,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -231,7 +286,7 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -247,7 +302,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -362,6 +417,30 @@ class _CupertinoAppearanceSettingsPageState
       backgroundColor: tileColor,
       selected: _accentPreset == preset,
       onTap: () => _updateAccentPreset(preset),
+    );
+  }
+
+  Widget _buildPlayerTopButtonToggleTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final tileColor = resolveSettingsTileBackground(context);
+    return CupertinoSettingsTile(
+      leading: Icon(
+        icon,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: CupertinoSwitch(
+        value: enabled,
+        onChanged: onChanged,
+      ),
+      backgroundColor: tileColor,
+      onTap: () => onChanged(!enabled),
     );
   }
 
