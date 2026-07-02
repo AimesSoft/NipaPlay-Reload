@@ -1,5 +1,5 @@
 var pluginManifest = {
-  id: 'danmaku_regex_filter',
+  id: 'builtin.cn_danmaku_regex_filter',
   name: '弹幕正则过滤规则预设',
   version: '1.2.3',
   minHostVersion: '1.10.3',
