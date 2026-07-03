@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -15,7 +16,6 @@ import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -265,6 +265,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     );
 
     if (categories == null || categories.isEmpty) return;
+    if (!mounted) return;
 
     // 确认对话框
     final confirmed = await BlurDialog.show<bool>(
@@ -297,7 +298,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
       if (restoreResult.success) {
         // 刷新观看历史
-        if (context.mounted) {
+        if (mounted) {
           final watchHistoryProvider =
               Provider.of<WatchHistoryProvider>(context, listen: false);
           watchHistoryProvider.clearInvalidPathCache();
@@ -391,6 +392,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
       final filePath = result.files.single.path!;
 
+      if (!mounted) return;
       final confirmed = await BlurDialog.show<bool>(
         context: context,
         title: '确认恢复',
@@ -413,7 +415,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       final restoredCount = await backupService.importWatchHistory(filePath);
 
       if (restoredCount > 0) {
-        if (context.mounted) {
+        if (mounted) {
           final watchHistoryProvider =
               Provider.of<WatchHistoryProvider>(context, listen: false);
           watchHistoryProvider.clearInvalidPathCache();
@@ -435,194 +437,108 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // 全量备份与恢复
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '全量备份与恢复',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SettingsItem.button(
-                title: '全量备份',
-                subtitle: '选择性导出设置、媒体库、观看历史、剧集匹配和账户信息',
-                enabled: !_isProcessing,
-                onTap: _showFullBackupDialog,
-                icon: Icons.cloud_upload,
-              ),
-              const SizedBox(height: 8),
-              SettingsItem.button(
-                title: '全量恢复',
-                subtitle: '从 .npb 备份文件选择性恢复数据',
-                enabled: !_isProcessing,
-                onTap: _showFullRestoreDialog,
-                icon: Icons.cloud_download,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // 自动同步设置卡片
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '自动云同步',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SettingsItem.toggle(
-                title: '启用自动同步',
-                subtitle:
-                    _autoSyncEnabled ? '观看进度会自动同步到本地路径或云端' : '启用后可实现多设备同步',
-                enabled: !_isProcessing,
-                value: _autoSyncEnabled,
-                onChanged: _toggleAutoSync,
-                icon: Icons.cloud_sync,
-              ),
-              if (_autoSyncEnabled && _autoSyncPath != null) ...[
-                const SizedBox(height: 8),
-                SettingsItem.button(
-                  title: '同步路径',
-                  subtitle: _autoSyncPath!.length > 50
-                      ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
-                      : _autoSyncPath!,
-                  enabled: !_isProcessing,
-                  onTap: _selectAutoSyncPath,
-                  icon: Icons.folder,
-                ),
-                const SizedBox(height: 8),
-                SettingsItem.button(
-                  title: '立即同步',
-                  subtitle: '手动执行一次同步',
-                  enabled: !_isProcessing,
-                  onTap: _manualSync,
-                  icon: Icons.sync,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          // 旧版手动备份恢复
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '观看进度备份（旧版）',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SettingsItem.button(
-                title: '备份观看进度',
-                subtitle: '将观看进度导出为 .nph 文件',
-                enabled: !_isProcessing,
-                onTap: _backupHistory,
-                icon: Icons.backup,
-              ),
-              const SizedBox(height: 8),
-              SettingsItem.button(
-                title: '恢复观看进度',
-                subtitle: '从 .nph 文件恢复观看进度',
-                enabled: !_isProcessing,
-                onTap: _restoreHistory,
-                icon: Icons.restore,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '说明',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '• 全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• 全量恢复：从 .npb 文件恢复，支持选择性恢复各类数据',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• 自动同步：启用后观看进度会自动保存到指定路径',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• 云同步：同步路径可以是 SMB/NFS 等网络位置',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• 恢复规则：已有数据不会被删除，仅更新或新增',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• 此功能仅在桌面端可用',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withOpacity(0.7),
-                    fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-          if (_isProcessing)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: Column(
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text(
-                      '处理中...',
-                      style: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.7)),
-                    ),
-                  ],
-                ),
-              ),
+    return AdaptiveSettingsPage(
+      title: context.l10n.backupAndRestore,
+      children: [
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
+              title: '全量备份',
+              subtitle: '选择性导出设置、媒体库、观看历史、剧集匹配和账户信息',
+              enabled: !_isProcessing,
+              onTap: _showFullBackupDialog,
+              icon: Icons.cloud_upload,
             ),
+            AdaptiveSettingsTile<void>.card(
+              title: '全量恢复',
+              subtitle: '从 .npb 备份文件选择性恢复数据',
+              enabled: !_isProcessing,
+              onTap: _showFullRestoreDialog,
+              icon: Icons.cloud_download,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<bool>.toggle(
+              title: '启用自动同步',
+              subtitle: _autoSyncEnabled ? '观看进度会自动同步到本地路径或云端' : '启用后可实现多设备同步',
+              enabled: !_isProcessing,
+              value: _autoSyncEnabled,
+              onChanged: _toggleAutoSync,
+              icon: Icons.cloud_sync,
+            ),
+            if (_autoSyncEnabled && _autoSyncPath != null) ...[
+              AdaptiveSettingsTile<void>.card(
+                title: '同步路径',
+                subtitle: _autoSyncPath!.length > 50
+                    ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
+                    : _autoSyncPath!,
+                enabled: !_isProcessing,
+                onTap: _selectAutoSyncPath,
+                icon: Icons.folder,
+              ),
+              AdaptiveSettingsTile<void>.card(
+                title: '立即同步',
+                subtitle: '手动执行一次同步',
+                enabled: !_isProcessing,
+                onTap: _manualSync,
+                icon: Icons.sync,
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
+              title: '备份观看进度',
+              subtitle: '将观看进度导出为 .nph 文件',
+              enabled: !_isProcessing,
+              onTap: _backupHistory,
+              icon: Icons.backup,
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: '恢复观看进度',
+              subtitle: '从 .nph 文件恢复观看进度',
+              enabled: !_isProcessing,
+              onTap: _restoreHistory,
+              icon: Icons.restore,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
+              title: '说明',
+              subtitle: '全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息\n'
+                  '全量恢复：从 .npb 文件恢复，支持选择性恢复各类数据\n'
+                  '自动同步：启用后观看进度会自动保存到指定路径\n'
+                  '云同步：同步路径可以是 SMB/NFS 等网络位置\n'
+                  '恢复规则：已有数据不会被删除，仅更新或新增\n'
+                  '此功能仅在桌面端可用',
+              icon: Icons.info_outline,
+              onTap: () {},
+            ),
+          ],
+        ),
+        if (_isProcessing) ...[
+          const SizedBox(height: 16),
+          AdaptiveSettingsSection(
+            children: [
+              AdaptiveSettingsTile<void>.card(
+                title: '处理中...',
+                subtitle: '请等待当前备份或恢复任务完成',
+                icon: Icons.hourglass_empty,
+                enabled: false,
+                onTap: () {},
+              ),
+            ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -793,7 +709,8 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('取消', style: TextStyle(color: Colors.white70)),
+                  child:
+                      const Text('取消', style: TextStyle(color: Colors.white70)),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -806,7 +723,8 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child: Text('确定', style: TextStyle(color: Colors.white)),
+                  child:
+                      const Text('确定', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -841,7 +759,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                 activeColor: accentColor,
                 checkColor: Colors.white,
                 side: BorderSide(
-                  color: colorScheme.onSurface.withOpacity(0.4),
+                  color: colorScheme.onSurface.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
               ),
@@ -863,7 +781,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.6),
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
                       fontSize: 13,
                     ),
                   ),
@@ -975,22 +893,25 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: colorScheme.onSurface.withOpacity(0.05),
+                color: colorScheme.onSurface.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: colorScheme.onSurface.withOpacity(0.1),
+                  color: colorScheme.onSurface.withValues(alpha: 0.1),
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      size: 18, color: colorScheme.onSurface.withOpacity(0.6)),
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '备份时间: $dateStr  版本: v${preview.appVersion}',
                       style: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.7),
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
                         fontSize: 13,
                       ),
                     ),
@@ -1085,7 +1006,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('取消', style: TextStyle(color: Colors.white70)),
+                  child:
+                      const Text('取消', style: TextStyle(color: Colors.white70)),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -1098,7 +1020,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child: Text('确定', style: TextStyle(color: Colors.white)),
+                  child:
+                      const Text('确定', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -1132,7 +1055,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                 activeColor: accentColor,
                 checkColor: Colors.white,
                 side: BorderSide(
-                  color: colorScheme.onSurface.withOpacity(0.4),
+                  color: colorScheme.onSurface.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
               ),
@@ -1154,7 +1077,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.6),
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
                       fontSize: 13,
                     ),
                   ),
