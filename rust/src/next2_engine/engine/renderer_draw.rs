@@ -506,10 +506,10 @@ impl Next2Renderer {
 
                             if shadow.opacity > 0.0 {
                                 self.push_shadow_quad(
-                                    (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                    (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                    (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE,
+                                    (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                    (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE,
                                     entry.uv_min,
                                     entry.uv_max,
                                     entry.uv_min,
@@ -552,10 +552,10 @@ impl Next2Renderer {
 
                         if shadow.opacity > 0.0 {
                             self.push_shadow_quad(
-                                (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE,
+                                (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE,
                                 entry.uv_min,
                                 entry.uv_max,
                                 entry.mask_uv_min,

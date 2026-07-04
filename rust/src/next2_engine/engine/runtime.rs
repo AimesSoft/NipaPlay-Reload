@@ -71,7 +71,11 @@ const EMOJI_SIDE_BEARING_RATIO: f32 = 0.08;
 const GLYPH_MODE_TEXT: f32 = 0.0;
 const GLYPH_MODE_EMOJI: f32 = 1.0;
 const SHADOW_ALPHA_SCALE: f32 = 1.0;
-const SHADOW_RENDER_SCALE: u32 = 1;
+/// Shadow render texture scale relative to the screen. 0.5 renders the shadow
+/// mask/blur at half resolution (1/4 the pixel area); the shadow is blurred
+/// anyway so the visual difference is negligible while GPU pixel load on the
+/// shadow passes drops ~75%.
+const SHADOW_RENDER_SCALE: f32 = 0.5;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 

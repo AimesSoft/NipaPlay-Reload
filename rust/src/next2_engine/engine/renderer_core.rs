@@ -317,8 +317,8 @@ impl Next2Renderer {
             mapped_at_creation: false,
         });
 
-        let shadow_width = width.max(1).saturating_mul(SHADOW_RENDER_SCALE);
-        let shadow_height = height.max(1).saturating_mul(SHADOW_RENDER_SCALE);
+        let shadow_width = ((width.max(1) as f32) * SHADOW_RENDER_SCALE).max(1.0) as u32;
+        let shadow_height = ((height.max(1) as f32) * SHADOW_RENDER_SCALE).max(1.0) as u32;
         let shadow_mask_texture = create_render_texture_with_usage(
             ctx.device.as_ref(),
             shadow_width,
@@ -395,8 +395,8 @@ impl Next2Renderer {
     fn resize(&mut self, width: u32, height: u32) -> bool {
         self.width = width.max(1);
         self.height = height.max(1);
-        self.shadow_width = self.width.saturating_mul(SHADOW_RENDER_SCALE);
-        self.shadow_height = self.height.saturating_mul(SHADOW_RENDER_SCALE);
+        self.shadow_width = ((self.width as f32) * SHADOW_RENDER_SCALE).max(1.0) as u32;
+        self.shadow_height = ((self.height as f32) * SHADOW_RENDER_SCALE).max(1.0) as u32;
         self.shadow_mask_texture = create_render_texture_with_usage(
             self.ctx.device.as_ref(),
             self.shadow_width,
