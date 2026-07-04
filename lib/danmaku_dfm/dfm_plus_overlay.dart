@@ -145,14 +145,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   int _vsyncWallUs = 0;
 
   /// Continuous media time used for layout. Advances by real wall-clock dt at
-  /// EXACTLY playbackRate — the rate is never modulated, so danmaku on-screen
-  /// speed is always consistent and matches the decoder (which always plays at
-  /// playbackRate). The authoritative media clock (playbackTimeMs) is used only
-  /// to (a) snap forward on seeks and (b) hold the display clock when the media
-  /// clock itself is stalled (frozen) — NOT to pace the display clock, because
-  /// the upstream progressively corrects playbackTimeMs toward the decoder
-  /// (slowing it after a seek/buffer), and following that slowed rate was the
-  /// "danmaku move slowly until the video catches up" symptom.
+  /// EXACTLY playbackRate — monotonic non-decreasing between snaps, never
+  /// modulated, so danmaku on-screen speed is always consistent and matches the
+  /// decoder (which always plays at playbackRate). The authoritative media
+  /// clock (playbackTimeMs) is used only to snap on seeks/loops — NOT to pace
+  /// the display clock, because the upstream progressively corrects
+  /// playbackTimeMs toward the decoder (slowing/freezing it after a
+  /// seek/buffer), and following or yanking back to that held clock caused the
+  /// "creep slowly" and "scroll-to-middle-then-snap-back" (twitch) symptoms.
   double _displayMediaTime = 0.0;
 
   /// Wall-clock microseconds of the previous display-time update.
@@ -161,48 +161,29 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// Whether _displayMediaTime has been initialized from playbackTimeMs.
   bool _displayTimeInitialized = false;
 
-  /// Last observed media-clock value (seconds), for stall detection.
+  /// Last observed media-clock value (seconds). Used to detect actual mediaTime
+  /// *jumps* (seek / loop / backward seek) as opposed to mere drift, so the
+  /// backward snap only fires on a real backward jump — never on accumulated
+  /// backward drift, which is just the display clock pacing the decoder while
+  /// the media clock is held during an upstream correction.
   double _lastMediaTimeSec = double.nan;
-
-  /// Wall-clock microseconds of the last observed media-clock advancement.
-  int _lastMediaAdvanceWallUs = 0;
 
   /// Per-frame wall dt cap. Prevents a long app stall/backgrounding event from
   /// jumping danmaku far ahead; playbackTimeMs will snap/correct us afterward.
   static const double _maxFrameDtSec = 0.2;
 
-  /// Media-clock stall threshold. If playbackTimeMs does not advance for longer
-  /// than this while isPlaying is true, the media clock is stalled (the upstream
-  /// smooth clock is held by monotonicity during a big backward correction, or
-  /// the player is frozen). In that state the display clock is held too and
-  /// pulled back to mediaTime + _stallAheadToleranceSec so danmaku pause with
-  /// the video instead of racing ahead of the frozen clock. ~6 frames at 60Hz:
-  /// above normal vsync jitter (16ms) and the upstream 50ms anchor-expire gap,
-  /// below any real stall.
-  static const double _stallThresholdSec = 0.10;
-
-  /// While stalled, the display clock may sit at most this far ahead of the
-  /// (frozen) media clock. Pulls back any run-ahead that accumulated during
-  /// stall-detection latency, then holds. Small, so the post-stall resync is a
-  /// sub-pixel nudge rather than a visible jump.
-  static const double _stallAheadToleranceSec = 0.05;
-
-  /// Forward drift above this (but below _hardResyncThresholdSec) is corrected
-  /// by a one-shot position snap to the media clock — NOT by modulating the
-  /// rate. Because layout is a pure function of time (x = width - speed * (t -
-  /// item.time)), a snap translates to a single-frame horizontal shift of
-  /// on-screen danmaku while the per-frame advance rate — the visible speed —
-  /// stays exactly playbackRate. Backward drift is NOT snapped: while the media
-  /// clock is advancing (normal play / upstream drift correction) danmaku just
-  /// advance at playbackRate and the bounded zero-sum correction drift keeps
-  /// them aligned; while it is stalled the _stallAheadToleranceSec ceiling
-  /// handles it. Below this threshold, drift is ignored (smooth per-vsync
-  /// motion).
+  /// Drift / mediaTime-jump threshold for a one-shot position snap. Because
+  /// layout is a pure function of time (x = width - speed * (t - item.time)),
+  /// a snap is a single-frame horizontal shift of on-screen danmaku while the
+  /// per-frame advance rate — the visible speed — stays exactly playbackRate.
+  /// Forward snaps fire on drift (displayTime fell behind mediaTime = seek);
+  /// backward snaps fire only on a mediaTime backward *jump* (loop / backward
+  /// seek), never on accumulated backward drift. Below this, drift is ignored
+  /// (smooth per-vsync motion).
   static const double _snapThresholdSec = 0.15;
 
-  /// Treat very large forward drift as seek and snap immediately (resets the
-  /// wall-clock baseline too). Large backward drift (loop restart) is pulled
-  /// back by the stall ceiling / forward-advancing media clock.
+  /// Large seek/loop threshold: a snap of this magnitude also resets the
+  /// wall-clock baseline (the overlay may not have ticked during the seek).
   static const double _hardResyncThresholdSec = 1.0;
 
   // ── Submit-rate throttle (P1-4) ──
@@ -318,9 +299,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     final mediaTime = widget.playbackTimeMs.value / 1000.0;
     _displayMediaTime = mediaTime;
     _lastDisplayWallUs = _wallClock.elapsedMicroseconds;
-    // Reset stall baseline so a fresh play/resume/seek isn't misread as a stall.
     _lastMediaTimeSec = mediaTime;
-    _lastMediaAdvanceWallUs = _lastDisplayWallUs;
     _displayTimeInitialized = true;
   }
 
@@ -490,71 +469,53 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           _displayMediaTime = mediaTime;
           _lastDisplayWallUs = currentWallUs;
           _lastMediaTimeSec = mediaTime;
-          _lastMediaAdvanceWallUs = currentWallUs;
           _displayTimeInitialized = true;
         }
 
-        // ── Media-clock stall detection ──
-        // The upstream smooth clock keeps advancing playbackTimeMs at ~1x even
-        // while the decoder is frozen (buffering), so a stall can't be detected
-        // from "mediaTime stopped". But the upstream DOES freeze playbackTimeMs
-        // (monotonicity hold) during a big backward drift correction after a
-        // seek/buffer — and that frozen state is what we detect here to hold
-        // the display clock.
-        if ((mediaTime - _lastMediaTimeSec).abs() > 1e-6) {
-          _lastMediaTimeSec = mediaTime;
-          _lastMediaAdvanceWallUs = currentWallUs;
-        }
-        final bool mediaStalled = widget.isPlaying &&
-            currentWallUs - _lastMediaAdvanceWallUs >
-                (_stallThresholdSec * 1000000).toInt();
-
-        // Advance at EXACTLY playbackRate — never modulated by drift. This is
-        // the decoder's rate, so danmaku stay aligned with the actual video
-        // frame even while the upstream is progressively correcting
-        // playbackTimeMs (slowing it), which was the "danmaku creep slowly
-        // until the video catches up" symptom. The bounded, zero-sum upstream
-        // corrections keep drift small without any rate modulation here. When
-        // the media clock is stalled (frozen), hold the display clock too.
-        if (widget.isPlaying &&
-            !mediaStalled &&
-            currentWallUs > _lastDisplayWallUs) {
+        // Advance at EXACTLY playbackRate — monotonic non-decreasing, never
+        // modulated. This is the decoder's rate, so danmaku stay aligned with
+        // the actual video frame even while the upstream is progressively
+        // correcting playbackTimeMs (slowing / freezing it toward the
+        // decoder). Because the display clock paces the decoder, any drift
+        // accumulated while the media clock is held returns to 0 on its own
+        // when the decoder catches up — no backward correction needed.
+        if (widget.isPlaying && currentWallUs > _lastDisplayWallUs) {
           final deltaUs = currentWallUs - _lastDisplayWallUs;
           final dt = (deltaUs / 1000000.0).clamp(0.0, _maxFrameDtSec);
           _displayMediaTime += dt * widget.playbackRate;
         }
         _lastDisplayWallUs = currentWallUs;
 
-        // ── Stall ceiling (active ONLY while the media clock is stalled) ──
-        // While playbackTimeMs is frozen, pull the display clock back to
-        // mediaTime + tolerance (clearing any run-ahead from the
-        // stall-detection latency) and hold it there so danmaku pause with the
-        // video. This is the ONLY backward correction — it is inactive while
-        // the media clock is advancing, so it never makes danmaku follow the
-        // upstream's slowed correction rate (the slow-movement symptom).
-        if (mediaStalled &&
-            _displayMediaTime > mediaTime + _stallAheadToleranceSec) {
-          _displayMediaTime = mediaTime + _stallAheadToleranceSec;
-        }
-
-        // ── Snaps: position jumps only, never rate modulation ──
+        // ── Snaps: one-shot position jumps, never rate modulation ──
         // A snap is a single-frame position jump; the per-frame advance rate
-        // (the visible speed) stays at playbackRate. Forward seek and large
-        // backward jumps (loop restart / backward seek) snap. Small/medium
-        // backward drift is NOT snapped — while the media clock advances it is
-        // handled by danmaku advancing at playbackRate (bounded zero-sum
-        // upstream corrections), and while stalled by the ceiling above; a
-        // small backward snap was the buffering-oscillation source.
+        // (the visible speed) stays at playbackRate.
+        //
+        // Forward snap on DRIFT: displayTime fell behind mediaTime (seek /
+        // scrub forward). Drift-based is correct here because forward drift
+        // only grows when mediaTime genuinely moved ahead.
+        //
+        // Backward snap on mediaTime JUMP (not drift): a real backward jump
+        // (loop restart / backward seek). Backward drift is NOT snapped — it
+        // accumulates when the display clock paces the decoder while mediaTime
+        // is held during an upstream correction, and yanking it back repeatedly
+        // was the "scroll to middle, jump back to right edge" twitch. Letting
+        // it resolve on its own (decoder catches up) keeps displayMediaTime
+        // monotonic between snaps.
         final drift = mediaTime - _displayMediaTime;
-        if (drift >= _hardResyncThresholdSec ||
-            drift <= -_hardResyncThresholdSec) {
-          // Large seek / loop / backward seek — snap and reset baseline.
+        if (drift > _snapThresholdSec) {
           _displayMediaTime = mediaTime;
-          _lastDisplayWallUs = currentWallUs;
-        } else if (drift > _snapThresholdSec) {
-          // Small/medium forward seek — snap to the media clock.
-          _displayMediaTime = mediaTime;
+          if (drift >= _hardResyncThresholdSec) {
+            _lastDisplayWallUs = currentWallUs;
+          }
         }
+        final double mediaDelta = mediaTime - _lastMediaTimeSec;
+        if (mediaDelta < -_snapThresholdSec) {
+          _displayMediaTime = mediaTime;
+          if (mediaDelta <= -_hardResyncThresholdSec) {
+            _lastDisplayWallUs = currentWallUs;
+          }
+        }
+        _lastMediaTimeSec = mediaTime;
 
         final double interpolatedTime = _displayMediaTime + widget.timeOffset;
 
