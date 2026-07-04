@@ -19,7 +19,10 @@ pub(crate) fn n2log(msg: &str) {
     });
     if let Ok(mut f) = file.lock() {
         let _ = writeln!(f, "[next2] {}", msg);
-        let _ = f.flush();
+        // Don't flush per-call: a synchronous fsync on every log line was a
+        // stall source on the MSDF rasterization hot path (5+ logs per new
+        // glyph). The OS buffers the write and flushes on drop/close. Error
+        // and panic paths still log, just without forcing an fsync.
     }
 }
 

@@ -459,7 +459,13 @@ impl Next2Renderer {
         self.interp_dt = if elapsed < 0.050 { elapsed } else { 0.0 };
         let interp_dt = self.interp_dt as f64;
 
-        for item in self.frame_items.clone().iter() {
+        // Take `frame_items` out of `self` so the loop body can borrow `self`
+        // mutably (push_quad / push_shadow_quad / atlas.entry_for all need
+        // &mut self) without contending with a shared borrow of self.frame_items.
+        // The Vec move is O(1) (pointer swap); previously this cloned the whole
+        // Vec plus every token's String on every frame.
+        let frame_items = std::mem::take(&mut self.frame_items);
+        for item in &frame_items {
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
@@ -474,7 +480,7 @@ impl Next2Renderer {
             let mut cursor_x = (item.x + item.scroll_speed as f64 * interp_dt) as f32;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);
-            let tokens = item.tokens.clone();
+            let tokens = &item.tokens;
 
             for token in tokens {
                 match token {
@@ -531,7 +537,7 @@ impl Next2Renderer {
                         }
                     }
                     FrameToken::Emoji(id) => {
-                        let Some(entry) = self.emoji_atlas.entry_for(&id).cloned() else {
+                        let Some(entry) = self.emoji_atlas.entry_for(id).cloned() else {
                             cursor_x += quantized_size as f32;
                             continue;
                         };
@@ -578,6 +584,9 @@ impl Next2Renderer {
                 }
             }
         }
+
+        // Restore the frame_items taken before the loop.
+        self.frame_items = frame_items;
 
         if !self.frame_items.is_empty() {
             self.atlas_bind_group = self

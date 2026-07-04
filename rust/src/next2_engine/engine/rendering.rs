@@ -849,6 +849,7 @@ fn load_faces_from_owned_bytes(
 }
 
 fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Option<GlyphMsdfData> {
+    #[cfg(debug_assertions)]
     n2log(&format!("glyph_msdf: glyph_id={}, px={}", glyph_id.0, px));
     let advance_units = face
         .glyph_hor_advance(glyph_id)
@@ -897,6 +898,7 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
     ));
 
     let mut shape: Shape<Contour> = fdsm_ttf_parser::load_shape_from_face(face, glyph_id)?;
+    #[cfg(debug_assertions)]
     n2log("glyph_msdf: shape loaded");
     shape.transform(&transform);
 
@@ -905,11 +907,13 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
 
     let colored_shape =
         Shape::edge_coloring_simple(shape, EDGE_COLORING_CORNER_THRESHOLD, EDGE_COLORING_SEED);
+    #[cfg(debug_assertions)]
     n2log("glyph_msdf: edge colored");
     let prepared_colored_shape = colored_shape.prepare();
 
     // fdsm 0.8.0 generate_mtsdf / correct_sign_mtsdf can hang on certain glyphs.
     // Run in a separate thread with a timeout to prevent permanent deadlock.
+    #[cfg(debug_assertions)]
     n2log(&format!("glyph_msdf: generating {}x{}", width, height));
     let (tx, rx) = std::sync::mpsc::channel();
     let _worker = std::thread::Builder::new()
@@ -935,6 +939,7 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
 
     let result = match rx.recv_timeout(std::time::Duration::from_secs(2)) {
         Ok(pixels) => {
+            #[cfg(debug_assertions)]
             n2log("glyph_msdf: done");
             Some(pixels)
         }
