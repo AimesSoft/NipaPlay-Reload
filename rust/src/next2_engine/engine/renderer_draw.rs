@@ -588,41 +588,11 @@ impl Next2Renderer {
         // Restore the frame_items taken before the loop.
         self.frame_items = frame_items;
 
-        if !self.frame_items.is_empty() {
-            self.atlas_bind_group = self
-                .ctx
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("next2 atlas bg"),
-                    layout: &self.atlas_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.atlas.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(
-                                &self.emoji_atlas.color_texture_view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::TextureView(
-                                &self.emoji_atlas.mask_texture_view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::Sampler(&self.emoji_atlas.sampler),
-                        },
-                    ],
-                });
-        }
+        // atlas_bind_group is created at construction and rebuilt only on font
+        // switch via rebuild_atlas_bind_group (renderer_core.rs). The glyph and
+        // emoji atlases reuse the same texture objects across uploads (clear()
+        // only resets the cursor, never recreates the texture), so the bind
+        // group stays valid between frames — no per-frame rebuild needed.
     }
 
     #[allow(clippy::too_many_arguments)]
