@@ -128,6 +128,34 @@ class ExternalPlayerSettingsPage extends StatelessWidget {
                     );
                   },
                 ),
+                Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                  height: 1,
+                ),
+                Consumer<SettingsProvider>(
+                  builder: (context, settingsProvider, child) {
+                    return SettingsItem.toggle(
+                      title: '弹幕外挂',
+                      subtitle: externalSupported
+                          ? '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net / PotPlayer）'
+                          : '仅桌面端支持',
+                      icon: Ionicons.chatbubbles_outline,
+                      enabled: externalSupported,
+                      value: settingsProvider.externalPlayerDanmakuOverlay,
+                      onChanged: (bool value) async {
+                        if (!externalSupported) return;
+                        await settingsProvider
+                            .setExternalPlayerDanmakuOverlay(value);
+                        if (context.mounted) {
+                          BlurSnackBar.show(
+                            context,
+                            value ? '已启用弹幕外挂' : '已关闭弹幕外挂',
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
               ],
             ),
           ),

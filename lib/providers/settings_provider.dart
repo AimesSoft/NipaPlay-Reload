@@ -28,6 +28,7 @@ class SettingsProvider with ChangeNotifier {
   // 外部播放器设置
   bool _useExternalPlayer = false;
   String _externalPlayerPath = '';
+  bool _externalPlayerDanmakuOverlay = true; // 弹幕外挂默认开启
 
   // GitHub 代理设置
   String _githubProxyUrl = '';
@@ -46,6 +47,7 @@ class SettingsProvider with ChangeNotifier {
       _danmakuAutoLoadStrategy;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
+  bool get externalPlayerDanmakuOverlay => _externalPlayerDanmakuOverlay;
   String get githubProxyUrl => _githubProxyUrl;
   double get danmakuSupersample => _danmakuSupersample;
 
@@ -91,6 +93,8 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
     _externalPlayerPath =
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
+    _externalPlayerDanmakuOverlay =
+        _prefs.getBool(SettingsKeys.externalPlayerDanmakuOverlay) ?? true;
     _githubProxyUrl =
         _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
     // 弹幕超采样：默认对平板和低 DPR 桌面设备开启 2x
@@ -195,6 +199,16 @@ class SettingsProvider with ChangeNotifier {
     await _prefs.setString(
       SettingsKeys.externalPlayerPath,
       _externalPlayerPath,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setExternalPlayerDanmakuOverlay(bool enable) async {
+    if (_externalPlayerDanmakuOverlay == enable) return;
+    _externalPlayerDanmakuOverlay = enable;
+    await _prefs.setBool(
+      SettingsKeys.externalPlayerDanmakuOverlay,
+      _externalPlayerDanmakuOverlay,
     );
     notifyListeners();
   }
