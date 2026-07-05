@@ -359,6 +359,71 @@ impl Next2EmojiAtlas {
     }
 }
 
+// Persistent MSDF rasterization worker pool.
+//
+// `glyph_msdf_from_face` used to spawn a fresh OS thread per new glyph; under a
+// burst of new glyphs (new font / episode) that formed a thread-creation storm.
+// The pool keeps one persistent worker fed by an mpsc channel of boxed
+// closures, so only the first miss pays the thread-spawn cost.
+//
+// fdsm 0.8.0's generate_mtsdf / correct_sign_mtsdf can deadlock on certain
+// glyphs, so every task carries a 2s recv_timeout. On timeout the worker is
+// abandoned (it stays stuck — the same thread leak as the old spawn-per-glyph
+// path) and a fresh worker is spawned lazily on the next call.
+struct MsdfTask {
+    work: Box<dyn FnOnce() -> Vec<u8> + Send + 'static>,
+    result_tx: std::sync::mpsc::Sender<Vec<u8>>,
+}
+
+struct MsdfWorkerPool {
+    task_tx: Option<std::sync::mpsc::Sender<MsdfTask>>,
+}
+
+impl MsdfWorkerPool {
+    fn new() -> Self {
+        Self { task_tx: None }
+    }
+
+    fn rasterize<F>(&mut self, work: F) -> Option<Vec<u8>>
+    where
+        F: FnOnce() -> Vec<u8> + Send + 'static,
+    {
+        if self.task_tx.is_none() {
+            let (tx, rx) = std::sync::mpsc::channel::<MsdfTask>();
+            let _ = std::thread::Builder::new()
+                .name("next2-msdf".into())
+                .spawn(move || msdf_worker_loop(rx));
+            self.task_tx = Some(tx);
+        }
+        let (result_tx, result_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let task = MsdfTask {
+            work: Box::new(work),
+            result_tx,
+        };
+        if self.task_tx.as_ref().unwrap().send(task).is_err() {
+            // worker died / channel closed
+            self.task_tx = None;
+            return None;
+        }
+        match result_rx.recv_timeout(std::time::Duration::from_secs(2)) {
+            Ok(pixels) => Some(pixels),
+            Err(_) => {
+                // Timeout or disconnect: worker likely stuck on this glyph.
+                // Abandon it; a fresh worker spawns on the next call.
+                self.task_tx = None;
+                None
+            }
+        }
+    }
+}
+
+fn msdf_worker_loop(task_rx: std::sync::mpsc::Receiver<MsdfTask>) {
+    while let Ok(task) = task_rx.recv() {
+        let pixels = (task.work)();
+        let _ = task.result_tx.send(pixels);
+    }
+}
+
 struct Next2GlyphAtlas {
     font_key: String,
     fonts: Vec<FontFaceHandle>,
@@ -376,6 +441,9 @@ struct Next2GlyphAtlas {
     free_list: Vec<FreeRect>,
     /// Monotonically increasing frame counter for LRU eviction.
     frame_counter: u64,
+    /// Persistent MSDF rasterization worker (lazily spawned). Avoids spawning a
+    /// thread per new glyph; see `MsdfWorkerPool`.
+    msdf_worker: MsdfWorkerPool,
 }
 
 impl Next2GlyphAtlas {
@@ -427,6 +495,7 @@ impl Next2GlyphAtlas {
             line_ascent_cache: HashMap::new(),
             free_list: Vec::new(),
             frame_counter: 0,
+            msdf_worker: MsdfWorkerPool::new(),
         })
     }
 
@@ -608,12 +677,12 @@ impl Next2GlyphAtlas {
         ch
     }
 
-    fn glyph_from_fonts(&self, ch: char, px: f32) -> Option<GlyphMsdfData> {
+    fn glyph_from_fonts(&mut self, ch: char, px: f32) -> Option<GlyphMsdfData> {
         for font in &self.fonts {
             let Some(glyph_id) = font.face.glyph_index(ch) else {
                 continue;
             };
-            let data = glyph_msdf_from_face(&font.face, glyph_id, px)?;
+            let data = glyph_msdf_from_face(&mut self.msdf_worker, &font.face, glyph_id, px)?;
             return Some(data);
         }
         None
@@ -848,7 +917,13 @@ fn load_faces_from_owned_bytes(
     Ok(())
 }
 
-fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Option<GlyphMsdfData> {
+fn glyph_msdf_from_face(
+    pool: &mut MsdfWorkerPool,
+    face: &Face<'static>,
+    glyph_id: GlyphId,
+    px: f32,
+) -> Option<GlyphMsdfData> {
+    #[cfg(debug_assertions)]
     n2log(&format!("glyph_msdf: glyph_id={}, px={}", glyph_id.0, px));
     let advance_units = face
         .glyph_hor_advance(glyph_id)
@@ -897,6 +972,7 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
     ));
 
     let mut shape: Shape<Contour> = fdsm_ttf_parser::load_shape_from_face(face, glyph_id)?;
+    #[cfg(debug_assertions)]
     n2log("glyph_msdf: shape loaded");
     shape.transform(&transform);
 
@@ -905,51 +981,43 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
 
     let colored_shape =
         Shape::edge_coloring_simple(shape, EDGE_COLORING_CORNER_THRESHOLD, EDGE_COLORING_SEED);
+    #[cfg(debug_assertions)]
     n2log("glyph_msdf: edge colored");
     let prepared_colored_shape = colored_shape.prepare();
 
-    // fdsm 0.8.0 generate_mtsdf / correct_sign_mtsdf can hang on certain glyphs.
-    // Run in a separate thread with a timeout to prevent permanent deadlock.
+    // fdsm 0.8.0 generate_mtsdf / correct_sign_mtsdf can hang on certain
+    // glyphs. Run on the persistent MSDF worker (see `MsdfWorkerPool`) with a
+    // 2s timeout; on timeout/worker-death the worker is abandoned (same thread
+    // leak as the old spawn-per-glyph path) and a fresh worker spawns next call.
+    #[cfg(debug_assertions)]
     n2log(&format!("glyph_msdf: generating {}x{}", width, height));
-    let (tx, rx) = std::sync::mpsc::channel();
-    let _worker = std::thread::Builder::new()
-        .name("next2-msdf".into())
-        .spawn(move || {
-            let mut mtsdf_f32 = Rgba32FImage::new(width, height);
-            generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
-            correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
+    let rgba = match pool.rasterize(move || {
+        let mut mtsdf_f32 = Rgba32FImage::new(width, height);
+        generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
+        correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
 
-            let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
-            let raw_rgba = mtsdf_u8.into_raw();
-            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-            for y in 0..height {
-                let src_y = height - 1 - y;
-                let row_start = (src_y * width * 4) as usize;
-                let row_end = row_start + (width * 4) as usize;
-                for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
-                    rgba.extend_from_slice(chunk);
-                }
+        let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
+        let raw_rgba = mtsdf_u8.into_raw();
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        for y in 0..height {
+            let src_y = height - 1 - y;
+            let row_start = (src_y * width * 4) as usize;
+            let row_end = row_start + (width * 4) as usize;
+            for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
+                rgba.extend_from_slice(chunk);
             }
-            let _ = tx.send(rgba);
-        });
-
-    let result = match rx.recv_timeout(std::time::Duration::from_secs(2)) {
-        Ok(pixels) => {
+        }
+        rgba
+    }) {
+        Some(pixels) => {
+            #[cfg(debug_assertions)]
             n2log("glyph_msdf: done");
-            Some(pixels)
+            pixels
         }
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            n2log(&format!("glyph_msdf: TIMEOUT glyph_id={}", glyph_id.0));
-            None
+        None => {
+            n2log(&format!("glyph_msdf: TIMEOUT/CRASH glyph_id={}", glyph_id.0));
+            return None;
         }
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            n2log(&format!("glyph_msdf: CRASH glyph_id={}", glyph_id.0));
-            None
-        }
-    };
-
-    let Some(rgba) = result else {
-        return None;
     };
 
     let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;

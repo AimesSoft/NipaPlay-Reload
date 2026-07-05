@@ -459,7 +459,13 @@ impl Next2Renderer {
         self.interp_dt = if elapsed < 0.050 { elapsed } else { 0.0 };
         let interp_dt = self.interp_dt as f64;
 
-        for item in self.frame_items.clone().iter() {
+        // Take `frame_items` out of `self` so the loop body can borrow `self`
+        // mutably (push_quad / push_shadow_quad / atlas.entry_for all need
+        // &mut self) without contending with a shared borrow of self.frame_items.
+        // The Vec move is O(1) (pointer swap); previously this cloned the whole
+        // Vec plus every token's String on every frame.
+        let frame_items = std::mem::take(&mut self.frame_items);
+        for item in &frame_items {
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
@@ -474,7 +480,7 @@ impl Next2Renderer {
             let mut cursor_x = (item.x + item.scroll_speed as f64 * interp_dt) as f32;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);
-            let tokens = item.tokens.clone();
+            let tokens = &item.tokens;
 
             for token in tokens {
                 match token {
@@ -500,10 +506,10 @@ impl Next2Renderer {
 
                             if shadow.opacity > 0.0 {
                                 self.push_shadow_quad(
-                                    (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                    (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                    (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                    (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE,
+                                    (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                    (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE,
                                     entry.uv_min,
                                     entry.uv_max,
                                     entry.uv_min,
@@ -531,7 +537,7 @@ impl Next2Renderer {
                         }
                     }
                     FrameToken::Emoji(id) => {
-                        let Some(entry) = self.emoji_atlas.entry_for(&id).cloned() else {
+                        let Some(entry) = self.emoji_atlas.entry_for(id).cloned() else {
                             cursor_x += quantized_size as f32;
                             continue;
                         };
@@ -546,10 +552,10 @@ impl Next2Renderer {
 
                         if shadow.opacity > 0.0 {
                             self.push_shadow_quad(
-                                (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
-                                (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE,
+                                (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE,
+                                (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE,
                                 entry.uv_min,
                                 entry.uv_max,
                                 entry.mask_uv_min,
@@ -579,41 +585,14 @@ impl Next2Renderer {
             }
         }
 
-        if !self.frame_items.is_empty() {
-            self.atlas_bind_group = self
-                .ctx
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("next2 atlas bg"),
-                    layout: &self.atlas_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.atlas.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(
-                                &self.emoji_atlas.color_texture_view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::TextureView(
-                                &self.emoji_atlas.mask_texture_view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::Sampler(&self.emoji_atlas.sampler),
-                        },
-                    ],
-                });
-        }
+        // Restore the frame_items taken before the loop.
+        self.frame_items = frame_items;
+
+        // atlas_bind_group is created at construction and rebuilt only on font
+        // switch via rebuild_atlas_bind_group (renderer_core.rs). The glyph and
+        // emoji atlases reuse the same texture objects across uploads (clear()
+        // only resets the cursor, never recreates the texture), so the bind
+        // group stays valid between frames — no per-frame rebuild needed.
     }
 
     #[allow(clippy::too_many_arguments)]
