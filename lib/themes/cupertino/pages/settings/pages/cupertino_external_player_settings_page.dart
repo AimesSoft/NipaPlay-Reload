@@ -174,6 +174,40 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
             );
           },
         ),
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return CupertinoSettingsTile(
+              leading: Icon(
+                CupertinoIcons.chat_bubble,
+                color: resolveSettingsIconColor(context),
+              ),
+              title: const Text('弹幕外挂'),
+              subtitle: Text(externalSupported
+                  ? '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net / PotPlayer）'
+                  : context.l10n.desktopOnlySupported),
+              trailing: AdaptiveSwitch(
+                value: settingsProvider.externalPlayerDanmakuOverlay,
+                onChanged: externalSupported
+                    ? (bool value) async {
+                        await settingsProvider
+                            .setExternalPlayerDanmakuOverlay(value);
+                        if (!context.mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: value ? '已启用弹幕外挂' : '已关闭弹幕外挂',
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      }
+                    : null,
+              ),
+              onTap: externalSupported
+                  ? () => settingsProvider.setExternalPlayerDanmakuOverlay(
+                      !settingsProvider.externalPlayerDanmakuOverlay)
+                  : null,
+              backgroundColor: tileColor,
+            );
+          },
+        ),
       ],
     );
   }

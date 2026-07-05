@@ -36,12 +36,23 @@ class BlurSnackBar {
       _currentOverlayEntry = null;
     }
 
-    final overlay = Overlay.of(context);
+    // context 可能是 Navigator 自己的 context（无 Overlay 祖先，如 PlaybackService
+    // 传入的 navigatorKey.currentContext），用 maybeOf + 回退到 Navigator 内部 Overlay。
+    final overlay = Overlay.maybeOf(context) ?? navigatorKey.currentState?.overlay;
+    if (overlay == null) {
+      debugPrint('[BlurSnackBar] 无可用 Overlay，放弃显示: $content');
+      return;
+    }
     late final OverlayEntry overlayEntry;
     late final Animation<double> animation;
     late final Animation<Offset> slideAnimation;
     late final Animation<double> scaleAnimation;
-    final useGlassBackground = _shouldUseGlassBackground(context);
+    bool useGlassBackground;
+    try {
+      useGlassBackground = _shouldUseGlassBackground(context);
+    } catch (_) {
+      useGlassBackground = false;
+    }
 
     void dismiss() {
       _controller?.reverse().then((_) {
@@ -58,7 +69,7 @@ class BlurSnackBar {
     _controller?.dispose();
     _controller = AnimationController(
       duration: const Duration(milliseconds: 300),
-      vsync: Navigator.of(context),
+      vsync: navigatorKey.currentState ?? Navigator.of(context),
     );
 
     animation = CurvedAnimation(

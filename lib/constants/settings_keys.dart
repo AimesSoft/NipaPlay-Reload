@@ -17,6 +17,10 @@ class SettingsKeys {
 
   static const String externalPlayerPath = 'external_player_path';
 
+  /// 外部播放器弹幕外挂开关（ASS 字幕注入）。
+  static const String externalPlayerDanmakuOverlay =
+      'external_player_danmaku_overlay';
+
   static const String autoCheckUpdatesInBackground =
       'auto_check_updates_in_background';
 

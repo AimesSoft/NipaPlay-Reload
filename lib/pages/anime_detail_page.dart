@@ -760,7 +760,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         );
         await PlaybackService().play(playableItem);
         if (mounted) {
-          Navigator.of(context).pop();
+          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
+          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
+          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
+          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop();
+          }
         }
         return;
       }
@@ -777,7 +784,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         );
         await PlaybackService().play(playableItem);
         if (mounted) {
-          Navigator.of(context).pop();
+          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
+          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
+          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
+          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop();
+          }
         }
       } else if (mounted) {
         BlurSnackBar.show(context, '文件已不存在于: ${historyItem.filePath}');

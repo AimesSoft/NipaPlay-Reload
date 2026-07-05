@@ -683,6 +683,110 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     return exportList;
   }
 
+  /// 为外部播放器弹幕外挂准备过滤后的弹幕列表。
+  ///
+  /// 与 [loadDanmaku] 不同：**不写** [_danmakuTracks]/[_danmakuList]，不影响
+  /// 内置播放器当前状态。流程复用 缓存→网络→解析→插件过滤→屏蔽过滤→随机色，
+  /// 返回与内置显示口径一致的过滤后列表。
+  ///
+  /// 调用方需保证此时内置播放器未在并发加载弹幕（插件过滤用共享 pending 缓冲）。
+  /// 若 [_context]/[_pluginService] 不可用，插件过滤会优雅跳过（屏蔽过滤仍生效）。
+  Future<List<Map<String, dynamic>>> buildFilteredDanmakuForExport({
+    required String episodeId,
+    required String animeId,
+  }) async {
+    debugPrint('[ExtDanmaku] buildFilteredDanmakuForExport 开始: '
+        'episodeId=$episodeId, animeId=$animeId');
+    if (episodeId.isEmpty) {
+      debugPrint('[ExtDanmaku] episodeId 为空，返回空列表');
+      return const [];
+    }
+
+    // 1. 缓存 → 网络
+    List<dynamic>? raw;
+    try {
+      final tCache = DateTime.now();
+      final cached = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      debugPrint('[ExtDanmaku] 缓存查询: ${cached?.length ?? 0} 条, '
+          '耗时=${DateTime.now().difference(tCache).inMilliseconds}ms');
+      if (cached != null && cached.isNotEmpty) {
+        raw = cached;
+      } else {
+        debugPrint('[ExtDanmaku] 缓存未命中，发起网络请求…');
+        final animeIdInt = int.tryParse(animeId) ?? 0;
+        final tNet = DateTime.now();
+        final data = await DandanplayService.getDanmaku(episodeId, animeIdInt)
+            .timeout(const Duration(seconds: 32), onTimeout: () {
+          throw TimeoutException('加载弹幕超时');
+        });
+        debugPrint('[ExtDanmaku] 网络返回: count=${data['count']}, '
+            '耗时=${DateTime.now().difference(tNet).inMilliseconds}ms');
+        final comments = data['comments'];
+        if (comments is List && comments.isNotEmpty) {
+          raw = comments;
+        }
+      }
+    } catch (e, st) {
+      debugPrint('[ExtDanmaku] 取弹幕失败: $e');
+      debugPrintStack(stackTrace: st);
+      return const [];
+    }
+    if (raw == null || raw.isEmpty) {
+      debugPrint('[ExtDanmaku] raw 为空，返回空列表');
+      return const [];
+    }
+
+    // 2. 解析（优先 C++ 解析器，回退 Dart isolate）
+    List<Map<String, dynamic>> parsed;
+    try {
+      final tParse = DateTime.now();
+      parsed = await DanmakuParser.parseDanmakuListOptimized(
+        raw,
+        (data) => compute(parseDanmakuListInBackground, data),
+      );
+      debugPrint('[ExtDanmaku] 解析完成: ${parsed.length} 条, '
+          '耗时=${DateTime.now().difference(tParse).inMilliseconds}ms');
+    } catch (e, st) {
+      debugPrint('[ExtDanmaku] 解析弹幕失败: $e');
+      debugPrintStack(stackTrace: st);
+      return const [];
+    }
+    if (parsed.isEmpty) {
+      debugPrint('[ExtDanmaku] 解析后为空，返回空列表');
+      return const [];
+    }
+
+    // 3. 插件过滤（复用 loadDanmaku 同款管线）
+    final beforePlugin = parsed.length;
+    _notifyPluginDanmakuLoaded(parsed);
+    final pluginModified = _pluginService?.pendingDanmakuData;
+    if (pluginModified != null && pluginModified.isNotEmpty) {
+      parsed = pluginModified;
+      _pluginService?.updateDanmakuData(null);
+      debugPrint('[ExtDanmaku] 插件过滤: $beforePlugin → ${parsed.length} 条');
+    } else {
+      debugPrint('[ExtDanmaku] 插件未修改 (pluginService=${_pluginService != null})');
+    }
+
+    // 4. 屏蔽过滤 + 随机色（复用 _updateMergedDanmakuList 同款谓词）
+    final beforeBlock = parsed.length;
+    final filtered = parsed
+        .where((d) => !shouldBlockDanmaku(d))
+        .map(_prepareDanmakuForDisplay)
+        .toList();
+    debugPrint('[ExtDanmaku] 屏蔽过滤: $beforeBlock → ${filtered.length} 条');
+
+    // 5. 按时间排序
+    filtered.sort((a, b) {
+      final ta = _resolveDanmakuTimeValue(a['time'] ?? a['t']);
+      final tb = _resolveDanmakuTimeValue(b['time'] ?? b['t']);
+      return ta.compareTo(tb);
+    });
+
+    debugPrint('[ExtDanmaku] 完成，返回 ${filtered.length} 条');
+    return filtered;
+  }
+
   String buildDanmakuJsonExport(List<Map<String, dynamic>> danmakuList) {
     final payload = <String, dynamic>{
       'count': danmakuList.length,
