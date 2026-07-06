@@ -349,6 +349,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
+      // 应用自定义 User-Agent（须在打开媒体前设置；空字符串 = 用内核默认 UA）。
+      // 优先用一次性 UA（串流菜单设置，仅本次有效，用后即清），否则用持久 UA。
+      final customUA =
+          PlayerFactory.consumeOneTimeUA() ?? PlayerFactory.getCustomPlayerUA();
+      if (customUA.isNotEmpty) {
+        player.setUserAgent(customUA);
+      }
+
       player.media = playUrl;
       await applyErikaUpscalerModeToCurrentPlayer();
 

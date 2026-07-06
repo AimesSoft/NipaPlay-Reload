@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
@@ -115,6 +116,52 @@ class ExternalPlayerService {
     }
   }
 
+  /// 按播放器类型构造自定义 User-Agent 参数（用户在 PlayerFactory 设置的 UA）。
+  /// 空 UA 或不支持的播放器返回空列表。须在打开媒体前传入，对所有 HTTP 请求生效。
+  static List<String> _buildUAArgs(String playerPath) {
+    final ua = PlayerFactory.getCustomPlayerUA();
+    if (ua.isEmpty) return const [];
+    switch (detectPlayer(playerPath)) {
+      case ExternalPlayerType.mpv:
+      case ExternalPlayerType.mpvNet:
+        return ['--user-agent=$ua'];
+      case ExternalPlayerType.vlc:
+        return ['--http-user-agent=$ua'];
+      case ExternalPlayerType.potPlayer:
+      case ExternalPlayerType.generic:
+        // PotPlayer / 未知播放器：CLI 不支持自定义 UA
+        return const [];
+    }
+  }
+
+  /// 按播放器类型构造弹幕平滑参数（仅原版 mpv）。
+  ///
+  /// 两个配套参数，缺一不可：
+  /// - `--blend-subtitles=video`：把弹幕混入视频层。是下面 vf 滤镜让弹幕
+  ///   按 60fps 重新定位的前提——若字幕留在 OSD 层，vf 不影响其刷新率。
+  ///   通过 CLI 强制设值，不依赖用户外部 mpv 的 mpv.conf 已配置此项。
+  /// - `--vf-add=lavfi=[fps=fps=60:round=down]`：把视频复制帧到 60fps，
+  ///   混入视频层的弹幕随之按 60fps 重新计算 \move 位置 → 滚动清晰不卡顿
+  ///   （mpv 字幕刷新率随视频帧率，24fps 视频下弹幕步进大、看不清）。
+  ///
+  /// 仅原版 mpv 需要：mpv.net 原生弹幕渲染已足够平滑，无需此滤镜。
+  /// `--vf-add` 追加而非 `--vf=` 覆盖，避免冲掉用户 mpv.conf 已有的 vf
+  /// 滤镜。PotPlayer/VLC/未知播放器不认这些选项，跳过。
+  static List<String> _buildDanmakuSmoothArgs(String playerPath) {
+    switch (detectPlayer(playerPath)) {
+      case ExternalPlayerType.mpv:
+        return [
+          '--blend-subtitles=video',
+          '--vf-add=lavfi=[fps=fps=60:round=down]',
+        ];
+      case ExternalPlayerType.mpvNet:
+      case ExternalPlayerType.potPlayer:
+      case ExternalPlayerType.vlc:
+      case ExternalPlayerType.generic:
+        return const [];
+    }
+  }
+
   /// 安全显示 snackbar。
   ///
   /// 服务层拿到的 context 可能缺少 Overlay 祖先（如 PlaybackService 传入的
@@ -196,6 +243,14 @@ class ExternalPlayerService {
           'assPath=${assets?.assPath}, luaPath=${assets?.luaPath}, 耗时=${dt}ms');
       if (assets != null) {
         extraArgs = _buildSubArgs(playerPath, assets);
+        // 弹幕平滑参数：仅原版 mpv（mpv.net 原生弹幕渲染已足够平滑）。
+        // blend-subtitles=video 把弹幕混入视频层，是 vf fps=60 让弹幕
+        // 按 60fps 重新定位的前提；二者配套，不依赖用户 mpv.conf。
+        final smoothArgs = _buildDanmakuSmoothArgs(playerPath);
+        if (smoothArgs.isNotEmpty) {
+          extraArgs = [...extraArgs, ...smoothArgs];
+          debugPrint('[ExtPlayer] 注入弹幕平滑参数: $smoothArgs');
+        }
         debugPrint('[ExtPlayer] 注入弹幕参数: extraArgs=$extraArgs, '
             'playerType=${detectPlayer(playerPath)}');
       } else {
@@ -205,6 +260,13 @@ class ExternalPlayerService {
     } else {
       debugPrint('[ExtPlayer] 跳过弹幕外挂 '
           '(enabled=$danmakuEnabled, episodeId="$episodeId")');
+    }
+
+    // 自定义 User-Agent（mpv/mpv.net/vlc 支持；与弹幕参数合并）
+    final uaArgs = _buildUAArgs(playerPath);
+    if (uaArgs.isNotEmpty) {
+      extraArgs = [...extraArgs, ...uaArgs];
+      debugPrint('[ExtPlayer] 注入自定义 UA 参数: $uaArgs');
     }
 
     debugPrint('[ExtPlayer] 调用 launch: path="$playerPath", '

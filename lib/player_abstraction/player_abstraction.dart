@@ -179,6 +179,9 @@ class Player {
   void setProperty(String key, String value) =>
       _delegate.setProperty(key, value);
 
+  /// 设置 HTTP User-Agent（播放器请求视频时）。空字符串 = 用内核默认 UA。
+  void setUserAgent(String ua) => _delegate.setUserAgent(ua);
+
   Future<void> setVideoSurfaceSize({int? width, int? height}) =>
       _delegate.setVideoSurfaceSize(width: width, height: height);
 

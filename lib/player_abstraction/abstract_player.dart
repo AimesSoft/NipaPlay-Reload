@@ -51,6 +51,10 @@ abstract class AbstractPlayer {
   List<String> getDecoders(PlayerMediaType type);
   String? getProperty(String key);
   void setProperty(String key, String value);
+
+  /// 设置 HTTP User-Agent（播放器请求视频时使用）。默认空实现，各内核按需 override。
+  /// 空字符串 [ua] = 用内核默认 UA。在打开媒体前调用。
+  void setUserAgent(String ua) {}
   Future<void> setVideoSurfaceSize({int? width, int? height});
 
   /// 跳转到指定索引的章节（使用 mpv 原生 `chapter` 属性，keyframe 对齐）。
