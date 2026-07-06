@@ -1,48 +1,28 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/pages/shortcuts_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/downloader_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/labs_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/plugin_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/theme_mode_page.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:provider/provider.dart';
+import 'package:nipaplay/settings/unified_settings_entries.dart';
 
 class NipaplaySettingEntryIds {
   const NipaplaySettingEntryIds._();
 
-  static const String appearance = 'appearance';
-  static const String language = 'language';
-  static const String general = 'general';
-  static const String storage = 'storage';
-  static const String network = 'network';
-  static const String backupRestore = 'backup_restore';
-  static const String player = 'player';
-  static const String danmaku = 'danmaku';
-  static const String externalPlayer = 'external_player';
-  static const String shortcuts = 'shortcuts';
-  static const String remoteAccess = 'remote_access';
-  static const String remoteMediaLibrary = 'remote_media_library';
-  static const String downloader = 'downloader';
-  static const String developerOptions = 'developer_options';
-  static const String labs = 'labs';
-  static const String plugins = 'plugins';
-  static const String about = 'about';
+  static const String appearance = UnifiedSettingEntryIds.appearance;
+  static const String language = UnifiedSettingEntryIds.language;
+  static const String general = UnifiedSettingEntryIds.general;
+  static const String storage = UnifiedSettingEntryIds.storage;
+  static const String network = UnifiedSettingEntryIds.network;
+  static const String backupRestore = UnifiedSettingEntryIds.backupRestore;
+  static const String player = UnifiedSettingEntryIds.player;
+  static const String danmaku = UnifiedSettingEntryIds.danmaku;
+  static const String externalPlayer = UnifiedSettingEntryIds.externalPlayer;
+  static const String shortcuts = UnifiedSettingEntryIds.shortcuts;
+  static const String remoteAccess = UnifiedSettingEntryIds.remoteAccess;
+  static const String remoteMediaLibrary =
+      UnifiedSettingEntryIds.remoteMediaLibrary;
+  static const String downloader = UnifiedSettingEntryIds.downloader;
+  static const String developerOptions =
+      UnifiedSettingEntryIds.developerOptions;
+  static const String labs = UnifiedSettingEntryIds.labs;
+  static const String plugins = UnifiedSettingEntryIds.plugins;
+  static const String about = UnifiedSettingEntryIds.about;
 }
 
 class NipaplaySettingEntry {
@@ -62,170 +42,20 @@ class NipaplaySettingEntry {
 }
 
 List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
-  final themeNotifier = context.read<ThemeNotifier>();
-  final l10n = context.l10n;
-  final pluginsTitle = l10n.localeName.startsWith('zh_Hant') ? '插件' : '插件';
-  final pluginsPageTitle =
-      l10n.localeName.startsWith('zh_Hant') ? '插件設定' : '插件设置';
-  final entries = <NipaplaySettingEntry>[
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.appearance,
-      title: l10n.appearance,
-      icon: Ionicons.color_palette_outline,
-      pageTitle: l10n.appearanceSettings,
-      page: ThemeModePage(themeNotifier: themeNotifier),
-    ),
-  ];
-
-  entries.addAll([
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.language,
-      title: l10n.language,
-      icon: Ionicons.language_outline,
-      pageTitle: l10n.languageSettingsTitle,
-      page: const LanguagePage(),
-    ),
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.general,
-      title: l10n.general,
-      icon: Ionicons.settings_outline,
-      pageTitle: l10n.generalSettings,
-      page: const GeneralPage(),
-    ),
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.storage,
-      title: l10n.storage,
-      icon: Ionicons.folder_open_outline,
-      pageTitle: l10n.storageSettings,
-      page: const StoragePage(),
-    ),
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.network,
-      title: l10n.networkSettings,
-      icon: Ionicons.wifi_outline,
-      pageTitle: l10n.networkSettings,
-      page: const NetworkSettingsPage(),
-    ),
-  ]);
-
-  if (!globals.isPhone) {
-    entries.add(
-      NipaplaySettingEntry(
-        id: NipaplaySettingEntryIds.backupRestore,
-        title: l10n.backupAndRestore,
-        icon: Ionicons.cloud_upload_outline,
-        pageTitle: l10n.backupAndRestore,
-        page: const BackupRestorePage(),
-      ),
-    );
-  }
-
-  entries.add(
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.player,
-      title: l10n.player,
-      icon: Ionicons.play_circle_outline,
-      pageTitle: l10n.playerSettings,
-      page: const PlayerSettingsPage(),
-    ),
+  final entries = buildUnifiedSettingEntries(
+    context,
+    surface: UnifiedSettingsSurface.nipaplay,
   );
 
-  entries.add(
-    const NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.danmaku,
-      title: '弹幕',
-      icon: Ionicons.hardware_chip_outline,
-      pageTitle: '弹幕设置',
-      page: DanmakuSettingsPage(),
-    ),
-  );
-
-  entries.add(
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.externalPlayer,
-      title: l10n.externalCall,
-      icon: Ionicons.open_outline,
-      pageTitle: l10n.externalCall,
-      page: const ExternalPlayerSettingsPage(),
-    ),
-  );
-
-  if (!globals.isPhone) {
-    entries.add(
-      NipaplaySettingEntry(
-        id: NipaplaySettingEntryIds.shortcuts,
-        title: l10n.shortcuts,
-        icon: Ionicons.key_outline,
-        pageTitle: l10n.shortcutsSettings,
-        page: const ShortcutsSettingsPage(),
-      ),
-    );
-  }
-
-  if (!kIsWeb) {
-    entries.add(
-      NipaplaySettingEntry(
-        id: NipaplaySettingEntryIds.remoteAccess,
-        title: l10n.remoteAccess,
-        icon: Ionicons.link_outline,
-        pageTitle: l10n.remoteAccess,
-        page: const RemoteAccessPage(),
-      ),
-    );
-  }
-
-  entries.add(
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.remoteMediaLibrary,
-      title: l10n.remoteMediaLibrary,
-      icon: Ionicons.library_outline,
-      pageTitle: l10n.remoteMediaLibrary,
-      page: const RemoteMediaLibraryPage(),
-    ),
-  );
-
-  if (globals.isDownloaderSupportedPlatform) {
-    entries.add(
-      const NipaplaySettingEntry(
-        id: NipaplaySettingEntryIds.downloader,
-        title: '下载器',
-        icon: Ionicons.cloud_download_outline,
-        pageTitle: '下载器',
-        page: DownloaderSettingsPage(),
-      ),
-    );
-  }
-
-  entries.addAll([
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.developerOptions,
-      title: l10n.developerOptions,
-      icon: Ionicons.code_slash_outline,
-      pageTitle: l10n.developerOptions,
-      page: const DeveloperOptionsPage(),
-    ),
-    const NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.labs,
-      title: '实验室',
-      icon: Ionicons.flask_outline,
-      pageTitle: '实验室',
-      page: LabsPage(),
-    ),
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.plugins,
-      title: pluginsTitle,
-      icon: Ionicons.extension_puzzle_outline,
-      pageTitle: pluginsPageTitle,
-      page: const PluginSettingsPage(),
-    ),
-    NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.about,
-      title: l10n.about,
-      icon: Ionicons.information_circle_outline,
-      pageTitle: l10n.about,
-      page: const AboutPage(),
-    ),
-  ]);
-
-  return entries;
+  return entries
+      .map(
+        (entry) => NipaplaySettingEntry(
+          id: entry.id,
+          title: entry.title(context, UnifiedSettingsSurface.nipaplay),
+          icon: entry.icon,
+          pageTitle: entry.pageTitle(context, UnifiedSettingsSurface.nipaplay),
+          page: entry.buildPage(context, UnifiedSettingsSurface.nipaplay),
+        ),
+      )
+      .toList();
 }

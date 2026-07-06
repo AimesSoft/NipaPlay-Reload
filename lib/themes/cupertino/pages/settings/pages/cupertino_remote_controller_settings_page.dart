@@ -6,13 +6,11 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
+import 'package:nipaplay/settings/pages/remote_access_receiver_settings_section.dart';
+import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/widgets/cupertino_remote_access_receiver_section.dart';
-import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:provider/provider.dart';
 
 class CupertinoRemoteControllerSettingsPage extends StatefulWidget {
@@ -210,14 +208,6 @@ class _CupertinoRemoteControllerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemGroupedBackground,
-      context,
-    );
-    final sectionBackground = resolveSettingsSectionBackground(context);
-    final tileBackground = resolveSettingsTileBackground(context);
-    final topPadding = MediaQuery.of(context).padding.top + 64;
-
     final label = _matchedHostname?.trim().isNotEmpty == true
         ? _matchedHostname!.trim()
         : (_matchedBaseUrl ?? '未匹配');
@@ -226,142 +216,89 @@ class _CupertinoRemoteControllerSettingsPageState
     final statusText =
         connected ? (receiverEnabled ? '已连接' : '对方已关闭被遥控端') : '未连接';
 
-    return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '远程访问',
-        useNativeToolbar: true,
-      ),
-      body: ColoredBox(
-        color: backgroundColor,
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
+    return AdaptiveSettingsPage(
+      title: '远程访问',
+      children: [
+        const RemoteAccessReceiverSettingsSection(),
+        const SizedBox(height: 24),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
+              title: '控制其他设备',
+              subtitle: '从手机连接局域网内的 NipaPlay 被遥控端',
+              icon: CupertinoIcons.dot_radiowaves_left_right,
+              cupertinoIcon: CupertinoIcons.dot_radiowaves_left_right,
+              enabled: false,
+              onTap: () {},
             ),
-            children: [
-              const CupertinoRemoteAccessReceiverSection(),
-              const SizedBox(height: 24),
-              _buildSectionLabel('控制其他设备'),
-              const SizedBox(height: 8),
-              CupertinoSettingsGroupCard(
-                margin: EdgeInsets.zero,
-                backgroundColor: sectionBackground,
-                addDividers: true,
-                dividerIndent: 16,
-                children: [
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.dot_radiowaves_left_right,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('当前匹配设备'),
-                    subtitle: Text(label),
-                    backgroundColor: tileBackground,
-                  ),
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      connected && receiverEnabled
-                          ? CupertinoIcons.check_mark_circled_solid
-                          : CupertinoIcons.exclamationmark_triangle,
-                      color: connected && receiverEnabled
-                          ? CupertinoColors.activeGreen
-                          : resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('连接状态'),
-                    subtitle: Text(statusText),
-                    backgroundColor: tileBackground,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              CupertinoSettingsGroupCard(
-                margin: EdgeInsets.zero,
-                backgroundColor: sectionBackground,
-                addDividers: true,
-                dividerIndent: 16,
-                children: [
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.search,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('自动扫描并匹配'),
-                    subtitle: const Text('默认局域网自动发现设备'),
-                    trailing: _isScanning
-                        ? const CupertinoActivityIndicator(radius: 8)
-                        : null,
-                    backgroundColor: tileBackground,
-                    onTap: _isScanning ? null : _scanAndMatch,
-                  ),
-                  if (RemoteAccessQrCameraScanner.isSupported)
-                    CupertinoSettingsTile(
-                      leading: Icon(
-                        CupertinoIcons.camera,
-                        color: resolveSettingsIconColor(context),
-                      ),
-                      title: const Text('拍摄二维码连接'),
-                      subtitle: const Text('同时连接共享媒体库与遥控器'),
-                      backgroundColor: tileBackground,
-                      onTap: _scanQrAndConnect,
-                    ),
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.refresh,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('刷新状态'),
-                    subtitle: const Text('同步目标设备实时播放状态'),
-                    trailing: _isLoadingState
-                        ? const CupertinoActivityIndicator(radius: 8)
-                        : null,
-                    backgroundColor: tileBackground,
-                    onTap: _isLoadingState ? null : _refreshRemoteState,
-                  ),
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.tv,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('打开遥控器'),
-                    subtitle: const Text('打开上拉遥控面板'),
-                    showChevron: true,
-                    backgroundColor: tileBackground,
-                    onTap: _openRemotePanel,
-                  ),
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.trash,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('清除匹配设备'),
-                    subtitle: const Text('下次将重新自动扫描'),
-                    backgroundColor: tileBackground,
-                    onTap: _matchedBaseUrl == null ? null : _clearMatchedTarget,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            AdaptiveSettingsTile<void>.card(
+              title: '当前匹配设备',
+              subtitle: label,
+              icon: CupertinoIcons.device_phone_portrait,
+              cupertinoIcon: CupertinoIcons.device_phone_portrait,
+              enabled: false,
+              onTap: () {},
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: '连接状态',
+              subtitle: statusText,
+              icon: connected && receiverEnabled
+                  ? CupertinoIcons.check_mark_circled_solid
+                  : CupertinoIcons.exclamationmark_triangle,
+              cupertinoIcon: connected && receiverEnabled
+                  ? CupertinoIcons.check_mark_circled_solid
+                  : CupertinoIcons.exclamationmark_triangle,
+              enabled: false,
+              onTap: () {},
+            ),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSectionLabel(String text) {
-    final style = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-          fontSize: 13,
-          color: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGrey,
-            context,
-          ),
-          letterSpacing: 0.2,
-        );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(text, style: style),
+        const SizedBox(height: 12),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
+              title: _isScanning ? '正在扫描...' : '自动扫描并匹配',
+              subtitle: '默认局域网自动发现设备',
+              icon: CupertinoIcons.search,
+              cupertinoIcon: CupertinoIcons.search,
+              enabled: !_isScanning,
+              onTap: _scanAndMatch,
+            ),
+            if (RemoteAccessQrCameraScanner.isSupported)
+              AdaptiveSettingsTile<void>.card(
+                title: '拍摄二维码连接',
+                subtitle: '同时连接共享媒体库与遥控器',
+                icon: CupertinoIcons.camera,
+                cupertinoIcon: CupertinoIcons.camera,
+                onTap: _scanQrAndConnect,
+              ),
+            AdaptiveSettingsTile<void>.card(
+              title: _isLoadingState ? '正在刷新...' : '刷新状态',
+              subtitle: '同步目标设备实时播放状态',
+              icon: CupertinoIcons.refresh,
+              cupertinoIcon: CupertinoIcons.refresh,
+              enabled: !_isLoadingState,
+              onTap: _refreshRemoteState,
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: '打开遥控器',
+              subtitle: '打开上拉遥控面板',
+              icon: CupertinoIcons.tv,
+              cupertinoIcon: CupertinoIcons.tv,
+              onTap: _openRemotePanel,
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: '清除匹配设备',
+              subtitle: '下次将重新自动扫描',
+              icon: CupertinoIcons.trash,
+              cupertinoIcon: CupertinoIcons.trash,
+              enabled: _matchedBaseUrl != null,
+              isDestructive: true,
+              onTap: _clearMatchedTarget,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

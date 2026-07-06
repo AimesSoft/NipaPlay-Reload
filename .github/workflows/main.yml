@@ -51,6 +51,12 @@ jobs:
       ALIAS: ${{ secrets.ALIAS }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+  Build-iOS:
+    name: Build iOS
+    needs: Gatekeeper
+    if: needs.Gatekeeper.outputs.triggered == 'true'
+    uses: ./.github/workflows/build-ios.yml
+
   Build-macOS:
     name: Build macOS
     needs: Gatekeeper
@@ -80,7 +86,7 @@ jobs:
 
   Publish:
     name: Publish Release
-    needs: [Gatekeeper, Build-Android, Build-macOS, Build-Windows, Build-Linux]
+    needs: [Gatekeeper, Build-Android, Build-iOS, Build-macOS, Build-Windows, Build-Linux]
     if: needs.Gatekeeper.outputs.triggered == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -356,7 +362,7 @@ jobs:
           name: Release v${{ needs.Build-Android.outputs.version }}
           bodyFile: "release_notes.md"
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-macOS/*.zip,/tmp/artifacts/release-macOS/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-macOS/*.zip,/tmp/artifacts/release-macOS/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
