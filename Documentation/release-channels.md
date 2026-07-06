@@ -29,32 +29,6 @@ brew upgrade nipaplay-reload
 - 通过 Homebrew 更新时，系统不会再次要求在"隐私与安全性"中手动允许应用
 - 自动处理依赖关系和清理旧版本
 
-## Arch Linux - AUR
-
-**包名**：`nipaplay-reload-bin`
-
-**更新方式**：
-
-使用 `paru`：
-
-```bash
-# 检查可更新的 AUR 包
-paru -Sua
-
-# 更新 NipaPlay
-paru -S nipaplay-reload-bin
-```
-
-使用 `yay`：
-
-```bash
-# 检查可更新的 AUR 包  
-yay -Sua
-
-# 更新 NipaPlay
-yay -S nipaplay-reload-bin
-```
-
 ## Windows
 
 **更新方式**：
