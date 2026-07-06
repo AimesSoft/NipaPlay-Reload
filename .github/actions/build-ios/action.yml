@@ -19,6 +19,12 @@ runs:
         echo "CPU架构: $(uname -m)"
         echo "可用磁盘空间:"
         df -h
+
+        MACOS_VERSION="$(sw_vers -productVersion)"
+        if [[ "${MACOS_VERSION}" != 26.* ]]; then
+          echo "❌ 错误：iOS IPA 构建必须运行在 macOS 26，当前系统为 ${MACOS_VERSION}"
+          exit 1
+        fi
         
         echo "=== Xcode环境检查 ==="
         if command -v xcodebuild &> /dev/null; then
