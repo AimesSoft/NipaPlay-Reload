@@ -760,6 +760,11 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   }
 
   @override
+  void setUserAgent(String ua) {
+    // erika_flutter 暂未暴露设置 HTTP User-Agent 的接口，留空实现。
+  }
+
+  @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {}
 
   @override

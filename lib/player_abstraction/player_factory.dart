@@ -5,6 +5,7 @@ import './media_kit_player_adapter.dart'; // 导入新的MediaKit适配器
 import './erika_player_adapter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
 import 'dart:async'; // 导入dart:async库
 
@@ -31,6 +32,8 @@ class PlayerFactory {
   static int _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
   static bool _cachedMacOSNativeVideoEnabled = false;
   static String _cachedAndroidAudioOutput = 'opensles';
+  static String _cachedCustomPlayerUA = ''; // 自定义播放器 UA，空=用内核默认
+  static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
   static bool _hasLoadedSettings = false;
 
   // 添加一个StreamController来广播内核切换事件
@@ -80,6 +83,7 @@ class PlayerFactory {
         _cachedMacOSNativeVideoEnabled,
       );
       _cachedAndroidAudioOutput = androidAudioOutput;
+      _cachedCustomPlayerUA = prefs.getString(SettingsKeys.customPlayerUA) ?? '';
 
       _hasLoadedSettings = true;
     } catch (e) {
@@ -88,6 +92,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
+      _cachedCustomPlayerUA = '';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
     }
@@ -101,6 +106,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
+      _cachedCustomPlayerUA = '';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
 
@@ -127,6 +133,7 @@ class PlayerFactory {
           _cachedMacOSNativeVideoEnabled,
         );
         _cachedAndroidAudioOutput = androidAudioOutput;
+        _cachedCustomPlayerUA = prefs.getString(SettingsKeys.customPlayerUA) ?? '';
       });
 
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
@@ -145,6 +152,31 @@ class PlayerFactory {
     }
     return _cachedKernelType ?? PlayerKernelType.mdk;
   }
+
+  /// 获取自定义播放器 User-Agent（空字符串 = 用内核默认 UA）。
+  static String getCustomPlayerUA() {
+    if (!_hasLoadedSettings) {
+      _loadSettingsSync();
+    }
+    return _cachedCustomPlayerUA;
+  }
+
+  /// 设置一次性 User-Agent（仅下一次打开视频时生效，不持久化，用后即清）。
+  /// 优先级高于 [getCustomPlayerUA] 的持久 UA。空字符串清除一次性 UA。
+  static void setOneTimeUA(String ua) {
+    final resolved = ua.trim();
+    _oneTimeUA = resolved.isEmpty ? null : resolved;
+  }
+
+  /// 消费一次性 UA：返回并清除。未设置返回 null（调用方回退到持久 UA）。
+  static String? consumeOneTimeUA() {
+    final v = _oneTimeUA;
+    _oneTimeUA = null;
+    return v;
+  }
+
+  /// 获取一次性 UA（不消费，供 UI 预填）。未设置返回 null。
+  static String? getOneTimeUA() => _oneTimeUA;
 
   static int _clampPrecacheBufferSizeMb(int value) {
     return value
@@ -212,6 +244,21 @@ class PlayerFactory {
       _cachedAndroidAudioOutput = resolved;
     } catch (e) {
       debugPrint('[PlayerFactory] 保存 Android 音频后端设置出错: $e');
+    }
+  }
+
+  /// 保存自定义播放器 User-Agent。空字符串表示用内核默认 UA。
+  /// 即时生效于"下一次打开视频"（当前正在播放的视频不会重新请求）。
+  static Future<void> saveCustomPlayerUA(String ua) async {
+    final resolved = ua.trim();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(SettingsKeys.customPlayerUA, resolved);
+      _cachedCustomPlayerUA = resolved;
+      debugPrint('[PlayerFactory] 已保存自定义播放器 UA: '
+          '${resolved.isEmpty ? "(空=默认)" : resolved}');
+    } catch (e) {
+      debugPrint('[PlayerFactory] 保存自定义播放器 UA 出错: $e');
     }
   }
 

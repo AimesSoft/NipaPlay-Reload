@@ -17,6 +17,13 @@ class SettingsKeys {
 
   static const String externalPlayerPath = 'external_player_path';
 
+  /// 外部播放器弹幕外挂开关（ASS 字幕注入）。
+  static const String externalPlayerDanmakuOverlay =
+      'external_player_danmaku_overlay';
+
+  /// 自定义播放器请求视频的 User-Agent（空字符串 = 用内核默认 UA）。
+  static const String customPlayerUA = 'custom_player_ua';
+
   static const String autoCheckUpdatesInBackground =
       'auto_check_updates_in_background';
 

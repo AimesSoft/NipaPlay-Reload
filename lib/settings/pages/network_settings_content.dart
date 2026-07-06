@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -52,9 +53,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     if (_isLoading) {
       return AdaptiveSettingsPage(
         title: l10n.networkSettings,
-        children: const [
-          Center(child: CircularProgressIndicator()),
-        ],
+        children: const [Center(child: CircularProgressIndicator())],
       );
     }
 
@@ -124,6 +123,41 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
         AdaptiveSettingsSection(
           children: [
             AdaptiveSettingsTile<void>.card(
+              title: _text(
+                context,
+                '自定义 User-Agent',
+                '自訂 User-Agent',
+                'Custom User-Agent',
+              ),
+              subtitle: _persistentUASubtitle(context),
+              icon: Ionicons.person_outline,
+              cupertinoIcon: cupertino.CupertinoIcons.person,
+              onTap: _editPersistentUA,
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: _text(
+                context,
+                '恢复默认 User-Agent',
+                '恢復預設 User-Agent',
+                'Restore Default User-Agent',
+              ),
+              subtitle: _text(
+                context,
+                '清除自定义 UA 并使用内核默认值',
+                '清除自訂 UA 並使用核心預設值',
+                'Clear the custom UA and use the player kernel default.',
+              ),
+              icon: Ionicons.refresh_outline,
+              cupertinoIcon: cupertino.CupertinoIcons.refresh,
+              enabled: _persistentUAHasValue(),
+              onTap: _resetPersistentUA,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AdaptiveSettingsSection(
+          children: [
+            AdaptiveSettingsTile<void>.card(
               title: l10n.serverDescriptionTitle,
               subtitle:
                   '${l10n.serverBullet(l10n.primaryServer, l10n.networkServerDescriptionPrimary)}\n'
@@ -170,8 +204,9 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   }
 
   Future<void> _editDandanplayServer() async {
-    final initialValue =
-        NetworkSettings.isCustomServer(_currentServer) ? _currentServer : '';
+    final initialValue = NetworkSettings.isCustomServer(_currentServer)
+        ? _currentServer
+        : '';
     final title = _text(
       context,
       '自定义弹弹play API 服务器',
@@ -228,9 +263,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   }
 
   Future<void> _editBangumiServer() async {
-    final initialValue = NetworkSettings.isCustomBangumiServer(
-      _currentBangumiServer,
-    )
+    final initialValue =
+        NetworkSettings.isCustomBangumiServer(_currentBangumiServer)
         ? _currentBangumiServer
         : '';
     final title = _text(
@@ -360,6 +394,45 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     }
   }
 
+  String _persistentUASubtitle(BuildContext context) {
+    final ua = PlayerFactory.getCustomPlayerUA();
+    if (ua.isEmpty) {
+      return _text(
+        context,
+        '未设置（使用内核默认 UA）',
+        '未設定（使用核心預設 UA）',
+        'Not set (using the player kernel default UA).',
+      );
+    }
+    return ua.length > 60 ? '${ua.substring(0, 60)}...' : ua;
+  }
+
+  bool _persistentUAHasValue() => PlayerFactory.getCustomPlayerUA().isNotEmpty;
+
+  Future<void> _editPersistentUA() async {
+    final input = await _showUserAgentInputDialog();
+    if (!mounted || input == null) return;
+    await PlayerFactory.saveCustomPlayerUA(input);
+    if (!mounted) return;
+    setState(() {});
+    AdaptiveSnackBar.show(
+      context,
+      message: _text(context, '已保存自定义 UA', '已儲存自訂 UA', 'Custom UA saved.'),
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  Future<void> _resetPersistentUA() async {
+    await PlayerFactory.saveCustomPlayerUA('');
+    if (!mounted) return;
+    setState(() {});
+    AdaptiveSnackBar.show(
+      context,
+      message: _text(context, '已恢复默认 UA', '已恢復預設 UA', 'Default UA restored.'),
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
   Future<String?> _showServerInputDialog({
     required String title,
     required String message,
@@ -406,6 +479,71 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
         ),
         HoverScaleTextButton(
           text: context.l10n.useThisServer,
+          idleColor: colorScheme.onSurface,
+          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+        ),
+      ],
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<String?> _showUserAgentInputDialog() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final controller = TextEditingController(
+      text: PlayerFactory.getCustomPlayerUA(),
+    );
+    final result = await BlurDialog.show<String>(
+      context: context,
+      title: _text(
+        context,
+        '自定义 User-Agent',
+        '自訂 User-Agent',
+        'Custom User-Agent',
+      ),
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _text(
+              context,
+              '播放器请求视频时使用，长期有效。重新输入可覆盖原值。',
+              '播放器請求影片時使用，長期有效。重新輸入可覆蓋原值。',
+              'Used by player video requests until changed. Enter a new value to replace the current one.',
+            ),
+            style: TextStyle(
+              color: colorScheme.onSurface.withValues(alpha: 0.72),
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            keyboardType: TextInputType.multiline,
+            minLines: 2,
+            maxLines: 4,
+            autocorrect: false,
+            enableSuggestions: false,
+            cursorColor: AppAccentColors.current,
+            decoration: InputDecoration(
+              hintText: 'Mozilla/5.0 ...',
+              hintStyle: TextStyle(
+                color: colorScheme.onSurface.withValues(alpha: 0.38),
+              ),
+            ),
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
+        ],
+      ),
+      actions: [
+        HoverScaleTextButton(
+          text: context.l10n.cancel,
+          idleColor: colorScheme.onSurface.withValues(alpha: 0.7),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        HoverScaleTextButton(
+          text: _text(context, '保存', '儲存', 'Save'),
           idleColor: colorScheme.onSurface,
           onPressed: () => Navigator.of(context).pop(controller.text.trim()),
         ),

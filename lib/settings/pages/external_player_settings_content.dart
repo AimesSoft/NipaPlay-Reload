@@ -47,8 +47,8 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                 final subtitle = !externalSupported
                     ? context.l10n.desktopOnlySupported
                     : (path.isEmpty
-                        ? context.l10n.externalPlayerNotSelected
-                        : path);
+                          ? context.l10n.externalPlayerNotSelected
+                          : path);
 
                 return AdaptiveSettingsTile<void>.card(
                   title: context.l10n.externalPlayerSelectTitle,
@@ -59,6 +59,31 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                   onTap: () => _selectExternalPlayer(
                     context,
                     settingsProvider,
+                    externalSupported,
+                  ),
+                );
+              },
+            ),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(context, '弹幕外挂', '彈幕外掛', 'Danmaku Overlay'),
+                  subtitle: externalSupported
+                      ? _text(
+                          context,
+                          '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net / PotPlayer）',
+                          '在外部播放器中注入 ASS 形式的彈幕作為次字幕（支援 mpv / mpv.net / PotPlayer）',
+                          'Inject danmaku as an ASS secondary subtitle in external players (mpv, mpv.net, PotPlayer).',
+                        )
+                      : context.l10n.desktopOnlySupported,
+                  icon: Ionicons.chatbubbles_outline,
+                  cupertinoIcon: cupertino.CupertinoIcons.chat_bubble,
+                  enabled: externalSupported,
+                  value: settingsProvider.externalPlayerDanmakuOverlay,
+                  onChanged: (value) => _toggleDanmakuOverlay(
+                    context,
+                    settingsProvider,
+                    value,
                     externalSupported,
                   ),
                 );
@@ -138,5 +163,39 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
       message: l10n.externalPlayerUpdated,
       type: AdaptiveSnackBarType.success,
     );
+  }
+
+  Future<void> _toggleDanmakuOverlay(
+    BuildContext context,
+    SettingsProvider settingsProvider,
+    bool value,
+    bool externalSupported,
+  ) async {
+    if (!externalSupported) return;
+    await settingsProvider.setExternalPlayerDanmakuOverlay(value);
+    if (!context.mounted) return;
+    AdaptiveSnackBar.show(
+      context,
+      message: value
+          ? _text(context, '已启用弹幕外挂', '已啟用彈幕外掛', 'Danmaku overlay enabled.')
+          : _text(context, '已关闭弹幕外挂', '已關閉彈幕外掛', 'Danmaku overlay disabled.'),
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  String _text(
+    BuildContext context,
+    String simplified,
+    String traditional,
+    String english,
+  ) {
+    final locale = context.l10n.localeName;
+    if (locale == 'en') {
+      return english;
+    }
+    if (locale == 'zh_Hant') {
+      return traditional;
+    }
+    return simplified;
   }
 }
