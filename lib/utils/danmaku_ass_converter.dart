@@ -134,7 +134,7 @@ String convertDanmakuToAss(
         final line =
             '{\\an4\\move($kAssPlayResX,${yCenter.toStringAsFixed(1)},'
             '${xEnd.toStringAsFixed(1)},${yCenter.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -151,7 +151,7 @@ String convertDanmakuToAss(
         final yTop = (lane * laneHeight + 2).toDouble();
         final line =
             '{\\an8\\pos(${(kAssPlayResX ~/ 2)},${yTop.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -168,7 +168,7 @@ String convertDanmakuToAss(
         final yBottom = (kAssPlayResY - lane * laneHeight - 2).toDouble();
         final line =
             '{\\an2\\pos(${(kAssPlayResX ~/ 2)},${yBottom.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -303,6 +303,19 @@ String _colorOverride(int rgb) {
   final b = rgb & 0xFF;
   final bgr = (b << 16) | (g << 8) | r;
   return '\\c&H${bgr.toRadixString(16).toUpperCase().padLeft(6, '0')}&';
+}
+
+/// 暗色弹幕（近黑）用白描边，其余沿用样式黑描边。
+/// 与 Next2/DFM+ 渲染管线 `stroke_color` 一致：r/g/b 均 ≤ 8 视为黑 → 白描边。
+/// 返回 ASS `\3c` 覆盖（空 = 沿用样式黑描边）。
+String _outlineColorOverride(int rgb) {
+  final r = (rgb >> 16) & 0xFF;
+  final g = (rgb >> 8) & 0xFF;
+  final b = rgb & 0xFF;
+  if (r <= 8 && g <= 8 && b <= 8) {
+    return r'\3c&HFFFFFF&';
+  }
+  return '';
 }
 
 // ---------- 宽度估算 ----------
@@ -557,6 +570,7 @@ String convertDanmakuToAssFromPrepared(
         : (it.isScroll ? 10.0 : kAssFixedDanmakuDurationSeconds);
     final end = start + duration;
     final colorOverride = _colorOverride(it.colorRgb);
+    final outlineOverride = _outlineColorOverride(it.colorRgb);
     final escaped = _escapeAssText(it.text);
     final yStr = it.yPosition.toStringAsFixed(1);
 
@@ -573,7 +587,7 @@ String convertDanmakuToAssFromPrepared(
         x2 = (-it.width).toStringAsFixed(1);
       }
       final line =
-          '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride\\1a$alphaHex}$escaped';
+          '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
       _writeDialogue(buffer,
           layer: 0, start: start, end: end, style: 'Danmaku', text: line);
     } else {
@@ -581,7 +595,7 @@ String convertDanmakuToAssFromPrepared(
       // 顶/底部居中：用 \an8 顶中对齐 + \pos(PlayResX/2, y)，让 libass 按自身
       // 字体度量居中，避免 DFM+ paint_width 与 libass 渲染宽度不一致导致长弹幕偏移。
       final line =
-          '{\\an8\\pos($centerX,$yStr)$colorOverride\\1a$alphaHex}$escaped';
+          '{\\an8\\pos($centerX,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
       _writeDialogue(
         buffer,
         layer: isBottom ? 2 : 1,
