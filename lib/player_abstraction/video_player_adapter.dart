@@ -821,6 +821,11 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
+  void setUserAgent(String ua) {
+    // video_player 插件无设置 HTTP User-Agent 的能力，留空实现。
+  }
+
+  @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {
     // video_player 插件使用 Flutter 纹理，由外层控制，保持空实现。
   }

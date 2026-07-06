@@ -7,9 +7,11 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -407,6 +409,10 @@ class _VideoUploadUIState extends State<VideoUploadUI>
             onSubmitted: (_) => _handlePlayFromUrl(),
             decoration: InputDecoration(
               hintText: 'https://example.com/video.mp4 或签名下载直链',
+              hintStyle: TextStyle(
+                color: textColor.withOpacity(0.35),
+                fontSize: 14,
+              ),
               filled: true,
               fillColor: colorScheme.surface.withOpacity(
                 isDarkMode ? 0.58 : 0.94,
@@ -422,24 +428,35 @@ class _VideoUploadUIState extends State<VideoUploadUI>
             ),
           ),
           SizedBox(height: 10),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 8,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               HoverScaleTextButton(
-                onPressed: _isSubmittingUrl ? null : _pasteUrlFromClipboard,
-                child: Text('粘贴', style: TextStyle(color: textColor)),
-              ),
-              HoverScaleTextButton(
-                onPressed: _isSubmittingUrl ? null : _handlePlayFromUrl,
+                onPressed: _isSubmittingUrl ? null : _showOneTimeUADialog,
                 child: Text(
-                  _isSubmittingUrl ? '处理中...' : '播放链接',
-                  style: TextStyle(
-                    color: AppAccentColors.current,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  '自定义UA(仅一次)',
+                  style: TextStyle(color: textColor),
                 ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  HoverScaleTextButton(
+                    onPressed: _isSubmittingUrl ? null : _pasteUrlFromClipboard,
+                    child: Text('粘贴', style: TextStyle(color: textColor)),
+                  ),
+                  HoverScaleTextButton(
+                    onPressed: _isSubmittingUrl ? null : _handlePlayFromUrl,
+                    child: Text(
+                      _isSubmittingUrl ? '处理中...' : '播放链接',
+                      style: TextStyle(
+                        color: AppAccentColors.current,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -465,6 +482,27 @@ class _VideoUploadUIState extends State<VideoUploadUI>
       if (!mounted) return;
       BlurSnackBar.show(context, '读取剪贴板失败: $e');
     }
+  }
+
+  /// 串流播放的"自定义UA(仅一次)"：设置仅对下一次播放这条链接生效的一次性 UA。
+  Future<void> _showOneTimeUADialog() async {
+    final result = await TextInputDialog.show(
+      context,
+      title: '自定义 User-Agent（仅本次播放）',
+      subtitle: '仅对下一次播放生效，不影响长期设置。',
+      hintText: 'Mozilla/5.0 ...',
+      initialValue: PlayerFactory.getOneTimeUA() ?? '',
+      minLines: 2,
+    );
+    if (result == null) return; // 用户取消
+    PlayerFactory.setOneTimeUA(result);
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      result.isEmpty
+          ? '已清除一次性 UA，本次将使用长期/默认 UA'
+          : '已设置一次性 UA，本次播放生效',
+    );
   }
 
   Future<bool> _handlePlayFromUrl() async {

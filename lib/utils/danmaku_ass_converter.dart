@@ -305,7 +305,7 @@ String _colorOverride(int rgb) {
   return '\\c&H${bgr.toRadixString(16).toUpperCase().padLeft(6, '0')}&';
 }
 
-/// 暗色弹幕（近黑）用白描边，其余沿用样式黑描边。
+/// 暗色弹幕（近纯黑）用白描边，其余沿用样式黑描边。
 /// 与 Next2/DFM+ 渲染管线 `stroke_color` 一致：r/g/b 均 ≤ 8 视为黑 → 白描边。
 /// 返回 ASS `\3c` 覆盖（空 = 沿用样式黑描边）。
 String _outlineColorOverride(int rgb) {

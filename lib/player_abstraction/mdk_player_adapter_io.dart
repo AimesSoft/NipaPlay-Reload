@@ -507,6 +507,15 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
+  void setUserAgent(String ua) {
+    if (ua.isEmpty) return;
+    // mdk-sdk: avio.user_agent 是 AVIOContext/URLProtocol 选项，对 HTTP 请求生效。
+    // setProperty 内部用 sticky property，对后续所有媒体生效。
+    setProperty('avio.user_agent', ua);
+    debugPrint('MDK: 已设置自定义 user-agent: $ua');
+  }
+
+  @override
   void setProperty(String key, String value) {
     try {
       _setStickyProperty(key, value);

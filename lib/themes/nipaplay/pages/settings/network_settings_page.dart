@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class NetworkSettingsPage extends StatefulWidget {
@@ -167,6 +169,39 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     });
 
     BlurSnackBar.show(context, 'Bangumi 服务器已切换到自定义服务器');
+  }
+
+  String _persistentUASubtitle() {
+    final ua = PlayerFactory.getCustomPlayerUA();
+    if (ua.isEmpty) return '未设置（使用内核默认 UA）';
+    return ua.length > 60 ? '${ua.substring(0, 60)}…' : ua;
+  }
+
+  Future<void> _editPersistentUA() async {
+    final result = await TextInputDialog.show(
+      context,
+      title: '自定义 User-Agent',
+      subtitle: '播放器请求视频时使用，长期有效。重新输入可覆盖原值。',
+      hintText: 'Mozilla/5.0 ...',
+      initialValue: PlayerFactory.getCustomPlayerUA(),
+      minLines: 2,
+    );
+    // 对话框空输入返回 null（等同取消），故 result 必为非空字符串。
+    if (result == null) return;
+    await PlayerFactory.saveCustomPlayerUA(result);
+    if (!mounted) return;
+    setState(() {}); // 刷新 subtitle
+    BlurSnackBar.show(context, '已保存自定义 UA');
+  }
+
+  bool _persistentUAHasValue() =>
+      PlayerFactory.getCustomPlayerUA().isNotEmpty;
+
+  Future<void> _resetPersistentUA() async {
+    await PlayerFactory.saveCustomPlayerUA('');
+    if (!mounted) return;
+    setState(() {}); // 刷新 subtitle + 恢复默认按钮禁用态
+    BlurSnackBar.show(context, '已恢复默认 UA');
   }
 
   String _getServerDisplayName(BuildContext context, String serverUrl) {
@@ -600,6 +635,84 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+          // 播放器请求 User-Agent
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Icon(
+                  Ionicons.globe_outline,
+                  color: colorScheme.onSurface,
+                  size: 16,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  '播放器请求',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: Icon(
+              Ionicons.person_outline,
+              color: colorScheme.onSurface.withOpacity(0.7),
+            ),
+            title: Text(
+              '自定义 User-Agent',
+              locale: const Locale('zh-Hans', 'zh'),
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              _persistentUASubtitle(),
+              locale: const Locale('zh-Hans', 'zh'),
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BlurButton(
+                  icon: Ionicons.create_outline,
+                  text: '编辑',
+                  onTap: _editPersistentUA,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  fontSize: 13,
+                  iconSize: 16,
+                  foregroundColor: colorScheme.onSurface,
+                  hoverForegroundColor: AppAccentColors.current,
+                ),
+                const SizedBox(width: 8),
+                Opacity(
+                  opacity: _persistentUAHasValue() ? 1.0 : 0.4,
+                  child: IgnorePointer(
+                    ignoring: !_persistentUAHasValue(),
+                    child: BlurButton(
+                      icon: Ionicons.refresh_outline,
+                      text: '恢复默认',
+                      onTap: _resetPersistentUA,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      fontSize: 13,
+                      iconSize: 16,
+                      foregroundColor: colorScheme.onSurface,
+                      hoverForegroundColor: AppAccentColors.current,
+                    ),
                   ),
                 ),
               ],

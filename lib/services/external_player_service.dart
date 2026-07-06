@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
@@ -115,6 +116,24 @@ class ExternalPlayerService {
     }
   }
 
+  /// 按播放器类型构造自定义 User-Agent 参数（用户在 PlayerFactory 设置的 UA）。
+  /// 空 UA 或不支持的播放器返回空列表。须在打开媒体前传入，对所有 HTTP 请求生效。
+  static List<String> _buildUAArgs(String playerPath) {
+    final ua = PlayerFactory.getCustomPlayerUA();
+    if (ua.isEmpty) return const [];
+    switch (detectPlayer(playerPath)) {
+      case ExternalPlayerType.mpv:
+      case ExternalPlayerType.mpvNet:
+        return ['--user-agent=$ua'];
+      case ExternalPlayerType.vlc:
+        return ['--http-user-agent=$ua'];
+      case ExternalPlayerType.potPlayer:
+      case ExternalPlayerType.generic:
+        // PotPlayer / 未知播放器：CLI 不支持自定义 UA
+        return const [];
+    }
+  }
+
   /// 安全显示 snackbar。
   ///
   /// 服务层拿到的 context 可能缺少 Overlay 祖先（如 PlaybackService 传入的
@@ -205,6 +224,13 @@ class ExternalPlayerService {
     } else {
       debugPrint('[ExtPlayer] 跳过弹幕外挂 '
           '(enabled=$danmakuEnabled, episodeId="$episodeId")');
+    }
+
+    // 自定义 User-Agent（mpv/mpv.net/vlc 支持；与弹幕参数合并）
+    final uaArgs = _buildUAArgs(playerPath);
+    if (uaArgs.isNotEmpty) {
+      extraArgs = [...extraArgs, ...uaArgs];
+      debugPrint('[ExtPlayer] 注入自定义 UA 参数: $uaArgs');
     }
 
     debugPrint('[ExtPlayer] 调用 launch: path="$playerPath", '
