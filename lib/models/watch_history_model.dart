@@ -871,8 +871,11 @@ class WatchHistoryManager {
     return _cachedItems.where((item) => item.animeId == animeId).toList();
   }
 
-  // Clear scan results for a specific animeId while preserving watch progress
-  static Future<int> clearScanResultsByAnimeId(int animeId) async {
+  // 清除指定 animeId 下的所有匹配信息，同时保留播放历史记录。
+  // 无论匹配信息来自扫描还是手动匹配，都会被清除：
+  // animeName 恢复为文件名，episodeTitle/episodeId/animeId 置空，isFromScan 置 false。
+  // 仅保留文件路径、观看进度、观看位置、时长、缩略图、视频哈希等播放历史字段。
+  static Future<int> clearMatchInfoByAnimeId(int animeId) async {
     if (!_initialized) await initialize();
 
     final items = await getAllItemsForAnime(animeId);
@@ -880,17 +883,24 @@ class WatchHistoryManager {
 
     int updatedCount = 0;
     for (final item in items) {
-      if (!item.isFromScan) continue;
       final fileName = path.basename(item.filePath);
       final fallbackName =
           fileName.isNotEmpty ? path.basenameWithoutExtension(fileName) : item.animeName;
-      final clearedHistory = item.copyWith(
+      // 直接构造新记录以真正清空 episodeTitle/episodeId/animeId：
+      // copyWith 中 `null` 表示"保持原值"，传 null 无法清除这些可空字段。
+      final clearedHistory = WatchHistoryItem(
+        filePath: item.filePath,
         animeName: fallbackName,
         episodeTitle: null,
         episodeId: null,
         animeId: null,
+        watchProgress: item.watchProgress,
+        lastPosition: item.lastPosition,
+        duration: item.duration,
         lastWatchTime: DateTime.now(),
+        thumbnailPath: item.thumbnailPath,
         isFromScan: false,
+        videoHash: item.videoHash,
       );
       await addOrUpdateHistory(clearedHistory);
       updatedCount++;

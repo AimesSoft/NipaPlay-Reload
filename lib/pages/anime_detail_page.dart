@@ -47,7 +47,7 @@ import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 
 enum _EpisodeCleanupAction {
-  clearScanResults,
+  clearMatchInfo,
   deleteWatchHistory,
 }
 
@@ -2430,12 +2430,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       context: context,
       title: '清理本地记录',
       content:
-          '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有扫描结果：移除扫描匹配信息，保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
+          '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除所有匹配信息（含扫描与手动匹配），保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
       actions: [
         HoverScaleTextButton(
-          child: const Text('清除所有扫描结果', locale: Locale('zh-Hans', 'zh')),
+          child: const Text('清除所有匹配信息', locale: Locale('zh-Hans', 'zh')),
           onPressed: () {
-            Navigator.of(context).pop(_EpisodeCleanupAction.clearScanResults);
+            Navigator.of(context).pop(_EpisodeCleanupAction.clearMatchInfo);
           },
         ),
         HoverScaleTextButton(
@@ -2469,13 +2469,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     int affectedCount = 0;
     try {
-      if (action == _EpisodeCleanupAction.clearScanResults) {
+      if (action == _EpisodeCleanupAction.clearMatchInfo) {
         affectedCount =
-            await WatchHistoryManager.clearScanResultsByAnimeId(anime.id);
+            await WatchHistoryManager.clearMatchInfoByAnimeId(anime.id);
         if (mounted) {
           _showBlurSnackBar(
             context,
-            affectedCount > 0 ? '已清除 $affectedCount 条扫描结果' : '没有可清除的扫描结果',
+            affectedCount > 0 ? '已清除 $affectedCount 条匹配信息' : '没有可清除的匹配信息',
           );
         }
       } else {
