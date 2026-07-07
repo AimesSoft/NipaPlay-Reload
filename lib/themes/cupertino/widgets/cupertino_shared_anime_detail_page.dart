@@ -100,7 +100,7 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
 
 enum _CupertinoDetailSubPage { detail, rating, bangumi }
 
-enum _CupertinoEpisodeCleanupAction { clearScanResults, deleteWatchHistory }
+enum _CupertinoEpisodeCleanupAction { clearMatchInfo, deleteWatchHistory }
 
 class _CupertinoSharedAnimeDetailPageState
     extends State<CupertinoSharedAnimeDetailPage> {
@@ -968,13 +968,13 @@ class _CupertinoSharedAnimeDetailPageState
         return CupertinoAlertDialog(
           title: const Text('清理本地记录'),
           content: Text(
-              '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有扫描结果：移除扫描匹配信息，保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。'),
+              '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除所有匹配信息（含扫描与手动匹配），保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。'),
           actions: [
             CupertinoDialogAction(
-              child: const Text('清除所有扫描结果'),
+              child: const Text('清除所有匹配信息'),
               onPressed: () {
                 Navigator.of(dialogContext)
-                    .pop(_CupertinoEpisodeCleanupAction.clearScanResults);
+                    .pop(_CupertinoEpisodeCleanupAction.clearMatchInfo);
               },
             ),
             CupertinoDialogAction(
@@ -1004,13 +1004,13 @@ class _CupertinoSharedAnimeDetailPageState
 
     int affectedCount = 0;
     try {
-      if (action == _CupertinoEpisodeCleanupAction.clearScanResults) {
-        affectedCount = await WatchHistoryManager.clearScanResultsByAnimeId(
+      if (action == _CupertinoEpisodeCleanupAction.clearMatchInfo) {
+        affectedCount = await WatchHistoryManager.clearMatchInfoByAnimeId(
           widget.anime.animeId,
         );
         if (!mounted) return;
         _showSnack(
-          affectedCount > 0 ? '已清除 $affectedCount 条扫描结果' : '没有可清除的扫描结果',
+          affectedCount > 0 ? '已清除 $affectedCount 条匹配信息' : '没有可清除的匹配信息',
           type: affectedCount > 0
               ? AdaptiveSnackBarType.success
               : AdaptiveSnackBarType.info,
