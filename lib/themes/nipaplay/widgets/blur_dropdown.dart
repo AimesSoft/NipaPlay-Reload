@@ -239,7 +239,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     _getSelectedItemText(),
                     style: getTitleTextStyle(context),
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   RotationTransition(
                     turns: Tween(begin: 0.0, end: 0.5)
                         .animate(_animationController),
@@ -425,11 +425,24 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     return KeyEventResult.ignored;
   }
 
+  RenderBox? _overlayRenderBox(OverlayState overlay) {
+    final renderObject = overlay.context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      return renderObject;
+    }
+    return null;
+  }
+
   void _openDropdown({bool requestMenuFocus = false}) {
     if (_isDropdownOpen || _animationController.isAnimating) {
       return;
     }
     _removeOverlay();
+
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) {
+      return;
+    }
 
     final RenderBox? renderBox =
         widget.dropdownKey.currentContext?.findRenderObject() as RenderBox?;
@@ -437,10 +450,14 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       return;
     }
 
+    final overlayBox = _overlayRenderBox(overlay);
     final size = renderBox.size;
-    final position = renderBox.localToGlobal(Offset.zero);
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final position = overlayBox == null
+        ? renderBox.localToGlobal(Offset.zero)
+        : renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+    final overlaySize = overlayBox?.size ?? MediaQuery.of(context).size;
+    final screenHeight = overlaySize.height;
+    final screenWidth = overlaySize.width;
 
     double top = position.dy + size.height + 5;
     double estimatedHeight = widget.items.length * 50.0;
@@ -594,7 +611,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       },
     );
 
-    Overlay.of(context).insert(_overlayEntry!);
+    overlay.insert(_overlayEntry!);
     _setExpandedTracked(true);
     setState(() {
       _isDropdownOpen = true;
