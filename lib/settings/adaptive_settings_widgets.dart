@@ -945,7 +945,7 @@ class AdaptiveSettingsDragList<T> extends material.StatelessWidget {
           physics: const material.NeverScrollableScrollPhysics(),
           buildDefaultDragHandles: false,
           itemCount: items.length,
-          onReorderItem: onReorder,
+          onReorder: onReorder,
           proxyDecorator: (child, index, animation) {
             return material.Material(
               color: material.Colors.transparent,
