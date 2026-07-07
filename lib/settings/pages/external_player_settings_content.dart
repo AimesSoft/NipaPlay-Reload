@@ -29,7 +29,7 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                       ? context.l10n.externalPlayerEnableSubtitle
                       : context.l10n.desktopOnlySupported,
                   icon: Ionicons.play_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.square_arrow_up,
+                  phoneIcon: cupertino.CupertinoIcons.square_arrow_up,
                   enabled: externalSupported,
                   value: settingsProvider.useExternalPlayer,
                   onChanged: (value) => _toggleExternal(
@@ -47,14 +47,14 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                 final subtitle = !externalSupported
                     ? context.l10n.desktopOnlySupported
                     : (path.isEmpty
-                          ? context.l10n.externalPlayerNotSelected
-                          : path);
+                        ? context.l10n.externalPlayerNotSelected
+                        : path);
 
                 return AdaptiveSettingsTile<void>.card(
                   title: context.l10n.externalPlayerSelectTitle,
                   subtitle: subtitle,
                   icon: Ionicons.folder_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.folder,
+                  phoneIcon: cupertino.CupertinoIcons.folder,
                   enabled: externalSupported,
                   onTap: () => _selectExternalPlayer(
                     context,
@@ -77,7 +77,7 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                         )
                       : context.l10n.desktopOnlySupported,
                   icon: Ionicons.chatbubbles_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.chat_bubble,
+                  phoneIcon: cupertino.CupertinoIcons.chat_bubble,
                   enabled: externalSupported,
                   value: settingsProvider.externalPlayerDanmakuOverlay,
                   onChanged: (value) => _toggleDanmakuOverlay(

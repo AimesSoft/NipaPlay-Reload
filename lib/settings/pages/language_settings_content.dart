@@ -23,7 +23,7 @@ class LanguageSettingsContent extends StatelessWidget {
               title: context.l10n.languageSettingsTitle,
               subtitle: context.l10n.languageSettingsSubtitle,
               icon: Ionicons.language_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.globe,
+              phoneIcon: cupertino.CupertinoIcons.globe,
               items: [
                 _item(
                   context,

@@ -55,7 +55,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
               title: l10n.openSourceCommunity,
               subtitle: l10n.aboutCommunityHint,
               icon: Ionicons.logo_github,
-              cupertinoIcon:
+              phoneIcon:
                   cupertino.CupertinoIcons.chevron_left_slash_chevron_right,
               onTap: () => _launchURL(AboutSettingsData.repositoryUrl),
             ),
@@ -63,21 +63,21 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
               title: 'AimesSoft/NipaPlay-Reload',
               subtitle: AboutSettingsData.repositoryUrl,
               icon: Ionicons.logo_github,
-              cupertinoIcon: cupertino.CupertinoIcons.link,
+              phoneIcon: cupertino.CupertinoIcons.link,
               onTap: () => _launchURL(AboutSettingsData.repositoryUrl),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.aboutQqGroup('961207150'),
               subtitle: AboutSettingsData.qqGroupUrl,
               icon: Ionicons.chatbubbles_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.chat_bubble_2,
+              phoneIcon: cupertino.CupertinoIcons.chat_bubble_2,
               onTap: () => _launchURL(AboutSettingsData.qqGroupUrl),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.aboutOfficialWebsite,
               subtitle: AboutSettingsData.officialWebsiteUrl,
               icon: Ionicons.globe_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.globe,
+              phoneIcon: cupertino.CupertinoIcons.globe,
               onTap: () => _launchURL(AboutSettingsData.officialWebsiteUrl),
             ),
           ],
@@ -89,14 +89,14 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
               title: l10n.aboutAfdianSponsorPage,
               subtitle: AboutSettingsData.afdianUrl,
               icon: Ionicons.heart,
-              cupertinoIcon: cupertino.CupertinoIcons.heart_fill,
+              phoneIcon: cupertino.CupertinoIcons.heart_fill,
               onTap: () => _launchURL(AboutSettingsData.afdianUrl),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.appreciationCode,
               subtitle: l10n.appreciationImageLoadFailed,
               icon: Ionicons.qr_code,
-              cupertinoIcon: cupertino.CupertinoIcons.qrcode,
+              phoneIcon: cupertino.CupertinoIcons.qrcode,
               onTap: _showAppreciationQR,
             ),
           ],
@@ -111,36 +111,36 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
     required bool hasUpdate,
   }) {
     final l10n = context.l10n;
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
     final colorScheme = Theme.of(context).colorScheme;
-    final textColor = isCupertino
+    final textColor = isPhoneLayout
         ? cupertino.CupertinoDynamicColor.resolve(
             cupertino.CupertinoColors.label,
             context,
           )
         : colorScheme.onSurface;
-    final secondaryColor = isCupertino
+    final secondaryColor = isPhoneLayout
         ? cupertino.CupertinoDynamicColor.resolve(
             cupertino.CupertinoColors.secondaryLabel,
             context,
           )
         : colorScheme.onSurface.withValues(alpha: 0.7);
-    final accentColor = isCupertino
+    final accentColor = isPhoneLayout
         ? cupertino.CupertinoTheme.of(context).primaryColor
         : AppAccentColors.current;
 
     return AdaptiveSettingsCanvas(
-      padding: EdgeInsets.all(isCupertino ? 18 : 20),
+      padding: EdgeInsets.all(isPhoneLayout ? 18 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Image.asset(
             'assets/logo.png',
-            height: isCupertino ? 110 : 120,
+            height: isPhoneLayout ? 110 : 120,
             errorBuilder: (context, error, stackTrace) {
               return Icon(
                 Ionicons.image_outline,
-                size: isCupertino ? 96 : 100,
+                size: isPhoneLayout ? 96 : 100,
                 color: secondaryColor,
               );
             },
@@ -160,7 +160,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
                     targetLabel: _buildTargetLabel,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: isCupertino ? 24 : 26,
+                      fontSize: isPhoneLayout ? 24 : 26,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.start,
@@ -353,7 +353,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
     String name,
     Color accentColor,
   ) {
-    final textColor = AdaptiveSettingsScope.isCupertino(context)
+    final textColor = AdaptiveSettingsScope.isPhoneLayout(context)
         ? cupertino.CupertinoDynamicColor.resolve(
             cupertino.CupertinoColors.label,
             context,

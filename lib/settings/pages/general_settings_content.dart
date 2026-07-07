@@ -84,7 +84,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                 'Set the default close-button behavior.',
               ),
               icon: Ionicons.close_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.xmark_circle,
+              phoneIcon: cupertino.CupertinoIcons.xmark_circle,
               items: _desktopExitItems(context),
               onChanged: (behavior) async {
                 setState(() {
@@ -108,7 +108,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                 'Set the player window state on startup.',
               ),
               icon: Ionicons.expand_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.rectangle_expand_vertical,
+              phoneIcon: cupertino.CupertinoIcons.rectangle_expand_vertical,
               items: _startupWindowStateItems(context),
               onChanged: (state) async {
                 final savedMessage = _text(
@@ -146,7 +146,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                   'Position used when starting in windowed mode.',
                 ),
                 icon: Ionicons.move_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.move,
+                phoneIcon: cupertino.CupertinoIcons.move,
                 items: _startupWindowPositionItems(context),
                 onChanged: (position) async {
                   final savedMessage = _text(
@@ -181,7 +181,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                   'Choose a preset or custom startup size.',
                 ),
                 icon: Ionicons.resize_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.resize,
+                phoneIcon: cupertino.CupertinoIcons.resize,
                 items: _startupWindowSizeItems(),
                 onChanged: (value) async {
                   if (value == 'custom') {
@@ -219,7 +219,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                   'Reset to the default startup window size.',
                 ),
                 icon: Ionicons.refresh_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.refresh,
+                phoneIcon: cupertino.CupertinoIcons.refresh,
                 onTap: _resetStartupWindowSize,
               ),
             ],
@@ -241,7 +241,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
               'Choose the page shown after app startup.',
             ),
             icon: Ionicons.home_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.house,
+            phoneIcon: cupertino.CupertinoIcons.house,
             items: _defaultPageItems(context),
             onChanged: (index) async {
               setState(() {
@@ -268,7 +268,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                   ? _text(context, '显示在首页', '顯示在首頁', 'Shown on Home')
                   : _text(context, '已隐藏', '已隱藏', 'Hidden'),
               icon: Ionicons.home_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.square_grid_2x2,
+              phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
               enabled: homeSections.isSectionEnabled(section),
             ),
         ],
@@ -286,7 +286,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
             title: context.l10n.restoreDefaults,
             subtitle: context.l10n.restoreDefaultsSubtitle,
             icon: Ionicons.refresh_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.refresh,
+            phoneIcon: cupertino.CupertinoIcons.refresh,
             onTap: homeSections.restoreDefaults,
           ),
         ],

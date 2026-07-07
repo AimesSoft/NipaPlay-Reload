@@ -82,7 +82,7 @@ class ManualDanmakuMatcher {
   }) async {
     final uiThemeProvider =
         Provider.of<UIThemeProvider>(context, listen: false);
-    if (uiThemeProvider.isCupertinoTheme) {
+    if (uiThemeProvider.isPhoneLayout) {
       return CupertinoBottomSheet.show<Map<String, dynamic>>(
         context: context,
         title: '手动匹配弹幕',

@@ -5,20 +5,20 @@ import 'package:nipaplay/themes/theme_ids.dart';
 
 class ThemeRegistry {
   static final Map<String, ThemeDescriptor> _themes = {
-    ThemeIds.nipaplay: const NipaplayThemeDescriptor(),
-    ThemeIds.cupertino: const CupertinoThemeDescriptor(),
+    ThemeIds.desktopTablet: const DesktopTabletThemeDescriptor(),
+    ThemeIds.phone: const PhoneThemeDescriptor(),
   };
 
-  static String get defaultThemeId => ThemeIds.nipaplay;
+  static String get defaultThemeId => ThemeIds.desktopTablet;
 
   static ThemeDescriptor get defaultTheme =>
-      _themes[defaultThemeId] ?? const NipaplayThemeDescriptor();
+      _themes[defaultThemeId] ?? const DesktopTabletThemeDescriptor();
 
   static ThemeDescriptor defaultThemeForEnvironment(ThemeEnvironment env) {
     if (env.isIOS && env.isPhone && !env.isTablet) {
-      final cupertinoTheme = maybeGet(ThemeIds.cupertino);
-      if (cupertinoTheme != null && cupertinoTheme.isSupported(env)) {
-        return cupertinoTheme;
+      final phoneLayout = maybeGet(ThemeIds.phone);
+      if (phoneLayout != null && phoneLayout.isSupported(env)) {
+        return phoneLayout;
       }
     }
     return defaultTheme;

@@ -95,7 +95,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Choose the app color theme.',
             ),
             icon: Ionicons.moon_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.circle_lefthalf_fill,
+            phoneIcon: cupertino.CupertinoIcons.circle_lefthalf_fill,
             items: [
               DropdownMenuItemData(
                 title: context.l10n.lightMode,
@@ -127,7 +127,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Choose the app accent color.',
             ),
             icon: Ionicons.color_palette_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.circle_grid_hex,
+            phoneIcon: cupertino.CupertinoIcons.circle_grid_hex,
             value: appearanceSettings.accentColorPreset,
             options: [
               for (final preset in AppAccentColorPreset.values)
@@ -153,7 +153,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Show a thin progress bar at the bottom of the player.',
             ),
             icon: Icons.linear_scale_rounded,
-            cupertinoIcon: cupertino.CupertinoIcons.minus,
+            phoneIcon: cupertino.CupertinoIcons.minus,
             value: videoState.minimalProgressBarEnabled,
             onChanged: videoState.setMinimalProgressBarEnabled,
           ),
@@ -166,7 +166,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Show the danmaku density chart at the bottom of the player.',
             ),
             icon: Icons.show_chart_rounded,
-            cupertinoIcon: cupertino.CupertinoIcons.chart_bar,
+            phoneIcon: cupertino.CupertinoIcons.chart_bar,
             value: videoState.showDanmakuDensityChart,
             onChanged: videoState.setShowDanmakuDensityChart,
           ),
@@ -184,7 +184,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Used by the bottom progress bar and danmaku density chart.',
             ),
             icon: Icons.palette_outlined,
-            cupertinoIcon: cupertino.CupertinoIcons.paintbrush,
+            phoneIcon: cupertino.CupertinoIcons.paintbrush,
             value: videoState.minimalProgressBarColor.toARGB32(),
             options: _playerControlColorOptions,
             onChanged: videoState.setMinimalProgressBarColor,
@@ -203,7 +203,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Show the send danmaku button at the top left of the player.',
             ),
             icon: Ionicons.chatbubble_ellipses_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.chat_bubble_2,
+            phoneIcon: cupertino.CupertinoIcons.chat_bubble_2,
             value: videoState.playerTopSendDanmakuButtonVisible,
             onChanged: videoState.setPlayerTopSendDanmakuButtonVisible,
           ),
@@ -221,7 +221,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Show the skip button at the top left of the player.',
             ),
             icon: Ionicons.play_skip_forward_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.forward_end,
+            phoneIcon: cupertino.CupertinoIcons.forward_end,
             value: videoState.playerTopSkipButtonVisible,
             onChanged: videoState.setPlayerTopSkipButtonVisible,
           ),
@@ -240,7 +240,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 'Show the fit-window-to-video button at the top left.',
               ),
               icon: Ionicons.resize_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.resize,
+              phoneIcon: cupertino.CupertinoIcons.resize,
               value: videoState.playerTopResizeButtonVisible,
               onChanged: videoState.setPlayerTopResizeButtonVisible,
             ),
@@ -258,7 +258,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Show frame back and frame forward buttons at the top left.',
             ),
             icon: Ionicons.play_circle_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.play_circle,
+            phoneIcon: cupertino.CupertinoIcons.play_circle,
             value: videoState.playerTopFrameStepButtonsVisible,
             onChanged: videoState.setPlayerTopFrameStepButtonsVisible,
           ),
@@ -276,7 +276,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Choose the anime detail page layout.',
             ),
             icon: Ionicons.albums_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
+            phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
             items: [
               DropdownMenuItemData(
                 title: context.l10n.appearanceDetailSimple,
@@ -307,7 +307,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'Choose how recently watched items are shown.',
             ),
             icon: Ionicons.time_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.clock,
+            phoneIcon: cupertino.CupertinoIcons.clock,
             items: [
               DropdownMenuItemData(
                 title: context.l10n.appearanceRecentSimple,
@@ -341,7 +341,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               'When off, cards only show cover art and title.',
             ),
             icon: Ionicons.document_text_outline,
-            cupertinoIcon: cupertino.CupertinoIcons.doc_text,
+            phoneIcon: cupertino.CupertinoIcons.doc_text,
             value: appearanceSettings.showAnimeCardSummary,
             onChanged: appearanceSettings.setShowAnimeCardSummary,
           ),
@@ -355,7 +355,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               AdaptiveSettingsTile<bool>.toggle(
                 title: section.title,
                 icon: Ionicons.grid_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.square_grid_2x2,
+                phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
                 value: homeSections.isSectionEnabled(section),
                 onChanged: (value) {
                   homeSections.setSectionEnabled(section, value);
@@ -365,7 +365,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               title: context.l10n.restoreDefaults,
               subtitle: context.l10n.restoreDefaultsSubtitle,
               icon: Ionicons.refresh_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.refresh,
+              phoneIcon: cupertino.CupertinoIcons.refresh,
               onTap: homeSections.restoreDefaults,
             ),
           ],
@@ -384,7 +384,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 'Adjust the overall NipaPlay interface size.',
               ),
               icon: Ionicons.expand_outline,
-              cupertinoIcon:
+              phoneIcon:
                   cupertino.CupertinoIcons.arrow_up_left_arrow_down_right,
               value: appearanceSettings.uiScale,
               min: AppearanceSettingsProvider.uiScaleMin,
@@ -407,7 +407,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 'Adjust the display area of NipaPlay Window controls.',
               ),
               icon: Ionicons.expand_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.rectangle_expand_vertical,
+              phoneIcon: cupertino.CupertinoIcons.rectangle_expand_vertical,
               items: [
                 DropdownMenuItemData(
                   title: _text(context, '窗口化', '視窗化', 'Windowed'),
@@ -453,7 +453,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 'Set the background image for the main interface.',
               ),
               icon: Ionicons.image_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.photo,
+              phoneIcon: cupertino.CupertinoIcons.photo,
               items: [
                 _backgroundImageItem(context, themeNotifier, '看板娘'),
                 _backgroundImageItem(context, themeNotifier, '看板娘2'),
@@ -483,7 +483,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                   'Adjust the blur strength of interface elements.',
                 ),
                 icon: Ionicons.water_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.drop,
+                phoneIcon: cupertino.CupertinoIcons.drop,
                 items: [
                   _blurItem(context, settingsProvider, '无', '無', 'None', 0),
                   _blurItem(
@@ -539,7 +539,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                   'Choose how the background color blends with the image.',
                 ),
                 icon: Ionicons.color_wand_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.wand_stars,
+                phoneIcon: cupertino.CupertinoIcons.wand_stars,
                 items: [
                   DropdownMenuItemData(
                     title: _text(context, '不透明度', '不透明度', 'Opacity'),
@@ -573,7 +573,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                   'Adjust the strength of the color overlay.',
                 ),
                 icon: Ionicons.color_palette_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.slider_horizontal_3,
+                phoneIcon: cupertino.CupertinoIcons.slider_horizontal_3,
                 value: themeNotifier.backgroundImageOverlayOpacity,
                 min: 0,
                 max: 1,

@@ -44,17 +44,18 @@ class NipaplaySettingEntry {
 List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
   final entries = buildUnifiedSettingEntries(
     context,
-    surface: UnifiedSettingsSurface.nipaplay,
+    surface: UnifiedSettingsSurface.desktopTablet,
   );
 
   return entries
       .map(
         (entry) => NipaplaySettingEntry(
           id: entry.id,
-          title: entry.title(context, UnifiedSettingsSurface.nipaplay),
+          title: entry.title(context, UnifiedSettingsSurface.desktopTablet),
           icon: entry.icon,
-          pageTitle: entry.pageTitle(context, UnifiedSettingsSurface.nipaplay),
-          page: entry.buildPage(context, UnifiedSettingsSurface.nipaplay),
+          pageTitle:
+              entry.pageTitle(context, UnifiedSettingsSurface.desktopTablet),
+          page: entry.buildPage(context, UnifiedSettingsSurface.desktopTablet),
         ),
       )
       .toList();

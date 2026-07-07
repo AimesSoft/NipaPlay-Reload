@@ -45,7 +45,7 @@ class _AutoUpdateSettingTileState extends State<AutoUpdateSettingTile> {
       title: context.l10n.aboutAutoCheckUpdates,
       subtitle: context.l10n.aboutManualOnlyWhenDisabled,
       icon: Ionicons.cloud_outline,
-      cupertinoIcon: cupertino.CupertinoIcons.arrow_clockwise_circle,
+      phoneIcon: cupertino.CupertinoIcons.arrow_clockwise_circle,
       enabled: !_loading,
       value: _enabled,
       onChanged: _setEnabled,

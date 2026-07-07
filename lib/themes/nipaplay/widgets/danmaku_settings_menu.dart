@@ -902,7 +902,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                           context,
                           listen: false,
                         );
-                        if (uiThemeProvider.isCupertinoTheme) {
+                        if (uiThemeProvider.isPhoneLayout) {
                           final menuScope = SettingsMenuScope.maybeOf(context);
                           if (menuScope?.requestClose != null) {
                             await menuScope!.requestClose!();
@@ -922,9 +922,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 : p.basenameWithoutExtension(initialVideoPath);
                         final result = await ManualDanmakuMatcher.instance
                             .showManualMatchDialog(
-                          uiThemeProvider.isCupertinoTheme
-                              ? rootContext
-                              : context,
+                          uiThemeProvider.isPhoneLayout ? rootContext : context,
                           initialVideoTitle: initialSearchKeyword,
                         );
 

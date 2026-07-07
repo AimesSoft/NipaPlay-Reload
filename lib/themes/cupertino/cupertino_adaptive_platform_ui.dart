@@ -1,11 +1,12 @@
-export 'package:adaptive_platform_ui/adaptive_platform_ui.dart' hide AdaptiveSnackBar;
+export 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
+    hide AdaptiveSnackBar;
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
     show AdaptiveSnackBarType;
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
-/// 在 Cupertino 主题下劫持 AdaptiveSnackBar，统一使用 Nipaplay 的通知控件。
+/// 在手机布局下劫持 AdaptiveSnackBar，统一使用 Nipaplay 的通知控件。
 class AdaptiveSnackBar {
   static void show(
     BuildContext context, {

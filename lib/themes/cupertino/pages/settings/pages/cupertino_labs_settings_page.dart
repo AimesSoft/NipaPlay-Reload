@@ -9,7 +9,7 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AdaptiveSettingsScope(
-      style: AdaptiveSettingsStyle.cupertino,
+      style: AdaptiveSettingsStyle.phone,
       child: LabsSettingsContent(
         onOpenWebDavQuickSettings: () {
           Navigator.of(context).push(

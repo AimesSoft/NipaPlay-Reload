@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:provider/provider.dart';
 
-/// Cupertino 主题的上拉菜单统一入口：显示时隐藏底部导航，关闭时恢复。
+/// 手机布局的上拉菜单统一入口：显示时隐藏底部导航，关闭时恢复。
 Future<T?> showCupertinoModalPopupWithBottomBar<T>({
   required BuildContext context,
   required WidgetBuilder builder,

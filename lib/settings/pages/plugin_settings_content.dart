@@ -75,21 +75,21 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
                   title: _importPluginTitle(context),
                   subtitle: _importPluginHint(context),
                   icon: Ionicons.cloud_upload_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.square_arrow_down,
+                  phoneIcon: cupertino.CupertinoIcons.square_arrow_down,
                   onTap: () => _importPlugin(context, pluginService),
                 ),
                 AdaptiveSettingsTile<void>.card(
                   title: _pluginMarketTitle(context),
                   subtitle: _pluginMarketSubtitle(context),
                   icon: Ionicons.storefront_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.bag,
+                  phoneIcon: cupertino.CupertinoIcons.bag,
                   onTap: () => _openPluginMarket(context),
                 ),
                 AdaptiveSettingsTile<void>.card(
                   title: _githubProxyLabel(context),
                   subtitle: _proxySubtitle(context),
                   icon: Ionicons.flash_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.bolt_horizontal,
+                  phoneIcon: cupertino.CupertinoIcons.bolt_horizontal,
                   enabled: !_isProxySaving,
                   onTap: () => _editProxyUrl(context),
                 ),
@@ -97,7 +97,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
                   title: _checkingUpdatesTitle(context),
                   subtitle: _checkingUpdatesSubtitle(context),
                   icon: Ionicons.refresh_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.refresh,
+                  phoneIcon: cupertino.CupertinoIcons.refresh,
                   enabled: !_isCheckingUpdates,
                   onTap: _checkPluginUpdates,
                 ),
@@ -111,27 +111,55 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
                     title: _pluginsEmpty(context),
                     subtitle: _pluginsEmptyHint(context),
                     icon: Ionicons.extension_puzzle_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.cube_box,
+                    phoneIcon: cupertino.CupertinoIcons.cube_box,
                     enabled: false,
                     onTap: () {},
                   ),
                 ],
               )
             else
-              AdaptiveSettingsSection(
-                children: [
-                  for (final plugin in plugins) ...[
-                    _buildPluginToggle(context, plugin, pluginService),
-                    if (plugin.uiEntries.isNotEmpty)
-                      _buildPluginActionTile(context, plugin),
-                    if (!plugin.isBuiltin)
-                      _buildPluginDeleteTile(context, plugin, pluginService),
-                  ],
-                ],
-              ),
+              ..._buildPluginSections(context, plugins, pluginService),
           ],
         );
       },
+    );
+  }
+
+  List<Widget> _buildPluginSections(
+    BuildContext context,
+    List<PluginDescriptor> plugins,
+    PluginService pluginService,
+  ) {
+    final sections = <Widget>[];
+    for (var index = 0; index < plugins.length; index++) {
+      if (index > 0) {
+        sections.add(const SizedBox(height: 12));
+      }
+      sections.add(
+        _buildPluginSection(
+          context,
+          plugins[index],
+          pluginService,
+        ),
+      );
+    }
+    return sections;
+  }
+
+  Widget _buildPluginSection(
+    BuildContext context,
+    PluginDescriptor plugin,
+    PluginService pluginService,
+  ) {
+    return AdaptiveSettingsSection(
+      key: ValueKey('plugin_settings_${plugin.manifest.id}'),
+      children: [
+        _buildPluginToggle(context, plugin, pluginService),
+        if (plugin.uiEntries.isNotEmpty)
+          _buildPluginActionTile(context, plugin),
+        if (!plugin.isBuiltin)
+          _buildPluginDeleteTile(context, plugin, pluginService),
+      ],
     );
   }
 
@@ -146,7 +174,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
       title: plugin.manifest.name,
       subtitle: _pluginSubtitle(context, plugin, updateVersion),
       icon: Ionicons.extension_puzzle_outline,
-      cupertinoIcon: cupertino.CupertinoIcons.cube_box,
+      phoneIcon: cupertino.CupertinoIcons.cube_box,
       value: plugin.enabled,
       onChanged: (value) => _setPluginEnabled(
         context,
@@ -168,7 +196,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
           ? _pluginActionChooseHint(context)
           : _pluginActionNotAvailable(context),
       icon: Ionicons.construct_outline,
-      cupertinoIcon: cupertino.CupertinoIcons.wrench,
+      phoneIcon: cupertino.CupertinoIcons.wrench,
       enabled: actionEnabled,
       onTap: () => _showPluginActionPicker(context, plugin),
     );
@@ -183,7 +211,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
       title: _pluginDeleteTitle(context, plugin),
       subtitle: _pluginDeleteSubtitle(context),
       icon: Ionicons.trash_outline,
-      cupertinoIcon: cupertino.CupertinoIcons.trash,
+      phoneIcon: cupertino.CupertinoIcons.trash,
       isDestructive: true,
       onTap: () => _confirmDeletePlugin(context, plugin, pluginService),
     );
@@ -230,7 +258,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     PluginDescriptor plugin,
     PluginService pluginService,
   ) async {
-    final confirmed = AdaptiveSettingsScope.isCupertino(context)
+    final confirmed = AdaptiveSettingsScope.isPhoneLayout(context)
         ? await _confirmDeletePluginCupertino(context, plugin)
         : await _confirmDeletePluginMaterial(context, plugin);
 
@@ -340,7 +368,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
 
   void _openPluginMarket(BuildContext context) {
     FocusScope.of(context).unfocus();
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       CupertinoPluginMarketDialog.show(context);
       return;
     }
@@ -352,7 +380,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     final controller = TextEditingController(text: _proxyController.text);
     String? result;
     try {
-      if (AdaptiveSettingsScope.isCupertino(context)) {
+      if (AdaptiveSettingsScope.isPhoneLayout(context)) {
         result = await _showProxyDialogCupertino(context, controller);
       } else {
         result = await _showProxyDialogMaterial(context, controller);
@@ -534,7 +562,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     final hasInteractiveEntries = hasSwitches || hasTextInputs;
 
     if (!hasInteractiveEntries) {
-      final selected = AdaptiveSettingsScope.isCupertino(context)
+      final selected = AdaptiveSettingsScope.isPhoneLayout(context)
           ? await _selectPluginActionCupertino(context, plugin, entries)
           : await _selectPluginActionMaterial(context, plugin, entries);
       if (!context.mounted || selected == null) return;
@@ -542,7 +570,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
       return;
     }
 
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await _showInteractivePluginActionsCupertino(context, plugin);
     } else {
       await _showInteractivePluginActionsMaterial(context, plugin);
@@ -930,7 +958,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     final content = result.content.trim().isEmpty
         ? _pluginActionContentFallback(context)
         : result.content;
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await CupertinoBottomSheet.show<void>(
         context: context,
         title: result.title,

@@ -15,7 +15,7 @@ enum RecentWatchingStyle {
   detailed, // 详细版（带截图）
 }
 
-// 定义 NipaPlay 主题弹窗显示区域模式
+// 定义 桌面和平板布局弹窗显示区域模式
 enum NipaplayWindowDisplayMode {
   windowed, // 窗口化
   filledScreen, // 铺满屏幕（保留少量边距）

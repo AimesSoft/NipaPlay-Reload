@@ -81,7 +81,7 @@ class _RemoteMediaLibrarySettingsContentState
                       'Initializing network media services...',
                     ),
                     icon: Ionicons.cloud_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.cloud,
+                    phoneIcon: cupertino.CupertinoIcons.cloud,
                     enabled: false,
                     onTap: () {},
                   ),
@@ -100,7 +100,7 @@ class _RemoteMediaLibrarySettingsContentState
                   title: l10n.networkMediaLibrary,
                   subtitle: l10n.networkMediaLibraryIntro,
                   icon: Ionicons.cloud_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.cloud,
+                  phoneIcon: cupertino.CupertinoIcons.cloud,
                   enabled: false,
                   onTap: () {},
                 ),
@@ -170,7 +170,7 @@ class _RemoteMediaLibrarySettingsContentState
                     'DLNA/UPnP and more remote media services are planned.',
                   ),
                   icon: Ionicons.wifi_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.wifi,
+                  phoneIcon: cupertino.CupertinoIcons.wifi,
                   enabled: false,
                   onTap: () {},
                 ),
@@ -555,7 +555,7 @@ class _RemoteMediaLibrarySettingsContentState
                 title: _sharedRemoteTitle(context),
                 subtitle: context.l10n.loading,
                 icon: Ionicons.laptop_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.device_laptop,
+                phoneIcon: cupertino.CupertinoIcons.device_laptop,
                 enabled: false,
                 onTap: () {},
               ),
@@ -572,7 +572,7 @@ class _RemoteMediaLibrarySettingsContentState
                   title: _sharedRemoteTitle(context),
                   subtitle: _sharedRemoteSubtitle(context, provider),
                   icon: Ionicons.laptop_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.device_laptop,
+                  phoneIcon: cupertino.CupertinoIcons.device_laptop,
                   enabled: provider.hasActiveHost,
                   onTap: () => _openSharedRemoteLibrary(context),
                 ),
@@ -587,7 +587,7 @@ class _RemoteMediaLibrarySettingsContentState
                       'Scan another device remote access QR code.',
                     ),
                     icon: Ionicons.qr_code_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.qrcode_viewfinder,
+                    phoneIcon: cupertino.CupertinoIcons.qrcode_viewfinder,
                     onTap: () => _connectSharedRemoteByQr(context, provider),
                   ),
                 AdaptiveSettingsTile<void>.card(
@@ -600,7 +600,7 @@ class _RemoteMediaLibrarySettingsContentState
                     'Enter another device LAN access URL.',
                   ),
                   icon: Ionicons.add_circle_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.add_circled,
+                  phoneIcon: cupertino.CupertinoIcons.add_circled,
                   onTap: () => _showAddSharedHostDialog(context, provider),
                 ),
               ],
@@ -639,7 +639,7 @@ class _RemoteMediaLibrarySettingsContentState
         icon: host.isOnline
             ? Ionicons.checkmark_circle_outline
             : Ionicons.alert_circle_outline,
-        cupertinoIcon: host.isOnline
+        phoneIcon: host.isOnline
             ? cupertino.CupertinoIcons.check_mark_circled
             : cupertino.CupertinoIcons.exclamationmark_circle,
         onTap: () => provider.setActiveHost(host.id),
@@ -648,7 +648,7 @@ class _RemoteMediaLibrarySettingsContentState
         title: _text(context, '刷新共享媒体库', '重新整理共享媒體庫', 'Refresh Shared Library'),
         subtitle: host.baseUrl,
         icon: Ionicons.refresh_outline,
-        cupertinoIcon: cupertino.CupertinoIcons.refresh,
+        phoneIcon: cupertino.CupertinoIcons.refresh,
         enabled: provider.activeHostId == host.id,
         onTap: () => provider.refreshLibrary(userInitiated: true),
       ),
@@ -657,14 +657,14 @@ class _RemoteMediaLibrarySettingsContentState
         subtitle: _text(context, '重命名或修改访问地址', '重新命名或修改存取地址',
             'Rename or change the access URL.'),
         icon: Ionicons.create_outline,
-        cupertinoIcon: cupertino.CupertinoIcons.pencil,
+        phoneIcon: cupertino.CupertinoIcons.pencil,
         onTap: () => _showEditSharedHostDialog(context, provider, host),
       ),
       AdaptiveSettingsTile<void>.card(
         title: _text(context, '删除共享客户端', '刪除共享客戶端', 'Delete Shared Client'),
         subtitle: host.baseUrl,
         icon: Ionicons.trash_outline,
-        cupertinoIcon: cupertino.CupertinoIcons.trash,
+        phoneIcon: cupertino.CupertinoIcons.trash,
         isDestructive: true,
         onTap: () => _confirmRemoveSharedHost(context, provider, host.id),
       ),
@@ -683,7 +683,7 @@ class _RemoteMediaLibrarySettingsContentState
                 title: l10n.deviceIdTitle,
                 subtitle: l10n.loading,
                 icon: Ionicons.finger_print_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.device_phone_portrait,
+                phoneIcon: cupertino.CupertinoIcons.device_phone_portrait,
                 enabled: false,
                 onTap: () {},
               ),
@@ -701,7 +701,7 @@ class _RemoteMediaLibrarySettingsContentState
                     ? l10n.loadFailedWithError('${snapshot.error}')
                     : l10n.loadFailed,
                 icon: Ionicons.alert_circle_outline,
-                cupertinoIcon: cupertino.CupertinoIcons.exclamationmark_circle,
+                phoneIcon: cupertino.CupertinoIcons.exclamationmark_circle,
                 onTap: _refreshDeviceIdInfo,
               ),
             ],
@@ -715,14 +715,14 @@ class _RemoteMediaLibrarySettingsContentState
               title: l10n.deviceIdTitle,
               subtitle: l10n.deviceIdDescription,
               icon: Ionicons.finger_print_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.device_phone_portrait,
+              phoneIcon: cupertino.CupertinoIcons.device_phone_portrait,
               onTap: () => _showCustomDeviceIdDialog(info),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.deviceIdCurrent,
               subtitle: info.effectiveDeviceId,
               icon: Ionicons.information_circle_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.info_circle,
+              phoneIcon: cupertino.CupertinoIcons.info_circle,
               onTap: () => _showCustomDeviceIdDialog(info),
             ),
             AdaptiveSettingsTile<void>.card(
@@ -731,14 +731,14 @@ class _RemoteMediaLibrarySettingsContentState
                   ? l10n.deviceIdCustomSet(info.customDeviceId!)
                   : info.generatedDeviceId,
               icon: Ionicons.create_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.pencil,
+              phoneIcon: cupertino.CupertinoIcons.pencil,
               onTap: () => _showCustomDeviceIdDialog(info),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.deviceIdRestoreAuto,
               subtitle: l10n.deviceIdRestoreAutoSubtitle,
               icon: Ionicons.refresh_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.refresh,
+              phoneIcon: cupertino.CupertinoIcons.refresh,
               enabled: hasCustom,
               onTap: () => _restoreGeneratedDeviceId(context),
             ),
@@ -749,11 +749,11 @@ class _RemoteMediaLibrarySettingsContentState
   }
 
   Future<void> _showNetworkServerDialog(MediaServerType type) async {
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
     final l10n = context.l10n;
     final label = _serverLabel(type);
 
-    if (isCupertino) {
+    if (isPhoneLayout) {
       final isConnected = type == MediaServerType.jellyfin
           ? context.read<JellyfinProvider>().isConnected
           : context.read<EmbyProvider>().isConnected;
@@ -798,7 +798,7 @@ class _RemoteMediaLibrarySettingsContentState
   }
 
   Future<void> _showNetworkMediaLibrary(MediaServerType type) async {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await _showNetworkMediaLibraryBottomSheet(initialServer: type);
       return;
     }
@@ -894,7 +894,7 @@ class _RemoteMediaLibrarySettingsContentState
   Future<void> _disconnectNetworkServer(MediaServerType type) async {
     final l10n = context.l10n;
     final label = _serverLabel(type);
-    final confirmed = AdaptiveSettingsScope.isCupertino(context)
+    final confirmed = AdaptiveSettingsScope.isPhoneLayout(context)
         ? await _confirmCupertino(
             title: l10n.disconnect,
             content: l10n.disconnectServerConfirm(label),
@@ -934,7 +934,7 @@ class _RemoteMediaLibrarySettingsContentState
   ) async {
     final l10n = context.l10n;
     final hasExisting = provider.serverUrl?.isNotEmpty == true;
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       final config = await showCupertinoDandanplayConnectionDialog(
         context: context,
         provider: provider,
@@ -1035,7 +1035,7 @@ class _RemoteMediaLibrarySettingsContentState
     DandanplayRemoteProvider provider,
   ) async {
     final l10n = context.l10n;
-    final confirmed = AdaptiveSettingsScope.isCupertino(context)
+    final confirmed = AdaptiveSettingsScope.isPhoneLayout(context)
         ? await _confirmCupertino(
             title: l10n.disconnectDandanRemoteTitle,
             content: l10n.disconnectDandanRemoteContent,
@@ -1192,7 +1192,7 @@ class _RemoteMediaLibrarySettingsContentState
     final nameController = TextEditingController(text: displayName);
     final urlController = TextEditingController(text: baseUrl);
     try {
-      if (AdaptiveSettingsScope.isCupertino(context)) {
+      if (AdaptiveSettingsScope.isPhoneLayout(context)) {
         return cupertino.showCupertinoDialog<_SharedHostEditResult>(
           context: context,
           builder: (dialogContext) => cupertino.CupertinoAlertDialog(
@@ -1288,7 +1288,7 @@ class _RemoteMediaLibrarySettingsContentState
     SharedRemoteLibraryProvider provider,
     String hostId,
   ) async {
-    final confirmed = AdaptiveSettingsScope.isCupertino(context)
+    final confirmed = AdaptiveSettingsScope.isPhoneLayout(context)
         ? await _confirmCupertino(
             title: _text(context, '删除共享客户端', '刪除共享客戶端', 'Delete Shared Client'),
             content: _text(context, '确定要删除该客户端吗？', '確定要刪除此客戶端嗎？',
@@ -1316,7 +1316,7 @@ class _RemoteMediaLibrarySettingsContentState
     final controller = TextEditingController(text: info.customDeviceId ?? '');
     final String? input;
     try {
-      if (AdaptiveSettingsScope.isCupertino(context)) {
+      if (AdaptiveSettingsScope.isPhoneLayout(context)) {
         input = await cupertino.showCupertinoDialog<String>(
           context: context,
           builder: (dialogContext) => cupertino.CupertinoAlertDialog(

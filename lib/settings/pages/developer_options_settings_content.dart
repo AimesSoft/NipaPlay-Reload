@@ -32,7 +32,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
     const showCertificateToggle = !kIsWeb;
     final showLinuxTools = !kIsWeb && platform.Platform.isLinux;
 
@@ -58,8 +58,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'Enable only for local networks or debugging. Web is not affected.',
                     ),
                     icon: Ionicons.alert_circle_outline,
-                    cupertinoIcon:
-                        cupertino.CupertinoIcons.exclamationmark_shield,
+                    phoneIcon: cupertino.CupertinoIcons.exclamationmark_shield,
                     value: devOptions.allowInvalidCertsGlobal,
                     onChanged: (value) async {
                       await devOptions.setAllowInvalidCertsGlobal(value);
@@ -99,7 +98,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                     'Show CPU, memory, and FPS in the upper-right corner.',
                   ),
                   icon: Ionicons.analytics_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.speedometer,
+                  phoneIcon: cupertino.CupertinoIcons.speedometer,
                   value: devOptions.showSystemResources,
                   onChanged: devOptions.setShowSystemResources,
                 ),
@@ -117,7 +116,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                     'Collect app print output for debugging and diagnostics.',
                   ),
                   icon: Ionicons.document_text_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.doc_text,
+                  phoneIcon: cupertino.CupertinoIcons.doc_text,
                   value: devOptions.enableDebugLogCollection,
                   onChanged: (value) async {
                     await devOptions.setEnableDebugLogCollection(value);
@@ -138,7 +137,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                   title: l10n.fileLogWriteTitle,
                   subtitle: l10n.fileLogWriteSubtitle,
                   icon: Ionicons.folder_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.folder,
+                  phoneIcon: cupertino.CupertinoIcons.folder,
                   value: devOptions.enableFileLog,
                   onChanged: (value) => _setFileLog(context, devOptions, value),
                 ),
@@ -146,24 +145,24 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                   title: l10n.openLogDirectoryTitle,
                   subtitle: l10n.openLogDirectorySubtitle,
                   icon: Ionicons.folder_open_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.folder_open,
+                  phoneIcon: cupertino.CupertinoIcons.folder_open,
                   onTap: () => _openLogDirectory(context),
                 ),
                 AdaptiveSettingsTile<void>.card(
                   title: l10n.terminalOutput,
                   subtitle: l10n.terminalOutputSubtitle,
                   icon: Ionicons.terminal_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.command,
+                  phoneIcon: cupertino.CupertinoIcons.command,
                   onTap: () => _openDebugLogViewer(context),
                 ),
                 AdaptiveSettingsTile<void>.card(
                   title: l10n.dependencyVersions,
                   subtitle: l10n.dependencyVersionsSubtitle,
                   icon: Ionicons.list_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.list_bullet,
+                  phoneIcon: cupertino.CupertinoIcons.list_bullet,
                   onTap: () => _openDependencyVersions(context),
                 ),
-                if (!isCupertino)
+                if (!isPhoneLayout)
                   AdaptiveSettingsTile<void>.card(
                     title: _text(
                       context,
@@ -178,14 +177,14 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'Preview Nipaplay UI components in a window.',
                     ),
                     icon: Ionicons.color_palette_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.paintbrush,
+                    phoneIcon: cupertino.CupertinoIcons.paintbrush,
                     onTap: () => _openNipaplayUiPreview(context),
                   ),
                 AdaptiveSettingsTile<void>.card(
                   title: l10n.buildInfo,
                   subtitle: l10n.buildInfoSubtitle,
                   icon: Ionicons.information_circle_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.info_circle,
+                  phoneIcon: cupertino.CupertinoIcons.info_circle,
                   onTap: () => _showBuildInfo(context),
                 ),
               ],
@@ -202,7 +201,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                           ? l10n.spoilerAiDebugPrintEnabledHint
                           : l10n.spoilerAiDebugPrintNeedSpoilerMode,
                       icon: Ionicons.information_circle_outline,
-                      cupertinoIcon: cupertino.CupertinoIcons.info_circle,
+                      phoneIcon: cupertino.CupertinoIcons.info_circle,
                       enabled: enabled,
                       value: videoState.spoilerAiDebugPrintResponse,
                       onChanged: (value) async {
@@ -239,7 +238,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'View Linux data directory migration status.',
                     ),
                     icon: Ionicons.information_circle_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.info_circle,
+                    phoneIcon: cupertino.CupertinoIcons.info_circle,
                     onTap: () => _checkLinuxMigrationStatus(context),
                   ),
                   AdaptiveSettingsTile<void>.card(
@@ -256,7 +255,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'Force data directory migration for testing.',
                     ),
                     icon: Ionicons.refresh_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.refresh,
+                    phoneIcon: cupertino.CupertinoIcons.refresh,
                     onTap: () => _manualTriggerMigration(context),
                   ),
                   AdaptiveSettingsTile<void>.card(
@@ -273,7 +272,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'Restore personal files moved to the app data directory.',
                     ),
                     icon: Ionicons.medical_outline,
-                    cupertinoIcon:
+                    phoneIcon:
                         cupertino.CupertinoIcons.exclamationmark_triangle,
                     isDestructive: true,
                     onTap: () => _emergencyRestorePersonalFiles(context),
@@ -292,7 +291,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                       'View current data and cache directory paths.',
                     ),
                     icon: Ionicons.folder_outline,
-                    cupertinoIcon: cupertino.CupertinoIcons.folder,
+                    phoneIcon: cupertino.CupertinoIcons.folder,
                     onTap: () => _showStorageDirectoryInfo(context),
                   ),
                 ],
@@ -339,7 +338,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
   }
 
   Future<void> _openDebugLogViewer(BuildContext context) async {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await CupertinoBottomSheet.show(
         context: context,
         title: context.l10n.terminalOutput,
@@ -409,7 +408,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
   }
 
   Future<void> _openDependencyVersions(BuildContext context) async {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await CupertinoBottomSheet.show(
         context: context,
         title: context.l10n.dependencyVersions,
@@ -449,7 +448,7 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
   }
 
   Future<void> _showBuildInfo(BuildContext context) async {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await CupertinoBottomSheet.show(
         context: context,
         title: context.l10n.buildInfo,

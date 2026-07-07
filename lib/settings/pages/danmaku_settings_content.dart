@@ -14,6 +14,8 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveSlider, PlatformInfo;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -277,7 +279,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   Future<void> _showSpoilerAiSettingsDialog(
     VideoPlayerState videoState,
   ) async {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       await CupertinoBottomSheet.show<void>(
         context: context,
         title: '防剧透 AI 设置',
@@ -296,7 +298,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   sliver: SliverToBoxAdapter(
                     child: _buildSpoilerAiSettingsForm(
                       contentContext,
-                      isCupertino: true,
+                      isPhoneLayout: true,
                       updateDialog: updateDialog,
                     ),
                   ),
@@ -309,7 +311,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                       child: _buildSpoilerAiSettingsActions(
                         sheetContext,
                         videoState: videoState,
-                        isCupertino: true,
+                        isPhoneLayout: true,
                         updateDialog: updateDialog,
                       ),
                     ),
@@ -374,7 +376,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                         padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
                         child: _buildSpoilerAiSettingsForm(
                           dialogContext,
-                          isCupertino: false,
+                          isPhoneLayout: false,
                           updateDialog: updateDialog,
                         ),
                       ),
@@ -388,7 +390,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                       child: _buildSpoilerAiSettingsActions(
                         dialogContext,
                         videoState: videoState,
-                        isCupertino: false,
+                        isPhoneLayout: false,
                         updateDialog: updateDialog,
                       ),
                     ),
@@ -404,7 +406,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
 
   Widget _buildSpoilerAiSettingsForm(
     BuildContext context, {
-    required bool isCupertino,
+    required bool isPhoneLayout,
     required void Function(VoidCallback change) updateDialog,
   }) {
     final isGemini = _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
@@ -413,7 +415,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
         : 'https://api.openai.com/v1/chat/completions';
     final modelHint = isGemini ? 'gemini-1.5-flash' : 'gpt-5';
 
-    if (isCupertino) {
+    if (isPhoneLayout) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -428,7 +430,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildCupertinoSpoilerLabel(context, '接口格式'),
+          _buildPhoneSpoilerLabel(context, '接口格式'),
           cupertino.CupertinoSlidingSegmentedControl<SpoilerAiApiFormat>(
             groupValue: _spoilerAiApiFormatDraft,
             children: const {
@@ -443,21 +445,21 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
             },
           ),
           const SizedBox(height: 14),
-          _buildCupertinoSpoilerLabel(context, '接口 URL'),
-          _buildCupertinoSpoilerTextField(
+          _buildPhoneSpoilerLabel(context, '接口 URL'),
+          _buildPhoneSpoilerTextField(
             controller: _spoilerAiUrlController,
             placeholder: urlHint,
             keyboardType: TextInputType.url,
           ),
           const SizedBox(height: 14),
-          _buildCupertinoSpoilerLabel(context, '模型'),
-          _buildCupertinoSpoilerTextField(
+          _buildPhoneSpoilerLabel(context, '模型'),
+          _buildPhoneSpoilerTextField(
             controller: _spoilerAiModelController,
             placeholder: modelHint,
           ),
           const SizedBox(height: 14),
-          _buildCupertinoSpoilerLabel(context, 'API Key'),
-          _buildCupertinoSpoilerTextField(
+          _buildPhoneSpoilerLabel(context, 'API Key'),
+          _buildPhoneSpoilerTextField(
             controller: _spoilerAiApiKeyController,
             placeholder: '请输入你的 API Key',
           ),
@@ -472,17 +474,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          cupertino.CupertinoSlider(
-            min: 0.0,
-            max: 2.0,
-            divisions: 40,
-            value: _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
-            onChanged: (value) {
-              updateDialog(() {
-                _spoilerAiTemperatureDraft = value;
-              });
-            },
-          ),
+          _buildPhoneSpoilerTemperatureSlider(context, updateDialog),
         ],
       );
     }
@@ -591,7 +583,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     );
   }
 
-  Widget _buildCupertinoSpoilerLabel(BuildContext context, String label) {
+  Widget _buildPhoneSpoilerLabel(BuildContext context, String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
@@ -608,7 +600,49 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     );
   }
 
-  Widget _buildCupertinoSpoilerTextField({
+  Widget _buildPhoneSpoilerTemperatureSlider(
+    BuildContext context,
+    void Function(VoidCallback change) updateDialog,
+  ) {
+    final value = _spoilerAiTemperatureDraft.clamp(0.0, 2.0).toDouble();
+    void onChanged(double next) {
+      updateDialog(() {
+        _spoilerAiTemperatureDraft = next;
+      });
+    }
+
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return AdaptiveSlider(
+        min: 0.0,
+        max: 2.0,
+        divisions: 40,
+        label: value.toStringAsFixed(2),
+        value: value,
+        activeColor: AppAccentColors.current,
+        onChanged: onChanged,
+      );
+    }
+
+    return fluent.FluentTheme(
+      data: fluent.FluentThemeData(
+        brightness: Theme.of(context).brightness,
+        accentColor: fluent.AccentColor.swatch({
+          'normal': AppAccentColors.current,
+          'default': AppAccentColors.current,
+        }),
+      ),
+      child: fluent.Slider(
+        min: 0.0,
+        max: 2.0,
+        divisions: 40,
+        label: value.toStringAsFixed(2),
+        value: value,
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _buildPhoneSpoilerTextField({
     required TextEditingController controller,
     required String placeholder,
     TextInputType? keyboardType,
@@ -630,7 +664,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   Widget _buildSpoilerAiSettingsActions(
     BuildContext dialogContext, {
     required VideoPlayerState videoState,
-    required bool isCupertino,
+    required bool isPhoneLayout,
     required void Function(VoidCallback change) updateDialog,
   }) {
     Future<void> save() async {
@@ -643,7 +677,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       }
     }
 
-    if (isCupertino) {
+    if (isPhoneLayout) {
       return Row(
         children: [
           Expanded(

@@ -1,7 +1,6 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/theme_registry.dart';
@@ -23,13 +22,13 @@ class UIThemeProvider extends ChangeNotifier {
 
   String get currentThemeId => currentThemeDescriptor.id;
 
-  bool get isNipaplayTheme => currentThemeId == ThemeIds.nipaplay;
-  bool get isCupertinoTheme => currentThemeId == ThemeIds.cupertino;
+  bool get isDesktopTabletLayout => currentThemeId == ThemeIds.desktopTablet;
+  bool get isPhoneLayout => currentThemeId == ThemeIds.phone;
 
   List<ThemeDescriptor> get availableThemes {
     final env = _currentEnvironment;
     final supported = ThemeRegistry.supportedThemes(env)
-        .where((theme) => !theme.hiddenFromThemeOptions)
+        .where((theme) => !theme.hiddenFromLayoutOptions)
         .toList();
     return supported;
   }
@@ -65,7 +64,7 @@ class UIThemeProvider extends ChangeNotifier {
   Future<void> setTheme(ThemeDescriptor descriptor) async {
     final lockedId = _lockedThemeId(_currentEnvironment);
     if (descriptor.id != lockedId) {
-      debugPrint('UI theme is locked to $lockedId; ignoring ${descriptor.id}');
+      debugPrint('UI layout is locked to $lockedId; ignoring ${descriptor.id}');
       return;
     }
     if (!descriptor.isSupported(_currentEnvironment)) {
@@ -90,6 +89,6 @@ class UIThemeProvider extends ChangeNotifier {
     if (env.isWeb) {
       return ThemeRegistry.resolveTheme(null, env).id;
     }
-    return env.isPhone ? ThemeIds.cupertino : ThemeIds.nipaplay;
+    return env.isPhone ? ThemeIds.phone : ThemeIds.desktopTablet;
   }
 }

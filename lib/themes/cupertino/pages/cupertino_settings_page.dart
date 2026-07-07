@@ -38,7 +38,7 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
   Widget build(BuildContext context) {
     final entries = buildUnifiedSettingEntries(
       context,
-      surface: UnifiedSettingsSurface.cupertino,
+      surface: UnifiedSettingsSurface.phone,
     );
     final Color backgroundColor =
         CupertinoColors.systemGroupedBackground.resolveFrom(context);
@@ -48,7 +48,7 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
     final double titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
 
     return AdaptiveSettingsScope(
-      style: AdaptiveSettingsStyle.cupertino,
+      style: AdaptiveSettingsStyle.phone,
       child: ColoredBox(
         color: backgroundColor,
         child: Stack(

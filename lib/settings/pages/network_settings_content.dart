@@ -66,7 +66,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               title: _text(context, '网络诊断', '網路診斷', 'Network Diagnostics'),
               subtitle: _diagnosticsSubtitle(context),
               icon: Ionicons.wifi_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.wifi,
+              phoneIcon: cupertino.CupertinoIcons.wifi,
               enabled: !_connectivity.isChecking,
               onTap: _connectivity.checkConnectivity,
             ),
@@ -84,7 +84,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               ),
               subtitle: _bangumiSubtitle(context),
               icon: Ionicons.book_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.book,
+              phoneIcon: cupertino.CupertinoIcons.book,
               enabled: !_isSavingBangumiCustom,
               onTap: _editBangumiServer,
             ),
@@ -99,7 +99,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
                 _getServerDisplayName(context, _currentServer),
               ),
               icon: Ionicons.server_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.cloud,
+              phoneIcon: cupertino.CupertinoIcons.cloud,
               items: _serverDropdownItems(context),
               onChanged: _changeServer,
               dropdownKey: _serverDropdownKey,
@@ -113,7 +113,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               ),
               subtitle: _dandanplayCustomSubtitle(context),
               icon: Ionicons.create_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.pencil,
+              phoneIcon: cupertino.CupertinoIcons.pencil,
               enabled: !_isSavingCustom,
               onTap: _editDandanplayServer,
             ),
@@ -131,7 +131,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               ),
               subtitle: _persistentUASubtitle(context),
               icon: Ionicons.person_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.person,
+              phoneIcon: cupertino.CupertinoIcons.person,
               onTap: _editPersistentUA,
             ),
             AdaptiveSettingsTile<void>.card(
@@ -148,7 +148,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
                 'Clear the custom UA and use the player kernel default.',
               ),
               icon: Ionicons.refresh_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.refresh,
+              phoneIcon: cupertino.CupertinoIcons.refresh,
               enabled: _persistentUAHasValue(),
               onTap: _resetPersistentUA,
             ),
@@ -163,7 +163,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
                   '${l10n.serverBullet(l10n.primaryServer, l10n.networkServerDescriptionPrimary)}\n'
                   '${l10n.serverBullet(l10n.backupServer, l10n.networkServerDescriptionBackup)}',
               icon: Ionicons.help_circle_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.question_circle,
+              phoneIcon: cupertino.CupertinoIcons.question_circle,
               onTap: () {},
             ),
           ],
@@ -204,9 +204,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   }
 
   Future<void> _editDandanplayServer() async {
-    final initialValue = NetworkSettings.isCustomServer(_currentServer)
-        ? _currentServer
-        : '';
+    final initialValue =
+        NetworkSettings.isCustomServer(_currentServer) ? _currentServer : '';
     final title = _text(
       context,
       '自定义弹弹play API 服务器',
@@ -265,8 +264,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   Future<void> _editBangumiServer() async {
     final initialValue =
         NetworkSettings.isCustomBangumiServer(_currentBangumiServer)
-        ? _currentBangumiServer
-        : '';
+            ? _currentBangumiServer
+            : '';
     final title = _text(
       context,
       '自定义 Bangumi API 服务器',

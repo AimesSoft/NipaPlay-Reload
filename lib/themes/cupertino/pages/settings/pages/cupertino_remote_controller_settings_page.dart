@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
@@ -227,7 +228,7 @@ class _CupertinoRemoteControllerSettingsPageState
               title: '控制其他设备',
               subtitle: '从手机连接局域网内的 NipaPlay 被遥控端',
               icon: CupertinoIcons.dot_radiowaves_left_right,
-              cupertinoIcon: CupertinoIcons.dot_radiowaves_left_right,
+              phoneIcon: CupertinoIcons.dot_radiowaves_left_right,
               enabled: false,
               onTap: () {},
             ),
@@ -235,7 +236,7 @@ class _CupertinoRemoteControllerSettingsPageState
               title: '当前匹配设备',
               subtitle: label,
               icon: CupertinoIcons.device_phone_portrait,
-              cupertinoIcon: CupertinoIcons.device_phone_portrait,
+              phoneIcon: CupertinoIcons.device_phone_portrait,
               enabled: false,
               onTap: () {},
             ),
@@ -245,7 +246,7 @@ class _CupertinoRemoteControllerSettingsPageState
               icon: connected && receiverEnabled
                   ? CupertinoIcons.check_mark_circled_solid
                   : CupertinoIcons.exclamationmark_triangle,
-              cupertinoIcon: connected && receiverEnabled
+              phoneIcon: connected && receiverEnabled
                   ? CupertinoIcons.check_mark_circled_solid
                   : CupertinoIcons.exclamationmark_triangle,
               enabled: false,
@@ -260,7 +261,7 @@ class _CupertinoRemoteControllerSettingsPageState
               title: _isScanning ? '正在扫描...' : '自动扫描并匹配',
               subtitle: '默认局域网自动发现设备',
               icon: CupertinoIcons.search,
-              cupertinoIcon: CupertinoIcons.search,
+              phoneIcon: CupertinoIcons.search,
               enabled: !_isScanning,
               onTap: _scanAndMatch,
             ),
@@ -269,14 +270,14 @@ class _CupertinoRemoteControllerSettingsPageState
                 title: '拍摄二维码连接',
                 subtitle: '同时连接共享媒体库与遥控器',
                 icon: CupertinoIcons.camera,
-                cupertinoIcon: CupertinoIcons.camera,
+                phoneIcon: CupertinoIcons.camera,
                 onTap: _scanQrAndConnect,
               ),
             AdaptiveSettingsTile<void>.card(
               title: _isLoadingState ? '正在刷新...' : '刷新状态',
               subtitle: '同步目标设备实时播放状态',
               icon: CupertinoIcons.refresh,
-              cupertinoIcon: CupertinoIcons.refresh,
+              phoneIcon: CupertinoIcons.refresh,
               enabled: !_isLoadingState,
               onTap: _refreshRemoteState,
             ),
@@ -284,14 +285,14 @@ class _CupertinoRemoteControllerSettingsPageState
               title: '打开遥控器',
               subtitle: '打开上拉遥控面板',
               icon: CupertinoIcons.tv,
-              cupertinoIcon: CupertinoIcons.tv,
+              phoneIcon: CupertinoIcons.tv,
               onTap: _openRemotePanel,
             ),
             AdaptiveSettingsTile<void>.card(
               title: '清除匹配设备',
               subtitle: '下次将重新自动扫描',
               icon: CupertinoIcons.trash,
-              cupertinoIcon: CupertinoIcons.trash,
+              phoneIcon: CupertinoIcons.trash,
               enabled: _matchedBaseUrl != null,
               isDestructive: true,
               onTap: _clearMatchedTarget,
@@ -900,30 +901,39 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
                       await _setParameter(key, output);
                     },
             )
-          : CupertinoSlider(
-              value: clamped,
-              min: min,
-              max: max,
-              divisions: isInteger ? (max - min).round() : null,
-              activeColor: sliderActiveColor,
-              onChanged: _isSending
-                  ? null
-                  : (next) {
-                      setState(() {
-                        _draftNumeric[key] = next;
-                      });
-                    },
-              onChangeEnd: _isSending
-                  ? null
-                  : (next) async {
-                      final output = isInteger
-                          ? next.round()
-                          : ((next / step).round() * step);
-                      setState(() {
-                        _draftNumeric.remove(key);
-                      });
-                      await _setParameter(key, output);
-                    },
+          : fluent.FluentTheme(
+              data: fluent.FluentThemeData(
+                brightness: CupertinoTheme.of(context).brightness,
+                accentColor: fluent.AccentColor.swatch({
+                  'normal': sliderActiveColor,
+                  'default': sliderActiveColor,
+                }),
+              ),
+              child: fluent.Slider(
+                value: clamped,
+                min: min,
+                max: max,
+                divisions: isInteger ? (max - min).round() : null,
+                label: isInteger ? clamped.round().toString() : '$clamped',
+                onChanged: _isSending
+                    ? null
+                    : (next) {
+                        setState(() {
+                          _draftNumeric[key] = next;
+                        });
+                      },
+                onChangeEnd: _isSending
+                    ? null
+                    : (next) async {
+                        final output = isInteger
+                            ? next.round()
+                            : ((next / step).round() * step);
+                        setState(() {
+                          _draftNumeric.remove(key);
+                        });
+                        await _setParameter(key, output);
+                      },
+              ),
             );
       return Column(
         children: [

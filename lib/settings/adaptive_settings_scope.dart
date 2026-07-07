@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 enum AdaptiveSettingsStyle {
-  nipaplay,
-  cupertino,
+  desktopTablet,
+  phone,
 }
 
 class AdaptiveSettingsScope extends InheritedWidget {
@@ -18,11 +18,11 @@ class AdaptiveSettingsScope extends InheritedWidget {
     return context
             .dependOnInheritedWidgetOfExactType<AdaptiveSettingsScope>()
             ?.style ??
-        AdaptiveSettingsStyle.nipaplay;
+        AdaptiveSettingsStyle.desktopTablet;
   }
 
-  static bool isCupertino(BuildContext context) {
-    return styleOf(context) == AdaptiveSettingsStyle.cupertino;
+  static bool isPhoneLayout(BuildContext context) {
+    return styleOf(context) == AdaptiveSettingsStyle.phone;
   }
 
   @override

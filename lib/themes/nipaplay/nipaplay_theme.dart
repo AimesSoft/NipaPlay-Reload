@@ -9,13 +9,13 @@ import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 
-class NipaplayThemeDescriptor extends ThemeDescriptor {
-  const NipaplayThemeDescriptor()
+class DesktopTabletThemeDescriptor extends ThemeDescriptor {
+  const DesktopTabletThemeDescriptor()
       : super(
-          id: ThemeIds.nipaplay,
-          displayName: 'NipaPlay',
+          id: ThemeIds.desktopTablet,
+          displayName: '桌面和平板布局',
           preview: const ThemePreview(
-            title: 'NipaPlay 主题',
+            title: '桌面和平板布局',
             icon: Icons.color_lens_outlined,
             highlights: [
               '浅色/深色界面',

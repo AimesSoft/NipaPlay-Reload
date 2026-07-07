@@ -48,23 +48,90 @@ class CupertinoSettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color resolvedBackground =
         backgroundColor ?? resolveSettingsTileBackground(context);
+    final Widget? trailingWidget = _buildTrailing(context);
 
-    return CupertinoListTile(
-      onTap: onTap,
-      padding: contentPadding ??
-          const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 12),
-      backgroundColor: resolvedBackground,
-      leading: leading,
-      title: DefaultTextStyle.merge(
-        style: TextStyle(
-          fontSize: 17,
-          color: resolveSettingsPrimaryTextColor(context),
+    return Semantics(
+      button: onTap != null,
+      selected: selected,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ColoredBox(
+          color: resolvedBackground,
+          child: Padding(
+            padding: contentPadding ??
+                const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (leading != null) ...[
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Center(child: leading),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: _buildResponsiveContent(context, trailingWidget),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: title,
       ),
-      subtitle: subtitle == null
-          ? null
-          : DefaultTextStyle(
+    );
+  }
+
+  Widget _buildResponsiveContent(BuildContext context, Widget? trailingWidget) {
+    final textColumn = _buildTextColumn(context);
+    if (trailingWidget == null) {
+      return textColumn;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trailingMaxWidth = constraints.maxWidth * 0.48;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: textColumn),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: trailingMaxWidth),
+              child: Align(
+                alignment: AlignmentDirectional.topEnd,
+                widthFactor: 1,
+                child: trailingWidget,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTextColumn(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DefaultTextStyle(
+          style: DefaultTextStyle.of(context).style.merge(
+                TextStyle(
+                  fontSize: 17,
+                  color: resolveSettingsPrimaryTextColor(context),
+                ),
+              ),
+          softWrap: true,
+          overflow: TextOverflow.visible,
+          maxLines: null,
+          child: title,
+        ),
+        if (subtitle != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: DefaultTextStyle(
               style: DefaultTextStyle.of(context).style.merge(
                     TextStyle(
                       fontSize: 13,
@@ -76,7 +143,8 @@ class CupertinoSettingsTile extends StatelessWidget {
               maxLines: null,
               child: subtitle!,
             ),
-      trailing: _buildTrailing(context),
+          ),
+      ],
     );
   }
 

@@ -41,9 +41,9 @@ enum WebDAVSearchTarget {
 
   /// 获取默认选中的搜索目标
   static Set<WebDAVSearchTarget> get defaultTargets => {
-    WebDAVSearchTarget.folder,
-    WebDAVSearchTarget.video,
-  };
+        WebDAVSearchTarget.folder,
+        WebDAVSearchTarget.video,
+      };
 }
 
 /// WebDAV 搜索超时选项
@@ -128,7 +128,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keySearchDepthLimit = 'webdav_search_depth_limit';
   static const String _keySearchTargets = 'webdav_search_targets';
   static const String _keySearchTimeout = 'webdav_search_timeout';
-  static const String _keySearchRequestInterval = 'webdav_search_request_interval';
+  static const String _keySearchRequestInterval =
+      'webdav_search_request_interval';
   static const String _keySearchMaxResults = 'webdav_search_max_results';
 
   // Tab 名称常量
@@ -210,7 +211,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       return tabHome;
     }
 
-    if (_isCupertinoOnlyTab(_defaultHomeTab) ||
+    if (_isPhoneOnlyTab(_defaultHomeTab) ||
         !_allSupportedTabs.contains(_defaultHomeTab)) {
       return tabHome;
     }
@@ -218,8 +219,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     return _defaultHomeTab;
   }
 
-  /// Material 主题可用的默认主页选项
-  List<String> get materialAvailableTabs {
+  /// 桌面和平板布局可用的默认主页选项
+  List<String> get desktopTabletAvailableTabs {
     final tabs = <String>[
       tabHome,
       tabVideo,
@@ -231,8 +232,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     return tabs;
   }
 
-  /// Cupertino 主题可用的默认主页选项
-  List<String> get cupertinoAvailableTabs {
+  /// 手机布局可用的默认主页选项
+  List<String> get phoneAvailableTabs {
     if (_showWebDAVTab) {
       return [tabHome, tabWebDAV, tabMediaLibrary, tabAccount, tabSettings];
     }
@@ -241,7 +242,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
   /// 获取所有可用的 Tab 选项（根据 WebDAV 是否开启）
   List<String> get availableTabs {
-    return materialAvailableTabs;
+    return desktopTabletAvailableTabs;
   }
 
   /// 获取 Tab 的显示名称
@@ -308,18 +309,19 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
       // 加载搜索功能相关设置
       _enableSearch = prefs.getBool(_keyEnableSearch) ?? true;
-      _searchScope = WebDAVSearchScope.fromValue(prefs.getString(_keySearchScope));
+      _searchScope =
+          WebDAVSearchScope.fromValue(prefs.getString(_keySearchScope));
       _searchDepthLimit = prefs.getInt(_keySearchDepthLimit) ?? 3;
       // 加载搜索目标（多选）
       final storedTargets = prefs.getStringList(_keySearchTargets);
       if (storedTargets != null && storedTargets.isNotEmpty) {
-        _searchTargets = storedTargets
-            .map((v) => WebDAVSearchTarget.fromValue(v))
-            .toSet();
+        _searchTargets =
+            storedTargets.map((v) => WebDAVSearchTarget.fromValue(v)).toSet();
       } else {
         _searchTargets = WebDAVSearchTarget.defaultTargets;
       }
-      _searchTimeout = WebDAVSearchTimeout.fromSeconds(prefs.getInt(_keySearchTimeout));
+      _searchTimeout =
+          WebDAVSearchTimeout.fromSeconds(prefs.getInt(_keySearchTimeout));
       _searchRequestInterval = prefs.getInt(_keySearchRequestInterval) ?? 100;
       _searchMaxResults = prefs.getInt(_keySearchMaxResults) ?? 500;
 
@@ -381,7 +383,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     }
   }
 
-  bool _isCupertinoOnlyTab(String tabName) {
+  bool _isPhoneOnlyTab(String tabName) {
     return tabName == tabSettings;
   }
 

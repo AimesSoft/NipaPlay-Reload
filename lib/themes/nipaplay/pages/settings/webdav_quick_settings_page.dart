@@ -9,7 +9,7 @@ class WebDAVQuickSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const AdaptiveSettingsScope(
-      style: AdaptiveSettingsStyle.nipaplay,
+      style: AdaptiveSettingsStyle.desktopTablet,
       child: WebDAVQuickSettingsContent(),
     );
   }

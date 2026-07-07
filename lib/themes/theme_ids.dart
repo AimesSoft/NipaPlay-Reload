@@ -1,4 +1,4 @@
 class ThemeIds {
-  static const String nipaplay = 'nipaplay';
-  static const String cupertino = 'cupertino';
+  static const String desktopTablet = 'desktop_tablet';
+  static const String phone = 'phone';
 }

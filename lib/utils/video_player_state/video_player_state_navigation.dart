@@ -439,18 +439,17 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
   }
 
   Widget _buildEpisodeNavigationDialogContent() {
-    final isCupertinoTheme = _context != null && _context!.mounted
-        ? Provider.of<UIThemeProvider>(_context!, listen: false)
-            .isCupertinoTheme
+    final isPhoneLayout = _context != null && _context!.mounted
+        ? Provider.of<UIThemeProvider>(_context!, listen: false).isPhoneLayout
         : false;
 
-    final Widget indicator = isCupertinoTheme
+    final Widget indicator = isPhoneLayout
         ? const CupertinoActivityIndicator(radius: 12)
         : const CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
           );
 
-    final TextStyle textStyle = isCupertinoTheme
+    final TextStyle textStyle = isPhoneLayout
         ? const TextStyle(
             color: CupertinoColors.secondaryLabel,
             fontSize: 14,

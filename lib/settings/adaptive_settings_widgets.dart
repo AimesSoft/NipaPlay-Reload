@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -11,7 +12,9 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
         AdaptivePopupMenuEntry,
         AdaptivePopupMenuItem,
         AdaptiveScaffold,
+        AdaptiveSlider,
         AdaptiveSwitch,
+        PlatformInfo,
         PopupButtonStyle;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -29,7 +32,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required this.title,
     this.subtitle,
     this.icon,
-    this.cupertinoIcon,
+    this.phoneIcon,
     required this.type,
     this.enabled = true,
     this.dropdownItems,
@@ -39,7 +42,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     this.onSwitchChanged,
     this.onTap,
     this.trailingIcon,
-    this.cupertinoTrailingIcon,
+    this.phoneTrailingIcon,
     this.isDestructive = false,
     this.sliderValue,
     this.sliderMin,
@@ -57,7 +60,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required List<DropdownMenuItemData<T>> items,
     required FutureOr<void> Function(T value) onChanged,
@@ -68,7 +71,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       type: SettingsItemType.dropdown,
       dropdownItems: items,
@@ -82,7 +85,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required bool value,
     required material.ValueChanged<bool> onChanged,
@@ -92,7 +95,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       type: SettingsItemType.toggle,
       switchValue: value,
@@ -105,11 +108,11 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required material.VoidCallback onTap,
     material.IconData? trailingIcon,
-    material.IconData? cupertinoTrailingIcon,
+    material.IconData? phoneTrailingIcon,
     bool isDestructive = false,
   }) {
     return AdaptiveSettingsTile<T>._(
@@ -117,12 +120,12 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       type: SettingsItemType.button,
       onTap: onTap,
       trailingIcon: trailingIcon,
-      cupertinoTrailingIcon: cupertinoTrailingIcon,
+      phoneTrailingIcon: phoneTrailingIcon,
       isDestructive: isDestructive,
     );
   }
@@ -132,11 +135,11 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required material.VoidCallback onTap,
     material.IconData? trailingIcon,
-    material.IconData? cupertinoTrailingIcon,
+    material.IconData? phoneTrailingIcon,
     bool isDestructive = false,
   }) {
     return AdaptiveSettingsTile<T>.card(
@@ -144,11 +147,11 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       onTap: onTap,
       trailingIcon: trailingIcon,
-      cupertinoTrailingIcon: cupertinoTrailingIcon,
+      phoneTrailingIcon: phoneTrailingIcon,
       isDestructive: isDestructive,
     );
   }
@@ -158,7 +161,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required double value,
     required double min,
@@ -172,7 +175,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       type: SettingsItemType.slider,
       sliderValue: value,
@@ -189,7 +192,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required String title,
     String? subtitle,
     material.IconData? icon,
-    material.IconData? cupertinoIcon,
+    material.IconData? phoneIcon,
     bool enabled = true,
     required String hotkeyText,
     bool isRecording = false,
@@ -200,7 +203,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      cupertinoIcon: cupertinoIcon,
+      phoneIcon: phoneIcon,
       enabled: enabled,
       type: SettingsItemType.hotkey,
       hotkeyText: hotkeyText,
@@ -212,7 +215,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   final String title;
   final String? subtitle;
   final material.IconData? icon;
-  final material.IconData? cupertinoIcon;
+  final material.IconData? phoneIcon;
   final SettingsItemType type;
   final bool enabled;
   final List<DropdownMenuItemData<T>>? dropdownItems;
@@ -222,7 +225,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   final material.ValueChanged<bool>? onSwitchChanged;
   final material.VoidCallback? onTap;
   final material.IconData? trailingIcon;
-  final material.IconData? cupertinoTrailingIcon;
+  final material.IconData? phoneTrailingIcon;
   final bool isDestructive;
   final double? sliderValue;
   final double? sliderMin;
@@ -236,8 +239,8 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
-      return _buildCupertino(context);
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      return _buildPhone(context);
     }
 
     switch (type) {
@@ -296,24 +299,24 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
   }
 
-  material.Widget _buildCupertino(material.BuildContext context) {
+  material.Widget _buildPhone(material.BuildContext context) {
     final backgroundColor = resolveSettingsTileBackground(context);
 
     switch (type) {
       case SettingsItemType.dropdown:
         return CupertinoSettingsTile(
-          leading: _buildCupertinoLeading(context),
+          leading: _buildPhoneLeading(context),
           title: material.Text(title),
-          subtitle: _buildCupertinoSubtitle(),
-          trailing: enabled ? _buildCupertinoDropdown(context) : null,
+          subtitle: _buildPhoneSubtitle(),
+          trailing: enabled ? _buildPhoneDropdown(context) : null,
           backgroundColor: backgroundColor,
         );
       case SettingsItemType.toggle:
         final value = switchValue ?? false;
         return CupertinoSettingsTile(
-          leading: _buildCupertinoLeading(context),
+          leading: _buildPhoneLeading(context),
           title: material.Text(title),
-          subtitle: _buildCupertinoSubtitle(),
+          subtitle: _buildPhoneSubtitle(),
           trailing: AdaptiveSwitch(
             value: value,
             onChanged: enabled ? onSwitchChanged : null,
@@ -325,27 +328,27 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         );
       case SettingsItemType.button:
         return CupertinoSettingsTile(
-          leading: _buildCupertinoLeading(context),
+          leading: _buildPhoneLeading(context),
           title: material.Text(title),
-          subtitle: _buildCupertinoSubtitle(),
-          trailing: cupertinoTrailingIcon != null || trailingIcon != null
+          subtitle: _buildPhoneSubtitle(),
+          trailing: phoneTrailingIcon != null || trailingIcon != null
               ? material.Icon(
-                  cupertinoTrailingIcon ?? trailingIcon,
+                  phoneTrailingIcon ?? trailingIcon,
                   size: 18,
-                  color: _cupertinoTrailingColor(context),
+                  color: _phoneTrailingColor(context),
                 )
               : null,
-          showChevron: cupertinoTrailingIcon == null && trailingIcon == null,
+          showChevron: phoneTrailingIcon == null && trailingIcon == null,
           onTap: enabled ? onTap : null,
           backgroundColor: backgroundColor,
         );
       case SettingsItemType.slider:
-        return _buildCupertinoSlider(context, backgroundColor);
+        return _buildPhoneSlider(context, backgroundColor);
       case SettingsItemType.hotkey:
         return CupertinoSettingsTile(
-          leading: _buildCupertinoLeading(context),
+          leading: _buildPhoneLeading(context),
           title: material.Text(title),
-          subtitle: _buildCupertinoSubtitle(),
+          subtitle: _buildPhoneSubtitle(),
           trailing: _buildHotkeyChip(context),
           onTap: enabled ? onHotkeyTap : null,
           backgroundColor: backgroundColor,
@@ -353,8 +356,8 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
   }
 
-  material.Widget? _buildCupertinoLeading(material.BuildContext context) {
-    final resolvedIcon = cupertinoIcon ?? icon;
+  material.Widget? _buildPhoneLeading(material.BuildContext context) {
+    final resolvedIcon = phoneIcon ?? icon;
     if (resolvedIcon == null) {
       return null;
     }
@@ -366,14 +369,14 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     );
   }
 
-  material.Widget? _buildCupertinoSubtitle() {
+  material.Widget? _buildPhoneSubtitle() {
     if (subtitle == null || subtitle!.trim().isEmpty) {
       return null;
     }
     return material.Text(subtitle!);
   }
 
-  material.Widget _buildCupertinoDropdown(material.BuildContext context) {
+  material.Widget _buildPhoneDropdown(material.BuildContext context) {
     final items = dropdownItems ?? <DropdownMenuItemData<T>>[];
     DropdownMenuItemData<T>? selected;
     for (final item in items) {
@@ -397,7 +400,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     return AdaptivePopupMenuButton.widget<T>(
       items: popupItems,
       buttonStyle: PopupButtonStyle.gray,
-      child: _CupertinoMenuChip(label: label),
+      child: _PhoneMenuChip(label: label),
       onSelected: (index, entry) {
         if (!entry.enabled) {
           return;
@@ -408,7 +411,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     );
   }
 
-  material.Widget _buildCupertinoSlider(
+  material.Widget _buildPhoneSlider(
     material.BuildContext context,
     material.Color backgroundColor,
   ) {
@@ -417,12 +420,13 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     final current = (sliderValue ?? min).clamp(min, max).toDouble();
     final label =
         sliderLabelFormatter?.call(current) ?? current.toStringAsFixed(1);
-    final slider = cupertino.CupertinoSlider(
+    final slider = _buildPhonePlatformSlider(
+      context,
       value: current,
       min: min,
       max: max,
-      activeColor: AppAccentColors.current,
-      onChanged: enabled ? onSliderChanged : null,
+      divisions: sliderDivisions,
+      label: label,
     );
 
     return material.ColoredBox(
@@ -431,9 +435,9 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         mainAxisSize: material.MainAxisSize.min,
         children: [
           CupertinoSettingsTile(
-            leading: _buildCupertinoLeading(context),
+            leading: _buildPhoneLeading(context),
             title: material.Text(title),
-            subtitle: _buildCupertinoSubtitle(),
+            subtitle: _buildPhoneSubtitle(),
             trailing: material.Text(label),
             backgroundColor: backgroundColor,
           ),
@@ -442,6 +446,48 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
             child: slider,
           ),
         ],
+      ),
+    );
+  }
+
+  material.Widget _buildPhonePlatformSlider(
+    material.BuildContext context, {
+    required double value,
+    required double min,
+    required double max,
+    int? divisions,
+    String? label,
+  }) {
+    final onChanged = enabled ? onSliderChanged : null;
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return AdaptiveSlider(
+        value: value,
+        min: min,
+        max: max,
+        divisions: divisions,
+        label: label,
+        activeColor: AppAccentColors.current,
+        onChanged: onChanged,
+      );
+    }
+
+    final accentColor = fluent.AccentColor.swatch({
+      'normal': AppAccentColors.current,
+      'default': AppAccentColors.current,
+    });
+
+    return fluent.FluentTheme(
+      data: fluent.FluentThemeData(
+        brightness: material.Theme.of(context).brightness,
+        accentColor: accentColor,
+      ),
+      child: fluent.Slider(
+        value: value,
+        min: min,
+        max: max,
+        divisions: divisions,
+        label: label,
+        onChanged: onChanged,
       ),
     );
   }
@@ -471,7 +517,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     );
   }
 
-  material.Color _cupertinoTrailingColor(material.BuildContext context) {
+  material.Color _phoneTrailingColor(material.BuildContext context) {
     if (isDestructive) {
       return cupertino.CupertinoColors.systemRed.resolveFrom(context);
     }
@@ -500,7 +546,7 @@ class AdaptiveSettingsColorTile<T> extends material.StatelessWidget {
     required this.title,
     this.subtitle,
     this.icon,
-    this.cupertinoIcon,
+    this.phoneIcon,
     this.enabled = true,
     required this.value,
     required this.options,
@@ -510,7 +556,7 @@ class AdaptiveSettingsColorTile<T> extends material.StatelessWidget {
   final String title;
   final String? subtitle;
   final material.IconData? icon;
-  final material.IconData? cupertinoIcon;
+  final material.IconData? phoneIcon;
   final bool enabled;
   final T value;
   final List<AdaptiveSettingsColorOption<T>> options;
@@ -518,11 +564,11 @@ class AdaptiveSettingsColorTile<T> extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       return CupertinoSettingsTile(
-        leading: _buildCupertinoLeading(context),
+        leading: _buildPhoneLeading(context),
         title: material.Text(title),
-        subtitle: _buildCupertinoSubtitle(),
+        subtitle: _buildPhoneSubtitle(),
         trailing: _ColorSwatchGroup<T>(
           enabled: enabled,
           value: value,
@@ -577,8 +623,8 @@ class AdaptiveSettingsColorTile<T> extends material.StatelessWidget {
     );
   }
 
-  material.Widget? _buildCupertinoLeading(material.BuildContext context) {
-    final resolvedIcon = cupertinoIcon ?? icon;
+  material.Widget? _buildPhoneLeading(material.BuildContext context) {
+    final resolvedIcon = phoneIcon ?? icon;
     if (resolvedIcon == null) {
       return null;
     }
@@ -590,7 +636,7 @@ class AdaptiveSettingsColorTile<T> extends material.StatelessWidget {
     );
   }
 
-  material.Widget? _buildCupertinoSubtitle() {
+  material.Widget? _buildPhoneSubtitle() {
     if (subtitle == null || subtitle!.trim().isEmpty) {
       return null;
     }
@@ -610,7 +656,7 @@ class AdaptiveSettingsSwitch extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       return AdaptiveSwitch(
         value: value,
         onChanged: onChanged,
@@ -642,7 +688,7 @@ class AdaptiveSettingsActionButton extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       final child = _content(
         context,
         color: destructive
@@ -837,7 +883,7 @@ class AdaptiveSettingsCanvas extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       return CupertinoSettingsGroupCard(
         margin: margin,
         backgroundColor: resolveSettingsSectionBackground(context),
@@ -865,7 +911,7 @@ class AdaptiveSettingsDragListItem<T> {
     required this.title,
     this.subtitle,
     this.icon,
-    this.cupertinoIcon,
+    this.phoneIcon,
     this.enabled = true,
   });
 
@@ -873,7 +919,7 @@ class AdaptiveSettingsDragListItem<T> {
   final String title;
   final String? subtitle;
   final material.IconData? icon;
-  final material.IconData? cupertinoIcon;
+  final material.IconData? phoneIcon;
   final bool enabled;
 }
 
@@ -943,14 +989,14 @@ class _AdaptiveSettingsDragRow<T> extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
     final dragHandle = material.ReorderableDragStartListener(
       index: index,
       child: material.Icon(
-        isCupertino
+        isPhoneLayout
             ? cupertino.CupertinoIcons.line_horizontal_3
             : Ionicons.reorder_three_outline,
-        color: isCupertino
+        color: isPhoneLayout
             ? resolveSettingsSecondaryTextColor(context)
             : material.Theme.of(context)
                 .colorScheme
@@ -965,7 +1011,7 @@ class _AdaptiveSettingsDragRow<T> extends material.StatelessWidget {
             onChanged: (value) => onEnabledChanged!(item.value, value),
           );
 
-    if (isCupertino) {
+    if (isPhoneLayout) {
       return CupertinoSettingsTile(
         leading: _leading(context),
         title: material.Text(item.title),
@@ -1006,14 +1052,14 @@ class _AdaptiveSettingsDragRow<T> extends material.StatelessWidget {
   }
 
   material.Widget? _leading(material.BuildContext context) {
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
-    final icon = isCupertino ? (item.cupertinoIcon ?? item.icon) : item.icon;
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
+    final icon = isPhoneLayout ? (item.phoneIcon ?? item.icon) : item.icon;
     if (icon == null) {
       return null;
     }
     return material.Icon(
       icon,
-      color: isCupertino
+      color: isPhoneLayout
           ? resolveSettingsIconColor(context)
           : material.Theme.of(context)
               .colorScheme
@@ -1046,7 +1092,7 @@ class AdaptiveSettingsSection extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       return CupertinoSettingsGroupCard(
         margin: margin,
         addDividers: addDividers,
@@ -1104,7 +1150,7 @@ class AdaptiveSettingsPage extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    if (AdaptiveSettingsScope.isCupertino(context)) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       final backgroundColor = cupertino.CupertinoDynamicColor.resolve(
         cupertino.CupertinoColors.systemGroupedBackground,
         context,
@@ -1145,8 +1191,8 @@ class AdaptiveSettingsPage extends material.StatelessWidget {
   }
 }
 
-class _CupertinoMenuChip extends material.StatelessWidget {
-  const _CupertinoMenuChip({required this.label});
+class _PhoneMenuChip extends material.StatelessWidget {
+  const _PhoneMenuChip({required this.label});
 
   final String label;
 

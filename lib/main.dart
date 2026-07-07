@@ -863,7 +863,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         if (ctx == null) return;
         final uiThemeProvider =
             Provider.of<UIThemeProvider>(ctx, listen: false);
-        if (uiThemeProvider.isCupertinoTheme) {
+        if (uiThemeProvider.isPhoneLayout) {
           _navigateToPage(ctx, 3);
         } else {
           SettingsPage.showWindow(ctx);
@@ -1002,7 +1002,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                       child: MainPage(launchFilePath: widget.launchFilePath),
                     )
                   : MainPage(launchFilePath: widget.launchFilePath),
-              cupertinoHomeBuilder: () => kIsWeb
+              phoneHomeBuilder: () => kIsWeb
                   ? WebRemoteAccessGate(
                       child: CupertinoMainPage(
                           launchFilePath: widget.launchFilePath),

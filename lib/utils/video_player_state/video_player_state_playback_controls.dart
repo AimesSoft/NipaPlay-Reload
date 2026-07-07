@@ -1284,22 +1284,22 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _context!,
       listen: false,
     );
-    final bool useCupertinoStyle =
-        uiThemeProvider.isCupertinoTheme && globals.isPhone;
+    final bool usePhoneControlsStyle =
+        uiThemeProvider.isPhoneLayout && globals.isPhone;
 
     _isSeekIndicatorVisible = true;
 
     if (_seekOverlayEntry == null) {
       _seekOverlayEntry = OverlayEntry(
         builder: (context) {
-          final seekWidget = useCupertinoStyle
+          final seekWidget = usePhoneControlsStyle
               ? const CupertinoSeekIndicator()
               : const SeekIndicator();
           Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: seekWidget,
           );
-          if (useCupertinoStyle) {
+          if (usePhoneControlsStyle) {
             overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
               value: uiThemeProvider,
               child: overlayChild,

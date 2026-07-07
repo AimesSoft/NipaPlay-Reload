@@ -38,7 +38,7 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isCupertino = AdaptiveSettingsScope.isCupertino(context);
+    final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
 
     if (_isLoading) {
       return AdaptiveSettingsPage(
@@ -56,11 +56,11 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
           children: [
             AdaptiveSettingsTile<bool>.toggle(
               title: l10n.clearDanmakuCacheOnLaunchTitle,
-              subtitle: isCupertino
+              subtitle: isPhoneLayout
                   ? l10n.clearDanmakuCacheOnLaunchSubtitle
                   : l10n.clearDanmakuCacheOnLaunchSubtitleNipaplay,
               icon: Ionicons.refresh_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.refresh_circled,
+              phoneIcon: cupertino.CupertinoIcons.refresh_circled,
               value: _clearOnLaunch,
               onChanged: _updateClearOnLaunch,
             ),
@@ -68,11 +68,11 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
               title: l10n.clearDanmakuCacheNow,
               subtitle: _isClearing
                   ? l10n.clearingInProgress
-                  : (isCupertino
+                  : (isPhoneLayout
                       ? l10n.clearDanmakuCacheManualHint
                       : l10n.clearDanmakuCacheManualHintNipaplay),
               icon: Ionicons.trash_bin_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.trash,
+              phoneIcon: cupertino.CupertinoIcons.trash,
               enabled: !_isClearing,
               isDestructive: true,
               onTap: () => _clearDanmakuCache(showSnack: true),
@@ -94,7 +94,7 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                       ? context.l10n.defaultDownloadDir
                       : currentPath,
                   icon: Icons.camera_alt_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.camera,
+                  phoneIcon: cupertino.CupertinoIcons.camera,
                   onTap: () async {
                     final selected = await FilePickerService().pickDirectory(
                       initialDirectory:
@@ -119,7 +119,7 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                     title: context.l10n.screenshotDefaultSaveTarget,
                     subtitle: context.l10n.screenshotDefaultSaveTargetMessage,
                     icon: Icons.save_alt,
-                    cupertinoIcon: cupertino.CupertinoIcons.photo_on_rectangle,
+                    phoneIcon: cupertino.CupertinoIcons.photo_on_rectangle,
                     items: [
                       DropdownMenuItemData(
                         title: ScreenshotSaveTarget.ask.label,
@@ -154,7 +154,7 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                   ? l10n.clearingInProgress
                   : l10n.clearImageCacheHint,
               icon: Ionicons.trash_outline,
-              cupertinoIcon: cupertino.CupertinoIcons.trash,
+              phoneIcon: cupertino.CupertinoIcons.trash,
               enabled: !_isClearingImageCache,
               isDestructive: true,
               onTap: _confirmClearImageCache,

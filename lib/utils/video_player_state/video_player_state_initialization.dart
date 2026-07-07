@@ -219,15 +219,15 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     final uiThemeProvider =
         Provider.of<UIThemeProvider>(_context!, listen: false);
-    final bool useCupertinoStyle =
-        uiThemeProvider.isCupertinoTheme && globals.isPhone;
+    final bool usePhoneControlsStyle =
+        uiThemeProvider.isPhoneLayout && globals.isPhone;
 
     _isBrightnessIndicatorVisible = true;
 
     if (_brightnessOverlayEntry == null) {
       _brightnessOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget = useCupertinoStyle
+          final indicatorWidget = usePhoneControlsStyle
               ? const CupertinoBrightnessIndicator()
               : const BrightnessIndicator();
           Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
@@ -253,7 +253,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
               },
             ),
           );
-          if (useCupertinoStyle) {
+          if (usePhoneControlsStyle) {
             overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
               value: uiThemeProvider,
               child: overlayChild,
@@ -302,15 +302,15 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     final uiThemeProvider =
         Provider.of<UIThemeProvider>(_context!, listen: false);
-    final bool useCupertinoStyle =
-        uiThemeProvider.isCupertinoTheme && globals.isPhone;
+    final bool usePhoneControlsStyle =
+        uiThemeProvider.isPhoneLayout && globals.isPhone;
 
     _isVolumeIndicatorVisible = true;
 
     if (_volumeOverlayEntry == null) {
       _volumeOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget = useCupertinoStyle
+          final indicatorWidget = usePhoneControlsStyle
               ? const CupertinoVolumeIndicator()
               : const VolumeIndicator();
           Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
@@ -336,7 +336,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
               },
             ),
           );
-          if (useCupertinoStyle) {
+          if (usePhoneControlsStyle) {
             overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
               value: uiThemeProvider,
               child: overlayChild,

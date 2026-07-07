@@ -21,7 +21,7 @@ class DownloaderSettingsContent extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(32),
                 child: Center(
-                  child: AdaptiveSettingsScope.isCupertino(context)
+                  child: AdaptiveSettingsScope.isPhoneLayout(context)
                       ? const cupertino.CupertinoActivityIndicator()
                       : const CircularProgressIndicator(),
                 ),
@@ -45,7 +45,7 @@ class DownloaderSettingsContent extends StatelessWidget {
                     'Hide the downloader tab when disabled.',
                   ),
                   icon: Ionicons.cloud_download_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.arrow_down_circle,
+                  phoneIcon: cupertino.CupertinoIcons.arrow_down_circle,
                   value: provider.enabled,
                   onChanged: provider.setEnabled,
                 ),
@@ -63,7 +63,7 @@ class DownloaderSettingsContent extends StatelessWidget {
                     'Put new tasks into a same-name folder without the extension.',
                   ),
                   icon: Ionicons.folder_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.folder,
+                  phoneIcon: cupertino.CupertinoIcons.folder,
                   value: provider.createFolderForTask,
                   onChanged: provider.setCreateFolderForTask,
                 ),
@@ -81,7 +81,7 @@ class DownloaderSettingsContent extends StatelessWidget {
                     'Scan the output folder into the media library after completion.',
                   ),
                   icon: Ionicons.library_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.collections,
+                  phoneIcon: cupertino.CupertinoIcons.collections,
                   value: provider.autoScanCompletedTasks,
                   onChanged: provider.setAutoScanCompletedTasks,
                 ),

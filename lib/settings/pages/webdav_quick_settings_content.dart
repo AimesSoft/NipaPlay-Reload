@@ -50,7 +50,7 @@ class _WebDAVQuickSettingsContentState
                 title: '正在加载设置',
                 subtitle: '正在读取 WebDAV 连接和快捷入口配置',
                 icon: Icons.hourglass_empty,
-                cupertinoIcon: cupertino.CupertinoIcons.refresh,
+                phoneIcon: cupertino.CupertinoIcons.refresh,
                 enabled: false,
                 onTap: () {},
               ),
@@ -63,10 +63,10 @@ class _WebDAVQuickSettingsContentState
     return Consumer<WebDAVQuickAccessProvider>(
       builder: (context, provider, child) {
         final connections = WebDAVService.instance.connections;
-        final isCupertino = AdaptiveSettingsScope.isCupertino(context);
-        final availableTabs = isCupertino
-            ? provider.cupertinoAvailableTabs
-            : provider.materialAvailableTabs;
+        final isPhoneLayout = AdaptiveSettingsScope.isPhoneLayout(context);
+        final availableTabs = isPhoneLayout
+            ? provider.phoneAvailableTabs
+            : provider.desktopTabletAvailableTabs;
 
         return AdaptiveSettingsPage(
           title: 'WebDAV快捷设置',
@@ -77,7 +77,7 @@ class _WebDAVQuickSettingsContentState
                   title: 'WebDAV 快捷入口',
                   subtitle: '配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器中的视频文件',
                   icon: Icons.info_outline,
-                  cupertinoIcon: cupertino.CupertinoIcons.info_circle,
+                  phoneIcon: cupertino.CupertinoIcons.info_circle,
                   enabled: false,
                   onTap: () {},
                 ),
@@ -85,7 +85,7 @@ class _WebDAVQuickSettingsContentState
                   title: '显示 WebDAV Tab',
                   subtitle: '在底部导航栏显示 WebDAV 快捷入口',
                   icon: Icons.cloud_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.cloud,
+                  phoneIcon: cupertino.CupertinoIcons.cloud,
                   value: provider.showWebDAVTab,
                   onChanged: provider.setShowWebDAVTab,
                 ),
@@ -93,7 +93,7 @@ class _WebDAVQuickSettingsContentState
                   title: '默认主页',
                   subtitle: _defaultHomeSubtitle(provider),
                   icon: Icons.home_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.house,
+                  phoneIcon: cupertino.CupertinoIcons.house,
                   items: availableTabs
                       .map(
                         (tab) => DropdownMenuItemData<String>(
@@ -117,7 +117,7 @@ class _WebDAVQuickSettingsContentState
                     title: 'WebDAV 默认主页未生效',
                     subtitle: '当前已选择 WebDAV 为默认主页，但 WebDAV Tab 未开启，将自动回落到首页',
                     icon: Icons.warning_amber_outlined,
-                    cupertinoIcon:
+                    phoneIcon:
                         cupertino.CupertinoIcons.exclamationmark_triangle,
                     enabled: false,
                     onTap: () {},
@@ -133,7 +133,7 @@ class _WebDAVQuickSettingsContentState
                       title: '没有配置 WebDAV 服务器',
                       subtitle: '请先在「远程媒体库」设置中添加 WebDAV 服务器',
                       icon: Ionicons.cloud_offline_outline,
-                      cupertinoIcon:
+                      phoneIcon:
                           cupertino.CupertinoIcons.exclamationmark_triangle,
                       enabled: false,
                       onTap: () {},
@@ -143,8 +143,7 @@ class _WebDAVQuickSettingsContentState
                       title: '默认服务器',
                       subtitle: '点击 WebDAV Tab 时默认连接的服务器',
                       icon: Icons.dns_outlined,
-                      cupertinoIcon:
-                          cupertino.CupertinoIcons.square_stack_3d_up,
+                      phoneIcon: cupertino.CupertinoIcons.square_stack_3d_up,
                       items: _serverItems(connections, provider),
                       onChanged: provider.setDefaultServerName,
                     ),
@@ -153,7 +152,7 @@ class _WebDAVQuickSettingsContentState
                       subtitle:
                           '${provider.defaultDirectory} · 点击 WebDAV Tab 时将直接打开此目录',
                       icon: Icons.folder_outlined,
-                      cupertinoIcon: cupertino.CupertinoIcons.folder,
+                      phoneIcon: cupertino.CupertinoIcons.folder,
                       onTap: () => _editText(
                         title: '默认目录',
                         initialValue: provider.defaultDirectory,
@@ -166,7 +165,7 @@ class _WebDAVQuickSettingsContentState
                       title: '文件排序',
                       subtitle: provider.sortPreset.description,
                       icon: Icons.sort,
-                      cupertinoIcon: cupertino.CupertinoIcons.sort_down,
+                      phoneIcon: cupertino.CupertinoIcons.sort_down,
                       items: WebDAVSortPreset.values
                           .map(
                             (preset) => DropdownMenuItemData<WebDAVSortPreset>(
@@ -183,7 +182,7 @@ class _WebDAVQuickSettingsContentState
                       title: '显示路径导航',
                       subtitle: '在顶部显示可点击的路径面包屑导航',
                       icon: Icons.account_tree_outlined,
-                      cupertinoIcon: cupertino.CupertinoIcons.list_bullet,
+                      phoneIcon: cupertino.CupertinoIcons.list_bullet,
                       value: provider.showPathBreadcrumb,
                       onChanged: provider.setShowPathBreadcrumb,
                     ),
@@ -198,7 +197,7 @@ class _WebDAVQuickSettingsContentState
                   title: '自动进入 Season 文件夹',
                   subtitle: '打开文件夹时自动进入匹配的子文件夹',
                   icon: Icons.folder_open_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.folder_open,
+                  phoneIcon: cupertino.CupertinoIcons.folder_open,
                   value: provider.autoEnterSeasonFolder,
                   onChanged: provider.setAutoEnterSeasonFolder,
                 ),
@@ -207,7 +206,7 @@ class _WebDAVQuickSettingsContentState
                     title: 'Season 匹配模式',
                     subtitle: '支持通配符：* 匹配任意字符，? 匹配单个字符',
                     icon: Icons.text_fields,
-                    cupertinoIcon: cupertino.CupertinoIcons.textformat,
+                    phoneIcon: cupertino.CupertinoIcons.textformat,
                     items: _seasonPatternItems(provider.seasonFolderPattern),
                     onChanged: provider.setSeasonFolderPattern,
                   ),
@@ -215,7 +214,7 @@ class _WebDAVQuickSettingsContentState
                     title: '自定义 Season 匹配模式',
                     subtitle: provider.seasonFolderPattern,
                     icon: Icons.edit_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.pencil,
+                    phoneIcon: cupertino.CupertinoIcons.pencil,
                     onTap: () => _editText(
                       title: 'Season 匹配模式',
                       initialValue: provider.seasonFolderPattern,
@@ -229,7 +228,7 @@ class _WebDAVQuickSettingsContentState
                   title: 'bgmid 快速匹配',
                   subtitle: '从 URL 中提取 bgmid，直接获取番剧信息',
                   icon: Icons.flash_on_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.bolt,
+                  phoneIcon: cupertino.CupertinoIcons.bolt,
                   value: provider.bgmIdQuickMatch,
                   onChanged: provider.setBgmIdQuickMatch,
                 ),
@@ -238,7 +237,7 @@ class _WebDAVQuickSettingsContentState
                     title: 'bgmid 匹配规则',
                     subtitle: provider.bgmIdMatchPattern,
                     icon: Icons.rule_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.doc_text,
+                    phoneIcon: cupertino.CupertinoIcons.doc_text,
                     onTap: () => _editText(
                       title: 'bgmid 匹配规则',
                       initialValue: provider.bgmIdMatchPattern,
@@ -252,7 +251,7 @@ class _WebDAVQuickSettingsContentState
                   title: 'tmdbId 快速匹配',
                   subtitle: '从 URL 中提取 tmdbId，通过 TMDB ID 直接获取番剧信息',
                   icon: Icons.movie_filter_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.film,
+                  phoneIcon: cupertino.CupertinoIcons.film,
                   value: provider.tmdbIdQuickMatch,
                   onChanged: provider.setTmdbIdQuickMatch,
                 ),
@@ -261,7 +260,7 @@ class _WebDAVQuickSettingsContentState
                     title: 'tmdbId 匹配规则',
                     subtitle: provider.tmdbIdMatchPattern,
                     icon: Icons.rule_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.doc_text,
+                    phoneIcon: cupertino.CupertinoIcons.doc_text,
                     onTap: () => _editText(
                       title: 'tmdbId 匹配规则',
                       initialValue: provider.tmdbIdMatchPattern,
@@ -275,7 +274,7 @@ class _WebDAVQuickSettingsContentState
                     title: '匹配弹幕自动剧集偏移',
                     subtitle: '自动计算跨季剧集编号偏移量，修复季内编号与弹幕库绝对编号不匹配的问题',
                     icon: Icons.format_list_numbered,
-                    cupertinoIcon: cupertino.CupertinoIcons.number,
+                    phoneIcon: cupertino.CupertinoIcons.number,
                     value: provider.episodeOffsetEnabled,
                     onChanged: provider.setEpisodeOffsetEnabled,
                   ),
@@ -289,7 +288,7 @@ class _WebDAVQuickSettingsContentState
                   title: '文件搜索',
                   subtitle: '在 WebDAV 页面显示搜索按钮',
                   icon: Icons.search_outlined,
-                  cupertinoIcon: cupertino.CupertinoIcons.search,
+                  phoneIcon: cupertino.CupertinoIcons.search,
                   value: provider.enableSearch,
                   onChanged: provider.setEnableSearch,
                 ),
@@ -298,7 +297,7 @@ class _WebDAVQuickSettingsContentState
                     title: '搜索范围',
                     subtitle: provider.searchScope.description,
                     icon: Icons.travel_explore_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.search,
+                    phoneIcon: cupertino.CupertinoIcons.search,
                     items: WebDAVSearchScope.values
                         .map(
                           (scope) => DropdownMenuItemData<WebDAVSearchScope>(
@@ -316,7 +315,7 @@ class _WebDAVQuickSettingsContentState
                       title: '层级限制',
                       subtitle: '当前目录 + 子目录或全局搜索时生效',
                       icon: Icons.account_tree_outlined,
-                      cupertinoIcon: cupertino.CupertinoIcons.layers_alt,
+                      phoneIcon: cupertino.CupertinoIcons.layers_alt,
                       value: provider.searchDepthLimit.toDouble(),
                       min: 1,
                       max: 10,
@@ -329,7 +328,7 @@ class _WebDAVQuickSettingsContentState
                     title: '搜索文件夹',
                     subtitle: '搜索结果包含文件夹',
                     icon: Icons.folder_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.folder,
+                    phoneIcon: cupertino.CupertinoIcons.folder,
                     value: provider.searchTargets
                         .contains(WebDAVSearchTarget.folder),
                     onChanged: (_) =>
@@ -339,7 +338,7 @@ class _WebDAVQuickSettingsContentState
                     title: '搜索视频文件',
                     subtitle: '搜索结果包含视频文件',
                     icon: Icons.video_file_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.film,
+                    phoneIcon: cupertino.CupertinoIcons.film,
                     value: provider.searchTargets
                         .contains(WebDAVSearchTarget.video),
                     onChanged: (_) =>
@@ -349,7 +348,7 @@ class _WebDAVQuickSettingsContentState
                     title: '搜索超时',
                     subtitle: '达到时间限制时停止搜索',
                     icon: Icons.timer_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.timer,
+                    phoneIcon: cupertino.CupertinoIcons.timer,
                     items: WebDAVSearchTimeout.values
                         .map(
                           (timeout) =>
@@ -366,7 +365,7 @@ class _WebDAVQuickSettingsContentState
                     title: '请求间隔',
                     subtitle: '防止请求过快被服务器限制，0 表示无延迟',
                     icon: Icons.speed_outlined,
-                    cupertinoIcon: cupertino.CupertinoIcons.speedometer,
+                    phoneIcon: cupertino.CupertinoIcons.speedometer,
                     value: provider.searchRequestInterval.toDouble(),
                     min: 0,
                     max: 1000,
@@ -379,7 +378,7 @@ class _WebDAVQuickSettingsContentState
                     title: '最大结果数',
                     subtitle: '搜索结果达到上限时自动停止',
                     icon: Icons.format_list_numbered,
-                    cupertinoIcon: cupertino.CupertinoIcons.number,
+                    phoneIcon: cupertino.CupertinoIcons.number,
                     value: provider.searchMaxResults.toDouble(),
                     min: 50,
                     max: 2000,
@@ -398,7 +397,7 @@ class _WebDAVQuickSettingsContentState
                   title: '重置所有设置',
                   subtitle: '恢复 WebDAV 快捷入口、排序、自动识别和搜索参数为默认值',
                   icon: Icons.restart_alt,
-                  cupertinoIcon: cupertino.CupertinoIcons.refresh,
+                  phoneIcon: cupertino.CupertinoIcons.refresh,
                   isDestructive: true,
                   onTap: () async {
                     await provider.resetSettings();

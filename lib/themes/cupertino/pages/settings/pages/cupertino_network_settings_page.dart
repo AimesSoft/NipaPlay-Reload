@@ -8,7 +8,7 @@ class CupertinoNetworkSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const AdaptiveSettingsScope(
-      style: AdaptiveSettingsStyle.cupertino,
+      style: AdaptiveSettingsStyle.phone,
       child: NetworkSettingsContent(),
     );
   }

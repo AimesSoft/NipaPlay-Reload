@@ -45,7 +45,7 @@ class ThemeBuildContext {
   final Widget Function(Widget child) overlayBuilder;
   final Widget Function() materialHomeBuilder;
   final Widget Function() fluentHomeBuilder;
-  final Widget Function() cupertinoHomeBuilder;
+  final Widget Function() phoneHomeBuilder;
 
   ThemeBuildContext({
     required this.themeNotifier,
@@ -59,7 +59,7 @@ class ThemeBuildContext {
     required this.overlayBuilder,
     required this.materialHomeBuilder,
     required this.fluentHomeBuilder,
-    required this.cupertinoHomeBuilder,
+    required this.phoneHomeBuilder,
   }) : _settings = UnmodifiableMapView(settings);
 
   T setting<T>(String key, T fallback) {
@@ -75,8 +75,9 @@ class ThemeDescriptor {
   final String id;
   final String displayName;
   final ThemePreview preview;
-  /// 是否在“主题选择/主题选项”中隐藏（例如：仅用于特定环境的内部主题）。
-  final bool hiddenFromThemeOptions;
+
+  /// 是否在布局候选中隐藏（例如：仅用于特定环境的内部布局）。
+  final bool hiddenFromLayoutOptions;
   final bool supportsDesktop;
   final bool supportsPhone;
   final bool supportsWeb;
@@ -88,7 +89,7 @@ class ThemeDescriptor {
     required this.displayName,
     required this.preview,
     required this.appBuilder,
-    this.hiddenFromThemeOptions = false,
+    this.hiddenFromLayoutOptions = false,
     this.supportsDesktop = true,
     this.supportsPhone = true,
     this.supportsWeb = true,
