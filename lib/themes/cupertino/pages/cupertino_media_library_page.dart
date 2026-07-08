@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 
@@ -3333,8 +3334,13 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
 
+    final appearance = context.watch<AppearanceSettingsProvider>();
     return CupertinoListTile(
-      title: Text(p.basename(folderPath)),
+      title: Text(
+        p.basename(folderPath),
+        maxLines: appearance.folderNameMaxLines,
+        overflow: appearance.folderNameOverflow,
+      ),
       subtitle: Text(
         folderPath,
         style: TextStyle(color: subtitleColor, fontSize: 12),
@@ -3605,6 +3611,7 @@ class _CupertinoLibraryManagementSheetState
       final name = p.basename(dirPath);
       final isExpanded = _expandedLocalFolders.contains(dirPath);
       final isLoading = _loadingLocalFolders.contains(dirPath);
+      final appearance = context.watch<AppearanceSettingsProvider>();
       final labelColor =
           CupertinoDynamicColor.resolve(CupertinoColors.label, context);
       final subtitleColor = CupertinoDynamicColor.resolve(
@@ -3631,8 +3638,8 @@ class _CupertinoLibraryManagementSheetState
                   Expanded(
                     child: Text(
                       name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: appearance.folderNameMaxLines,
+                      overflow: appearance.folderNameOverflow,
                       style: TextStyle(
                         fontSize: 13,
                         color: labelColor,
@@ -6483,6 +6490,7 @@ class _SharedRemoteLibraryManagementContentState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final secondaryLabelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final appearance = context.watch<AppearanceSettingsProvider>();
 
     if (entries.isEmpty) {
       return [
@@ -6518,8 +6526,8 @@ class _SharedRemoteLibraryManagementContentState
                   Expanded(
                     child: Text(
                       entryName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: appearance.folderNameMaxLines,
+                      overflow: appearance.folderNameOverflow,
                       style: TextStyle(fontSize: 13, color: labelColor),
                     ),
                   ),

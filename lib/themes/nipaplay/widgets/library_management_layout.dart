@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 const double _libraryManagementTreeBaseIndent = 12.0;
 const double _libraryManagementTreeIndentStep = 16.0;
@@ -211,6 +213,8 @@ class LibraryManagementFolderRow extends StatelessWidget {
     final Color resolvedSecondaryTextColor =
         secondaryTextColor ?? (isDark ? Colors.white70 : Colors.black54);
     final Color resolvedIconColor = iconColor ?? resolvedSecondaryTextColor;
+    // 根据外观设置决定目录名是省略号截断还是多行完整显示
+    final appearance = context.watch<AppearanceSettingsProvider>();
 
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -222,8 +226,8 @@ class LibraryManagementFolderRow extends StatelessWidget {
           title,
           locale: locale,
           style: TextStyle(color: resolvedTextColor, fontSize: 13),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          maxLines: appearance.folderNameMaxLines,
+          overflow: appearance.folderNameOverflow,
         ),
         trailing: loading
             ? SizedBox(

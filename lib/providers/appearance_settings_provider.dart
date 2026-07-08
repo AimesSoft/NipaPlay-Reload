@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart' show TextOverflow;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -21,6 +22,12 @@ enum NipaplayWindowDisplayMode {
   filledScreen, // 铺满屏幕（保留少量边距）
 }
 
+// 定义媒体库管理中目录名称的显示模式
+enum FolderNameDisplayMode {
+  ellipsis, // 省略号截断（默认，当前机制）
+  multiline, // 多行完整显示
+}
+
 class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
   static const String _animeCardActionKey = 'anime_card_action';
@@ -30,6 +37,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
   static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
   static const String _accentColorPresetKey = 'app_accent_color_preset';
+  static const String _folderNameDisplayModeKey = 'folder_name_display_mode';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -44,6 +52,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late bool _showAnimeCardSummary;
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
+  late FolderNameDisplayMode _folderNameDisplayMode;
 
   // 获取设置值
   // 页面滑动动画始终启用
@@ -57,6 +66,17 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   bool get showAnimeCardSummary => _showAnimeCardSummary;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
+  FolderNameDisplayMode get folderNameDisplayMode => _folderNameDisplayMode;
+
+  /// 目录名称最大行数：省略号模式为 1，多行模式为 null（不限制，完整显示）
+  int? get folderNameMaxLines =>
+      _folderNameDisplayMode == FolderNameDisplayMode.ellipsis ? 1 : null;
+
+  /// 目录名称溢出处理：省略号模式为 ellipsis，多行模式为 visible
+  TextOverflow get folderNameOverflow =>
+      _folderNameDisplayMode == FolderNameDisplayMode.ellipsis
+          ? TextOverflow.ellipsis
+          : TextOverflow.visible;
 
   // 构造函数
   AppearanceSettingsProvider() {
@@ -68,6 +88,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _accentColorPreset = AppAccentColorPreset.rose;
+    _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
     AppAccentColors.setCurrent(_accentColorPreset);
     _loadSettings();
   }
@@ -96,6 +117,17 @@ class AppearanceSettingsProvider extends ChangeNotifier {
         prefs.getString(_accentColorPresetKey),
       );
       AppAccentColors.setCurrent(_accentColorPreset);
+
+      // 加载目录名称显示模式
+      final folderNameModeIndex = prefs.getInt(_folderNameDisplayModeKey);
+      if (folderNameModeIndex != null &&
+          folderNameModeIndex >= 0 &&
+          folderNameModeIndex < FolderNameDisplayMode.values.length) {
+        _folderNameDisplayMode =
+            FolderNameDisplayMode.values[folderNameModeIndex];
+      } else {
+        _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
+      }
       final savedUiScale = prefs.getDouble(_uiScaleKey);
       _uiScale = (savedUiScale ?? _resolveDefaultUiScale())
           .clamp(uiScaleMin, uiScaleMax)
@@ -243,6 +275,21 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setString(_accentColorPresetKey, value.storageKey);
     } catch (e) {
       debugPrint('保存主题色设置时出错: $e');
+    }
+  }
+
+  // 设置目录名称显示模式
+  Future<void> setFolderNameDisplayMode(FolderNameDisplayMode value) async {
+    if (_folderNameDisplayMode == value) return;
+
+    _folderNameDisplayMode = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_folderNameDisplayModeKey, value.index);
+    } catch (e) {
+      debugPrint('保存目录名称显示模式设置时出错: $e');
     }
   }
 }

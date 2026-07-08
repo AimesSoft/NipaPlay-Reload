@@ -38,6 +38,50 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       } else {
         BlurSnackBar.show(context, '无法找到对应的弹弹play条目');
       }
+    } else if (item.source == RecommendedItemSource.sharedRemote) {
+      _onSharedRemoteRecommendedTap(item.id);
+    }
+  }
+
+  // 打开远程共享库（NipaPlay Server）推荐项的详情
+  Future<void> _onSharedRemoteRecommendedTap(String itemId) async {
+    final animeId = int.tryParse(itemId.replaceFirst('shared:', ''));
+    if (animeId == null) return;
+    SharedRemoteLibraryProvider? provider;
+    try {
+      provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+    } catch (_) {}
+    if (provider == null || provider.animeSummaries.isEmpty) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '未连接到远程共享库');
+      return;
+    }
+    final matches =
+        provider.animeSummaries.where((s) => s.animeId == animeId).toList();
+    if (matches.isEmpty) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '找不到该共享库番剧');
+      return;
+    }
+    final summary = matches.first;
+    final resolvedProvider = provider;
+    try {
+      await ThemedAnimeDetail.show(
+        context,
+        animeId,
+        sharedSummary: summary,
+        sharedEpisodeLoader: () =>
+            resolvedProvider.loadAnimeEpisodes(animeId, force: true),
+        sharedEpisodeBuilder: (episode) => resolvedProvider.buildPlayableItem(
+          anime: summary,
+          episode: episode,
+        ),
+        sharedSourceLabel: resolvedProvider.activeHost?.displayName,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '打开详情失败: $e');
     }
   }
 

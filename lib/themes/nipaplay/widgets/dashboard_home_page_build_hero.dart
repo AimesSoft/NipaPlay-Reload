@@ -164,7 +164,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   forceBlur: item.source != RecommendedItemSource.dandanplay
                       ? item.isLowRes
                       : false,
-                  lowResBlurSigma: 40,
+                  lowResBlurSigma: 3,
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
@@ -425,7 +425,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   forceBlur: item.source != RecommendedItemSource.dandanplay
                       ? item.isLowRes
                       : false,
-                  lowResBlurSigma: 40,
+                  lowResBlurSigma: 3,
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
@@ -643,6 +643,12 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
       case RecommendedItemSource.dandanplay:
         return Icon(
           Icons.cloud_outlined,
+          color: Colors.white,
+          size: size,
+        );
+      case RecommendedItemSource.sharedRemote:
+        return Icon(
+          Icons.cloud_done_outlined,
           color: Colors.white,
           size: size,
         );

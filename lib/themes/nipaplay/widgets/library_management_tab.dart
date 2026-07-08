@@ -2501,6 +2501,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       future: _getDisplayPath(folderPath),
       builder: (context, snapshot) {
         final displayPath = snapshot.data ?? folderPath;
+        final appearance = context.read<AppearanceSettingsProvider>();
         return NipaplayLargeScreenFocusableAction(
           autofocus: autofocus,
           onActivate: () {
@@ -2529,8 +2530,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   Expanded(
                     child: Text(
                       p.basename(folderPath),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: appearance.folderNameMaxLines,
+                      overflow: appearance.folderNameOverflow,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 17,
@@ -2585,6 +2586,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     String folderPath,
     ScanService scanService,
   ) {
+    final appearance = context.read<AppearanceSettingsProvider>();
     final isLoading = _loadingFolders.contains(folderPath);
     final files = _expandedFolderContents[folderPath] ?? const [];
     if (!isLoading && !_expandedFolderContents.containsKey(folderPath)) {
@@ -2599,6 +2601,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           NipaplayLargeScreenSectionHeader(
             title: p.basename(folderPath),
             subtitle: folderPath,
+            titleMaxLines: appearance.folderNameMaxLines,
+            titleOverflow: appearance.folderNameOverflow,
             trailing: NipaplayLargeScreenActionButton(
               icon: Icons.refresh_rounded,
               label: '扫描',
@@ -3640,6 +3644,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       future: _getDisplayPath(folderPath),
       builder: (context, snapshot) {
         final displayPath = snapshot.data ?? folderPath;
+        final appearance = context.read<AppearanceSettingsProvider>();
 
         return LibraryManagementCard(
           child: Theme(
@@ -3660,7 +3665,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     child: Text(
                       p.basename(folderPath),
                       style: TextStyle(color: textColor, fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: appearance.folderNameMaxLines,
+                      overflow: appearance.folderNameOverflow,
                     ),
                   ),
                 ],

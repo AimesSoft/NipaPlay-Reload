@@ -40,6 +40,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
+  final GlobalKey _folderNameDisplayModeDropdownKey = GlobalKey();
 
   static const List<AdaptiveSettingsColorOption<int>>
       _playerControlColorOptions = [
@@ -267,66 +268,68 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
       const SizedBox(height: 16),
       AdaptiveSettingsSection(
         children: [
-          AdaptiveSettingsTile<AnimeDetailDisplayMode>.dropdown(
-            title: context.l10n.appearanceAnimeDetailStyle,
-            subtitle: _text(
-              context,
-              '选择番剧详情页展示方式',
-              '選擇番劇詳情頁展示方式',
-              'Choose the anime detail page layout.',
+          if (globals.isPhone) ...[
+            AdaptiveSettingsTile<AnimeDetailDisplayMode>.dropdown(
+              title: context.l10n.appearanceAnimeDetailStyle,
+              subtitle: _text(
+                context,
+                '选择番剧详情页展示方式',
+                '選擇番劇詳情頁展示方式',
+                'Choose the anime detail page layout.',
+              ),
+              icon: Ionicons.albums_outline,
+              phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
+              items: [
+                DropdownMenuItemData(
+                  title: context.l10n.appearanceDetailSimple,
+                  value: AnimeDetailDisplayMode.simple,
+                  isSelected: themeNotifier.animeDetailDisplayMode ==
+                      AnimeDetailDisplayMode.simple,
+                  description: context.l10n.appearanceDetailSimpleSubtitle,
+                ),
+                DropdownMenuItemData(
+                  title: context.l10n.appearanceDetailVivid,
+                  value: AnimeDetailDisplayMode.vivid,
+                  isSelected: themeNotifier.animeDetailDisplayMode ==
+                      AnimeDetailDisplayMode.vivid,
+                  description: context.l10n.appearanceDetailVividSubtitle,
+                ),
+              ],
+              onChanged: (mode) {
+                themeNotifier.animeDetailDisplayMode = mode;
+              },
+              dropdownKey: _detailModeDropdownKey,
             ),
-            icon: Ionicons.albums_outline,
-            phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
-            items: [
-              DropdownMenuItemData(
-                title: context.l10n.appearanceDetailSimple,
-                value: AnimeDetailDisplayMode.simple,
-                isSelected: themeNotifier.animeDetailDisplayMode ==
-                    AnimeDetailDisplayMode.simple,
-                description: context.l10n.appearanceDetailSimpleSubtitle,
+            AdaptiveSettingsTile<RecentWatchingStyle>.dropdown(
+              title: context.l10n.appearanceRecentWatchingStyle,
+              subtitle: _text(
+                context,
+                '选择最近观看区域的展示方式',
+                '選擇最近觀看區域的展示方式',
+                'Choose how recently watched items are shown.',
               ),
-              DropdownMenuItemData(
-                title: context.l10n.appearanceDetailVivid,
-                value: AnimeDetailDisplayMode.vivid,
-                isSelected: themeNotifier.animeDetailDisplayMode ==
-                    AnimeDetailDisplayMode.vivid,
-                description: context.l10n.appearanceDetailVividSubtitle,
-              ),
-            ],
-            onChanged: (mode) {
-              themeNotifier.animeDetailDisplayMode = mode;
-            },
-            dropdownKey: _detailModeDropdownKey,
-          ),
-          AdaptiveSettingsTile<RecentWatchingStyle>.dropdown(
-            title: context.l10n.appearanceRecentWatchingStyle,
-            subtitle: _text(
-              context,
-              '选择最近观看区域的展示方式',
-              '選擇最近觀看區域的展示方式',
-              'Choose how recently watched items are shown.',
+              icon: Ionicons.time_outline,
+              phoneIcon: cupertino.CupertinoIcons.clock,
+              items: [
+                DropdownMenuItemData(
+                  title: context.l10n.appearanceRecentSimple,
+                  value: RecentWatchingStyle.simple,
+                  isSelected: appearanceSettings.recentWatchingStyle ==
+                      RecentWatchingStyle.simple,
+                  description: context.l10n.appearanceRecentSimpleSubtitle,
+                ),
+                DropdownMenuItemData(
+                  title: context.l10n.appearanceRecentDetailed,
+                  value: RecentWatchingStyle.detailed,
+                  isSelected: appearanceSettings.recentWatchingStyle ==
+                      RecentWatchingStyle.detailed,
+                  description: context.l10n.appearanceRecentDetailedSubtitle,
+                ),
+              ],
+              onChanged: appearanceSettings.setRecentWatchingStyle,
+              dropdownKey: _recentStyleDropdownKey,
             ),
-            icon: Ionicons.time_outline,
-            phoneIcon: cupertino.CupertinoIcons.clock,
-            items: [
-              DropdownMenuItemData(
-                title: context.l10n.appearanceRecentSimple,
-                value: RecentWatchingStyle.simple,
-                isSelected: appearanceSettings.recentWatchingStyle ==
-                    RecentWatchingStyle.simple,
-                description: context.l10n.appearanceRecentSimpleSubtitle,
-              ),
-              DropdownMenuItemData(
-                title: context.l10n.appearanceRecentDetailed,
-                value: RecentWatchingStyle.detailed,
-                isSelected: appearanceSettings.recentWatchingStyle ==
-                    RecentWatchingStyle.detailed,
-                description: context.l10n.appearanceRecentDetailedSubtitle,
-              ),
-            ],
-            onChanged: appearanceSettings.setRecentWatchingStyle,
-            dropdownKey: _recentStyleDropdownKey,
-          ),
+          ],
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
@@ -344,6 +347,43 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             phoneIcon: cupertino.CupertinoIcons.doc_text,
             value: appearanceSettings.showAnimeCardSummary,
             onChanged: appearanceSettings.setShowAnimeCardSummary,
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      AdaptiveSettingsSection(
+        children: [
+          AdaptiveSettingsTile<FolderNameDisplayMode>.dropdown(
+            title: _text(
+              context,
+              '目录名称显示模式',
+              '目錄名稱顯示模式',
+              'Folder Name Display',
+            ),
+            subtitle: _text(
+              context,
+              '设置媒体库管理中过长目录名的显示方式',
+              '設定媒體庫管理中過長目錄名的顯示方式',
+              'Choose how long folder names are shown in library management.',
+            ),
+            icon: Ionicons.folder_outline,
+            phoneIcon: cupertino.CupertinoIcons.folder,
+            items: [
+              DropdownMenuItemData(
+                title: _text(context, '省略号截断', '省略號截斷', 'Ellipsis'),
+                value: FolderNameDisplayMode.ellipsis,
+                isSelected: appearanceSettings.folderNameDisplayMode ==
+                    FolderNameDisplayMode.ellipsis,
+              ),
+              DropdownMenuItemData(
+                title: _text(context, '多行显示', '多行顯示', 'Multiline'),
+                value: FolderNameDisplayMode.multiline,
+                isSelected: appearanceSettings.folderNameDisplayMode ==
+                    FolderNameDisplayMode.multiline,
+              ),
+            ],
+            onChanged: appearanceSettings.setFolderNameDisplayMode,
+            dropdownKey: _folderNameDisplayModeDropdownKey,
           ),
         ],
       ),
