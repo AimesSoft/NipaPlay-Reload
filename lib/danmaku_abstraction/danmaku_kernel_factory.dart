@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 
 /// 弹幕渲染引擎枚举
@@ -26,19 +27,41 @@ enum DanmakuRenderEngine {
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  // Default to NipaPlay Next if no user setting exists
-  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.nipaplayNext;
+  // Default to Next2 where it is supported; fall back to NipaPlay Next on Web.
+  static DanmakuRenderEngine _cachedEngine = _defaultEngine;
   static bool _initialized = false;
 
-  /// Next++ 激进优化引擎开关（由 LabsSettingsProvider 同步）
+  /// Next++ 激进优化引擎开关
   static bool _enableNextPlusPlus = false;
 
-  /// 同步 Next++ 开关状态（由 LabsSettingsProvider 调用）
-  static void setEnableNextPlusPlus(bool enabled) {
+  static DanmakuRenderEngine get _defaultEngine =>
+      Next2PlatformSupport.isKernelSupported
+          ? DanmakuRenderEngine.next2
+          : DanmakuRenderEngine.nipaplayNext;
+
+  static bool get isNextPlusPlusEnabled => _enableNextPlusPlus;
+
+  static void _setEnableNextPlusPlus(bool enabled) {
     if (_enableNextPlusPlus == enabled) return;
     _enableNextPlusPlus = enabled;
-    // 通知 UI 更新显示名称（如开发者模式右上角）
+  }
+
+  /// 保存 Next++ 开关状态，并通知 UI 更新显示名称和渲染路径。
+  static Future<void> saveEnableNextPlusPlus(bool enabled) async {
+    if (_enableNextPlusPlus == enabled) return;
+
+    _setEnableNextPlusPlus(enabled);
     _kernelChangeController.add(DanmakuRenderEngine.nipaplayNext);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(
+        SettingsKeys.danmakuEnableNextPlusPlusEngine,
+        enabled,
+      );
+    } catch (e) {
+      // ignore
+    }
   }
 
   /// 获取 NipaPlay Next 引擎的显示名称
@@ -64,6 +87,9 @@ class DanmakuKernelFactory {
     try {
       final prefs = await SharedPreferences.getInstance();
       final engineIndex = prefs.getInt(_danmakuRenderEngineKey);
+      _setEnableNextPlusPlus(
+        prefs.getBool(SettingsKeys.danmakuEnableNextPlusPlusEngine) ?? false,
+      );
 
       if (engineIndex != null &&
           engineIndex >= 0 &&
@@ -71,10 +97,10 @@ class DanmakuKernelFactory {
         _cachedEngine =
             _sanitizeEngine(DanmakuRenderEngine.values[engineIndex]);
       } else {
-        _cachedEngine = DanmakuRenderEngine.nipaplayNext; // 默认使用 NipaPlay Next
+        _cachedEngine = _defaultEngine;
       }
     } catch (e) {
-      _cachedEngine = DanmakuRenderEngine.nipaplayNext;
+      _cachedEngine = _defaultEngine;
     }
 
     _initialized = true;

@@ -38,13 +38,10 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
-  static const String labsEnableNext2DanmakuKernel =
-      'labs_enable_next2_danmaku_kernel';
-
   static const String labsEnableErikaPlayerKernel =
       'labs_enable_erika_player_kernel';
 
-  static const String labsEnableNextPlusPlusEngine =
+  static const String danmakuEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';
 
   static const String torrentDownloadDirectory = 'torrent_download_directory';

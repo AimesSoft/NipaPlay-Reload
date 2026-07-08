@@ -119,6 +119,7 @@ class PlayerKernelManager {
     }
 
     // 通知UI刷新，以便DanmakuOverlay可以重建
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
     videoPlayerState.notifyListeners();
   }
 
@@ -198,9 +199,15 @@ class PlayerKernelManager {
 
   /// 获取支持的弹幕内核列表
   static List<String> getSupportedDanmakuKernels() {
-    final kernels = <String>['Canvas 弹幕', 'GPU渲染', 'CPU渲染', DanmakuKernelFactory.nipaplayNextDisplayName];
+    final kernels = <String>[
+      'Canvas 弹幕',
+      'GPU渲染',
+      'CPU渲染',
+      DanmakuKernelFactory.nipaplayNextDisplayName,
+    ];
     if (Next2PlatformSupport.isKernelSupported) {
       kernels.add('NipaPlay Next2');
+      kernels.add('DFM+');
     }
     return kernels;
   }
@@ -208,7 +215,10 @@ class PlayerKernelManager {
   /// 获取当前弹幕内核
   static Future<String> getCurrentDanmakuKernel() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('danmaku_kernel') ?? 'Canvas 弹幕';
+    return prefs.getString('danmaku_kernel') ??
+        (Next2PlatformSupport.isKernelSupported
+            ? 'NipaPlay Next2'
+            : 'NipaPlay Next');
   }
 
   /// 设置弹幕内核
@@ -234,6 +244,10 @@ class PlayerKernelManager {
       case 'NipaPlay Next2 (实验性)':
         engine = DanmakuRenderEngine.next2;
         break;
+      case 'DFM+':
+      case 'DFM+ (实验性)':
+        engine = DanmakuRenderEngine.dfmPlus;
+        break;
       case 'Canvas弹幕':
       case 'Canvas 弹幕':
         engine = DanmakuRenderEngine.canvas;
@@ -242,7 +256,8 @@ class PlayerKernelManager {
         engine = DanmakuRenderEngine.canvas;
     }
 
-    if (engine == DanmakuRenderEngine.next2 &&
+    if ((engine == DanmakuRenderEngine.next2 ||
+            engine == DanmakuRenderEngine.dfmPlus) &&
         !Next2PlatformSupport.isKernelSupported) {
       engine = DanmakuRenderEngine.canvas;
     }
@@ -268,8 +283,6 @@ class PlayerKernelManager {
       case PlayerKernelType.erika:
         playerKernelName = 'Erika';
         break;
-      default:
-        playerKernelName = 'Unknown';
     }
 
     return {

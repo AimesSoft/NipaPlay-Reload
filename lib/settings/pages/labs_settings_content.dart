@@ -38,24 +38,6 @@ class LabsSettingsContent extends StatelessWidget {
                   value: labsSettings.enableLargeScreenMode,
                   onChanged: labsSettings.setEnableLargeScreenMode,
                 ),
-                AdaptiveSettingsTile.toggle(
-                  title: _text(
-                    context,
-                    '显示 Next2和 DFM+ 弹幕内核',
-                    '顯示 Next2 和 DFM+ 彈幕內核',
-                    'Show Next2 and DFM+ Danmaku Kernels',
-                  ),
-                  subtitle: _text(
-                    context,
-                    '开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2 和 DFM+',
-                    '開啟後，彈幕渲染引擎下拉選單顯示 NipaPlay Next2 和 DFM+',
-                    'Expose NipaPlay Next2 and DFM+ in danmaku renderer menus.',
-                  ),
-                  icon: Ionicons.flask_outline,
-                  phoneIcon: cupertino.CupertinoIcons.lab_flask,
-                  value: labsSettings.enableNext2DanmakuKernel,
-                  onChanged: labsSettings.setEnableNext2DanmakuKernel,
-                ),
                 if (PlayerFactory.isErikaKernelSupported)
                   AdaptiveSettingsTile.toggle(
                     title: _text(
@@ -75,24 +57,6 @@ class LabsSettingsContent extends StatelessWidget {
                     value: labsSettings.enableErikaPlayerKernel,
                     onChanged: labsSettings.setEnableErikaPlayerKernel,
                   ),
-                AdaptiveSettingsTile.toggle(
-                  title: _text(
-                    context,
-                    'Next++ 激进优化引擎',
-                    'Next++ 激進最佳化引擎',
-                    'Next++ Aggressive Engine',
-                  ),
-                  subtitle: _text(
-                    context,
-                    '激进优化，推荐。关闭则回退至 Next 原始引擎路径',
-                    '激進最佳化，推薦。關閉則回退至 Next 原始引擎路徑',
-                    'Recommended aggressive optimization. Disable to use the original Next engine path.',
-                  ),
-                  icon: Ionicons.rocket_outline,
-                  phoneIcon: cupertino.CupertinoIcons.bolt,
-                  value: labsSettings.enableNextPlusPlusEngine,
-                  onChanged: labsSettings.setEnableNextPlusPlusEngine,
-                ),
                 AdaptiveSettingsTile.button(
                   title: _text(
                     context,
