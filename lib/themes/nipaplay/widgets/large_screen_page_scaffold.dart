@@ -140,11 +140,19 @@ class NipaplayLargeScreenSectionHeader extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.trailing,
+    this.titleMaxLines = 1,
+    this.titleOverflow = TextOverflow.ellipsis,
   });
 
   final String title;
   final String? subtitle;
   final Widget? trailing;
+
+  /// 标题最大行数，默认 1（省略号截断）；传入 null 可多行完整显示
+  final int? titleMaxLines;
+
+  /// 标题溢出处理，默认省略号截断
+  final TextOverflow titleOverflow;
 
   @override
   Widget build(BuildContext context) {
@@ -159,8 +167,8 @@ class NipaplayLargeScreenSectionHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: titleMaxLines,
+                overflow: titleOverflow,
                 style: TextStyle(
                   color: textColor,
                   fontSize: 22,

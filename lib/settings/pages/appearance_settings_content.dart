@@ -40,6 +40,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
+  final GlobalKey _folderNameDisplayModeDropdownKey = GlobalKey();
 
   static const List<AdaptiveSettingsColorOption<int>>
       _playerControlColorOptions = [
@@ -344,6 +345,43 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             phoneIcon: cupertino.CupertinoIcons.doc_text,
             value: appearanceSettings.showAnimeCardSummary,
             onChanged: appearanceSettings.setShowAnimeCardSummary,
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      AdaptiveSettingsSection(
+        children: [
+          AdaptiveSettingsTile<FolderNameDisplayMode>.dropdown(
+            title: _text(
+              context,
+              '目录名称显示模式',
+              '目錄名稱顯示模式',
+              'Folder Name Display',
+            ),
+            subtitle: _text(
+              context,
+              '设置媒体库管理中过长目录名的显示方式',
+              '設定媒體庫管理中過長目錄名的顯示方式',
+              'Choose how long folder names are shown in library management.',
+            ),
+            icon: Ionicons.folder_outline,
+            phoneIcon: cupertino.CupertinoIcons.folder,
+            items: [
+              DropdownMenuItemData(
+                title: _text(context, '省略号截断', '省略號截斷', 'Ellipsis'),
+                value: FolderNameDisplayMode.ellipsis,
+                isSelected: appearanceSettings.folderNameDisplayMode ==
+                    FolderNameDisplayMode.ellipsis,
+              ),
+              DropdownMenuItemData(
+                title: _text(context, '多行显示', '多行顯示', 'Multiline'),
+                value: FolderNameDisplayMode.multiline,
+                isSelected: appearanceSettings.folderNameDisplayMode ==
+                    FolderNameDisplayMode.multiline,
+              ),
+            ],
+            onChanged: appearanceSettings.setFolderNameDisplayMode,
+            dropdownKey: _folderNameDisplayModeDropdownKey,
           ),
         ],
       ),
