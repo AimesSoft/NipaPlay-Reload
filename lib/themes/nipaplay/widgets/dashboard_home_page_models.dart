@@ -47,6 +47,7 @@ enum RecommendedItemSource {
   emby,
   local,
   dandanplay,
+  sharedRemote,
   placeholder,
 }
 

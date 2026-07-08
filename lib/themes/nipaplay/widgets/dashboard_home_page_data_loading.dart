@@ -242,18 +242,16 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         }
       }
 
-      // 从本地媒体库收集候选项目
+      // 从本地媒体库收集候选项目（含 WebDAV/SMB 观看记录，详情页已支持这些路径播放）
       final watchHistoryProvider =
           Provider.of<WatchHistoryProvider>(context, listen: false);
       if (watchHistoryProvider.isLoaded) {
         try {
-          // 过滤掉Jellyfin和Emby的项目，只保留本地文件
+          // 本地 + WebDAV + SMB 的观看记录
           final localHistory = watchHistoryProvider.history
               .where((item) =>
                   !item.filePath.startsWith('jellyfin://') &&
                   !item.filePath.startsWith('emby://') &&
-                  !MediaSourceUtils.isSmbPath(item.filePath) &&
-                  !MediaSourceUtils.isWebDavPath(item.filePath) &&
                   !item.isDandanplayRemote)
               .toList();
 
@@ -301,6 +299,22 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           await _loadPersistedLocalImageUrls(dandanAnimeIds);
         }
         allCandidates.addAll(selectedGroups);
+      }
+
+      // 从远程共享库（NipaPlay Server）收集候选项目
+      SharedRemoteLibraryProvider? sharedRemoteProvider;
+      try {
+        sharedRemoteProvider =
+            Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      } catch (_) {}
+      if (sharedRemoteProvider != null &&
+          sharedRemoteProvider.animeSummaries.isNotEmpty) {
+        final summaries = List<SharedRemoteAnimeSummary>.from(
+            sharedRemoteProvider.animeSummaries);
+        summaries.shuffle(math.Random());
+        final selectedSummaries =
+            summaries.take(math.min(30, summaries.length)).toList();
+        allCandidates.addAll(selectedSummaries);
       }
 
       // 第二步：从所有候选中随机选择7个（去重）
@@ -512,6 +526,25 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               isLowRes:
                   coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
             );
+          } else if (item is SharedRemoteAnimeSummary) {
+            final title = (item.nameCn?.isNotEmpty == true)
+                ? item.nameCn!
+                : item.name;
+            final subtitle = (item.summary?.isNotEmpty == true)
+                ? item.summary!
+                : '远程共享媒体';
+            final coverUrl = _normalizeRecommendationImageUrl(item.imageUrl);
+            return RecommendedItem(
+              id: 'shared:${item.animeId}',
+              title: title,
+              subtitle: subtitle,
+              backgroundImageUrl: coverUrl,
+              logoImageUrl: null,
+              source: RecommendedItemSource.sharedRemote,
+              rating: null,
+              isLowRes:
+                  coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
+            );
           }
         } catch (_) {
           return null;
@@ -704,6 +737,10 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         keys.add('anime:${candidate.animeId}');
       }
       _addTitleKey(keys, candidate.title);
+    } else if (candidate is SharedRemoteAnimeSummary) {
+      keys.add('anime:${candidate.animeId}');
+      _addTitleKey(keys, candidate.nameCn);
+      _addTitleKey(keys, candidate.name);
     }
 
     if (keys.length <= 1) return keys;

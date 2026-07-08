@@ -266,11 +266,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
       final historyProvider = _watchHistoryProvider;
       if (historyProvider != null && historyProvider.isLoaded) {
+        // 本地 + WebDAV + SMB 观看记录（详情页已支持这些路径播放）
         final localHistory = historyProvider.history.where((item) {
           return !item.filePath.startsWith('jellyfin://') &&
               !item.filePath.startsWith('emby://') &&
-              !MediaSourceUtils.isSmbPath(item.filePath) &&
-              !MediaSourceUtils.isWebDavPath(item.filePath) &&
               !item.isDandanplayRemote;
         }).toList();
 
@@ -294,6 +293,20 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final groups =
             List<DandanplayRemoteAnimeGroup>.from(dandanProvider.animeGroups);
         allCandidates.addAll(groups.take(20));
+      }
+
+      // 从远程共享库（NipaPlay Server）收集候选项目
+      SharedRemoteLibraryProvider? sharedRemoteProvider;
+      try {
+        sharedRemoteProvider = context.read<SharedRemoteLibraryProvider>();
+      } catch (_) {}
+      if (sharedRemoteProvider != null &&
+          sharedRemoteProvider.animeSummaries.isNotEmpty) {
+        final summaries =
+            List<SharedRemoteAnimeSummary>.from(
+                sharedRemoteProvider.animeSummaries);
+        summaries.shuffle(math.Random());
+        allCandidates.addAll(summaries.take(20));
       }
 
       if (allCandidates.isEmpty) {
@@ -413,6 +426,24 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             mediaServerItemId: null,
             mediaServerType: null,
             dandanGroup: candidate,
+          );
+        } else if (candidate is SharedRemoteAnimeSummary) {
+          final title = (candidate.nameCn?.isNotEmpty == true)
+              ? candidate.nameCn!
+              : candidate.name;
+          built = _CupertinoRecommendedItem(
+            id: 'shared_${candidate.animeId}',
+            title: title,
+            subtitle: (candidate.summary?.isNotEmpty == true)
+                ? candidate.summary!
+                : '远程共享媒体',
+            imageUrl: candidate.imageUrl,
+            source: _CupertinoRecommendedSource.sharedRemote,
+            rating: null,
+            animeId: candidate.animeId,
+            episodeCount: candidate.episodeCount,
+            mediaServerItemId: null,
+            mediaServerType: null,
           );
         }
 
@@ -2907,6 +2938,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return '本地媒体';
       case _CupertinoRecommendedSource.dandanplay:
         return '弹弹play';
+      case _CupertinoRecommendedSource.sharedRemote:
+        return '共享库';
       case _CupertinoRecommendedSource.placeholder:
         return '';
     }
@@ -2922,6 +2955,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return CupertinoIcons.tray_full;
       case _CupertinoRecommendedSource.dandanplay:
         return CupertinoIcons.chat_bubble_2_fill;
+      case _CupertinoRecommendedSource.sharedRemote:
+        return CupertinoIcons.cloud_fill;
       case _CupertinoRecommendedSource.placeholder:
         return CupertinoIcons.sparkles;
     }
@@ -3124,5 +3159,6 @@ enum _CupertinoRecommendedSource {
   emby,
   local,
   dandanplay,
+  sharedRemote,
   placeholder,
 }
