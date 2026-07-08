@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class LabsSettingsProvider extends ChangeNotifier {
   LabsSettingsProvider() {
@@ -9,15 +8,11 @@ class LabsSettingsProvider extends ChangeNotifier {
   }
 
   bool _enableLargeScreenMode = false;
-  bool _enableNext2DanmakuKernel = false;
   bool _enableErikaPlayerKernel = false;
-  bool _enableNextPlusPlusEngine = false; // 默认关闭：Next++ 激进优化引擎
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
-  bool get enableNext2DanmakuKernel => _enableNext2DanmakuKernel;
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
-  bool get enableNextPlusPlusEngine => _enableNextPlusPlusEngine;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
@@ -25,19 +20,10 @@ class LabsSettingsProvider extends ChangeNotifier {
       SettingsKeys.labsEnableLargeScreenMode,
       defaultValue: false,
     );
-    _enableNext2DanmakuKernel = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableNext2DanmakuKernel,
-      defaultValue: false,
-    );
     _enableErikaPlayerKernel = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableErikaPlayerKernel,
       defaultValue: false,
     );
-    _enableNextPlusPlusEngine = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableNextPlusPlusEngine,
-      defaultValue: false, // 默认关闭：Next++ 激进优化引擎（回退至 Next 原始引擎路径）
-    );
-    DanmakuKernelFactory.setEnableNextPlusPlus(_enableNextPlusPlusEngine);
     _isLoaded = true;
     notifyListeners();
   }
@@ -52,33 +38,12 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> setEnableNext2DanmakuKernel(bool enabled) async {
-    if (_enableNext2DanmakuKernel == enabled) return;
-    _enableNext2DanmakuKernel = enabled;
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsEnableNext2DanmakuKernel,
-      enabled,
-    );
-  }
-
   Future<void> setEnableErikaPlayerKernel(bool enabled) async {
     if (_enableErikaPlayerKernel == enabled) return;
     _enableErikaPlayerKernel = enabled;
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsEnableErikaPlayerKernel,
-      enabled,
-    );
-  }
-
-  Future<void> setEnableNextPlusPlusEngine(bool enabled) async {
-    if (_enableNextPlusPlusEngine == enabled) return;
-    _enableNextPlusPlusEngine = enabled;
-    DanmakuKernelFactory.setEnableNextPlusPlus(enabled);
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsEnableNextPlusPlusEngine,
       enabled,
     );
   }

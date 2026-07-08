@@ -11,7 +11,6 @@ import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/danmaku_dfm/dfm_plus_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
@@ -131,10 +130,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
         }
 
         if (kernelType == DanmakuRenderEngine.nipaplayNext) {
-          final labsSettings = context.watch<LabsSettingsProvider>();
           // Next++ ON → NipaPlayNextOverlay (C++ FFI V2 + atlas + vsync + Emoji bypass)
           // Next++ OFF → NipaPlayNextOldOverlay (d6592232版 C++ FFI + TextPainter逐条 + playbackTimeMs驱动)
-          if (labsSettings.enableNextPlusPlusEngine) {
+          if (DanmakuKernelFactory.isNextPlusPlusEnabled) {
             return NipaPlayNextOverlay(
               danmakuList: activeDanmakuList,
               playbackTimeMs: videoState.playbackTimeMs,

@@ -9,7 +9,6 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
@@ -95,6 +94,14 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     });
   }
 
+  Future<void> _saveNextPlusPlusEngineSetting(bool enabled) async {
+    await DanmakuKernelFactory.saveEnableNextPlusPlus(enabled);
+
+    if (!mounted) return;
+    BlurSnackBar.show(context, enabled ? 'Next++ 已开启' : 'Next++ 已关闭');
+    setState(() {});
+  }
+
   Future<bool> _saveSpoilerAiSettings(VideoPlayerState videoState) async {
     if (_isSavingSpoilerAiSettings) return false;
 
@@ -163,7 +170,6 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
 
   List<DropdownMenuItemData<DanmakuRenderEngine>>
       _buildDanmakuRenderEngineItems({
-    required bool showNext2,
     required bool next2Supported,
   }) {
     final items = <DropdownMenuItemData<DanmakuRenderEngine>>[
@@ -198,7 +204,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       ),
     ];
 
-    if (showNext2) {
+    if (next2Supported) {
       items.add(
         DropdownMenuItemData(
           title: 'NipaPlay Next2',
@@ -221,9 +227,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2) {
       items.add(
         DropdownMenuItemData(
-          title: next2Supported
-              ? 'NipaPlay Next2 (实验室关闭)'
-              : 'NipaPlay Next2 (当前平台不支持)',
+          title: 'NipaPlay Next2 (当前平台不支持)',
           value: DanmakuRenderEngine.next2,
           isSelected: true,
           enabled: false,
@@ -231,10 +235,13 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
         ),
       );
-    } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus) {
+    }
+
+    if (!next2Supported &&
+        _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus) {
       items.add(
         DropdownMenuItemData(
-          title: next2Supported ? 'DFM+ (实验室关闭)' : 'DFM+ (当前平台不支持)',
+          title: 'DFM+ (当前平台不支持)',
           value: DanmakuRenderEngine.dfmPlus,
           isSelected: true,
           enabled: false,
@@ -721,13 +728,12 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     final isErikaPlayerKernel =
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final showNext2 = next2Supported &&
-        context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
+    final showNextPlusPlusToggle =
+        _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
     final showRendererSupersample = !isErikaPlayerKernel &&
         (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus);
     final renderEngineItems = _buildDanmakuRenderEngineItems(
-      showNext2: showNext2,
       next2Supported: next2Supported,
     );
 
@@ -745,13 +751,26 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 items: renderEngineItems,
                 onChanged: (dynamic value) {
                   if (value is! DanmakuRenderEngine) return;
-                  if ((!showNext2 || !next2Supported) &&
-                      value == DanmakuRenderEngine.next2) {
+                  if (!next2Supported &&
+                      (value == DanmakuRenderEngine.next2 ||
+                          value == DanmakuRenderEngine.dfmPlus)) {
                     return;
                   }
                   _saveDanmakuRenderEngineSettings(value);
                 },
                 dropdownKey: _danmakuRenderEngineDropdownKey,
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+            ],
+            if (showNextPlusPlusToggle) ...[
+              AdaptiveSettingsTile.toggle(
+                title: 'Next++ 激进优化引擎',
+                subtitle: '开启后使用 Next++ 优化路径，关闭则回退至 Next 原始引擎路径',
+                icon: Ionicons.rocket_outline,
+                value: DanmakuKernelFactory.isNextPlusPlusEnabled,
+                onChanged: _saveNextPlusPlusEngineSetting,
               ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
