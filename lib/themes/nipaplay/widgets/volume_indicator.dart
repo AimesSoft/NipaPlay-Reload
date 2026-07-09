@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/indicator_widget.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 
 class VolumeIndicator extends StatelessWidget {
   const VolumeIndicator({super.key});

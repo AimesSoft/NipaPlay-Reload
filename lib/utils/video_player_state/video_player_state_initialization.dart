@@ -217,20 +217,12 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   void _showBrightnessIndicator() {
     if (!globals.isMobilePlatform || _context == null) return;
 
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(_context!, listen: false);
-    final bool usePhoneControlsStyle =
-        uiThemeProvider.isPhoneLayout && globals.isPhone;
-
     _isBrightnessIndicatorVisible = true;
 
     if (_brightnessOverlayEntry == null) {
       _brightnessOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget = usePhoneControlsStyle
-              ? const CupertinoBrightnessIndicator()
-              : const BrightnessIndicator();
-          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
+          return ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
@@ -246,20 +238,13 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
                         0.0,
                         0.0,
                       ),
-                      child: indicatorWidget,
+                      child: const BrightnessIndicator(),
                     ),
                   ),
                 );
               },
             ),
           );
-          if (usePhoneControlsStyle) {
-            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
-              value: uiThemeProvider,
-              child: overlayChild,
-            );
-          }
-          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_brightnessOverlayEntry!);
@@ -300,20 +285,12 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   void _showVolumeIndicator() {
     if (_context == null) return;
 
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(_context!, listen: false);
-    final bool usePhoneControlsStyle =
-        uiThemeProvider.isPhoneLayout && globals.isPhone;
-
     _isVolumeIndicatorVisible = true;
 
     if (_volumeOverlayEntry == null) {
       _volumeOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget = usePhoneControlsStyle
-              ? const CupertinoVolumeIndicator()
-              : const VolumeIndicator();
-          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
+          return ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
@@ -329,20 +306,13 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
                         0.0,
                         0.0,
                       ),
-                      child: indicatorWidget,
+                      child: const VolumeIndicator(),
                     ),
                   ),
                 );
               },
             ),
           );
-          if (usePhoneControlsStyle) {
-            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
-              value: uiThemeProvider,
-              child: overlayChild,
-            );
-          }
-          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_volumeOverlayEntry!);

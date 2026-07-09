@@ -76,9 +76,6 @@ import 'subtitle_language_utils.dart';
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_brightness_indicator.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_volume_indicator.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_seek_indicator.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
 import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
 import 'package:nipaplay/services/auto_next_episode_service.dart';
