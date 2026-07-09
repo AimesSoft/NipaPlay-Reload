@@ -1280,32 +1280,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void _showSeekIndicator() {
     if (!globals.isMobilePlatform || _context == null) return;
 
-    final uiThemeProvider = Provider.of<UIThemeProvider>(
-      _context!,
-      listen: false,
-    );
-    final bool usePhoneControlsStyle =
-        uiThemeProvider.isPhoneLayout && globals.isPhone;
-
     _isSeekIndicatorVisible = true;
 
     if (_seekOverlayEntry == null) {
       _seekOverlayEntry = OverlayEntry(
         builder: (context) {
-          final seekWidget = usePhoneControlsStyle
-              ? const CupertinoSeekIndicator()
-              : const SeekIndicator();
-          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
+          return ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
-            child: seekWidget,
+            child: const SeekIndicator(),
           );
-          if (usePhoneControlsStyle) {
-            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
-              value: uiThemeProvider,
-              child: overlayChild,
-            );
-          }
-          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_seekOverlayEntry!);
