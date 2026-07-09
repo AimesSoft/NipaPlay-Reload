@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/player_menu_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/player_overlay_surface.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -44,14 +45,16 @@ class VideoProgressBar extends StatefulWidget {
   State<VideoProgressBar> createState() => _VideoProgressBarState();
 }
 
-class _VideoProgressBarState extends State<VideoProgressBar> {
+class _VideoProgressBarState extends State<VideoProgressBar>
+    with TickerProviderStateMixin {
   final GlobalKey _sliderKey = GlobalKey();
   Duration? _localHoverTime;
   bool _isHovering = false;
   bool _isThumbHovered = false;
   OverlayEntry? _overlayEntry;
-  DateTime? _lastSeekTime;
   Timer? _previewDebounceTimer;
+  late final AnimationController _thumbHoverController;
+  late final AnimationController _thumbDeformController;
 
   /// 当前 hover/tap 命中的章节分割线索引（-1=未命中任何分割线）。
   /// 用于 _ChapterTickMarks 高亮放大该分割线。
@@ -59,12 +62,40 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
 
   /// 章节分割线命中容差（像素）。点击/悬停在该像素范围内才触发章节跳转。
   static const double _chapterTickHitTolerance = 8.0;
+  static const SpringDescription _dragThumbSpring = SpringDescription(
+    mass: 1,
+    stiffness: 620,
+    damping: 22,
+  );
+  static const SpringDescription _releaseThumbSpring = SpringDescription(
+    mass: 1,
+    stiffness: 360,
+    damping: 7.2,
+  );
   String? _hoverThumbnailPath;
   int? _hoverBucket;
+  Offset? _lastDragLocalPosition;
+  DateTime? _lastDragUpdateTime;
+
+  Size get _thumbBaseSize =>
+      globals.isPhone ? const Size(34.0, 20.0) : const Size(28.0, 16.0);
+
+  @override
+  void initState() {
+    super.initState();
+    _thumbHoverController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+      reverseDuration: const Duration(milliseconds: 140),
+    );
+    _thumbDeformController = AnimationController.unbounded(vsync: this);
+  }
 
   @override
   void dispose() {
     _previewDebounceTimer?.cancel();
+    _thumbHoverController.dispose();
+    _thumbDeformController.dispose();
     _removeOverlay();
     super.dispose();
   }
@@ -125,7 +156,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
                                 child: _buildPreviewImage(
-                                  thumbnailPath!,
+                                  thumbnailPath,
                                   previewWidth,
                                   previewHeight,
                                 ),
@@ -193,25 +224,23 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
 
           final progressRect =
               Rect.fromLTWH(0, 0, width, sliderBox.size.height);
-          final thumbSize = globals.isPhone ? 20.0 : 12.0;
-          final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
-          final currentThumbSize =
-              _isThumbHovered ? thumbSizeHovered : thumbSize;
-          final halfThumbSize = currentThumbSize / 2;
+          final trackHeight = globals.isPhone ? 6.0 : 4.0;
           final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
           final hitPadding = globals.isPhone ? 12.0 : 8.0;
           final verticalMargin = baseVerticalMargin + hitPadding;
-          final trackHeight = globals.isPhone ? 6.0 : 4.0;
-          final thumbRect = Rect.fromLTWH(
-              (widget.videoState.progress * width) - halfThumbSize,
-              verticalMargin + (trackHeight / 2) - halfThumbSize,
-              currentThumbSize,
-              currentThumbSize);
+          final thumbProgress =
+              widget.videoState.progress.clamp(0.0, 1.0).toDouble();
+          final thumbRect = _thumbHitRect(
+            progress: thumbProgress,
+            trackWidth: width,
+            verticalMargin: verticalMargin,
+            trackHeight: trackHeight,
+          );
 
           // 章节分割线 hover 命中检测：命中则高亮放大该分割线，鼠标变 pointer
           final hitTick = _hitTestChapterTick(localPosition.dx, width);
+          _setThumbHovered(thumbRect.contains(localPosition));
           setState(() {
-            _isThumbHovered = thumbRect.contains(localPosition);
             _hitChapterTickIndex = hitTick;
           });
 
@@ -239,9 +268,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         }
       },
       onExit: (_) {
+        _setThumbHovered(false);
         setState(() {
           _isHovering = false;
-          _isThumbHovered = false;
           _localHoverTime = null;
           _hitChapterTickIndex = -1;
         });
@@ -253,7 +282,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: (details) {
-          widget.onDraggingStateChange(true);
+          _beginThumbPress(details.localPosition, deformTarget: 0.62);
           _updateProgressFromPosition(details.localPosition);
           _showOverlay(
             context,
@@ -262,6 +291,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           );
         },
         onHorizontalDragUpdate: (details) {
+          _updateThumbDragEffect(details.localPosition);
           _updateProgressFromPosition(details.localPosition);
           if (_overlayEntry != null) {
             _showOverlay(
@@ -271,32 +301,43 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             );
           }
         },
-        onHorizontalDragEnd: (details) {
+        onHorizontalDragEnd: (_) {
+          if (_lastDragLocalPosition != null) {
+            _updateProgressFromPosition(_lastDragLocalPosition!);
+          }
           widget.onDraggingStateChange(false);
-          _updateProgressFromPosition(details.localPosition);
           widget.onPositionUpdate(Offset.zero);
+          _endThumbPress();
+          _removeOverlay();
+        },
+        onHorizontalDragCancel: () {
+          widget.onDraggingStateChange(false);
+          widget.onPositionUpdate(Offset.zero);
+          _endThumbPress();
           _removeOverlay();
         },
         onTapDown: (details) {
-          widget.onDraggingStateChange(true);
-          // isTapGesture: true → 命中章节分割线走 seekToChapter（keyframe 对齐）。
-          // drag 手势（onHorizontalDrag*）默认 false，始终走精确 seekTo，避免
-          // 在章节边界 ±8px 内拖拽被章节跳转劫持。
-          _updateProgressFromPosition(details.localPosition,
-              isTapGesture: true);
+          _beginThumbPress(details.localPosition, deformTarget: 0.34);
+          _updateProgressFromPosition(
+            details.localPosition,
+            isTapGesture: true,
+          );
           _showOverlay(
             context,
             widget.videoState.progress,
             displayTime: widget.videoState.position,
           );
         },
-        onTapUp: (details) {
+        onTapUp: (_) {
           widget.onDraggingStateChange(false);
-          // 不重复 seek：onTapDown 已完成定位（章节分割线命中跳转或普通 seek）。
-          // 若此处再次 _updateProgressFromPosition，tap down→up 间鼠标微动会
-          // 导致 up 时未命中分割线，普通 seekTo 覆盖 onTapDown 的章节跳转。
-          // drag 场景由 onHorizontalDragEnd 处理，不受影响。
           widget.onPositionUpdate(Offset.zero);
+          _endThumbPress();
+          _removeOverlay();
+        },
+        onTapCancel: () {
+          widget.onDraggingStateChange(false);
+          widget.onPositionUpdate(Offset.zero);
+          _endThumbPress();
           _removeOverlay();
         },
         child: LayoutBuilder(
@@ -329,227 +370,252 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
             final hitPadding = globals.isPhone ? 12.0 : 8.0;
             final verticalMargin = baseVerticalMargin + hitPadding;
-            final thumbSize = globals.isPhone ? 20.0 : 12.0;
-            final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
-            final currentThumbSize = _isThumbHovered || widget.isDragging
-                ? thumbSizeHovered
-                : thumbSize;
-            final halfThumbSize = currentThumbSize / 2;
             const trackBaseColor = Color.fromARGB(255, 160, 160, 160);
             const bufferTrackColor = Color.fromARGB(255, 225, 225, 225);
             const playedTrackColor = Color(0xFFFFFFFF);
-            return widget.isDragging
-                ? Stack(
-                    key: _sliderKey,
-                    clipBehavior: Clip.none,
-                    children: [
-                      // 背景轨道
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: verticalMargin),
-                        child: Opacity(
-                          opacity: 0.3,
-                          child: ControlShadow(
-                            borderRadius:
-                                BorderRadius.circular(trackHeight / 2),
-                            child: Container(
-                              height: trackHeight,
-                              decoration: BoxDecoration(
-                                color: trackBaseColor,
-                                borderRadius:
-                                    BorderRadius.circular(trackHeight / 2),
-                              ),
-                            ),
-                          ),
+            final trackOpacity = widget.isDragging ? 0.3 : 0.5;
+
+            return Stack(
+              key: _sliderKey,
+              clipBehavior: Clip.none,
+              children: [
+                // 背景轨道
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: verticalMargin),
+                  child: Opacity(
+                    opacity: trackOpacity,
+                    child: ControlShadow(
+                      borderRadius: BorderRadius.circular(trackHeight / 2),
+                      child: Container(
+                        height: trackHeight,
+                        decoration: BoxDecoration(
+                          color: trackBaseColor,
+                          borderRadius: BorderRadius.circular(trackHeight / 2),
                         ),
                       ),
-                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
-                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
-                      ..._buildChapterOverlayWidgets(
-                          verticalMargin, trackHeight),
-                      // 缓存轨道
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: verticalMargin,
-                        child: FractionallySizedBox(
-                          widthFactor: bufferProgress,
-                          alignment: Alignment.centerLeft,
-                          child: Opacity(
-                            opacity: 0.3,
-                            child: Container(
-                              height: trackHeight,
-                              decoration: BoxDecoration(
-                                color: bufferTrackColor,
-                                borderRadius:
-                                    BorderRadius.circular(trackHeight / 2),
-                              ),
-                            ),
-                          ),
+                    ),
+                  ),
+                ),
+                // 章节标记 overlay（竖线标记 + 当前章节高亮段）
+                // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
+                ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
+                // 缓存轨道
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: verticalMargin,
+                  child: FractionallySizedBox(
+                    widthFactor: bufferProgress,
+                    alignment: Alignment.centerLeft,
+                    child: Opacity(
+                      opacity: trackOpacity,
+                      child: Container(
+                        height: trackHeight,
+                        decoration: BoxDecoration(
+                          color: bufferTrackColor,
+                          borderRadius: BorderRadius.circular(trackHeight / 2),
                         ),
                       ),
-                      // 进度轨道
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: verticalMargin,
-                        child: FractionallySizedBox(
-                          widthFactor: progress,
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            height: trackHeight,
-                            decoration: BoxDecoration(
-                              color: playedTrackColor,
-                              borderRadius:
-                                  BorderRadius.circular(trackHeight / 2),
-                            ),
-                          ),
-                        ),
+                    ),
+                  ),
+                ),
+                // 进度轨道
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: verticalMargin,
+                  child: FractionallySizedBox(
+                    widthFactor: progress,
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      height: trackHeight,
+                      decoration: BoxDecoration(
+                        color: playedTrackColor,
+                        borderRadius: BorderRadius.circular(trackHeight / 2),
                       ),
-                      // 滑块
-                      Positioned(
-                        left: (progress * constraints.maxWidth) - halfThumbSize,
-                        top: verticalMargin + (trackHeight / 2) - halfThumbSize,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOutBack,
-                            width: currentThumbSize,
-                            height: currentThumbSize,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color.fromARGB(100, 0, 0, 0),
-                                  blurRadius:
-                                      _isThumbHovered || widget.isDragging
-                                          ? 12
-                                          : 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                                BoxShadow(
-                                  color: const Color.fromARGB(100, 0, 0, 0),
-                                  blurRadius:
-                                      _isThumbHovered || widget.isDragging
-                                          ? 20
-                                          : 14,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Stack(
-                    key: _sliderKey,
-                    clipBehavior: Clip.none,
-                    children: [
-                      // 背景轨道
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: verticalMargin),
-                        child: Opacity(
-                          opacity: 0.5,
-                          child: ControlShadow(
-                            borderRadius:
-                                BorderRadius.circular(trackHeight / 2),
-                            child: Container(
-                              height: trackHeight,
-                              decoration: BoxDecoration(
-                                color: trackBaseColor,
-                                borderRadius:
-                                    BorderRadius.circular(trackHeight / 2),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
-                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
-                      ..._buildChapterOverlayWidgets(
-                          verticalMargin, trackHeight),
-                      // 缓存轨道
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: verticalMargin,
-                        child: FractionallySizedBox(
-                          widthFactor: bufferProgress,
-                          alignment: Alignment.centerLeft,
-                          child: Opacity(
-                            opacity: 0.5,
-                            child: Container(
-                              height: trackHeight,
-                              decoration: BoxDecoration(
-                                color: bufferTrackColor,
-                                borderRadius:
-                                    BorderRadius.circular(trackHeight / 2),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // 进度轨道
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: verticalMargin,
-                        child: FractionallySizedBox(
-                          widthFactor: progress,
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            height: trackHeight,
-                            decoration: BoxDecoration(
-                              color: playedTrackColor,
-                              borderRadius:
-                                  BorderRadius.circular(trackHeight / 2),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // 滑块
-                      Positioned(
-                        left: (progress * constraints.maxWidth) - halfThumbSize,
-                        top: verticalMargin + (trackHeight / 2) - halfThumbSize,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOutBack,
-                            width: currentThumbSize,
-                            height: currentThumbSize,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color.fromARGB(100, 0, 0, 0),
-                                  blurRadius:
-                                      _isThumbHovered || widget.isDragging
-                                          ? 12
-                                          : 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                                BoxShadow(
-                                  color: Color.fromARGB(100, 0, 0, 0),
-                                  blurRadius:
-                                      _isThumbHovered || widget.isDragging
-                                          ? 20
-                                          : 14,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
+                    ),
+                  ),
+                ),
+                _buildThumb(
+                  progress: progress,
+                  trackWidth: constraints.maxWidth,
+                  trackHeight: trackHeight,
+                  verticalMargin: verticalMargin,
+                ),
+              ],
+            );
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildThumb({
+    required double progress,
+    required double trackWidth,
+    required double trackHeight,
+    required double verticalMargin,
+  }) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _thumbHoverController,
+        _thumbDeformController,
+      ]),
+      builder: (context, child) {
+        final size = _thumbSizeForAnimation();
+        final centerX = progress.clamp(0.0, 1.0) * trackWidth;
+        final centerY = verticalMargin + (trackHeight / 2);
+        final emphasis = widget.isDragging ||
+            _isThumbHovered ||
+            _thumbDeformController.value.abs() > 0.05;
+
+        return Positioned(
+          left: centerX - (size.width / 2),
+          top: centerY - (size.height / 2),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              width: size.width,
+              height: size.height,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(size.height / 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color.fromARGB(100, 0, 0, 0),
+                    blurRadius: emphasis ? 12 : 8,
+                    offset: const Offset(0, 2),
+                  ),
+                  BoxShadow(
+                    color: const Color.fromARGB(100, 0, 0, 0),
+                    blurRadius: emphasis ? 20 : 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Size _thumbSizeForAnimation() {
+    final hoverT = Curves.easeOutCubic.transform(_thumbHoverController.value);
+    final deform = _thumbDeformController.value.clamp(-0.95, 1.0);
+    final squeeze = deform > 0 ? deform : 0.0;
+    final rebound = deform < 0 ? -deform : 0.0;
+    final hoverScale = 1.0 + (hoverT * 0.08);
+    final widthScale = (hoverScale * (1.0 - squeeze * 0.42 + rebound * 0.34))
+        .clamp(0.56, 1.38);
+    final heightScale = (hoverScale * (1.0 + squeeze * 0.40 - rebound * 0.30))
+        .clamp(0.68, 1.42);
+
+    return Size(
+      _thumbBaseSize.width * widthScale,
+      _thumbBaseSize.height * heightScale,
+    );
+  }
+
+  Rect _thumbHitRect({
+    required double progress,
+    required double trackWidth,
+    required double verticalMargin,
+    required double trackHeight,
+  }) {
+    final center = Offset(
+      progress * trackWidth,
+      verticalMargin + (trackHeight / 2),
+    );
+    final size = _thumbBaseSize;
+    return Rect.fromCenter(
+      center: center,
+      width: size.width + 12,
+      height: size.height + 12,
+    );
+  }
+
+  void _setThumbHovered(bool isHovered) {
+    if (_isThumbHovered == isHovered) return;
+    setState(() {
+      _isThumbHovered = isHovered;
+    });
+    if (isHovered) {
+      _thumbHoverController.forward();
+    } else {
+      _thumbHoverController.reverse();
+    }
+  }
+
+  void _beginThumbPress(Offset localPosition, {required double deformTarget}) {
+    widget.onDraggingStateChange(true);
+    _lastDragLocalPosition = localPosition;
+    _lastDragUpdateTime = DateTime.now();
+    _springThumbDeformTo(deformTarget);
+  }
+
+  void _updateThumbDragEffect(Offset localPosition) {
+    final now = DateTime.now();
+    final lastPosition = _lastDragLocalPosition;
+    final lastTime = _lastDragUpdateTime;
+
+    double target = 0.48;
+    if (lastPosition != null && lastTime != null) {
+      final elapsedSeconds = now.difference(lastTime).inMicroseconds /
+          Duration.microsecondsPerSecond;
+      final velocity = elapsedSeconds > 0
+          ? (localPosition.dx - lastPosition.dx).abs() / elapsedSeconds
+          : 0.0;
+      target = (0.40 + velocity / 2200).clamp(0.40, 0.95).toDouble();
+    }
+
+    _lastDragLocalPosition = localPosition;
+    _lastDragUpdateTime = now;
+    _springThumbDeformTo(target);
+  }
+
+  void _endThumbPress() {
+    _lastDragLocalPosition = null;
+    _lastDragUpdateTime = null;
+    _releaseThumbDeform();
+  }
+
+  void _springThumbDeformTo(double target) {
+    _thumbDeformController.stop();
+    unawaited(
+      _thumbDeformController.animateWith(
+        SpringSimulation(
+          _dragThumbSpring,
+          _thumbDeformController.value,
+          target,
+          _thumbDeformController.velocity,
+        ),
+      ),
+    );
+  }
+
+  void _releaseThumbDeform() {
+    _thumbDeformController.stop();
+    unawaited(
+      _thumbDeformController
+          .animateTo(
+        -0.55,
+        duration: const Duration(milliseconds: 95),
+        curve: Curves.easeOutCubic,
+      )
+          .whenComplete(() {
+        if (!mounted) return;
+        unawaited(
+          _thumbDeformController.animateWith(
+            SpringSimulation(
+              _releaseThumbSpring,
+              _thumbDeformController.value,
+              0.0,
+              0.0,
+            ),
+          ),
+        );
+      }),
     );
   }
 

@@ -50,7 +50,8 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
   late final PlayerKernelType _currentKernelType;
   static const double _menuWidth = 300;
   static const double _menuRightOffset = 20;
-  static const double _menuHeight = 420;
+  static const double _paneMenuHeight = 420;
+  static const double _settingsItemHeight = 44;
   static const int _maxAnchorRefreshAttempts = 6;
   static const Duration _menuEnterDuration = Duration(milliseconds: 240);
   static const Duration _menuExitDuration = Duration(milliseconds: 170);
@@ -254,6 +255,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     required Widget child,
     bool forceShowHeader = false,
     bool? useBackButtonOverride,
+    double? height,
   }) {
     final bool showHeader = showBackItem || forceShowHeader;
     final bool useBackButton = useBackButtonOverride ?? showBackItem;
@@ -286,10 +288,17 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
       lockControlsVisible: true,
       anchorRect: resolvedAnchorRect,
       showPointer: resolvedAnchorRect != null,
-      height: _menuHeight,
+      height: height ?? _paneMenuHeight,
       requestClose: requestClose,
       child: child,
     );
+  }
+
+  double _heightForSettingsItemCount(int itemCount) {
+    if (itemCount <= 0) {
+      return _settingsItemHeight;
+    }
+    return itemCount * _settingsItemHeight;
   }
 
   Widget _buildPane(
@@ -438,6 +447,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
         final Widget menuContent = _activePaneId == null
             ? _wrapMenu(
                 showBackItem: false,
+                height: _heightForSettingsItemCount(menuItems.length),
                 child: BaseSettingsMenu(
                   title: '设置',
                   width: _menuWidth,
