@@ -31,12 +31,46 @@ import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/pages/account/material_account_page.dart';
+import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('unified application pages', () {
+    testWidgets('application chrome inherits the selected display surface',
+        (tester) async {
+      AppDisplaySurface? observedSurface;
+      final themeContext = ThemeBuildContext(
+        themeNotifier: ThemeNotifier(),
+        navigatorKey: GlobalKey<NavigatorState>(),
+        launchFilePath: null,
+        environment: const ThemeEnvironment(
+          isDesktop: false,
+          isPhone: true,
+          isWeb: false,
+        ),
+        locale: const Locale('zh'),
+        supportedLocales: const <Locale>[Locale('zh')],
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[],
+        settings: const <String, dynamic>{},
+        overlayBuilder: (child) => child,
+        homeBuilders: <AppDisplaySurface, Widget Function()>{
+          AppDisplaySurface.phone: () => Builder(
+                builder: (context) {
+                  observedSurface = AppDisplaySurfaceScope.of(context);
+                  return const SizedBox.shrink();
+                },
+              ),
+        },
+      );
+
+      await tester.pumpWidget(themeContext.buildHome(AppDisplaySurface.phone));
+
+      expect(observedSurface, AppDisplaySurface.phone);
+    });
+
     test('settings is an action instead of a primary destination', () {
       final pages = buildUnifiedAppPages(
         availability: const AppPageAvailability(

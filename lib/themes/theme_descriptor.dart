@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 
 class ThemeEnvironment {
@@ -83,7 +84,10 @@ class ThemeBuildContext {
       builder = _homeBuilders.values.first;
     }
     assert(builder != null, 'No application shell registered for $surface.');
-    return builder?.call() ?? const SizedBox.shrink();
+    return AppDisplaySurfaceScope(
+      surface: surface,
+      child: builder?.call() ?? const SizedBox.shrink(),
+    );
   }
 }
 
