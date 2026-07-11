@@ -16,6 +16,8 @@ class BlurDialog {
     List<Widget>? actions,
     Color? backgroundColor,
     bool barrierDismissible = true,
+    bool hidePhoneBottomBar = true,
+    Color? phoneBarrierColor,
   }) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -25,6 +27,8 @@ class BlurDialog {
         contentWidget: contentWidget,
         actions: actions,
         barrierDismissible: barrierDismissible,
+        hidePhoneBottomBar: hidePhoneBottomBar,
+        phoneBarrierColor: phoneBarrierColor,
       );
     }
 
@@ -104,6 +108,8 @@ class BlurDialog {
     Widget? contentWidget,
     List<Widget>? actions,
     bool barrierDismissible = true,
+    bool hidePhoneBottomBar = true,
+    Color? phoneBarrierColor,
   }) {
     return _showPhoneBottomSheet<T>(
       context: context,
@@ -112,6 +118,8 @@ class BlurDialog {
       contentWidget: contentWidget,
       actions: actions,
       barrierDismissible: barrierDismissible,
+      hidePhoneBottomBar: hidePhoneBottomBar,
+      phoneBarrierColor: phoneBarrierColor,
     );
   }
 
@@ -122,33 +130,40 @@ class BlurDialog {
     Widget? contentWidget,
     List<Widget>? actions,
     bool barrierDismissible = true,
+    bool hidePhoneBottomBar = true,
+    Color? phoneBarrierColor,
   }) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-
     return CupertinoBottomSheet.show<T>(
       context: context,
       title: title.isEmpty ? null : title,
       heightRatio: 0.86,
       barrierDismissible: barrierDismissible,
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            16,
-            24,
-            24 + keyboardHeight,
-          ),
-          child: _buildDialogContent(
-            context: context,
-            title: title,
-            content: content,
-            contentWidget: contentWidget,
-            actions: actions,
-            includeTitle: false,
-          ),
-        ),
+      barrierColor: phoneBarrierColor,
+      hideBottomBar: hidePhoneBottomBar,
+      child: Builder(
+        builder: (sheetContext) {
+          final keyboardHeight = MediaQuery.of(sheetContext).viewInsets.bottom;
+          return SafeArea(
+            top: false,
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                16,
+                24,
+                24 + keyboardHeight,
+              ),
+              child: _buildDialogContent(
+                context: sheetContext,
+                title: title,
+                content: content,
+                contentWidget: contentWidget,
+                actions: actions,
+                includeTitle: false,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -102,7 +102,7 @@ class _UnifiedSettingsPageState extends material.State<UnifiedSettingsPage> {
 
     UnifiedSettingEntry? target;
     for (final entry in entries) {
-      if (entry.id == initialEntryId && entry.contentType != null) {
+      if (entry.id == initialEntryId) {
         target = entry;
         break;
       }

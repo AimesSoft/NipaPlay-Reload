@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 
@@ -44,33 +45,44 @@ class CupertinoBottomSheet extends StatelessWidget {
     VoidCallback? onClose,
     bool floatingTitle = false,
     bool barrierDismissible = true,
+    Color? barrierColor,
     CupertinoBottomSheetPageController? pageController,
+    bool hideBottomBar = true,
   }) async {
+    final displaySurface = AppDisplaySurfaceScope.of(context);
     // 隐藏底部导航栏
     final bottomBarProvider =
         Provider.of<BottomBarProvider>(context, listen: false);
     final ownsPageController = pageController == null;
     final effectivePageController = pageController ??
         CupertinoBottomSheetPageController(rootTitle: title ?? '');
-    bottomBarProvider.hideBottomBar();
+    if (hideBottomBar) {
+      bottomBarProvider.hideBottomBar();
+    }
 
     try {
       final result = await showCupertinoModalPopup<T>(
         context: context,
         barrierDismissible: barrierDismissible,
-        builder: (BuildContext context) => CupertinoBottomSheet(
-          heightRatio: heightRatio,
-          showCloseButton: showCloseButton,
-          onClose: onClose,
-          floatingTitle: floatingTitle,
-          pageController: effectivePageController,
-          child: child,
+        barrierColor: barrierColor ?? kCupertinoModalBarrierColor,
+        builder: (BuildContext context) => AppDisplaySurfaceScope(
+          surface: displaySurface,
+          child: CupertinoBottomSheet(
+            heightRatio: heightRatio,
+            showCloseButton: showCloseButton,
+            onClose: onClose,
+            floatingTitle: floatingTitle,
+            pageController: effectivePageController,
+            child: child,
+          ),
         ),
       );
       return result;
     } finally {
       // 恢复底部导航栏显示
-      bottomBarProvider.showBottomBar();
+      if (hideBottomBar) {
+        bottomBarProvider.showBottomBar();
+      }
       if (ownsPageController) {
         effectivePageController.dispose();
       }

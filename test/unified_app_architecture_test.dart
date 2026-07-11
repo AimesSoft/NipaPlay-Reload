@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ElevatedButton;
+import 'package:flutter/material.dart' show ElevatedButton, TextField;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
@@ -23,6 +23,8 @@ import 'package:nipaplay/pages/dashboard_home_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
+import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
+import 'package:nipaplay/playback/unified_playback_entry_model.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
@@ -252,11 +254,17 @@ void main() {
   test('settings entries cannot carry per-surface page builders', () {
     final source =
         File('lib/settings/unified_settings_entries.dart').readAsStringSync();
+    final generalSource = File(
+      'lib/settings/pages/general_settings_content.dart',
+    ).readAsStringSync();
 
     expect(source, isNot(contains('desktopTabletPageBuilder')));
     expect(source, isNot(contains('phonePageBuilder')));
     expect(source, isNot(contains('phoneHomeTileBuilder')));
     expect(source, isNot(contains('subtitleWidgetBuilder')));
+    expect(source, isNot(contains('UnifiedSettingInlineControlType')));
+    expect(source, isNot(contains('AutoUpdateSettingTile')));
+    expect(generalSource, contains('AutoUpdateSettingTile'));
     expect(UnifiedSettingContentType.values, isNotEmpty);
     expect(
       const UnifiedSettingContent(type: UnifiedSettingContentType.general),
@@ -487,6 +495,68 @@ void main() {
       notifier.targetMediaLibrarySectionId,
       MediaLibrarySectionIds.localManagement,
     );
+  });
+
+  test('playback entry host delegates controls to the adaptive renderer', () {
+    final source = File(
+      'lib/themes/nipaplay/widgets/video_upload_ui.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('AdaptivePlaybackEntryView('));
+    expect(source, isNot(contains('TextField(')));
+    expect(source, isNot(contains('TextButton(')));
+  });
+
+  testWidgets('playback entry builds Cupertino controls on phone',
+      (tester) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: AdaptivePlaybackEntryView(
+            content: unifiedPlaybackEntryContent,
+            mascotScale: const AlwaysStoppedAnimation<double>(1),
+            onMascotTap: () {},
+            onSelectFile: () {},
+            onOpenUrlInput: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(CupertinoButton), findsWidgets);
+    expect(find.byType(CupertinoTextField), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('playback URL popup builds one adaptive phone form',
+      (tester) async {
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    final submitting = ValueNotifier<bool>(false);
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    addTearDown(submitting.dispose);
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: AdaptivePlaybackUrlDialogContent(
+            content: unifiedPlaybackEntryContent,
+            controller: controller,
+            focusNode: focusNode,
+            isSubmitting: submitting,
+            onPaste: () {},
+            onEditOneTimeUserAgent: () {},
+            onPlay: () async => false,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(CupertinoTextField), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
   });
 
   test('phone renderer can force Cupertino controls on Android', () {

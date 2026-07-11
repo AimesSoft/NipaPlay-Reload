@@ -11,7 +11,6 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
-import 'package:nipaplay/settings/common_setting_tiles.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
 import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -34,10 +33,6 @@ enum UnifiedSettingSection {
   about,
 }
 
-enum UnifiedSettingInlineControlType {
-  autoUpdate,
-}
-
 enum UnifiedSettingSubtitleType {
   packageVersion,
 }
@@ -48,7 +43,6 @@ class UnifiedSettingEntryIds {
   static const String appearance = 'appearance';
   static const String language = 'language';
   static const String general = 'general';
-  static const String updateCheck = 'update_check';
   static const String storage = 'storage';
   static const String network = 'network';
   static const String backupRestore = 'backup_restore';
@@ -81,11 +75,10 @@ class UnifiedSettingEntry {
     required this.titleBuilder,
     required this.pageTitleBuilder,
     required this.icon,
+    required this.contentType,
     this.phoneIcon,
     this.subtitleBuilder,
     this.subtitleType,
-    this.contentType,
-    this.inlineControlType,
     this.visible,
   });
 
@@ -97,8 +90,7 @@ class UnifiedSettingEntry {
   final material.IconData? phoneIcon;
   final UnifiedSettingTextBuilder? subtitleBuilder;
   final UnifiedSettingSubtitleType? subtitleType;
-  final UnifiedSettingContentType? contentType;
-  final UnifiedSettingInlineControlType? inlineControlType;
+  final UnifiedSettingContentType contentType;
   final UnifiedSettingVisibleBuilder? visible;
 
   String title(material.BuildContext context, UnifiedSettingsSurface surface) {
@@ -119,23 +111,18 @@ class UnifiedSettingEntry {
     if (visible?.call(context, surface) == false) {
       return false;
     }
-    return contentType != null || inlineControlType != null;
+    return true;
   }
 
   material.Widget buildPage(
     material.BuildContext context,
     UnifiedSettingsSurface surface,
   ) {
-    final type = contentType;
-    if (type == null) {
-      return const material.SizedBox.shrink();
-    }
-
     return AdaptiveSettingsScope(
       style: surface == UnifiedSettingsSurface.phone
           ? AdaptiveSettingsStyle.phone
           : AdaptiveSettingsStyle.desktopTablet,
-      child: UnifiedSettingContent(type: type),
+      child: UnifiedSettingContent(type: contentType),
     );
   }
 
@@ -247,13 +234,6 @@ class _UnifiedCupertinoSettingHomeTileState
     extends material.State<UnifiedCupertinoSettingHomeTile> {
   @override
   material.Widget build(material.BuildContext context) {
-    switch (widget.entry.inlineControlType) {
-      case UnifiedSettingInlineControlType.autoUpdate:
-        return const AutoUpdateSettingTile();
-      case null:
-        break;
-    }
-
     return CupertinoSettingsTile(
       leading: material.Icon(
         widget.entry.phoneIcon ?? widget.entry.icon,
@@ -267,14 +247,12 @@ class _UnifiedCupertinoSettingHomeTileState
         UnifiedSettingsSurface.phone,
       ),
       backgroundColor: resolveSettingsTileBackground(context),
-      showChevron: widget.entry.contentType != null,
-      onTap: widget.entry.contentType == null
-          ? null
-          : () async {
-              await openUnifiedCupertinoSettingEntry(context, widget.entry);
-              if (!mounted) return;
-              setState(() {});
-            },
+      showChevron: true,
+      onTap: () async {
+        await openUnifiedCupertinoSettingEntry(context, widget.entry);
+        if (!mounted) return;
+        setState(() {});
+      },
     );
   }
 }
@@ -329,19 +307,6 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.settings_outline,
       phoneIcon: cupertino.CupertinoIcons.settings,
       contentType: UnifiedSettingContentType.general,
-    ),
-    UnifiedSettingEntry(
-      id: UnifiedSettingEntryIds.updateCheck,
-      section: UnifiedSettingSection.general,
-      titleBuilder: (context, surface) => context.l10n.aboutAutoCheckUpdates,
-      pageTitleBuilder: (context, surface) =>
-          context.l10n.aboutAutoCheckUpdates,
-      subtitleBuilder: (context, surface) =>
-          context.l10n.aboutManualOnlyWhenDisabled,
-      icon: Ionicons.cloud_outline,
-      phoneIcon: cupertino.CupertinoIcons.arrow_clockwise_circle,
-      inlineControlType: UnifiedSettingInlineControlType.autoUpdate,
-      visible: (context, surface) => surface == UnifiedSettingsSurface.phone,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.storage,
