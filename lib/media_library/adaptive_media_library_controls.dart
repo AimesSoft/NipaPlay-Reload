@@ -6,7 +6,7 @@ import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_tabs.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
@@ -358,10 +358,16 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
             ),
           ),
           const material.SizedBox(height: 8),
-          CupertinoMediaLibrarySectionTabs(
-            sections: sections,
-            selectedId: selectedSection.id,
-            onSelected: onSectionSelected,
+          material.Padding(
+            padding: const material.EdgeInsets.symmetric(horizontal: 20),
+            child: material.Align(
+              alignment: material.Alignment.centerLeft,
+              child: CupertinoMediaLibrarySectionPicker(
+                sections: sections,
+                selectedId: selectedSection.id,
+                onSelected: onSectionSelected,
+              ),
+            ),
           ),
           const material.SizedBox(height: 4),
           material.Expanded(child: child),
