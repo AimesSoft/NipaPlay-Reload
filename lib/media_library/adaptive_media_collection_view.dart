@@ -19,8 +19,8 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
-import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_anime_card.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
@@ -320,47 +320,23 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
   @override
   material.Widget build(material.BuildContext context) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
-      return material.Padding(
-        padding: const material.EdgeInsets.fromLTRB(20, 12, 20, 4),
-        child: material.Row(
-          children: [
-            material.Expanded(
-              child: cupertino.CupertinoSearchTextField(
-                controller: controller,
-                placeholder: '搜索$sourceLabel',
-                onChanged: onSearchChanged,
-                onSuffixTap: () {
-                  controller.clear();
-                  onSearchChanged('');
-                },
-              ),
-            ),
-            const material.SizedBox(width: 8),
-            AdaptiveButton.child(
-              onPressed: () => _showPhoneSort(context),
-              style: AdaptiveButtonStyle.glass,
-              size: AdaptiveButtonSize.medium,
-              padding: const material.EdgeInsets.all(9),
-              child: const material.Icon(
-                cupertino.CupertinoIcons.sort_down,
-                size: 19,
-              ),
-            ),
-            const material.SizedBox(width: 8),
-            AdaptiveButton.child(
-              onPressed: onSync,
-              style: AdaptiveButtonStyle.glass,
-              size: AdaptiveButtonSize.medium,
-              padding: const material.EdgeInsets.all(9),
-              child: isSyncing
-                  ? const cupertino.CupertinoActivityIndicator(radius: 9)
-                  : const material.Icon(
-                      cupertino.CupertinoIcons.refresh,
-                      size: 19,
-                    ),
-            ),
-          ],
-        ),
+      return CupertinoMediaSearchToolbar(
+        controller: controller,
+        placeholder: '搜索$sourceLabel',
+        onChanged: onSearchChanged,
+        actions: [
+          CupertinoMediaSearchToolbarAction(
+            label: '媒体库排序',
+            icon: cupertino.CupertinoIcons.sort_down,
+            onPressed: () => _showPhoneSort(context),
+          ),
+          CupertinoMediaSearchToolbarAction(
+            label: isSyncing ? '同步中' : '同步$sourceLabel',
+            icon: cupertino.CupertinoIcons.refresh,
+            onPressed: onSync,
+            loading: isSyncing,
+          ),
+        ],
       );
     }
 

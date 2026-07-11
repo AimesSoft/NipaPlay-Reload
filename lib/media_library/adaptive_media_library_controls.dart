@@ -7,6 +7,7 @@ import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
@@ -334,32 +335,11 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    final background = cupertino.CupertinoDynamicColor.resolve(
-      cupertino.CupertinoColors.systemGroupedBackground,
-      context,
-    );
-    final top = material.MediaQuery.paddingOf(context).top;
     return material.ColoredBox(
-      color: background,
+      color: material.Colors.transparent,
       child: material.Column(
         children: [
-          material.SizedBox(height: top + 8),
-          material.Padding(
-            padding: const material.EdgeInsets.symmetric(horizontal: 20),
-            child: material.Row(
-              children: [
-                material.Expanded(
-                  child: material.Text(
-                    '媒体库',
-                    style: cupertino.CupertinoTheme.of(context)
-                        .textTheme
-                        .navLargeTitleTextStyle,
-                  ),
-                ),
-                const material.SizedBox(width: 148),
-              ],
-            ),
-          ),
+          const CupertinoAppPageHeader(title: '媒体库', bottomPadding: 8),
           const material.SizedBox(height: 8),
           material.Padding(
             padding: const material.EdgeInsets.symmetric(horizontal: 20),

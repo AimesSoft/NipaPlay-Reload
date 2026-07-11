@@ -64,6 +64,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 part '../themes/nipaplay/widgets/dashboard_home_page_data_loading.dart';

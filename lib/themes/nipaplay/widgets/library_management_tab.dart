@@ -39,7 +39,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_glass_button_group.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -2378,69 +2378,39 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
 
     return ColoredBox(
-      color: isPhone
-          ? cupertino.CupertinoDynamicColor.resolve(
-              cupertino.CupertinoColors.systemGroupedBackground,
-              context,
-            )
-          : Colors.transparent,
+      color: Colors.transparent,
       child: Column(
         children: [
           if (isPhone)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: Row(
-                children: [
-                  if (mountedLocation != null) ...[
-                    cupertino.CupertinoButton(
-                      padding: const EdgeInsets.all(6),
-                      minimumSize: const Size.square(38),
+            CupertinoMediaSearchToolbar(
+              controller: _searchController,
+              placeholder: mountedLocation == null ? '搜索文件夹或服务器' : '搜索文件或文件夹',
+              onChanged: (_) => setState(() {}),
+              leadingAction: mountedLocation == null
+                  ? null
+                  : CupertinoMediaSearchToolbarAction(
+                      label: '返回上级目录',
+                      icon: cupertino.CupertinoIcons.chevron_back,
                       onPressed: _navigateMountedBack,
-                      child: const Icon(
-                        cupertino.CupertinoIcons.chevron_back,
-                        size: 20,
-                      ),
                     ),
-                    const SizedBox(width: 4),
-                  ],
-                  Expanded(
-                    child: cupertino.CupertinoSearchTextField(
-                      controller: _searchController,
-                      placeholder:
-                          mountedLocation == null ? '搜索文件夹或服务器' : '搜索文件或文件夹',
-                      onChanged: (_) => setState(() {}),
-                      onSuffixTap: () {
-                        _searchController.clear();
-                        setState(() {});
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CupertinoGlassButtonGroup(
-                    buttonSize: 38,
-                    items: [
-                      CupertinoGlassButtonGroupItem(
-                        label:
-                            widget.viewMode == LibraryManagementViewMode.icons
-                                ? '切换到列表视图'
-                                : '切换到图标视图',
-                        icon: widget.viewMode == LibraryManagementViewMode.icons
-                            ? cupertino.CupertinoIcons.list_bullet
-                            : cupertino.CupertinoIcons.square_grid_2x2,
-                        onPressed: _toggleViewMode,
-                      ),
-                      CupertinoGlassButtonGroupItem(
-                        label: '库管理操作',
-                        icon: cupertino.CupertinoIcons.ellipsis,
-                        onPressed:
-                            actions.any((action) => action.onPressed != null)
-                                ? () => _showPhoneManagementActions(actions)
-                                : null,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              actions: [
+                CupertinoMediaSearchToolbarAction(
+                  label: widget.viewMode == LibraryManagementViewMode.icons
+                      ? '切换到列表视图'
+                      : '切换到图标视图',
+                  icon: widget.viewMode == LibraryManagementViewMode.icons
+                      ? cupertino.CupertinoIcons.list_bullet
+                      : cupertino.CupertinoIcons.square_grid_2x2,
+                  onPressed: _toggleViewMode,
+                ),
+                CupertinoMediaSearchToolbarAction(
+                  label: '库管理操作',
+                  icon: cupertino.CupertinoIcons.ellipsis,
+                  onPressed: actions.any((action) => action.onPressed != null)
+                      ? () => _showPhoneManagementActions(actions)
+                      : null,
+                ),
+              ],
             )
           else
             _buildManagementControlBar(

@@ -408,6 +408,85 @@ void main() {
     expect(removedNativeGroup.existsSync(), isFalse);
   });
 
+  test('phone primary pages share one header and desktop background renderer',
+      () {
+    final home = File(
+      'lib/themes/cupertino/widgets/cupertino_home_page_controls.dart',
+    ).readAsStringSync();
+    final account = File(
+      'lib/themes/nipaplay/pages/account/material_account_page.dart',
+    ).readAsStringSync();
+    final media = File(
+      'lib/media_library/adaptive_media_library_controls.dart',
+    ).readAsStringSync();
+    final phoneRoot = File(
+      'lib/themes/cupertino/pages/cupertino_main_page.dart',
+    ).readAsStringSync();
+    final header = File(
+      'lib/themes/cupertino/widgets/cupertino_app_page_header.dart',
+    ).readAsStringSync();
+
+    expect(home, contains("CupertinoAppPageHeader(title: '主页')"));
+    expect(account, contains("title: '账户'"));
+    expect(media, contains("CupertinoAppPageHeader(title: '媒体库'"));
+    expect(home, isNot(contains('statusBarHeight + 58')));
+    expect(account, isNot(contains('statusBarHeight + 58')));
+    expect(header, contains('fontSize: 30'));
+    expect(phoneRoot, contains('BackgroundWithBlur('));
+  });
+
+  test('phone media pages share one neutral containerless search toolbar', () {
+    final collection = File(
+      'lib/media_library/adaptive_media_collection_view.dart',
+    ).readAsStringSync();
+    final management = File(
+      'lib/themes/nipaplay/widgets/library_management_tab.dart',
+    ).readAsStringSync();
+    final toolbar = File(
+      'lib/themes/cupertino/widgets/cupertino_media_search_toolbar.dart',
+    ).readAsStringSync();
+    final sectionPicker = File(
+      'lib/themes/cupertino/widgets/cupertino_media_library_section_picker.dart',
+    ).readAsStringSync();
+
+    expect(collection, contains('CupertinoMediaSearchToolbar('));
+    expect(collection, isNot(contains('_phoneToolbarButton')));
+    expect(collection, isNot(contains('AdaptiveButtonStyle.glass')));
+    expect(management, contains('CupertinoMediaSearchToolbar('));
+    expect(management, isNot(contains('_buildPhoneLibraryToolbarButton')));
+    expect(management, isNot(contains('CupertinoGlassButtonGroup(')));
+    expect(toolbar, contains('static const double controlHeight = 38'));
+    expect(toolbar, contains('CupertinoSearchTextField('));
+    expect(toolbar, contains('CupertinoColors.label'));
+    expect(sectionPicker, contains('mainAxisSize: MainAxisSize.min'));
+    expect(sectionPicker, isNot(contains('width: 240')));
+  });
+
+  test('phone anime detail respects its bottom sheet title area', () {
+    final detailShell = File(
+      'lib/themes/nipaplay/widgets/anime_detail_shell.dart',
+    ).readAsStringSync();
+
+    expect(detailShell, contains('CupertinoBottomSheetScope.maybeOf(context)'));
+    expect(detailShell, contains('bottomSheetScope?.contentTopInset'));
+    expect(detailShell, contains('12 + phoneTopInset'));
+    expect(detailShell, contains('fontSize: 18'));
+  });
+
+  test('phone anime detail and account share the native segmented control', () {
+    final detailShell = File(
+      'lib/themes/nipaplay/widgets/anime_detail_shell.dart',
+    ).readAsStringSync();
+    final account = File(
+      'lib/themes/nipaplay/pages/account/material_account_page.dart',
+    ).readAsStringSync();
+
+    expect(detailShell, contains('AdaptiveSegmentedControl('));
+    expect(detailShell, contains("labels: const ['简介', '剧集']"));
+    expect(detailShell, isNot(contains('TabBar(')));
+    expect(account, contains('AdaptiveSegmentedControl('));
+  });
+
   test('media library sections share stable ids and ordering', () {
     final sections = buildUnifiedMediaLibrarySections(
       const MediaLibraryAvailability(

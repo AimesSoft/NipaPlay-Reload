@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
@@ -210,36 +211,40 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBar, _) {
-        final body = CupertinoPageActionsScope(
-          controller: _pageActionsController,
-          child: AppNavigationScope(
-            selectedPageId: selectedPage.id,
-            pageIds: pages.map((page) => page.id).toList(growable: false),
-            onSelectPage: _selectPage,
-            child: Stack(
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 90),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  child: KeyedSubtree(
-                    key: ValueKey<String>(selectedPage.id),
-                    child: CupertinoBounceWrapper(
-                      key: _bounceKey(selectedPage.id),
-                      autoPlay: false,
-                      child:
-                          selectedPage.build(context, AppDisplaySurface.phone),
+        final body = BackgroundWithBlur(
+          child: CupertinoPageActionsScope(
+            controller: _pageActionsController,
+            child: AppNavigationScope(
+              selectedPageId: selectedPage.id,
+              pageIds: pages.map((page) => page.id).toList(growable: false),
+              onSelectPage: _selectPage,
+              child: Stack(
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 90),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: KeyedSubtree(
+                      key: ValueKey<String>(selectedPage.id),
+                      child: CupertinoBounceWrapper(
+                        key: _bounceKey(selectedPage.id),
+                        autoPlay: false,
+                        child: selectedPage.build(
+                          context,
+                          AppDisplaySurface.phone,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                Positioned(
-                  top: MediaQuery.paddingOf(context).top + 4,
-                  right: 12 + MediaQuery.paddingOf(context).right,
-                  child: CupertinoAppPageActions(
-                    actionIds: selectedPage.actionIds,
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top + 4,
+                    right: 12 + MediaQuery.paddingOf(context).right,
+                    child: CupertinoAppPageActions(
+                      actionIds: selectedPage.actionIds,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

@@ -54,9 +54,9 @@ class _CupertinoMediaLibrarySectionPickerState
       );
     }
 
-    return SizedBox(
+    return ConstrainedBox(
       key: const ValueKey<String>('media-library-section-picker'),
-      width: 240,
+      constraints: const BoxConstraints(maxWidth: 240),
       child: BlurDropdown<String>(
         dropdownKey: _dropdownKey,
         items: [
@@ -93,33 +93,36 @@ class _PickerLabel extends StatelessWidget {
       context,
     );
 
-    return SizedBox(
+    return ConstrainedBox(
       key: const ValueKey<String>('media-library-section-picker'),
-      width: 240,
-      height: 44,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                section.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: labelColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+      constraints: const BoxConstraints(maxWidth: 240),
+      child: SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  section.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              CupertinoIcons.chevron_down,
-              size: 15,
-              color: secondaryColor,
-            ),
-          ],
+              const SizedBox(width: 5),
+              Icon(
+                CupertinoIcons.chevron_down,
+                size: 15,
+                color: secondaryColor,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -19,6 +19,7 @@ import 'package:nipaplay/widgets/user_activity/cupertino_user_activity.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/pages/account/sections/bangumi_section.dart';
 import 'package:nipaplay/themes/cupertino/pages/account/sections/dandanplay_account_section.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -553,30 +554,17 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
   }
 
   Widget _buildCupertinoAccountPage() {
-    final background = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemGroupedBackground,
-      context,
-    );
-    final statusBarHeight = MediaQuery.paddingOf(context).top;
-
     return ColoredBox(
-      color: background,
+      color: Colors.transparent,
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: statusBarHeight + 58)),
           const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 116, 14),
-              child: Text(
-                '账户',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            child: CupertinoAppPageHeader(
+              title: '账户',
+              bottomPadding: 14,
             ),
           ),
           SliverToBoxAdapter(

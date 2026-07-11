@@ -480,7 +480,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           ],
         ),
       ],
-      if (showNipaplayShellSettings) ...[
+      ...[
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [

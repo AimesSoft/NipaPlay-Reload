@@ -16,38 +16,21 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
   }
 
   Widget _buildCupertinoHomePage() {
-    final background = cupertino.CupertinoDynamicColor.resolve(
-      cupertino.CupertinoColors.systemGroupedBackground,
-      context,
-    );
     final sectionsProvider = context.watch<HomeSectionsSettingsProvider>();
-    final statusBarHeight = MediaQuery.paddingOf(context).top;
 
     return ColoredBox(
-      color: background,
+      color: Colors.transparent,
       child: CustomScrollView(
         controller: _mainScrollController,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
         slivers: [
-          SliverPadding(
-            padding: EdgeInsets.only(top: statusBarHeight + 58),
-            sliver: cupertino.CupertinoSliverRefreshControl(
-              onRefresh: _refreshCupertinoHome,
-            ),
+          cupertino.CupertinoSliverRefreshControl(
+            onRefresh: _refreshCupertinoHome,
           ),
           const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 116, 10),
-              child: Text(
-                '主页',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+            child: CupertinoAppPageHeader(title: '主页'),
           ),
           SliverToBoxAdapter(child: _buildCupertinoHero()),
           ..._buildCupertinoConfiguredSections(sectionsProvider),
