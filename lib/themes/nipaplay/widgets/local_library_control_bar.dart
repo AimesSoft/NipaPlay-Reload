@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 
@@ -52,6 +53,8 @@ class LocalLibraryControlBar extends StatefulWidget {
   final String? title;
   final bool showSort;
   final List<LocalLibraryActionControl>? trailingActions;
+  final LibraryManagementViewMode? viewMode;
+  final VoidCallback? onToggleViewMode;
 
   LocalLibraryControlBar({
     super.key,
@@ -65,6 +68,8 @@ class LocalLibraryControlBar extends StatefulWidget {
     this.title,
     this.showSort = true,
     this.trailingActions,
+    this.viewMode,
+    this.onToggleViewMode,
   });
 
   @override
@@ -93,6 +98,7 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   Widget build(BuildContext context) {
     assert(!widget.showSort ||
         (widget.currentSort != null && widget.onSortChanged != null));
+    assert((widget.viewMode == null) == (widget.onToggleViewMode == null));
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _buildPhoneControlBar(context);
     }
@@ -144,6 +150,20 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               onClear: widget.onClearSearch,
             ),
           ),
+          if (widget.viewMode != null) ...[
+            const SizedBox(width: 10),
+            SearchBarActionButton(
+              icon: widget.viewMode == LibraryManagementViewMode.icons
+                  ? Ionicons.list_outline
+                  : Ionicons.grid_outline,
+              size: 20,
+              color: primaryTextColor,
+              tooltip: widget.viewMode == LibraryManagementViewMode.icons
+                  ? '切换到列表视图'
+                  : '切换到图标视图',
+              onPressed: widget.onToggleViewMode,
+            ),
+          ],
           if (widget.trailingActions != null &&
               widget.trailingActions!.isNotEmpty) ...[
             SizedBox(width: 12),

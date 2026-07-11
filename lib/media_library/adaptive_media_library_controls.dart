@@ -4,6 +4,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
@@ -64,11 +65,16 @@ class AdaptiveMediaLibrarySectionContent extends material.StatelessWidget {
     required this.section,
     required this.onPlayEpisode,
     required this.onSourcesUpdated,
+    required this.managementViewMode,
+    required this.onManagementViewModeChanged,
   });
 
   final UnifiedMediaLibrarySection section;
   final material.ValueChanged<WatchHistoryItem> onPlayEpisode;
   final material.VoidCallback onSourcesUpdated;
+  final LibraryManagementViewMode managementViewMode;
+  final material.ValueChanged<LibraryManagementViewMode>
+      onManagementViewModeChanged;
 
   @override
   material.Widget build(material.BuildContext context) {
@@ -84,6 +90,8 @@ class AdaptiveMediaLibrarySectionContent extends material.StatelessWidget {
       section: section,
       onPlayEpisode: onPlayEpisode,
       onSourcesUpdated: onSourcesUpdated,
+      managementViewMode: managementViewMode,
+      onManagementViewModeChanged: onManagementViewModeChanged,
     );
   }
 }
@@ -94,11 +102,16 @@ class _UnifiedMediaLibrarySectionContent extends material.StatelessWidget {
     required this.section,
     required this.onPlayEpisode,
     required this.onSourcesUpdated,
+    required this.managementViewMode,
+    required this.onManagementViewModeChanged,
   });
 
   final UnifiedMediaLibrarySection section;
   final material.ValueChanged<WatchHistoryItem> onPlayEpisode;
   final material.VoidCallback onSourcesUpdated;
+  final LibraryManagementViewMode managementViewMode;
+  final material.ValueChanged<LibraryManagementViewMode>
+      onManagementViewModeChanged;
 
   @override
   material.Widget build(material.BuildContext context) {
@@ -108,6 +121,8 @@ class _UnifiedMediaLibrarySectionContent extends material.StatelessWidget {
       UnifiedMediaLibraryContentType.libraryManagement => LibraryManagementTab(
           section: _desktopManagementSource(section.source!),
           onPlayEpisode: onPlayEpisode,
+          viewMode: managementViewMode,
+          onViewModeChanged: onManagementViewModeChanged,
         ),
       UnifiedMediaLibraryContentType.sharedCollection =>
         SharedRemoteLibraryView(

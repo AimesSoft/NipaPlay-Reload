@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:provider/provider.dart';
@@ -104,6 +105,7 @@ class LibraryManagementList<T> extends StatelessWidget {
     this.minItemWidth = 300.0,
     this.spacing = 16.0,
     this.padding = const EdgeInsets.all(8),
+    this.viewMode = LibraryManagementViewMode.icons,
   });
 
   final List<T> items;
@@ -112,6 +114,7 @@ class LibraryManagementList<T> extends StatelessWidget {
   final double minItemWidth;
   final double spacing;
   final EdgeInsets padding;
+  final LibraryManagementViewMode viewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -126,6 +129,21 @@ class LibraryManagementList<T> extends StatelessWidget {
             child: itemBuilder(context, items[index]),
           );
         },
+      );
+    }
+
+    if (viewMode == LibraryManagementViewMode.list) {
+      return AdaptiveMediaScrollbar(
+        controller: scrollController,
+        child: ListView.builder(
+          controller: scrollController,
+          padding: padding,
+          itemCount: items.length,
+          itemBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: itemBuilder(context, items[index]),
+          ),
+        ),
       );
     }
 

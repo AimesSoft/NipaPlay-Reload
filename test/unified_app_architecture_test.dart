@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ElevatedButton, TextField;
+import 'package:flutter/material.dart'
+    show ElevatedButton, MaterialApp, TextField;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
@@ -19,6 +20,8 @@ import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
+import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
@@ -32,6 +35,7 @@ import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_management_overview.dart';
 import 'package:nipaplay/themes/nipaplay/pages/account/material_account_page.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
@@ -359,6 +363,24 @@ void main() {
     expect(appRegistry, isNot(contains('_CupertinoPageControls')));
   });
 
+  test('library management extends its root renderer into mounted folders', () {
+    final management = File(
+      'lib/themes/nipaplay/widgets/library_management_tab.dart',
+    ).readAsStringSync();
+    final removedBrowser = File(
+      'lib/media_library/adaptive_library_folder_browser.dart',
+    );
+
+    expect(management, contains('_MountedLibraryLocation'));
+    expect(management, contains('_buildMountedDirectoryItems'));
+    expect(management, contains('AdaptiveLibraryManagementOverview'));
+    expect(management, isNot(contains('_buildMountedLibrary')));
+    expect(management, isNot(contains('AdaptiveLibraryFolderBrowser')));
+    expect(management, isNot(contains('CupertinoBottomSheet.show')));
+    expect(management, isNot(contains('_openPhoneLocalFolder')));
+    expect(removedBrowser.existsSync(), isFalse);
+  });
+
   test('media library sections share stable ids and ordering', () {
     final sections = buildUnifiedMediaLibrarySections(
       const MediaLibraryAvailability(
@@ -393,6 +415,90 @@ void main() {
       ),
       greaterThan(0),
     );
+  });
+
+  testWidgets('phone library management renders one item model in both views',
+      (tester) async {
+    const items = <UnifiedLibraryManagementItem>[
+      UnifiedLibraryManagementItem(
+        id: 'library-a',
+        title: '动画目录',
+        subtitle: '/media/anime',
+        icon: LibraryManagementIcon.folder,
+        onOpen: null,
+      ),
+    ];
+
+    Future<void> pump(LibraryManagementViewMode viewMode) {
+      return tester.pumpWidget(
+        CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: CupertinoLibraryManagementOverview(
+              items: items,
+              viewMode: viewMode,
+              emptyTitle: '没有目录',
+              emptySubtitle: '请添加目录',
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pump(LibraryManagementViewMode.icons);
+    expect(find.byType(GridView), findsOneWidget);
+    expect(find.text('动画目录'), findsOneWidget);
+
+    await pump(LibraryManagementViewMode.list);
+    expect(find.byType(ListView), findsOneWidget);
+    expect(find.text('动画目录'), findsOneWidget);
+  });
+
+  testWidgets('desktop library management honors the shared view mode',
+      (tester) async {
+    Future<void> pump(LibraryManagementViewMode viewMode) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: AppDisplaySurfaceScope(
+            surface: AppDisplaySurface.desktopTablet,
+            child: SizedBox(
+              width: 900,
+              height: 600,
+              child: AdaptiveLibraryManagementOverview(
+                items: const [
+                  UnifiedLibraryManagementItem(
+                    id: 'a',
+                    title: '目录 A',
+                    subtitle: '/media/a',
+                    icon: LibraryManagementIcon.folder,
+                    onOpen: null,
+                  ),
+                  UnifiedLibraryManagementItem(
+                    id: 'b',
+                    title: '目录 B',
+                    subtitle: '/media/b',
+                    icon: LibraryManagementIcon.folder,
+                    onOpen: null,
+                  ),
+                ],
+                viewMode: viewMode,
+                emptyContent: const LibraryManagementEmptyContent(
+                  title: '没有目录',
+                  subtitle: '请添加目录',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pump(LibraryManagementViewMode.icons);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.text('目录 A'), findsOneWidget);
+
+    await pump(LibraryManagementViewMode.list);
+    expect(find.byType(ListView), findsOneWidget);
+    expect(find.text('目录 B'), findsOneWidget);
   });
 
   test('media library source filtering is shared by every renderer', () {

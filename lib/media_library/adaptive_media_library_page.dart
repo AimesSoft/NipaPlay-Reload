@@ -11,6 +11,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -54,6 +55,8 @@ class AdaptiveMediaLibraryPage extends StatefulWidget {
 
 class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   String _selectedSectionId = MediaLibrarySectionIds.local;
+  LibraryManagementViewMode _managementViewMode =
+      LibraryManagementViewMode.icons;
   TabChangeNotifier? _tabChangeNotifier;
   bool _connectionsInitialized = false;
 
@@ -185,6 +188,12 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
             section: selectedSection,
             onPlayEpisode: _playHistoryItem,
             onSourcesUpdated: _refreshSources,
+            managementViewMode: _managementViewMode,
+            onManagementViewModeChanged: (viewMode) {
+              if (viewMode != _managementViewMode) {
+                setState(() => _managementViewMode = viewMode);
+              }
+            },
           ),
         );
       },
