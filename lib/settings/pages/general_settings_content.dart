@@ -294,7 +294,6 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
     );
 
     return AdaptiveSettingsPage(
-      title: context.l10n.generalSettings,
       children: children,
     );
   }

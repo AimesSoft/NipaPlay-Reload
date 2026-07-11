@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -8,6 +10,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class BangumiCollectionDialog extends StatefulWidget {
   final String animeTitle;
@@ -40,6 +44,28 @@ class BangumiCollectionDialog extends StatefulWidget {
     required Future<void> Function(BangumiCollectionSubmitResult result)
         onSubmit,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '编辑收藏',
+        heightRatio: 0.9,
+        child: CupertinoBangumiCollectionSheet(
+          animeTitle: animeTitle,
+          initialRating: initialRating,
+          initialCollectionType: initialCollectionType,
+          initialComment: initialComment,
+          initialEpisodeStatus: initialEpisodeStatus,
+          totalEpisodes: totalEpisodes,
+          isSubmitting: false,
+          onSubmit: (result) async {
+            await onSubmit(result);
+            return true;
+          },
+          onCancel: () => Navigator.of(context).pop(),
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,

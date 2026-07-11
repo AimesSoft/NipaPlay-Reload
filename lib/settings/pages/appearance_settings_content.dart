@@ -630,7 +630,6 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
     ];
 
     return AdaptiveSettingsPage(
-      title: context.l10n.appearanceSettings,
       children: children,
     );
   }

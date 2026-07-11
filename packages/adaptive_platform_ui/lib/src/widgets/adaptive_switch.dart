@@ -69,7 +69,7 @@ class AdaptiveSwitch extends StatelessWidget {
     }
 
     // iOS 18 and below - Use traditional CupertinoSwitch
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return CupertinoSwitch(
         value: value,
         onChanged: onChanged,

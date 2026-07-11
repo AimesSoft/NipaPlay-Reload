@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -70,11 +69,12 @@ class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
   factory CupertinoLibraryFolderBrowserSheet.webdav({
     Key? key,
     required WebDAVConnection connection,
+    String rootPath = '/',
   }) {
     return CupertinoLibraryFolderBrowserSheet._(
       key: key,
       source: CupertinoLibraryBrowserSource.webdav,
-      rootPath: '/',
+      rootPath: rootPath,
       sourceLabel: connection.name,
       webdavConnection: connection,
     );
@@ -743,14 +743,17 @@ class _CupertinoLibraryFolderBrowserSheetState
       progressNotifier = ValueNotifier<_ScanProgressState>(
         const _ScanProgressState(progress: 0.08, message: '准备扫描'),
       );
-      NipaplayWindow.show<void>(
+      unawaited(CupertinoBottomSheet.show<void>(
         context: context,
+        title: '正在扫描',
+        heightRatio: 0.36,
+        showCloseButton: false,
         barrierDismissible: false,
-        child: _ScanProgressWindow(
+        child: _ScanProgressContent(
           fileName: entry.name,
           progressListenable: progressNotifier,
         ),
-      );
+      ));
     }
 
     void updateProgress(double progress, String message) {
@@ -1081,9 +1084,8 @@ class _CupertinoLibraryFolderBrowserSheetState
       return;
     }
 
-    final filePaths = candidateFiles
-        .map((e) => _historyKeyForEntry(e) ?? e.path)
-        .toList();
+    final filePaths =
+        candidateFiles.map((e) => _historyKeyForEntry(e) ?? e.path).toList();
     final folderDisplayName =
         entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
 
@@ -1189,14 +1191,17 @@ class _CupertinoLibraryFolderBrowserSheetState
       progressNotifier = ValueNotifier<_ScanProgressState>(
         const _ScanProgressState(progress: 0.05, message: '准备扫描'),
       );
-      NipaplayWindow.show<void>(
+      unawaited(CupertinoBottomSheet.show<void>(
         context: context,
+        title: '正在扫描',
+        heightRatio: 0.36,
+        showCloseButton: false,
         barrierDismissible: false,
-        child: _ScanProgressWindow(
+        child: _ScanProgressContent(
           fileName: displayName,
           progressListenable: progressNotifier,
         ),
-      );
+      ));
     }
 
     void updateProgress(double progress, String message) {
@@ -2408,8 +2413,8 @@ class _ScanProgressState {
   final String message;
 }
 
-class _ScanProgressWindow extends StatelessWidget {
-  const _ScanProgressWindow({
+class _ScanProgressContent extends StatelessWidget {
+  const _ScanProgressContent({
     required this.fileName,
     required this.progressListenable,
   });
@@ -2419,8 +2424,6 @@ class _ScanProgressWindow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color labelColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final Color secondaryLabelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final Color primaryColor = CupertinoTheme.of(context).primaryColor;
@@ -2429,61 +2432,47 @@ class _ScanProgressWindow extends StatelessWidget {
       context,
     );
 
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: NipaplayWindowScaffold(
-        showCloseButton: false,
-        maxWidth: 420,
-        maxHeightFactor: 0.5,
-        child: Center(
-          child: ValueListenableBuilder<_ScanProgressState>(
-            valueListenable: progressListenable,
-            builder: (context, value, _) {
-              final double clamped = value.progress.clamp(0.0, 1.0).toDouble();
-              final int percent = (clamped * 100).round();
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '正在扫描',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: labelColor,
-                      ),
+    return PopScope(
+      canPop: false,
+      child: Center(
+        child: ValueListenableBuilder<_ScanProgressState>(
+          valueListenable: progressListenable,
+          builder: (context, value, _) {
+            final double clamped = value.progress.clamp(0.0, 1.0).toDouble();
+            final int percent = (clamped * 100).round();
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondaryLabelColor,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      fileName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: secondaryLabelColor,
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  _ScanProgressBar(
+                    progress: clamped,
+                    color: primaryColor,
+                    trackColor: trackColor,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$percent% · ${value.message}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryLabelColor,
                     ),
-                    const SizedBox(height: 16),
-                    _ScanProgressBar(
-                      progress: clamped,
-                      color: primaryColor,
-                      trackColor: trackColor,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$percent% · ${value.message}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryLabelColor,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

@@ -8,11 +8,15 @@ import 'package:flutter/material.dart';
 import 'package:http/io_client.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SharedRemoteLanScanDialog {
@@ -20,39 +24,28 @@ class SharedRemoteLanScanDialog {
     BuildContext context, {
     required SharedRemoteLibraryProvider provider,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textColor = colorScheme.onSurface.withOpacity(0.7);
-    final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    final accentColor = AppAccentColors.current;
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<bool>(
+        context: context,
+        title: '扫描局域网',
+        heightRatio: 0.68,
+        child: _SharedRemoteLanScanDialogContent(provider: provider),
+      );
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
-    final ButtonStyle plainButtonStyle = ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return mutedTextColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return accentColor;
-        }
-        return textColor;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      ),
-    );
     return BlurDialog.show<bool>(
       context: context,
       title: '扫描局域网',
       contentWidget: _SharedRemoteLanScanDialogContent(provider: provider),
       backgroundColor: backgroundColor,
       actions: [
-        TextButton(
+        AdaptiveMediaActionButton(
+          label: '关闭',
           onPressed: () => Navigator.of(context).pop(false),
-          style: plainButtonStyle,
-          child: const Text('关闭'),
+          compact: true,
         ),
       ],
     );
@@ -435,22 +428,6 @@ class _SharedRemoteLanScanDialogContentState
     final borderColor = textColor.withOpacity(isDark ? 0.12 : 0.18);
     final itemColor =
         isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
-    final ButtonStyle actionButtonStyle = ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return mutedTextColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return accentColor;
-        }
-        return accentColor;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      ),
-    );
     final height = (MediaQuery.of(context).size.height * 0.55)
         .clamp(320.0, 520.0)
         .toDouble();
@@ -482,13 +459,14 @@ class _SharedRemoteLanScanDialogContentState
               const Spacer(),
               SizedBox(
                 width: 120,
-                child: TextButton.icon(
-                  icon: Icon(Ionicons.refresh_outline, size: 18),
-                  label: Text(_isScanning ? '停止' : '重新扫描'),
+                child: AdaptiveMediaActionButton(
+                  label: _isScanning ? '停止' : '重新扫描',
+                  desktopIcon: Ionicons.refresh_outline,
+                  phoneIcon: Ionicons.refresh_outline,
                   onPressed: _isScanning
                       ? () => _cancelScan(updateState: true)
                       : _startScan,
-                  style: actionButtonStyle,
+                  compact: true,
                 ),
               ),
             ],
@@ -517,13 +495,9 @@ class _SharedRemoteLanScanDialogContentState
                 ),
               ),
               if (_isScanning)
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                  ),
+                AdaptiveMediaActivityIndicator(
+                  color: accentColor,
+                  size: 14,
                 ),
             ],
           ),
@@ -581,24 +555,12 @@ class _SharedRemoteLanScanDialogContentState
                               ),
                             ),
                             SizedBox(width: 10),
-                            TextButton(
+                            AdaptiveMediaActionButton(
+                              label: '添加',
                               onPressed: _isAdding
                                   ? null
                                   : () => _addDiscoveredHost(host),
-                              style: actionButtonStyle,
-                              child: _isAdding
-                                  ? SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                          accentColor,
-                                        ),
-                                      ),
-                                    )
-                                  : const Text('添加'),
+                              compact: true,
                             ),
                           ],
                         ),

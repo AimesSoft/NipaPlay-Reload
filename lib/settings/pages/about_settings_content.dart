@@ -44,7 +44,6 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
     final hasUpdate = _updateInfo?.hasUpdate == true;
 
     return AdaptiveSettingsPage(
-      title: l10n.about,
       children: [
         _buildAboutCanvas(context,
             versionText: versionText, hasUpdate: hasUpdate),

@@ -1,8 +1,10 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:provider/provider.dart';
 
@@ -40,10 +42,7 @@ class LibraryManagementCard extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: child,
-      ),
+      child: child,
     );
   }
 }
@@ -116,7 +115,7 @@ class LibraryManagementList<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isPhone && !kIsWeb) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return ListView.builder(
         controller: scrollController,
         padding: padding,
@@ -130,10 +129,8 @@ class LibraryManagementList<T> extends StatelessWidget {
       );
     }
 
-    return Scrollbar(
+    return AdaptiveMediaScrollbar(
       controller: scrollController,
-      radius: const Radius.circular(2),
-      thickness: 4,
       child: SingleChildScrollView(
         controller: scrollController,
         padding: padding,
@@ -216,43 +213,61 @@ class LibraryManagementFolderRow extends StatelessWidget {
     // 根据外观设置决定目录名是省略号截断还是多行完整显示
     final appearance = context.watch<AppearanceSettingsProvider>();
 
+    final content = Padding(
+      padding: EdgeInsets.fromLTRB(indent, 7, 8, 7),
+      child: Row(
+        children: [
+          Icon(leadingIcon, color: resolvedIconColor, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              locale: locale,
+              style: TextStyle(color: resolvedTextColor, fontSize: 13),
+              maxLines: appearance.folderNameMaxLines,
+              overflow: appearance.folderNameOverflow,
+            ),
+          ),
+          if (loading)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: AdaptiveMediaActivityIndicator(
+                size: 14,
+                color: AppAccentColors.current,
+              ),
+            )
+          else ...[
+            if (trailingActions != null) ...trailingActions!,
+            Icon(
+              expanded
+                  ? Ionicons.chevron_down_outline
+                  : Ionicons.chevron_forward,
+              color: resolvedSecondaryTextColor,
+              size: 16,
+            ),
+          ],
+        ],
+      ),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 2),
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-        leading: Icon(leadingIcon, color: resolvedIconColor, size: 18),
-        title: Text(
-          title,
-          locale: locale,
-          style: TextStyle(color: resolvedTextColor, fontSize: 13),
-          maxLines: appearance.folderNameMaxLines,
-          overflow: appearance.folderNameOverflow,
-        ),
-        trailing: loading
-            ? SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppAccentColors.current,
-                ),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (trailingActions != null) ...trailingActions!,
-                  Icon(
-                    expanded
-                        ? Ionicons.chevron_down_outline
-                        : Ionicons.chevron_forward,
-                    color: resolvedSecondaryTextColor,
-                    size: 16,
-                  ),
-                ],
+      child: AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone
+          ? cupertino.CupertinoButton(
+              padding: EdgeInsets.zero,
+              borderRadius: BorderRadius.circular(8),
+              onPressed: onTap,
+              child: content,
+            )
+          : MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                child: content,
               ),
-        onTap: onTap,
-      ),
+            ),
     );
   }
 }

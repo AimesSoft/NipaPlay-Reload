@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
@@ -16,11 +17,7 @@ class BlurDialog {
     Color? backgroundColor,
     bool barrierDismissible = true,
   }) {
-    // 根据设备布局选择弹出层
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(context, listen: false);
-
-    if (uiThemeProvider.isPhoneLayout) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
         context: context,
         title: title,

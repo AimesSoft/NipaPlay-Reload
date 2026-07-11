@@ -45,6 +45,10 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 enum _EpisodeCleanupAction {
   clearMatchInfo,
@@ -101,6 +105,23 @@ class AnimeDetailPage extends StatefulWidget {
             sharedEpisodeBuilder: sharedEpisodeBuilder,
             sharedSourceLabel: sharedSourceLabel,
           ),
+        ),
+      );
+    }
+
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<WatchHistoryItem>(
+        context: context,
+        title: '番剧详情',
+        floatingTitle: true,
+        heightRatio: 0.96,
+        child: AnimeDetailPage(
+          animeId: animeId,
+          sharedSummary: sharedSummary,
+          sharedEpisodeLoader: sharedEpisodeLoader,
+          sharedEpisodeBuilder: sharedEpisodeBuilder,
+          sharedSourceLabel: sharedSourceLabel,
+          renderInWindowScaffold: false,
         ),
       );
     }
@@ -686,8 +707,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _isLoadingBangumiCollection = false;
           if (_myCommentTimestamp == 0 &&
               (userRating > 0 || (comment != null && comment.isNotEmpty))) {
-            _myCommentTimestamp =
-                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             _saveCommentTimestamp(subjectId, _myCommentTimestamp);
           }
         });
@@ -887,8 +907,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             if (ratingPayload != null) {
               _bangumiUserRating = ratingPayload;
             }
-            _myCommentTimestamp =
-                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             _saveCommentTimestamp(subjectId, _myCommentTimestamp);
           });
         }
@@ -1411,10 +1430,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(secondaryTextColor),
+                      child: AdaptiveMediaActivityIndicator(
+                        color: secondaryTextColor,
+                        size: 16,
                       ),
                     ),
                     SizedBox(width: 8),
@@ -1491,11 +1509,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                idleColor,
-                              ),
+                            child: AdaptiveMediaActivityIndicator(
+                              color: idleColor,
+                              size: 14,
                             ),
                           )
                         else
@@ -1693,14 +1709,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               _wrapLargeScreenFocusable(
                 onActivate: _openTagSearch,
                 borderRadius: BorderRadius.circular(6),
-                child: IconButton(
+                child: AdaptiveMediaIconButton(
                   onPressed: _isLargeScreenModeActive ? null : _openTagSearch,
-                  icon: Icon(
-                    Ionicons.search,
-                    color: secondaryTextColor,
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
+                  desktopIcon: Ionicons.search,
+                  phoneIcon: Ionicons.search,
+                  tooltip: '搜索标签',
+                  color: secondaryTextColor,
                 ),
               ),
             ],
@@ -1742,7 +1756,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
-          child: CircularProgressIndicator(color: textColor),
+          child: AdaptiveMediaActivityIndicator(color: textColor),
         ),
       );
     }
@@ -1763,16 +1777,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: textColor.withOpacity(0.1),
-                ),
+              AdaptiveMediaActionButton(
+                label: '重新加载',
                 onPressed: _loadSharedEpisodes,
-                child: Text(
-                  '重新加载',
-                  locale: const Locale('zh', 'CN'),
-                  style: TextStyle(color: textColor),
-                ),
+                desktopIcon: Icons.refresh,
+                phoneIcon: Icons.refresh,
+                compact: true,
               )
             ],
           ),
@@ -2024,10 +2034,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                               }
                             }
                           : null,
-                      child: Material(
+                      child: ColoredBox(
                         color: tileColor ?? Colors.transparent,
-                        child: ListTile(
-                          dense: true,
+                        child: AdaptiveMediaListTile(
                           leading: leadingIcon,
                           title: Row(
                             children: [
@@ -2188,7 +2197,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator(color: textColor));
+      return Center(child: AdaptiveMediaActivityIndicator(color: textColor));
     }
     if (_error != null || _detailedAnime == null) {
       return Center(
@@ -2208,20 +2217,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: textColor.withOpacity(0.2)),
+              AdaptiveMediaActionButton(
+                label: '重试',
                 onPressed: _fetchAnimeDetails,
-                child: Text('重试',
-                    locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(color: textColor)),
+                desktopIcon: Icons.refresh,
+                phoneIcon: Icons.refresh,
+                compact: true,
               ),
               SizedBox(height: 10),
-              TextButton(
+              AdaptiveMediaActionButton(
+                label: '关闭',
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('关闭',
-                    locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(color: secondaryTextColor)),
+                compact: true,
               ),
             ],
           ),
@@ -2238,7 +2245,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         : anime.name;
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
-    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+    final bool isDesktopOrTablet =
+        AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone;
 
     // 加载上次观看记录
     if (_lastWatchedEpisode == null && !_isLoadingLastWatched) {
@@ -2947,10 +2955,9 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
                       ? SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(baseColor),
+                          child: AdaptiveMediaActivityIndicator(
+                            color: baseColor,
+                            size: 14,
                           ),
                         )
                       : Icon(

@@ -54,8 +54,12 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:provider/provider.dart';
 
@@ -65,6 +69,7 @@ class TextInputDialog extends StatefulWidget {
   final String? hintText;
   final String? initialValue;
   final int minLines;
+  final bool embedded;
 
   const TextInputDialog({
     super.key,
@@ -73,6 +78,7 @@ class TextInputDialog extends StatefulWidget {
     this.hintText,
     this.initialValue,
     this.minLines = 5,
+    this.embedded = false,
   });
 
   static Future<String?> show(
@@ -83,6 +89,22 @@ class TextInputDialog extends StatefulWidget {
     String? initialValue,
     int minLines = 5,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<String>(
+        context: context,
+        title: title,
+        heightRatio: 0.72,
+        child: TextInputDialog(
+          title: title,
+          subtitle: subtitle,
+          hintText: hintText,
+          initialValue: initialValue,
+          minLines: minLines,
+          embedded: true,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -124,27 +146,6 @@ class _TextInputDialogState extends State<TextInputDialog> {
         cursorColor: _accentColor,
         selectionColor: _accentColor.withOpacity(0.3),
         selectionHandleColor: _accentColor,
-      );
-
-  ButtonStyle get _primaryButtonStyle => ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return _accentColor.withOpacity(0.5);
-          }
-          return _accentColor;
-        }),
-        foregroundColor: WidgetStateProperty.all(Colors.white),
-        overlayColor: WidgetStateProperty.all(Colors.transparent),
-        splashFactory: NoSplash.splashFactory,
-        padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        ),
-        minimumSize: WidgetStateProperty.all(const Size(96, 44)),
-        elevation: WidgetStateProperty.all(0),
-        shadowColor: WidgetStateProperty.all(Colors.transparent),
-        shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
       );
 
   @override
@@ -200,6 +201,7 @@ class _TextInputDialogState extends State<TextInputDialog> {
       child: TextSelectionTheme(
         data: _selectionTheme,
         child: NipaplayWindowScaffold(
+          embedded: widget.embedded,
           maxWidth: dialogWidth,
           maxHeightFactor: dialogHeight / screenHeight,
           onClose: _cancel,
@@ -210,8 +212,16 @@ class _TextInputDialogState extends State<TextInputDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildHeader(),
-                const SizedBox(height: 20),
+                if (!widget.embedded) ...[
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                ] else if (widget.subtitle != null) ...[
+                  Text(
+                    widget.subtitle!,
+                    style: TextStyle(color: _subTextColor, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 ConstrainedBox(
                   constraints: BoxConstraints(
                     maxHeight: dialogHeight * 0.55,
@@ -285,13 +295,12 @@ class _TextInputDialogState extends State<TextInputDialog> {
               width: 1,
             ),
           ),
-          child: TextField(
+          child: AdaptiveMediaTextField(
             controller: _controller,
             focusNode: _focusNode,
             style: TextStyle(color: _textColor, fontSize: 15),
             maxLines: null,
             minLines: widget.minLines,
-            textAlignVertical: TextAlignVertical.top,
             textInputAction: TextInputAction.done,
             decoration: InputDecoration(
               hintText: widget.hintText,
@@ -316,21 +325,17 @@ class _TextInputDialogState extends State<TextInputDialog> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        TextButton(
+        AdaptiveMediaActionButton(
+          label: '取消',
           onPressed: _cancel,
-          style: TextButton.styleFrom(
-            foregroundColor: _subTextColor,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            minimumSize: const Size(88, 44),
-            textStyle: const TextStyle(fontSize: 15),
-          ),
-          child: const Text('取消'),
+          compact: true,
         ),
         const SizedBox(width: 12),
-        ElevatedButton(
+        AdaptiveMediaActionButton(
+          label: '确定',
           onPressed: _confirm,
-          style: _primaryButtonStyle,
-          child: const Text('确定'),
+          emphasis: AdaptiveMediaActionEmphasis.primary,
+          compact: true,
         ),
       ],
     );

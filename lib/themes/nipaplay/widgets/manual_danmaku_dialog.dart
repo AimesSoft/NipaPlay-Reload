@@ -9,14 +9,20 @@ import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 
 /// 手动弹幕匹配对话框
 ///
 /// 显示搜索动画和选择剧集的界面
 class ManualDanmakuMatchDialog extends StatefulWidget {
   final String? initialVideoTitle;
+  final bool embedded;
 
-  const ManualDanmakuMatchDialog({super.key, this.initialVideoTitle});
+  const ManualDanmakuMatchDialog({
+    super.key,
+    this.initialVideoTitle,
+    this.embedded = false,
+  });
 
   @override
   State<ManualDanmakuMatchDialog> createState() =>
@@ -59,49 +65,6 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
         selectionColor: _accentColor.withOpacity(0.3),
         selectionHandleColor: _accentColor,
       );
-
-  ButtonStyle _textButtonStyle({Color? baseColor}) {
-    final resolvedBase = baseColor ?? _textColor;
-    return ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return _mutedTextColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return _accentColor;
-        }
-        return resolvedBase;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-    );
-  }
-
-  ButtonStyle _primaryButtonStyle() {
-    return ButtonStyle(
-      backgroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return _accentColor.withOpacity(0.5);
-        }
-        return _accentColor;
-      }),
-      foregroundColor: MaterialStateProperty.all(Colors.white),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      ),
-      minimumSize: MaterialStateProperty.all(const Size(96, 44)),
-      elevation: MaterialStateProperty.all(0),
-      shadowColor: MaterialStateProperty.all(Colors.transparent),
-      shape: MaterialStateProperty.all(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
 
   // 实现GlobalHotkeyManagerMixin要求的方法
   @override
@@ -418,7 +381,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     return Row(
       children: [
         Expanded(
-          child: TextField(
+          child: AdaptiveMediaTextField(
             controller: _searchController,
             cursorColor: _accentColor,
             style: TextStyle(color: _textColor),
@@ -451,19 +414,13 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           ),
         ),
         SizedBox(width: 12),
-        ElevatedButton(
+        AdaptiveMediaActionButton(
+          label: '搜索',
           onPressed: _isSearching ? null : _performSearch,
-          style: _primaryButtonStyle(),
-          child: _isSearching
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Text('搜索'),
+          desktopIcon: Icons.search,
+          phoneIcon: Icons.search,
+          emphasis: AdaptiveMediaActionEmphasis.primary,
+          compact: true,
         ),
       ],
     );
@@ -678,10 +635,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           ),
           child: _isSearching
               ? Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                  ),
+                  child: AdaptiveMediaActivityIndicator(color: _accentColor),
                 )
               : _currentMatches.isEmpty
                   ? _buildEmptyState('暂无搜索结果')
@@ -764,10 +718,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           ),
           child: _isLoadingEpisodes
               ? Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                  ),
+                  child: AdaptiveMediaActivityIndicator(color: _accentColor),
                 )
               : _currentEpisodes.isEmpty
                   ? _buildEmptyState('暂无剧集')
@@ -818,16 +769,17 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        TextButton(
+        AdaptiveMediaActionButton(
+          label: '返回搜索',
           onPressed: _backToAnimeSelection,
-          style: _textButtonStyle(),
-          child: const Text('返回搜索'),
+          compact: true,
         ),
         SizedBox(width: 8),
-        ElevatedButton(
+        AdaptiveMediaActionButton(
+          label: confirmText,
           onPressed: canConfirm ? _completeSelection : null,
-          style: _primaryButtonStyle(),
-          child: Text(confirmText),
+          emphasis: AdaptiveMediaActionEmphasis.primary,
+          compact: true,
         ),
       ],
     );
@@ -847,6 +799,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       child: TextSelectionTheme(
         data: _selectionTheme,
         child: NipaplayWindowScaffold(
+          embedded: widget.embedded,
           maxWidth: dialogWidth,
           maxHeightFactor: 0.9,
           onClose: () => Navigator.of(context).maybePop(),
@@ -856,8 +809,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(),
-                SizedBox(height: 16),
+                if (!widget.embedded) ...[
+                  _buildHeader(),
+                  SizedBox(height: 16),
+                ],
                 if (!_showEpisodesView) ...[
                   _buildSearchBar(),
                   SizedBox(height: 12),

@@ -85,7 +85,7 @@ class AdaptiveAlertDialog {
     }
 
     // iOS 18 and below - Use CupertinoAlertDialog
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return showCupertinoDialog<void>(
         context: context,
         builder: (context) {
@@ -225,7 +225,7 @@ class AdaptiveAlertDialog {
     }
 
     // iOS 18 and below - Use CupertinoAlertDialog with text field
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       final textController = TextEditingController(text: input.initialValue);
 
       return showCupertinoDialog<String?>(

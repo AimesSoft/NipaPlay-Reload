@@ -71,7 +71,7 @@ class AdaptiveTooltip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // iOS - Use custom iOS-style tooltip
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _IOSTooltip(
         message: message,
         preferBelow: preferBelow,

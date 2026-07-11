@@ -9,21 +9,22 @@ import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/settings/pages/remote_access_receiver_settings_section.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 
-class CupertinoRemoteControllerSettingsPage extends StatefulWidget {
-  const CupertinoRemoteControllerSettingsPage({super.key});
+class UnifiedRemoteAccessSettingsContent extends StatefulWidget {
+  const UnifiedRemoteAccessSettingsContent({super.key});
 
   @override
-  State<CupertinoRemoteControllerSettingsPage> createState() =>
-      _CupertinoRemoteControllerSettingsPageState();
+  State<UnifiedRemoteAccessSettingsContent> createState() =>
+      _UnifiedRemoteAccessSettingsContentState();
 }
 
-class _CupertinoRemoteControllerSettingsPageState
-    extends State<CupertinoRemoteControllerSettingsPage> {
+class _UnifiedRemoteAccessSettingsContentState
+    extends State<UnifiedRemoteAccessSettingsContent> {
   bool _isScanning = false;
   bool _isLoadingState = false;
   String? _matchedBaseUrl;
@@ -194,11 +195,9 @@ class _CupertinoRemoteControllerSettingsPageState
       if (_matchedBaseUrl == null) return;
     }
     if (!mounted) return;
-    await CupertinoBottomSheet.show<void>(
-      context: context,
+    await AdaptiveSettingsNavigation.openChildPage<void>(
+      context,
       title: '遥控器',
-      floatingTitle: true,
-      heightRatio: 0.93,
       child: _RemoteControllerPanel(
         baseUrl: _matchedBaseUrl!,
         hostname: _matchedHostname,
@@ -218,7 +217,6 @@ class _CupertinoRemoteControllerSettingsPageState
         connected ? (receiverEnabled ? '已连接' : '对方已关闭被遥控端') : '未连接';
 
     return AdaptiveSettingsPage(
-      title: '远程访问',
       children: [
         const RemoteAccessReceiverSettingsSection(),
         const SizedBox(height: 24),
@@ -226,7 +224,7 @@ class _CupertinoRemoteControllerSettingsPageState
           children: [
             AdaptiveSettingsTile<void>.card(
               title: '控制其他设备',
-              subtitle: '从手机连接局域网内的 NipaPlay 被遥控端',
+              subtitle: '从当前设备连接局域网内的 NipaPlay 被遥控端',
               icon: CupertinoIcons.dot_radiowaves_left_right,
               phoneIcon: CupertinoIcons.dot_radiowaves_left_right,
               enabled: false,
@@ -428,11 +426,9 @@ class _RemoteControllerPanelState extends State<_RemoteControllerPanel> {
     final paneId = menu['paneId']?.toString() ?? '';
     final title = menu['title']?.toString() ?? paneId;
     if (paneId.isEmpty) return;
-    await CupertinoBottomSheet.show<void>(
-      context: context,
+    await AdaptiveSettingsNavigation.openChildPage<void>(
+      context,
       title: title,
-      floatingTitle: true,
-      heightRatio: 0.92,
       child: _RemoteMenuPaneSheet(
         baseUrl: widget.baseUrl,
         paneId: paneId,

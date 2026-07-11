@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -10,6 +15,10 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
+import 'package:nipaplay/widgets/user_activity/cupertino_user_activity.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/pages/account/sections/bangumi_section.dart';
+import 'package:nipaplay/themes/cupertino/pages/account/sections/dandanplay_account_section.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -17,14 +26,14 @@ import 'package:nipaplay/utils/app_theme.dart';
 enum _BangumiSyncHelpService { dandanplay, nipaplay }
 
 /// Fluent UI版本的账号页面
-class MaterialAccountPage extends StatefulWidget {
-  const MaterialAccountPage({super.key});
+class UnifiedAccountPage extends StatefulWidget {
+  const UnifiedAccountPage({super.key});
 
   @override
-  State<MaterialAccountPage> createState() => _MaterialAccountPageState();
+  State<UnifiedAccountPage> createState() => _UnifiedAccountPageState();
 }
 
-class _MaterialAccountPageState extends State<MaterialAccountPage>
+class _UnifiedAccountPageState extends State<UnifiedAccountPage>
     with AccountPageController {
   static Color get _accentColor => AppAccentColors.current;
   static const double _buttonHoverScale = 1.06;
@@ -34,10 +43,23 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     horizontal: 18,
     vertical: 12,
   );
+  bool _showDandanplayPhoneSection = true;
+  bool _isRefreshingDandanBangumiStatus = false;
+
+  bool get _isPhoneSurface =>
+      AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
 
   @override
   void showMessage(String message) {
     if (!mounted) return;
+    if (_isPhoneSurface) {
+      AdaptiveSnackBar.show(
+        context,
+        message: message,
+        type: AdaptiveSnackBarType.info,
+      );
+      return;
+    }
     BlurSnackBar.show(context, message);
   }
 
@@ -104,6 +126,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showLoginDialog() {
+    if (_isPhoneSurface) {
+      unawaited(_showCupertinoLoginDialog());
+      return;
+    }
     _showFluentLoginDialog(
       title: '登录弹弹play账号',
       fields: [
@@ -132,6 +158,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showRegisterDialog() {
+    if (_isPhoneSurface) {
+      unawaited(_showCupertinoRegisterDialog());
+      return;
+    }
     _showFluentLoginDialog(
       title: '注册弹弹play账号',
       fields: [
@@ -218,6 +248,40 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showDeleteAccountDialog(String deleteAccountUrl) {
+    if (_isPhoneSurface) {
+      AdaptiveAlertDialog.show(
+        context: context,
+        title: '账号注销确认',
+        message: '账号注销为不可逆操作，将清除账号关联的所有数据。点击“继续注销”将在浏览器中打开注销页面。',
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '继续注销',
+            style: AlertActionStyle.destructive,
+            onPressed: () {
+              Future.microtask(
+                () => _openExternalUrl(
+                  deleteAccountUrl,
+                  cannotOpenMessage: '无法打开注销页面',
+                ),
+              );
+            },
+          ),
+          AlertAction(
+            title: '已完成注销',
+            style: AlertActionStyle.primary,
+            onPressed: () {
+              Future.microtask(completeAccountDeletion);
+            },
+          ),
+        ],
+      );
+      return;
+    }
     final colorScheme = Theme.of(context).colorScheme;
     showDialog<void>(
       context: context,
@@ -299,6 +363,22 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         ? '这是弹弹play提供的 Bangumi 同步服务，会在你看完后自动同步观看记录。\n\n你可以和下方 NipaPlay 的 Bangumi 同步配合使用，也可以按需只使用其中之一。'
         : '这是 NipaPlay 提供的 Bangumi 服务。默认需要你在番剧详情页手动配置观看集数；支持打分和写评价，也支持按钮一键同步。\n\n你可以和上方弹弹play同步配合使用，也可以按需只使用其中之一。';
 
+    if (_isPhoneSurface) {
+      await AdaptiveAlertDialog.show(
+        context: context,
+        title: title,
+        message: message,
+        actions: [
+          AlertAction(
+            title: '知道了',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
+      );
+      return;
+    }
+
     await BlurDialog.show<void>(
       context: context,
       title: title,
@@ -332,6 +412,9 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isPhoneSurface) {
+      return _buildCupertinoAccountPage();
+    }
     final colorScheme = Theme.of(context).colorScheme;
 
     return fluent.FluentTheme(
@@ -356,6 +439,220 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 ),
               ),
             ),
+    );
+  }
+
+  Future<String?> _showCupertinoInputDialog({
+    required String title,
+    required String message,
+    required String placeholder,
+    required String confirmLabel,
+    String initialValue = '',
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) async {
+    final result = await AdaptiveAlertDialog.inputShow(
+      context: context,
+      title: title,
+      message: message,
+      input: AdaptiveAlertDialogInput(
+        placeholder: placeholder,
+        initialValue: initialValue,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+      ),
+      actions: [
+        AlertAction(
+          title: '取消',
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
+        ),
+        AlertAction(
+          title: confirmLabel,
+          style: AlertActionStyle.primary,
+          onPressed: () {},
+        ),
+      ],
+    );
+    final trimmed = result?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  Future<void> _showCupertinoLoginDialog() async {
+    final username = await _showCupertinoInputDialog(
+      title: '登录弹弹play账号',
+      message: '请输入用户名或邮箱',
+      placeholder: '用户名/邮箱',
+      confirmLabel: '下一步',
+      initialValue: usernameController.text,
+      keyboardType: TextInputType.emailAddress,
+    );
+    if (username == null || !mounted) return;
+    usernameController.text = username;
+
+    final password = await _showCupertinoInputDialog(
+      title: '登录弹弹play账号',
+      message: '请输入密码',
+      placeholder: '密码',
+      confirmLabel: '登录',
+      obscureText: true,
+    );
+    if (password == null || !mounted) return;
+    passwordController.text = password;
+    await performLogin();
+  }
+
+  Future<void> _showCupertinoRegisterDialog() async {
+    final username = await _showCupertinoInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入用户名（5-20位英文或数字，首位不能为数字）',
+      placeholder: '用户名',
+      confirmLabel: '下一步',
+      initialValue: registerUsernameController.text,
+    );
+    if (username == null || !mounted) return;
+    registerUsernameController.text = username;
+
+    final password = await _showCupertinoInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入密码',
+      placeholder: '密码',
+      confirmLabel: '下一步',
+      obscureText: true,
+      initialValue: registerPasswordController.text,
+    );
+    if (password == null || !mounted) return;
+    registerPasswordController.text = password;
+
+    final email = await _showCupertinoInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入邮箱（用于找回密码）',
+      placeholder: '邮箱',
+      confirmLabel: '下一步',
+      initialValue: registerEmailController.text,
+      keyboardType: TextInputType.emailAddress,
+    );
+    if (email == null || !mounted) return;
+    registerEmailController.text = email;
+
+    final screenName = await _showCupertinoInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入昵称（不超过50个字符）',
+      placeholder: '昵称',
+      confirmLabel: '注册',
+      initialValue: registerScreenNameController.text,
+    );
+    if (screenName == null || !mounted) return;
+    registerScreenNameController.text = screenName;
+
+    try {
+      await performRegister();
+    } catch (_) {
+      // performRegister already presents the error.
+    }
+  }
+
+  Widget _buildCupertinoAccountPage() {
+    final background = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final statusBarHeight = MediaQuery.paddingOf(context).top;
+
+    return ColoredBox(
+      color: background,
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        slivers: [
+          SliverToBoxAdapter(child: SizedBox(height: statusBarHeight + 58)),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 116, 14),
+              child: Text(
+                '账户',
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdaptiveSegmentedControl(
+                    labels: const ['弹弹play', 'Bangumi'],
+                    selectedIndex: _showDandanplayPhoneSection ? 0 : 1,
+                    onValueChanged: (index) {
+                      setState(() {
+                        _showDandanplayPhoneSection = index == 0;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: _showDandanplayPhoneSection
+                        ? _buildCupertinoDandanplaySection()
+                        : _buildCupertinoBangumiSection(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 84)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCupertinoDandanplaySection() {
+    return CupertinoDandanplayAccountSection(
+      key: const ValueKey<String>('dandanplay-account'),
+      isLoggedIn: isLoggedIn,
+      username: username.isEmpty ? '未登录' : username,
+      avatarUrl: avatarUrl,
+      isLoading: isLoading,
+      onLogin: showLoginDialog,
+      onRegister: showRegisterDialog,
+      onLogout: performLogout,
+      onDeleteAccount: startDeleteAccount,
+      userActivity: CupertinoUserActivity(key: ValueKey<String>(username)),
+    );
+  }
+
+  Widget _buildCupertinoBangumiSection() {
+    return CupertinoBangumiSection(
+      key: const ValueKey<String>('bangumi-account'),
+      isAuthorized: isBangumiLoggedIn,
+      userInfo: bangumiUserInfo,
+      isDandanplayLoggedIn: isLoggedIn,
+      dandanLinkedBangumiInfo: dandanLinkedBangumiInfo,
+      dandanLinkedBangumiExpireTime: dandanLinkedBangumiExpireTime,
+      isRequestingDandanBangumiAuth: isRequestingDandanBangumiAuth,
+      isRefreshingDandanBangumiStatus: _isRefreshingDandanBangumiStatus,
+      isLoading: isLoading,
+      isSyncing: isBangumiSyncing,
+      syncStatus: bangumiSyncStatus,
+      lastSyncTime: lastBangumiSyncTime,
+      tokenController: bangumiTokenController,
+      onRequestDandanBangumiAuth: _startDandanBangumiAuthorize,
+      onOpenDandanBangumiManage: _openDandanBangumiManagePage,
+      onRefreshDandanBangumiStatus: _manualRefreshDandanBangumiStatus,
+      onSaveToken: saveBangumiToken,
+      onClearToken: clearBangumiToken,
+      onSync: () => performBangumiSync(forceFullSync: false),
+      onFullSync: () => performBangumiSync(forceFullSync: true),
+      onTestConnection: testBangumiConnection,
+      onClearCache: clearBangumiSyncCache,
+      onOpenHelp: () => _showBangumiSyncHelpDialog(
+        _BangumiSyncHelpService.nipaplay,
+      ),
     );
   }
 
@@ -1439,8 +1736,11 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
   }
 
   Future<void> _manualRefreshDandanBangumiStatus() async {
+    if (_isRefreshingDandanBangumiStatus) return;
+    setState(() => _isRefreshingDandanBangumiStatus = true);
     final success = await _refreshDandanBangumiStatusAfterAuth();
     if (!mounted) return;
+    setState(() => _isRefreshingDandanBangumiStatus = false);
     if (success && dandanLinkedBangumiInfo != null) {
       showMessage('Bangumi账号绑定已更新。');
     } else if (success) {

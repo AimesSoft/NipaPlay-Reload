@@ -25,6 +25,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
     this.maxWidth = 850,
     this.maxHeightFactor = 0.8,
     this.showCloseButton = true,
+    this.embedded = false,
   });
 
   final Widget child;
@@ -36,6 +37,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
   final double maxWidth;
   final double maxHeightFactor;
   final bool showCloseButton;
+  final bool embedded;
 
   @override
   State<NipaplayWindowScaffold> createState() => _NipaplayWindowScaffoldState();
@@ -216,6 +218,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) return widget.child;
+
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final bool useFilledScreenLayout = appearanceSettings.windowDisplayMode ==
         NipaplayWindowDisplayMode.filledScreen;

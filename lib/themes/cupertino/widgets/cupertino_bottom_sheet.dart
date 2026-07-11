@@ -6,9 +6,6 @@ import 'package:nipaplay/providers/bottom_bar_provider.dart';
 /// 通用的 Cupertino 风格上拉菜单容器
 /// 提供标准的上拉菜单外观和行为，内容完全可自定义
 class CupertinoBottomSheet extends StatelessWidget {
-  /// 菜单标题（可选）
-  final String? title;
-
   /// 菜单内容，完全可自定义
   final Widget child;
 
@@ -24,14 +21,17 @@ class CupertinoBottomSheet extends StatelessWidget {
   /// 标题是否浮动（浮动标题会随滚动渐隐，不占用布局空间），默认 false
   final bool floatingTitle;
 
+  /// 带子页面的上拉菜单使用此控制器同步标题和返回状态。
+  final CupertinoBottomSheetPageController pageController;
+
   const CupertinoBottomSheet({
     super.key,
-    this.title,
     required this.child,
     this.heightRatio = 0.94,
     this.showCloseButton = true,
     this.onClose,
     this.floatingTitle = false,
+    required this.pageController,
   });
 
   /// 显示上拉菜单的静态方法
@@ -44,9 +44,14 @@ class CupertinoBottomSheet extends StatelessWidget {
     VoidCallback? onClose,
     bool floatingTitle = false,
     bool barrierDismissible = true,
+    CupertinoBottomSheetPageController? pageController,
   }) async {
     // 隐藏底部导航栏
-    final bottomBarProvider = Provider.of<BottomBarProvider>(context, listen: false);
+    final bottomBarProvider =
+        Provider.of<BottomBarProvider>(context, listen: false);
+    final ownsPageController = pageController == null;
+    final effectivePageController = pageController ??
+        CupertinoBottomSheetPageController(rootTitle: title ?? '');
     bottomBarProvider.hideBottomBar();
 
     try {
@@ -54,11 +59,11 @@ class CupertinoBottomSheet extends StatelessWidget {
         context: context,
         barrierDismissible: barrierDismissible,
         builder: (BuildContext context) => CupertinoBottomSheet(
-          title: title,
           heightRatio: heightRatio,
           showCloseButton: showCloseButton,
           onClose: onClose,
           floatingTitle: floatingTitle,
+          pageController: effectivePageController,
           child: child,
         ),
       );
@@ -66,15 +71,68 @@ class CupertinoBottomSheet extends StatelessWidget {
     } finally {
       // 恢复底部导航栏显示
       bottomBarProvider.showBottomBar();
+      if (ownsPageController) {
+        effectivePageController.dispose();
+      }
+    }
+  }
+
+  /// 显示带内部导航栈的上拉菜单。
+  ///
+  /// 根页面及其后续页面使用最近的 [Navigator]，因此子页面切换始终
+  /// 发生在上拉菜单内部，不会把应用主界面替换成独立路由。
+  static Future<T?> showPage<T>({
+    required BuildContext context,
+    required String title,
+    required WidgetBuilder rootPageBuilder,
+    double heightRatio = 0.94,
+    bool showCloseButton = true,
+    bool floatingTitle = true,
+    bool barrierDismissible = true,
+  }) async {
+    final pageController = CupertinoBottomSheetPageController(
+      rootTitle: title,
+    );
+    try {
+      return await show<T>(
+        context: context,
+        title: title,
+        heightRatio: heightRatio,
+        showCloseButton: showCloseButton,
+        floatingTitle: floatingTitle,
+        barrierDismissible: barrierDismissible,
+        pageController: pageController,
+        child: CupertinoBottomSheetPageNavigator(
+          controller: pageController,
+          rootPageBuilder: rootPageBuilder,
+        ),
+      );
+    } finally {
+      pageController.dispose();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: pageController,
+      builder: (context, _) => _buildSheet(
+        context,
+        effectiveTitle: pageController.title,
+        showBackButton: pageController.canPop,
+      ),
+    );
+  }
+
+  Widget _buildSheet(
+    BuildContext context, {
+    required String? effectiveTitle,
+    required bool showBackButton,
+  }) {
     final screenHeight = MediaQuery.of(context).size.height;
     final double effectiveHeightRatio = heightRatio.clamp(0.0, 1.0).toDouble();
     final double maxHeight = screenHeight * effectiveHeightRatio;
-    final hasTitle = title != null && title!.isNotEmpty;
+    final hasTitle = effectiveTitle != null && effectiveTitle.isNotEmpty;
     final bool displayHeader = hasTitle && !floatingTitle;
 
     final Widget content;
@@ -82,7 +140,11 @@ class CupertinoBottomSheet extends StatelessWidget {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(context),
+          _buildHeader(
+            context,
+            effectiveTitle,
+            showBackButton: showBackButton,
+          ),
           Expanded(child: child),
         ],
       );
@@ -103,8 +165,10 @@ class CupertinoBottomSheet extends StatelessWidget {
     return CupertinoBottomSheetScope(
       contentTopInset: contentTopInset,
       contentTopSpacing: contentTopSpacing,
-      title: title,
+      title: effectiveTitle,
       floatingTitle: floatingTitle && hasTitle,
+      showBackButton: showBackButton,
+      pageController: pageController,
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ClipRRect(
@@ -121,6 +185,19 @@ class CupertinoBottomSheet extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(child: content),
+                  if (floatingTitle && hasTitle)
+                    _buildFloatingTitle(
+                      context,
+                      effectiveTitle,
+                      showBackButton: showBackButton,
+                      opacity: pageController.titleOpacity,
+                    ),
+                  if (showBackButton)
+                    Positioned(
+                      top: _closeButtonPadding,
+                      left: _closeButtonPadding,
+                      child: _buildBackButton(context),
+                    ),
                   if (showCloseButton)
                     Positioned(
                       top: _closeButtonPadding,
@@ -136,20 +213,97 @@ class CupertinoBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(
+    BuildContext context,
+    String effectiveTitle, {
+    required bool showBackButton,
+  }) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        20,
+        showBackButton ? 68 : 20,
         showCloseButton ? 36 : 28,
         showCloseButton ? 68 : 20,
         8,
       ),
       child: Text(
-        title!,
+        effectiveTitle,
         style: CupertinoTheme.of(context).textTheme.navTitleTextStyle.copyWith(
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingTitle(
+    BuildContext context,
+    String effectiveTitle, {
+    required bool showBackButton,
+    required double opacity,
+  }) {
+    return Positioned(
+      top: 0,
+      left: showBackButton ? 64 : 0,
+      right: showCloseButton ? 64 : 0,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Text(
+              effectiveTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: CupertinoTheme.of(context)
+                  .textTheme
+                  .navTitleTextStyle
+                  .copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackButton(BuildContext context) {
+    final Color resolvedIconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final onPressed = pageController.maybePop;
+
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return SizedBox.square(
+        dimension: _closeButtonSize,
+        child: AdaptiveButton.sfSymbol(
+          useSmoothRectangleBorder: false,
+          onPressed: onPressed,
+          style: AdaptiveButtonStyle.glass,
+          size: AdaptiveButtonSize.large,
+          sfSymbol: SFSymbol(
+            'chevron.left',
+            size: 16,
+            color: resolvedIconColor,
+          ),
+        ),
+      );
+    }
+
+    return SizedBox.square(
+      dimension: _closeButtonSize,
+      child: AdaptiveButton.child(
+        useSmoothRectangleBorder: false,
+        onPressed: onPressed,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
+        child: Icon(
+          CupertinoIcons.chevron_back,
+          size: 18,
+          color: resolvedIconColor,
+        ),
       ),
     );
   }
@@ -201,17 +355,185 @@ class CupertinoBottomSheet extends StatelessWidget {
   static const double _floatingContentTopSpacing = 8;
 }
 
+class CupertinoBottomSheetPageController extends ChangeNotifier {
+  CupertinoBottomSheetPageController({required String rootTitle})
+      : _rootTitle = rootTitle,
+        _title = rootTitle;
+
+  final String _rootTitle;
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  final List<Route<dynamic>> _routes = <Route<dynamic>>[];
+  late final NavigatorObserver observer =
+      _CupertinoBottomSheetNavigatorObserver(this);
+
+  String _title;
+  bool _canPop = false;
+  double _titleOpacity = 1;
+  bool _disposed = false;
+
+  String get title => _title;
+  bool get canPop => _canPop;
+  double get titleOpacity => _titleOpacity;
+
+  void setTitleOpacity(double opacity) {
+    if (_disposed) return;
+    final nextOpacity = opacity.clamp(0.0, 1.0).toDouble();
+    if ((nextOpacity - _titleOpacity).abs() < 0.001) return;
+    _titleOpacity = nextOpacity;
+    notifyListeners();
+  }
+
+  Future<void> maybePop() async {
+    await navigatorKey.currentState?.maybePop();
+  }
+
+  void _didPush(Route<dynamic> route) {
+    _routes.add(route);
+    _sync();
+  }
+
+  void _didPop(Route<dynamic> route) {
+    _routes.remove(route);
+    _sync();
+  }
+
+  void _didRemove(Route<dynamic> route) {
+    _routes.remove(route);
+    _sync();
+  }
+
+  void _didReplace(Route<dynamic>? oldRoute, Route<dynamic>? newRoute) {
+    final index = oldRoute == null ? -1 : _routes.indexOf(oldRoute);
+    if (index >= 0 && newRoute != null) {
+      _routes[index] = newRoute;
+    } else if (newRoute != null) {
+      _routes.add(newRoute);
+    }
+    _sync();
+  }
+
+  void _sync() {
+    if (_disposed) return;
+    var nextTitle = _rootTitle;
+    for (final route in _routes.reversed) {
+      final routeTitle = route.settings.name;
+      if (routeTitle != null && routeTitle.isNotEmpty && routeTitle != '/') {
+        nextTitle = routeTitle;
+        break;
+      }
+    }
+    final nextCanPop = _routes.length > 1;
+    if (nextTitle == _title && nextCanPop == _canPop) return;
+    _title = nextTitle;
+    _canPop = nextCanPop;
+    _titleOpacity = 1;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+
+class _CupertinoBottomSheetNavigatorObserver extends NavigatorObserver {
+  _CupertinoBottomSheetNavigatorObserver(this.controller);
+
+  final CupertinoBottomSheetPageController controller;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    controller._didPush(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    controller._didPop(route);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    controller._didRemove(route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    controller._didReplace(oldRoute, newRoute);
+  }
+}
+
+class CupertinoBottomSheetPageScope
+    extends InheritedNotifier<CupertinoBottomSheetPageController> {
+  const CupertinoBottomSheetPageScope({
+    super.key,
+    required CupertinoBottomSheetPageController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  static CupertinoBottomSheetPageScope? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<CupertinoBottomSheetPageScope>();
+  }
+}
+
+class CupertinoBottomSheetPageNavigator extends StatelessWidget {
+  const CupertinoBottomSheetPageNavigator({
+    super.key,
+    required this.controller,
+    required this.rootPageBuilder,
+  });
+
+  final CupertinoBottomSheetPageController controller;
+  final WidgetBuilder rootPageBuilder;
+
+  static Future<T?> push<T>(
+    BuildContext context, {
+    required String title,
+    required WidgetBuilder builder,
+  }) {
+    return Navigator.of(context).push<T>(
+      CupertinoPageRoute<T>(
+        settings: RouteSettings(name: title),
+        builder: builder,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoBottomSheetPageScope(
+      controller: controller,
+      child: MediaQuery.removePadding(
+        context: context,
+        removeTop: true,
+        child: Navigator(
+          key: controller.navigatorKey,
+          observers: <NavigatorObserver>[controller.observer],
+          onGenerateInitialRoutes: (_, __) => <Route<void>>[
+            CupertinoPageRoute<void>(builder: rootPageBuilder),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CupertinoBottomSheetScope extends InheritedWidget {
   final double contentTopInset;
   final double contentTopSpacing;
   final String? title;
   final bool floatingTitle;
+  final bool showBackButton;
+  final CupertinoBottomSheetPageController pageController;
 
   const CupertinoBottomSheetScope({
     required this.contentTopInset,
     required this.contentTopSpacing,
     required this.title,
     required this.floatingTitle,
+    required this.showBackButton,
+    required this.pageController,
     required super.child,
     super.key,
   });
@@ -226,7 +548,9 @@ class CupertinoBottomSheetScope extends InheritedWidget {
     return contentTopInset != oldWidget.contentTopInset ||
         contentTopSpacing != oldWidget.contentTopSpacing ||
         title != oldWidget.title ||
-        floatingTitle != oldWidget.floatingTitle;
+        floatingTitle != oldWidget.floatingTitle ||
+        showBackButton != oldWidget.showBackButton ||
+        pageController != oldWidget.pageController;
   }
 }
 
@@ -234,7 +558,7 @@ typedef CupertinoBottomSheetSliversBuilder = List<Widget> Function(
     BuildContext context, double contentTopSpacing);
 
 /// 提供与上拉菜单视觉保持一致的滚动内容布局，
-/// 自动处理顶部留白、渐变遮罩以及浮动标题。
+/// 自动处理顶部留白和渐变遮罩；标题由上拉菜单容器统一绘制。
 class CupertinoBottomSheetContentLayout extends StatelessWidget {
   final ScrollController? controller;
   final ScrollPhysics? physics;
@@ -256,10 +580,12 @@ class CupertinoBottomSheetContentLayout extends StatelessWidget {
     final scope = CupertinoBottomSheetScope.maybeOf(context);
     final double contentTopInset = scope?.contentTopInset ?? 0;
     final double contentTopSpacing = scope?.contentTopSpacing ?? 0;
-    final bool showFloatingTitle =
-        (scope?.floatingTitle ?? false) && (scope?.title?.isNotEmpty ?? false);
-    final String? title = scope?.title;
-
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    if (scope != null && routeIsCurrent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scope.pageController.setTitleOpacity(floatingTitleOpacity);
+      });
+    }
     final Color effectiveBackground = backgroundColor ??
         CupertinoDynamicColor.resolve(
           CupertinoColors.systemGroupedBackground,
@@ -267,9 +593,6 @@ class CupertinoBottomSheetContentLayout extends StatelessWidget {
         );
 
     final slivers = sliversBuilder(context, contentTopSpacing);
-    final double effectiveFloatingTitleOpacity =
-        floatingTitleOpacity.clamp(0.0, 1.0).toDouble();
-
     return ColoredBox(
       color: effectiveBackground,
       child: Stack(
@@ -302,33 +625,9 @@ class CupertinoBottomSheetContentLayout extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         effectiveBackground,
-                        effectiveBackground.withOpacity(0.0),
+                        effectiveBackground.withValues(alpha: 0.0),
                       ],
                       stops: const [0.0, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (showFloatingTitle && title != null)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: Opacity(
-                  opacity: effectiveFloatingTitleOpacity,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 68, 0),
-                    child: Text(
-                      title,
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .navTitleTextStyle
-                          .copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
                     ),
                   ),
                 ),

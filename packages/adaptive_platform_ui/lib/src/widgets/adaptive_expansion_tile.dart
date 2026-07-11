@@ -162,7 +162,7 @@ class _AdaptiveExpansionTileState extends State<AdaptiveExpansionTile>
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _buildIOSExpansionTile(context);
     }
     return _buildMaterialExpansionTile(context);

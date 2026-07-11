@@ -180,7 +180,7 @@ class AdaptivePopupMenuButton<T> {
             onPressed: () => Navigator.of(ctx).pop(),
             isDefaultAction: true,
             child: Text(
-              PlatformInfo.isIOS
+              PlatformInfo.prefersCupertinoControls
                   ? CupertinoLocalizations.of(ctx).cancelButtonLabel
                   : MaterialLocalizations.of(ctx).cancelButtonLabel,
             ),

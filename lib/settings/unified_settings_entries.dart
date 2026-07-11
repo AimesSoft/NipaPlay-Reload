@@ -5,7 +5,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
-import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
@@ -13,38 +12,11 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/common_setting_tiles.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/cupertino_media_server_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_about_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_appearance_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_danmaku_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_developer_options_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_downloader_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_external_player_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_labs_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_language_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_network_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_player_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_plugin_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_remote_controller_settings_page.dart';
-import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_storage_settings_page.dart';
+import 'package:nipaplay/settings/unified_setting_content.dart';
+import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/downloader_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/labs_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/plugin_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/theme_mode_page.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
@@ -60,6 +32,14 @@ enum UnifiedSettingSection {
   general,
   labs,
   about,
+}
+
+enum UnifiedSettingInlineControlType {
+  autoUpdate,
+}
+
+enum UnifiedSettingSubtitleType {
+  packageVersion,
 }
 
 class UnifiedSettingEntryIds {
@@ -89,10 +69,6 @@ typedef UnifiedSettingTextBuilder = String Function(
   material.BuildContext context,
   UnifiedSettingsSurface surface,
 );
-typedef UnifiedSettingWidgetBuilder = material.Widget Function(
-  material.BuildContext context,
-  UnifiedSettingsSurface surface,
-);
 typedef UnifiedSettingVisibleBuilder = bool Function(
   material.BuildContext context,
   UnifiedSettingsSurface surface,
@@ -107,10 +83,9 @@ class UnifiedSettingEntry {
     required this.icon,
     this.phoneIcon,
     this.subtitleBuilder,
-    this.subtitleWidgetBuilder,
-    this.desktopTabletPageBuilder,
-    this.phonePageBuilder,
-    this.phoneHomeTileBuilder,
+    this.subtitleType,
+    this.contentType,
+    this.inlineControlType,
     this.visible,
   });
 
@@ -121,10 +96,9 @@ class UnifiedSettingEntry {
   final material.IconData icon;
   final material.IconData? phoneIcon;
   final UnifiedSettingTextBuilder? subtitleBuilder;
-  final UnifiedSettingWidgetBuilder? subtitleWidgetBuilder;
-  final material.WidgetBuilder? desktopTabletPageBuilder;
-  final material.WidgetBuilder? phonePageBuilder;
-  final material.WidgetBuilder? phoneHomeTileBuilder;
+  final UnifiedSettingSubtitleType? subtitleType;
+  final UnifiedSettingContentType? contentType;
+  final UnifiedSettingInlineControlType? inlineControlType;
   final UnifiedSettingVisibleBuilder? visible;
 
   String title(material.BuildContext context, UnifiedSettingsSurface surface) {
@@ -145,22 +119,15 @@ class UnifiedSettingEntry {
     if (visible?.call(context, surface) == false) {
       return false;
     }
-    switch (surface) {
-      case UnifiedSettingsSurface.desktopTablet:
-        return desktopTabletPageBuilder != null;
-      case UnifiedSettingsSurface.phone:
-        return phonePageBuilder != null || phoneHomeTileBuilder != null;
-    }
+    return contentType != null || inlineControlType != null;
   }
 
   material.Widget buildPage(
     material.BuildContext context,
     UnifiedSettingsSurface surface,
   ) {
-    final builder = surface == UnifiedSettingsSurface.phone
-        ? (phonePageBuilder ?? desktopTabletPageBuilder)
-        : (desktopTabletPageBuilder ?? phonePageBuilder);
-    if (builder == null) {
+    final type = contentType;
+    if (type == null) {
       return const material.SizedBox.shrink();
     }
 
@@ -168,7 +135,7 @@ class UnifiedSettingEntry {
       style: surface == UnifiedSettingsSurface.phone
           ? AdaptiveSettingsStyle.phone
           : AdaptiveSettingsStyle.desktopTablet,
-      child: builder(context),
+      child: UnifiedSettingContent(type: type),
     );
   }
 
@@ -176,9 +143,11 @@ class UnifiedSettingEntry {
     material.BuildContext context,
     UnifiedSettingsSurface surface,
   ) {
-    final builder = subtitleWidgetBuilder;
-    if (builder != null) {
-      return builder(context, surface);
+    switch (subtitleType) {
+      case UnifiedSettingSubtitleType.packageVersion:
+        return const _PackageVersionSubtitle();
+      case null:
+        break;
     }
     final subtitle = subtitleBuilder?.call(context, surface);
     if (subtitle == null || subtitle.trim().isEmpty) {
@@ -278,9 +247,11 @@ class _UnifiedCupertinoSettingHomeTileState
     extends material.State<UnifiedCupertinoSettingHomeTile> {
   @override
   material.Widget build(material.BuildContext context) {
-    final customBuilder = widget.entry.phoneHomeTileBuilder;
-    if (customBuilder != null) {
-      return customBuilder(context);
+    switch (widget.entry.inlineControlType) {
+      case UnifiedSettingInlineControlType.autoUpdate:
+        return const AutoUpdateSettingTile();
+      case null:
+        break;
     }
 
     return CupertinoSettingsTile(
@@ -296,23 +267,30 @@ class _UnifiedCupertinoSettingHomeTileState
         UnifiedSettingsSurface.phone,
       ),
       backgroundColor: resolveSettingsTileBackground(context),
-      showChevron: widget.entry.phonePageBuilder != null,
-      onTap: widget.entry.phonePageBuilder == null
+      showChevron: widget.entry.contentType != null,
+      onTap: widget.entry.contentType == null
           ? null
           : () async {
-              await cupertino.Navigator.of(context).push(
-                cupertino.CupertinoPageRoute(
-                  builder: (routeContext) => widget.entry.buildPage(
-                    routeContext,
-                    UnifiedSettingsSurface.phone,
-                  ),
-                ),
-              );
+              await openUnifiedCupertinoSettingEntry(context, widget.entry);
               if (!mounted) return;
               setState(() {});
             },
     );
   }
+}
+
+Future<void> openUnifiedCupertinoSettingEntry(
+  material.BuildContext context,
+  UnifiedSettingEntry entry,
+) {
+  return CupertinoBottomSheetPageNavigator.push<void>(
+    context,
+    title: entry.pageTitle(context, UnifiedSettingsSurface.phone),
+    builder: (routeContext) => entry.buildPage(
+      routeContext,
+      UnifiedSettingsSurface.phone,
+    ),
+  );
 }
 
 List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
@@ -325,10 +303,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       subtitleBuilder: (context, surface) => _themeModeLabel(context),
       icon: Ionicons.color_palette_outline,
       phoneIcon: cupertino.CupertinoIcons.paintbrush,
-      desktopTabletPageBuilder: (context) => ThemeModePage(
-        themeNotifier: context.read<ThemeNotifier>(),
-      ),
-      phonePageBuilder: (context) => const CupertinoAppearanceSettingsPage(),
+      contentType: UnifiedSettingContentType.appearance,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.language,
@@ -344,8 +319,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       },
       icon: Ionicons.language_outline,
       phoneIcon: cupertino.CupertinoIcons.globe,
-      desktopTabletPageBuilder: (context) => const LanguagePage(),
-      phonePageBuilder: (context) => const CupertinoLanguageSettingsPage(),
+      contentType: UnifiedSettingContentType.language,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.general,
@@ -354,7 +328,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       pageTitleBuilder: (context, surface) => context.l10n.generalSettings,
       icon: Ionicons.settings_outline,
       phoneIcon: cupertino.CupertinoIcons.settings,
-      desktopTabletPageBuilder: (context) => const GeneralPage(),
+      contentType: UnifiedSettingContentType.general,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.updateCheck,
@@ -366,7 +340,8 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
           context.l10n.aboutManualOnlyWhenDisabled,
       icon: Ionicons.cloud_outline,
       phoneIcon: cupertino.CupertinoIcons.arrow_clockwise_circle,
-      phoneHomeTileBuilder: (context) => const AutoUpdateSettingTile(),
+      inlineControlType: UnifiedSettingInlineControlType.autoUpdate,
+      visible: (context, surface) => surface == UnifiedSettingsSurface.phone,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.storage,
@@ -377,8 +352,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
           context.l10n.storageSettingsSubtitle,
       icon: Ionicons.folder_open_outline,
       phoneIcon: cupertino.CupertinoIcons.archivebox,
-      desktopTabletPageBuilder: (context) => const StoragePage(),
-      phonePageBuilder: (context) => const CupertinoStorageSettingsPage(),
+      contentType: UnifiedSettingContentType.storage,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.network,
@@ -389,8 +363,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
           context.l10n.networkSettingsSubtitle,
       icon: Ionicons.wifi_outline,
       phoneIcon: cupertino.CupertinoIcons.globe,
-      desktopTabletPageBuilder: (context) => const NetworkSettingsPage(),
-      phonePageBuilder: (context) => const CupertinoNetworkSettingsPage(),
+      contentType: UnifiedSettingContentType.network,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.backupRestore,
@@ -399,7 +372,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       pageTitleBuilder: (context, surface) => context.l10n.backupAndRestore,
       icon: Ionicons.cloud_upload_outline,
       phoneIcon: cupertino.CupertinoIcons.cloud_upload,
-      desktopTabletPageBuilder: (context) => const BackupRestorePage(),
+      contentType: UnifiedSettingContentType.backupRestore,
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet && !globals.isPhone,
     ),
@@ -412,8 +385,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
           _playerKernelLabel(context, PlayerFactory.getKernelType()),
       icon: Ionicons.play_circle_outline,
       phoneIcon: cupertino.CupertinoIcons.play_circle,
-      desktopTabletPageBuilder: (context) => const PlayerSettingsPage(),
-      phonePageBuilder: (context) => const CupertinoPlayerSettingsPage(),
+      contentType: UnifiedSettingContentType.player,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.danmaku,
@@ -429,8 +401,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       ),
       icon: Ionicons.hardware_chip_outline,
       phoneIcon: cupertino.CupertinoIcons.bubble_left_bubble_right,
-      desktopTabletPageBuilder: (context) => const DanmakuSettingsPage(),
-      phonePageBuilder: (context) => const CupertinoDanmakuSettingsPage(),
+      contentType: UnifiedSettingContentType.danmaku,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.externalPlayer,
@@ -449,9 +420,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       },
       icon: Ionicons.open_outline,
       phoneIcon: cupertino.CupertinoIcons.square_arrow_up,
-      desktopTabletPageBuilder: (context) => const ExternalPlayerSettingsPage(),
-      phonePageBuilder: (context) =>
-          const CupertinoExternalPlayerSettingsPage(),
+      contentType: UnifiedSettingContentType.externalPlayer,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.shortcuts,
@@ -460,7 +429,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       pageTitleBuilder: (context, surface) => context.l10n.shortcutsSettings,
       icon: Ionicons.key_outline,
       phoneIcon: cupertino.CupertinoIcons.keyboard,
-      desktopTabletPageBuilder: (context) => const ShortcutsSettingsPage(),
+      contentType: UnifiedSettingContentType.shortcuts,
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet && !globals.isPhone,
     ),
@@ -477,9 +446,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       ),
       icon: Ionicons.link_outline,
       phoneIcon: cupertino.CupertinoIcons.dot_radiowaves_left_right,
-      desktopTabletPageBuilder: (context) => const RemoteAccessPage(),
-      phonePageBuilder: (context) =>
-          const CupertinoRemoteControllerSettingsPage(),
+      contentType: UnifiedSettingContentType.remoteAccess,
       visible: (context, surface) => !kIsWeb,
     ),
     UnifiedSettingEntry(
@@ -496,8 +463,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       subtitleBuilder: _mediaServerSubtitle,
       icon: Ionicons.library_outline,
       phoneIcon: cupertino.CupertinoIcons.cloud,
-      desktopTabletPageBuilder: (context) => const RemoteMediaLibraryPage(),
-      phonePageBuilder: (context) => const CupertinoMediaServerSettingsPage(),
+      contentType: UnifiedSettingContentType.remoteMediaLibrary,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.downloader,
@@ -512,8 +478,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       ),
       icon: Ionicons.cloud_download_outline,
       phoneIcon: cupertino.CupertinoIcons.arrow_down_circle,
-      desktopTabletPageBuilder: (context) => const DownloaderSettingsPage(),
-      phonePageBuilder: (context) => const CupertinoDownloaderSettingsPage(),
+      contentType: UnifiedSettingContentType.downloader,
       visible: (context, surface) => globals.isDownloaderSupportedPlatform,
     ),
     UnifiedSettingEntry(
@@ -525,8 +490,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
           context.l10n.developerOptionsSubtitle,
       icon: Ionicons.code_slash_outline,
       phoneIcon: cupertino.CupertinoIcons.command,
-      desktopTabletPageBuilder: (context) => const DeveloperOptionsPage(),
-      phonePageBuilder: (context) => const CupertinoDeveloperOptionsPage(),
+      contentType: UnifiedSettingContentType.developerOptions,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.labs,
@@ -542,8 +506,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       ),
       icon: Ionicons.flask_outline,
       phoneIcon: cupertino.CupertinoIcons.lab_flask,
-      desktopTabletPageBuilder: (context) => const LabsPage(),
-      phonePageBuilder: (context) => const CupertinoLabsSettingsPage(),
+      contentType: UnifiedSettingContentType.labs,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.plugins,
@@ -559,20 +522,17 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       ),
       icon: Ionicons.extension_puzzle_outline,
       phoneIcon: cupertino.CupertinoIcons.cube_box,
-      desktopTabletPageBuilder: (context) => const PluginSettingsPage(),
-      phonePageBuilder: (context) => const CupertinoPluginSettingsPage(),
+      contentType: UnifiedSettingContentType.plugins,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.about,
       section: UnifiedSettingSection.about,
       titleBuilder: (context, surface) => context.l10n.about,
       pageTitleBuilder: (context, surface) => context.l10n.about,
-      subtitleWidgetBuilder: (context, surface) =>
-          const _PackageVersionSubtitle(),
+      subtitleType: UnifiedSettingSubtitleType.packageVersion,
       icon: Ionicons.information_circle_outline,
       phoneIcon: cupertino.CupertinoIcons.info_circle,
-      desktopTabletPageBuilder: (context) => const AboutPage(),
-      phonePageBuilder: (context) => const CupertinoAboutPage(),
+      contentType: UnifiedSettingContentType.about,
     ),
   ];
 }

@@ -39,7 +39,6 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
         return AdaptiveSettingsPage(
-          title: l10n.developerOptions,
           children: [
             AdaptiveSettingsSection(
               children: [

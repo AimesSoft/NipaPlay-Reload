@@ -86,7 +86,7 @@ class AdaptiveBadge extends StatelessWidget {
         (count != null ? (count! > 99 ? '99+' : count!.toString()) : '');
 
     // iOS - Use custom iOS-style badge
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _IOSBadge(
         displayText: displayText,
         backgroundColor: backgroundColor ?? CupertinoColors.systemRed,

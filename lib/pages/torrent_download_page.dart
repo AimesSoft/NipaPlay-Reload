@@ -1,6 +1,9 @@
+library torrent_download_page;
+
 import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/torrent_magnet_preview.dart';
@@ -27,17 +30,14 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 
-enum _TorrentTaskViewMode { cards, list }
-
-enum _TorrentTaskSort { latest, name, progress, status }
-
-const Map<_TorrentTaskSort, String> _torrentTaskSortLabels = {
-  _TorrentTaskSort.latest: '最近添加',
-  _TorrentTaskSort.name: '名称排序',
-  _TorrentTaskSort.progress: '进度排序',
-  _TorrentTaskSort.status: '状态排序',
-};
+part '../themes/cupertino/widgets/cupertino_torrent_download_controls.dart';
 
 class TorrentDownloadPage extends StatefulWidget {
   const TorrentDownloadPage({super.key});
@@ -66,9 +66,25 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   bool _isLoading = true;
   bool _isBusy = false;
   bool _autoScanRegistryLoaded = false;
-  _TorrentTaskViewMode _viewMode = _TorrentTaskViewMode.cards;
-  _TorrentTaskSort _sort = _TorrentTaskSort.latest;
+  UnifiedTorrentTaskViewMode _viewMode = UnifiedTorrentTaskViewMode.cards;
+  UnifiedTorrentTaskSort _sort = UnifiedTorrentTaskSort.latest;
   String _searchQuery = '';
+
+  bool get _isPhoneSurface =>
+      AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+
+  void _showTorrentMessage(String message) {
+    if (!mounted) return;
+    if (_isPhoneSurface) {
+      AdaptiveSnackBar.show(
+        context,
+        message: message,
+        type: AdaptiveSnackBarType.info,
+      );
+      return;
+    }
+    BlurSnackBar.show(context, message);
+  }
 
   @override
   void initState() {
@@ -122,7 +138,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       setState(() {
         _isLoading = false;
       });
-      BlurSnackBar.show(context, '初始化种子下载失败: $e');
+      _showTorrentMessage('初始化种子下载失败: $e');
     }
   }
 
@@ -138,7 +154,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       unawaited(_handleAutoScanCompletedTasks(tasks, silent: silent));
     } catch (e) {
       if (!mounted || silent) return;
-      BlurSnackBar.show(context, '刷新下载列表失败: $e');
+      _showTorrentMessage('刷新下载列表失败: $e');
     }
   }
 
@@ -149,16 +165,25 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
         : _downloadDirectory;
     final recentDirectories = await _service.loadRecentDownloadDirectories();
     if (!mounted) return;
-    final result = await NipaplayWindow.show<_AddMagnetDialogResult>(
-      context: context,
-      barrierDismissible: false,
-      child: _AddMagnetDialog(
-        service: _service,
-        initialDirectory: initialDirectory,
-        initialRecentDirectories: recentDirectories,
-        initialCreateFolderForTask: downloaderSettings.createFolderForTask,
-      ),
+    final dialog = _AddMagnetDialog(
+      service: _service,
+      initialDirectory: initialDirectory,
+      initialRecentDirectories: recentDirectories,
+      initialCreateFolderForTask: downloaderSettings.createFolderForTask,
     );
+    final result = _isPhoneSurface
+        ? await CupertinoBottomSheet.show<_AddMagnetDialogResult>(
+            context: context,
+            title: '添加磁力链接',
+            floatingTitle: true,
+            heightRatio: 0.94,
+            child: dialog,
+          )
+        : await NipaplayWindow.show<_AddMagnetDialogResult>(
+            context: context,
+            barrierDismissible: false,
+            child: dialog,
+          );
     if (result == null) return;
 
     await _runBusyAction(
@@ -193,43 +218,19 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     });
   }
 
-  void _applySort(_TorrentTaskSort sort) {
+  void _applySort(UnifiedTorrentTaskSort sort) {
     if (_sort == sort) return;
     setState(() {
       _sort = sort;
     });
   }
 
-  List<TorrentTask> get _visibleTasks {
-    final query = _searchQuery.toLowerCase();
-    final filtered = query.isEmpty
-        ? List<TorrentTask>.from(_tasks)
-        : _tasks.where((task) {
-            final scanText =
-                _scanSummaries[task.autoScanKey]?.displayText ?? '';
-            final haystack = [
-              task.name,
-              task.outputFolder,
-              task.displayState,
-              scanText,
-            ].join('\n').toLowerCase();
-            return haystack.contains(query);
-          }).toList();
-
-    filtered.sort((a, b) {
-      switch (_sort) {
-        case _TorrentTaskSort.latest:
-          return b.id.compareTo(a.id);
-        case _TorrentTaskSort.name:
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        case _TorrentTaskSort.progress:
-          return b.progress.compareTo(a.progress);
-        case _TorrentTaskSort.status:
-          return a.displayState.compareTo(b.displayState);
-      }
-    });
-    return filtered;
-  }
+  List<TorrentTask> get _visibleTasks => buildUnifiedTorrentVisibleTasks(
+        tasks: _tasks,
+        scanSummaries: _scanSummaries,
+        query: _searchQuery,
+        sort: _sort,
+      );
 
   Future<void> _pickTorrentFile() async {
     final file = await openFile(
@@ -288,10 +289,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       afterSuccess?.call();
       await _refreshTasks(silent: true);
       if (!mounted) return;
-      BlurSnackBar.show(context, successMessage);
+      _showTorrentMessage(successMessage);
     } catch (e) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '操作失败: $e');
+      _showTorrentMessage('操作失败: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -317,6 +318,32 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   Future<void> _deleteTask(TorrentTask task) async {
+    if (_isPhoneSurface) {
+      final confirm = await cupertino.showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => cupertino.CupertinoAlertDialog(
+          title: const Text('删除任务和文件'),
+          content: Text('将从列表移除“${task.name}”，并删除已下载文件。此操作不可撤销。'),
+          actions: [
+            cupertino.CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            cupertino.CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+      await _runBusyAction(
+        action: () => _service.delete(task.id),
+        successMessage: '已删除任务和文件',
+      );
+      return;
+    }
     final colorScheme = Theme.of(context).colorScheme;
     final confirm = await BlurDialog.show<bool>(
       context: context,
@@ -346,18 +373,22 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   Future<void> _openTaskFolder(TorrentTask task) async {
+    if (_isPhoneSurface) {
+      _showTorrentMessage('文件夹: ${task.outputFolder}');
+      return;
+    }
     final ok = await FolderOpener.open(task.outputFolder);
     if (!mounted) return;
     if (!ok) {
-      BlurSnackBar.show(context, '打开文件夹失败');
+      _showTorrentMessage('打开文件夹失败');
     }
   }
 
   void _toggleViewMode() {
     setState(() {
-      _viewMode = _viewMode == _TorrentTaskViewMode.cards
-          ? _TorrentTaskViewMode.list
-          : _TorrentTaskViewMode.cards;
+      _viewMode = _viewMode == UnifiedTorrentTaskViewMode.cards
+          ? UnifiedTorrentTaskViewMode.list
+          : UnifiedTorrentTaskViewMode.cards;
     });
   }
 
@@ -504,10 +535,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       }
 
       if (!mounted || silent) return;
-      BlurSnackBar.show(context, '已自动扫描并加入媒体库: ${task.name}');
+      _showTorrentMessage('已自动扫描并加入媒体库: ${task.name}');
     } catch (e) {
       if (!mounted || silent) return;
-      BlurSnackBar.show(context, '自动扫描下载任务失败: $e');
+      _showTorrentMessage('自动扫描下载任务失败: $e');
     } finally {
       _autoScanningTaskKeys.remove(key);
     }
@@ -523,7 +554,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       final files = await _service.listPlayableFiles(task);
       if (!mounted) return;
       if (files.isEmpty) {
-        BlurSnackBar.show(context, '尚未获取到可播放的视频文件，请稍后再试');
+        _showTorrentMessage('尚未获取到可播放的视频文件，请稍后再试');
         return;
       }
 
@@ -545,7 +576,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       );
     } catch (e) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '播放下载任务失败: $e');
+      _showTorrentMessage('播放下载任务失败: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -558,6 +589,9 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   Future<TorrentTaskFile?> _showPlayableFilesDialog(
     List<TorrentTaskFile> files,
   ) {
+    if (_isPhoneSurface) {
+      return _showCupertinoPlayableFiles(files);
+    }
     final colorScheme = Theme.of(context).colorScheme;
     return BlurDialog.show<TorrentTaskFile>(
       context: context,
@@ -609,6 +643,9 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isPhoneSurface) {
+      return _buildCupertinoTorrentPage();
+    }
     final colorScheme = Theme.of(context).colorScheme;
     final visibleTasks = _visibleTasks;
     final useLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
@@ -674,10 +711,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           onPressed: () => _refreshTasks(),
         ),
         NipaplayLargeScreenActionButton(
-          icon: _viewMode == _TorrentTaskViewMode.cards
+          icon: _viewMode == UnifiedTorrentTaskViewMode.cards
               ? Ionicons.list_outline
               : Ionicons.grid_outline,
-          label: _viewMode == _TorrentTaskViewMode.cards ? '列表' : '网格',
+          label: _viewMode == UnifiedTorrentTaskViewMode.cards ? '列表' : '网格',
           onPressed: _toggleViewMode,
         ),
         NipaplayLargeScreenActionButton(
@@ -746,7 +783,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
                           )
                         : null,
                   )
-                : _viewMode == _TorrentTaskViewMode.list
+                : _viewMode == UnifiedTorrentTaskViewMode.list
                     ? _buildLargeScreenTorrentList(colorScheme, visibleTasks)
                     : _buildLargeScreenTorrentGrid(colorScheme, visibleTasks),
           ),
@@ -760,7 +797,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          for (final entry in _torrentTaskSortLabels.entries) ...[
+          for (final entry in unifiedTorrentTaskSortLabels.entries) ...[
             _LargeScreenTorrentSortButton(
               label: entry.value,
               selected: entry.key == _sort,
@@ -850,12 +887,12 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           );
           final sort = SizedBox(
             width: 142,
-            child: BlurDropdown<_TorrentTaskSort>(
+            child: BlurDropdown<UnifiedTorrentTaskSort>(
               dropdownKey: _sortDropdownKey,
               onItemSelected: _applySort,
-              items: _torrentTaskSortLabels.entries
+              items: unifiedTorrentTaskSortLabels.entries
                   .map(
-                    (entry) => DropdownMenuItemData<_TorrentTaskSort>(
+                    (entry) => DropdownMenuItemData<UnifiedTorrentTaskSort>(
                       title: entry.value,
                       value: entry.key,
                       isSelected: entry.key == _sort,
@@ -872,10 +909,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
             ),
             const SizedBox(width: 8),
             _TorrentHoverAction(
-              icon: _viewMode == _TorrentTaskViewMode.cards
+              icon: _viewMode == UnifiedTorrentTaskViewMode.cards
                   ? Ionicons.list_outline
                   : Ionicons.grid_outline,
-              tooltip: _viewMode == _TorrentTaskViewMode.cards
+              tooltip: _viewMode == UnifiedTorrentTaskViewMode.cards
                   ? '切换为列表显示'
                   : '切换为三列显示',
               onPressed: _toggleViewMode,
@@ -933,7 +970,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   Widget _buildTaskList(List<TorrentTask> tasks) {
-    if (_viewMode == _TorrentTaskViewMode.list) {
+    if (_viewMode == UnifiedTorrentTaskViewMode.list) {
       return _buildCompactTaskList(tasks);
     }
 
@@ -1175,6 +1212,8 @@ class _AddMagnetDialogState extends State<_AddMagnetDialog> {
   bool _isPreviewing = false;
   int _previewRequestId = 0;
 
+  void _updateCupertinoForm(VoidCallback update) => setState(update);
+
   @override
   void initState() {
     super.initState();
@@ -1298,6 +1337,9 @@ class _AddMagnetDialogState extends State<_AddMagnetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return _buildCupertinoAddMagnetSheet();
+    }
     final colorScheme = Theme.of(context).colorScheme;
 
     return NipaplayWindowScaffold(

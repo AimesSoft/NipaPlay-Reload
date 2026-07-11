@@ -1,7 +1,5 @@
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'dart:io';
 import 'globals.dart' as globals;
 
 class ScreenOrientationManager {
@@ -58,11 +56,14 @@ class ScreenOrientationManager {
         // 平板设备：已经是横屏，无需改变
         return;
       } else {
-        // 手机设备：切换到横屏
-        // 若已是横屏（例如自动下一集），跳过“先允许竖屏再锁横屏”的过渡，
-        // 避免出现短暂的横/竖来回切换。
-        final bool alreadyLandscape = isLandscape;
-        await _setLandscapeOnly(allowTransientPortrait: !alreadyLandscape);
+        // 手机播放器是主页面的一部分，播放时允许用户保持竖屏或自由旋转。
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       }
     } finally {
       _isTransitioning = false;

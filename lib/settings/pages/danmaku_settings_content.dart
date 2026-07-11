@@ -738,7 +738,6 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     );
 
     return AdaptiveSettingsPage(
-      title: _text(context, '弹幕设置', '彈幕設定', 'Danmaku Settings'),
       children: [
         AdaptiveSettingsSection(
           addDividers: false,
@@ -1056,21 +1055,5 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
         ),
       ],
     );
-  }
-
-  String _text(
-    BuildContext context,
-    String simplified,
-    String traditional,
-    String english,
-  ) {
-    final locale = context.l10n.localeName;
-    if (locale == 'en') {
-      return english;
-    }
-    if (locale == 'zh_Hant') {
-      return traditional;
-    }
-    return simplified;
   }
 }

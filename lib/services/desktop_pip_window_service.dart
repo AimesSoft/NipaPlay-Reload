@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
@@ -55,9 +56,11 @@ class DesktopPipLaunchPayload {
       } catch (_) {}
     }
 
-    final String windowType = _stringValue(payload['windowType']) ?? _pipWindowType;
+    final String windowType =
+        _stringValue(payload['windowType']) ?? _pipWindowType;
     final String? videoPath = _stringValue(payload['videoPath']);
-    if (windowType == _pipWindowType && (videoPath == null || videoPath.isEmpty)) {
+    if (windowType == _pipWindowType &&
+        (videoPath == null || videoPath.isEmpty)) {
       return null;
     }
 
@@ -68,8 +71,8 @@ class DesktopPipLaunchPayload {
       actualPlayUrl: _stringValue(payload['actualPlayUrl']),
       positionMs: _intValue(payload['positionMs']),
       shouldPlay: _boolValue(payload['shouldPlay']),
-      aspectRatio:
-          DesktopPipWindowService.normalizeAspectRatio(_doubleValue(payload['aspectRatio'])),
+      aspectRatio: DesktopPipWindowService.normalizeAspectRatio(
+          _doubleValue(payload['aspectRatio'])),
       animeTitle: _stringValue(payload['animeTitle']),
       episodeTitle: _stringValue(payload['episodeTitle']),
     );
@@ -202,8 +205,8 @@ class DesktopPipWindowService {
     );
 
     try {
-      final controller =
-          await DesktopMultiWindow.createWindow(payload.toWindowArgumentsJson());
+      final controller = await DesktopMultiWindow.createWindow(
+          payload.toWindowArgumentsJson());
       _activePipWindowId = controller.windowId;
 
       final Rect frame = preferredWindowFrameForAspect(aspectRatio);
@@ -224,7 +227,8 @@ class DesktopPipWindowService {
     }
   }
 
-  Future<void> closeCurrentPipWindowAndRestore(VideoPlayerState videoState) async {
+  Future<void> closeCurrentPipWindowAndRestore(
+      VideoPlayerState videoState) async {
     if (!_isPipWindow || _currentWindowId <= 0) {
       return;
     }
@@ -279,7 +283,8 @@ class DesktopPipWindowService {
     }
   }
 
-  Future<dynamic> _handleMainMethodCall(MethodCall call, int fromWindowId) async {
+  Future<dynamic> _handleMainMethodCall(
+      MethodCall call, int fromWindowId) async {
     switch (call.method) {
       case _methodRestorePlayback:
         _activePipWindowId = null;
@@ -311,7 +316,7 @@ class DesktopPipWindowService {
     }
 
     try {
-      rootContext.read<TabChangeNotifier>().changeTab(1);
+      rootContext.read<TabChangeNotifier>().changePage(AppPageIds.video);
     } catch (_) {}
 
     VideoPlayerState? videoState;

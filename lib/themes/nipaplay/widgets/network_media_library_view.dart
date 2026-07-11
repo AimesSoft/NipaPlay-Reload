@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
@@ -17,13 +18,15 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_library_sort_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/jellyfin_library_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 
 enum NetworkMediaServerType { jellyfin, emby }
 
@@ -162,7 +165,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   String? _error;
   Timer? _refreshTimer;
   final ScrollController _gridScrollController = ScrollController();
-  final GlobalKey _remoteSortDropdownKey = GlobalKey();
 
   // 库视图状态
   String? _selectedLibraryId;
@@ -180,39 +182,25 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   List<NetworkMediaItem> _filteredMediaItems = [];
   Timer? _searchDebounceTimer;
 
-  ButtonStyle _plainButtonStyle({Color? baseColor}) {
-    final textColor = Theme.of(context).colorScheme.onSurface;
-    final mutedColor = textColor.withOpacity(0.5);
-    final resolvedBase = baseColor ?? textColor;
-    return ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return mutedColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return _accentColor;
-        }
-        return resolvedBase;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      ),
-    );
-  }
-
   Widget _buildPlainActionButton({
     required IconData icon,
     required String text,
     required VoidCallback? onPressed,
     Color? baseColor,
   }) {
-    return TextButton.icon(
+    return AdaptiveMediaActionButton(
       onPressed: onPressed,
-      style: _plainButtonStyle(baseColor: baseColor),
-      icon: Icon(icon, size: 18),
-      label: Text(text),
+      desktopIcon: icon,
+      phoneIcon: switch (icon) {
+        Icons.cloud => cupertino.CupertinoIcons.cloud,
+        Icons.refresh => cupertino.CupertinoIcons.refresh,
+        Icons.arrow_back => cupertino.CupertinoIcons.back,
+        _ => cupertino.CupertinoIcons.ellipsis,
+      },
+      label: text,
+      emphasis: baseColor == Colors.red
+          ? AdaptiveMediaActionEmphasis.destructive
+          : AdaptiveMediaActionEmphasis.plain,
     );
   }
 
@@ -453,7 +441,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   Widget _buildLargeScreenLibraryContentView(
       dynamic provider, dynamic service) {
     if (_isLoadingLibraryContent) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(
+        child: AdaptiveMediaActivityIndicator(),
+      );
     }
 
     if (_error != null) {
@@ -545,10 +535,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             onChanged: onSearchChanged,
             suffix: _searchController.text.isEmpty
                 ? null
-                : IconButton(
+                : AdaptiveMediaIconButton(
                     tooltip: '清空搜索',
                     onPressed: _clearSearch,
-                    icon: const Icon(Icons.close_rounded),
+                    desktopIcon: Icons.close_rounded,
+                    phoneIcon: cupertino.CupertinoIcons.clear,
                   ),
           ),
         ),
@@ -610,9 +601,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(
+            child: AdaptiveMediaActivityIndicator(
               color: _accentColor,
-              strokeWidth: 2,
+              size: 20,
             ),
           ),
       ],
@@ -1042,10 +1033,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         // 媒体库网格或搜索结果
         Expanded(
           child: RepaintBoundary(
-            child: Scrollbar(
+            child: AdaptiveMediaScrollbar(
               controller: _gridScrollController,
-              thickness: 4,
-              radius: const Radius.circular(2),
               child: _isSearching
                   ? GridView.builder(
                       controller: _gridScrollController,
@@ -1105,7 +1094,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     if (_isLoadingLibraryContent) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(
+        child: AdaptiveMediaActivityIndicator(),
+      );
     }
 
     if (_error != null) {
@@ -1182,10 +1173,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         // 媒体内容网格/文件夹列表
         Expanded(
           child: RepaintBoundary(
-            child: Scrollbar(
+            child: AdaptiveMediaScrollbar(
               controller: _gridScrollController,
-              thickness: 4,
-              radius: const Radius.circular(2),
               child: _isFolderNavigation
                   ? _buildFolderListView()
                   : GridView.builder(
@@ -1244,10 +1233,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
-  Widget _buildServerSettingsAction() {
-    return SearchBarActionButton(
-      icon: Ionicons.settings_outline,
-      tooltip: '$_serverName服务器设置',
+  LocalLibraryActionControl _buildServerSettingsAction() {
+    return LocalLibraryActionControl(
+      label: '$_serverName服务器设置',
+      desktopIcon: Ionicons.settings_outline,
+      phoneIcon: cupertino.CupertinoIcons.settings,
       onPressed: _showServerDialog,
     );
   }
@@ -1323,8 +1313,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             ? Ionicons.folder_outline
             : Ionicons.play_circle_outline;
 
-        return ListTile(
-          dense: true,
+        return AdaptiveMediaListTile(
           leading: Icon(icon, color: Colors.white70, size: 20),
           title: Text(
             item.title,
@@ -1972,7 +1961,20 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
-  Widget _buildRemoteSortDropdown() {
+  LocalLibraryActionControl _buildRemoteSortDropdown() {
+    return LocalLibraryActionControl(
+      label: '排序',
+      desktopIcon: Icons.sort_rounded,
+      phoneIcon: cupertino.CupertinoIcons.arrow_up_arrow_down,
+      onPressed: _showAdaptiveRemoteSortDialog,
+    );
+  }
+
+  Future<void> _showAdaptiveRemoteSortDialog() async {
+    if (AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone) {
+      await _showLargeScreenRemoteSortDialog();
+      return;
+    }
     final provider = _provider;
     final currentSortSettings = _getCurrentRemoteSortSettings(provider);
     final items = _buildRemoteSortItems(
@@ -1980,11 +1982,25 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       currentSortSettings['sortOrder']!,
     );
 
-    return BlurDropdown<_RemoteSortSelection>(
-      dropdownKey: _remoteSortDropdownKey,
-      items: items,
-      onItemSelected: _applyRemoteSortSelection,
+    final selection =
+        await cupertino.showCupertinoModalPopup<_RemoteSortSelection>(
+      context: context,
+      builder: (sheetContext) => cupertino.CupertinoActionSheet(
+        title: const Text('排序'),
+        actions: [
+          for (final item in items)
+            cupertino.CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop(item.value),
+              child: Text(item.title),
+            ),
+        ],
+        cancelButton: cupertino.CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
     );
+    if (selection != null) _applyRemoteSortSelection(selection);
   }
 
   Map<String, String> _getCurrentRemoteSortSettings(dynamic provider) {

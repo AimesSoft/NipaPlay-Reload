@@ -16,7 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -133,23 +133,13 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     //debugPrint("[PlayVideoPage] Accumulated Drag Distance: $_horizontalDragDistance");
     //debugPrint("[PlayVideoPage] Drag Velocity: ${details.primaryVelocity}");
 
-    // 先检查是否存在DefaultTabController，避免异常
-    final TabController? tabController =
-        context.findAncestorWidgetOfExactType<DefaultTabController>() != null
-            ? DefaultTabController.of(context)
-            : null;
-
-    if (tabController == null) {
-      // 如果不存在TabController，直接返回
+    final navigation = AppNavigationScope.maybeOf(context);
+    if (navigation == null) {
       _horizontalDragDistance = 0.0;
       return;
     }
-
-    final tabChangeNotifier =
-        Provider.of<TabChangeNotifier>(context, listen: false);
-
-    final currentIndex = tabController.index;
-    final tabCount = tabController.length;
+    final currentIndex = navigation.pageIds.indexOf(navigation.selectedPageId);
+    final tabCount = navigation.pageIds.length;
     int newIndex = currentIndex;
 
     final double dragThreshold = MediaQuery.of(context).size.width / 15;
@@ -170,8 +160,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
 
     if (newIndex != currentIndex) {
-      //debugPrint("[PlayVideoPage] Changing tab to index: $newIndex via side swipe.");
-      tabChangeNotifier.changeTab(newIndex);
+      navigation.onSelectPage(navigation.pageIds[newIndex]);
     } else {
       //debugPrint("[PlayVideoPage] No tab change needed from side swipe.");
     }
@@ -430,20 +419,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     !usesWindowHostedVideoSurface
                 ? Colors.black
                 : Colors.transparent,
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              body: Stack(
-                fit: StackFit.expand,
-                children: [
-                  const Positioned.fill(
-                    child: VideoPlayerWidget(),
-                  ),
-                  if (videoState.hasVideo)
-                    NipaplayLargeScreenModeScope.isActiveOf(context)
-                        ? _buildLargeScreenMaterialControls(videoState)
-                        : _buildMaterialControls(videoState),
-                ],
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const Positioned.fill(
+                  child: VideoPlayerWidget(),
+                ),
+                if (videoState.hasVideo)
+                  NipaplayLargeScreenModeScope.isActiveOf(context)
+                      ? _buildLargeScreenMaterialControls(videoState)
+                      : _buildMaterialControls(videoState),
+              ],
             ),
           ),
         );

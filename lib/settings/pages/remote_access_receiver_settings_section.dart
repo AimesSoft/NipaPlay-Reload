@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -8,7 +9,9 @@ import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -86,24 +89,43 @@ class _RemoteAccessReceiverSettingsSectionState
   }
 
   Future<void> _removeTrustedDevice(String clientKey) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移除受信任设备'),
-        content: const Text('移除后，该设备下次连接时需要重新确认。'),
-        actions: [
-          AdaptiveSettingsActionButton(
-            label: '取消',
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AdaptiveSettingsActionButton(
-            label: '移除',
-            destructive: true,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
-    );
+    final confirmed = AdaptiveSettingsScope.isPhoneLayout(context)
+        ? await cupertino.showCupertinoDialog<bool>(
+            context: context,
+            builder: (dialogContext) => cupertino.CupertinoAlertDialog(
+              title: const Text('移除受信任设备'),
+              content: const Text('移除后，该设备下次连接时需要重新确认。'),
+              actions: [
+                cupertino.CupertinoDialogAction(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                cupertino.CupertinoDialogAction(
+                  isDestructiveAction: true,
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('移除'),
+                ),
+              ],
+            ),
+          )
+        : await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('移除受信任设备'),
+              content: const Text('移除后，该设备下次连接时需要重新确认。'),
+              actions: [
+                AdaptiveSettingsActionButton(
+                  label: '取消',
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                ),
+                AdaptiveSettingsActionButton(
+                  label: '移除',
+                  destructive: true,
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                ),
+              ],
+            ),
+          );
     if (confirmed != true) return;
 
     try {
@@ -270,6 +292,21 @@ class _RemoteAccessReceiverSettingsSectionState
   }
 
   void _showStartServerErrorDialog(String message) {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      AdaptiveAlertDialog.show(
+        context: context,
+        title: '远程访问服务启动失败',
+        message: message,
+        actions: [
+          AlertAction(
+            title: '确定',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
+      );
+      return;
+    }
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -287,6 +324,37 @@ class _RemoteAccessReceiverSettingsSectionState
   }
 
   Future<void> _showPortDialog() async {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      final input = await AdaptiveAlertDialog.inputShow(
+        context: context,
+        title: '设置远程访问端口',
+        input: const AdaptiveAlertDialogInput(
+          placeholder: '端口 (1-65535)',
+          keyboardType: TextInputType.number,
+        ),
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '确定',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
+      );
+      if (!mounted || input == null) return;
+      final newPort = int.tryParse(input.trim());
+      if (newPort == null || newPort <= 0 || newPort >= 65536) {
+        AdaptiveSnackBar.show(context, message: '请输入有效的端口号 (1-65535)');
+        return;
+      }
+      await _applyPort(newPort);
+      return;
+    }
+
     final controller = TextEditingController(text: _currentPort.toString());
     final newPort = await showDialog<int>(
       context: context,
@@ -322,7 +390,12 @@ class _RemoteAccessReceiverSettingsSectionState
       ),
     );
 
-    if (newPort == null || newPort == _currentPort) return;
+    if (newPort == null) return;
+    await _applyPort(newPort);
+  }
+
+  Future<void> _applyPort(int newPort) async {
+    if (newPort == _currentPort) return;
     final wasRunning = _webServerEnabled;
     setState(() {
       _currentPort = newPort;
@@ -385,6 +458,16 @@ class _RemoteAccessReceiverSettingsSectionState
       baseUrl: qrUrl,
       candidateBaseUrls: _qrCandidateUrls,
     );
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      await CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '手机扫码连接',
+        floatingTitle: true,
+        child: _buildPhoneQrContent(payload, qrUrl),
+      );
+      return;
+    }
+
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -424,6 +507,44 @@ class _RemoteAccessReceiverSettingsSectionState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPhoneQrContent(String payload, String qrUrl) {
+    return CupertinoBottomSheetContentLayout(
+      sliversBuilder: (context, topSpacing) => [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(20, topSpacing + 8, 20, 24),
+          sliver: SliverList.list(
+            children: [
+              Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: QrImageView(
+                      data: payload,
+                      version: QrVersions.auto,
+                      size: 220,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SelectableText(qrUrl, textAlign: TextAlign.center),
+              const SizedBox(height: 14),
+              cupertino.CupertinoButton.filled(
+                onPressed: () => _copyUrl(qrUrl),
+                child: const Text('复制地址'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

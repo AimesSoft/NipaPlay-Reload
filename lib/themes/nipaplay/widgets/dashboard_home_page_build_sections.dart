@@ -79,36 +79,27 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       lastSection = type;
     }
 
-    for (final section in sectionsProvider.orderedSections) {
-      if (!sectionsProvider.isSectionEnabled(section)) {
-        continue;
-      }
-      switch (section) {
-        case HomeSectionType.todaySeries:
-          if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
-            continue;
-          }
+    for (final component in _buildHomeComponents(sectionsProvider)) {
+      final section = component.sectionType;
+      if (section == null) continue;
+      switch (component.type) {
+        case UnifiedHomeComponentType.hero:
+          break;
+        case UnifiedHomeComponentType.todaySeries:
           addSectionWidgets(section, [_buildTodaySeriesSection()]);
           break;
-        case HomeSectionType.randomRecommendations:
-          if (_randomRecommendations.isEmpty &&
-              !_isLoadingRandomRecommendations) {
-            continue;
-          }
+        case UnifiedHomeComponentType.randomRecommendations:
           addSectionWidgets(section, [_buildRandomRecommendationsSection()]);
           break;
-        case HomeSectionType.continueWatching:
+        case UnifiedHomeComponentType.continueWatching:
           addSectionWidgets(
               section, [_buildContinueWatching(isPhone: isPhone)]);
           break;
-        case HomeSectionType.remoteLibraries:
+        case UnifiedHomeComponentType.remoteLibraries:
           final remoteSections = _buildRemoteLibrarySections(isPhone: isPhone);
           addSectionWidgets(section, remoteSections);
           break;
-        case HomeSectionType.localLibrary:
-          if (_localAnimeItems.isEmpty) {
-            continue;
-          }
+        case UnifiedHomeComponentType.localLibrary:
           addSectionWidgets(
             section,
             [
@@ -278,18 +269,24 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     return _wrapLargeScreenFocusable(child: card, onActivate: onTap);
   }
 
-  void _showWatchHistoryDialog() {
-    final screenSize = MediaQuery.of(context).size;
-    final shortestSide = math.min(screenSize.width, screenSize.height);
-    final isPhone = shortestSide < 600;
+  Future<void> _showWatchHistoryDialog() async {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      await CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '观看记录',
+        floatingTitle: true,
+        child: const WatchHistoryPage(phoneLayout: true),
+      );
+      return;
+    }
 
-    NipaplayWindow.show(
+    await NipaplayWindow.show<void>(
       context: context,
       child: NipaplayWindowScaffold(
         backgroundImageUrl: null,
         blurBackground: true, // 内部已固定为 40 模糊
-        maxWidth: isPhone ? screenSize.width * 0.95 : 800,
-        maxHeightFactor: isPhone ? 0.85 : 0.7,
+        maxWidth: 800,
+        maxHeightFactor: 0.7,
         onClose: () => Navigator.of(context).pop(),
         child: Column(
           children: [
@@ -330,7 +327,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _buildWatchHistoryButton() {
     final button = _HoverScaleButton(
-      onTap: _isLargeScreenModeActive ? null : _showWatchHistoryDialog,
+      onTap: _isLargeScreenModeActive
+          ? null
+          : () => unawaited(_showWatchHistoryDialog()),
       child: Icon(
         Icons.history_rounded,
         size: 24,
@@ -340,7 +339,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       message: '观看记录',
       child: _wrapLargeScreenFocusable(
         child: button,
-        onActivate: _showWatchHistoryDialog,
+        onActivate: () => unawaited(_showWatchHistoryDialog()),
         borderRadius: BorderRadius.circular(8),
         padding: const EdgeInsets.all(4),
       ),

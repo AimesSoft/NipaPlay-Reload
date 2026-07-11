@@ -1,13 +1,44 @@
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum LocalLibrarySortType {
   name,
   dateAdded,
   rating,
+}
+
+class LocalLibraryActionControl extends StatelessWidget {
+  const LocalLibraryActionControl({
+    super.key,
+    required this.label,
+    required this.desktopIcon,
+    required this.phoneIcon,
+    required this.onPressed,
+    this.isDestructive = false,
+  });
+
+  final String label;
+  final IconData desktopIcon;
+  final IconData phoneIcon;
+  final VoidCallback? onPressed;
+  final bool isDestructive;
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveMediaIconButton(
+      desktopIcon: desktopIcon,
+      phoneIcon: phoneIcon,
+      tooltip: label,
+      color: isDestructive ? Colors.redAccent : null,
+      onPressed: onPressed,
+    );
+  }
 }
 
 class LocalLibraryControlBar extends StatefulWidget {
@@ -20,7 +51,7 @@ class LocalLibraryControlBar extends StatefulWidget {
   final VoidCallback? onBack;
   final String? title;
   final bool showSort;
-  final List<Widget>? trailingActions;
+  final List<LocalLibraryActionControl>? trailingActions;
 
   LocalLibraryControlBar({
     super.key,
@@ -62,21 +93,13 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   Widget build(BuildContext context) {
     assert(!widget.showSort ||
         (widget.currentSort != null && widget.onSortChanged != null));
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return _buildPhoneControlBar(context);
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentSort = widget.currentSort ?? LocalLibrarySortType.dateAdded;
 
-    final activeColor = AppAccentColors.current;
-    final idleBorderColor = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.1);
-
-    // 提高背景对比度，日间模式下使用纯白
-    final bgColor =
-        isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white;
-
-    final textColor = isDark
-        ? Colors.white.withValues(alpha: 0.8)
-        : Colors.black.withValues(alpha: 0.7);
     final primaryTextColor = isDark ? Colors.white : Colors.black;
 
     return Container(
@@ -113,54 +136,12 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
           ],
           // 搜索框
           Expanded(
-            child: Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color:
-                      _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
-                  width: _searchFocusNode.hasFocus ? 1.5 : 1,
-                ),
-              ),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  textSelectionTheme: TextSelectionThemeData(
-                    selectionColor: activeColor.withValues(alpha: 0.3),
-                    selectionHandleColor: activeColor,
-                  ),
-                ),
-                child: TextField(
-                  controller: widget.searchController,
-                  focusNode: _searchFocusNode,
-                  onChanged: widget.onSearchChanged,
-                  style: TextStyle(color: primaryTextColor, fontSize: 14),
-                  cursorColor: activeColor,
-                  decoration: InputDecoration(
-                    hintText: '搜索...',
-                    hintStyle: TextStyle(
-                        color: textColor.withValues(alpha: 0.5), fontSize: 14),
-                    prefixIcon: Icon(Ionicons.search_outline,
-                        size: 18,
-                        color: _searchFocusNode.hasFocus
-                            ? activeColor
-                            : textColor.withValues(alpha: 0.5)),
-                    suffixIcon: widget.searchController.text.isNotEmpty
-                        ? SearchBarActionButton(
-                            icon: Ionicons.close_circle,
-                            onPressed: () {
-                              widget.searchController.clear();
-                              widget.onSearchChanged('');
-                              widget.onClearSearch?.call();
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
+            child: AdaptiveMediaSearchField(
+              controller: widget.searchController,
+              focusNode: _searchFocusNode,
+              placeholder: '搜索…',
+              onChanged: widget.onSearchChanged,
+              onClear: widget.onClearSearch,
             ),
           ),
           if (widget.trailingActions != null &&
@@ -193,6 +174,169 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                 ),
               ],
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhoneControlBar(BuildContext context) {
+    final labelColor = cupertino.CupertinoDynamicColor.resolve(
+      cupertino.CupertinoColors.label,
+      context,
+    );
+    return SizedBox(
+      height: 54,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Row(
+          children: [
+            if (widget.showBackButton) ...[
+              cupertino.CupertinoButton(
+                padding: const EdgeInsets.all(6),
+                minimumSize: const Size.square(34),
+                onPressed: widget.onBack,
+                child: const Icon(cupertino.CupertinoIcons.back, size: 20),
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (widget.title != null && widget.title!.isNotEmpty) ...[
+              Flexible(
+                child: Text(
+                  widget.title!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: AdaptiveMediaSearchField(
+                controller: widget.searchController,
+                focusNode: _searchFocusNode,
+                placeholder: '搜索…',
+                onChanged: widget.onSearchChanged,
+                onClear: widget.onClearSearch,
+              ),
+            ),
+            if (widget.trailingActions != null &&
+                widget.trailingActions!.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              _buildPhoneActions(context, widget.trailingActions!),
+            ],
+            if (widget.showSort) ...[
+              const SizedBox(width: 4),
+              cupertino.CupertinoButton(
+                padding: const EdgeInsets.all(7),
+                minimumSize: const Size.square(34),
+                onPressed: () => _showPhoneSortMenu(context),
+                child: const Icon(
+                  cupertino.CupertinoIcons.arrow_up_arrow_down,
+                  size: 18,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhoneActions(
+    BuildContext context,
+    List<LocalLibraryActionControl> actions,
+  ) {
+    if (actions.length == 1) return actions.single;
+    return cupertino.CupertinoButton(
+      padding: const EdgeInsets.all(7),
+      minimumSize: const Size.square(34),
+      onPressed: () => _showPhoneActions(context, actions),
+      child: const Icon(cupertino.CupertinoIcons.ellipsis_circle, size: 19),
+    );
+  }
+
+  Future<void> _showPhoneActions(
+    BuildContext context,
+    List<LocalLibraryActionControl> actions,
+  ) async {
+    final enabledActions =
+        actions.where((action) => action.onPressed != null).toList();
+    final selected =
+        await cupertino.showCupertinoModalPopup<LocalLibraryActionControl>(
+      context: context,
+      builder: (sheetContext) => cupertino.CupertinoActionSheet(
+        title: const Text('页面操作'),
+        actions: [
+          for (final action in enabledActions)
+            cupertino.CupertinoActionSheetAction(
+              isDestructiveAction: action.isDestructive,
+              onPressed: () => Navigator.of(sheetContext).pop(action),
+              child: Text(action.label),
+            ),
+        ],
+        cancelButton: cupertino.CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+    selected?.onPressed?.call();
+  }
+
+  Future<void> _showPhoneSortMenu(BuildContext context) async {
+    final selected =
+        await cupertino.showCupertinoModalPopup<LocalLibrarySortType>(
+      context: context,
+      builder: (sheetContext) => cupertino.CupertinoActionSheet(
+        title: const Text('排序'),
+        actions: [
+          _phoneSortAction(
+            sheetContext,
+            LocalLibrarySortType.dateAdded,
+            '最近观看',
+          ),
+          _phoneSortAction(
+            sheetContext,
+            LocalLibrarySortType.name,
+            '名称排序',
+          ),
+          _phoneSortAction(
+            sheetContext,
+            LocalLibrarySortType.rating,
+            '评分排序',
+          ),
+        ],
+        cancelButton: cupertino.CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+    if (selected != null) {
+      widget.onSortChanged?.call(selected);
+    }
+  }
+
+  cupertino.CupertinoActionSheetAction _phoneSortAction(
+    BuildContext context,
+    LocalLibrarySortType type,
+    String label,
+  ) {
+    final selected = widget.currentSort == type;
+    return cupertino.CupertinoActionSheetAction(
+      onPressed: () => Navigator.of(context).pop(type),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label),
+          if (selected) ...[
+            const SizedBox(width: 8),
+            const Icon(cupertino.CupertinoIcons.check_mark, size: 16),
           ],
         ],
       ),

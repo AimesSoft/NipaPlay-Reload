@@ -8,12 +8,29 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_lan_scan_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class SharedRemoteHostSelectionSheet extends StatelessWidget {
-  const SharedRemoteHostSelectionSheet({super.key});
+  const SharedRemoteHostSelectionSheet({
+    super.key,
+    this.embedded = false,
+  });
+
+  final bool embedded;
 
   static Future<void> show(BuildContext context) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '选择共享客户端',
+        floatingTitle: true,
+        child: const SharedRemoteHostSelectionSheet(embedded: true),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -50,7 +67,6 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final textColor = colorScheme.onSurface;
     final subTextColor = colorScheme.onSurface.withOpacity(0.7);
     final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    final accentColor = AppAccentColors.current;
     final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.18);
     final panelColor =
         isDark ? const Color(0xFF242424) : const Color(0xFFEDEDED);
@@ -76,27 +92,23 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             itemColor: itemColor,
           );
 
-    return NipaplayWindowScaffold(
-      maxWidth: dialogWidth,
-      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.85),
-      onClose: () => Navigator.of(context).maybePop(),
-      backgroundColor: backgroundColor,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: keyboardHeight),
-          child: SizedBox(
-            height: sheetHeight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    final content = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: SizedBox(
+          height: sheetHeight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!embedded) ...[
                   Row(
                     children: [
                       Icon(Ionicons.link_outline, color: textColor, size: 20),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Text(
                         '选择共享客户端',
                         locale: const Locale('zh', 'CN'),
@@ -114,57 +126,63 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
-                  Text(
-                    '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
-                    locale: const Locale('zh', 'CN'),
-                    style: TextStyle(
-                      color: subTextColor,
-                      fontSize: 13,
-                      height: 1.3,
-                    ),
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
+                  locale: const Locale('zh', 'CN'),
+                  style: TextStyle(
+                    color: subTextColor,
+                    fontSize: 13,
+                    height: 1.3,
                   ),
-                  SizedBox(height: 16),
-                  Expanded(
-                    child: useSplitLayout
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: listWidget),
-                              SizedBox(width: 16),
-                              SizedBox(
-                                width: (dialogWidth * 0.32).clamp(220.0, 280.0),
-                                child: _buildActionPanel(
-                                  context,
-                                  provider,
-                                  accentColor: accentColor,
-                                  textColor: textColor,
-                                  subTextColor: subTextColor,
-                                  borderColor: borderColor,
-                                  panelColor: panelColor,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildInlineActions(
+                ),
+                SizedBox(height: 16),
+                Expanded(
+                  child: useSplitLayout
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: listWidget),
+                            SizedBox(width: 16),
+                            SizedBox(
+                              width: (dialogWidth * 0.32).clamp(220.0, 280.0),
+                              child: _buildActionPanel(
                                 context,
                                 provider,
-                                accentColor: accentColor,
+                                textColor: textColor,
+                                subTextColor: subTextColor,
+                                borderColor: borderColor,
+                                panelColor: panelColor,
                               ),
-                              SizedBox(height: 12),
-                              Expanded(child: listWidget),
-                            ],
-                          ),
-                  ),
-                ],
-              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildInlineActions(
+                              context,
+                              provider,
+                            ),
+                            SizedBox(height: 12),
+                            Expanded(child: listWidget),
+                          ],
+                        ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+    if (embedded) return content;
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.85),
+      onClose: () => Navigator.of(context).maybePop(),
+      backgroundColor: backgroundColor,
+      child: content,
     );
   }
 
@@ -316,9 +334,8 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
 
   Widget _buildInlineActions(
     BuildContext context,
-    SharedRemoteLibraryProvider provider, {
-    required Color accentColor,
-  }) {
+    SharedRemoteLibraryProvider provider,
+  ) {
     return Wrap(
       spacing: 12,
       runSpacing: 10,
@@ -327,14 +344,12 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
           icon: Ionicons.wifi_outline,
           label: '扫描局域网',
           onPressed: () => _showLanScanDialog(context, provider),
-          accentColor: accentColor,
           minWidth: 160,
         ),
         _buildSecondaryActionButton(
           icon: Ionicons.add_outline,
           label: '添加共享客户端',
           onPressed: () => _showAddHostDialog(context, provider),
-          accentColor: accentColor,
           minWidth: 160,
         ),
       ],
@@ -344,7 +359,6 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   Widget _buildActionPanel(
     BuildContext context,
     SharedRemoteLibraryProvider provider, {
-    required Color accentColor,
     required Color textColor,
     required Color subTextColor,
     required Color borderColor,
@@ -374,7 +388,6 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             icon: Ionicons.wifi_outline,
             label: '扫描局域网',
             onPressed: () => _showLanScanDialog(context, provider),
-            accentColor: accentColor,
             expand: true,
           ),
           SizedBox(height: 8),
@@ -382,7 +395,6 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             icon: Ionicons.add_outline,
             label: '添加共享客户端',
             onPressed: () => _showAddHostDialog(context, provider),
-            accentColor: accentColor,
             expand: true,
           ),
           SizedBox(height: 12),
@@ -400,50 +412,20 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     );
   }
 
-  ButtonStyle _primaryActionStyle(Color accentColor) {
-    return ElevatedButton.styleFrom(
-      backgroundColor: accentColor,
-      foregroundColor: Colors.white,
-      minimumSize: const Size(0, 40),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      elevation: 0,
-    ).copyWith(
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-    );
-  }
-
-  ButtonStyle _secondaryActionStyle(Color accentColor) {
-    return OutlinedButton.styleFrom(
-      foregroundColor: accentColor,
-      minimumSize: const Size(0, 40),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      side: BorderSide(color: accentColor.withOpacity(0.7)),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-    ).copyWith(
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-    );
-  }
-
   Widget _buildPrimaryActionButton({
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
-    required Color accentColor,
     bool expand = false,
     double minWidth = 0,
   }) {
-    final button = ElevatedButton.icon(
+    final button = AdaptiveMediaActionButton(
+      label: label,
       onPressed: onPressed,
-      style: _primaryActionStyle(accentColor),
-      icon: Icon(icon, size: 18),
-      label: Text(label),
+      desktopIcon: icon,
+      phoneIcon: icon,
+      emphasis: AdaptiveMediaActionEmphasis.primary,
+      expand: expand,
     );
 
     if (expand) {
@@ -460,15 +442,15 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
-    required Color accentColor,
     bool expand = false,
     double minWidth = 0,
   }) {
-    final button = OutlinedButton.icon(
+    final button = AdaptiveMediaActionButton(
+      label: label,
       onPressed: onPressed,
-      style: _secondaryActionStyle(accentColor),
-      icon: Icon(icon, size: 18),
-      label: Text(label),
+      desktopIcon: icon,
+      phoneIcon: icon,
+      expand: expand,
     );
 
     if (expand) {

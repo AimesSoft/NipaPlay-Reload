@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -38,7 +39,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
-import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -52,7 +52,10 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/unified_home_components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
@@ -60,6 +63,7 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 part '../themes/nipaplay/widgets/dashboard_home_page_data_loading.dart';
@@ -69,6 +73,7 @@ part '../themes/nipaplay/widgets/dashboard_home_page_actions.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_image_helpers.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_models.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_random_recommendations.dart';
+part '../themes/cupertino/widgets/cupertino_home_page_controls.dart';
 
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});
@@ -81,6 +86,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     with AutomaticKeepAliveClientMixin {
   bool get _isLargeScreenModeActive {
     return NipaplayLargeScreenHomeScope.isActive(context);
+  }
+
+  List<UnifiedHomeComponent> _buildHomeComponents(
+    HomeSectionsSettingsProvider settings,
+  ) {
+    return buildUnifiedHomeComponents(
+      settings: settings,
+      hasTodaySeries: _todayAnimes.isNotEmpty || _isLoadingTodayAnimes,
+      hasRandomRecommendations:
+          _randomRecommendations.isNotEmpty || _isLoadingRandomRecommendations,
+      hasLocalLibrary: _localAnimeItems.isNotEmpty,
+    );
   }
 
   Widget _wrapLargeScreenFocusable({
@@ -962,6 +979,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return _buildCupertinoHomePage();
+    }
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
 

@@ -52,13 +52,11 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
     if (_isLoading) {
       return AdaptiveSettingsPage(
-        title: l10n.networkSettings,
         children: const [Center(child: CircularProgressIndicator())],
       );
     }
 
     return AdaptiveSettingsPage(
-      title: l10n.networkSettings,
       children: [
         AdaptiveSettingsSection(
           children: [

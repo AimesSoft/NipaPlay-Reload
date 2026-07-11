@@ -7,11 +7,9 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show
-        AdaptiveAppBar,
         AdaptivePopupMenuButton,
         AdaptivePopupMenuEntry,
         AdaptivePopupMenuItem,
-        AdaptiveScaffold,
         AdaptiveSlider,
         AdaptiveSwitch,
         PlatformInfo,
@@ -1135,14 +1133,12 @@ class AdaptiveSettingsSection extends material.StatelessWidget {
 class AdaptiveSettingsPage extends material.StatelessWidget {
   const AdaptiveSettingsPage({
     super.key,
-    required this.title,
     required this.children,
     this.nipaplayPadding = const material.EdgeInsets.all(24),
     this.cupertinoHorizontalPadding = 16,
     this.cupertinoBottomPadding = 32,
   });
 
-  final String title;
   final List<material.Widget> children;
   final material.EdgeInsetsGeometry nipaplayPadding;
   final double cupertinoHorizontalPadding;
@@ -1155,30 +1151,23 @@ class AdaptiveSettingsPage extends material.StatelessWidget {
         cupertino.CupertinoColors.systemGroupedBackground,
         context,
       );
-      final topPadding = material.MediaQuery.of(context).padding.top + 64;
-
-      return AdaptiveScaffold(
-        appBar: AdaptiveAppBar(
-          title: title,
-          useNativeToolbar: true,
-        ),
-        body: material.ColoredBox(
-          color: backgroundColor,
-          child: material.SafeArea(
-            top: false,
-            bottom: false,
-            child: material.ListView(
-              physics: const cupertino.BouncingScrollPhysics(
-                parent: material.AlwaysScrollableScrollPhysics(),
-              ),
-              padding: material.EdgeInsets.fromLTRB(
-                cupertinoHorizontalPadding,
-                topPadding,
-                cupertinoHorizontalPadding,
-                cupertinoBottomPadding,
-              ),
-              children: children,
+      return material.ColoredBox(
+        color: backgroundColor,
+        child: material.SafeArea(
+          top: false,
+          bottom: false,
+          child: material.ListView(
+            physics: const cupertino.BouncingScrollPhysics(
+              parent: material.AlwaysScrollableScrollPhysics(),
             ),
+            padding: material.EdgeInsets.fromLTRB(
+              cupertinoHorizontalPadding,
+              64,
+              cupertinoHorizontalPadding,
+              cupertinoBottomPadding +
+                  material.MediaQuery.viewPaddingOf(context).bottom,
+            ),
+            children: children,
           ),
         ),
       );

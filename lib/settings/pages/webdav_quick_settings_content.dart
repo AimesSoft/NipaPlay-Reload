@@ -42,7 +42,6 @@ class _WebDAVQuickSettingsContentState
   Widget build(BuildContext context) {
     if (_isInitializing) {
       return AdaptiveSettingsPage(
-        title: 'WebDAV快捷设置',
         children: [
           AdaptiveSettingsSection(
             children: [
@@ -69,7 +68,6 @@ class _WebDAVQuickSettingsContentState
             : provider.desktopTabletAvailableTabs;
 
         return AdaptiveSettingsPage(
-          title: 'WebDAV快捷设置',
           children: [
             AdaptiveSettingsSection(
               children: [

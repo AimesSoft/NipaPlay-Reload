@@ -6,9 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoUserActivity extends StatefulWidget {
@@ -106,8 +104,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
   }
 
   Widget _buildSegmentedControl(BuildContext context) {
-    final Color textColor =
-        CupertinoDynamicColor.resolve(
+    final Color textColor = CupertinoDynamicColor.resolve(
       const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.black,
         darkColor: CupertinoColors.white,
@@ -173,10 +170,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           children: [
             Text(
               error!,
-              style: CupertinoTheme.of(context)
-                  .textTheme
-                  .textStyle
-                  .copyWith(
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                     color: CupertinoDynamicColor.resolve(
                       CupertinoColors.systemRed,
                       context,
@@ -215,10 +209,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         child: Center(
           child: Text(
             emptyText,
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   color: resolveSettingsSecondaryTextColor(context),
                 ),
           ),
@@ -238,17 +229,17 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: items.length,
-        itemBuilder: (context, index) => _buildActivityTile(items[index]),
-        separatorBuilder: (context, index) => Container(
-          height: 0.5,
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          color: resolveSettingsSeparatorColor(context),
-        ),
-      ),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: items.length,
+            itemBuilder: (context, index) => _buildActivityTile(items[index]),
+            separatorBuilder: (context, index) => Container(
+              height: 0.5,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              color: resolveSettingsSeparatorColor(context),
+            ),
+          ),
         ),
       ),
     );
@@ -267,14 +258,16 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       subtitle = [
         if (episodeTitle != null && episodeTitle.isNotEmpty)
           context.l10n.userActivityWatchedEpisode(episodeTitle),
-        if (watched.isNotEmpty) context.l10n.userActivityWatchedUpdatedTime(watched),
+        if (watched.isNotEmpty)
+          context.l10n.userActivityWatchedUpdatedTime(watched),
       ].join('\n');
     } else if (_selectedIndex == 1) {
       final String? status = item['favoriteStatus'] as String?;
       final int rating = item['rating'] as int? ?? 0;
       subtitle = [
         if (status != null && status.isNotEmpty)
-          context.l10n.userActivityStatusWithValue(getFavoriteStatusText(status)),
+          context.l10n
+              .userActivityStatusWithValue(getFavoriteStatusText(status)),
         if (rating > 0) context.l10n.userActivityRatingWithValue(rating),
       ].join('\n');
     } else {
@@ -323,8 +316,6 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       sharedProvider = null;
     }
 
-    final detailMode = context.read<ThemeNotifier>().animeDetailDisplayMode;
-
     if (sharedProvider == null) {
       openAnimeDetail(animeId);
       return;
@@ -332,18 +323,15 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
 
     final summary = _buildSharedSummary(sharedProvider, item, animeId);
 
-    await CupertinoBottomSheet.show(
-      context: context,
-      title: null,
-      showCloseButton: false,
-      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
-        value: sharedProvider,
-        child: CupertinoSharedAnimeDetailPage(
-          anime: summary,
-          hideBackButton: true,
-          displayModeOverride: detailMode,
-          showCloseButton: true,
-        ),
+    await ThemedAnimeDetail.show(
+      context,
+      animeId,
+      sharedSummary: summary,
+      sharedSourceLabel: 'NipaPlay共享媒体库',
+      sharedEpisodeLoader: () => sharedProvider!.loadAnimeEpisodes(animeId),
+      sharedEpisodeBuilder: (episode) => sharedProvider!.buildPlayableItem(
+        anime: summary,
+        episode: episode,
       ),
     );
   }
@@ -359,14 +347,12 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       }
     }
 
-    final title =
-        (item['animeTitle'] ?? context.l10n.userActivityUnknownTitle)
-            .toString();
+    final title = (item['animeTitle'] ?? context.l10n.userActivityUnknownTitle)
+        .toString();
     final imageUrl = item['imageUrl'] as String?;
     final rawTime = item['lastWatchedTime'] as String?;
-    final parsed = rawTime != null
-        ? DateTime.tryParse(rawTime)?.toLocal()
-        : null;
+    final parsed =
+        rawTime != null ? DateTime.tryParse(rawTime)?.toLocal() : null;
 
     return SharedRemoteAnimeSummary(
       animeId: animeId,

@@ -16,7 +16,6 @@ class DownloaderSettingsContent extends StatelessWidget {
       builder: (context, provider, _) {
         if (!provider.isLoaded) {
           return AdaptiveSettingsPage(
-            title: _title(context),
             children: [
               Padding(
                 padding: const EdgeInsets.all(32),
@@ -31,7 +30,6 @@ class DownloaderSettingsContent extends StatelessWidget {
         }
 
         return AdaptiveSettingsPage(
-          title: _title(context),
           children: [
             AdaptiveSettingsSection(
               dividerIndent: 56,
@@ -91,10 +89,6 @@ class DownloaderSettingsContent extends StatelessWidget {
         );
       },
     );
-  }
-
-  String _title(BuildContext context) {
-    return context.l10n.tabTorrentDownload;
   }
 
   String _text(

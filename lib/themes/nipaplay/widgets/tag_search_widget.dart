@@ -15,7 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -24,6 +24,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class _TagSearchStyle {
   const _TagSearchStyle({
@@ -120,6 +123,7 @@ class TagSearchModal extends StatefulWidget {
   final List<String>? preselectedTags;
   final VoidCallback? onBeforeOpenAnimeDetail;
   final bool useWindow;
+  final bool embedded;
 
   const TagSearchModal({
     super.key,
@@ -127,6 +131,7 @@ class TagSearchModal extends StatefulWidget {
     this.preselectedTags,
     this.onBeforeOpenAnimeDetail,
     this.useWindow = false,
+    this.embedded = false,
   });
 
   @override
@@ -138,6 +143,21 @@ class TagSearchModal extends StatefulWidget {
     List<String>? preselectedTags,
     VoidCallback? onBeforeOpenAnimeDetail,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '搜索',
+        floatingTitle: true,
+        heightRatio: 0.94,
+        child: TagSearchModal(
+          prefilledTag: prefilledTag,
+          preselectedTags: preselectedTags,
+          onBeforeOpenAnimeDetail: onBeforeOpenAnimeDetail,
+          embedded: true,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -502,56 +522,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              try {
-                // 首先尝试通过Navigator找到根context
-                final rootContext =
-                    Navigator.of(context, rootNavigator: true).context;
-                debugPrint('[TagSearchWidget] 尝试使用根context切换页面');
-
-                // 尝试从根context获取MainPageState
-                MainPageState? mainPageState;
-                try {
-                  mainPageState = MainPageState.of(rootContext);
-                } catch (e) {
-                  debugPrint(
-                      '[TagSearchWidget] 从根context获取MainPageState失败: $e');
-                  // 如果失败，尝试从当前context获取
-                  try {
-                    mainPageState = MainPageState.of(context);
-                  } catch (e2) {
-                    debugPrint(
-                        '[TagSearchWidget] 从当前context获取MainPageState也失败: $e2');
-                  }
-                }
-
-                if (mainPageState != null &&
-                    mainPageState.globalTabController != null) {
-                  if (mainPageState.globalTabController!.index != 1) {
-                    mainPageState.globalTabController!.animateTo(1);
-                    debugPrint('[TagSearchWidget] 成功切换到播放页面 (tab 1)');
-                  } else {
-                    debugPrint('[TagSearchWidget] 已经在播放页面 (tab 1)');
-                  }
-                } else {
-                  debugPrint('[TagSearchWidget] 无法获取MainPageState，尝试备用方案');
-                  // 备用方案：使用TabChangeNotifier
-                  try {
-                    final tabNotifier = Provider.of<TabChangeNotifier>(
-                        rootContext,
-                        listen: false);
-                    tabNotifier.changeTab(1);
-                    debugPrint('[TagSearchWidget] 使用TabChangeNotifier成功切换页面');
-                  } catch (e) {
-                    debugPrint('[TagSearchWidget] TabChangeNotifier也失败: $e');
-                    // 最后的备用方案：直接关闭所有模态对话框
-                    Navigator.of(context, rootNavigator: true)
-                        .popUntil((route) => route.isFirst);
-                    debugPrint('[TagSearchWidget] 关闭所有模态对话框作为备用方案');
-                  }
-                }
-              } catch (e) {
-                debugPrint("[TagSearchWidget] 切换页面时出错: $e");
-              }
+              context.read<TabChangeNotifier>().changePage(AppPageIds.video);
               videoPlayerState.removeListener(statusListener);
             } else {
               videoPlayerState.removeListener(statusListener);
@@ -586,7 +557,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
   @override
   Widget build(BuildContext context) {
     final style = _TagSearchStyle.from(context);
-    final borderRadius = widget.useWindow
+    final borderRadius = widget.useWindow || widget.embedded
         ? BorderRadius.circular(20)
         : const BorderRadius.only(
             topLeft: Radius.circular(20),
@@ -600,7 +571,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
         return Column(
           children: [
-            if (!widget.useWindow)
+            if (!widget.useWindow && !widget.embedded)
               // 拖拽指示器
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -617,20 +588,21 @@ class _TagSearchModalState extends State<TagSearchModal> {
             if (widget.useWindow) SizedBox(height: 12),
 
             // 标题
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  titleText,
-                  style: TextStyle(
-                    color: style.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+            if (!widget.embedded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    titleText,
+                    style: TextStyle(
+                      color: style.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
 
             // 内容区域
             Expanded(
@@ -642,14 +614,14 @@ class _TagSearchModalState extends State<TagSearchModal> {
     );
 
     return Container(
-      height: widget.useWindow
+      height: widget.useWindow || widget.embedded
           ? double.infinity
           : MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: borderRadius,
       ),
-      child: widget.useWindow
+      child: widget.useWindow || widget.embedded
           ? content
           : GlassmorphicContainer(
               width: double.infinity,

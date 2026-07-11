@@ -10,11 +10,11 @@ import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_plugin_market_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -57,7 +57,6 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
       builder: (context, pluginService, child) {
         if (!pluginService.isLoaded) {
           return AdaptiveSettingsPage(
-            title: _title(context),
             children: const [
               Center(child: CircularProgressIndicator()),
             ],
@@ -67,7 +66,6 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
         final plugins = pluginService.plugins;
 
         return AdaptiveSettingsPage(
-          title: _title(context),
           children: [
             AdaptiveSettingsSection(
               children: [
@@ -369,7 +367,11 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
   void _openPluginMarket(BuildContext context) {
     FocusScope.of(context).unfocus();
     if (AdaptiveSettingsScope.isPhoneLayout(context)) {
-      CupertinoPluginMarketDialog.show(context);
+      AdaptiveSettingsNavigation.openChildPage<void>(
+        context,
+        title: '插件市场',
+        child: const PluginMarketDialog(embedded: true),
+      );
       return;
     }
     PluginMarketDialog.show(context);
@@ -1080,8 +1082,6 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     }
     return subtitle.toString();
   }
-
-  String _title(BuildContext context) => _text(context, '插件', '插件', 'Plugins');
 
   String _importPluginTitle(BuildContext context) =>
       _text(context, '导入插件', '導入插件', 'Import Plugin');

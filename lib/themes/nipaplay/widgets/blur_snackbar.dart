@@ -3,8 +3,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_navigation_scope.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -19,8 +21,8 @@ class BlurSnackBar {
       return false;
     }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    final mainPageState = MainPageState.of(context);
-    final isOnVideoPage = mainPageState?.globalTabController?.index == 1;
+    final isOnVideoPage =
+        AppNavigationScope.maybeOf(context)?.selectedPageId == AppPageIds.video;
     return videoState.status == PlayerStatus.playing && isOnVideoPage;
   }
 
@@ -38,7 +40,8 @@ class BlurSnackBar {
 
     // context 可能是 Navigator 自己的 context（无 Overlay 祖先，如 PlaybackService
     // 传入的 navigatorKey.currentContext），用 maybeOf + 回退到 Navigator 内部 Overlay。
-    final overlay = Overlay.maybeOf(context) ?? navigatorKey.currentState?.overlay;
+    final overlay =
+        Overlay.maybeOf(context) ?? globals.navigatorKey.currentState?.overlay;
     if (overlay == null) {
       debugPrint('[BlurSnackBar] 无可用 Overlay，放弃显示: $content');
       return;
@@ -69,7 +72,7 @@ class BlurSnackBar {
     _controller?.dispose();
     _controller = AnimationController(
       duration: const Duration(milliseconds: 300),
-      vsync: navigatorKey.currentState ?? Navigator.of(context),
+      vsync: globals.navigatorKey.currentState ?? Navigator.of(context),
     );
 
     animation = CurvedAnimation(

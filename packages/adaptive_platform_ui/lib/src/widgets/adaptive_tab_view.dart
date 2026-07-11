@@ -114,7 +114,7 @@ class _AdaptiveTabBarViewState extends State<AdaptiveTabBarView>
     // iOS implementation - Uses AdaptiveSegmentedControl
     // On iOS 26+: Native segmented control with Liquid Glass
     // On iOS <26: CupertinoSlidingSegmentedControl
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return Column(
         children: [
           // iOS segmented control as tab bar

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -398,13 +397,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       onKeyEvent: _handleKeyPress,
       child: _shortcuts == null
           ? AdaptiveSettingsPage(
-              title: context.l10n.shortcutsSettings,
               children: const [
                 Center(child: CircularProgressIndicator()),
               ],
             )
           : AdaptiveSettingsPage(
-              title: context.l10n.shortcutsSettings,
               children: [
                 AdaptiveSettingsSection(
                   addDividers: false,

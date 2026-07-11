@@ -15,7 +15,6 @@ class LanguageSettingsContent extends StatelessWidget {
     final provider = context.watch<AppLanguageProvider>();
 
     return AdaptiveSettingsPage(
-      title: context.l10n.languageSettingsTitle,
       children: [
         AdaptiveSettingsSection(
           children: [

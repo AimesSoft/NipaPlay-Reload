@@ -15,7 +15,8 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -817,26 +818,7 @@ class _NewSeriesPageState extends State<NewSeriesPage>
 
               debugPrint(
                   '[NewSeriesPage _handlePlayEpisode] Player ready/playing. Attempting to switch tab.');
-              try {
-                MainPageState? mainPageState = MainPageState.of(context);
-                if (mainPageState != null &&
-                    mainPageState.globalTabController != null) {
-                  if (mainPageState.globalTabController!.index != 1) {
-                    mainPageState.globalTabController!.animateTo(1);
-                    debugPrint(
-                        '[NewSeriesPage _handlePlayEpisode] Directly called mainPageState.globalTabController.animateTo(1)');
-                  } else {
-                    debugPrint(
-                        '[NewSeriesPage _handlePlayEpisode] mainPageState.globalTabController is already at index 1.');
-                  }
-                } else {
-                  debugPrint(
-                      '[NewSeriesPage _handlePlayEpisode] Could not find MainPageState or globalTabController.');
-                }
-              } catch (e) {
-                debugPrint(
-                    "[NewSeriesPage _handlePlayEpisode] Error directly changing tab: $e");
-              }
+              context.read<TabChangeNotifier>().changePage(AppPageIds.video);
               videoState.removeListener(statusListener);
             } else {
               videoState.removeListener(statusListener);
