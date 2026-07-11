@@ -31,6 +31,8 @@ import 'package:nipaplay/settings/unified_settings_entries.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart'
     as cupertino_smb;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart'
@@ -58,6 +60,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   LibraryManagementViewMode _managementViewMode =
       LibraryManagementViewMode.icons;
   TabChangeNotifier? _tabChangeNotifier;
+  CupertinoPageActionsController? _pageActionsController;
   bool _connectionsInitialized = false;
 
   @override
@@ -71,6 +74,27 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final pageActionsController = CupertinoPageActionsScope.maybeOf(context);
+    if (pageActionsController != _pageActionsController) {
+      _pageActionsController?.clear(this);
+      _pageActionsController = pageActionsController;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _pageActionsController != pageActionsController) {
+          return;
+        }
+        pageActionsController?.setActions(
+          this,
+          [
+            CupertinoPageAction(
+              id: 'media-library-more',
+              label: '媒体库操作',
+              icon: CupertinoIcons.ellipsis,
+              onPressed: _showPhonePageActions,
+            ),
+          ],
+        );
+      });
+    }
     final notifier = context.read<TabChangeNotifier>();
     if (notifier == _tabChangeNotifier) return;
     _tabChangeNotifier?.removeListener(_handleRequestedSection);
@@ -82,6 +106,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
 
   @override
   void dispose() {
+    _pageActionsController?.clear(this);
     _tabChangeNotifier?.removeListener(_handleRequestedSection);
     super.dispose();
   }
@@ -241,6 +266,83 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
       case 'nipaplay':
         await _addSharedHost();
         break;
+    }
+  }
+
+  Future<void> _showPhonePageActions() async {
+    final selected = await CupertinoBottomSheet.show<String>(
+      context: context,
+      title: '媒体库操作',
+      heightRatio: 0.32,
+      child: Builder(
+        builder: (sheetContext) {
+          final label = CupertinoDynamicColor.resolve(
+            CupertinoColors.label,
+            sheetContext,
+          );
+          final separator = CupertinoDynamicColor.resolve(
+            CupertinoColors.separator,
+            sheetContext,
+          );
+
+          Widget action({
+            required String id,
+            required String title,
+            required IconData icon,
+          }) {
+            return CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              onPressed: () => Navigator.of(sheetContext).pop(id),
+              child: Row(
+                children: [
+                  Icon(icon, size: 21, color: label),
+                  const SizedBox(width: 14),
+                  Text(title, style: TextStyle(fontSize: 16, color: label)),
+                  const Spacer(),
+                  Icon(
+                    CupertinoIcons.chevron_forward,
+                    size: 15,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.tertiaryLabel,
+                      sheetContext,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return SafeArea(
+            top: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                action(
+                  id: 'add',
+                  title: '添加媒体',
+                  icon: CupertinoIcons.add_circled,
+                ),
+                Container(
+                    height: 0.5,
+                    margin: const EdgeInsets.only(left: 55),
+                    color: separator),
+                action(
+                  id: 'remote',
+                  title: '远程访问',
+                  icon: CupertinoIcons.link,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    if (!mounted) return;
+    switch (selected) {
+      case 'add':
+        await _showAddMedia();
+      case 'remote':
+        await _openRemoteAccessSettings();
     }
   }
 

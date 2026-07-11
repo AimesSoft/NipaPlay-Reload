@@ -6,6 +6,7 @@ import 'package:nipaplay/app/unified_app_actions.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_glass_button_group.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 
@@ -19,11 +20,31 @@ class CupertinoAppPageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (actionIds.isEmpty) return const SizedBox.shrink();
+    final controller = CupertinoPageActionsScope.maybeOf(context);
+    if (controller == null) return _buildActions(context, const []);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => _buildActions(context, controller.actions),
+    );
+  }
+
+  Widget _buildActions(
+    BuildContext context,
+    List<CupertinoPageAction> pageActions,
+  ) {
+    if (actionIds.isEmpty && pageActions.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return CupertinoGlassButtonGroup(
       buttonSize: 44,
       items: [
+        for (final action in pageActions)
+          CupertinoGlassButtonGroupItem(
+            label: action.label,
+            icon: action.icon,
+            onPressed: action.onPressed,
+          ),
         if (actionIds.contains(AppActionIds.toggleTheme))
           CupertinoGlassButtonGroupItem(
             label: '切换深浅模式',

@@ -6,7 +6,6 @@ import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -41,8 +40,6 @@ class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
           sections: sections,
           selectedSection: selectedSection,
           onSectionSelected: onSectionSelected,
-          onRemoteAccess: onRemoteAccess,
-          onAddMedia: onAddMedia,
           child: child,
         ),
       AppDisplaySurface.desktopTablet ||
@@ -327,16 +324,12 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
     required this.sections,
     required this.selectedSection,
     required this.onSectionSelected,
-    required this.onRemoteAccess,
-    required this.onAddMedia,
     required this.child,
   });
 
   final List<UnifiedMediaLibrarySection> sections;
   final UnifiedMediaLibrarySection selectedSection;
   final material.ValueChanged<String> onSectionSelected;
-  final material.VoidCallback onRemoteAccess;
-  final material.VoidCallback onAddMedia;
   final material.Widget child;
 
   @override
@@ -363,12 +356,7 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
                         .navLargeTitleTextStyle,
                   ),
                 ),
-                _CupertinoHeaderButton(
-                  fallbackIcon: cupertino.CupertinoIcons.ellipsis_circle,
-                  tooltip: '媒体库操作',
-                  onPressed: () => _showPageActions(context),
-                ),
-                const material.SizedBox(width: 104),
+                const material.SizedBox(width: 148),
               ],
             ),
           ),
@@ -387,64 +375,6 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
           const material.SizedBox(height: 4),
           material.Expanded(child: child),
         ],
-      ),
-    );
-  }
-
-  Future<void> _showPageActions(material.BuildContext context) async {
-    final selected = await cupertino.showCupertinoModalPopup<String>(
-      context: context,
-      builder: (context) => cupertino.CupertinoActionSheet(
-        title: const material.Text('媒体库操作'),
-        actions: [
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () => material.Navigator.of(context).pop('add'),
-            child: const material.Text('添加媒体'),
-          ),
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () => material.Navigator.of(context).pop('remote'),
-            child: const material.Text('远程访问'),
-          ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => material.Navigator.of(context).pop(),
-          child: const material.Text('取消'),
-        ),
-      ),
-    );
-    switch (selected) {
-      case 'add':
-        onAddMedia();
-        break;
-      case 'remote':
-        onRemoteAccess();
-        break;
-    }
-  }
-}
-
-class _CupertinoHeaderButton extends material.StatelessWidget {
-  const _CupertinoHeaderButton({
-    required this.fallbackIcon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final material.IconData fallbackIcon;
-  final String tooltip;
-  final material.VoidCallback onPressed;
-
-  @override
-  material.Widget build(material.BuildContext context) {
-    return material.Semantics(
-      button: true,
-      label: tooltip,
-      child: AdaptiveButton.child(
-        onPressed: onPressed,
-        style: AdaptiveButtonStyle.glass,
-        size: AdaptiveButtonSize.medium,
-        padding: const material.EdgeInsets.all(9),
-        child: material.Icon(fallbackIcon, size: 20),
       ),
     );
   }

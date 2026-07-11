@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -30,6 +31,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   bool _showWebDAV = false;
   bool _showDownloader = false;
   bool _didApplyInitialPage = false;
+  final CupertinoPageActionsController _pageActionsController =
+      CupertinoPageActionsController();
 
   TabChangeNotifier? _tabChangeNotifier;
   WebDAVQuickAccessProvider? _webdavProvider;
@@ -127,6 +130,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     _webdavProvider?.removeListener(_handleWebDAVChanged);
     _downloaderProvider?.removeListener(_handleDownloaderChanged);
     _pluginService?.removeListener(_handleDownloaderChanged);
+    _pageActionsController.dispose();
     super.dispose();
   }
 
@@ -143,6 +147,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   void _selectPage(String pageId) {
     final effectiveId = effectiveAppPageId(_pages, pageId);
     if (effectiveId == _selectedPageId) return;
+    _pageActionsController.reset();
     setState(() => _selectedPageId = effectiveId);
     _playBounce(effectiveId);
   }
@@ -205,26 +210,28 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBar, _) {
-        final body = AppNavigationScope(
-          selectedPageId: selectedPage.id,
-          pageIds: pages.map((page) => page.id).toList(growable: false),
-          onSelectPage: _selectPage,
-          child: Stack(
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 90),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                child: KeyedSubtree(
-                  key: ValueKey<String>(selectedPage.id),
-                  child: CupertinoBounceWrapper(
-                    key: _bounceKey(selectedPage.id),
-                    autoPlay: false,
-                    child: selectedPage.build(context, AppDisplaySurface.phone),
+        final body = CupertinoPageActionsScope(
+          controller: _pageActionsController,
+          child: AppNavigationScope(
+            selectedPageId: selectedPage.id,
+            pageIds: pages.map((page) => page.id).toList(growable: false),
+            onSelectPage: _selectPage,
+            child: Stack(
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 90),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: KeyedSubtree(
+                    key: ValueKey<String>(selectedPage.id),
+                    child: CupertinoBounceWrapper(
+                      key: _bounceKey(selectedPage.id),
+                      autoPlay: false,
+                      child:
+                          selectedPage.build(context, AppDisplaySurface.phone),
+                    ),
                   ),
                 ),
-              ),
-              if (selectedPage.actionIds.isNotEmpty)
                 Positioned(
                   top: MediaQuery.paddingOf(context).top + 4,
                   right: 12 + MediaQuery.paddingOf(context).right,
@@ -232,7 +239,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     actionIds: selectedPage.actionIds,
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         );
 

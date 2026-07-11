@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/app/app_navigation_scope.dart';
@@ -160,6 +161,9 @@ void main(List<String> args) async {
   _installFrameTimingTrace();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
+  if (globals.isPhone) {
+    await LiquidGlassWidgets.initialize();
+  }
   debugPaintBaselinesEnabled = false;
   debugPaintSizeEnabled = false;
   WidgetsBinding.instance.addPostFrameCallback((_) {

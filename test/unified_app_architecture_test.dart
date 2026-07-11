@@ -381,6 +381,33 @@ void main() {
     expect(removedBrowser.existsSync(), isFalse);
   });
 
+  test('phone media library more action joins the Flutter glass group', () {
+    final mediaControls = File(
+      'lib/media_library/adaptive_media_library_controls.dart',
+    ).readAsStringSync();
+    final mediaPage = File(
+      'lib/media_library/adaptive_media_library_page.dart',
+    ).readAsStringSync();
+    final pageActions = File(
+      'lib/themes/cupertino/widgets/cupertino_app_page_actions.dart',
+    ).readAsStringSync();
+    final glassGroup = File(
+      'lib/themes/cupertino/widgets/cupertino_glass_button_group.dart',
+    ).readAsStringSync();
+    final removedNativeGroup = File(
+      'packages/adaptive_platform_ui/ios/Classes/iOS26ButtonGroupView.swift',
+    );
+
+    expect(mediaControls, isNot(contains('_CupertinoHeaderButton')));
+    expect(mediaPage, contains("id: 'media-library-more'"));
+    expect(mediaPage, contains('CupertinoBottomSheet.show<String>'));
+    expect(pageActions, contains('for (final action in pageActions)'));
+    expect(glassGroup, contains('GlassButtonGroup.icons'));
+    expect(glassGroup, contains('useOwnLayer: true'));
+    expect(glassGroup, isNot(contains('UiKitView')));
+    expect(removedNativeGroup.existsSync(), isFalse);
+  });
+
   test('media library sections share stable ids and ordering', () {
     final sections = buildUnifiedMediaLibrarySections(
       const MediaLibraryAvailability(
