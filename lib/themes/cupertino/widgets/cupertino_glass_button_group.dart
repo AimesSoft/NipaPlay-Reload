@@ -27,6 +27,10 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final iconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
 
     return GlassButtonGroup.icons(
       useOwnLayer: true,
@@ -52,7 +56,7 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
         for (final item in items)
           GlassButtonGroupItem(
             label: item.label,
-            icon: Icon(item.icon),
+            icon: Icon(item.icon, color: iconColor),
             enabled: item.onPressed != null,
             onTap: item.onPressed ?? _noop,
           ),

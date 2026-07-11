@@ -435,6 +435,21 @@ void main() {
     expect(phoneRoot, contains('BackgroundWithBlur('));
   });
 
+  test('phone home icon buttons use neutral Cupertino label colors', () {
+    final home = File(
+      'lib/themes/cupertino/widgets/cupertino_home_page_controls.dart',
+    ).readAsStringSync();
+    final glassGroup = File(
+      'lib/themes/cupertino/widgets/cupertino_glass_button_group.dart',
+    ).readAsStringSync();
+
+    expect(home, contains('_buildCupertinoHomeIconButton('));
+    expect(home, contains('CupertinoColors.label'));
+    expect(home, contains('color: effectiveColor'));
+    expect(glassGroup, contains('CupertinoColors.label'));
+    expect(glassGroup, contains('Icon(item.icon, color: iconColor)'));
+  });
+
   test('phone media pages share one neutral containerless search toolbar', () {
     final collection = File(
       'lib/media_library/adaptive_media_collection_view.dart',

@@ -242,11 +242,10 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
       subtitle: (item) => item.airDate,
       rating: (item) => item.rating,
       onTap: _showAnimeDetail,
-      action: cupertino.CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: const Size.square(36),
+      action: _buildCupertinoHomeIconButton(
+        label: '搜索番剧',
+        icon: cupertino.CupertinoIcons.search,
         onPressed: _showTagSearchModal,
-        child: const Icon(cupertino.CupertinoIcons.search, size: 19),
       ),
     );
   }
@@ -264,13 +263,12 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
         context,
         item.anime.animeId,
       ),
-      action: cupertino.CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: const Size.square(36),
+      action: _buildCupertinoHomeIconButton(
+        label: '刷新随机推荐',
+        icon: cupertino.CupertinoIcons.refresh,
         onPressed: _isLoadingRandomRecommendations
             ? null
             : () => _loadRandomRecommendations(forceRefresh: true),
-        child: const Icon(cupertino.CupertinoIcons.refresh, size: 19),
       ),
     );
   }
@@ -287,27 +285,18 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
               action: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  cupertino.CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size.square(36),
+                  _buildCupertinoHomeIconButton(
+                    label: '观看记录',
+                    icon: cupertino.CupertinoIcons.time,
                     onPressed: () => unawaited(_showWatchHistoryDialog()),
-                    child: const Icon(
-                      cupertino.CupertinoIcons.time,
-                      size: 19,
-                    ),
                   ),
-                  cupertino.CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size.square(36),
+                  _buildCupertinoHomeIconButton(
+                    label: '刷新继续播放',
+                    icon: cupertino.CupertinoIcons.refresh,
                     onPressed: _isContinueWatchingRefreshInProgress
                         ? null
                         : _onContinueWatchingRefreshPressed,
-                    child: _isContinueWatchingRefreshInProgress
-                        ? const cupertino.CupertinoActivityIndicator(radius: 8)
-                        : const Icon(
-                            cupertino.CupertinoIcons.refresh,
-                            size: 19,
-                          ),
+                    loading: _isContinueWatchingRefreshInProgress,
                   ),
                 ],
               ),
@@ -442,6 +431,39 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           ),
           if (action != null) action,
         ],
+      ),
+    );
+  }
+
+  Widget _buildCupertinoHomeIconButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool loading = false,
+  }) {
+    final foreground = cupertino.CupertinoDynamicColor.resolve(
+      cupertino.CupertinoColors.label,
+      context,
+    );
+    final effectiveColor =
+        onPressed == null ? foreground.withValues(alpha: 0.3) : foreground;
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: SizedBox.square(
+        dimension: 36,
+        child: cupertino.CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size.square(36),
+          onPressed: onPressed,
+          child: loading
+              ? cupertino.CupertinoActivityIndicator(
+                  radius: 8,
+                  color: effectiveColor,
+                )
+              : Icon(icon, size: 19, color: effectiveColor),
+        ),
       ),
     );
   }
