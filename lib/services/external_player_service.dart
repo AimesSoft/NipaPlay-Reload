@@ -657,8 +657,18 @@ end)
       }
 
       // Linux
-      debugPrint('[ExtPlayer] launch: Linux 直启 + extraArgs=$extraArgs');
-      await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
+      debugPrint('[ExtPlayer] launch: Linux 直启 + extraArgs=$extraArgs, mode=detached',);
+
+      // 外部播放器改为独立进程
+      final proc = await Process.start(
+        resolvedPath,
+        [mediaPath, ...extraArgs],
+        mode: ProcessStartMode.detached,
+      );
+
+      // 打印派生进程 PID，方便调试
+      debugPrint('[ExtPlayer] launch: 已派生 pid=${proc.pid}');
+
       return true;
     } catch (e, st) {
       debugPrint('[ExtPlayer] launch: 启动异常: $e');
