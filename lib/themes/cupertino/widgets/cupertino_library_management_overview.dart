@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoLibraryManagementOverview extends StatelessWidget {
   const CupertinoLibraryManagementOverview({
@@ -239,30 +240,18 @@ Future<void> _showActions(
 ) async {
   final enabled = item.actions.where((action) => action.onPressed != null);
   final selected =
-      await showCupertinoModalPopup<UnifiedLibraryManagementAction>(
+      await CupertinoBottomSheet.showSelection<UnifiedLibraryManagementAction>(
     context: context,
-    builder: (sheetContext) => CupertinoActionSheet(
-      title: Text(item.title),
-      actions: [
-        for (final action in enabled)
-          CupertinoActionSheetAction(
-            isDestructiveAction: action.destructive,
-            onPressed: () => Navigator.of(sheetContext).pop(action),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(_phoneIcon(action.icon), size: 18),
-                const SizedBox(width: 8),
-                Text(action.label),
-              ],
-            ),
-          ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        onPressed: () => Navigator.of(sheetContext).pop(),
-        child: const Text('取消'),
-      ),
-    ),
+    title: item.title,
+    options: [
+      for (final action in enabled)
+        CupertinoBottomSheetOption(
+          label: action.label,
+          value: action,
+          icon: _phoneIcon(action.icon),
+          destructive: action.destructive,
+        ),
+    ],
   );
   selected?.onPressed?.call();
 }

@@ -3114,6 +3114,12 @@ abstract class AppLocalizations {
   /// **'赞赏码'**
   String get appreciationCode;
 
+  /// No description provided for @appreciationCodeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击查看赞赏码'**
+  String get appreciationCodeHint;
+
   /// No description provided for @appreciationImageLoadFailed.
   ///
   /// In zh, this message translates to:

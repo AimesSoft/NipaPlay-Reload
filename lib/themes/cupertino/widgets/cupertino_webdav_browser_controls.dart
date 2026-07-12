@@ -508,67 +508,37 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
   Future<void> _showCupertinoServerActions() async {
     final current = _currentConnection;
     final action =
-        await cupertino.showCupertinoModalPopup<_CupertinoWebDavAction>(
+        await CupertinoBottomSheet.showSelection<_CupertinoWebDavAction>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('WebDAV 服务器'),
-        actions: [
-          for (final connection in WebDAVService.instance.connections)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(
-                _CupertinoWebDavAction.select(connection),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (connection.name == current?.name) ...[
-                    const Icon(cupertino.CupertinoIcons.check_mark, size: 16),
-                    const SizedBox(width: 7),
-                  ],
-                  Flexible(
-                    child: Text(
-                      connection.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(sheetContext).pop(
-              const _CupertinoWebDavAction.add(),
-            ),
-            child: const Text('添加服务器'),
+      title: 'WebDAV 服务器',
+      options: [
+        for (final connection in WebDAVService.instance.connections)
+          CupertinoBottomSheetOption(
+            label: connection.name,
+            value: _CupertinoWebDavAction.select(connection),
+            selected: connection.name == current?.name,
           ),
-          if (current != null)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(
-                const _CupertinoWebDavAction.edit(),
-              ),
-              child: const Text('编辑当前服务器'),
-            ),
-          if (current != null)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(
-                const _CupertinoWebDavAction.test(),
-              ),
-              child: const Text('测试当前连接'),
-            ),
-          if (current != null)
-            cupertino.CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () => Navigator.of(sheetContext).pop(
-                const _CupertinoWebDavAction.remove(),
-              ),
-              child: const Text('删除当前服务器'),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+        const CupertinoBottomSheetOption(
+          label: '添加服务器',
+          value: _CupertinoWebDavAction.add(),
         ),
-      ),
+        if (current != null)
+          const CupertinoBottomSheetOption(
+            label: '编辑当前服务器',
+            value: _CupertinoWebDavAction.edit(),
+          ),
+        if (current != null)
+          const CupertinoBottomSheetOption(
+            label: '测试当前连接',
+            value: _CupertinoWebDavAction.test(),
+          ),
+        if (current != null)
+          const CupertinoBottomSheetOption(
+            label: '删除当前服务器',
+            value: _CupertinoWebDavAction.remove(),
+            destructive: true,
+          ),
+      ],
     );
     if (!mounted || action == null) return;
     switch (action.kind) {

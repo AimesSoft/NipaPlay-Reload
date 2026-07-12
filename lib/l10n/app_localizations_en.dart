@@ -1781,6 +1781,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appreciationCode => 'Tip Jar';
 
   @override
+  String get appreciationCodeHint => 'Tap to view the tip jar';
+
+  @override
   String get appreciationImageLoadFailed => 'Failed to load tip jar image';
 
   @override

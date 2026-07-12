@@ -1,55 +1,45 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
 
 class CupertinoUserActivity extends StatefulWidget {
-  const CupertinoUserActivity({super.key});
+  const CupertinoUserActivity({super.key, required this.data});
+
+  final UserActivityViewModel data;
 
   @override
   State<CupertinoUserActivity> createState() => _CupertinoUserActivityState();
 }
 
-class _CupertinoUserActivityState extends State<CupertinoUserActivity>
-    with SingleTickerProviderStateMixin, UserActivityController {
+class _CupertinoUserActivityState extends State<CupertinoUserActivity> {
   static const double _thumbnailWidth = 60;
   static const double _thumbnailHeight = 84;
   int _selectedIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    tabController.addListener(_handleTabChange);
-  }
-
-  @override
-  void dispose() {
-    tabController.removeListener(_handleTabChange);
-    super.dispose();
-  }
-
-  void _handleTabChange() {
-    if (!mounted) return;
-    if (_selectedIndex != tabController.index) {
-      setState(() {
-        _selectedIndex = tabController.index;
-      });
-    }
-  }
-
   void _onSegmentChanged(int index) {
     if (_selectedIndex == index) return;
-    setState(() {
-      _selectedIndex = index;
-    });
-    tabController.animateTo(index);
+    setState(() => _selectedIndex = index);
   }
+
+  UserActivityViewModel get data => widget.data;
+  bool get isLoading => data.isLoading;
+  String? get error => data.error;
+  List<Map<String, dynamic>> get recentWatched => data.recentWatched;
+  List<Map<String, dynamic>> get favorites => data.favorites;
+  List<Map<String, dynamic>> get rated => data.rated;
+
+  Future<void> loadUserActivity() => data.onRefresh();
+  void openAnimeDetail(int animeId) => data.onOpenAnimeDetail(animeId);
+  String formatTime(String? value) => data.formatTime(value);
+  String getFavoriteStatusText(String? status) =>
+      data.favoriteStatusText(status);
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +58,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
             const Spacer(),
             CupertinoButton(
               padding: EdgeInsets.zero,
-              minSize: 0,
+              minimumSize: Size.zero,
               onPressed: isLoading ? null : loadUserActivity,
               child: Container(
                 width: 32,

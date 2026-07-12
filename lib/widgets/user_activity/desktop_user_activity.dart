@@ -1,27 +1,43 @@
-import 'dart:ui';
+import 'dart:ui' show ImageFilter;
 
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
 
-/// Fluent UI版本的用户活动记录组件
-class MaterialUserActivity extends StatefulWidget {
-  const MaterialUserActivity({super.key});
+/// NipaPlay/Fluent renderer for shared user activity data.
+class DesktopUserActivity extends StatefulWidget {
+  const DesktopUserActivity({super.key, required this.data});
+
+  final UserActivityViewModel data;
 
   @override
-  State<MaterialUserActivity> createState() => _MaterialUserActivityState();
+  State<DesktopUserActivity> createState() => _DesktopUserActivityState();
 }
 
-class _MaterialUserActivityState extends State<MaterialUserActivity>
-    with SingleTickerProviderStateMixin, UserActivityController {
+class _DesktopUserActivityState extends State<DesktopUserActivity> {
   static Color get _ratingAccentColor => AppAccentColors.current;
   static const double _buttonHoverScale = 1.06;
+  int _selectedIndex = 0;
+
+  UserActivityViewModel get data => widget.data;
+  bool get isLoading => data.isLoading;
+  String? get error => data.error;
+  List<Map<String, dynamic>> get recentWatched => data.recentWatched;
+  List<Map<String, dynamic>> get favorites => data.favorites;
+  List<Map<String, dynamic>> get rated => data.rated;
+
+  Future<void> loadUserActivity() => data.onRefresh();
+  void openAnimeDetail(int animeId) => data.onOpenAnimeDetail(animeId);
+  String formatTime(String? value) => data.formatTime(value);
+  String getFavoriteStatusText(String? status) =>
+      data.favoriteStatusText(status);
+  String getRatingText(int rating) => data.ratingText(rating);
+  String? processImageUrl(String? url) => data.processImageUrl(url);
 
   @override
   Widget build(BuildContext context) {
@@ -29,12 +45,12 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
     final textPrimary = theme.resources.textFillColorPrimary;
     final textSecondary = theme.resources.textFillColorSecondary;
     final accent = theme.accentColor.defaultBrushFor(theme.brightness);
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isDarkMode = theme.brightness == Brightness.dark;
     final unselectedLabelColor = isDarkMode ? Colors.white60 : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
 
         // 标题和刷新按钮
         Row(
@@ -60,81 +76,44 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             ),
           ],
         ),
-        SizedBox(height: 8),
-        TabBar(
-          controller: tabController,
-          isScrollable: true,
-          tabs: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: HoverZoomTab(
-                text: context.l10n.userActivityTabWatchedCount(
-                  recentWatched.length,
-                ),
-                fontSize: 18,
-                icon: Icon(
-                  Ionicons.play_circle_outline,
-                  size: 18,
-                ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 20,
+          runSpacing: 8,
+          children: [
+            _DesktopActivityTab(
+              label: context.l10n.userActivityTabWatchedCount(
+                recentWatched.length,
               ),
+              icon: Ionicons.play_circle_outline,
+              selected: _selectedIndex == 0,
+              selectedColor: accent,
+              unselectedColor: unselectedLabelColor,
+              onPressed: () => setState(() => _selectedIndex = 0),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: HoverZoomTab(
-                text: context.l10n.userActivityTabFavoritesCount(
-                  favorites.length,
-                ),
-                fontSize: 18,
-                icon: Icon(
-                  Ionicons.heart_outline,
-                  size: 18,
-                ),
+            _DesktopActivityTab(
+              label: context.l10n.userActivityTabFavoritesCount(
+                favorites.length,
               ),
+              icon: Ionicons.heart_outline,
+              selected: _selectedIndex == 1,
+              selectedColor: accent,
+              unselectedColor: unselectedLabelColor,
+              onPressed: () => setState(() => _selectedIndex = 1),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: HoverZoomTab(
-                text: context.l10n.userActivityTabRatedCount(
-                  rated.length,
-                ),
-                fontSize: 18,
-                icon: Icon(
-                  Ionicons.star_outline,
-                  size: 18,
-                ),
-              ),
+            _DesktopActivityTab(
+              label: context.l10n.userActivityTabRatedCount(rated.length),
+              icon: Ionicons.star_outline,
+              selected: _selectedIndex == 2,
+              selectedColor: accent,
+              unselectedColor: unselectedLabelColor,
+              onPressed: () => setState(() => _selectedIndex = 2),
             ),
           ],
-          labelColor: accent,
-          unselectedLabelColor: unselectedLabelColor,
-          labelPadding: const EdgeInsets.only(bottom: 12.0),
-          indicatorPadding: EdgeInsets.zero,
-          indicator: _CustomTabIndicator(
-            indicatorHeight: 3.0,
-            indicatorColor: accent,
-            radius: 30.0,
-          ),
-          tabAlignment: TabAlignment.start,
-          splashFactory: NoSplash.splashFactory,
-          overlayColor: WidgetStateProperty.all(Colors.transparent),
-          dividerColor: Colors.transparent,
-          dividerHeight: 3.0,
-          indicatorSize: TabBarIndicatorSize.label,
         ),
-        SizedBox(height: 8),
-        // 内容区域
+        const SizedBox(height: 8),
         Expanded(
-          child: SwitchableView(
-            enableAnimation: false,
-            keepAlive: true,
-            currentIndex: tabController.index,
-            controller: tabController,
-            children: [
-              _buildTabBody(0, accent, textSecondary),
-              _buildTabBody(1, accent, textSecondary),
-              _buildTabBody(2, accent, textSecondary),
-            ],
-          ),
+          child: _buildTabBody(_selectedIndex, accent, textSecondary),
         ),
       ],
     );
@@ -178,13 +157,13 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             color: textSecondary,
             size: 48,
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             error!,
             style: TextStyle(color: textSecondary),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           BlurButton(
             icon: Ionicons.refresh_outline,
             text: context.l10n.retry,
@@ -261,7 +240,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                       color: _ratingAccentColor,
                       size: 14,
                     ),
-                    SizedBox(width: 2),
+                    const SizedBox(width: 2),
                     Text(
                       '${item['rating']}',
                       style: TextStyle(
@@ -302,7 +281,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                 color: _ratingAccentColor,
                 size: 16,
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
                 '${item['rating']}',
                 style: TextStyle(
@@ -344,7 +323,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             color: textSecondary,
             size: 48,
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             message,
             style: TextStyle(
@@ -453,7 +432,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                               ),
                             ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     // Title and Subtitle
                     Expanded(
                       child: Column(
@@ -471,7 +450,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
                             widget.subtitle,
                             style: TextStyle(
@@ -486,7 +465,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                     ),
                     // Trailing
                     if (widget.trailing != null) ...[
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       widget.trailing!,
                     ],
                   ],
@@ -500,44 +479,70 @@ class _ActivityListItemState extends State<_ActivityListItem> {
   }
 }
 
-// 自定义Tab指示器
-class _CustomTabIndicator extends Decoration {
-  final double indicatorHeight;
-  final Color indicatorColor;
-  final double radius;
-
-  _CustomTabIndicator({
-    required this.indicatorHeight,
-    required this.indicatorColor,
-    required this.radius,
+class _DesktopActivityTab extends StatefulWidget {
+  const _DesktopActivityTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onPressed,
   });
 
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onPressed;
+
   @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
-    return _CustomPainter(this, onChanged);
-  }
+  State<_DesktopActivityTab> createState() => _DesktopActivityTabState();
 }
 
-class _CustomPainter extends BoxPainter {
-  final _CustomTabIndicator decoration;
-
-  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
+class _DesktopActivityTabState extends State<_DesktopActivityTab> {
+  bool _hovered = false;
 
   @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
-    assert(configuration.size != null);
-    // 将指示器绘制在TabBar的底部
-    final Rect rect = Offset(
-          offset.dx,
-          (configuration.size!.height - decoration.indicatorHeight),
-        ) &
-        Size(configuration.size!.width, decoration.indicatorHeight);
-    final Paint paint = Paint();
-    paint.color = decoration.indicatorColor;
-    paint.style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
-      paint,
+  Widget build(BuildContext context) {
+    final color =
+        widget.selected ? widget.selectedColor : widget.unselectedColor;
+    const labelStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.w500);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedScale(
+          scale: _hovered ? 1.04 : 1,
+          duration: const Duration(milliseconds: 140),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 8, 2, 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    fluent.Icon(widget.icon, size: 17, color: color),
+                    const SizedBox(width: 6),
+                    Text(widget.label,
+                        style: labelStyle.copyWith(color: color)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                NipaplayLabelTabIndicator(
+                  label: widget.label,
+                  labelStyle: labelStyle,
+                  selected: widget.selected,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

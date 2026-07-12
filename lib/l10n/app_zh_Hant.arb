@@ -512,6 +512,7 @@
   "pleaseTryAgainLater": "請稍後再試",
   "cannotOpenLink": "無法開啟連結: {url}",
   "appreciationCode": "贊賞碼",
+  "appreciationCodeHint": "點擊查看贊賞碼",
   "appreciationImageLoadFailed": "贊賞碼圖片載入失敗",
   "acknowledgements": "致謝",
   "aboutStoryPrefix": "NipaPlay，名字來自《寒蟬鳴泣之時》中古手梨花的口頭禪 \"",

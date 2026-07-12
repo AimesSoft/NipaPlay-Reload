@@ -273,7 +273,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
     final selected = await CupertinoBottomSheet.show<String>(
       context: context,
       title: '媒体库操作',
-      heightRatio: 0.32,
+      heightRatio: 0.94,
       child: Builder(
         builder: (sheetContext) {
           final label = CupertinoDynamicColor.resolve(

@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show ElevatedButton, MaterialApp, TextField;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/adaptive_app_page_content.dart';
@@ -21,8 +21,10 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
+import 'package:nipaplay/media_library/media_collection_empty_content.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
+import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
@@ -34,6 +36,7 @@ import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_management_overview.dart';
 import 'package:nipaplay/themes/nipaplay/pages/account/material_account_page.dart';
@@ -268,6 +271,7 @@ void main() {
     expect(source, isNot(contains('subtitleWidgetBuilder')));
     expect(source, isNot(contains('UnifiedSettingInlineControlType')));
     expect(source, isNot(contains('AutoUpdateSettingTile')));
+    expect(source, contains('context.watch<PluginService>()'));
     expect(generalSource, contains('AutoUpdateSettingTile'));
     expect(UnifiedSettingContentType.values, isNotEmpty);
     expect(
@@ -376,12 +380,12 @@ void main() {
     expect(management, contains('AdaptiveLibraryManagementOverview'));
     expect(management, isNot(contains('_buildMountedLibrary')));
     expect(management, isNot(contains('AdaptiveLibraryFolderBrowser')));
-    expect(management, isNot(contains('CupertinoBottomSheet.show')));
+    expect(management, isNot(contains('CupertinoBottomSheet.show(')));
     expect(management, isNot(contains('_openPhoneLocalFolder')));
     expect(removedBrowser.existsSync(), isFalse);
   });
 
-  test('phone media library more action joins the Flutter glass group', () {
+  test('phone page actions use native iOS 26 and Flutter glass groups', () {
     final mediaControls = File(
       'lib/media_library/adaptive_media_library_controls.dart',
     ).readAsStringSync();
@@ -394,18 +398,35 @@ void main() {
     final glassGroup = File(
       'lib/themes/cupertino/widgets/cupertino_glass_button_group.dart',
     ).readAsStringSync();
-    final removedNativeGroup = File(
+    final nativeGroup = File(
       'packages/adaptive_platform_ui/ios/Classes/iOS26ButtonGroupView.swift',
-    );
+    ).readAsStringSync();
+    final nativeGroupWidget = File(
+      'packages/adaptive_platform_ui/lib/src/widgets/ios26/'
+      'ios26_button_group.dart',
+    ).readAsStringSync();
+    final plugin = File(
+      'packages/adaptive_platform_ui/ios/Classes/'
+      'AdaptivePlatformUiPlugin.swift',
+    ).readAsStringSync();
 
     expect(mediaControls, isNot(contains('_CupertinoHeaderButton')));
     expect(mediaPage, contains("id: 'media-library-more'"));
     expect(mediaPage, contains('CupertinoBottomSheet.show<String>'));
+    expect(mediaPage, contains('heightRatio: 0.94'));
+    expect(mediaPage, isNot(contains('heightRatio: 0.32')));
     expect(pageActions, contains('for (final action in pageActions)'));
+    expect(glassGroup, contains('PlatformInfo.isIOS26OrHigher()'));
+    expect(glassGroup, contains('IOS26ButtonGroup('));
     expect(glassGroup, contains('GlassButtonGroup.icons'));
     expect(glassGroup, contains('useOwnLayer: true'));
     expect(glassGroup, isNot(contains('UiKitView')));
-    expect(removedNativeGroup.existsSync(), isFalse);
+    expect(nativeGroup, contains('UIToolbar()'));
+    expect(nativeGroup, contains('UIBarButtonItemGroup.fixedGroup'));
+    expect(nativeGroup, contains('barItem.sharesBackground = true'));
+    expect(nativeGroup, isNot(contains('UISegmentedControl')));
+    expect(nativeGroupWidget, contains("ios26_button_group"));
+    expect(plugin, contains('iOS26ButtonGroupViewFactory'));
   });
 
   test('phone primary pages share one header and desktop background renderer',
@@ -427,7 +448,7 @@ void main() {
     ).readAsStringSync();
 
     expect(home, contains("CupertinoAppPageHeader(title: '主页')"));
-    expect(account, contains("title: '账户'"));
+    expect(account, contains('title: AccountPageViewModel.title'));
     expect(media, contains("CupertinoAppPageHeader(title: '媒体库'"));
     expect(home, isNot(contains('statusBarHeight + 58')));
     expect(account, isNot(contains('statusBarHeight + 58')));
@@ -448,6 +469,81 @@ void main() {
     expect(home, contains('color: effectiveColor'));
     expect(glassGroup, contains('CupertinoColors.label'));
     expect(glassGroup, contains('Icon(item.icon, color: iconColor)'));
+  });
+
+  test('phone notifications sit higher and use neutral colors', () {
+    final notification = File(
+      'lib/themes/nipaplay/widgets/blur_snackbar.dart',
+    ).readAsStringSync();
+
+    expect(notification,
+        contains('final baseBottomOffset = 16 + safePadding.bottom'));
+    expect(
+      notification,
+      contains('isPhoneSurface ? baseBottomOffset * 2 : baseBottomOffset'),
+    );
+    expect(notification, contains('const Color(0xF2252527)'));
+    expect(notification, contains('const Color(0xFAF7F7F8)'));
+    expect(notification, contains('final actionForeground = textColor'));
+    expect(notification, isNot(contains('AppAccentColors.current')));
+  });
+
+  test('phone modal choices all use the shared Cupertino bottom sheet', () {
+    final dartFiles = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where(
+          (file) => !file.path.endsWith(
+            'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
+          ),
+        );
+    final directPopupUsers = <String>[];
+    for (final file in dartFiles) {
+      final source = file.readAsStringSync();
+      if (source.contains('showCupertinoModalPopup') ||
+          source.contains('CupertinoActionSheet') ||
+          source.contains('AdaptivePopupMenuButton')) {
+        directPopupUsers.add(file.path);
+      }
+    }
+
+    expect(directPopupUsers, isEmpty);
+    expect(
+      File(
+        'lib/themes/cupertino/widgets/cupertino_modal_popup.dart',
+      ).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('today anime search separates shared state from surface renderers', () {
+    final host = File(
+      'lib/themes/nipaplay/widgets/tag_search_widget.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/search/tag_search_controller.dart',
+    ).readAsStringSync();
+    final phoneView = File(
+      'lib/themes/cupertino/widgets/cupertino_tag_search_view.dart',
+    ).readAsStringSync();
+
+    expect(host, contains('TagSearchController('));
+    expect(host, contains('CupertinoTagSearchView('));
+    expect(
+        controller, contains('abstract interface class TagSearchDataSource'));
+    expect(controller, contains('class TagSearchController'));
+    expect(phoneView, contains('CupertinoBottomSheetContentLayout('));
+    expect(phoneView, contains('CupertinoTextField('));
+    expect(phoneView, contains('AdaptiveSlider('));
+    expect(phoneView, isNot(contains('CupertinoSlider(')));
+    expect(
+      phoneView,
+      contains('activeColor: CupertinoTheme.of(context).primaryColor'),
+    );
+    expect(phoneView, contains('CupertinoColors.label'));
+    expect(phoneView, contains('copyWith(color: label)'));
+    expect(phoneView, isNot(contains("package:flutter/material.dart")));
   });
 
   test('phone media pages share one neutral containerless search toolbar', () {
@@ -502,6 +598,126 @@ void main() {
     expect(account, contains('AdaptiveSegmentedControl('));
   });
 
+  test('account content has one model and surface-specific renderers', () {
+    final account = File(
+      'lib/themes/nipaplay/pages/account/material_account_page.dart',
+    ).readAsStringSync();
+    final desktop = File(
+      'lib/themes/nipaplay/pages/account/desktop_account_view.dart',
+    ).readAsStringSync();
+    final phoneDandanplay = File(
+      'lib/themes/cupertino/pages/account/sections/'
+      'dandanplay_account_section.dart',
+    ).readAsStringSync();
+    final phoneBangumi = File(
+      'lib/themes/cupertino/pages/account/sections/bangumi_section.dart',
+    ).readAsStringSync();
+
+    expect(account, contains('final data = _buildAccountPageViewModel();'));
+    expect(
+      account,
+      contains('DesktopAccountView(data: data, userActivity: userActivity)'),
+    );
+    expect(account, contains('data: data.dandanplay'));
+    expect(account, contains('data: data.bangumi'));
+    expect(account, isNot(contains('_buildDandanplayPage')));
+    expect(account, isNot(contains('_buildBangumiPage')));
+    expect(account, isNot(contains('_buildLargeScreen')));
+    expect(desktop, contains('class DesktopAccountView'));
+    expect(
+      RegExp(r'Expanded\([\s\S]*data\.dandanplay').hasMatch(desktop),
+      isTrue,
+    );
+    expect(
+      RegExp(r'Expanded\([\s\S]*data\.bangumi').hasMatch(desktop),
+      isTrue,
+    );
+    expect(phoneDandanplay, contains('final DandanplayAccountViewModel data'));
+    expect(phoneBangumi, contains('final BangumiAccountViewModel data'));
+  });
+
+  test('account activity has one state host and adaptive renderers', () {
+    final account = File(
+      'lib/themes/nipaplay/pages/account/material_account_page.dart',
+    ).readAsStringSync();
+    final host = File(
+      'lib/widgets/user_activity/adaptive_user_activity.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/controllers/user_activity_controller.dart',
+    ).readAsStringSync();
+    final phone = File(
+      'lib/widgets/user_activity/cupertino_user_activity.dart',
+    ).readAsStringSync();
+    final desktop = File(
+      'lib/widgets/user_activity/desktop_user_activity.dart',
+    ).readAsStringSync();
+
+    expect(account, contains('final userActivity = AdaptiveUserActivity('));
+    expect(account, contains('userActivity: userActivity'));
+    expect(host, contains('with UserActivityController'));
+    expect(host, contains('final data = UserActivityViewModel('));
+    expect(host, contains('CupertinoUserActivity(data: data)'));
+    expect(host, contains('DesktopUserActivity(data: data)'));
+    expect(controller, isNot(contains('TabController')));
+    expect(phone, contains('final UserActivityViewModel data'));
+    expect(desktop, contains('final UserActivityViewModel data'));
+    expect(desktop, isNot(contains('TabBar(')));
+  });
+
+  test('account model owns shared labels and action availability', () {
+    var loginCount = 0;
+    var syncCount = 0;
+    final tokenController = TextEditingController();
+    final dandanplay = DandanplayAccountViewModel(
+      isLoggedIn: false,
+      username: '未登录',
+      avatarUrl: null,
+      isLoading: false,
+      onLogin: () => loginCount++,
+      onRegister: () {},
+      onLogout: () {},
+      onDeleteAccount: () {},
+    );
+    final bangumi = BangumiAccountViewModel(
+      isAuthorized: false,
+      userInfo: null,
+      isDandanplayLoggedIn: false,
+      dandanLinkedInfo: null,
+      dandanLinkedExpireTime: null,
+      isRequestingDandanAuth: false,
+      isRefreshingDandanStatus: false,
+      isLoading: false,
+      isSyncing: false,
+      syncStatus: '',
+      lastSyncTime: null,
+      tokenController: tokenController,
+      onRequestDandanAuth: () {},
+      onOpenDandanManage: () {},
+      onRefreshDandanStatus: () {},
+      onSaveToken: () {},
+      onClearToken: () {},
+      onSync: () => syncCount++,
+      onFullSync: () {},
+      onTestConnection: () {},
+      onClearCache: () {},
+      onOpenDandanHelp: () {},
+      onOpenNipaplayHelp: () {},
+    );
+
+    expect(dandanplay.actions.map((action) => action.label), [
+      '立即登录',
+      '注册新账号',
+    ]);
+    dandanplay.actions.first.onPressed!();
+    expect(loginCount, 1);
+    expect(bangumi.requestDandanAuthAction.onPressed, isNull);
+    expect(bangumi.syncActions.first.label, '增量同步');
+    bangumi.syncActions.first.onPressed!();
+    expect(syncCount, 1);
+    tokenController.dispose();
+  });
+
   test('media library sections share stable ids and ordering', () {
     final sections = buildUnifiedMediaLibrarySections(
       const MediaLibraryAvailability(
@@ -536,6 +752,20 @@ void main() {
       ),
       greaterThan(0),
     );
+  });
+
+  test('desktop media subtabs share the main label-width indicator', () {
+    final controls = File(
+      'lib/media_library/adaptive_media_library_controls.dart',
+    ).readAsStringSync();
+    final mainTabs = File(
+      'lib/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart',
+    ).readAsStringSync();
+
+    expect(controls, contains('NipaplayLabelTabIndicator('));
+    expect(controls, isNot(contains('width: selected ? 32 : 0')));
+    expect(mainTabs, contains('selected ? painter.width : 0'));
+    expect(mainTabs, contains('TabBarIndicatorSize.label'));
   });
 
   testWidgets('phone library management renders one item model in both views',
@@ -668,6 +898,40 @@ void main() {
     );
   });
 
+  test('media collection empty content is shared by both renderers', () {
+    final local = mediaCollectionEmptyContent(
+      UnifiedMediaLibrarySource.local,
+      sourceLabel: '本地媒体库',
+    );
+    final webdav = mediaCollectionEmptyContent(
+      UnifiedMediaLibrarySource.webdav,
+      sourceLabel: 'WebDAV媒体库',
+    );
+    final renderer = File(
+      'lib/media_library/adaptive_media_collection_view.dart',
+    ).readAsStringSync();
+
+    expect(local.title, '本地媒体库为空');
+    expect(local.subtitle, contains('观看或扫描识别'));
+    expect(webdav.subtitle, contains('WebDAV 刮削'));
+    expect(renderer, contains('_AdaptiveMediaCollectionEmptyState('));
+    expect(renderer, isNot(contains('_phoneEmptyState')));
+    expect(
+      renderer,
+      contains("ValueKey<String>('media-collection-empty-state')"),
+    );
+    expect(
+      renderer,
+      contains('mainAxisAlignment: material.MainAxisAlignment.center'),
+    );
+    expect(renderer, contains('cupertino.CupertinoIcons.rectangle_stack'));
+    expect(renderer, isNot(contains('material.Icons.video_library_outlined')));
+    expect(
+      renderer,
+      isNot(contains("material.Text(\n          '\$sourceLabel为空'")),
+    );
+  });
+
   test('torrent search and sorting use one shared model', () {
     TorrentTask task(int id, String name, int progress) {
       return TorrentTask(
@@ -707,6 +971,91 @@ void main() {
     );
   });
 
+  test('torrent page has one model and surface-specific renderers', () {
+    final page =
+        File('lib/pages/torrent_download_page.dart').readAsStringSync();
+    final phone = File(
+      'lib/themes/cupertino/widgets/cupertino_torrent_download_controls.dart',
+    ).readAsStringSync();
+    final phonePage = phone.substring(
+      0,
+      phone.indexOf('class CupertinoAddTorrentView'),
+    );
+    final glassGroup = File(
+      'lib/themes/cupertino/widgets/cupertino_glass_button_group.dart',
+    ).readAsStringSync();
+    final dialogs = File(
+      'lib/downloads/adaptive_torrent_download_dialogs.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('final data = _buildPageViewModel();'));
+    expect(page, contains('CupertinoTorrentDownloadView(data: data)'));
+    expect(page, contains('DesktopTorrentDownloadView(data: data)'));
+    expect(page, contains('TelevisionTorrentDownloadView(data: data)'));
+    expect(page, contains('surface == AppDisplaySurface.television'));
+    expect(page, contains('final data = _buildViewModel();'));
+    expect(page, contains('CupertinoAddTorrentView(data: data)'));
+    expect(page, contains('DesktopAddTorrentView(data: data)'));
+    expect(phone, contains('final UnifiedTorrentPageViewModel data'));
+    expect(phone, contains('final AddTorrentDialogViewModel data'));
+    expect(phone, isNot(contains('on _TorrentDownloadPageState')));
+    expect(phone, isNot(contains('on _AddMagnetDialogState')));
+    expect(phonePage, contains("CupertinoAppPageHeader(title: '下载器'"));
+    expect(phonePage, contains("id: 'torrent-view-mode'"));
+    expect(phonePage, contains('CupertinoPageActionsScope.maybeOf(context)'));
+    expect(phonePage, contains('color: Colors.transparent'));
+    expect(
+      RegExp('AppAccentColors.current').allMatches(phonePage).length,
+      1,
+    );
+    expect(glassGroup, contains("return 'list.bullet'"));
+    expect(glassGroup, contains("return 'square.grid.2x2'"));
+    expect(dialogs, contains('showAddTorrent('));
+    expect(dialogs, contains('confirmDelete('));
+    expect(dialogs, contains('selectPlayableFile('));
+    expect(page, isNot(contains('showCupertinoDialog')));
+  });
+
+  test('torrent task and dialogs expose shared semantic data', () {
+    const task = TorrentTask(
+      id: 7,
+      infoHash: 'hash-7',
+      name: 'Example',
+      outputFolder: '/downloads/example',
+      state: 'completed',
+      progressBytes: 100,
+      uploadedBytes: 0,
+      totalBytes: 100,
+      finished: true,
+      downloadSpeedBytesPerSecond: 0,
+      uploadSpeedBytesPerSecond: 0,
+      error: null,
+    );
+    var played = false;
+    final item = UnifiedTorrentTaskItemViewModel(
+      task: task,
+      scanSummary: null,
+      isAutoScanning: false,
+      isAutoScanned: true,
+      actions: [
+        UnifiedTorrentTaskActionViewModel(
+          action: UnifiedTorrentTaskAction.play,
+          label: '播放',
+          onPressed: () => played = true,
+        ),
+      ],
+    );
+    const deleteDialog = TorrentDeleteDialogViewModel(task: task);
+
+    expect(item.primaryAction.label, '播放');
+    item.primaryAction.onPressed();
+    expect(played, isTrue);
+    expect(item.scanStatusText, '已加入媒体库');
+    expect(deleteDialog.title, '删除任务和文件');
+    expect(deleteDialog.message, contains('Example'));
+    expect(formatTorrentBytes(1024), '1.00 KB');
+  });
+
   test('navigation requests carry stable page and section ids', () {
     final notifier = TabChangeNotifier();
 
@@ -728,10 +1077,70 @@ void main() {
     final source = File(
       'lib/themes/nipaplay/widgets/video_upload_ui.dart',
     ).readAsStringSync();
+    final renderer = File(
+      'lib/playback/adaptive_playback_entry_view.dart',
+    ).readAsStringSync();
+    final selectFileStart = renderer.indexOf(
+      'label: data.content.selectFileLabel',
+    );
+    final selectFileEnd = renderer.indexOf(
+      'const material.SizedBox(height: 8)',
+      selectFileStart,
+    );
+    final selectFileButton = renderer.substring(
+      selectFileStart,
+      selectFileEnd,
+    );
 
     expect(source, contains('AdaptivePlaybackEntryView('));
     expect(source, isNot(contains('TextField(')));
     expect(source, isNot(contains('TextButton(')));
+    expect(selectFileButton, isNot(contains('emphasis:')));
+  });
+
+  test('add media uses one model with adaptive renderers', () {
+    final model = File(
+      'lib/media_library/media_source_option.dart',
+    ).readAsStringSync();
+    final host = File(
+      'lib/media_library/adaptive_media_library_controls.dart',
+    ).readAsStringSync();
+    final desktop = File(
+      'lib/themes/nipaplay/widgets/media_server_selection_sheet.dart',
+    ).readAsStringSync();
+    final phone = File(
+      'lib/themes/cupertino/widgets/cupertino_media_source_sheet.dart',
+    ).readAsStringSync();
+
+    expect(model, contains('const mediaSourceOptions'));
+    for (final id in <String>[
+      'local_folder',
+      'nipaplay',
+      'jellyfin',
+      'dandanplay',
+      'emby',
+      'webdav',
+      'smb',
+    ]) {
+      expect(model, contains("id: '$id'"));
+      expect(desktop, isNot(contains("pop('$id')")));
+      expect(phone, isNot(contains("value: '$id'")));
+    }
+
+    expect(desktop, contains('MediaSourceCategory.values'));
+    expect(desktop, contains('option.iconKind'));
+    expect(
+      desktop,
+      isNot(contains('color: accentColor.withValues(alpha: 0.18)')),
+    );
+    expect(phone, contains('MediaSourceCategory.values'));
+    expect(phone, contains('CupertinoListTile('));
+    expect(phone, contains('option.subtitle'));
+    expect(phone, isNot(contains('color.withValues(alpha: 0.14)')));
+    expect(phone, contains('size: 30'));
+    expect(host, contains('MediaServerSelectionSheet.show('));
+    expect(host, contains('CupertinoMediaSourceSheet.show('));
+    expect(host, isNot(contains('CupertinoBottomSheetOption(')));
   });
 
   testWidgets('playback entry builds Cupertino controls on phone',
@@ -799,7 +1208,7 @@ void main() {
     expect(PlatformInfo.isIOS26OrHigher(), isFalse);
   });
 
-  testWidgets('adaptive buttons do not fall back to Material on phone Android',
+  testWidgets('non-iOS 26 phones use liquid glass adaptive controls',
       (tester) async {
     PlatformInfo.setPlatformOverride(PlatformOverride.android);
     PlatformInfo.setPreferCupertinoControls(true);
@@ -810,15 +1219,85 @@ void main() {
 
     await tester.pumpWidget(
       CupertinoApp(
-        home: AdaptiveButton(
-          label: 'Action',
-          onPressed: () {},
+        home: AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: Column(
+            children: [
+              AdaptiveButton(
+                label: 'Action',
+                onPressed: () {},
+              ),
+              AdaptiveSwitch(value: true, onChanged: (_) {}),
+              AdaptiveSlider(value: 0.5, onChanged: (_) {}),
+              AdaptiveSegmentedControl(
+                labels: const ['One', 'Two'],
+                selectedIndex: 0,
+                onValueChanged: (_) {},
+              ),
+            ],
+          ),
         ),
       ),
     );
 
-    expect(find.byType(CupertinoButton), findsOneWidget);
+    expect(find.byType(GlassButton), findsWidgets);
+    expect(find.byType(GlassSwitch), findsOneWidget);
+    expect(find.byType(GlassSlider), findsOneWidget);
+    expect(find.byType(GlassSegmentedControl), findsOneWidget);
+    expect(find.byType(CupertinoButton), findsNothing);
     expect(find.byType(ElevatedButton), findsNothing);
+  });
+
+  test('iOS 26 native controls have one liquid-glass fallback layer', () {
+    final bridge = File(
+      'lib/themes/cupertino/cupertino_adaptive_platform_ui.dart',
+    ).readAsStringSync();
+    final mainPage = File(
+      'lib/themes/cupertino/pages/cupertino_main_page.dart',
+    ).readAsStringSync();
+    final nativePage = File(
+      'lib/themes/cupertino/widgets/cupertino_adaptive_native_page.dart',
+    ).readAsStringSync();
+    final settings = File(
+      'lib/settings/adaptive_settings_widgets.dart',
+    ).readAsStringSync();
+    final danmaku = File(
+      'lib/settings/pages/danmaku_settings_content.dart',
+    ).readAsStringSync();
+    final remote = File(
+      'lib/themes/cupertino/pages/settings/pages/'
+      'cupertino_remote_controller_settings_page.dart',
+    ).readAsStringSync();
+    final dandanplayDialog = File(
+      'lib/themes/cupertino/widgets/'
+      'cupertino_dandanplay_connection_dialog.dart',
+    ).readAsStringSync();
+    final networkDialog = File(
+      'lib/themes/cupertino/widgets/'
+      'cupertino_network_server_connection_dialog.dart',
+    ).readAsStringSync();
+
+    for (final control in <String>[
+      'GlassButton.custom(',
+      'GlassSwitch(',
+      'GlassSlider(',
+      'GlassSegmentedControl(',
+      'GlassDialog.show',
+      'GlassTextField(',
+    ]) {
+      expect(bridge, contains(control));
+    }
+    expect(mainPage, contains('GlassTabBar.bottom('));
+    expect(nativePage, contains('GlassScaffold('));
+    expect(nativePage, contains('GlassAppBar('));
+    expect(settings, isNot(contains('fluent.Slider(')));
+    expect(danmaku, isNot(contains('PlatformInfo.isIOS26OrHigher()')));
+    expect(remote, isNot(contains('PlatformInfo.isIOS26OrHigher()')));
+    expect(remote, isNot(contains('fluent.Slider(')));
+    expect(dandanplayDialog, contains('AdaptiveAlertDialog.inputShow('));
+    expect(networkDialog, contains('AdaptiveAlertDialog.inputShow('));
+    expect(dandanplayDialog, isNot(contains('IOS26AlertDialog(')));
+    expect(networkDialog, isNot(contains('IOS26AlertDialog(')));
   });
 
   testWidgets('Cupertino bottom sheet keeps child navigation inside the sheet',
@@ -875,6 +1354,12 @@ void main() {
     expect(find.byType(CupertinoBottomSheet), findsOneWidget);
     expect(find.byType(CupertinoBottomSheetPageNavigator), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('cupertino-bottom-sheet-top-scrim'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('open-child')));
     await tester.pumpAndSettle();
@@ -884,6 +1369,12 @@ void main() {
     expect(find.text('Settings'), findsNothing);
     expect(find.byType(AdaptiveScaffold), findsNothing);
     expect(find.byType(CupertinoBottomSheet), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('cupertino-bottom-sheet-top-scrim'),
+      ),
+      findsOneWidget,
+    );
 
     Navigator.of(tester.element(find.byKey(const Key('sheet-child')))).pop();
     await tester.pumpAndSettle();

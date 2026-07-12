@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoCommentDialog extends StatefulWidget {
   final String animeTitle;
@@ -23,11 +24,14 @@ class CupertinoCommentDialog extends StatefulWidget {
     required int initialRating,
     String? initialComment,
     required int collectionType,
-    required Future<void> Function(BangumiCollectionSubmitResult result) onSubmit,
+    required Future<void> Function(BangumiCollectionSubmitResult result)
+        onSubmit,
   }) {
-    return showCupertinoModalPopup<void>(
+    return CupertinoBottomSheet.show<void>(
       context: context,
-      builder: (context) => CupertinoCommentDialog(
+      title: '编辑短评',
+      heightRatio: 0.78,
+      child: CupertinoCommentDialog(
         animeTitle: animeTitle,
         initialRating: initialRating,
         initialComment: initialComment,
@@ -67,10 +71,8 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
       CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
   Color get _mutedTextColor =>
       CupertinoDynamicColor.resolve(CupertinoColors.tertiaryLabel, context);
-  Color get _borderColor => CupertinoDynamicColor.resolve(
-      CupertinoColors.separator, context);
-  Color get _surfaceColor => CupertinoDynamicColor.resolve(
-      CupertinoColors.systemGroupedBackground, context);
+  Color get _borderColor =>
+      CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
   Color get _fillColor => CupertinoDynamicColor.resolve(
       CupertinoColors.secondarySystemGroupedBackground, context);
 
@@ -102,77 +104,34 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: _dismissKeyboard,
-      child: Container(
-        decoration: BoxDecoration(
-          color: _surfaceColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardHeight),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 20),
-                _buildRatingSection(),
-                const SizedBox(height: 18),
-                _buildCommentInput(),
-                const SizedBox(height: 20),
-                _buildActionButtons(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: _accentColor.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            CupertinoIcons.chat_bubble_2,
-            color: _accentColor,
-            size: 18,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardHeight),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '编辑短评',
-                style: TextStyle(
-                  color: _textColor,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 2),
               Text(
                 widget.animeTitle,
                 style: TextStyle(
                   color: _subTextColor,
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              const SizedBox(height: 16),
+              _buildRatingSection(),
+              const SizedBox(height: 18),
+              _buildCommentInput(),
+              const SizedBox(height: 20),
+              _buildActionButtons(),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -228,9 +187,8 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? _accentColor.withOpacity(0.12)
-                        : _fillColor,
+                    color:
+                        isActive ? _accentColor.withOpacity(0.12) : _fillColor,
                     border: Border.all(
                       color: isActive ? _accentColor : _borderColor,
                       width: 1,
@@ -259,9 +217,8 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? _accentColor.withOpacity(0.12)
-                      : _fillColor,
+                  color:
+                      isSelected ? _accentColor.withOpacity(0.12) : _fillColor,
                   border: Border.all(
                     color: isSelected ? _accentColor : _borderColor,
                     width: 1,
@@ -337,14 +294,12 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
         CupertinoButton(
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Text('取消',
-              style: TextStyle(color: _textColor, fontSize: 14)),
+          child: Text('取消', style: TextStyle(color: _textColor, fontSize: 14)),
         ),
         const SizedBox(width: 4),
         CupertinoButton(
-          onPressed: _isSubmitting || _selectedRating == 0
-              ? null
-              : _handleSubmit,
+          onPressed:
+              _isSubmitting || _selectedRating == 0 ? null : _handleSubmit,
           borderRadius: BorderRadius.circular(10),
           color: _accentColor,
           disabledColor: _accentColor.withOpacity(0.5),
@@ -353,7 +308,8 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CupertinoActivityIndicator(color: CupertinoColors.white),
+                  child:
+                      CupertinoActivityIndicator(color: CupertinoColors.white),
                 )
               : const Text(
                   '确定',

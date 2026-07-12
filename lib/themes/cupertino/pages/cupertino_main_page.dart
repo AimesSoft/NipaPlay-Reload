@@ -9,6 +9,7 @@ import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
@@ -196,6 +197,21 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         .toList(growable: false);
   }
 
+  List<GlassTab> _buildGlassTabs(
+    BuildContext context,
+    List<UnifiedAppPage> pages,
+  ) {
+    return pages
+        .map(
+          (page) => GlassTab(
+            icon: Icon(page.phoneIcon),
+            activeIcon: Icon(page.phoneActiveIcon),
+            label: page.title(context.l10n),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = _pages;
@@ -277,13 +293,26 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           );
         }
 
-        // Android and older iOS deliberately use Cupertino controls. This is
-        // the phone renderer's non-Material fallback.
+        // Older iOS and other phone platforms render the same tab semantics
+        // with the Flutter liquid-glass implementation.
         return CupertinoPageScaffold(
           child: Column(
             children: [
               Expanded(child: body),
-              if (bottomBar.isBottomBarVisible) cupertinoTabBar,
+              if (bottomBar.isBottomBarVisible)
+                GlassTabBar.bottom(
+                  tabs: _buildGlassTabs(context, pages),
+                  selectedIndex: selectedIndex,
+                  onTabSelected: _selectIndex,
+                  horizontalPadding: 12,
+                  verticalPadding: bottomInset > 0 ? 8 : 6,
+                  barHeight: tabBarHeight,
+                  selectedIconColor: activeColor,
+                  selectedLabelColor: activeColor,
+                  unselectedIconColor: inactiveColor,
+                  unselectedLabelColor: inactiveColor,
+                  quality: GlassQuality.standard,
+                ),
             ],
           ),
         );

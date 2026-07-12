@@ -1,4 +1,5 @@
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 class CupertinoGlassButtonGroupItem {
@@ -32,6 +33,22 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
       context,
     );
 
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return IOS26ButtonGroup(
+        height: buttonSize,
+        itemWidth: buttonSize,
+        items: [
+          for (final item in items)
+            IOS26ButtonGroupItem(
+              label: item.label,
+              sfSymbol: _sfSymbolForIcon(item.icon),
+              enabled: item.onPressed != null,
+            ),
+        ],
+        onPressed: (index) => items[index].onPressed?.call(),
+      );
+    }
+
     return GlassButtonGroup.icons(
       useOwnLayer: true,
       quality: GlassQuality.standard,
@@ -62,6 +79,18 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  String _sfSymbolForIcon(IconData icon) {
+    if (icon == CupertinoIcons.ellipsis) return 'ellipsis';
+    if (icon == CupertinoIcons.sun_max_fill) return 'sun.max.fill';
+    if (icon == CupertinoIcons.moon_fill) return 'moon.fill';
+    if (icon == CupertinoIcons.gear_alt_fill) return 'gearshape.fill';
+    if (icon == CupertinoIcons.add) return 'plus';
+    if (icon == CupertinoIcons.search) return 'magnifyingglass';
+    if (icon == CupertinoIcons.list_bullet) return 'list.bullet';
+    if (icon == CupertinoIcons.square_grid_2x2) return 'square.grid.2x2';
+    return 'circle';
   }
 
   static void _noop() {}

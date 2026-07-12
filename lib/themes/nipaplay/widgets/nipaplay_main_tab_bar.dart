@@ -117,3 +117,40 @@ class _NipaplayMainTabPainter extends BoxPainter {
     );
   }
 }
+
+/// 给自定义 Tab 使用的标签等宽指示线，与主 [TabBar] 的
+/// [TabBarIndicatorSize.label] 保持一致。
+class NipaplayLabelTabIndicator extends StatelessWidget {
+  const NipaplayLabelTabIndicator({
+    super.key,
+    required this.label,
+    required this.labelStyle,
+    required this.selected,
+    this.duration = const Duration(milliseconds: 160),
+  });
+
+  final String label;
+  final TextStyle labelStyle;
+  final bool selected;
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: labelStyle),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+
+    return AnimatedContainer(
+      duration: duration,
+      width: selected ? painter.width : 0,
+      height: 3,
+      decoration: BoxDecoration(
+        color: AppAccentColors.current,
+        borderRadius: BorderRadius.circular(30),
+      ),
+    );
+  }
+}

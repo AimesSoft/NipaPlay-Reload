@@ -884,6 +884,7 @@
     }
   },
   "appreciationCode": "Tip Jar",
+  "appreciationCodeHint": "Tap to view the tip jar",
   "appreciationImageLoadFailed": "Failed to load tip jar image",
   "acknowledgements": "Acknowledgements",
   "aboutStoryPrefix": "NipaPlay's name comes from Furude Rika's catchphrase \"",

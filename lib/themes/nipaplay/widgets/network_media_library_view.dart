@@ -27,6 +27,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 enum NetworkMediaServerType { jellyfin, emby }
 
@@ -1983,22 +1984,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     );
 
     final selection =
-        await cupertino.showCupertinoModalPopup<_RemoteSortSelection>(
+        await CupertinoBottomSheet.showSelection<_RemoteSortSelection>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('排序'),
-        actions: [
-          for (final item in items)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(item.value),
-              child: Text(item.title),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '排序',
+      options: [
+        for (final item in items)
+          CupertinoBottomSheetOption(label: item.title, value: item.value),
+      ],
     );
     if (selection != null) _applyRemoteSortSelection(selection);
   }

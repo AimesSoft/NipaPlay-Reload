@@ -7,6 +7,7 @@ import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 enum LocalLibrarySortType {
   name,
@@ -287,79 +288,45 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
     final enabledActions =
         actions.where((action) => action.onPressed != null).toList();
     final selected =
-        await cupertino.showCupertinoModalPopup<LocalLibraryActionControl>(
+        await CupertinoBottomSheet.showSelection<LocalLibraryActionControl>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('页面操作'),
-        actions: [
-          for (final action in enabledActions)
-            cupertino.CupertinoActionSheetAction(
-              isDestructiveAction: action.isDestructive,
-              onPressed: () => Navigator.of(sheetContext).pop(action),
-              child: Text(action.label),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '页面操作',
+      options: [
+        for (final action in enabledActions)
+          CupertinoBottomSheetOption(
+            label: action.label,
+            value: action,
+            destructive: action.isDestructive,
+          ),
+      ],
     );
     selected?.onPressed?.call();
   }
 
   Future<void> _showPhoneSortMenu(BuildContext context) async {
     final selected =
-        await cupertino.showCupertinoModalPopup<LocalLibrarySortType>(
+        await CupertinoBottomSheet.showSelection<LocalLibrarySortType>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('排序'),
-        actions: [
-          _phoneSortAction(
-            sheetContext,
-            LocalLibrarySortType.dateAdded,
-            '最近观看',
-          ),
-          _phoneSortAction(
-            sheetContext,
-            LocalLibrarySortType.name,
-            '名称排序',
-          ),
-          _phoneSortAction(
-            sheetContext,
-            LocalLibrarySortType.rating,
-            '评分排序',
-          ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '排序',
+      options: [
+        _phoneSortOption(LocalLibrarySortType.dateAdded, '最近观看'),
+        _phoneSortOption(LocalLibrarySortType.name, '名称排序'),
+        _phoneSortOption(LocalLibrarySortType.rating, '评分排序'),
+      ],
     );
     if (selected != null) {
       widget.onSortChanged?.call(selected);
     }
   }
 
-  cupertino.CupertinoActionSheetAction _phoneSortAction(
-    BuildContext context,
+  CupertinoBottomSheetOption<LocalLibrarySortType> _phoneSortOption(
     LocalLibrarySortType type,
     String label,
   ) {
-    final selected = widget.currentSort == type;
-    return cupertino.CupertinoActionSheetAction(
-      onPressed: () => Navigator.of(context).pop(type),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(label),
-          if (selected) ...[
-            const SizedBox(width: 8),
-            const Icon(cupertino.CupertinoIcons.check_mark, size: 16),
-          ],
-        ],
-      ),
+    return CupertinoBottomSheetOption(
+      label: label,
+      value: type,
+      selected: widget.currentSort == type,
     );
   }
 }

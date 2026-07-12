@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
@@ -824,17 +823,10 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
     switch (type) {
       case 'bool':
         final value = param['value'] == true;
-        final toggle = PlatformInfo.isIOS26OrHigher()
-            ? AdaptiveSwitch(
-                value: value,
-                onChanged:
-                    _isSending ? null : (next) => _setParameter(key, next),
-              )
-            : CupertinoSwitch(
-                value: value,
-                onChanged:
-                    _isSending ? null : (next) => _setParameter(key, next),
-              );
+        final toggle = AdaptiveSwitch(
+          value: value,
+          onChanged: _isSending ? null : (next) => _setParameter(key, next),
+        );
         return _row(
           label: label,
           trailing: toggle,
@@ -871,66 +863,31 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
     if (min != null && max != null && max > min) {
       final clamped = value.clamp(min, max);
       final sliderActiveColor = CupertinoTheme.of(context).primaryColor;
-      final slider = PlatformInfo.isIOS26OrHigher()
-          ? AdaptiveSlider(
-              value: clamped,
-              min: min,
-              max: max,
-              divisions: isInteger ? (max - min).round() : null,
-              activeColor: sliderActiveColor,
-              onChanged: _isSending
-                  ? null
-                  : (next) {
-                      setState(() {
-                        _draftNumeric[key] = next;
-                      });
-                    },
-              onChangeEnd: _isSending
-                  ? null
-                  : (next) async {
-                      final output = isInteger
-                          ? next.round()
-                          : ((next / step).round() * step);
-                      setState(() {
-                        _draftNumeric.remove(key);
-                      });
-                      await _setParameter(key, output);
-                    },
-            )
-          : fluent.FluentTheme(
-              data: fluent.FluentThemeData(
-                brightness: CupertinoTheme.of(context).brightness,
-                accentColor: fluent.AccentColor.swatch({
-                  'normal': sliderActiveColor,
-                  'default': sliderActiveColor,
-                }),
-              ),
-              child: fluent.Slider(
-                value: clamped,
-                min: min,
-                max: max,
-                divisions: isInteger ? (max - min).round() : null,
-                label: isInteger ? clamped.round().toString() : '$clamped',
-                onChanged: _isSending
-                    ? null
-                    : (next) {
-                        setState(() {
-                          _draftNumeric[key] = next;
-                        });
-                      },
-                onChangeEnd: _isSending
-                    ? null
-                    : (next) async {
-                        final output = isInteger
-                            ? next.round()
-                            : ((next / step).round() * step);
-                        setState(() {
-                          _draftNumeric.remove(key);
-                        });
-                        await _setParameter(key, output);
-                      },
-              ),
-            );
+      final slider = AdaptiveSlider(
+        value: clamped,
+        min: min,
+        max: max,
+        divisions: isInteger ? (max - min).round() : null,
+        label: isInteger ? clamped.round().toString() : '$clamped',
+        activeColor: sliderActiveColor,
+        onChanged: _isSending
+            ? null
+            : (next) {
+                setState(() {
+                  _draftNumeric[key] = next;
+                });
+              },
+        onChangeEnd: _isSending
+            ? null
+            : (next) async {
+                final output =
+                    isInteger ? next.round() : ((next / step).round() * step);
+                setState(() {
+                  _draftNumeric.remove(key);
+                });
+                await _setParameter(key, output);
+              },
+      );
       return Column(
         children: [
           _row(
@@ -995,30 +952,20 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
         onPressed: _isSending
             ? null
             : () async {
-                final selected = await showCupertinoModalPopup<dynamic>(
+                final selected =
+                    await CupertinoBottomSheet.showSelection<dynamic>(
                   context: context,
-                  builder: (ctx) {
-                    return CupertinoActionSheet(
-                      title: Text(label),
-                      actions: options
-                          .map(
-                            (option) => CupertinoActionSheetAction(
-                              onPressed: () =>
-                                  Navigator.of(ctx).pop(option['value']),
-                              child: Text(
-                                option['label']?.toString() ??
-                                    option['value']?.toString() ??
-                                    'unknown',
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      cancelButton: CupertinoActionSheetAction(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('取消'),
+                  title: label,
+                  options: [
+                    for (final option in options)
+                      CupertinoBottomSheetOption<dynamic>(
+                        label: option['label']?.toString() ??
+                            option['value']?.toString() ??
+                            'unknown',
+                        value: option['value'],
+                        selected: option['value'] == value,
                       ),
-                    );
-                  },
+                  ],
                 );
                 if (selected == null) return;
                 await _setParameter(key, selected);

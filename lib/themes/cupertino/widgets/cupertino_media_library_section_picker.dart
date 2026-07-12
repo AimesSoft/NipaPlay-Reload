@@ -1,7 +1,6 @@
 import 'package:nipaplay/app/unified_media_library_sections.dart';
-import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoMediaLibrarySectionPicker extends StatefulWidget {
   const CupertinoMediaLibrarySectionPicker({
@@ -22,8 +21,6 @@ class CupertinoMediaLibrarySectionPicker extends StatefulWidget {
 
 class _CupertinoMediaLibrarySectionPickerState
     extends State<CupertinoMediaLibrarySectionPicker> {
-  final GlobalKey _dropdownKey = GlobalKey();
-
   @override
   Widget build(BuildContext context) {
     if (widget.sections.isEmpty) return const SizedBox.shrink();
@@ -33,46 +30,27 @@ class _CupertinoMediaLibrarySectionPickerState
       orElse: () => widget.sections.first,
     );
 
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptivePopupMenuButton.widget<String>(
-        items: [
-          for (final section in widget.sections)
-            AdaptivePopupMenuItem<String>(
-              label: section.label,
-              icon: section.id == selectedSection.id ? 'checkmark' : null,
-              value: section.id,
-            ),
-        ],
-        buttonStyle: PopupButtonStyle.glass,
-        onSelected: (_, entry) {
-          final sectionId = entry.value;
-          if (sectionId != null && sectionId != selectedSection.id) {
-            widget.onSelected(sectionId);
-          }
-        },
-        child: _PickerLabel(section: selectedSection),
-      );
-    }
-
-    return ConstrainedBox(
-      key: const ValueKey<String>('media-library-section-picker'),
-      constraints: const BoxConstraints(maxWidth: 240),
-      child: BlurDropdown<String>(
-        dropdownKey: _dropdownKey,
-        items: [
-          for (final section in widget.sections)
-            DropdownMenuItemData<String>(
-              title: section.label,
-              value: section.id,
-              isSelected: section.id == selectedSection.id,
-            ),
-        ],
-        onItemSelected: (sectionId) {
-          if (sectionId != selectedSection.id) {
-            widget.onSelected(sectionId);
-          }
-        },
-      ),
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: () async {
+        final sectionId = await CupertinoBottomSheet.showSelection<String>(
+          context: context,
+          title: '媒体库分区',
+          options: [
+            for (final section in widget.sections)
+              CupertinoBottomSheetOption(
+                label: section.label,
+                value: section.id,
+                selected: section.id == selectedSection.id,
+              ),
+          ],
+        );
+        if (sectionId != null && sectionId != selectedSection.id) {
+          widget.onSelected(sectionId);
+        }
+      },
+      child: _PickerLabel(section: selectedSection),
     );
   }
 }

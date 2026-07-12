@@ -14,7 +14,7 @@ import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show AdaptiveSlider, PlatformInfo;
+    show AdaptiveSlider;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -618,34 +618,14 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       });
     }
 
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptiveSlider(
-        min: 0.0,
-        max: 2.0,
-        divisions: 40,
-        label: value.toStringAsFixed(2),
-        value: value,
-        activeColor: AppAccentColors.current,
-        onChanged: onChanged,
-      );
-    }
-
-    return fluent.FluentTheme(
-      data: fluent.FluentThemeData(
-        brightness: Theme.of(context).brightness,
-        accentColor: fluent.AccentColor.swatch({
-          'normal': AppAccentColors.current,
-          'default': AppAccentColors.current,
-        }),
-      ),
-      child: fluent.Slider(
-        min: 0.0,
-        max: 2.0,
-        divisions: 40,
-        label: value.toStringAsFixed(2),
-        value: value,
-        onChanged: onChanged,
-      ),
+    return AdaptiveSlider(
+      min: 0.0,
+      max: 2.0,
+      divisions: 40,
+      label: value.toStringAsFixed(2),
+      value: value,
+      activeColor: AppAccentColors.current,
+      onChanged: onChanged,
     );
   }
 

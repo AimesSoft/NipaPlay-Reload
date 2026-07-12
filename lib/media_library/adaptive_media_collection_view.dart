@@ -11,6 +11,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/media_collection_empty_content.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -21,6 +22,7 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_anime_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
@@ -365,27 +367,21 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
 
   Future<void> _showPhoneSort(material.BuildContext context) async {
     final selected =
-        await cupertino.showCupertinoModalPopup<MediaCollectionSort>(
+        await CupertinoBottomSheet.showSelection<MediaCollectionSort>(
       context: context,
-      builder: (context) => cupertino.CupertinoActionSheet(
-        title: const material.Text('媒体库排序'),
-        actions: [
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () => material.Navigator.of(context)
-                .pop(MediaCollectionSort.recentlyAdded),
-            child: const material.Text('最近添加'),
-          ),
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () =>
-                material.Navigator.of(context).pop(MediaCollectionSort.name),
-            child: const material.Text('名称'),
-          ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => material.Navigator.of(context).pop(),
-          child: const material.Text('取消'),
+      title: '媒体库排序',
+      options: [
+        CupertinoBottomSheetOption(
+          label: '最近添加',
+          value: MediaCollectionSort.recentlyAdded,
+          selected: sort == MediaCollectionSort.recentlyAdded,
         ),
-      ),
+        CupertinoBottomSheetOption(
+          label: '名称',
+          value: MediaCollectionSort.name,
+          selected: sort == MediaCollectionSort.name,
+        ),
+      ],
     );
     if (selected != null) onSortChanged(selected);
   }
@@ -415,13 +411,20 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
+    final emptyContent = mediaCollectionEmptyContent(
+      source,
+      sourceLabel: sourceLabel,
+    );
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
-      return _buildPhone(context);
+      return _buildPhone(context, emptyContent);
     }
-    return _buildDesktop(context);
+    return _buildDesktop(context, emptyContent);
   }
 
-  material.Widget _buildPhone(material.BuildContext context) {
+  material.Widget _buildPhone(
+    material.BuildContext context,
+    MediaCollectionEmptyContent emptyContent,
+  ) {
     final slivers = <material.Widget>[
       cupertino.CupertinoSliverRefreshControl(onRefresh: onRefresh),
     ];
@@ -435,7 +438,12 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         ),
       );
     } else if (items.isEmpty) {
-      slivers.add(_phoneEmptyState());
+      slivers.add(
+        material.SliverFillRemaining(
+          hasScrollBody: false,
+          child: _AdaptiveMediaCollectionEmptyState(content: emptyContent),
+        ),
+      );
     } else {
       slivers.add(
         material.SliverPadding(
@@ -470,7 +478,10 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     );
   }
 
-  material.Widget _buildDesktop(material.BuildContext context) {
+  material.Widget _buildDesktop(
+    material.BuildContext context,
+    MediaCollectionEmptyContent emptyContent,
+  ) {
     if (isLoading) {
       return material.Center(
         child: AdaptiveMediaActivityIndicator(color: AppAccentColors.current),
@@ -478,10 +489,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     }
     if (items.isEmpty) {
       return material.Center(
-        child: material.Text(
-          '$sourceLabel为空',
-          style: material.Theme.of(context).textTheme.titleMedium,
-        ),
+        child: _AdaptiveMediaCollectionEmptyState(content: emptyContent),
       );
     }
 
@@ -519,42 +527,6 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     );
   }
 
-  material.Widget _phoneEmptyState() {
-    final message = switch (source) {
-      UnifiedMediaLibrarySource.local => '观看或扫描识别后的动画会显示在这里。',
-      UnifiedMediaLibrarySource.webdav => '完成 WebDAV 刮削后，动画会显示在这里。',
-      UnifiedMediaLibrarySource.smb => '完成 SMB 刮削后，动画会显示在这里。',
-    };
-    return material.SliverFillRemaining(
-      hasScrollBody: false,
-      child: material.Center(
-        child: material.Padding(
-          padding: const material.EdgeInsets.symmetric(horizontal: 32),
-          child: material.Column(
-            mainAxisSize: material.MainAxisSize.min,
-            children: [
-              const material.Icon(
-                cupertino.CupertinoIcons.rectangle_stack,
-                size: 50,
-                color: cupertino.CupertinoColors.inactiveGray,
-              ),
-              const material.SizedBox(height: 14),
-              material.Text(
-                '$sourceLabel为空',
-                style: const material.TextStyle(
-                  fontSize: 18,
-                  fontWeight: material.FontWeight.w600,
-                ),
-              ),
-              const material.SizedBox(height: 8),
-              material.Text(message, textAlign: material.TextAlign.center),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   String _episodeLabel(int animeId) {
     final count = allHistory
         .where((item) =>
@@ -586,5 +558,65 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
       return watchedCount >= total ? '已看完' : '已看 $watchedCount / $total 集';
     }
     return '已看 $watchedCount 集';
+  }
+}
+
+class _AdaptiveMediaCollectionEmptyState extends material.StatelessWidget {
+  const _AdaptiveMediaCollectionEmptyState({required this.content});
+
+  final MediaCollectionEmptyContent content;
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    final phone = AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    final secondary = phone
+        ? cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.secondaryLabel,
+            context,
+          )
+        : material.Theme.of(context)
+            .colorScheme
+            .onSurface
+            .withValues(alpha: 0.58);
+
+    return material.Center(
+      key: const material.ValueKey<String>('media-collection-empty-state'),
+      child: material.Padding(
+        padding: const material.EdgeInsets.symmetric(horizontal: 32),
+        child: material.Column(
+          mainAxisSize: material.MainAxisSize.min,
+          mainAxisAlignment: material.MainAxisAlignment.center,
+          children: [
+            material.Icon(
+              _icon(),
+              size: 50,
+              color: secondary,
+            ),
+            const material.SizedBox(height: 14),
+            material.Text(
+              content.title,
+              textAlign: material.TextAlign.center,
+              style: const material.TextStyle(
+                fontSize: 18,
+                fontWeight: material.FontWeight.w600,
+              ),
+            ),
+            const material.SizedBox(height: 8),
+            material.Text(
+              content.subtitle,
+              textAlign: material.TextAlign.center,
+              style: material.TextStyle(color: secondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  material.IconData _icon() {
+    return switch (content.icon) {
+      MediaCollectionEmptyIcon.library =>
+        cupertino.CupertinoIcons.rectangle_stack,
+    };
   }
 }

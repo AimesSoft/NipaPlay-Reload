@@ -1,105 +1,145 @@
 part of torrent_download_page;
 
-enum _CupertinoTorrentAction { play, toggle, folder, forget, delete }
+class CupertinoTorrentDownloadView extends StatefulWidget {
+  const CupertinoTorrentDownloadView({super.key, required this.data});
 
-extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
-  Widget _buildCupertinoTorrentPage() {
-    final background = cupertino.CupertinoDynamicColor.resolve(
-      cupertino.CupertinoColors.systemGroupedBackground,
-      context,
-    );
+  final UnifiedTorrentPageViewModel data;
+
+  @override
+  State<CupertinoTorrentDownloadView> createState() =>
+      _CupertinoTorrentDownloadViewState();
+}
+
+class _CupertinoTorrentDownloadViewState
+    extends State<CupertinoTorrentDownloadView> {
+  CupertinoPageActionsController? _pageActionsController;
+
+  UnifiedTorrentPageViewModel get data => widget.data;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPageAction();
+  }
+
+  @override
+  void didUpdateWidget(covariant CupertinoTorrentDownloadView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data.viewMode != data.viewMode ||
+        oldWidget.data.onToggleViewMode != data.onToggleViewMode) {
+      _syncPageAction();
+    }
+  }
+
+  void _syncPageAction() {
+    final controller = CupertinoPageActionsScope.maybeOf(context);
+    if (controller != _pageActionsController) {
+      _pageActionsController?.clear(this);
+      _pageActionsController = controller;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || controller != _pageActionsController) return;
+      controller?.setActions(
+        this,
+        [
+          CupertinoPageAction(
+            id: 'torrent-view-mode',
+            label: data.viewMode == UnifiedTorrentTaskViewMode.cards
+                ? '切换到列表视图'
+                : '切换到图标视图',
+            icon: data.viewMode == UnifiedTorrentTaskViewMode.cards
+                ? cupertino.CupertinoIcons.list_bullet
+                : cupertino.CupertinoIcons.square_grid_2x2,
+            onPressed: data.onToggleViewMode,
+          ),
+        ],
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageActionsController?.clear(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final separator = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.separator,
       context,
     );
-    final visibleTasks = _visibleTasks;
+    final secondary = cupertino.CupertinoDynamicColor.resolve(
+      cupertino.CupertinoColors.secondaryLabel,
+      context,
+    );
 
     return ColoredBox(
-      color: background,
+      color: Colors.transparent,
       child: Column(
         children: [
-          cupertino.SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 116, 4),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '下载器',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  cupertino.CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size.square(40),
-                    onPressed: _toggleViewMode,
-                    child: Icon(
-                      _viewMode == UnifiedTorrentTaskViewMode.cards
-                          ? cupertino.CupertinoIcons.list_bullet
-                          : cupertino.CupertinoIcons.square_grid_2x2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          _buildCupertinoTorrentToolbar(),
+          const CupertinoAppPageHeader(title: '下载器', bottomPadding: 4),
+          _buildToolbar(context),
           ColoredBox(color: separator, child: const SizedBox(height: 0.5)),
           Expanded(
-            child: _isLoading
-                ? const Center(child: cupertino.CupertinoActivityIndicator())
-                : visibleTasks.isEmpty
-                    ? _buildCupertinoTorrentEmpty(_tasks.isNotEmpty)
-                    : _buildCupertinoTaskList(visibleTasks),
+            child: data.isLoading
+                ? Center(
+                    child: cupertino.CupertinoActivityIndicator(
+                      color: secondary,
+                    ),
+                  )
+                : data.visibleTasks.isEmpty
+                    ? _buildEmpty(context)
+                    : _buildTaskList(context),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCupertinoTorrentToolbar() {
+  Widget _buildToolbar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Column(
         children: [
           cupertino.CupertinoSearchTextField(
-            controller: _searchController,
+            controller: data.searchController,
             placeholder: '搜索下载任务',
-            onChanged: _updateSearchQuery,
+            onChanged: data.onSearchChanged,
             onSuffixTap: () {
-              _searchController.clear();
-              _updateSearchQuery('');
+              data.searchController.clear();
+              data.onClearSearch();
             },
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               _cupertinoToolbarButton(
+                context,
                 icon: cupertino.CupertinoIcons.sort_down,
-                label: unifiedTorrentTaskSortLabels[_sort] ?? '排序',
-                onPressed: _showCupertinoSort,
+                label: unifiedTorrentTaskSortLabels[data.sort] ?? '排序',
+                onPressed: () => _showSort(context),
               ),
               const SizedBox(width: 6),
               _cupertinoToolbarButton(
+                context,
                 icon: cupertino.CupertinoIcons.refresh,
-                onPressed: _isBusy ? null : () => _refreshTasks(),
+                onPressed: data.isBusy ? null : data.onRefresh,
               ),
               const Spacer(),
               _cupertinoToolbarButton(
+                context,
                 icon: cupertino.CupertinoIcons.link,
                 label: '添加',
                 filled: true,
-                onPressed: _isBusy ? null : _showAddMagnetDialog,
+                onPressed: data.isBusy ? null : data.onAddMagnet,
               ),
               const SizedBox(width: 6),
               _cupertinoToolbarButton(
+                context,
                 icon: cupertino.CupertinoIcons.doc,
                 label: '种子',
-                onPressed: _isBusy ? null : _pickTorrentFile,
+                onPressed: data.isBusy ? null : data.onPickTorrent,
               ),
             ],
           ),
@@ -108,13 +148,19 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
     );
   }
 
-  Widget _cupertinoToolbarButton({
+  Widget _cupertinoToolbarButton(
+    BuildContext context, {
     required IconData icon,
     String? label,
     required VoidCallback? onPressed,
     bool filled = false,
   }) {
-    final foreground = filled ? cupertino.CupertinoColors.white : null;
+    final foreground = filled
+        ? cupertino.CupertinoColors.white
+        : cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.label,
+            context,
+          );
     return cupertino.CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       minimumSize: Size.zero,
@@ -134,56 +180,45 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
     );
   }
 
-  Future<void> _showCupertinoSort() async {
+  Future<void> _showSort(BuildContext context) async {
     final selected =
-        await showCupertinoModalPopupWithBottomBar<UnifiedTorrentTaskSort>(
+        await CupertinoBottomSheet.showSelection<UnifiedTorrentTaskSort>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('排序方式'),
-        actions: [
-          for (final entry in unifiedTorrentTaskSortLabels.entries)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(entry.key),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (entry.key == _sort) ...[
-                    const Icon(cupertino.CupertinoIcons.check_mark, size: 18),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(entry.value),
-                ],
-              ),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '排序方式',
+      options: [
+        for (final entry in unifiedTorrentTaskSortLabels.entries)
+          CupertinoBottomSheetOption(
+            label: entry.value,
+            value: entry.key,
+            selected: entry.key == data.sort,
+          ),
+      ],
     );
-    if (selected != null) _applySort(selected);
+    if (selected != null) data.onSortChanged(selected);
   }
 
-  Widget _buildCupertinoTaskList(List<TorrentTask> tasks) {
+  Widget _buildTaskList(BuildContext context) {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 84),
-      itemCount: tasks.length,
+      itemCount: data.visibleTasks.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        final task = tasks[index];
-        return _buildCupertinoTaskCard(
-          task,
-          compact: _viewMode == UnifiedTorrentTaskViewMode.list,
+        final item = data.visibleTasks[index];
+        return _buildTaskCard(
+          context,
+          item,
+          compact: data.viewMode == UnifiedTorrentTaskViewMode.list,
         );
       },
     );
   }
 
-  Widget _buildCupertinoTaskCard(
-    TorrentTask task, {
+  Widget _buildTaskCard(
+    BuildContext context,
+    UnifiedTorrentTaskItemViewModel item, {
     required bool compact,
   }) {
+    final task = item.task;
     final cardColor = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.secondarySystemGroupedBackground,
       context,
@@ -196,13 +231,9 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
       cupertino.CupertinoColors.systemRed,
       context,
     );
-    final summary = _scanSummaries[task.autoScanKey];
-    final scanning = _autoScanningTaskKeys.contains(task.autoScanKey);
-    final scanned = _autoScannedCompletedTaskKeys.contains(task.autoScanKey);
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPress: () => _showCupertinoTaskActions(task),
+      onLongPress: () => _showTaskActions(context, item),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: cardColor,
@@ -218,7 +249,7 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
                 children: [
                   Icon(
                     cupertino.CupertinoIcons.cloud_download,
-                    color: AppAccentColors.current,
+                    color: secondary,
                     size: 22,
                   ),
                   const SizedBox(width: 10),
@@ -257,46 +288,47 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
                   cupertino.CupertinoButton(
                     padding: const EdgeInsets.only(left: 8),
                     minimumSize: Size.zero,
-                    onPressed: () => _showCupertinoTaskActions(task),
-                    child: const Icon(
+                    onPressed: () => _showTaskActions(context, item),
+                    child: Icon(
                       cupertino.CupertinoIcons.ellipsis,
                       size: 19,
+                      color: secondary,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              _buildCupertinoTaskProgress(task),
+              _buildTaskProgress(context, task),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  _cupertinoMetric(
+                  _metric(
+                    context,
                     '${(task.progress * 100).toStringAsFixed(1)}%',
                   ),
-                  _cupertinoMetric(
-                    '${_TorrentTaskCard.formatBytes(task.progressBytes)} / '
-                    '${_TorrentTaskCard.formatBytes(task.totalBytes)}',
+                  _metric(
+                    context,
+                    '${formatTorrentBytes(task.progressBytes)} / '
+                    '${formatTorrentBytes(task.totalBytes)}',
                   ),
                   if (!compact)
-                    _cupertinoMetric(
-                      '↓ ${_TorrentTaskCard.formatBytes(task.downloadSpeedBytesPerSecond)}/s',
+                    _metric(
+                      context,
+                      '↓ ${formatTorrentBytes(task.downloadSpeedBytesPerSecond)}/s',
                     ),
                   if (!compact)
-                    _cupertinoMetric(
-                      '↑ ${_TorrentTaskCard.formatBytes(task.uploadSpeedBytesPerSecond)}/s',
+                    _metric(
+                      context,
+                      '↑ ${formatTorrentBytes(task.uploadSpeedBytesPerSecond)}/s',
                     ),
                 ],
               ),
-              if (scanning || summary != null || scanned) ...[
+              if (item.scanStatusText != null) ...[
                 const SizedBox(height: 7),
                 Text(
-                  scanning
-                      ? '正在加入媒体库...'
-                      : (summary?.displayText.isNotEmpty == true
-                          ? summary!.displayText
-                          : '已加入媒体库'),
+                  item.scanStatusText!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: secondary),
@@ -318,7 +350,7 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
     );
   }
 
-  Widget _buildCupertinoTaskProgress(TorrentTask task) {
+  Widget _buildTaskProgress(BuildContext context, TorrentTask task) {
     final background = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.systemGrey4,
       context,
@@ -328,7 +360,10 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
             cupertino.CupertinoColors.systemRed,
             context,
           )
-        : AppAccentColors.current;
+        : cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.systemGrey,
+            context,
+          );
     return SizedBox(
       height: 5,
       child: ClipRRect(
@@ -347,7 +382,7 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
     );
   }
 
-  Widget _cupertinoMetric(String text) {
+  Widget _metric(BuildContext context, String text) {
     return Text(
       text,
       style: TextStyle(
@@ -360,104 +395,28 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
     );
   }
 
-  Future<void> _showCupertinoTaskActions(TorrentTask task) async {
-    final action =
-        await showCupertinoModalPopupWithBottomBar<_CupertinoTorrentAction>(
+  Future<void> _showTaskActions(
+    BuildContext context,
+    UnifiedTorrentTaskItemViewModel item,
+  ) async {
+    final selected =
+        await CupertinoBottomSheet.showSelection<UnifiedTorrentTaskAction>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: Text(task.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (task.finished)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () =>
-                  Navigator.of(sheetContext).pop(_CupertinoTorrentAction.play),
-              child: const Text('播放'),
-            ),
-          if (!task.finished)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext)
-                  .pop(_CupertinoTorrentAction.toggle),
-              child: Text(task.isPaused ? '继续下载' : '暂停下载'),
-            ),
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () =>
-                Navigator.of(sheetContext).pop(_CupertinoTorrentAction.folder),
-            child: const Text('查看文件夹'),
+      title: item.task.name,
+      options: [
+        for (final action in item.actions)
+          CupertinoBottomSheetOption(
+            label: action.label,
+            value: action.action,
+            destructive: action.destructive,
           ),
-          cupertino.CupertinoActionSheetAction(
-            onPressed: () =>
-                Navigator.of(sheetContext).pop(_CupertinoTorrentAction.forget),
-            child: const Text('移除任务'),
-          ),
-          cupertino.CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () =>
-                Navigator.of(sheetContext).pop(_CupertinoTorrentAction.delete),
-            child: const Text('删除任务和文件'),
-          ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      ],
     );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case _CupertinoTorrentAction.play:
-        await _playTask(task);
-        break;
-      case _CupertinoTorrentAction.toggle:
-        await _toggleTask(task);
-        break;
-      case _CupertinoTorrentAction.folder:
-        await _openTaskFolder(task);
-        break;
-      case _CupertinoTorrentAction.forget:
-        await _forgetTask(task);
-        break;
-      case _CupertinoTorrentAction.delete:
-        await _deleteTask(task);
-        break;
-    }
+    if (selected == null) return;
+    item.action(selected)?.onPressed();
   }
 
-  Future<TorrentTaskFile?> _showCupertinoPlayableFiles(
-    List<TorrentTaskFile> files,
-  ) {
-    return showCupertinoModalPopupWithBottomBar<TorrentTaskFile>(
-      context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('选择要播放的文件'),
-        actions: [
-          for (final file in files)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(file),
-              child: Column(
-                children: [
-                  Text(
-                    file.displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _TorrentTaskCard.formatBytes(file.length),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCupertinoTorrentEmpty(bool filtered) {
+  Widget _buildEmpty(BuildContext context) {
     final secondary = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.secondaryLabel,
       context,
@@ -472,10 +431,10 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
             color: secondary,
           ),
           const SizedBox(height: 12),
-          Text(filtered ? '没有匹配的下载任务' : '暂无下载任务'),
+          Text(data.emptyTitle),
           const SizedBox(height: 5),
           Text(
-            filtered ? '换一个关键词或清空搜索后再查看' : '添加 magnet 链接或种子文件开始下载',
+            data.emptyDescription,
             style: TextStyle(fontSize: 13, color: secondary),
           ),
         ],
@@ -484,8 +443,13 @@ extension _CupertinoTorrentDownloadControls on _TorrentDownloadPageState {
   }
 }
 
-extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
-  Widget _buildCupertinoAddMagnetSheet() {
+class CupertinoAddTorrentView extends StatelessWidget {
+  const CupertinoAddTorrentView({super.key, required this.data});
+
+  final AddTorrentDialogViewModel data;
+
+  @override
+  Widget build(BuildContext context) {
     final background = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.systemGroupedBackground,
       context,
@@ -503,23 +467,23 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
           padding: EdgeInsets.fromLTRB(16, topSpacing + 8, 16, bottom),
           sliver: SliverList.list(
             children: [
-              Text('磁力链接', style: TextStyle(fontSize: 13, color: secondary)),
+              Text(
+                AddTorrentDialogViewModel.magnetLabel,
+                style: TextStyle(fontSize: 13, color: secondary),
+              ),
               const SizedBox(height: 6),
               cupertino.CupertinoTextField(
-                controller: _magnetController,
-                placeholder: 'magnet:?xt=urn:btih:...',
+                controller: data.magnetController,
+                placeholder: AddTorrentDialogViewModel.magnetPlaceholder,
                 minLines: 2,
                 maxLines: 4,
-                onChanged: (_) {
-                  if (_preview == null && _error == null) return;
-                  _updateCupertinoForm(() {
-                    _preview = null;
-                    _error = null;
-                  });
-                },
+                onChanged: data.onMagnetChanged,
               ),
               const SizedBox(height: 16),
-              Text('下载目录', style: TextStyle(fontSize: 13, color: secondary)),
+              Text(
+                AddTorrentDialogViewModel.directoryLabel,
+                style: TextStyle(fontSize: 13, color: secondary),
+              ),
               const SizedBox(height: 6),
               DecoratedBox(
                 decoration: BoxDecoration(
@@ -535,9 +499,9 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
                     children: [
                       Expanded(
                         child: Text(
-                          _downloadDirectory.isEmpty
+                          data.downloadDirectory.isEmpty
                               ? '尚未选择目录'
-                              : _downloadDirectory,
+                              : data.downloadDirectory,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 13),
@@ -545,30 +509,30 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
                       ),
                       cupertino.CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
-                        onPressed: _chooseDirectory,
+                        onPressed: data.onChooseDirectory,
                         child: const Text('选择'),
                       ),
                     ],
                   ),
                 ),
               ),
-              if (_recentDirectories.isNotEmpty) ...[
+              if (data.recentDirectories.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 38,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: _recentDirectories.length,
+                    itemCount: data.recentDirectories.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 6),
                     itemBuilder: (context, index) {
-                      final directory = _recentDirectories[index];
+                      final directory = data.recentDirectories[index];
                       return cupertino.CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         color: cupertino.CupertinoDynamicColor.resolve(
                           cupertino.CupertinoColors.systemGrey5,
                           context,
                         ),
-                        onPressed: () => _selectDirectory(directory),
+                        onPressed: () => data.onSelectDirectory(directory),
                         child: Text(
                           p.basename(directory),
                           maxLines: 1,
@@ -583,31 +547,28 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  const Expanded(child: Text('为任务创建独立文件夹')),
+                  const Expanded(
+                    child: Text(AddTorrentDialogViewModel.createFolderLabel),
+                  ),
                   cupertino.CupertinoSwitch(
-                    value: _createFolderForTask,
-                    onChanged: (value) {
-                      _updateCupertinoForm(() {
-                        _createFolderForTask = value;
-                        _preview = null;
-                      });
-                    },
+                    value: data.createFolderForTask,
+                    onChanged: data.onCreateFolderChanged,
                   ),
                 ],
               ),
-              if (_error != null) ...[
+              if (data.error != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  _error!,
+                  data.error!,
                   style: const TextStyle(
                     color: cupertino.CupertinoColors.systemRed,
                     fontSize: 13,
                   ),
                 ),
               ],
-              if (_preview != null) ...[
+              if (data.preview != null) ...[
                 const SizedBox(height: 16),
-                _buildCupertinoPreview(_preview!),
+                _buildPreview(context, data.preview!),
               ],
               const SizedBox(height: 18),
               Row(
@@ -618,17 +579,16 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
                         cupertino.CupertinoColors.systemGrey5,
                         context,
                       ),
-                      onPressed: _isPreviewing ? null : _previewMagnet,
-                      child: _isPreviewing
+                      onPressed: data.isPreviewing ? null : data.onPreview,
+                      child: data.isPreviewing
                           ? const cupertino.CupertinoActivityIndicator()
-                          : Text(_preview == null ? '预览' : '重新预览'),
+                          : Text(data.previewLabel),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: cupertino.CupertinoButton.filled(
-                      onPressed:
-                          _preview == null || _isPreviewing ? null : _confirm,
+                      onPressed: data.canConfirm ? data.onConfirm : null,
                       child: const Text('添加任务'),
                     ),
                   ),
@@ -641,7 +601,10 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
     );
   }
 
-  Widget _buildCupertinoPreview(TorrentMagnetPreview preview) {
+  Widget _buildPreview(
+    BuildContext context,
+    TorrentMagnetPreview preview,
+  ) {
     final secondary = cupertino.CupertinoDynamicColor.resolve(
       cupertino.CupertinoColors.secondaryLabel,
       context,
@@ -667,7 +630,7 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
             const SizedBox(height: 5),
             Text(
               '${preview.files.length} 个文件 · '
-              '${_TorrentTaskCard.formatBytes(preview.totalSize)}',
+              '${formatTorrentBytes(preview.totalSize)}',
               style: TextStyle(fontSize: 12, color: secondary),
             ),
             if (preview.files.isNotEmpty) ...[
@@ -689,7 +652,7 @@ extension _CupertinoAddMagnetControls on _AddMagnetDialogState {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _TorrentTaskCard.formatBytes(file.length),
+                        formatTorrentBytes(file.length),
                         style: TextStyle(fontSize: 11, color: secondary),
                       ),
                     ],

@@ -1,5 +1,5 @@
 PODS:
-  - adaptive_platform_ui (0.1.0):
+  - adaptive_platform_ui (0.1.1):
     - Flutter
   - charset_converter (0.0.1):
     - Flutter
@@ -60,7 +60,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/rust_lib_nipaplay/ios"
 
 SPEC CHECKSUMS:
-  adaptive_platform_ui: f54f620666d1797636f9ef06f49137ef2cc13611
+  adaptive_platform_ui: b3303b57b350e6b7d48f86eef86f044da7eda88f
   charset_converter: 82bc1d2e3c70dcb51bf769e9772e3ae5b2571695
   erika_flutter: d06851b1ab2694767b0f479fba59c77442397389
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467

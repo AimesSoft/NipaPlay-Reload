@@ -93,7 +93,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.appreciationCode,
-              subtitle: l10n.appreciationImageLoadFailed,
+              subtitle: l10n.appreciationCodeHint,
               icon: Ionicons.qr_code,
               phoneIcon: cupertino.CupertinoIcons.qrcode,
               onTap: _showAppreciationQR,

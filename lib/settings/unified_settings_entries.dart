@@ -6,6 +6,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -148,6 +149,9 @@ List<UnifiedSettingEntry> buildUnifiedSettingEntries(
   material.BuildContext context, {
   required UnifiedSettingsSurface surface,
 }) {
+  // Plugin capabilities can change while the settings sheet keeps its root
+  // page alive. Observe them here so every surface regenerates the same list.
+  context.watch<PluginService>();
   return _buildUnifiedSettingEntryDefinitions()
       .where((entry) => entry.isVisible(context, surface))
       .toList();

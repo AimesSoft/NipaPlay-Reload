@@ -238,7 +238,6 @@ class _NipaplayPlaybackEntryRendererState
                     onPressed: data.onSelectFile,
                     desktopIcon: material.Icons.folder_open_rounded,
                     phoneIcon: cupertino.CupertinoIcons.folder_open,
-                    emphasis: AdaptiveMediaActionEmphasis.primary,
                   ),
                   const material.SizedBox(height: 8),
                   material.Text(

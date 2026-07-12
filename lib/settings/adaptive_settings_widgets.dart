@@ -1,19 +1,12 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show
-        AdaptivePopupMenuButton,
-        AdaptivePopupMenuEntry,
-        AdaptivePopupMenuItem,
-        AdaptiveSlider,
-        AdaptiveSwitch,
-        PlatformInfo,
-        PopupButtonStyle;
+    show AdaptiveSlider, AdaptiveSwitch;
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -385,27 +378,31 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
     final label =
         selected?.title ?? (items.isNotEmpty ? items.first.title : '');
-    final popupItems = items
-        .map<AdaptivePopupMenuEntry>(
-          (item) => AdaptivePopupMenuItem<T>(
-            label: item.title,
-            value: item.value,
-            enabled: item.enabled,
-          ),
-        )
-        .toList();
-
-    return AdaptivePopupMenuButton.widget<T>(
-      items: popupItems,
-      buttonStyle: PopupButtonStyle.gray,
+    return cupertino.CupertinoButton(
+      padding: material.EdgeInsets.zero,
+      minimumSize: material.Size.zero,
+      onPressed: items.isEmpty
+          ? null
+          : () async {
+              final selectedIndex =
+                  await CupertinoBottomSheet.showSelection<int>(
+                context: context,
+                title: title,
+                options: [
+                  for (final entry in items.asMap().entries)
+                    CupertinoBottomSheetOption(
+                      label: entry.value.title,
+                      value: entry.key,
+                      selected: entry.value.isSelected,
+                      enabled: entry.value.enabled,
+                    ),
+                ],
+              );
+              if (selectedIndex != null) {
+                onDropdownChanged?.call(items[selectedIndex].value);
+              }
+            },
       child: _PhoneMenuChip(label: label),
-      onSelected: (index, entry) {
-        if (!entry.enabled) {
-          return;
-        }
-        final value = entry.value ?? items[index].value;
-        onDropdownChanged?.call(value);
-      },
     );
   }
 
@@ -457,36 +454,14 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     String? label,
   }) {
     final onChanged = enabled ? onSliderChanged : null;
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptiveSlider(
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        activeColor: AppAccentColors.current,
-        onChanged: onChanged,
-      );
-    }
-
-    final accentColor = fluent.AccentColor.swatch({
-      'normal': AppAccentColors.current,
-      'default': AppAccentColors.current,
-    });
-
-    return fluent.FluentTheme(
-      data: fluent.FluentThemeData(
-        brightness: material.Theme.of(context).brightness,
-        accentColor: accentColor,
-      ),
-      child: fluent.Slider(
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        onChanged: onChanged,
-      ),
+    return AdaptiveSlider(
+      value: value,
+      min: min,
+      max: max,
+      divisions: divisions,
+      label: label,
+      activeColor: AppAccentColors.current,
+      onChanged: onChanged,
     );
   }
 

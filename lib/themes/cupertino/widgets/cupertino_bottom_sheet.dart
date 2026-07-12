@@ -4,6 +4,26 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 
+class CupertinoBottomSheetOption<T> {
+  const CupertinoBottomSheetOption({
+    required this.label,
+    required this.value,
+    this.subtitle,
+    this.icon,
+    this.selected = false,
+    this.enabled = true,
+    this.destructive = false,
+  });
+
+  final String label;
+  final T value;
+  final String? subtitle;
+  final IconData? icon;
+  final bool selected;
+  final bool enabled;
+  final bool destructive;
+}
+
 /// 通用的 Cupertino 风格上拉菜单容器
 /// 提供标准的上拉菜单外观和行为，内容完全可自定义
 class CupertinoBottomSheet extends StatelessWidget {
@@ -87,6 +107,42 @@ class CupertinoBottomSheet extends StatelessWidget {
         effectivePageController.dispose();
       }
     }
+  }
+
+  static Future<T?> showSelection<T>({
+    required BuildContext context,
+    required String title,
+    required List<CupertinoBottomSheetOption<T>> options,
+    double? heightRatio,
+    bool hideBottomBar = true,
+  }) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final contentHeight = 112.0 + options.length * 52.0;
+    final effectiveHeightRatio = heightRatio ??
+        (contentHeight / screenHeight).clamp(0.3, 0.82).toDouble();
+
+    return show<T>(
+      context: context,
+      title: title,
+      heightRatio: effectiveHeightRatio,
+      hideBottomBar: hideBottomBar,
+      child: CupertinoBottomSheetContentLayout(
+        sliversBuilder: (context, topSpacing) => [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(12, topSpacing + 4, 12, 24),
+            sliver: SliverToBoxAdapter(
+              child: CupertinoListSection.insetGrouped(
+                margin: EdgeInsets.zero,
+                children: [
+                  for (final option in options)
+                    _CupertinoBottomSheetOptionTile<T>(option: option),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 显示带内部导航栈的上拉菜单。
@@ -173,6 +229,10 @@ class CupertinoBottomSheet extends StatelessWidget {
             : (showCloseButton ? _contentTopInsetWithClose : 0);
     final double contentTopSpacing =
         !displayHeader && floatingTitle ? _floatingContentTopSpacing : 0;
+    final sheetBackground = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
 
     return CupertinoBottomSheetScope(
       contentTopInset: contentTopInset,
@@ -187,16 +247,18 @@ class CupertinoBottomSheet extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           child: Container(
             height: maxHeight,
-            color: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemGroupedBackground,
-              context,
-            ),
+            color: sheetBackground,
             child: SafeArea(
               top: false,
               bottom: false,
               child: Stack(
                 children: [
                   Positioned.fill(child: content),
+                  if (contentTopInset > 0)
+                    _buildTopScrim(
+                      backgroundColor: sheetBackground,
+                      height: contentTopInset,
+                    ),
                   if (floatingTitle && hasTitle)
                     _buildFloatingTitle(
                       context,
@@ -218,6 +280,34 @@ class CupertinoBottomSheet extends StatelessWidget {
                     ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopScrim({
+    required Color backgroundColor,
+    required double height,
+  }) {
+    return Positioned(
+      key: const ValueKey<String>('cupertino-bottom-sheet-top-scrim'),
+      top: 0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                backgroundColor,
+                backgroundColor.withValues(alpha: 0.0),
+              ],
+              stops: const [0.0, 1.0],
             ),
           ),
         ),
@@ -365,6 +455,50 @@ class CupertinoBottomSheet extends StatelessWidget {
   static const double _floatingContentTopInset = 28;
   static const double _contentTopInsetWithClose = 28;
   static const double _floatingContentTopSpacing = 8;
+}
+
+class _CupertinoBottomSheetOptionTile<T> extends StatelessWidget {
+  const _CupertinoBottomSheetOptionTile({required this.option});
+
+  final CupertinoBottomSheetOption<T> option;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor = option.destructive
+        ? CupertinoColors.destructiveRed
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final disabledColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.tertiaryLabel,
+      context,
+    );
+
+    return CupertinoListTile(
+      leading: option.icon == null
+          ? null
+          : Icon(
+              option.icon,
+              size: 20,
+              color: option.enabled ? labelColor : disabledColor,
+            ),
+      title: Text(
+        option.label,
+        style: TextStyle(
+          color: option.enabled ? labelColor : disabledColor,
+        ),
+      ),
+      subtitle: option.subtitle == null ? null : Text(option.subtitle!),
+      trailing: option.selected
+          ? Icon(
+              CupertinoIcons.check_mark,
+              size: 18,
+              color: CupertinoTheme.of(context).primaryColor,
+            )
+          : null,
+      onTap: option.enabled
+          ? () => Navigator.of(context).pop<T>(option.value)
+          : null,
+    );
+  }
 }
 
 class CupertinoBottomSheetPageController extends ChangeNotifier {
@@ -607,44 +741,18 @@ class CupertinoBottomSheetContentLayout extends StatelessWidget {
     final slivers = sliversBuilder(context, contentTopSpacing);
     return ColoredBox(
       color: effectiveBackground,
-      child: Stack(
-        children: [
-          CustomScrollView(
-            controller: controller,
-            physics: physics ??
-                const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-            slivers: [
-              if (contentTopInset > 0)
-                SliverToBoxAdapter(
-                  child: SizedBox(height: contentTopInset / 1.3),
-                ),
-              ...slivers,
-            ],
-          ),
-          if (contentTopInset > 0)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: Container(
-                  height: contentTopInset,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        effectiveBackground,
-                        effectiveBackground.withValues(alpha: 0.0),
-                      ],
-                      stops: const [0.0, 1.0],
-                    ),
-                  ),
-                ),
-              ),
+      child: CustomScrollView(
+        controller: controller,
+        physics: physics ??
+            const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
             ),
+        slivers: [
+          if (contentTopInset > 0)
+            SliverToBoxAdapter(
+              child: SizedBox(height: contentTopInset / 1.3),
+            ),
+          ...slivers,
         ],
       ),
     );

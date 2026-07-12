@@ -40,6 +40,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -1283,31 +1284,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       if (selected != null) _applySortOption(selected);
       return;
     }
-    final selected = await cupertino.showCupertinoModalPopup<int>(
+    final selected = await CupertinoBottomSheet.showSelection<int>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('排序'),
-        actions: [
-          for (final entry in _sortOptionLabels.asMap().entries)
-            cupertino.CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(sheetContext).pop(entry.key),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(entry.value),
-                  if (entry.key == _sortOption) ...[
-                    const SizedBox(width: 8),
-                    const Icon(cupertino.CupertinoIcons.check_mark, size: 16),
-                  ],
-                ],
-              ),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '排序',
+      options: [
+        for (final entry in _sortOptionLabels.asMap().entries)
+          CupertinoBottomSheetOption(
+            label: entry.value,
+            value: entry.key,
+            selected: entry.key == _sortOption,
+          ),
+      ],
     );
     if (selected != null) {
       _applySortOption(selected);
@@ -2715,23 +2702,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final enabled =
         actions.where((action) => action.onPressed != null).toList();
     final selected =
-        await cupertino.showCupertinoModalPopup<LocalLibraryActionControl>(
+        await CupertinoBottomSheet.showSelection<LocalLibraryActionControl>(
       context: context,
-      builder: (sheetContext) => cupertino.CupertinoActionSheet(
-        title: const Text('库管理操作'),
-        actions: [
-          for (final action in enabled)
-            cupertino.CupertinoActionSheetAction(
-              isDestructiveAction: action.isDestructive,
-              onPressed: () => Navigator.of(sheetContext).pop(action),
-              child: Text(action.label),
-            ),
-        ],
-        cancelButton: cupertino.CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '库管理操作',
+      options: [
+        for (final action in enabled)
+          CupertinoBottomSheetOption(
+            label: action.label,
+            value: action,
+            destructive: action.isDestructive,
+          ),
+      ],
     );
     selected?.onPressed?.call();
   }

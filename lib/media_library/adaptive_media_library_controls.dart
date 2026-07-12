@@ -1,18 +1,20 @@
-import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
+import 'package:nipaplay/media_library/media_source_option.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_source_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_library_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -260,6 +262,10 @@ class _DesktopSectionButton extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
+    const labelStyle = material.TextStyle(
+      fontSize: 18,
+      fontWeight: material.FontWeight.w600,
+    );
     final color = selected
         ? AppAccentColors.current
         : material.Theme.of(context)
@@ -281,20 +287,14 @@ class _DesktopSectionButton extends material.StatelessWidget {
               children: [
                 material.Icon(_desktopIcon(section), size: 18),
                 const material.SizedBox(width: 7),
-                material.Text(section.label,
-                    style: const material.TextStyle(
-                        fontSize: 18, fontWeight: material.FontWeight.w600)),
+                material.Text(section.label, style: labelStyle),
               ],
             ),
             const material.SizedBox(height: 8),
-            material.AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              width: selected ? 32 : 0,
-              height: 3,
-              decoration: material.BoxDecoration(
-                color: AppAccentColors.current,
-                borderRadius: material.BorderRadius.circular(2),
-              ),
+            NipaplayLabelTabIndicator(
+              label: section.label,
+              labelStyle: labelStyle,
+              selected: selected,
             ),
           ],
         ),
@@ -362,37 +362,14 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
 
 Future<String?> showAdaptiveMediaSourcePicker(material.BuildContext context) {
   if (AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone) {
-    return MediaServerSelectionSheet.show(context);
+    return MediaServerSelectionSheet.show(
+      context,
+      options: mediaSourceOptions,
+    );
   }
 
-  return cupertino.showCupertinoModalPopup<String>(
-    context: context,
-    builder: (sheetContext) => cupertino.CupertinoActionSheet(
-      title: const material.Text('添加媒体'),
-      actions: [
-        _mediaSourceAction(sheetContext, 'local_folder', '本地文件夹'),
-        _mediaSourceAction(sheetContext, 'nipaplay', 'NipaPlay 共享媒体库'),
-        _mediaSourceAction(sheetContext, 'jellyfin', 'Jellyfin'),
-        _mediaSourceAction(sheetContext, 'emby', 'Emby'),
-        _mediaSourceAction(sheetContext, 'dandanplay', '弹弹play'),
-        _mediaSourceAction(sheetContext, 'webdav', 'WebDAV'),
-        _mediaSourceAction(sheetContext, 'smb', 'SMB'),
-      ],
-      cancelButton: cupertino.CupertinoActionSheetAction(
-        onPressed: () => material.Navigator.of(sheetContext).pop(),
-        child: const material.Text('取消'),
-      ),
-    ),
-  );
-}
-
-cupertino.CupertinoActionSheetAction _mediaSourceAction(
-  material.BuildContext context,
-  String id,
-  String label,
-) {
-  return cupertino.CupertinoActionSheetAction(
-    onPressed: () => material.Navigator.of(context).pop(id),
-    child: material.Text(label),
+  return CupertinoMediaSourceSheet.show(
+    context,
+    options: mediaSourceOptions,
   );
 }
