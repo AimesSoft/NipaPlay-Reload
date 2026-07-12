@@ -224,6 +224,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     );
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
+    final glassTabBarBottom = bottomInset > 14 ? bottomInset - 8 : 6.0;
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBar, _) {
@@ -296,22 +297,29 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         // Older iOS and other phone platforms render the same tab semantics
         // with the Flutter liquid-glass implementation.
         return CupertinoPageScaffold(
-          child: Column(
+          backgroundColor: const Color(0x00000000),
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Expanded(child: body),
+              Positioned.fill(child: body),
               if (bottomBar.isBottomBarVisible)
-                GlassTabBar.bottom(
-                  tabs: _buildGlassTabs(context, pages),
-                  selectedIndex: selectedIndex,
-                  onTabSelected: _selectIndex,
-                  horizontalPadding: 12,
-                  verticalPadding: bottomInset > 0 ? 8 : 6,
-                  barHeight: tabBarHeight,
-                  selectedIconColor: activeColor,
-                  selectedLabelColor: activeColor,
-                  unselectedIconColor: inactiveColor,
-                  unselectedLabelColor: inactiveColor,
-                  quality: GlassQuality.standard,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: glassTabBarBottom,
+                  child: GlassTabBar.bottom(
+                    tabs: _buildGlassTabs(context, pages),
+                    selectedIndex: selectedIndex,
+                    onTabSelected: _selectIndex,
+                    horizontalPadding: 12,
+                    verticalPadding: 0,
+                    barHeight: tabBarHeight,
+                    selectedIconColor: activeColor,
+                    selectedLabelColor: activeColor,
+                    unselectedIconColor: inactiveColor,
+                    unselectedLabelColor: inactiveColor,
+                    quality: GlassQuality.standard,
+                  ),
                 ),
             ],
           ),

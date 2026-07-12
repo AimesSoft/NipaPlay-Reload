@@ -1288,6 +1288,11 @@ void main() {
       expect(bridge, contains(control));
     }
     expect(mainPage, contains('GlassTabBar.bottom('));
+    expect(mainPage, contains('backgroundColor: const Color(0x00000000)'));
+    expect(mainPage, contains('Positioned.fill(child: body)'));
+    expect(mainPage, contains('bottom: glassTabBarBottom'));
+    expect(mainPage, contains('verticalPadding: 0'));
+    expect(mainPage, isNot(contains('Expanded(child: body)')));
     expect(nativePage, contains('GlassScaffold('));
     expect(nativePage, contains('GlassAppBar('));
     expect(settings, isNot(contains('fluent.Slider(')));
