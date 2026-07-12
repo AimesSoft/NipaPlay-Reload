@@ -44,16 +44,23 @@ class PluginService extends ChangeNotifier {
   static const String _loadedFilePrefix = 'file:';
 
   static bool _forceEnableDownloader = false;
+  static bool _hasStoredDownloaderOverride = false;
 
   static void setForceEnableDownloader(bool value) {
+    _applyDownloaderOverride(value);
+    unawaited(_saveDownloaderOverride(value));
+  }
+
+  static void _applyDownloaderOverride(bool value) {
     _forceEnableDownloader = value;
-    _saveDownloaderOverride(value);
+    _hasStoredDownloaderOverride = true;
   }
 
   static bool get forceEnableDownloader => _forceEnableDownloader;
 
   static Future<void> loadDownloaderOverride() async {
     final prefs = await SharedPreferences.getInstance();
+    _hasStoredDownloaderOverride = prefs.containsKey(_downloaderOverrideKey);
     _forceEnableDownloader = prefs.getBool(_downloaderOverrideKey) ?? false;
   }
 
@@ -78,6 +85,7 @@ class PluginService extends ChangeNotifier {
   final Map<String, String> _scriptByPluginId = <String, String>{};
   final Map<String, String> _textSettingValues = <String, String>{};
   final Map<String, bool> _switchSettingValues = <String, bool>{};
+  final Map<String, String> _pluginStorageValues = <String, String>{};
   final PluginStorage _pluginStorage = createPluginStorage();
   final PluginEventBus _eventBus;
 
@@ -181,6 +189,20 @@ class PluginService extends ChangeNotifier {
           _switchSettingValues[key] = saved;
         } else if (entry.enabled != null) {
           _switchSettingValues[key] = entry.enabled!;
+        }
+      }
+    }
+  }
+
+  Future<void> _loadPluginStorageValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final plugin in _plugins) {
+      final prefix = 'plugin_${plugin.manifest.id}_';
+      for (final key in prefs.getKeys()) {
+        if (!key.startsWith(prefix)) continue;
+        final value = prefs.getString(key);
+        if (value != null) {
+          _pluginStorageValues[key] = value;
         }
       }
     }
@@ -509,6 +531,7 @@ class PluginService extends ChangeNotifier {
         if (callArgs.length >= 2) {
           final key = 'plugin_${pluginId}_${callArgs[0]}';
           final value = callArgs[1]?.toString() ?? '';
+          _pluginStorageValues[key] = value;
           unawaited(SharedPreferences.getInstance().then(
             (prefs) => prefs.setString(key, value),
           ));
@@ -518,14 +541,13 @@ class PluginService extends ChangeNotifier {
       case 'storageGet':
         if (callArgs.isNotEmpty) {
           final key = 'plugin_${pluginId}_${callArgs[0]}';
-          // 同步桥接无法 await，用已缓存的值或返回 null
-          // 插件应仅在初始化时读取，此时值应已加载
-          return null;
+          return _pluginStorageValues[key];
         }
         return null;
       case 'storageRemove':
         if (callArgs.isNotEmpty) {
           final key = 'plugin_${pluginId}_${callArgs[0]}';
+          _pluginStorageValues.remove(key);
           unawaited(SharedPreferences.getInstance().then(
             (prefs) => prefs.remove(key),
           ));
@@ -533,10 +555,11 @@ class PluginService extends ChangeNotifier {
         }
         return false;
       case 'storageClear':
+        final prefix = 'plugin_${pluginId}_';
+        _pluginStorageValues.removeWhere((key, _) => key.startsWith(prefix));
         unawaited(SharedPreferences.getInstance().then((prefs) async {
-          final keys = prefs.getKeys()
-              .where((k) => k.startsWith('plugin_${pluginId}_'))
-              .toList();
+          final keys =
+              prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
           for (final k in keys) {
             await prefs.remove(k);
           }
@@ -691,6 +714,7 @@ class PluginService extends ChangeNotifier {
     await _disposeAllRuntimes();
     _plugins.clear();
     _scriptByPluginId.clear();
+    _pluginStorageValues.clear();
 
     final enabledIds = await _loadEnabledIds();
     final discoveredPlugins = await _discoverPlugins();
@@ -725,11 +749,21 @@ class PluginService extends ChangeNotifier {
       return;
     }
 
+    final hasEnabledDownloaderUnlock = _plugins.any(
+      (plugin) =>
+          plugin.enabled && _isDownloaderUnlockPluginId(plugin.manifest.id),
+    );
+    if (hasEnabledDownloaderUnlock && !_hasStoredDownloaderOverride) {
+      _applyDownloaderOverride(true);
+      await _saveDownloaderOverride(true);
+    }
+
     // 关键：必须在加载运行时、触发 pluginOnInitialize 之前，先把用户保存的设置
     // 读入内存。否则插件初始化时读取到的是空值，只能回退到默认值——表现为打开软件
     // 后插件用默认配置生效，必须到设置里关闭再打开才读取到真实配置。
     await _loadTextSettingValues();
     await _loadSwitchSettingValues();
+    await _loadPluginStorageValues();
 
     // 第二遍：加载运行时并触发 pluginOnInitialize，此时设置已就绪。
     for (final plugin in _plugins) {
@@ -792,7 +826,14 @@ class PluginService extends ChangeNotifier {
         .toList();
   }
 
-  static const String _downloaderUnlockPluginId = 'custom.downloader_unlock';
+  static const Set<String> _downloaderUnlockPluginIds = <String>{
+    'downloader_unlock',
+    'custom.downloader_unlock',
+  };
+
+  static bool _isDownloaderUnlockPluginId(String pluginId) {
+    return _downloaderUnlockPluginIds.contains(pluginId);
+  }
 
   Future<void> setPluginEnabled(String pluginId, bool enabled) async {
     final index =
@@ -812,7 +853,13 @@ class PluginService extends ChangeNotifier {
       blockWords: enabled ? current.blockWords : const <String>[],
       clearErrorMessage: !enabled,
     );
+    if (_isDownloaderUnlockPluginId(pluginId)) {
+      _applyDownloaderOverride(enabled);
+    }
     notifyListeners();
+    if (_isDownloaderUnlockPluginId(pluginId)) {
+      await _saveDownloaderOverride(enabled);
+    }
 
     if (enabled) {
       await _loadPluginRuntime(pluginId);
@@ -820,11 +867,6 @@ class PluginService extends ChangeNotifier {
     } else {
       await _invokeLifecycleEvent(pluginId, 'destroy');
       await _unloadPluginRuntime(pluginId);
-    }
-
-    if (pluginId == _downloaderUnlockPluginId) {
-      setForceEnableDownloader(enabled);
-      notifyListeners();
     }
 
     final enabledIds = _plugins

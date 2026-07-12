@@ -280,6 +280,25 @@ void main() {
     );
   });
 
+  test('downloader unlock plugin drives one persistent visible capability', () {
+    final source = File('lib/plugins/plugin_service.dart').readAsStringSync();
+
+    expect(source, contains("'downloader_unlock'"));
+    expect(source, contains("'custom.downloader_unlock'"));
+    expect(source, contains('hasEnabledDownloaderUnlock'));
+    expect(source, contains('!_hasStoredDownloaderOverride'));
+    expect(source, contains('await _saveDownloaderOverride(enabled)'));
+    expect(source, contains('return _pluginStorageValues[key]'));
+    expect(source, contains('await _loadPluginStorageValues()'));
+    expect(
+      source,
+      isNot(contains(
+        "static const String _downloaderUnlockPluginId = "
+        "'custom.downloader_unlock'",
+      )),
+    );
+  });
+
   test('home renderers consume one ordered semantic component list', () {
     SharedPreferences.setMockInitialValues(const {});
     final settings = HomeSectionsSettingsProvider();
