@@ -19,6 +19,32 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:provider/provider.dart';
 
+const _lightPhoneNavigationGlassSettings = LiquidGlassSettings(
+  thickness: 30,
+  blur: 6,
+  chromaticAberration: 0.2,
+  lightIntensity: 0.62,
+  refractiveIndex: 1.5,
+  saturation: 1.05,
+  ambientStrength: 0.65,
+  glassColor: Color(0x70FFFFFF),
+  backerColor: Color(0xA6FFFFFF),
+  whitenStrength: 0.25,
+  whitenGated: false,
+);
+
+const _darkPhoneNavigationGlassSettings = LiquidGlassSettings(
+  thickness: 30,
+  blur: 6,
+  chromaticAberration: 0.2,
+  lightIntensity: 0.45,
+  refractiveIndex: 1.5,
+  saturation: 0.9,
+  ambientStrength: 0.35,
+  glassColor: Color(0x52000000),
+  backerColor: Color(0x99000000),
+);
+
 class CupertinoMainPage extends StatefulWidget {
   const CupertinoMainPage({super.key, this.launchFilePath});
 
@@ -174,7 +200,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     return pages
         .map(
           (page) => BottomNavigationBarItem(
-            icon: Icon(page.phoneIcon),
+            icon: Icon(page.phoneActiveIcon),
             activeIcon: Icon(page.phoneActiveIcon),
             label: page.title(context.l10n),
           ),
@@ -189,7 +215,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     return pages
         .map(
           (page) => AdaptiveNavigationDestination(
-            icon: page.phoneSymbol,
+            icon: page.phoneActiveSymbol,
             selectedIcon: page.phoneActiveSymbol,
             label: page.title(context.l10n),
           ),
@@ -204,7 +230,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     return pages
         .map(
           (page) => GlassTab(
-            icon: Icon(page.phoneIcon),
+            icon: Icon(page.phoneActiveIcon),
             activeIcon: Icon(page.phoneActiveIcon),
             label: page.title(context.l10n),
           ),
@@ -225,6 +251,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
     final glassTabBarBottom = bottomInset > 14 ? bottomInset - 8 : 6.0;
+    final glassTabBarSettings =
+        CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? _lightPhoneNavigationGlassSettings
+            : _darkPhoneNavigationGlassSettings;
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBar, _) {
@@ -314,6 +344,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     horizontalPadding: 12,
                     verticalPadding: 0,
                     barHeight: tabBarHeight,
+                    settings: glassTabBarSettings,
                     selectedIconColor: activeColor,
                     selectedLabelColor: activeColor,
                     unselectedIconColor: inactiveColor,

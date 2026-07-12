@@ -1258,6 +1258,9 @@ void main() {
     final nativePage = File(
       'lib/themes/cupertino/widgets/cupertino_adaptive_native_page.dart',
     ).readAsStringSync();
+    final bottomSheet = File(
+      'lib/themes/cupertino/widgets/cupertino_bottom_sheet.dart',
+    ).readAsStringSync();
     final settings = File(
       'lib/settings/adaptive_settings_widgets.dart',
     ).readAsStringSync();
@@ -1293,8 +1296,25 @@ void main() {
     expect(mainPage, contains('bottom: glassTabBarBottom'));
     expect(mainPage, contains('verticalPadding: 0'));
     expect(mainPage, isNot(contains('Expanded(child: body)')));
+    expect(mainPage, contains('settings: glassTabBarSettings'));
+    expect(mainPage, contains('backerColor: Color(0xA6FFFFFF)'));
+    expect(mainPage, contains('backerColor: Color(0x99000000)'));
+    expect(mainPage, isNot(contains('icon: Icon(page.phoneIcon)')));
+    expect(mainPage, isNot(contains('icon: page.phoneSymbol')));
+    expect(
+      RegExp('icon: Icon\\(page.phoneActiveIcon\\)')
+          .allMatches(mainPage)
+          .length,
+      2,
+    );
+    expect(mainPage, contains('icon: page.phoneActiveSymbol'));
     expect(nativePage, contains('GlassScaffold('));
     expect(nativePage, contains('GlassAppBar('));
+    expect(bottomSheet, contains('child: _buildFallbackHeaderButton('));
+    expect(bottomSheet, contains('alignment: Alignment.center'));
+    expect(bottomSheet, contains('glassColor: Color(0xFFFFFFFF)'));
+    expect(bottomSheet, contains('backerColor: Color(0xFFFFFFFF)'));
+    expect(bottomSheet, isNot(contains('child: AdaptiveButton.child(')));
     expect(settings, isNot(contains('fluent.Slider(')));
     expect(danmaku, isNot(contains('PlatformInfo.isIOS26OrHigher()')));
     expect(remote, isNot(contains('PlatformInfo.isIOS26OrHigher()')));

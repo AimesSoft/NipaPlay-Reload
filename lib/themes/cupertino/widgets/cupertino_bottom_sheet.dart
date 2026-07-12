@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 
@@ -396,16 +397,12 @@ class CupertinoBottomSheet extends StatelessWidget {
 
     return SizedBox.square(
       dimension: _closeButtonSize,
-      child: AdaptiveButton.child(
-        useSmoothRectangleBorder: false,
+      child: _buildFallbackHeaderButton(
+        context,
+        label: '返回',
+        icon: CupertinoIcons.chevron_back,
+        iconSize: 18,
         onPressed: onPressed,
-        style: AdaptiveButtonStyle.glass,
-        size: AdaptiveButtonSize.large,
-        child: Icon(
-          CupertinoIcons.chevron_back,
-          size: 18,
-          color: resolvedIconColor,
-        ),
       ),
     );
   }
@@ -435,19 +432,63 @@ class CupertinoBottomSheet extends StatelessWidget {
     return SizedBox(
       width: _closeButtonSize,
       height: _closeButtonSize,
-      child: AdaptiveButton.child(
-        useSmoothRectangleBorder: false,
+      child: _buildFallbackHeaderButton(
+        context,
+        label: '关闭',
+        icon: CupertinoIcons.xmark,
+        iconSize: 16,
         onPressed: onPressedCallback,
-        style: AdaptiveButtonStyle.glass,
-        size: AdaptiveButtonSize.large,
-        child: Icon(
-          CupertinoIcons.xmark,
-          size: 16,
-          color: resolvedIconColor,
-        ),
       ),
     );
   }
+
+  Widget _buildFallbackHeaderButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required double iconSize,
+    required VoidCallback onPressed,
+  }) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final iconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    return GlassButton(
+      label: label,
+      icon: Icon(icon, size: iconSize, color: iconColor),
+      onTap: onPressed,
+      width: _closeButtonSize,
+      height: _closeButtonSize,
+      iconSize: iconSize,
+      useOwnLayer: true,
+      quality: GlassQuality.standard,
+      shape: const LiquidOval(),
+      settings: isLight
+          ? _lightFallbackHeaderButtonSettings
+          : _darkFallbackHeaderButtonSettings,
+      stretch: 0.15,
+      alignment: Alignment.center,
+    );
+  }
+
+  static const _lightFallbackHeaderButtonSettings = LiquidGlassSettings(
+    glassColor: Color(0xFFFFFFFF),
+    backerColor: Color(0xFFFFFFFF),
+    blur: 6,
+    lightIntensity: 0.72,
+    ambientStrength: 0.3,
+    whitenStrength: 1,
+    whitenGated: false,
+  );
+
+  static const _darkFallbackHeaderButtonSettings = LiquidGlassSettings(
+    glassColor: Color(0x66000000),
+    backerColor: Color(0xB3000000),
+    blur: 6,
+    lightIntensity: 0.38,
+    ambientStrength: 0.2,
+  );
 
   static const double _closeButtonPadding = 12;
   static const double _closeButtonSize = 40;
