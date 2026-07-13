@@ -178,8 +178,8 @@ class BackupService {
         'thumbnailBase64': thumbnailBase64, // 包含截图的base64数据
       };
       
-      // 转换为JSON并编码为UTF-8
-      final jsonString = json.encode(recordData);
+      // 转换为JSON并编码为UTF-8（净化 Infinity/NaN，避免编码失败）
+      final jsonString = json.encode(_sanitizeForJson(recordData));
       final utf8Bytes = utf8.encode(jsonString);
       
       // 写入记录长度
@@ -414,5 +414,22 @@ class BackupService {
       debugPrint('检查文件存在性失败: ${item.filePath}, 错误: $e');
       return false;
     }
+  }
+
+  /// 递归净化备份数据中的非法 double（Infinity/NaN）
+  ///
+  /// 与 FullBackupService._sanitizeForJson 同理：JSON 不支持 Infinity/NaN，
+  /// watchProgress 在 duration=0 时可能落库为非法值，编码前兜底净化。
+  static dynamic _sanitizeForJson(dynamic value) {
+    if (value is double) {
+      return value.isInfinite || value.isNaN ? 0.0 : value;
+    }
+    if (value is Map) {
+      return value.map((k, v) => MapEntry(k, _sanitizeForJson(v)));
+    }
+    if (value is List) {
+      return value.map(_sanitizeForJson).toList();
+    }
+    return value;
   }
 }

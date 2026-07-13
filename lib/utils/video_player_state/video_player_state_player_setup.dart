@@ -650,7 +650,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         await Future.delayed(const Duration(milliseconds: 100));
         // 更新状态
         _position = Duration(milliseconds: lastPosition);
-        _progress = lastPosition / _duration.inMilliseconds;
+        // duration 为 0 时避免除零产生 Infinity/NaN 落库
+        // （iOS duration 延迟就绪场景，与 navigation.dart 中的一致性保护）
+        _progress = _duration.inMilliseconds > 0
+            ? lastPosition / _duration.inMilliseconds
+            : 0.0;
         // [VIDEO-OPEN-PTM-DIAG] 追踪 player.seek 后 playbackTimeMs 是否被更新
         if (!kReleaseMode) {
           debugPrint('[VIDEO-OPEN-PTM-DIAG] AFTER player.seek+anchor-update: '

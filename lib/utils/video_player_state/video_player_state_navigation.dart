@@ -581,7 +581,12 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     0.0001) {
               unawaited(applySubtitleStylePreference());
             }
-            _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            // duration 为 0 时（iOS 流媒体 duration 延迟就绪/解析失败）避免除零
+            // 产生 Infinity/NaN，否则会落库到 watchProgress 导致全量备份
+            // JSON 编码失败（"Converting object to an encoding object failed: Infinity"）
+            _progress = _duration.inMilliseconds > 0
+                ? _position.inMilliseconds / _duration.inMilliseconds
+                : 0.0;
             final bufferedMs = player.bufferedPosition;
             _bufferedPositionMs = bufferedMs <= 0
                 ? 0
