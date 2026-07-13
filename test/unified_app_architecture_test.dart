@@ -1450,6 +1450,36 @@ void main() {
     );
   });
 
+  test('phone media library selection is restored and follows new mounts', () {
+    final page = File(
+      'lib/media_library/adaptive_media_library_page.dart',
+    ).readAsStringSync();
+    final keys = File('lib/constants/settings_keys.dart').readAsStringSync();
+
+    expect(keys, contains('mediaLibrarySelectedSection'));
+    expect(page, contains('_restoreSelectedSection'));
+    expect(page, contains('onSectionSelected: _selectSection'));
+    expect(page, contains('_selectMountedMediaLibrarySection'));
+    expect(page, contains('MediaLibrarySectionIds.localManagement'));
+    expect(page, contains('MediaLibrarySectionIds.webdavManagement'));
+    expect(page, contains('MediaLibrarySectionIds.smbManagement'));
+  });
+
+  test('shared media summaries hydrate covers without a 24 item cap', () {
+    final service = File(
+      'lib/services/local_media_share_service.dart',
+    ).readAsStringSync();
+    final provider = File(
+      'lib/providers/shared_remote_library_provider.dart',
+    ).readAsStringSync();
+
+    expect(service, isNot(contains('.take(24)')));
+    expect(service, contains('getAnimeDetailsFromMemory'));
+    expect(service, contains('_mediaLibraryImagePrefsKeyPrefix'));
+    expect(provider, contains('_resolveRemoteImageUrl'));
+    expect(provider, contains('/api/image_proxy?url='));
+  });
+
   test('playback entry host delegates controls to the adaptive renderer', () {
     final source = File(
       'lib/themes/nipaplay/widgets/video_upload_ui.dart',

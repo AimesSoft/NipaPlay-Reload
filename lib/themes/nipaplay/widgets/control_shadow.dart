@@ -52,12 +52,12 @@ class ControlIconShadow extends StatelessWidget {
       Shadow(
         color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 10,
-        offset: Offset(0, 2),
+        offset: Offset.zero,
       ),
       Shadow(
         color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 18,
-        offset: Offset(0, 4),
+        offset: Offset.zero,
       ),
     ],
   });

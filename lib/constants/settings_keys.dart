@@ -52,6 +52,9 @@ class SettingsKeys {
   static const String torrentRecentDownloadDirectoriesMigrated =
       'torrent_recent_download_directories_migrated';
 
+  static const String mediaLibrarySelectedSection =
+      'media_library_selected_section';
+
   static const String downloaderEnabled = 'downloader_enabled';
 
   static const String downloaderCreateFolderForTask =

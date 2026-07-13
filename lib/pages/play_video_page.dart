@@ -443,15 +443,18 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       fit: StackFit.expand,
       clipBehavior: Clip.hardEdge,
       children: [
-        Positioned.fill(
-          child: VideoPlayerWidget(danmakuScale: portraitUiScale),
+        const Positioned.fill(
+          child: VideoPlayerWidget(),
         ),
         if (videoState.hasVideo)
           NipaplayLargeScreenModeScope.isActiveOf(context)
               ? _buildLargeScreenMaterialControls(videoState)
-              : _buildMaterialControls(
-                  videoState,
-                  portraitUiScale: portraitUiScale,
+              : KeyedSubtree(
+                  key: ValueKey<bool>(portraitUiScale < 0.999),
+                  child: _buildMaterialControls(
+                    videoState,
+                    portraitUiScale: portraitUiScale,
+                  ),
                 ),
       ],
     );
@@ -869,6 +872,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     double portraitUiScale = 1.0,
   }) {
     final bool isCompactPortrait = portraitUiScale < 0.999;
+    final double topControlsScale = isCompactPortrait ? 1.0 : portraitUiScale;
     final bool uiLocked =
         globals.isMobilePlatform && !isCompactPortrait ? _isUiLocked : false;
     final bool showLockButton = globals.isMobilePlatform &&
@@ -885,7 +889,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         (showScreenshotButton ? 1 : 0) +
         (showShareButton ? 1 : 0);
     final double rightButtonsWidth = rightButtonCount > 0
-        ? rightButtonCount * 42.0 + (rightButtonCount - 1) * 12.0
+        ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
         : 0.0;
     final double availableTitleWidth = (MediaQuery.of(context).size.width -
             (16.0 + horizontalCutoutInset) -
@@ -914,7 +918,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             child: IgnorePointer(
               ignoring: !videoState.showControls,
               child: Transform.scale(
-                scale: portraitUiScale,
+                scale: topControlsScale,
                 alignment: Alignment.topLeft,
                 child: Padding(
                   padding: EdgeInsets.only(
@@ -1039,7 +1043,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             child: IgnorePointer(
               ignoring: !videoState.showControls,
               child: Transform.scale(
-                scale: portraitUiScale,
+                scale: topControlsScale,
                 alignment: Alignment.topRight,
                 child: Padding(
                   padding: EdgeInsets.only(
