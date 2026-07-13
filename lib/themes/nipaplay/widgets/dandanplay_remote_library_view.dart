@@ -23,6 +23,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 
 class DandanplayRemoteLibraryView extends StatefulWidget {
@@ -97,7 +98,7 @@ class _DandanplayRemoteLibraryViewState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildToolbar(),
+            _buildToolbar(provider),
             if ((provider.errorMessage?.isNotEmpty ?? false) &&
                 !provider.isLoading) ...[
               SizedBox(height: 12),
@@ -437,7 +438,35 @@ class _DandanplayRemoteLibraryViewState
     });
   }
 
-  Widget _buildToolbar() {
+  Widget _buildToolbar(DandanplayRemoteProvider provider) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoMediaSearchToolbar(
+        controller: _searchController,
+        placeholder: '搜索番剧或剧集…',
+        onChanged: _updateSearchQueryDebounced,
+        actions: [
+          CupertinoMediaSearchToolbarAction(
+            label: provider.isLoading ? '刷新中' : '刷新',
+            icon: cupertino.CupertinoIcons.refresh,
+            loading: provider.isLoading,
+            onPressed: provider.isLoading
+                ? null
+                : () async {
+                    try {
+                      await provider.refresh();
+                    } catch (error) {
+                      if (mounted) BlurSnackBar.show(context, '刷新失败: $error');
+                    }
+                  },
+          ),
+          CupertinoMediaSearchToolbarAction(
+            label: '连接',
+            icon: cupertino.CupertinoIcons.link,
+            onPressed: () => _showConnectDialog(context, provider),
+          ),
+        ],
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       child: Column(

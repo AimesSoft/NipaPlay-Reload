@@ -567,7 +567,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
   Widget _buildCupertinoRating(double rating) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.62),
+        color: Colors.black,
         borderRadius: BorderRadius.circular(7),
       ),
       child: Padding(

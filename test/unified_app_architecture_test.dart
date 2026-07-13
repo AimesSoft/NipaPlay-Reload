@@ -536,6 +536,154 @@ void main() {
     );
   });
 
+  test('shared host selection has one model and adaptive renderers', () {
+    final host = File(
+      'lib/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart',
+    ).readAsStringSync();
+    final model = File(
+      'lib/remote/shared_remote_host_selection_model.dart',
+    ).readAsStringSync();
+    final phone = File(
+      'lib/themes/cupertino/widgets/'
+      'cupertino_shared_remote_host_selection_view.dart',
+    ).readAsStringSync();
+    final qr = File(
+      'lib/services/remote_access_qr_service.dart',
+    ).readAsStringSync();
+
+    expect(host, contains('final data = _buildViewModel(context, provider)'));
+    expect(
+        host, contains('CupertinoSharedRemoteHostSelectionView(data: data)'));
+    expect(host, contains('SharedRemoteHostSelectionActionKind.scanQr'));
+    expect(host, contains('List<SharedRemoteHostSelectionItem> hosts'));
+    expect(host, isNot(contains('Colors.lightBlueAccent')));
+    expect(model, contains('class SharedRemoteHostSelectionViewModel'));
+    expect(model, contains('scanLan'));
+    expect(model, contains('scanQr'));
+    expect(model, contains('addManually'));
+    expect(phone, contains('CupertinoBottomSheetContentLayout('));
+    expect(phone, contains('topSpacing + 14'));
+    expect(phone, isNot(contains("package:flutter/material.dart")));
+    expect(qr, contains('MobileScanner('));
+  });
+
+  test('obsolete appearance modes are removed and phone sections reorder', () {
+    final appearance = File(
+      'lib/settings/pages/appearance_settings_content.dart',
+    ).readAsStringSync();
+
+    expect(appearance, isNot(contains('AnimeDetailDisplayMode')));
+    expect(appearance, isNot(contains('RecentWatchingStyle')));
+    expect(appearance, isNot(contains('_detailModeDropdownKey')));
+    expect(appearance, isNot(contains('_recentStyleDropdownKey')));
+    expect(appearance, contains('AdaptiveSettingsDragList<HomeSectionType>'));
+    expect(appearance, contains('onReorder: homeSections.reorderSections'));
+  });
+
+  test('danmaku workflows share one data service and adaptive presentation',
+      () {
+    final service = File(
+      'lib/services/danmaku_matching_service.dart',
+    ).readAsStringSync();
+    final manual = File(
+      'lib/themes/nipaplay/widgets/manual_danmaku_dialog.dart',
+    ).readAsStringSync();
+    final batch = File(
+      'lib/themes/nipaplay/widgets/batch_danmaku_dialog.dart',
+    ).readAsStringSync();
+    final send = File(
+      'lib/themes/nipaplay/widgets/send_danmaku_dialog.dart',
+    ).readAsStringSync();
+    final primitives = File(
+      'lib/media_library/adaptive_media_library_primitives.dart',
+    ).readAsStringSync();
+    final presenter = File(
+      'lib/utils/danmaku_dialog_manager.dart',
+    ).readAsStringSync();
+
+    expect(service, contains('class DanmakuMatchingService'));
+    expect(service, contains('searchAnime('));
+    expect(service, contains('getAnimeEpisodes('));
+    expect(service, contains('sendDanmaku('));
+    for (final view in [manual, batch]) {
+      expect(view, contains('DanmakuMatchingService.instance'));
+      expect(view, isNot(contains('http.get(')));
+      expect(view, isNot(contains('generateSignature(')));
+      expect(view, isNot(contains('InkWell(')));
+      expect(view, contains('CupertinoBottomSheetScope.maybeOf(context)'));
+    }
+    expect(send, contains('AdaptiveMediaTextField('));
+    expect(send, contains('AdaptiveSegmentedControl('));
+    expect(send, isNot(contains('_buildPhoneLayout')));
+    expect(send, isNot(contains('ToggleButtons(')));
+    expect(send, isNot(contains('Material(')));
+    expect(primitives, contains('cupertino.CupertinoTextField('));
+    expect(presenter, contains('CupertinoBottomSheetContentLayout('));
+  });
+
+  test('all media sources share toolbar and management semantics', () {
+    final controlBar = File(
+      'lib/themes/nipaplay/widgets/local_library_control_bar.dart',
+    ).readAsStringSync();
+    final network = File(
+      'lib/themes/nipaplay/widgets/network_media_library_view.dart',
+    ).readAsStringSync();
+    final dandan = File(
+      'lib/themes/nipaplay/widgets/dandanplay_remote_library_view.dart',
+    ).readAsStringSync();
+    final shared = File(
+      'lib/themes/nipaplay/widgets/shared_remote_library_view.dart',
+    ).readAsStringSync();
+
+    expect(controlBar, contains('CupertinoMediaSearchToolbar('));
+    expect(network, contains('LocalLibraryControlBar('));
+    expect(dandan, contains('CupertinoMediaSearchToolbar('));
+    expect(shared, contains('AdaptiveLibraryManagementOverview('));
+    expect(shared, contains('_buildUnifiedRemoteManagementItems'));
+    expect(shared, contains('UnifiedLibraryManagementItem('));
+    expect(shared, contains('LibraryManagementViewMode _managementViewMode'));
+  });
+
+  test('phone playback defaults landscape and embeds details in portrait', () {
+    final orientation = File(
+      'lib/utils/screen_orientation_manager.dart',
+    ).readAsStringSync();
+    final controls = File(
+      'lib/utils/video_player_state/'
+      'video_player_state_playback_controls.dart',
+    ).readAsStringSync();
+    final player = File('lib/pages/play_video_page.dart').readAsStringSync();
+    final loading = File(
+      'lib/themes/nipaplay/widgets/loading_overlay.dart',
+    ).readAsStringSync();
+
+    expect(orientation, contains('await _setLandscapeOnly();'));
+    expect(orientation, contains('setPhonePlaybackLandscape'));
+    expect(orientation, contains('setPhonePlaybackPortrait'));
+    expect(controls, contains('if (globals.isPhone)'));
+    expect(controls, contains('setPhonePlaybackPortrait()'));
+    expect(controls, contains('setPhonePlaybackLandscape()'));
+    expect(player, contains('_buildPhonePortraitPlayer(videoState)'));
+    expect(player, contains('final stageHeight'));
+    expect(player, contains('constraints.maxWidth / aspectRatio'));
+    expect(player, contains('AnimeDetailPage('));
+    expect(player, contains('renderInWindowScaffold: false'));
+    expect(loading, contains('final bool isPhoneSurface'));
+    expect(loading, contains('const Color(0xF2252527)'));
+    expect(loading, contains('const Color(0xFAF7F7F8)'));
+    expect(loading, contains('if (hasCoverImage)'));
+    expect(loading, isNot(contains('showArtworkBackdrop')));
+  });
+
+  test('phone anime score badges are fully opaque', () {
+    final home = File(
+      'lib/themes/cupertino/widgets/cupertino_home_page_controls.dart',
+    ).readAsStringSync();
+
+    expect(home, contains('color: Colors.black,'));
+    expect(home, isNot(contains('Colors.black.withValues(alpha: 0.62)')));
+  });
+
   test('today anime search separates shared state from surface renderers', () {
     final host = File(
       'lib/themes/nipaplay/widgets/tag_search_widget.dart',

@@ -67,6 +67,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 立即重置屏幕方向，不受后续等待阻塞，避免用户被卡在横屏状态
       if (globals.isMobilePlatform) {
         await ScreenOrientationManager.instance.resetOrientation();
+        _isFullscreen = false;
         await _restoreSystemUiOverlayStyleIfNeeded();
       }
 
@@ -1047,11 +1048,29 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     return !_isFullscreen;
   }
 
-  // 切换全屏状态（仅用于桌面平台）
+  // 手机上在横屏全屏和竖屏窗口布局之间切换；桌面端切换系统全屏。
   Future<void> toggleFullscreen() async {
     if (kIsWeb) return;
-    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
     if (_isFullscreenTransitioning) return;
+
+    if (globals.isPhone) {
+      _isFullscreenTransitioning = true;
+      try {
+        if (_isFullscreen) {
+          await ScreenOrientationManager.instance.setPhonePlaybackPortrait();
+          _isFullscreen = false;
+        } else {
+          await ScreenOrientationManager.instance.setPhonePlaybackLandscape();
+          _isFullscreen = true;
+        }
+        _notifyListeners();
+      } finally {
+        _isFullscreenTransitioning = false;
+      }
+      return;
+    }
+
+    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
 
     _isFullscreenTransitioning = true;
     try {

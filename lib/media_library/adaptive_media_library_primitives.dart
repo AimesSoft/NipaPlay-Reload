@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
+import 'package:flutter/services.dart' as services;
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -606,6 +607,7 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
     this.textAlign = material.TextAlign.start,
     this.onChanged,
     this.onSubmitted,
+    this.maxLength,
   });
 
   final material.TextEditingController controller;
@@ -621,6 +623,7 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
   final material.TextAlign textAlign;
   final material.ValueChanged<String>? onChanged;
   final material.ValueChanged<String>? onSubmitted;
+  final int? maxLength;
 
   @override
   material.State<AdaptiveMediaTextField> createState() =>
@@ -678,6 +681,7 @@ class _AdaptiveMediaTextFieldState
         textAlign: widget.textAlign,
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,
+        maxLength: widget.maxLength,
         padding: decoration?.contentPadding ??
             const material.EdgeInsets.symmetric(
               horizontal: 12,
@@ -746,6 +750,13 @@ class _AdaptiveMediaTextFieldState
               widget.onChanged?.call(value);
             },
             onSubmitted: widget.onSubmitted,
+            inputFormatters: widget.maxLength == null
+                ? null
+                : <services.TextInputFormatter>[
+                    services.LengthLimitingTextInputFormatter(
+                      widget.maxLength,
+                    ),
+                  ],
           ),
         ],
       ),

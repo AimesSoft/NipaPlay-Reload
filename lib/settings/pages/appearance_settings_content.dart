@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
@@ -34,8 +33,6 @@ class AppearanceSettingsContent extends StatefulWidget {
 
 class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
   final GlobalKey _themeModeDropdownKey = GlobalKey();
-  final GlobalKey _detailModeDropdownKey = GlobalKey();
-  final GlobalKey _recentStyleDropdownKey = GlobalKey();
   final GlobalKey _windowDisplayModeDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _blurDropdownKey = GlobalKey();
@@ -268,68 +265,6 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
       const SizedBox(height: 16),
       AdaptiveSettingsSection(
         children: [
-          if (globals.isPhone) ...[
-            AdaptiveSettingsTile<AnimeDetailDisplayMode>.dropdown(
-              title: context.l10n.appearanceAnimeDetailStyle,
-              subtitle: _text(
-                context,
-                '选择番剧详情页展示方式',
-                '選擇番劇詳情頁展示方式',
-                'Choose the anime detail page layout.',
-              ),
-              icon: Ionicons.albums_outline,
-              phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
-              items: [
-                DropdownMenuItemData(
-                  title: context.l10n.appearanceDetailSimple,
-                  value: AnimeDetailDisplayMode.simple,
-                  isSelected: themeNotifier.animeDetailDisplayMode ==
-                      AnimeDetailDisplayMode.simple,
-                  description: context.l10n.appearanceDetailSimpleSubtitle,
-                ),
-                DropdownMenuItemData(
-                  title: context.l10n.appearanceDetailVivid,
-                  value: AnimeDetailDisplayMode.vivid,
-                  isSelected: themeNotifier.animeDetailDisplayMode ==
-                      AnimeDetailDisplayMode.vivid,
-                  description: context.l10n.appearanceDetailVividSubtitle,
-                ),
-              ],
-              onChanged: (mode) {
-                themeNotifier.animeDetailDisplayMode = mode;
-              },
-              dropdownKey: _detailModeDropdownKey,
-            ),
-            AdaptiveSettingsTile<RecentWatchingStyle>.dropdown(
-              title: context.l10n.appearanceRecentWatchingStyle,
-              subtitle: _text(
-                context,
-                '选择最近观看区域的展示方式',
-                '選擇最近觀看區域的展示方式',
-                'Choose how recently watched items are shown.',
-              ),
-              icon: Ionicons.time_outline,
-              phoneIcon: cupertino.CupertinoIcons.clock,
-              items: [
-                DropdownMenuItemData(
-                  title: context.l10n.appearanceRecentSimple,
-                  value: RecentWatchingStyle.simple,
-                  isSelected: appearanceSettings.recentWatchingStyle ==
-                      RecentWatchingStyle.simple,
-                  description: context.l10n.appearanceRecentSimpleSubtitle,
-                ),
-                DropdownMenuItemData(
-                  title: context.l10n.appearanceRecentDetailed,
-                  value: RecentWatchingStyle.detailed,
-                  isSelected: appearanceSettings.recentWatchingStyle ==
-                      RecentWatchingStyle.detailed,
-                  description: context.l10n.appearanceRecentDetailedSubtitle,
-                ),
-              ],
-              onChanged: appearanceSettings.setRecentWatchingStyle,
-              dropdownKey: _recentStyleDropdownKey,
-            ),
-          ],
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
@@ -389,18 +324,28 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
       ),
       if (globals.isPhone) ...[
         const SizedBox(height: 16),
+        AdaptiveSettingsDragList<HomeSectionType>(
+          items: [
+            for (final section in homeSections.orderedSections)
+              AdaptiveSettingsDragListItem<HomeSectionType>(
+                value: section,
+                title: section.title,
+                subtitle: homeSections.isSectionEnabled(section)
+                    ? _text(context, '显示在首页', '顯示在首頁', 'Shown on Home')
+                    : _text(context, '已隐藏', '已隱藏', 'Hidden'),
+                icon: Ionicons.home_outline,
+                phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
+                enabled: homeSections.isSectionEnabled(section),
+              ),
+          ],
+          onReorder: homeSections.reorderSections,
+          onEnabledChanged: (section, value) {
+            homeSections.setSectionEnabled(section, value);
+          },
+        ),
+        const SizedBox(height: 8),
         AdaptiveSettingsSection(
           children: [
-            for (final section in HomeSectionType.values)
-              AdaptiveSettingsTile<bool>.toggle(
-                title: section.title,
-                icon: Ionicons.grid_outline,
-                phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
-                value: homeSections.isSectionEnabled(section),
-                onChanged: (value) {
-                  homeSections.setSectionEnabled(section, value);
-                },
-              ),
             AdaptiveSettingsTile<void>.card(
               title: context.l10n.restoreDefaults,
               subtitle: context.l10n.restoreDefaultsSubtitle,

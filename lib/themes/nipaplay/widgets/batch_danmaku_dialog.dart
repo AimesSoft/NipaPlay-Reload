@@ -1,13 +1,8 @@
-import 'dart:convert';
-import 'dart:ui';
-
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -211,7 +206,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     try {
       if (!mounted) return;
 
-      final results = await DandanplayService.searchAnime(keyword);
+      final results =
+          await DanmakuMatchingService.instance.searchAnime(keyword);
       if (!mounted) return;
 
       // 对搜索结果进行简繁转换
@@ -264,74 +260,33 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     });
 
     try {
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/bangumi/$animeId';
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url = '$baseUrl$apiPath';
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-            DandanplayService.appId,
-            timestamp,
-            apiPath,
-            appSecret,
-          ),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
+      final rawEpisodes =
+          await DanmakuMatchingService.instance.getAnimeEpisodes(animeId);
       if (!mounted) return;
-
-      setState(() {
-        _isLoadingEpisodes = false;
-      });
-
-      if (response.statusCode != 200) {
-        setState(() {
-          _episodesMessage = '加载剧集失败: HTTP ${response.statusCode}';
-        });
-        return;
-      }
-
-      final data = json.decode(response.body);
-      final rawEpisodes = (data is Map<String, dynamic> &&
-              data['success'] == true &&
-              data['bangumi'] is Map<String, dynamic>)
-          ? (data['bangumi'] as Map<String, dynamic>)['episodes']
-          : (data is Map<String, dynamic> ? data['episodes'] : null);
 
       final parsedEpisodes = <_EpisodeItem>[];
       // 检查是否需要繁体中文
       final isTraditional =
           await ChineseConverter.isTraditionalChineseEnvironment(context);
-      if (rawEpisodes is List) {
-        for (final entry in rawEpisodes) {
-          if (entry is! Map) continue;
-          final map = Map<String, dynamic>.from(entry);
-          final episodeId = _tryParsePositiveInt(map['episodeId']);
-          if (episodeId == null) continue;
-          var episodeTitle = map['episodeTitle']?.toString().trim() ?? '未命名剧集';
-          // 对剧集标题进行简繁转换
-          if (isTraditional) {
-            episodeTitle = ChineseConverter.convert(episodeTitle);
-          }
-          parsedEpisodes.add(
-            _EpisodeItem(
-              episodeId: episodeId,
-              episodeTitle: episodeTitle,
-              episodeNumber: _tryParsePositiveInt(map['episodeNumber']),
-            ),
-          );
+      for (final map in rawEpisodes) {
+        final episodeId = _tryParsePositiveInt(map['episodeId']);
+        if (episodeId == null) continue;
+        var episodeTitle = map['episodeTitle']?.toString().trim() ?? '未命名剧集';
+        // 对剧集标题进行简繁转换
+        if (isTraditional) {
+          episodeTitle = ChineseConverter.convert(episodeTitle);
         }
+        parsedEpisodes.add(
+          _EpisodeItem(
+            episodeId: episodeId,
+            episodeTitle: episodeTitle,
+            episodeNumber: _tryParsePositiveInt(map['episodeNumber']),
+          ),
+        );
       }
 
       setState(() {
+        _isLoadingEpisodes = false;
         _episodes
           ..clear()
           ..addAll(parsedEpisodes);
@@ -373,19 +328,6 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         // 如果都没有sortKey，按文件名排序
         return a.displayName.compareTo(b.displayName);
       });
-    });
-  }
-
-  void _toggleSelectAllEpisodes(bool selectAll) {
-    if (_episodes.isEmpty) return;
-    setState(() {
-      if (!selectAll) {
-        _selectedEpisodeIds.clear();
-        return;
-      }
-      _selectedEpisodeIds
-        ..clear()
-        ..addAll(_episodes.map((e) => e.episodeId));
     });
   }
 
@@ -473,8 +415,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: borderColor),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: isDragging
             ? null
             : () {
@@ -558,8 +500,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: borderColor),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: isDragging
             ? null
             : () {
@@ -620,10 +562,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final title = anime['animeTitle']?.toString() ?? '未知动画';
     final animeId = anime['animeId']?.toString() ?? '';
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _selectAnime(anime),
         child: Container(
           margin: EdgeInsets.only(bottom: showBottomDivider ? 8 : 0),
@@ -830,10 +772,17 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             buildDefaultDragHandles: false,
             proxyDecorator: (child, index, animation) {
               final item = _files[index];
-              return Material(
-                color: Colors.transparent,
-                elevation: 8,
-                shadowColor: Colors.black26,
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 12,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: _buildFileListItem(
@@ -942,10 +891,17 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         buildDefaultDragHandles: false,
         proxyDecorator: (child, index, animation) {
           final episode = _episodes[index];
-          return Material(
-            color: Colors.transparent,
-            elevation: 8,
-            shadowColor: Colors.black26,
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 12,
+                  offset: Offset(0, 5),
+                ),
+              ],
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: _buildEpisodeListItem(
@@ -1017,8 +973,12 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
   @override
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final sheetScope = CupertinoBottomSheetScope.maybeOf(context);
+    final topPadding = widget.embedded && sheetScope != null
+        ? sheetScope.contentTopInset / 1.3 + sheetScope.contentTopSpacing + 8
+        : 16.0;
     final content = SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
+      padding: EdgeInsets.fromLTRB(24, topPadding, 24, 24 + keyboardHeight),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1094,10 +1054,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           : globals.DialogSizes.getDialogWidth(
               MediaQuery.of(context).size.width,
             ),
-      maxHeightFactor:
-          (globals.isPhone && MediaQuery.of(context).size.shortestSide < 600)
-              ? 0.9
-              : 0.9,
+      maxHeightFactor: 0.9,
       onClose: () => Navigator.of(context).maybePop(),
       backgroundColor: _surfaceColor,
       child: body,
@@ -1108,14 +1065,13 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 class _FileItem {
   final String path;
   final String displayName;
-  bool selected;
+  bool selected = true;
   final String? episodeNumber;
   final int? sortKey;
 
   _FileItem({
     required this.path,
     required this.displayName,
-    this.selected = true,
   })  : episodeNumber = _extractEpisodeNumber(displayName),
         sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
 
@@ -1190,5 +1146,3 @@ class _EpisodeItem {
     this.episodeNumber,
   });
 }
-
-enum _EpisodesMenuAction { changeAnime, selectAll, clearAll, selectFirstN }

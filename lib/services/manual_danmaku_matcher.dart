@@ -1,8 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
@@ -27,50 +24,14 @@ class ManualDanmakuMatcher {
       return [];
     }
 
-    try {
-      return DandanplayService.searchAnime(keyword);
-    } catch (e) {
-      debugPrint('搜索动画时出错: $e');
-      rethrow;
-    }
+    return DanmakuMatchingService.instance.searchAnime(keyword);
   }
 
   /// 获取动画剧集列表
   ///
   /// 根据动画ID获取剧集信息
   Future<List<Map<String, dynamic>>> getAnimeEpisodes(int animeId) async {
-    try {
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/bangumi/$animeId';
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url = '$baseUrl$apiPath';
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-              DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['episodes'] != null && data['episodes'] is List) {
-          return List<Map<String, dynamic>>.from(data['episodes']);
-        }
-      }
-
-      return [];
-    } catch (e) {
-      debugPrint('获取剧集信息时出错: $e');
-      rethrow;
-    }
+    return DanmakuMatchingService.instance.getAnimeEpisodes(animeId);
   }
 
   /// 显示手动匹配弹幕对话框
@@ -126,7 +87,8 @@ class ManualDanmakuMatcher {
   /// 根据episodeId获取弹幕内容
   Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
     try {
-      return await DandanplayService.getDanmaku(episodeId, animeId);
+      return await DanmakuMatchingService.instance
+          .getDanmaku(episodeId, animeId);
     } catch (e) {
       debugPrint('获取弹幕数据时出错: $e');
       rethrow;

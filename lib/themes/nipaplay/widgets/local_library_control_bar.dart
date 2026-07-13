@@ -8,6 +8,7 @@ import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
 
 enum LocalLibrarySortType {
   name,
@@ -202,105 +203,47 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   }
 
   Widget _buildPhoneControlBar(BuildContext context) {
-    final labelColor = cupertino.CupertinoDynamicColor.resolve(
-      cupertino.CupertinoColors.label,
-      context,
-    );
-    return SizedBox(
-      height: 54,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        child: Row(
-          children: [
-            if (widget.showBackButton) ...[
-              cupertino.CupertinoButton(
-                padding: const EdgeInsets.all(6),
-                minimumSize: const Size.square(34),
-                onPressed: widget.onBack,
-                child: const Icon(cupertino.CupertinoIcons.back, size: 20),
-              ),
-              const SizedBox(width: 6),
-            ],
-            if (widget.title != null && widget.title!.isNotEmpty) ...[
-              Flexible(
-                child: Text(
-                  widget.title!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: AdaptiveMediaSearchField(
-                controller: widget.searchController,
-                focusNode: _searchFocusNode,
-                placeholder: '搜索…',
-                onChanged: widget.onSearchChanged,
-                onClear: widget.onClearSearch,
-              ),
-            ),
-            if (widget.trailingActions != null &&
-                widget.trailingActions!.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              _buildPhoneActions(context, widget.trailingActions!),
-            ],
-            if (widget.showSort) ...[
-              const SizedBox(width: 4),
-              cupertino.CupertinoButton(
-                padding: const EdgeInsets.all(7),
-                minimumSize: const Size.square(34),
-                onPressed: () => _showPhoneSortMenu(context),
-                child: const Icon(
-                  cupertino.CupertinoIcons.arrow_up_arrow_down,
-                  size: 18,
-                ),
-              ),
-            ],
-          ],
+    final actions = <CupertinoMediaSearchToolbarAction>[
+      if (widget.viewMode != null)
+        CupertinoMediaSearchToolbarAction(
+          label: widget.viewMode == LibraryManagementViewMode.icons
+              ? '切换到列表视图'
+              : '切换到图标视图',
+          icon: widget.viewMode == LibraryManagementViewMode.icons
+              ? cupertino.CupertinoIcons.list_bullet
+              : cupertino.CupertinoIcons.square_grid_2x2,
+          onPressed: widget.onToggleViewMode,
         ),
-      ),
+      for (final action in widget.trailingActions ?? const [])
+        CupertinoMediaSearchToolbarAction(
+          label: action.label,
+          icon: action.phoneIcon,
+          onPressed: action.onPressed,
+        ),
+      if (widget.showSort)
+        CupertinoMediaSearchToolbarAction(
+          label: '排序',
+          icon: cupertino.CupertinoIcons.arrow_up_arrow_down,
+          onPressed: () => _showPhoneSortMenu(context),
+        ),
+    ];
+    return CupertinoMediaSearchToolbar(
+      controller: widget.searchController,
+      placeholder:
+          widget.title?.isNotEmpty == true ? '搜索${widget.title}' : '搜索…',
+      onChanged: (value) {
+        widget.onSearchChanged(value);
+        if (value.isEmpty) widget.onClearSearch?.call();
+      },
+      leadingAction: widget.showBackButton
+          ? CupertinoMediaSearchToolbarAction(
+              label: '返回',
+              icon: cupertino.CupertinoIcons.back,
+              onPressed: widget.onBack,
+            )
+          : null,
+      actions: actions,
     );
-  }
-
-  Widget _buildPhoneActions(
-    BuildContext context,
-    List<LocalLibraryActionControl> actions,
-  ) {
-    if (actions.length == 1) return actions.single;
-    return cupertino.CupertinoButton(
-      padding: const EdgeInsets.all(7),
-      minimumSize: const Size.square(34),
-      onPressed: () => _showPhoneActions(context, actions),
-      child: const Icon(cupertino.CupertinoIcons.ellipsis_circle, size: 19),
-    );
-  }
-
-  Future<void> _showPhoneActions(
-    BuildContext context,
-    List<LocalLibraryActionControl> actions,
-  ) async {
-    final enabledActions =
-        actions.where((action) => action.onPressed != null).toList();
-    final selected =
-        await CupertinoBottomSheet.showSelection<LocalLibraryActionControl>(
-      context: context,
-      title: '页面操作',
-      options: [
-        for (final action in enabledActions)
-          CupertinoBottomSheetOption(
-            label: action.label,
-            value: action,
-            destructive: action.isDestructive,
-          ),
-      ],
-    );
-    selected?.onPressed?.call();
   }
 
   Future<void> _showPhoneSortMenu(BuildContext context) async {

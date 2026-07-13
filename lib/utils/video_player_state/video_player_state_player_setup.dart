@@ -796,6 +796,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         await ScreenOrientationManager.instance.setVideoPlayingOrientation();
         await _restoreSystemUiOverlayStyleIfNeeded();
 
+        if (globals.isPhone) {
+          _isFullscreen = true;
+          _notifyListeners();
+        }
+
         // 平板设备默认隐藏菜单栏（全屏状态）
         if (globals.isTablet) {
           _isAppBarHidden = true;

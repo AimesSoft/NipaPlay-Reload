@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class RemoteAccessQrPayload {
   const RemoteAccessQrPayload({
@@ -230,9 +230,10 @@ class RemoteAccessQrCameraScanner {
   RemoteAccessQrCameraScanner._();
 
   static bool get isSupported {
-    if (kIsWeb) return false;
+    if (kIsWeb) return true;
     return defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS;
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
   }
 
   static Future<RemoteAccessQrPayload?> scan(BuildContext context) async {
@@ -240,9 +241,8 @@ class RemoteAccessQrCameraScanner {
       throw UnsupportedError('当前平台不支持相机扫码');
     }
 
-    final scannedText = await Navigator.of(context, rootNavigator: true).push<
-      String
-    >(
+    final scannedText =
+        await Navigator.of(context, rootNavigator: true).push<String>(
       CupertinoPageRoute(builder: (_) => const _RemoteAccessQrScannerPage()),
     );
     if (scannedText == null || scannedText.trim().isEmpty) return null;
@@ -258,37 +258,30 @@ class _RemoteAccessQrScannerPage extends StatefulWidget {
       _RemoteAccessQrScannerPageState();
 }
 
-class _RemoteAccessQrScannerPageState extends State<_RemoteAccessQrScannerPage> {
-  final GlobalKey _qrKey = GlobalKey(debugLabel: 'remote_access_qr');
-  QRViewController? _controller;
-  StreamSubscription<Barcode>? _scanSubscription;
+class _RemoteAccessQrScannerPageState
+    extends State<_RemoteAccessQrScannerPage> {
+  final MobileScannerController _controller = MobileScannerController(
+    formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
+  );
   bool _hasResult = false;
 
   @override
-  void reassemble() {
-    super.reassemble();
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      _controller?.pauseCamera();
-    }
-    _controller?.resumeCamera();
-  }
-
-  @override
   void dispose() {
-    _scanSubscription?.cancel();
+    unawaited(_controller.dispose());
     super.dispose();
   }
 
-  void _onQRViewCreated(QRViewController controller) {
-    _controller = controller;
-    _scanSubscription = controller.scannedDataStream.listen((scanData) {
-      if (_hasResult) return;
-      final code = scanData.code?.trim();
-      if (code == null || code.isEmpty) return;
+  void _onDetect(BarcodeCapture capture) {
+    if (_hasResult) return;
+    for (final barcode in capture.barcodes) {
+      final code = barcode.rawValue?.trim();
+      if (code == null || code.isEmpty) continue;
       if (!mounted) return;
       _hasResult = true;
+      unawaited(_controller.stop());
       Navigator.of(context).pop(code);
-    });
+      return;
+    }
   }
 
   @override
@@ -301,9 +294,9 @@ class _RemoteAccessQrScannerPageState extends State<_RemoteAccessQrScannerPage> 
         child: Stack(
           fit: StackFit.expand,
           children: [
-            QRView(
-              key: _qrKey,
-              onQRViewCreated: _onQRViewCreated,
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
             ),
             Positioned(
               left: 20,
@@ -313,8 +306,8 @@ class _RemoteAccessQrScannerPageState extends State<_RemoteAccessQrScannerPage> 
                 '将二维码放入取景框内自动识别',
                 textAlign: TextAlign.center,
                 style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  color: CupertinoColors.white,
-                ),
+                      color: CupertinoColors.white,
+                    ),
               ),
             ),
           ],

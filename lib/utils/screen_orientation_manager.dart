@@ -56,15 +56,29 @@ class ScreenOrientationManager {
         // 平板设备：已经是横屏，无需改变
         return;
       } else {
-        // 手机播放器是主页面的一部分，播放时允许用户保持竖屏或自由旋转。
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        // 手机开始播放时默认进入横屏全屏。
+        await _setLandscapeOnly();
       }
+    } finally {
+      _isTransitioning = false;
+    }
+  }
+
+  Future<void> setPhonePlaybackLandscape() async {
+    if (!globals.isMobilePlatform || globals.isTablet) return;
+    _isTransitioning = true;
+    try {
+      await _setLandscapeOnly();
+    } finally {
+      _isTransitioning = false;
+    }
+  }
+
+  Future<void> setPhonePlaybackPortrait() async {
+    if (!globals.isMobilePlatform || globals.isTablet) return;
+    _isTransitioning = true;
+    try {
+      await _setPortraitOnly();
     } finally {
       _isTransitioning = false;
     }

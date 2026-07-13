@@ -31,6 +31,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/mobile_playback_status.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_progress_bar.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
+import 'package:nipaplay/pages/anime_detail_page.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -408,6 +409,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       builder: (context, videoState, child) {
         final usesWindowHostedVideoSurface =
             videoState.player.usesWindowOverlayVideoSurface;
+        final isPhonePortrait = globals.isPhone &&
+            MediaQuery.orientationOf(context) == Orientation.portrait &&
+            videoState.hasVideo;
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
@@ -415,23 +419,67 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 _isExiting ? Duration.zero : const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             color: videoState.hasVideo &&
+                    !isPhonePortrait &&
                     !_isMacOSHdrTransparentFlutterEnabled &&
                     !usesWindowHostedVideoSurface
                 ? Colors.black
                 : Colors.transparent,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                const Positioned.fill(
-                  child: VideoPlayerWidget(),
-                ),
-                if (videoState.hasVideo)
-                  NipaplayLargeScreenModeScope.isActiveOf(context)
-                      ? _buildLargeScreenMaterialControls(videoState)
-                      : _buildMaterialControls(videoState),
-              ],
-            ),
+            child: isPhonePortrait
+                ? _buildPhonePortraitPlayer(videoState)
+                : _buildPlayerStage(videoState),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPlayerStage(VideoPlayerState videoState) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: VideoPlayerWidget()),
+        if (videoState.hasVideo)
+          NipaplayLargeScreenModeScope.isActiveOf(context)
+              ? _buildLargeScreenMaterialControls(videoState)
+              : _buildMaterialControls(videoState),
+      ],
+    );
+  }
+
+  Widget _buildPhonePortraitPlayer(VideoPlayerState videoState) {
+    final aspectRatio =
+        videoState.aspectRatio.isFinite && videoState.aspectRatio > 0
+            ? videoState.aspectRatio
+            : 16 / 9;
+    final animeId = videoState.animeId;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final requestedVideoHeight = constraints.maxWidth / aspectRatio;
+        final maximumVideoHeight = constraints.maxHeight * 0.58;
+        final stageHeight = requestedVideoHeight > maximumVideoHeight
+            ? maximumVideoHeight
+            : requestedVideoHeight;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: stageHeight,
+              child: ColoredBox(
+                color: Colors.black,
+                child: _buildPlayerStage(videoState),
+              ),
+            ),
+            Expanded(
+              child: animeId != null && animeId > 0
+                  ? AnimeDetailPage(
+                      key: ValueKey('portrait-player-detail-$animeId'),
+                      animeId: animeId,
+                      renderInWindowScaffold: false,
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
         );
       },
     );
