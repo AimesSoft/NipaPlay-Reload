@@ -89,9 +89,10 @@ class FullBackupService {
           'nipaplay_backup_${categorySuffix}_${dateString}_$timeString.npb';
       final filePath = path.join(directoryPath, fileName);
 
-      // 写入文件
+      // 写入文件（编码前净化 Infinity/NaN 等非法 double，避免备份失败）
+      final sanitized = _sanitizeForJson(backupData);
       final jsonString =
-          const JsonEncoder.withIndent('  ').convert(backupData);
+          const JsonEncoder.withIndent('  ').convert(sanitized);
       final file = File(filePath);
       await file.writeAsString(jsonString);
 
@@ -130,7 +131,7 @@ class FullBackupService {
       backupData['accounts'] = await _collectAccounts();
     }
 
-    return backupData;
+    return _sanitizeForJson(backupData) as Map<String, dynamic>;
   }
 
   // ---------- 偏好设置收集 ----------
@@ -1119,6 +1120,27 @@ class FullBackupService {
   }
 
   // ==================== 辅助方法 ====================
+
+  /// 递归净化备份数据中的非法 double（Infinity/NaN）
+  ///
+  /// JSON 标准不支持 Infinity/NaN，遇到会抛
+  /// "Converting object to an encoding object failed: Infinity"。
+  /// 观看历史的 watchProgress 在播放器 duration=0 时可能被算成
+  /// Infinity/NaN 落库（iOS 流媒体 duration 延迟就绪时易发），
+  /// 源头已加除零保护，这里在编码前再做兜底，保证备份永不因此失败，
+  /// 同时也能净化历史遗留的脏数据。
+  static dynamic _sanitizeForJson(dynamic value) {
+    if (value is double) {
+      return value.isInfinite || value.isNaN ? 0.0 : value;
+    }
+    if (value is Map) {
+      return value.map((k, v) => MapEntry(k, _sanitizeForJson(v)));
+    }
+    if (value is List) {
+      return value.map(_sanitizeForJson).toList();
+    }
+    return value;
+  }
 
   /// 恢复截图文件
   Future<String?> _restoreThumbnail(
