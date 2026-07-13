@@ -7,6 +7,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? historyFilePath,
     String? actualPlayUrl,
     PlaybackSession? playbackSession,
+    PlaybackDetailContext? playbackDetailContext,
     bool resetManualDanmakuOffset = true,
   }) async {
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
@@ -27,20 +28,41 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // }
     // notice: 后面会进入loading状态，此函数用意也是初始化，在函数开头将状态修改到idle不妥
 
+    PlaybackDetailContext resolvedDetailContext;
+    if (playbackDetailContext != null) {
+      resolvedDetailContext = playbackDetailContext;
+    } else {
+      final sourceItem = PlayableItem(
+        videoPath: videoPath,
+        title: historyItem?.animeName,
+        subtitle: historyItem?.episodeTitle,
+        animeId: historyItem?.animeId,
+        episodeId: historyItem?.episodeId,
+        historyItem: historyItem,
+        actualPlayUrl: actualPlayUrl,
+        playbackSession: playbackSession,
+      );
+      final currentContext = _context;
+      resolvedDetailContext = currentContext == null || !currentContext.mounted
+          ? PlaybackSourceService.fallback(sourceItem)
+          : await PlaybackSourceService.resolve(currentContext, sourceItem);
+    }
+
     _clearPreviousVideoState(); // 清理旧状态
+    _playbackDetailContext = resolvedDetailContext;
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _initialHistoryItem = historyItem;
 
     // 从 historyItem 中获取弹幕 ID
     if (historyItem != null) {
       _episodeId = historyItem.episodeId;
-      _animeId = historyItem.animeId;
+      _animeId = historyItem.animeId ?? resolvedDetailContext.animeId;
       debugPrint(
         'VideoPlayerState: 从 historyItem 获取弹幕 ID - episodeId: $_episodeId, animeId: $_animeId',
       );
     } else {
       _episodeId = null;
-      _animeId = null;
+      _animeId = resolvedDetailContext.animeId;
       debugPrint('VideoPlayerState: 没有 historyItem，重置弹幕 ID');
     }
 
@@ -242,10 +264,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _currentActualPlayUrl = resolvedActualPlayUrl; // 存储实际播放URL
     _currentPlaybackSession = resolvedSession;
     print('historyItem: $historyItem');
-    _animeTitle = historyItem?.animeName; // 从历史记录获取动画标题
-    _episodeTitle = historyItem?.episodeTitle; // 从历史记录获取集数标题
+    _animeTitle = historyItem?.animeName ?? resolvedDetailContext.title;
+    _episodeTitle = historyItem?.episodeTitle ?? resolvedDetailContext.subtitle;
     _episodeId = historyItem?.episodeId; // 保存从历史记录传入的 episodeId
-    _animeId = historyItem?.animeId; // 保存从历史记录传入的 animeId
+    _animeId = historyItem?.animeId ?? resolvedDetailContext.animeId;
     String message = '正在初始化播放器: ${p.basename(videoPath)}';
     if (_animeTitle != null) {
       message = '正在初始化播放器: $_animeTitle $_episodeTitle';

@@ -25,6 +25,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart'
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/playback_detail_context.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
@@ -62,7 +63,9 @@ class AnimeDetailPage extends StatefulWidget {
   final PlayableItem Function(SharedRemoteEpisode episode)?
       sharedEpisodeBuilder;
   final String? sharedSourceLabel;
+  final PlaybackDetailContext? playbackDetailContext;
   final bool renderInWindowScaffold;
+  final bool embeddedInPlayback;
 
   const AnimeDetailPage({
     super.key,
@@ -71,7 +74,9 @@ class AnimeDetailPage extends StatefulWidget {
     this.sharedEpisodeLoader,
     this.sharedEpisodeBuilder,
     this.sharedSourceLabel,
+    this.playbackDetailContext,
     this.renderInWindowScaffold = true,
+    this.embeddedInPlayback = false,
   });
 
   @override
@@ -92,6 +97,7 @@ class AnimeDetailPage extends StatefulWidget {
     Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader,
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
     String? sharedSourceLabel,
+    PlaybackDetailContext? playbackDetailContext,
   }) {
     if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
       return Navigator.of(context).push<WatchHistoryItem>(
@@ -121,6 +127,7 @@ class AnimeDetailPage extends StatefulWidget {
           sharedEpisodeLoader: sharedEpisodeLoader,
           sharedEpisodeBuilder: sharedEpisodeBuilder,
           sharedSourceLabel: sharedSourceLabel,
+          playbackDetailContext: playbackDetailContext,
           renderInWindowScaffold: false,
         ),
       );
@@ -140,6 +147,7 @@ class AnimeDetailPage extends StatefulWidget {
         sharedEpisodeLoader: sharedEpisodeLoader,
         sharedEpisodeBuilder: sharedEpisodeBuilder,
         sharedSourceLabel: sharedSourceLabel,
+        playbackDetailContext: playbackDetailContext,
       ),
     );
   }
@@ -156,9 +164,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   PlayableItem Function(SharedRemoteEpisode episode)? _sharedEpisodeBuilder;
   final Map<int, SharedRemoteEpisode> _sharedEpisodeMap = {};
   final Map<int, PlayableItem> _sharedPlayableMap = {};
+  PlaybackDetailContext? _playbackDetailContext;
+  final Map<int, PlaybackDetailEpisode> _playbackEpisodeMap = {};
+  final Map<int, PlayableItem> _playbackPlayableMap = {};
   final Map<int, Future<WatchHistoryItem?>> _episodeHistoryFutures = {};
   bool _isLoadingSharedEpisodes = false;
   String? _sharedEpisodesError;
+  bool _isLoadingPlaybackEpisodes = false;
+  String? _playbackEpisodesError;
   bool _isLoading = true;
   String? _error;
   TabController? _tabController;
@@ -277,7 +290,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   @override
   void initState() {
     super.initState();
-    _openPageContext = context;
+    if (!widget.embeddedInPlayback) {
+      _openPageContext = context;
+    }
     _tabController = TabController(
         length: 2,
         vsync: this,
@@ -292,9 +307,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _sharedSourceLabel = widget.sharedSourceLabel;
     _sharedEpisodeLoader = widget.sharedEpisodeLoader;
     _sharedEpisodeBuilder = widget.sharedEpisodeBuilder;
+    _playbackDetailContext = widget.playbackDetailContext;
 
     if (_sharedEpisodeLoader != null && _sharedEpisodeBuilder != null) {
       _loadSharedEpisodes();
+    }
+    if (_shouldLoadPlaybackEpisodes) {
+      _isLoadingPlaybackEpisodes = true;
+      _loadPlaybackEpisodes();
     }
 
     // 添加TabController监听
@@ -312,6 +332,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     });
     _fetchAnimeDetails().then((_) {
       if (_detailedAnime != null &&
+          _detailedAnime!.id > 0 &&
           DandanplayService.isLoggedIn &&
           _dandanplayWatchStatus.isEmpty &&
           (globals.isDesktopOrTablet || _tabController!.index == 1)) {
@@ -356,6 +377,125 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
   }
 
+  bool get _shouldLoadPlaybackEpisodes =>
+      _playbackDetailContext != null &&
+      !_playbackDetailContext!.usesLocalLibraryDetail;
+
+  int _episodeKeyForPlaybackEpisode(PlaybackDetailEpisode episode) {
+    final sourceEpisodeId = episode.episodeId;
+    if (sourceEpisodeId != null && sourceEpisodeId > 0) {
+      return sourceEpisodeId;
+    }
+
+    var key = (episode.id.hashCode & 0x3fffffff) + 1;
+    while (_playbackEpisodeMap.containsKey(key) &&
+        _playbackEpisodeMap[key]!.videoPath != episode.videoPath) {
+      key = key == 0x3fffffff ? 1 : key + 1;
+    }
+    return key;
+  }
+
+  List<EpisodeData> _playbackEpisodeData() {
+    return _playbackEpisodeMap.entries
+        .map(
+          (entry) => EpisodeData(
+            id: entry.key,
+            title: entry.value.title,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  BangumiAnime _playbackFallbackAnime() {
+    final detail = _playbackDetailContext!;
+    final episodes = _playbackEpisodeData();
+    final sourceTitle = detail.title.trim();
+    final sourceSubtitle = detail.subtitle?.trim();
+    return BangumiAnime(
+      id: detail.animeId ?? 0,
+      name: sourceSubtitle?.isNotEmpty == true ? sourceSubtitle! : sourceTitle,
+      nameCn: detail.displayTitle,
+      imageUrl: detail.imageUrl?.trim() ?? '',
+      summary: detail.summary,
+      totalEpisodes: episodes.length,
+      episodeList: episodes,
+    );
+  }
+
+  BangumiAnime _mergePlaybackDetail(BangumiAnime anime) {
+    final detail = _playbackDetailContext;
+    if (detail == null || detail.usesLocalLibraryDetail) return anime;
+
+    final sourceTitle = detail.title.trim();
+    final sourceSubtitle = detail.subtitle?.trim();
+    final sourceSummary = detail.summary?.trim();
+    final sourceImage = detail.imageUrl?.trim();
+    final sourceEpisodes = _playbackEpisodeData();
+    return anime.copyWith(
+      name: sourceSubtitle?.isNotEmpty == true ? sourceSubtitle : anime.name,
+      nameCn: detail.isIdentified && sourceTitle.isNotEmpty
+          ? sourceTitle
+          : anime.nameCn,
+      imageUrl: sourceImage?.isNotEmpty == true ? sourceImage : anime.imageUrl,
+      summary:
+          sourceSummary?.isNotEmpty == true ? sourceSummary : anime.summary,
+      totalEpisodes: sourceEpisodes.isNotEmpty
+          ? sourceEpisodes.length
+          : anime.totalEpisodes,
+      episodeList:
+          sourceEpisodes.isNotEmpty ? sourceEpisodes : anime.episodeList,
+    );
+  }
+
+  Future<void> _loadPlaybackEpisodes() async {
+    final detail = _playbackDetailContext;
+    if (detail == null || !_shouldLoadPlaybackEpisodes) return;
+
+    if (!_isLoadingPlaybackEpisodes || _playbackEpisodesError != null) {
+      setState(() {
+        _isLoadingPlaybackEpisodes = true;
+        _playbackEpisodesError = null;
+      });
+    }
+
+    try {
+      final episodes = await detail.episodeLoader();
+      if (!mounted || _playbackDetailContext?.sourceKey != detail.sourceKey) {
+        return;
+      }
+      setState(() {
+        _playbackEpisodeMap.clear();
+        _playbackPlayableMap.clear();
+        for (final episode in episodes) {
+          final key = _episodeKeyForPlaybackEpisode(episode);
+          _playbackEpisodeMap[key] = episode;
+          _playbackPlayableMap[key] = PlayableItem.fromDetailEpisode(
+            episode,
+            detailContext: detail,
+          );
+        }
+        if (_detailedAnime != null) {
+          _detailedAnime = _mergePlaybackDetail(_detailedAnime!);
+        } else if ((detail.animeId ?? 0) <= 0) {
+          _detailedAnime = _playbackFallbackAnime();
+          _isLoading = false;
+          _error = null;
+        }
+        _episodeHistoryFutures.clear();
+        _isLoadingPlaybackEpisodes = false;
+        _playbackEpisodesError = null;
+      });
+    } catch (error) {
+      if (!mounted || _playbackDetailContext?.sourceKey != detail.sourceKey) {
+        return;
+      }
+      setState(() {
+        _isLoadingPlaybackEpisodes = false;
+        _playbackEpisodesError = error.toString();
+      });
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -378,9 +518,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     super.dispose();
   }
 
+  void _dismissDetailIfNeeded() {
+    if (!mounted || widget.embeddedInPlayback) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
   void _onBangumiLoginStatusChanged() {
     if (mounted) {
-      if (_detailedAnime != null) {
+      if (_detailedAnime != null && _detailedAnime!.id > 0) {
         _loadBangumiUserData(_detailedAnime!);
       }
       setState(() {});
@@ -393,6 +541,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       // 当切换到剧集列表标签（索引1）时，刷新观看状态
       if (_tabController!.index == 1 &&
           _detailedAnime != null &&
+          _detailedAnime!.id > 0 &&
           DandanplayService.isLoggedIn) {
         // 只有在没有加载过状态时才获取
         if (_dandanplayWatchStatus.isEmpty) {
@@ -421,14 +570,28 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       _isSavingBangumiCollection = false;
       _myCommentTimestamp = 0;
     });
+
+    final playbackAnimeId = _playbackDetailContext?.animeId;
+    final animeId = playbackAnimeId != null && playbackAnimeId > 0
+        ? playbackAnimeId
+        : widget.animeId;
+    if (animeId <= 0 && _playbackDetailContext != null) {
+      setState(() {
+        _detailedAnime = _playbackFallbackAnime();
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
+
     try {
       BangumiAnime anime;
 
       if (kIsWeb) {
         // Web environment: fetch from local API
         try {
-          final apiUri = WebRemoteAccessService.apiUri(
-              '/api/bangumi/detail/${widget.animeId}');
+          final apiUri =
+              WebRemoteAccessService.apiUri('/api/bangumi/detail/$animeId');
           if (apiUri == null) {
             throw Exception('未配置远程访问地址');
           }
@@ -445,23 +608,33 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         }
       } else {
         // Mobile/Desktop environment: fetch from service
-        anime = await BangumiService.instance.getAnimeDetails(widget.animeId);
+        anime = await BangumiService.instance.getAnimeDetails(animeId);
       }
 
       if (mounted) {
+        final mergedAnime = _mergePlaybackDetail(anime);
         setState(() {
-          _detailedAnime = anime;
+          _detailedAnime = mergedAnime;
           _isLoading = false;
         });
 
-        _loadBangumiUserData(anime);
+        _loadBangumiUserData(mergedAnime);
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
+        final detail = _playbackDetailContext;
+        if (detail != null) {
+          setState(() {
+            _detailedAnime = _playbackFallbackAnime();
+            _error = null;
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _error = e.toString();
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -470,6 +643,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   Future<void> _fetchDandanplayWatchStatus(BangumiAnime anime) async {
     // 如果未登录弹弹play或没有剧集信息，跳过
     if (!DandanplayService.isLoggedIn ||
+        anime.id <= 0 ||
         anime.episodeList == null ||
         anime.episodeList!.isEmpty) {
       // 重置加载状态
@@ -740,19 +914,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return _collectionTypeLabels[type] ?? '未收藏';
   }
 
-  Future<void> _playEpisodeFromHistoryOrShared({
+  Future<void> _playEpisodeFromSourceOrHistory({
     required BangumiAnime anime,
     required EpisodeData episode,
     required WatchHistoryItem? historyItem,
     required ConnectionState historyState,
-    required bool sharedPlayableAvailable,
-    required PlayableItem? sharedPlayable,
+    required bool sourcePlayableAvailable,
+    required PlayableItem? sourcePlayable,
   }) async {
-    if (sharedPlayableAvailable && sharedPlayable != null) {
-      await PlaybackService().play(sharedPlayable);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+    if (sourcePlayableAvailable && sourcePlayable != null) {
+      await PlaybackService().play(sourcePlayable);
+      _dismissDetailIfNeeded();
       return;
     }
 
@@ -779,7 +951,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           historyItem: historyItem,
         );
         await PlaybackService().play(playableItem);
-        if (mounted) {
+        if (mounted && !widget.embeddedInPlayback) {
           // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
           // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
           // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
@@ -803,7 +975,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           historyItem: historyItem,
         );
         await PlaybackService().play(playableItem);
-        if (mounted) {
+        if (mounted && !widget.embeddedInPlayback) {
           // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
           // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
           // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
@@ -1114,9 +1286,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   Widget _buildSummaryView(BangumiAnime anime) {
     final sharedSummary = _sharedSummary;
-    final String summaryText = (sharedSummary?.summary?.isNotEmpty == true
-            ? sharedSummary!.summary!
-            : (anime.summary ?? '暂无简介'))
+    final playbackDetail = _playbackDetailContext;
+    final allowPlaybackOverrides =
+        playbackDetail != null && !playbackDetail.usesLocalLibraryDetail;
+    final playbackSummary =
+        allowPlaybackOverrides ? playbackDetail.summary?.trim() : null;
+    final String summaryText = (playbackSummary?.isNotEmpty == true
+            ? playbackSummary!
+            : sharedSummary?.summary?.isNotEmpty == true
+                ? sharedSummary!.summary!
+                : (anime.summary ?? '暂无简介'))
         .replaceAll('<br>', ' ')
         .replaceAll('<br/>', ' ')
         .replaceAll('<br />', ' ')
@@ -1128,7 +1307,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             : '待定';
 
     // -- 开始修改 --
-    String coverImageUrl = sharedSummary?.imageUrl ?? anime.imageUrl;
+    final playbackImageUrl =
+        allowPlaybackOverrides ? playbackDetail.imageUrl?.trim() : null;
+    String coverImageUrl = playbackImageUrl?.isNotEmpty == true
+        ? playbackImageUrl!
+        : sharedSummary?.imageUrl ?? anime.imageUrl;
     if (kIsWeb) {
       coverImageUrl =
           WebRemoteAccessService.imageProxyUrl(coverImageUrl) ?? coverImageUrl;
@@ -1243,7 +1426,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       style: valueStyle.copyWith(
                           fontSize: 14, fontStyle: FontStyle.italic))),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (anime.imageUrl.isNotEmpty)
+              if (coverImageUrl.isNotEmpty)
                 Padding(
                     padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
                     child: ClipRRect(
@@ -1751,6 +1934,46 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     final bool hasSharedEpisodes =
         _sharedEpisodeBuilder != null && _sharedEpisodeMap.isNotEmpty;
+    final bool hasPlaybackEpisodes =
+        _playbackDetailContext != null && _playbackEpisodeMap.isNotEmpty;
+
+    if (_shouldLoadPlaybackEpisodes && _isLoadingPlaybackEpisodes) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: AdaptiveMediaActivityIndicator(color: textColor),
+        ),
+      );
+    }
+
+    if (_shouldLoadPlaybackEpisodes && _playbackEpisodesError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Ionicons.alert_circle_outline,
+                  color: Colors.orangeAccent, size: 42),
+              SizedBox(height: 12),
+              Text(
+                _playbackEpisodesError!,
+                style: TextStyle(color: secondaryTextColor),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 16),
+              AdaptiveMediaActionButton(
+                label: '重新加载',
+                onPressed: _loadPlaybackEpisodes,
+                desktopIcon: Icons.refresh,
+                phoneIcon: Icons.refresh,
+                compact: true,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     if (_sharedEpisodeBuilder != null && _isLoadingSharedEpisodes) {
       return Center(
@@ -1933,18 +2156,40 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               itemCount: displayEpisodes.length,
               itemBuilder: (context, index) {
                 final episode = displayEpisodes[index];
+                final playbackEpisode = hasPlaybackEpisodes
+                    ? _playbackEpisodeMap[episode.id]
+                    : null;
+                final playbackPlayable = playbackEpisode != null
+                    ? _playbackPlayableMap[episode.id]
+                    : null;
                 final sharedEpisode =
                     hasSharedEpisodes ? _sharedEpisodeMap[episode.id] : null;
                 final sharedPlayable = sharedEpisode != null
                     ? _sharedPlayableMap[episode.id]
                     : null;
-                final bool sharedPlayableAvailable = sharedEpisode != null &&
-                    sharedPlayable != null &&
-                    sharedEpisode.fileExists;
+                final sourcePlayable = playbackPlayable ?? sharedPlayable;
+                final bool sourcePlayableAvailable =
+                    (playbackEpisode != null && playbackPlayable != null) ||
+                        (sharedEpisode != null &&
+                            sharedPlayable != null &&
+                            sharedEpisode.fileExists);
+                final sourceProgress =
+                    playbackEpisode?.progress ?? sharedEpisode?.progress;
+                final sourceAvailabilityLabel = playbackEpisode != null
+                    ? _playbackDetailContext!.sourceLabel
+                    : '共享媒体';
                 final historyFuture = _episodeHistoryFutures.putIfAbsent(
                   episode.id,
-                  () => WatchHistoryManager.getHistoryItemByEpisode(
-                      anime.id, episode.id),
+                  () {
+                    final sourceHistory = playbackEpisode?.historyItem;
+                    if (sourceHistory != null) {
+                      return Future<WatchHistoryItem?>.value(sourceHistory);
+                    }
+                    return WatchHistoryManager.getHistoryItemByEpisode(
+                      anime.id,
+                      episode.id,
+                    );
+                  },
                 );
 
                 return FutureBuilder<WatchHistoryItem?>(
@@ -1960,7 +2205,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     Color iconColor =
                         progressOrange.withOpacity(0.8); // Default for playing
 
-                    double progress = sharedEpisode?.progress ?? 0.0;
+                    double progress = sourceProgress ?? 0.0;
                     bool progressFromHistory = false;
                     bool isFromScan = false;
                     final historyItem =
@@ -1990,10 +2235,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       leadingIcon = Icon(Ionicons.play_circle_outline,
                           color: progressGreen.withOpacity(0.8), size: 16);
                       progressText = '未播放';
-                    } else if (sharedPlayableAvailable) {
+                    } else if (sourcePlayableAvailable) {
                       leadingIcon = Icon(Ionicons.play_circle_outline,
                           color: progressBlue.withOpacity(0.8), size: 16);
-                      progressText = '共享媒体';
+                      progressText = sourceAvailabilityLabel;
                     } else if (historySnapshot.connectionState ==
                             ConnectionState.done &&
                         historyItem == null) {
@@ -2012,7 +2257,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             .withOpacity(progressFromHistory ? 0.95 : 0.9);
                       } else if (progressText == '未播放') {
                         progressTextColor = progressGreen.withOpacity(0.9);
-                      } else if (progressText == '共享媒体') {
+                      } else if (progressText == sourceAvailabilityLabel) {
                         progressTextColor = progressBlue.withOpacity(0.85);
                       } else {
                         progressTextColor = secondaryTextColor.withOpacity(0.6);
@@ -2155,28 +2400,28 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           ),
                           onTap: _isLargeScreenModeActive
                               ? null
-                              : () => _playEpisodeFromHistoryOrShared(
+                              : () => _playEpisodeFromSourceOrHistory(
                                     anime: anime,
                                     episode: episode,
                                     historyItem: historyItem,
                                     historyState:
                                         historySnapshot.connectionState,
-                                    sharedPlayableAvailable:
-                                        sharedPlayableAvailable,
-                                    sharedPlayable: sharedPlayable,
+                                    sourcePlayableAvailable:
+                                        sourcePlayableAvailable,
+                                    sourcePlayable: sourcePlayable,
                                   ),
                         ),
                       ),
                     );
                     return _wrapLargeScreenFocusable(
                       child: tile,
-                      onActivate: () => _playEpisodeFromHistoryOrShared(
+                      onActivate: () => _playEpisodeFromSourceOrHistory(
                         anime: anime,
                         episode: episode,
                         historyItem: historyItem,
                         historyState: historySnapshot.connectionState,
-                        sharedPlayableAvailable: sharedPlayableAvailable,
-                        sharedPlayable: sharedPlayable,
+                        sourcePlayableAvailable: sourcePlayableAvailable,
+                        sourcePlayable: sourcePlayable,
                       ),
                       borderRadius: BorderRadius.circular(6),
                       autofocus: index == 0,
@@ -2225,11 +2470,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 compact: true,
               ),
               SizedBox(height: 10),
-              AdaptiveMediaActionButton(
-                label: '关闭',
-                onPressed: () => Navigator.of(context).pop(),
-                compact: true,
-              ),
+              if (!widget.embeddedInPlayback)
+                AdaptiveMediaActionButton(
+                  label: '关闭',
+                  onPressed: _dismissDetailIfNeeded,
+                  compact: true,
+                ),
             ],
           ),
         ),
@@ -2237,29 +2483,41 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
 
     final anime = _detailedAnime!;
-    final displayTitle = (_sharedSummary?.nameCn?.isNotEmpty == true)
-        ? _sharedSummary!.nameCn!
-        : anime.nameCn;
-    final displaySubTitle = (_sharedSummary?.name?.isNotEmpty == true)
-        ? _sharedSummary!.name
-        : anime.name;
+    final playbackDetail = _playbackDetailContext;
+    final usesPlaybackHeader =
+        playbackDetail != null && !playbackDetail.usesLocalLibraryDetail;
+    final displayTitle = usesPlaybackHeader
+        ? playbackDetail.displayTitle
+        : (_sharedSummary?.nameCn?.isNotEmpty == true)
+            ? _sharedSummary!.nameCn!
+            : anime.nameCn;
+    final playbackSubtitle = playbackDetail?.subtitle?.trim();
+    final displaySubTitle = usesPlaybackHeader
+        ? playbackDetail.isIdentified
+            ? playbackSubtitle?.isNotEmpty == true
+                ? playbackSubtitle!
+                : anime.name
+            : playbackDetail.title
+        : (_sharedSummary?.name.isNotEmpty == true)
+            ? _sharedSummary!.name
+            : anime.name;
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
     final bool isDesktopOrTablet =
         AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone;
 
     // 加载上次观看记录
-    if (_lastWatchedEpisode == null && !_isLoadingLastWatched) {
-      _loadLastWatchedEpisode(widget.animeId);
+    if (anime.id > 0 && _lastWatchedEpisode == null && !_isLoadingLastWatched) {
+      _loadLastWatchedEpisode(anime.id);
     }
 
     return NipaplayAnimeDetailLayout(
       title: displayTitle,
       subtitle: displaySubTitle,
-      sourceLabel: _sharedSourceLabel,
+      sourceLabel: playbackDetail?.sourceLabel ?? _sharedSourceLabel,
       headerActions:
           inlineHeaderAction == null ? null : <Widget>[inlineHeaderAction],
-      onClose: () => Navigator.of(context).pop(),
+      onClose: widget.embeddedInPlayback ? null : _dismissDetailIfNeeded,
       tabController: _tabController,
       showTabs: !isDesktopOrTablet,
       enableAnimation: enableAnimation,
@@ -2273,9 +2531,20 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   String? _getPosterUrl() {
     final anime = _detailedAnime;
     final sharedSummary = _sharedSummary;
-    if (anime == null && sharedSummary == null) return null;
+    final playbackDetail = _playbackDetailContext;
+    final playbackImageUrl =
+        playbackDetail != null && !playbackDetail.usesLocalLibraryDetail
+            ? playbackDetail.imageUrl?.trim()
+            : null;
+    if (anime == null &&
+        sharedSummary == null &&
+        playbackImageUrl?.isNotEmpty != true) {
+      return null;
+    }
 
-    String coverImageUrl = sharedSummary?.imageUrl ?? anime?.imageUrl ?? '';
+    String coverImageUrl = playbackImageUrl?.isNotEmpty == true
+        ? playbackImageUrl!
+        : sharedSummary?.imageUrl ?? anime?.imageUrl ?? '';
     if (coverImageUrl.isEmpty) return null;
 
     if (kIsWeb) {
@@ -2298,15 +2567,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    final Widget? topRightAction = DandanplayService.isLoggedIn
-        ? _WindowFavoriteButton(
-            isFavorited: _isFavorited,
-            isToggling: _isTogglingFavorite,
-            onTap: _toggleFavorite,
-            secondaryTextColor: secondaryTextColor,
-            isLargeScreenMode: _isLargeScreenModeActive,
-          )
-        : null;
+    final Widget? topRightAction =
+        DandanplayService.isLoggedIn && (_detailedAnime?.id ?? 0) > 0
+            ? _WindowFavoriteButton(
+                isFavorited: _isFavorited,
+                isToggling: _isTogglingFavorite,
+                onTap: _toggleFavorite,
+                secondaryTextColor: secondaryTextColor,
+                isLargeScreenMode: _isLargeScreenModeActive,
+              )
+            : null;
     final Widget? inlineHeaderAction =
         widget.renderInWindowScaffold ? null : topRightAction;
 
@@ -2323,7 +2593,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return NipaplayWindowScaffold(
       backgroundImageUrl: _getPosterUrl(),
       blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
-      onClose: () => Navigator.of(context).pop(),
+      onClose: _dismissDetailIfNeeded,
       topRightAction: topRightAction,
       child: content,
     );
@@ -2365,7 +2635,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       preselectedTags: currentTags,
       onBeforeOpenAnimeDetail: () {
         // 关闭当前的番剧详情页面
-        Navigator.of(context).pop();
+        _dismissDetailIfNeeded();
       },
     );
   }
@@ -2377,7 +2647,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       prefilledTag: tag,
       onBeforeOpenAnimeDetail: () {
         // 关闭当前的番剧详情页面
-        Navigator.of(context).pop();
+        _dismissDetailIfNeeded();
       },
     );
   }

@@ -1,8 +1,10 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:flutter/foundation.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
@@ -12,11 +14,9 @@ class CupertinoSubtitleTracksPane extends StatefulWidget {
   const CupertinoSubtitleTracksPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   State<CupertinoSubtitleTracksPane> createState() =>
@@ -151,10 +151,10 @@ class _CupertinoSubtitleTracksPaneState
         title: '选择远程字幕',
         child: ListView(
           children: [
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               children: candidates
                   .map(
-                    (candidate) => CupertinoListTile(
+                    (candidate) => AdaptivePlayerMenuTile(
                       title: Text(candidate.name),
                       subtitle: Text(candidate.sourceLabel),
                       onTap: () => Navigator.of(context).pop(candidate),
@@ -287,10 +287,10 @@ class _CupertinoSubtitleTracksPaneState
             .isPotentialRemoteVideoPath(widget.videoState.currentVideoPath!);
 
     final children = <Widget>[
-      CupertinoListSection.insetGrouped(
+      AdaptivePlayerMenuSection(
         header: const Text('字幕控制'),
         children: [
-          CupertinoListTile(
+          AdaptivePlayerMenuTile(
             padding: const EdgeInsets.symmetric(vertical: 10),
             leading: const Icon(CupertinoIcons.multiply_circle),
             title: const Text('关闭字幕'),
@@ -312,20 +312,21 @@ class _CupertinoSubtitleTracksPaneState
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-          child: CupertinoButton.filled(
+          child: AdaptiveButton.child(
+            style: AdaptiveButtonStyle.prominentGlass,
             onPressed: _isLoading ? null : _loadExternalSubtitleFile,
             child: _isLoading
-                ? Row(
+                ? const Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      CupertinoActivityIndicator(radius: 10),
+                    children: [
+                      AdaptivePlayerMenuProgressIndicator(size: 20),
                       SizedBox(width: 8),
                       Text('加载中…'),
                     ],
                   )
-                : Row(
+                : const Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
+                    children: [
                       Icon(CupertinoIcons.add_circled),
                       SizedBox(width: 6),
                       Text('加载本地字幕文件'),
@@ -339,11 +340,12 @@ class _CupertinoSubtitleTracksPaneState
         children.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: CupertinoButton.filled(
+            child: AdaptiveButton.child(
+              style: AdaptiveButtonStyle.prominentGlass,
               onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(CupertinoIcons.cloud_download),
                   SizedBox(width: 6),
                   Text('从远程媒体库加载字幕'),
@@ -357,7 +359,7 @@ class _CupertinoSubtitleTracksPaneState
 
     if (_externalSubtitles.isNotEmpty) {
       children.add(
-        CupertinoListSection.insetGrouped(
+        AdaptivePlayerMenuSection(
           header: const Text('外部字幕'),
           children: _externalSubtitles.asMap().entries.map((entry) {
             final index = entry.key;
@@ -366,7 +368,7 @@ class _CupertinoSubtitleTracksPaneState
             final String name = data['name']?.toString() ?? '字幕 $index';
             final String type = data['type']?.toString().toUpperCase() ?? '';
 
-            return CupertinoListTile(
+            return AdaptivePlayerMenuTile(
               leading: Icon(
                 isActive
                     ? CupertinoIcons.check_mark_circled_solid
@@ -380,13 +382,10 @@ class _CupertinoSubtitleTracksPaneState
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
+                  AdaptiveButton.icon(
+                    icon: CupertinoIcons.delete,
+                    style: AdaptiveButtonStyle.glass,
                     onPressed: () => _removeExternalSubtitle(index),
-                    child: const Icon(
-                      CupertinoIcons.delete,
-                      size: 20,
-                    ),
                   ),
                 ],
               ),
@@ -406,7 +405,7 @@ class _CupertinoSubtitleTracksPaneState
 
     if (embeddedTracks != null && embeddedTracks.isNotEmpty) {
       children.add(
-        CupertinoListSection.insetGrouped(
+        AdaptivePlayerMenuSection(
           header: const Text('内嵌字幕'),
           children: embeddedTracks.asMap().entries.map((entry) {
             final index = entry.key;
@@ -421,7 +420,7 @@ class _CupertinoSubtitleTracksPaneState
                 ? track.title!
                 : '轨道 ${index + 1}';
 
-            return CupertinoListTile(
+            return AdaptivePlayerMenuTile(
               leading: Icon(
                 isActive
                     ? CupertinoIcons.check_mark_circled_solid
@@ -492,9 +491,6 @@ class _CupertinoSubtitleTracksPaneState
                 ),
               ),
             ),
-          SliverToBoxAdapter(
-            child: CupertinoPaneBackButton(onPressed: widget.onBack),
-          ),
         ];
       },
     );

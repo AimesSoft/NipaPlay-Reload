@@ -1,16 +1,16 @@
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 class CupertinoSeekStepPane extends StatefulWidget {
-  const CupertinoSeekStepPane({super.key, required this.onBack});
-
-  final VoidCallback onBack;
+  const CupertinoSeekStepPane({super.key});
 
   @override
   State<CupertinoSeekStepPane> createState() => _CupertinoSeekStepPaneState();
@@ -130,10 +130,10 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
           padding: EdgeInsets.only(top: topSpacing),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed([
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('快进 / 快退时间'),
                 children: [
-                  CupertinoListTile(
+                  AdaptivePlayerMenuTile(
                     title: Text(controller.seekStepSummaryLabel),
                     subtitle: const Text('支持预设与手动输入，最小值为 1 帧'),
                   ),
@@ -142,7 +142,7 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CupertinoTextField(
+                        AdaptivePlayerMenuTextField(
                           controller: _customSeekStepController,
                           focusNode: _customSeekStepFocus,
                           placeholder: '例如 0.5 / 1 / 12.5',
@@ -165,7 +165,9 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                         const SizedBox(height: 8),
                         Text(
                           controller.seekStepInputRangeHint,
-                          style: CupertinoTheme.of(context).textTheme.textStyle
+                          style: CupertinoTheme.of(context)
+                              .textTheme
+                              .textStyle
                               .copyWith(
                                 fontSize: 13,
                                 color: CupertinoColors.secondaryLabel
@@ -175,13 +177,10 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                         const SizedBox(height: 10),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 8,
-                            ),
+                          child: AdaptiveButton(
+                            label: '应用',
+                            style: AdaptiveButtonStyle.glass,
                             onPressed: _applyCustomSeekStep,
-                            child: const Text('应用'),
                           ),
                         ),
                       ],
@@ -190,7 +189,7 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                   ...controller.seekStepOptions.map((seconds) {
                     final isSelected = controller.isSeekStepSelected(seconds);
                     final isFrame = controller.isFrameSeekStep(seconds);
-                    return CupertinoListTile(
+                    return AdaptivePlayerMenuTile(
                       title: Text(
                         controller.formatSeekStepLabel(
                           seconds,
@@ -208,21 +207,21 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                   }),
                 ],
               ),
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('长按右键倍速'),
                 children: controller.speedBoostOptions.map((speed) {
                   final isSelected = controller.speedBoostRate == speed;
-                  return CupertinoListTile(
+                  return AdaptivePlayerMenuTile(
                     title: Text('${speed}x'),
                     trailing: _buildCheckmark(isSelected),
                     onTap: () => controller.setSpeedBoostRate(speed),
                   );
                 }).toList(),
               ),
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('跳过时间'),
                 children: [
-                  CupertinoListTile(
+                  AdaptivePlayerMenuTile(
                     title: Text('${controller.skipSeconds} 秒'),
                     subtitle: const Text('用于跳过片头/片尾等片段'),
                   ),
@@ -239,19 +238,12 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: CupertinoTextField(
+                          child: AdaptivePlayerMenuTextField(
                             controller: _skipSecondsController,
-                            textAlign: TextAlign.center,
                             keyboardType: TextInputType.number,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                             ],
-                            decoration: BoxDecoration(
-                              color: CupertinoColors
-                                  .tertiarySystemGroupedBackground
-                                  .resolveFrom(context),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
                             onSubmitted: _handleSkipInput,
                           ),
                         ),
@@ -267,9 +259,6 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
               ),
             ]),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
         ),
       ],
     );
@@ -288,20 +277,11 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
+    return AdaptiveButton.icon(
+      icon: icon,
+      style: AdaptiveButtonStyle.glass,
+      minSize: const Size.square(44),
       onPressed: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon),
-      ),
     );
   }
 

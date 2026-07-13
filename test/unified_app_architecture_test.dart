@@ -17,6 +17,8 @@ import 'package:nipaplay/app/unified_home_components.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
@@ -36,6 +38,7 @@ import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
+import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_management_overview.dart';
@@ -681,6 +684,8 @@ void main() {
       contains('portraitUiScale >= 0.999 ? 24.0 : 0.0'),
     );
     expect(player, contains('AnimeDetailPage('));
+    expect(player, contains('playbackDetailContext: detailContext'));
+    expect(player, isNot(contains('AdaptivePlaybackDetailView(')));
     expect(player, contains('renderInWindowScaffold: false'));
     expect(
         phoneShell, contains('Consumer2<BottomBarProvider, VideoPlayerState>'));
@@ -696,6 +701,12 @@ void main() {
     final controlsOverlay = File(
       'lib/themes/nipaplay/widgets/video_controls_overlay.dart',
     ).readAsStringSync();
+    final modernControls = File(
+      'lib/themes/nipaplay/widgets/modern_video_controls.dart',
+    ).readAsStringSync();
+    final progressBar = File(
+      'lib/themes/nipaplay/widgets/video_progress_bar.dart',
+    ).readAsStringSync();
     final danmakuContainer = File(
       'lib/widgets/danmaku_container.dart',
     ).readAsStringSync();
@@ -703,14 +714,25 @@ void main() {
       'lib/widgets/danmaku_overlay.dart',
     ).readAsStringSync();
     expect(playerUi, contains('getFontSize(videoState) * widget.danmakuScale'));
-    expect(controlsOverlay, contains('Transform.scale('));
-    expect(controlsOverlay, contains('scale: uiScale'));
-    expect(controlsOverlay, contains('compactDesignWidth = 760.0'));
-    expect(controlsOverlay, contains('compactDesignHeight = 168.0'));
+    expect(controlsOverlay, contains('compactPortrait: compactPortrait'));
+    expect(player, contains('_phonePortraitUiDesignWidth = 760'));
+    expect(player, contains('compactPortrait: portraitUiScale < 0.999'));
+    expect(player, contains('_portraitUnlockScheduled'));
+    expect(player, contains('videoState.setShowControls(true)'));
+    expect(player, contains('if (!isCompactPortrait) ...['));
     expect(
       player,
-      contains('VideoControlsOverlay.compactDesignWidth'),
+      contains('globals.isMobilePlatform && !isCompactPortrait'),
     );
+    expect(modernControls, contains('_buildCompactPortraitControls'));
+    expect(modernControls, contains('Expanded(child: _buildProgressBar'));
+    expect(modernControls, contains('CupertinoBottomSheet.showPage<void>'));
+    expect(
+      modernControls,
+      contains('rootPageBuilder: (_) => const CupertinoPlayerMenu()'),
+    );
+    expect(progressBar, contains('this.compact = false'));
+    expect(progressBar, contains('widget.compact'));
     expect(danmakuOverlay, contains('fontSize: widget.fontSize'));
     expect(
       danmakuContainer,
@@ -721,6 +743,136 @@ void main() {
     expect(loading, contains('const Color(0xFAF7F7F8)'));
     expect(loading, contains('if (hasCoverImage)'));
     expect(loading, isNot(contains('showArtworkBackdrop')));
+  });
+
+  test('playback detail source is classified before portrait rendering', () {
+    expect(
+      PlaybackSourceService.sourceKindForPath(
+        'https://share.example/api/media/local/manage/stream?path=%2FAnime%2F01.mkv',
+      ),
+      PlaybackSourceKind.sharedRemoteDirectory,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath(
+        'https://share.example/api/media/local/manage/stream?path=%2FAnime%2F01.mkv',
+        animeId: 42,
+      ),
+      PlaybackSourceKind.sharedRemoteAnime,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath('jellyfin://episode-id'),
+      PlaybackSourceKind.jellyfin,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath('emby://episode-id'),
+      PlaybackSourceKind.emby,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath(
+        'https://dandan.example/api/v1/stream/hash-id',
+      ),
+      PlaybackSourceKind.dandanplayRemote,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath(
+        'http://127.0.0.1:33221/smb/stream?conn=nas&path=%2FAnime%2F01.mkv',
+      ),
+      PlaybackSourceKind.smb,
+    );
+    expect(
+      PlaybackSourceService.sourceKindForPath(
+        'webdav://example/Anime/01.mkv',
+      ),
+      PlaybackSourceKind.webDav,
+    );
+  });
+
+  test('only identified local media may mount the local anime detail', () {
+    final local = PlaybackSourceService.fallback(
+      PlayableItem(
+        videoPath: '/media/Anime/01.mkv',
+        animeId: 42,
+        title: 'Example',
+      ),
+    );
+    final shared = PlaybackSourceService.fallback(
+      PlayableItem(
+        videoPath:
+            'https://share.example/api/media/local/manage/stream?path=%2FAnime%2F01.mkv',
+        animeId: 42,
+        title: 'Example',
+      ),
+    );
+
+    expect(local.usesLocalLibraryDetail, isTrue);
+    expect(shared.usesLocalLibraryDetail, isFalse);
+  });
+
+  test('unidentified playback keeps a source episode instead of local lookup',
+      () async {
+    final detail = PlaybackSourceService.fallback(
+      PlayableItem(
+        videoPath: 'https://media.example/Anime/01.mkv',
+        title: '01',
+      ),
+    );
+    final episodes = await detail.episodeLoader();
+
+    expect(detail.displayTitle, '未识别');
+    expect(detail.usesLocalLibraryDetail, isFalse);
+    expect(episodes, hasLength(1));
+    expect(episodes.single.videoPath, 'https://media.example/Anime/01.mkv');
+  });
+
+  test('episode playback preserves the shared detail context', () {
+    final detail = PlaybackDetailContext(
+      sourceKind: PlaybackSourceKind.webDav,
+      sourceLabel: 'WebDAV',
+      sourceKey: 'webdav:example:/Anime',
+      title: 'Example',
+      isIdentified: false,
+      episodeLoader: () async => const <PlaybackDetailEpisode>[],
+    );
+    const episode = PlaybackDetailEpisode(
+      id: 'episode-2',
+      videoPath: 'webdav://example/Anime/02.mkv',
+      title: '02',
+    );
+
+    final item = PlayableItem.fromDetailEpisode(
+      episode,
+      detailContext: detail,
+    );
+
+    expect(item.detailContext, same(detail));
+    expect(item.videoPath, episode.videoPath);
+
+    const recognizedEpisode = PlaybackDetailEpisode(
+      id: 'episode-3',
+      videoPath: 'webdav://example/Anime/03.mkv',
+      title: '03',
+      animeId: 42,
+    );
+    final recognizedItem = PlayableItem.fromDetailEpisode(
+      recognizedEpisode,
+      detailContext: detail,
+    );
+    expect(recognizedItem.detailContext, isNull);
+  });
+
+  test('playback sources reuse the canonical anime detail renderer', () {
+    final player = File('lib/pages/play_video_page.dart').readAsStringSync();
+    final detail = File('lib/pages/anime_detail_page.dart').readAsStringSync();
+
+    expect(player, contains('AnimeDetailPage('));
+    expect(player, contains('playbackDetailContext: detailContext'));
+    expect(detail, contains('PlaybackDetailContext? playbackDetailContext'));
+    expect(detail, contains('NipaplayAnimeDetailLayout('));
+    expect(detail, contains('BangumiCommentsWidget('));
+    expect(
+      File('lib/playback/adaptive_playback_detail_view.dart').existsSync(),
+      isFalse,
+    );
   });
 
   test('phone anime score badges are fully opaque', () {
@@ -1538,6 +1690,53 @@ void main() {
     expect(networkDialog, contains('AdaptiveAlertDialog.inputShow('));
     expect(dandanplayDialog, isNot(contains('IOS26AlertDialog(')));
     expect(networkDialog, isNot(contains('IOS26AlertDialog(')));
+  });
+
+  test('portrait player menu uses sheet navigation and adaptive controls', () {
+    final playerMenuDirectory = Directory(
+      'lib/themes/cupertino/widgets/player_menu',
+    );
+    final playerMenuSources = playerMenuDirectory
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+    final subtitleSettings = File(
+      'lib/themes/cupertino/widgets/player_menu/'
+      'cupertino_subtitle_settings_pane.dart',
+    ).readAsStringSync();
+    final playerMenu = File(
+      'lib/themes/cupertino/widgets/cupertino_player_menu.dart',
+    ).readAsStringSync();
+    final videoControls = File(
+      'lib/themes/nipaplay/widgets/modern_video_controls.dart',
+    ).readAsStringSync();
+
+    expect(playerMenuSources, isNot(contains('CupertinoSwitch(')));
+    expect(playerMenuSources, isNot(contains('CupertinoListSection')));
+    expect(playerMenuSources, isNot(contains('CupertinoListTile')));
+    expect(playerMenuSources, isNot(contains('CupertinoSegmentedControl')));
+    expect(playerMenuSources, isNot(contains('CupertinoTextField(')));
+    expect(playerMenuSources, isNot(contains('CupertinoButton(')));
+    expect(playerMenuSources, isNot(contains('CupertinoButton.')));
+    expect(playerMenuSources, isNot(contains('CupertinoPaneBackButton')));
+    expect(playerMenuSources, isNot(contains('required this.onBack')));
+    expect(playerMenuSources, contains('AdaptiveSwitch('));
+    expect(playerMenuSources, contains('AdaptivePlayerMenuSection('));
+    expect(playerMenuSources, contains('AdaptivePlayerMenuTextField('));
+    expect(subtitleSettings, contains('_buildSegmentedTile<'));
+    expect(subtitleSettings, contains('AdaptiveSegmentedControl('));
+    expect(subtitleSettings, contains('width: double.infinity'));
+    expect(videoControls, contains('CupertinoBottomSheet.showPage<void>('));
+    expect(videoControls, contains('rootPageBuilder:'));
+    expect(
+      playerMenu,
+      contains('CupertinoBottomSheetPageNavigator.push<void>('),
+    );
+    expect(playerMenu, isNot(contains('_activePane')));
+    expect(playerMenu, isNot(contains('_navigationStack')));
+    expect(playerMenu, isNot(contains('AnimatedSwitcher(')));
   });
 
   testWidgets('Cupertino bottom sheet keeps child navigation inside the sheet',

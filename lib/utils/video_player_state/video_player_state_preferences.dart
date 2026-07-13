@@ -37,6 +37,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         await initializePlayer(
           path,
           actualPlayUrl: actualUrl,
+          playbackDetailContext: _playbackDetailContext,
           resetManualDanmakuOffset: false,
         );
       } else {

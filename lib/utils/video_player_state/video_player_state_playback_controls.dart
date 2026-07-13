@@ -694,6 +694,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
+    _playbackDetailContext = null;
     _danmakuList.clear();
     _danmakuListVersion++;
     _danmakuTracks.clear();
@@ -767,6 +768,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
+    _playbackDetailContext = null;
     _danmakuList.clear();
     _danmakuListVersion++;
     _danmakuTracks.clear();

@@ -48,12 +48,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   static const Curve _largeScreenChromeAnimationCurve = Curves.easeOutCubic;
   static const double _largeScreenTopBarHeight = 76;
   static const double _largeScreenBottomControlsHiddenBottom = -220;
+  static const double _phonePortraitUiDesignWidth = 760;
 
   bool _isHoveringAnimeInfo = false;
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
   bool _isUiLocked = false;
   bool _showUiLockButton = false;
+  bool _portraitUnlockScheduled = false;
   bool _isLargeScreenProgressDragging = false;
   bool _largeScreenPlayStateChangedByDrag = false;
   Timer? _uiLockButtonTimer;
@@ -456,11 +458,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }
 
   Widget _buildPhonePortraitPlayer(VideoPlayerState videoState) {
+    if (_isUiLocked && !_portraitUnlockScheduled) {
+      _portraitUnlockScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _portraitUnlockScheduled = false;
+        if (!mounted || !_isUiLocked) return;
+        _uiLockButtonTimer?.cancel();
+        setState(() {
+          _isUiLocked = false;
+          _showUiLockButton = false;
+        });
+        videoState.setShowControls(true);
+      });
+    }
     final aspectRatio =
         videoState.aspectRatio.isFinite && videoState.aspectRatio > 0
             ? videoState.aspectRatio
             : 16 / 9;
-    final animeId = videoState.animeId;
+    final detailContext = videoState.playbackDetailContext;
 
     return SafeArea(
       left: false,
@@ -474,7 +489,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               ? maximumVideoHeight
               : requestedVideoHeight;
           final portraitUiScale =
-              (constraints.maxWidth / VideoControlsOverlay.compactDesignWidth)
+              (constraints.maxWidth / _phonePortraitUiDesignWidth)
                   .clamp(0.35, 0.72)
                   .toDouble();
           return Column(
@@ -493,11 +508,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 ),
               ),
               Expanded(
-                child: animeId != null && animeId > 0
+                child: detailContext != null
                     ? AnimeDetailPage(
-                        key: ValueKey('portrait-player-detail-$animeId'),
-                        animeId: animeId,
+                        key: ValueKey(
+                          'portrait-player-detail-${detailContext.sourceKey}',
+                        ),
+                        animeId: detailContext.animeId ?? 0,
+                        playbackDetailContext: detailContext,
                         renderInWindowScaffold: false,
+                        embeddedInPlayback: true,
                       )
                     : const SizedBox.shrink(),
               ),
@@ -849,7 +868,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     VideoPlayerState videoState, {
     double portraitUiScale = 1.0,
   }) {
-    final bool uiLocked = globals.isMobilePlatform ? _isUiLocked : false;
+    final bool isCompactPortrait = portraitUiScale < 0.999;
+    final bool uiLocked =
+        globals.isMobilePlatform && !isCompactPortrait ? _isUiLocked : false;
     final bool showLockButton = globals.isMobilePlatform &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton =
@@ -985,20 +1006,22 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           ),
                           const SizedBox(width: 8.0),
                         ],
-                        const SizedBox(width: 4.0),
-                        MouseRegion(
-                          cursor: _isHoveringAnimeInfo
-                              ? SystemMouseCursors.click
-                              : SystemMouseCursors.basic,
-                          onEnter: (_) =>
-                              setState(() => _isHoveringAnimeInfo = true),
-                          onExit: (_) =>
-                              setState(() => _isHoveringAnimeInfo = false),
-                          child: AnimeInfoWidget(
-                            videoState: videoState,
-                            maxWidth: availableTitleWidth,
+                        if (!isCompactPortrait) ...[
+                          const SizedBox(width: 4.0),
+                          MouseRegion(
+                            cursor: _isHoveringAnimeInfo
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.basic,
+                            onEnter: (_) =>
+                                setState(() => _isHoveringAnimeInfo = true),
+                            onExit: (_) =>
+                                setState(() => _isHoveringAnimeInfo = false),
+                            child: AnimeInfoWidget(
+                              videoState: videoState,
+                              maxWidth: availableTitleWidth,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -1076,7 +1099,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         ),
-        if (globals.isMobilePlatform &&
+        if (!isCompactPortrait &&
+            globals.isMobilePlatform &&
             (!globals.isTablet || videoState.isFullscreen))
           Positioned(
             top: 0,
@@ -1115,7 +1139,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               child: Container(),
             ),
           ),
-        VideoControlsOverlay(uiScale: portraitUiScale),
+        VideoControlsOverlay(compactPortrait: portraitUiScale < 0.999),
         if (uiLocked)
           Positioned.fill(
             child: GestureDetector(
@@ -1124,7 +1148,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               child: const SizedBox.expand(),
             ),
           ),
-        if (globals.isMobilePlatform)
+        if (globals.isMobilePlatform && !isCompactPortrait)
           Positioned(
             left: 16.0 + horizontalCutoutInset,
             top: 0,

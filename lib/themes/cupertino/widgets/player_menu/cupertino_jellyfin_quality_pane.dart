@@ -1,4 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle, AdaptiveSwitch;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
@@ -7,7 +9,7 @@ import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -15,11 +17,9 @@ class CupertinoJellyfinQualityPane extends StatefulWidget {
   const CupertinoJellyfinQualityPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   State<CupertinoJellyfinQualityPane> createState() =>
@@ -79,9 +79,8 @@ class _CupertinoJellyfinQualityPaneState
           (t) => t['isDefault'] == true,
           orElse: () => {},
         );
-        _selectedServerSubtitle = defaultTrack.isEmpty
-            ? null
-            : defaultTrack['index'] as int?;
+        _selectedServerSubtitle =
+            defaultTrack.isEmpty ? null : defaultTrack['index'] as int?;
       });
     } else if (path.startsWith('emby://')) {
       final itemId = path.replaceFirst('emby://', '');
@@ -92,9 +91,8 @@ class _CupertinoJellyfinQualityPaneState
           (t) => t['isDefault'] == true,
           orElse: () => {},
         );
-        _selectedServerSubtitle = defaultTrack.isEmpty
-            ? null
-            : defaultTrack['index'] as int?;
+        _selectedServerSubtitle =
+            defaultTrack.isEmpty ? null : defaultTrack['index'] as int?;
       });
     }
   }
@@ -152,24 +150,12 @@ class _CupertinoJellyfinQualityPaneState
         SliverPadding(
           padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 12),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '清晰度与字幕',
-                  style:
-                      CupertinoTheme.of(context).textTheme.navTitleTextStyle,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '选择转码质量，并可指定服务器字幕',
-                  style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                        fontSize: 13,
-                        color: CupertinoColors.secondaryLabel
-                            .resolveFrom(context),
-                      ),
-                ),
-              ],
+            child: Text(
+              '选择转码质量，并可指定服务器字幕',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
             ),
           ),
         ),
@@ -177,17 +163,17 @@ class _CupertinoJellyfinQualityPaneState
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
-              child: CupertinoActivityIndicator(radius: 16),
+              child: AdaptivePlayerMenuProgressIndicator(size: 32),
             ),
           )
         else
           SliverList(
             delegate: SliverChildListDelegate([
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('清晰度'),
                 children: JellyfinVideoQuality.values.map((option) {
                   final selected = option == quality;
-                  return CupertinoListTile(
+                  return AdaptivePlayerMenuTile(
                     title: Text(_qualityName(option)),
                     subtitle: Text(_qualityDescription(option)),
                     trailing: Icon(
@@ -203,7 +189,7 @@ class _CupertinoJellyfinQualityPaneState
                 }).toList(),
               ),
               if (_serverSubtitles.isNotEmpty)
-                CupertinoListSection.insetGrouped(
+                AdaptivePlayerMenuSection(
                   header: const Text('服务器字幕'),
                   children: [
                     ..._serverSubtitles.map((track) {
@@ -212,7 +198,7 @@ class _CupertinoJellyfinQualityPaneState
                       final name = track['display']?.toString() ??
                           track['title']?.toString() ??
                           '字幕 $index';
-                      return CupertinoListTile(
+                      return AdaptivePlayerMenuTile(
                         title: Text(name),
                         trailing: Icon(
                           selected
@@ -227,10 +213,10 @@ class _CupertinoJellyfinQualityPaneState
                         },
                       );
                     }),
-                    CupertinoListTile(
+                    AdaptivePlayerMenuTile(
                       title: const Text('烧录字幕'),
                       subtitle: const Text('转码时将字幕写入画面'),
-                      trailing: CupertinoSwitch(
+                      trailing: AdaptiveSwitch(
                         value: _burnIn,
                         onChanged: (value) => setState(() => _burnIn = value),
                       ),
@@ -240,19 +226,17 @@ class _CupertinoJellyfinQualityPaneState
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: CupertinoButton.filled(
+                child: AdaptiveButton.child(
+                  style: AdaptiveButtonStyle.prominentGlass,
                   onPressed: _isLoading ? null : _applySelection,
                   child: _isLoading
-                      ? const CupertinoActivityIndicator()
+                      ? const AdaptivePlayerMenuProgressIndicator()
                       : const Text('应用设置'),
                 ),
               ),
               const SizedBox(height: 12),
             ]),
           ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
-        ),
       ],
     );
   }

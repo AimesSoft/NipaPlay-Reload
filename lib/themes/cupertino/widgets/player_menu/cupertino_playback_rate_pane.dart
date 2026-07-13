@@ -1,15 +1,15 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 class CupertinoPlaybackRatePane extends StatefulWidget {
-  const CupertinoPlaybackRatePane({super.key, required this.onBack});
-
-  final VoidCallback onBack;
+  const CupertinoPlaybackRatePane({super.key});
 
   @override
   State<CupertinoPlaybackRatePane> createState() =>
@@ -148,7 +148,7 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
           padding: const EdgeInsets.only(bottom: 24),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed([
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('手动输入'),
                 children: [
                   Padding(
@@ -156,7 +156,7 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CupertinoTextField(
+                        AdaptivePlayerMenuTextField(
                           controller: _customRateController,
                           focusNode: _customRateFocus,
                           placeholder: '例如 0.01 / 1.25 / 3.5',
@@ -186,13 +186,10 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
                         const SizedBox(height: 10),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 8,
-                            ),
+                          child: AdaptiveButton(
+                            label: '应用',
+                            style: AdaptiveButtonStyle.glass,
                             onPressed: () => _applyCustomRate(controller),
-                            child: const Text('应用'),
                           ),
                         ),
                       ],
@@ -200,12 +197,12 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
                   ),
                 ],
               ),
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('选择倍速'),
                 children: controller.speedOptions.map((speed) {
                   final bool isSelected =
                       (controller.currentRate - speed).abs() < 0.0001;
-                  return CupertinoListTile(
+                  return AdaptivePlayerMenuTile(
                     title: Text('${_formatRate(speed)}x'),
                     subtitle: Text(_speedDescription(speed)),
                     trailing: isSelected
@@ -226,9 +223,6 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
               ),
             ]),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
         ),
       ],
     );

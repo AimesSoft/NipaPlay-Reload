@@ -1,15 +1,15 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonSize, AdaptiveButtonStyle;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 class CupertinoDanmakuOffsetPane extends StatefulWidget {
-  const CupertinoDanmakuOffsetPane({super.key, required this.onBack});
-
-  final VoidCallback onBack;
+  const CupertinoDanmakuOffsetPane({super.key});
 
   @override
   State<CupertinoDanmakuOffsetPane> createState() =>
@@ -42,7 +42,7 @@ class _CupertinoDanmakuOffsetPaneState
 
   String _formatOffset(double offset) {
     if (offset == 0) return '无偏移';
-    return offset > 0 ? '+${offset}秒' : '${offset}秒';
+    return offset > 0 ? '+$offset' '秒' : '$offset' '秒';
   }
 
   void _applyCustomOffset(VideoPlayerState videoState) {
@@ -68,49 +68,36 @@ class _CupertinoDanmakuOffsetPaneState
             SliverPadding(
               padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 12),
               sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '弹幕时间偏移',
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .navTitleTextStyle,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '修正弹幕与视频之间的同步差异',
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .textStyle
-                          .copyWith(
+                child: Text(
+                  '修正弹幕与视频之间的同步差异',
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                             fontSize: 13,
-                            color: CupertinoColors.secondaryLabel
-                                .resolveFrom(context),
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
-                    ),
-                  ],
                 ),
               ),
             ),
             SliverList(
               delegate: SliverChildListDelegate([
-                CupertinoListSection.insetGrouped(
+                AdaptivePlayerMenuSection(
                   header: const Text('当前偏移'),
                   children: [
-                    CupertinoListTile(
+                    AdaptivePlayerMenuTile(
                       title: Text(_formatOffset(currentOffset)),
                       subtitle: Text(
                         currentOffset == 0
                             ? '弹幕与视频同步显示'
                             : currentOffset > 0
-                                ? '弹幕延迟 ${currentOffset} 秒'
+                                ? '弹幕延迟 $currentOffset' ' 秒'
                                 : '弹幕提前 ${currentOffset.abs()} 秒',
                       ),
                     ),
                   ],
                 ),
-                CupertinoListSection.insetGrouped(
+                AdaptivePlayerMenuSection(
                   header: const Text('快速选择'),
                   children: [
                     Padding(
@@ -120,33 +107,28 @@ class _CupertinoDanmakuOffsetPaneState
                         spacing: 8,
                         runSpacing: 8,
                         children: _offsetOptions.map((value) {
-                          final selected =
-                              (value - currentOffset).abs() < 0.01;
-                          return CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
+                          final selected = (value - currentOffset).abs() < 0.01;
+                          return AdaptiveButton(
+                            label: _formatOffset(value),
+                            size: AdaptiveButtonSize.small,
+                            style: selected
+                                ? AdaptiveButtonStyle.filled
+                                : AdaptiveButtonStyle.glass,
                             color: selected
                                 ? CupertinoTheme.of(context).primaryColor
-                                : CupertinoColors.systemGrey5,
+                                : null,
+                            textColor: selected
+                                ? CupertinoColors.white
+                                : CupertinoColors.label.resolveFrom(context),
                             onPressed: () =>
                                 videoState.setManualDanmakuOffset(value),
-                            child: Text(
-                              _formatOffset(value),
-                              style: TextStyle(
-                                color: selected
-                                    ? CupertinoColors.white
-                                    : CupertinoColors.label.resolveFrom(
-                                        context,
-                                      ),
-                              ),
-                            ),
                           );
                         }).toList(),
                       ),
                     ),
                   ],
                 ),
-                CupertinoListSection.insetGrouped(
+                AdaptivePlayerMenuSection(
                   header: const Text('自定义'),
                   children: [
                     Padding(
@@ -154,7 +136,7 @@ class _CupertinoDanmakuOffsetPaneState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CupertinoTextField(
+                          AdaptivePlayerMenuTextField(
                             controller: _controller,
                             placeholder: '输入偏移值（秒，可为负）',
                             keyboardType: const TextInputType.numberWithOptions(
@@ -166,11 +148,10 @@ class _CupertinoDanmakuOffsetPaneState
                           const SizedBox(height: 8),
                           Align(
                             alignment: Alignment.centerRight,
-                            child: CupertinoButton(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 6),
+                            child: AdaptiveButton(
+                              label: '应用',
+                              style: AdaptiveButtonStyle.glass,
                               onPressed: () => _applyCustomOffset(videoState),
-                              child: const Text('应用'),
                             ),
                           ),
                         ],
@@ -178,11 +159,11 @@ class _CupertinoDanmakuOffsetPaneState
                     ),
                   ],
                 ),
-            CupertinoListSection.insetGrouped(
-              children: [
-                CupertinoListTile(
-                  title: const Text('重置偏移'),
-                  subtitle: const Text('恢复为无偏移状态'),
+                AdaptivePlayerMenuSection(
+                  children: [
+                    AdaptivePlayerMenuTile(
+                      title: const Text('重置偏移'),
+                      subtitle: const Text('恢复为无偏移状态'),
                       trailing: const Icon(CupertinoIcons.refresh),
                       onTap: currentOffset == 0
                           ? null
@@ -195,9 +176,6 @@ class _CupertinoDanmakuOffsetPaneState
                 ),
                 const SizedBox(height: 24),
               ]),
-            ),
-            SliverToBoxAdapter(
-              child: CupertinoPaneBackButton(onPressed: widget.onBack),
             ),
           ],
         );
