@@ -13,11 +13,36 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:path/path.dart' as p;
 
 class TorrentDownloadService {
-  TorrentDownloadService._();
+  TorrentDownloadService._({
+    bool Function()? isIos,
+    Future<io.Directory> Function()? getDownloadsDirectory,
+    Future<bool> Function(String path)? directoryExists,
+  })  : _isIos = isIos ?? (() => io.Platform.isIOS),
+        _getDownloadsDirectory =
+            getDownloadsDirectory ?? StorageService.getDownloadsDirectory,
+        _directoryExists =
+            directoryExists ?? ((path) => io.Directory(path).exists());
 
   static final TorrentDownloadService instance = TorrentDownloadService._();
 
+  @visibleForTesting
+  factory TorrentDownloadService.forTesting({
+    required bool Function() isIos,
+    required Future<io.Directory> Function() getDownloadsDirectory,
+    required Future<bool> Function(String path) directoryExists,
+  }) {
+    return TorrentDownloadService._(
+      isIos: isIos,
+      getDownloadsDirectory: getDownloadsDirectory,
+      directoryExists: directoryExists,
+    );
+  }
+
   static const int _maxRecentDownloadDirectories = 8;
+
+  final bool Function() _isIos;
+  final Future<io.Directory> Function() _getDownloadsDirectory;
+  final Future<bool> Function(String path) _directoryExists;
 
   bool _sessionInitialized = false;
   String _sessionDownloadDir = '';
@@ -27,14 +52,65 @@ class TorrentDownloadService {
       SettingsKeys.torrentDownloadDirectory,
     );
     if (saved.trim().isNotEmpty) {
-      return _resolveDownloadDirectoryAccess(saved.trim());
+      final savedDirectory = saved.trim();
+      final resolved = await _resolveDownloadDirectoryAccess(savedDirectory);
+      if (!_isIos() || await _directoryExists(resolved)) {
+        return resolved;
+      }
+
+      return _recoverInvalidIosDownloadDirectory(
+        savedDirectory: savedDirectory,
+        resolvedDirectory: resolved,
+      );
     }
-    final defaultDir = await StorageService.getDownloadsDirectory();
+    final defaultDir = await _getDownloadsDirectory();
     await SettingsStorage.saveString(
       SettingsKeys.torrentDownloadDirectory,
       defaultDir.path,
     );
     return defaultDir.path;
+  }
+
+  Future<String> _recoverInvalidIosDownloadDirectory({
+    required String savedDirectory,
+    required String resolvedDirectory,
+  }) async {
+    final defaultDirectory = await _getDownloadsDirectory();
+    final defaultPath = defaultDirectory.path;
+    _log(
+      'saved iOS download directory no longer exists; '
+      'recovering from "$savedDirectory" to "$defaultPath"',
+    );
+
+    await SettingsStorage.saveString(
+      SettingsKeys.torrentDownloadDirectory,
+      defaultPath,
+    );
+
+    final invalidDirectories = <String>{
+      savedDirectory,
+      resolvedDirectory,
+    };
+    final recentDirectories = await SettingsStorage.loadStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+    );
+    final updatedRecentDirectories = <String>[
+      defaultPath,
+      ...recentDirectories.where(
+        (directory) =>
+            directory != defaultPath && !invalidDirectories.contains(directory),
+      ),
+    ].take(_maxRecentDownloadDirectories).toList(growable: false);
+    await SettingsStorage.saveStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+      updatedRecentDirectories,
+    );
+    await SettingsStorage.saveBool(
+      SettingsKeys.torrentRecentDownloadDirectoriesMigrated,
+      true,
+    );
+
+    return defaultPath;
   }
 
   Future<void> setDownloadDirectory(String directory) async {

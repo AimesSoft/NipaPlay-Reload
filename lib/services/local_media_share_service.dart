@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
 
 import 'package:nipaplay/models/bangumi_model.dart';
@@ -105,6 +106,8 @@ class LocalMediaShareService {
   }
 
   static final LocalMediaShareService instance = LocalMediaShareService._internal();
+  static const String _mediaLibraryImagePrefsKeyPrefix =
+      'media_library_image_url_';
   static const Map<String, int> _subtitleExtensionPriority = {
     '.ass': 0,
     '.ssa': 1,
@@ -192,21 +195,30 @@ class LocalMediaShareService {
     final bundles = _animeBundleMap.values.toList()
       ..sort((a, b) => b.latestWatchTime.compareTo(a.latestWatchTime));
 
-    // 预取部分番剧详情（异步，不阻塞 API），避免一次性触发过多请求
-    for (final bundle in bundles.take(24)) {
+    // BangumiService 已在应用启动时将持久化详情载入内存。先复用这些
+    // 缓存，再为确实缺失的条目后台补齐，避免首次共享时整页灰色封面。
+    for (final bundle in bundles) {
       _prefetchAnimeDetail(bundle.animeId);
     }
 
+    final prefs = await SharedPreferences.getInstance();
     final List<Map<String, dynamic>> summaries = [];
     for (final bundle in bundles) {
       final detail = _peekAnimeDetail(bundle.animeId);
       final fallbackName = bundle.episodes.first.historyItem.animeName;
+      final persistedImageUrl = prefs.getString(
+        '$_mediaLibraryImagePrefsKeyPrefix${bundle.animeId}',
+      );
       summaries.add({
         'animeId': bundle.animeId,
         'name': detail?.name ?? fallbackName,
         'nameCn': detail?.nameCn ?? fallbackName,
         'summary': detail?.summary ?? '',
-        'imageUrl': detail?.imageUrl,
+        'imageUrl': _firstNonEmptyString([
+          detail?.imageUrl,
+          persistedImageUrl,
+          bundle.episodes.first.historyItem.thumbnailPath,
+        ]),
         'tags': detail?.tags ?? const <dynamic>[],
         'totalEpisodes': detail?.totalEpisodes,
         'lastWatchTime': bundle.latestWatchTime.toIso8601String(),
@@ -266,14 +278,16 @@ class LocalMediaShareService {
     final episodes = _shareEpisodeMap.values.toList()
       ..sort((a, b) => b.historyItem.lastWatchTime.compareTo(a.historyItem.lastWatchTime));
 
-    // 预取部分番剧详情（异步，不阻塞 API）
-    for (final entry in episodes.take(sanitizedLimit).take(24)) {
+    // 与番剧摘要保持一致，预取本次返回范围内的全部详情，避免观看历史
+    // 超过 24 项后封面永久停留在占位图。
+    for (final entry in episodes.take(sanitizedLimit)) {
       final animeId = entry.historyItem.animeId;
       if (animeId != null) {
         _prefetchAnimeDetail(animeId);
       }
     }
 
+    final prefs = await SharedPreferences.getInstance();
     final List<Map<String, dynamic>> items = [];
     for (final entry in episodes.take(sanitizedLimit)) {
       final baseJson = await entry.toJson();
@@ -287,7 +301,13 @@ class LocalMediaShareService {
       items.add({
         ...baseJson,
         'animeName': resolvedName,
-        'imageUrl': detail?.imageUrl ?? entry.historyItem.thumbnailPath,
+        'imageUrl': _firstNonEmptyString([
+          detail?.imageUrl,
+          animeId == null
+              ? null
+              : prefs.getString('$_mediaLibraryImagePrefsKeyPrefix$animeId'),
+          entry.historyItem.thumbnailPath,
+        ]),
       });
     }
 
@@ -299,12 +319,29 @@ class LocalMediaShareService {
   }
 
   BangumiAnime? _peekAnimeDetail(int animeId) {
-    if (!_animeDetailCache.containsKey(animeId)) return null;
-    return _animeDetailCache[animeId];
+    if (_animeDetailCache.containsKey(animeId)) {
+      return _animeDetailCache[animeId];
+    }
+
+    final sharedDetail =
+        BangumiService.instance.getAnimeDetailsFromMemory(animeId);
+    if (sharedDetail != null) {
+      _animeDetailCache[animeId] = sharedDetail;
+    }
+    return sharedDetail;
+  }
+
+  String? _firstNonEmptyString(Iterable<String?> values) {
+    for (final value in values) {
+      final normalized = value?.trim() ?? '';
+      if (normalized.isNotEmpty) return normalized;
+    }
+    return null;
   }
 
   void _prefetchAnimeDetail(int animeId) {
-    if (_animeDetailCache.containsKey(animeId)) {
+    if (_peekAnimeDetail(animeId) != null ||
+        _animeDetailCache.containsKey(animeId)) {
       return;
     }
     if (_animeDetailFetching.contains(animeId)) {

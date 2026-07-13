@@ -15,7 +15,7 @@ class ShadowActionButton extends StatefulWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
-    this.iconSize = 26,
+    this.iconSize = 28,
     this.padding = const EdgeInsets.all(8.0),
   });
 

@@ -10,6 +10,7 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -45,6 +46,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart'
     as desktop_smb;
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'
     as desktop_webdav;
+import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 
 class AdaptiveMediaLibraryPage extends StatefulWidget {
@@ -62,10 +64,12 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   TabChangeNotifier? _tabChangeNotifier;
   CupertinoPageActionsController? _pageActionsController;
   bool _connectionsInitialized = false;
+  int _selectionRevision = 0;
 
   @override
   void initState() {
     super.initState();
+    unawaited(_restoreSelectedSection());
     if (!kIsWeb) {
       unawaited(_initializeConnections());
     }
@@ -120,12 +124,51 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
     setState(() => _connectionsInitialized = true);
   }
 
+  Future<void> _restoreSelectedSection() async {
+    final revisionAtStart = _selectionRevision;
+    final saved = await SettingsStorage.loadString(
+      SettingsKeys.mediaLibrarySelectedSection,
+    );
+    if (!mounted || saved.trim().isEmpty) return;
+    if (_selectionRevision != revisionAtStart) return;
+    setState(() => _selectedSectionId = saved.trim());
+  }
+
+  void _selectSection(String sectionId) {
+    final normalized = sectionId.trim();
+    if (normalized.isEmpty) return;
+    _selectionRevision++;
+    if (normalized != _selectedSectionId) {
+      setState(() => _selectedSectionId = normalized);
+    }
+    unawaited(_persistSelectedSection(normalized));
+  }
+
+  Future<void> _persistSelectedSection(String sectionId) async {
+    try {
+      await SettingsStorage.saveString(
+        SettingsKeys.mediaLibrarySelectedSection,
+        sectionId,
+      );
+    } catch (error) {
+      debugPrint('保存媒体库分区失败: $error');
+    }
+  }
+
+  void _selectMountedMediaLibrarySection(String sectionId) {
+    if (!mounted ||
+        AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone) {
+      return;
+    }
+    _selectSection(sectionId);
+  }
+
   void _handleRequestedSection() {
     final requested = _tabChangeNotifier?.targetMediaLibrarySectionId;
     if (requested == null) return;
     _tabChangeNotifier?.clearSubTabIndex();
     if (requested != _selectedSectionId && mounted) {
-      setState(() => _selectedSectionId = requested);
+      _selectSection(requested);
     }
   }
 
@@ -191,22 +234,11 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
           _selectedSectionId,
         );
         final selectedSection = sections[selectedIndex < 0 ? 0 : selectedIndex];
-        if (selectedSection.id != _selectedSectionId) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() => _selectedSectionId = selectedSection.id);
-            }
-          });
-        }
 
         return AdaptiveMediaLibraryScaffold(
           sections: sections,
           selectedSection: selectedSection,
-          onSectionSelected: (id) {
-            if (id != _selectedSectionId) {
-              setState(() => _selectedSectionId = id);
-            }
-          },
+          onSectionSelected: _selectSection,
           onRemoteAccess: _openRemoteAccessSettings,
           onAddMedia: _showAddMedia,
           child: AdaptiveMediaLibrarySectionContent(
@@ -359,6 +391,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
       directory,
       skipPreviouslyMatchedUnwatched: false,
     );
+    _selectMountedMediaLibrarySection(MediaLibrarySectionIds.localManagement);
     if (mounted) _showMessage('已开始扫描：${path.basename(directory)}');
   }
 
@@ -370,6 +403,8 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         : await desktop_webdav.WebDAVConnectionDialog.show(context);
     if (result == true && mounted) {
       setState(() => _connectionsInitialized = true);
+      _selectMountedMediaLibrarySection(
+          MediaLibrarySectionIds.webdavManagement);
     }
   }
 
@@ -381,11 +416,18 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         : await desktop_smb.SMBConnectionDialog.show(context);
     if (result == true && mounted) {
       setState(() => _connectionsInitialized = true);
+      _selectMountedMediaLibrarySection(MediaLibrarySectionIds.smbManagement);
     }
   }
 
   Future<void> _configureNetworkServer(MediaServerType type) async {
-    await NetworkMediaServerDialog.show(context, type);
+    final result = await NetworkMediaServerDialog.show(context, type);
+    if (result != true || !mounted) return;
+    _selectMountedMediaLibrarySection(
+      type == MediaServerType.jellyfin
+          ? MediaLibrarySectionIds.jellyfin
+          : MediaLibrarySectionIds.emby,
+    );
   }
 
   Future<void> _configureDandanplay() async {
@@ -401,6 +443,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
       );
       if (config == null) return;
       await provider.connect(config.baseUrl, token: config.apiToken);
+      _selectMountedMediaLibrarySection(MediaLibrarySectionIds.dandanplay);
       return;
     }
 
@@ -434,11 +477,21 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         }
       },
     );
-    if (result == true && mounted) setState(() {});
+    if (result == true && mounted) {
+      setState(() {});
+      _selectMountedMediaLibrarySection(MediaLibrarySectionIds.dandanplay);
+    }
   }
 
   Future<void> _addSharedHost() async {
+    final provider = context.read<SharedRemoteLibraryProvider>();
+    final previousHostId = provider.activeHostId;
     await SharedRemoteHostSelectionSheet.show(context);
+    if (!mounted) return;
+    final activeHostId = provider.activeHostId;
+    if (activeHostId != null && activeHostId != previousHostId) {
+      _selectMountedMediaLibrarySection(MediaLibrarySectionIds.shared);
+    }
   }
 
   Future<void> _playHistoryItem(WatchHistoryItem item) async {

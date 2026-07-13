@@ -299,10 +299,16 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       debugPrint('✅ [共享媒体] 成功获取 ${items.length} 个番剧');
 
-      _animeSummaries = items
-          .map((item) =>
-              SharedRemoteAnimeSummary.fromJson(item as Map<String, dynamic>))
-          .toList();
+      _animeSummaries = items.map((item) {
+        final data = Map<String, dynamic>.from(item as Map<String, dynamic>);
+        if (!kIsWeb) {
+          data['imageUrl'] = _resolveRemoteImageUrl(
+            host.baseUrl,
+            data['imageUrl'],
+          );
+        }
+        return SharedRemoteAnimeSummary.fromJson(data);
+      }).toList();
       _animeSummaries
           .sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       _episodeCache.clear();
@@ -361,6 +367,21 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       notifyListeners();
       await _persistHosts();
     }
+  }
+
+  String? _resolveRemoteImageUrl(String baseUrl, dynamic rawImageUrl) {
+    final imageUrl = rawImageUrl?.toString().trim() ?? '';
+    if (imageUrl.isEmpty) return null;
+    if (imageUrl.startsWith('http://') ||
+        imageUrl.startsWith('https://') ||
+        imageUrl.startsWith('data:') ||
+        imageUrl.startsWith('blob:')) {
+      return imageUrl;
+    }
+
+    final encoded = base64Url.encode(utf8.encode(imageUrl));
+    return '${_normalizeBaseUrl(baseUrl)}/api/image_proxy?url='
+        '${Uri.encodeQueryComponent(encoded)}';
   }
 
   Future<List<SharedRemoteEpisode>> loadAnimeEpisodes(int animeId,
