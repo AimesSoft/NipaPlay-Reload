@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
@@ -14,13 +15,10 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/media_server_device_id_service.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
-import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_library_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_management_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_server_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
@@ -30,6 +28,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dar
     show MediaServerType, NetworkMediaServerDialog;
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -68,7 +67,6 @@ class _RemoteMediaLibrarySettingsContentState
 
         if (isInitializing) {
           return AdaptiveSettingsPage(
-            title: l10n.networkMediaLibrary,
             children: [
               AdaptiveSettingsSection(
                 children: [
@@ -92,7 +90,6 @@ class _RemoteMediaLibrarySettingsContentState
         }
 
         return AdaptiveSettingsPage(
-          title: l10n.networkMediaLibrary,
           children: [
             AdaptiveSettingsSection(
               children: [
@@ -770,12 +767,12 @@ class _RemoteMediaLibrarySettingsContentState
         return;
       }
 
-      await Navigator.of(context).push(
-        cupertino.CupertinoPageRoute(
-          fullscreenDialog: true,
-          builder: (context) => CupertinoNetworkMediaManagementSheet(
-            serverType: type,
-          ),
+      await AdaptiveSettingsNavigation.openChildPage<void>(
+        context,
+        title: '$label 设置',
+        child: NetworkMediaServerDialog(
+          serverType: type,
+          embedded: true,
         ),
       );
       if (!mounted) return;
@@ -799,7 +796,14 @@ class _RemoteMediaLibrarySettingsContentState
 
   Future<void> _showNetworkMediaLibrary(MediaServerType type) async {
     if (AdaptiveSettingsScope.isPhoneLayout(context)) {
-      await _showNetworkMediaLibraryBottomSheet(initialServer: type);
+      final navigation = context.read<TabChangeNotifier>();
+      Navigator.of(context, rootNavigator: true).pop();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      navigation.changeToMediaLibrarySection(
+        type == MediaServerType.jellyfin
+            ? MediaLibrarySectionIds.jellyfin
+            : MediaLibrarySectionIds.emby,
+      );
       return;
     }
 
@@ -811,47 +815,6 @@ class _RemoteMediaLibrarySettingsContentState
       title: context.l10n.networkMediaLibrary,
       child: NetworkMediaLibraryView(serverType: viewType),
     );
-  }
-
-  Future<void> _showNetworkMediaLibraryBottomSheet({
-    MediaServerType? initialServer,
-  }) async {
-    final l10n = context.l10n;
-    final jellyfinProvider = context.read<JellyfinProvider>();
-    final embyProvider = context.read<EmbyProvider>();
-
-    if (!jellyfinProvider.isConnected && !embyProvider.isConnected) {
-      AdaptiveSnackBar.show(
-        context,
-        message: l10n.connectJellyfinOrEmbyFirst,
-        type: AdaptiveSnackBarType.warning,
-      );
-      return;
-    }
-
-    await CupertinoBottomSheet.show(
-      context: context,
-      title: l10n.networkMediaLibrary,
-      floatingTitle: true,
-      child: CupertinoNetworkMediaLibrarySheet(
-        jellyfinProvider: jellyfinProvider,
-        embyProvider: embyProvider,
-        initialServer: initialServer,
-        onOpenDetail: (type, id) async {
-          await Navigator.of(context).maybePop();
-          if (!mounted) return;
-          await _openMediaDetail(type, id);
-        },
-      ),
-    );
-  }
-
-  Future<void> _openMediaDetail(MediaServerType type, String mediaId) async {
-    if (type == MediaServerType.jellyfin) {
-      await CupertinoMediaServerDetailPage.showJellyfin(context, mediaId);
-    } else {
-      await CupertinoMediaServerDetailPage.showEmby(context, mediaId);
-    }
   }
 
   Future<void> _refreshNetworkMedia(MediaServerType type) async {
@@ -1067,6 +1030,14 @@ class _RemoteMediaLibrarySettingsContentState
   }
 
   Future<void> _openSharedRemoteLibrary(BuildContext context) async {
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      final navigation = context.read<TabChangeNotifier>();
+      Navigator.of(context, rootNavigator: true).pop();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      navigation.changeToMediaLibrarySection(MediaLibrarySectionIds.shared);
+      return;
+    }
+
     await _openNipaplayWindow(
       context,
       title: _sharedRemoteTitle(context),

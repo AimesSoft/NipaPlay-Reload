@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:path/path.dart' as p;
@@ -7,7 +8,6 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -20,9 +20,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 
 enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
 
@@ -33,7 +35,7 @@ class SharedRemoteLibraryView extends StatefulWidget {
     this.mode = SharedRemoteViewMode.mediaLibrary,
   });
 
-  final OnPlayEpisodeCallback? onPlayEpisode;
+  final ValueChanged<WatchHistoryItem>? onPlayEpisode;
   final SharedRemoteViewMode mode;
 
   @override
@@ -48,6 +50,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
+  LibraryManagementViewMode _managementViewMode =
+      LibraryManagementViewMode.icons;
   String? _managementLoadedHostId;
   Timer? _scanStatusTimer;
   bool _scanStatusRequestInFlight = false;
@@ -157,6 +161,17 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 });
               },
               showSort: true,
+              viewMode: isManagement ? _managementViewMode : null,
+              onToggleViewMode: isManagement
+                  ? () {
+                      setState(() {
+                        _managementViewMode = _managementViewMode ==
+                                LibraryManagementViewMode.icons
+                            ? LibraryManagementViewMode.list
+                            : LibraryManagementViewMode.icons;
+                      });
+                    }
+                  : null,
               trailingActions: [
                 _buildActionIcon(
                   icon: Ionicons.refresh_outline,
@@ -324,13 +339,14 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             onChanged: (_) => setState(() {}),
             suffix: _searchController.text.isEmpty
                 ? null
-                : IconButton(
+                : AdaptiveMediaIconButton(
                     tooltip: '清空搜索',
                     onPressed: () {
                       _searchController.clear();
                       setState(() {});
                     },
-                    icon: const Icon(Icons.close_rounded),
+                    desktopIcon: Icons.close_rounded,
+                    phoneIcon: cupertino.CupertinoIcons.clear,
                   ),
           ),
         ),
@@ -480,10 +496,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             ),
           ),
           const SizedBox(height: 10),
-          LinearProgressIndicator(
+          AdaptiveMediaProgressBar(
             value: progress,
             backgroundColor: Colors.white10,
-            valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+            color: _accentColor,
           ),
         ],
       ),
@@ -532,7 +548,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   ) {
     if (provider.isInitializing ||
         (provider.isLoading && animeSummaries.isEmpty && hasHosts)) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (!hasHosts) {
@@ -698,7 +714,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         (provider.isManagementLoading &&
             folders.isEmpty &&
             provider.scanStatus == null)) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (!hasHosts) {
@@ -922,7 +938,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           const SizedBox(height: 14),
           Expanded(
             child: loading
-                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                ? const Center(child: AdaptiveMediaActivityIndicator())
                 : ListView(
                     padding: const EdgeInsets.only(bottom: 80),
                     children: _buildRemoteDirectoryChildren(
@@ -1014,25 +1030,34 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           Text(status?.message ?? '正在扫描...',
               style: TextStyle(color: Colors.white70, fontSize: 12)),
           SizedBox(height: 4),
-          LinearProgressIndicator(
+          AdaptiveMediaProgressBar(
             value: progress,
             backgroundColor: Colors.white10,
-            valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+            color: _accentColor,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionIcon({
+  LocalLibraryActionControl _buildActionIcon({
     required IconData icon,
     required String tooltip,
     required VoidCallback? onPressed,
   }) {
-    return SearchBarActionButton(
-      icon: icon,
-      tooltip: tooltip,
+    return LocalLibraryActionControl(
+      label: tooltip,
+      desktopIcon: icon,
+      phoneIcon: switch (icon) {
+        Ionicons.refresh_outline => cupertino.CupertinoIcons.refresh,
+        Ionicons.trash_outline => cupertino.CupertinoIcons.delete,
+        Ionicons.add_circle_outline => cupertino.CupertinoIcons.add_circled,
+        Ionicons.flash_outline => cupertino.CupertinoIcons.bolt,
+        Ionicons.link_outline => cupertino.CupertinoIcons.link,
+        _ => cupertino.CupertinoIcons.ellipsis,
+      },
       onPressed: onPressed,
+      isDestructive: icon == Ionicons.trash_outline,
     );
   }
 
@@ -1043,7 +1068,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     bool hasHosts,
   ) {
     if (provider.isInitializing) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (!hasHosts) {
@@ -1051,7 +1076,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isLoading && animeSummaries.isEmpty) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (animeSummaries.isEmpty) {
@@ -1062,9 +1087,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
 
     return RepaintBoundary(
-      child: Scrollbar(
+      child: AdaptiveMediaScrollbar(
         controller: _gridScrollController,
-        radius: const Radius.circular(4),
         child: GridView.builder(
           controller: _gridScrollController,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
@@ -1301,8 +1325,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: ListTile(
-            dense: true,
+          child: AdaptiveMediaListTile(
             contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
             leading: Icon(
               canPlay ? Icons.videocam_outlined : Icons.description_outlined,
@@ -1432,10 +1455,13 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
               ),
             ),
-            IconButton(
+            AdaptiveMediaIconButton(
               onPressed: onClose,
-              icon: Icon(Ionicons.close_outline,
-                  color: Colors.orangeAccent, size: 16),
+              desktopIcon: Ionicons.close_outline,
+              phoneIcon: cupertino.CupertinoIcons.clear,
+              tooltip: '关闭',
+              color: Colors.orangeAccent,
+              size: 16,
             ),
           ],
         ),
@@ -1450,7 +1476,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (!hasHosts) {
@@ -1460,7 +1486,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     if (provider.isManagementLoading &&
         folders.isEmpty &&
         provider.scanStatus == null) {
-      return Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
 
     if (!provider.hasActiveHost) {
@@ -1489,127 +1515,140 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       );
     }
 
-    return LibraryManagementList<SharedRemoteScannedFolder>(
-      scrollController: _managementScrollController,
-      items: folders,
-      itemBuilder: (context, folder) =>
-          _buildRemoteFolderCard(context, provider, folder),
+    return AdaptiveLibraryManagementOverview(
+      items: _buildUnifiedRemoteManagementItems(provider, folders),
+      viewMode: _managementViewMode,
+      emptyContent: const LibraryManagementEmptyContent(
+        title: '远程端未添加媒体文件夹',
+        subtitle: '使用顶部添加按钮选择文件夹并扫描。',
+      ),
     );
   }
 
-  Widget _buildRemoteFolderCard(
-    BuildContext context,
+  List<UnifiedLibraryManagementItem> _buildUnifiedRemoteManagementItems(
     SharedRemoteLibraryProvider provider,
-    SharedRemoteScannedFolder folder,
+    List<SharedRemoteScannedFolder> folders,
   ) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color textColor = isDark ? Colors.white : Colors.black87;
-    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-
     final busy =
         provider.isManagementLoading || provider.scanStatus?.isScanning == true;
-    final statusColor = folder.exists ? iconColor : Colors.orangeAccent;
-    final title = folder.name.isNotEmpty ? folder.name : folder.path;
-    final folderPath = folder.path;
-    final expanded = _expandedRemoteDirectories.containsKey(folderPath);
-    final loading = _loadingRemoteDirectories.contains(folderPath);
+    final items = <UnifiedLibraryManagementItem>[];
 
-    return LibraryManagementCard(
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          dividerColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          key: PageStorageKey<String>(folderPath),
-          leading: Icon(
-            folder.exists
-                ? Icons.folder_open_outlined
-                : Ionicons.warning_outline,
-            color: statusColor,
-          ),
-          iconColor: iconColor,
-          collapsedIconColor: iconColor,
-          onExpansionChanged: (isExpanded) {
-            if (isExpanded != expanded) {
-              // Avoid setState during build when ExpansionTile restores its state.
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                _toggleRemoteDirectory(provider, folderPath);
-              });
-            }
-          },
-          initiallyExpanded: expanded,
-          title: Text(
-            title,
-            style: TextStyle(color: textColor, fontSize: 16),
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              folderPath,
-              locale: const Locale("zh-Hans", "zh"),
-              style: TextStyle(color: secondaryTextColor, fontSize: 11),
-              overflow: TextOverflow.ellipsis,
+    for (final folder in folders) {
+      final path = folder.path;
+      final expanded = _expandedRemoteDirectories.containsKey(path);
+      items.add(
+        UnifiedLibraryManagementItem(
+          id: 'remote-root:$path',
+          title: folder.name.isNotEmpty ? folder.name : path,
+          subtitle: path,
+          status: folder.exists
+              ? (_loadingRemoteDirectories.contains(path) ? '加载中' : null)
+              : '不存在',
+          icon: LibraryManagementIcon.folder,
+          onOpen: () => _toggleRemoteDirectory(provider, path),
+          actions: [
+            UnifiedLibraryManagementAction(
+              label: expanded ? '收起文件夹' : '浏览文件',
+              icon: LibraryManagementIcon.browse,
+              onPressed: () => _toggleRemoteDirectory(provider, path),
             ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: '移除',
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
-                onPressed:
-                    busy ? null : () => provider.removeRemoteFolder(folderPath),
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: Colors.redAccent,
-                  size: 22,
-                ),
-              ),
-              IconButton(
-                tooltip: '扫描',
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
-                onPressed: busy
-                    ? null
-                    : () async {
-                        await provider.addRemoteFolder(
-                          folderPath: folderPath,
-                          scan: true,
-                          skipPreviouslyMatchedUnwatched: false,
-                        );
-                        _startScanStatusPolling();
-                      },
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  color: iconColor,
-                  size: 22,
-                ),
-              ),
-              if (loading)
-                Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: _accentColor),
-                  ),
-                ),
-            ],
-          ),
-          children: expanded
-              ? _buildRemoteDirectoryChildren(context, provider, folderPath, 1)
-              : [],
+            UnifiedLibraryManagementAction(
+              label: '重新扫描',
+              icon: LibraryManagementIcon.refresh,
+              onPressed: busy
+                  ? null
+                  : () async {
+                      await provider.addRemoteFolder(
+                        folderPath: path,
+                        scan: true,
+                        skipPreviouslyMatchedUnwatched: false,
+                      );
+                      _startScanStatusPolling();
+                    },
+            ),
+            UnifiedLibraryManagementAction(
+              label: '移除文件夹',
+              icon: LibraryManagementIcon.delete,
+              destructive: true,
+              onPressed: busy ? null : () => provider.removeRemoteFolder(path),
+            ),
+          ],
         ),
-      ),
-    );
+      );
+      if (expanded) {
+        _appendUnifiedRemoteEntries(
+          items,
+          provider,
+          parentPath: path,
+          depth: 1,
+        );
+      }
+    }
+    return items;
+  }
+
+  void _appendUnifiedRemoteEntries(
+    List<UnifiedLibraryManagementItem> output,
+    SharedRemoteLibraryProvider provider, {
+    required String parentPath,
+    required int depth,
+  }) {
+    final entries = List<SharedRemoteFileEntry>.from(
+      _expandedRemoteDirectories[parentPath] ?? const [],
+    )..sort((a, b) {
+        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+
+    for (final entry in entries) {
+      final path = entry.path;
+      final title = entry.name.isNotEmpty ? entry.name : path;
+      final canPlay = provider.isRemoteFilePlayable(entry);
+      output.add(
+        UnifiedLibraryManagementItem(
+          id: 'remote-entry:$path',
+          title: title,
+          subtitle: entry.isDirectory
+              ? '子文件夹 · ${p.dirname(path)}'
+              : (entry.episodeTitle?.trim().isNotEmpty == true
+                  ? entry.episodeTitle!.trim()
+                  : p.dirname(path)),
+          status: _loadingRemoteDirectories.contains(path) ? '加载中' : null,
+          icon: entry.isDirectory
+              ? LibraryManagementIcon.folder
+              : canPlay
+                  ? LibraryManagementIcon.video
+                  : LibraryManagementIcon.file,
+          onOpen: entry.isDirectory
+              ? () => _toggleRemoteDirectory(provider, path)
+              : canPlay
+                  ? () => _playRemoteFile(provider, entry)
+                  : null,
+          actions: [
+            if (entry.isDirectory)
+              UnifiedLibraryManagementAction(
+                label: '打开文件夹',
+                icon: LibraryManagementIcon.browse,
+                onPressed: () => _toggleRemoteDirectory(provider, path),
+              ),
+            if (!entry.isDirectory && canPlay)
+              UnifiedLibraryManagementAction(
+                label: '播放',
+                icon: LibraryManagementIcon.video,
+                onPressed: () => _playRemoteFile(provider, entry),
+              ),
+          ],
+        ),
+      );
+      if (entry.isDirectory && _expandedRemoteDirectories.containsKey(path)) {
+        _appendUnifiedRemoteEntries(
+          output,
+          provider,
+          parentPath: path,
+          depth: depth + 1,
+        );
+      }
+    }
   }
 
   Widget _buildEmptyManagementPlaceholder(

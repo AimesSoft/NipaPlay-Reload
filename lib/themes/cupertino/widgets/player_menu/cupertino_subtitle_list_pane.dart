@@ -1,30 +1,29 @@
 import 'dart:async';
 
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonSize, AdaptiveButtonStyle;
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoSubtitleListPane extends StatefulWidget {
   const CupertinoSubtitleListPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   State<CupertinoSubtitleListPane> createState() =>
       _CupertinoSubtitleListPaneState();
 }
 
-class _CupertinoSubtitleListPaneState
-    extends State<CupertinoSubtitleListPane> {
+class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
   final SubtitleService _subtitleService = SubtitleService();
   final ScrollController _scrollController = ScrollController();
 
@@ -169,8 +168,9 @@ class _CupertinoSubtitleListPaneState
   }
 
   void _initializeVisibleWindow(int centerIndex) {
-    int start =
-        (centerIndex - _windowSize ~/ 2).clamp(0, _allEntries.length - 1).toInt();
+    int start = (centerIndex - _windowSize ~/ 2)
+        .clamp(0, _allEntries.length - 1)
+        .toInt();
     int end = (start + _windowSize).clamp(0, _allEntries.length).toInt();
 
     setState(() {
@@ -272,37 +272,26 @@ class _CupertinoSubtitleListPaneState
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '字幕预览',
-                          style: CupertinoTheme.of(context)
-                              .textTheme
-                              .navTitleTextStyle,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _allEntries.isEmpty
-                              ? '正在解析字幕文件…'
-                              : '共 ${_allEntries.length} 条字幕，点击任意条目跳转播放位置',
-                          style: CupertinoTheme.of(context)
-                              .textTheme
-                              .textStyle
-                              .copyWith(
-                                fontSize: 13,
-                                color: CupertinoColors.secondaryLabel
-                                    .resolveFrom(context),
-                              ),
-                        ),
-                      ],
+                    child: Text(
+                      _allEntries.isEmpty
+                          ? '正在解析字幕文件…'
+                          : '共 ${_allEntries.length} 条字幕，点击任意条目跳转播放位置',
+                      style: CupertinoTheme.of(context)
+                          .textTheme
+                          .textStyle
+                          .copyWith(
+                            fontSize: 13,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
+                          ),
                     ),
                   ),
-                  CupertinoButton(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  AdaptiveButton(
+                    label: '重新解析',
+                    style: AdaptiveButtonStyle.glass,
+                    size: AdaptiveButtonSize.small,
                     onPressed: _isLoading ? null : _loadSubtitles,
-                    child: const Text('重新解析'),
                   ),
                 ],
               ),
@@ -315,7 +304,7 @@ class _CupertinoSubtitleListPaneState
             const SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
-                child: CupertinoActivityIndicator(radius: 16),
+                child: AdaptivePlayerMenuProgressIndicator(size: 32),
               ),
             ),
           );
@@ -371,8 +360,8 @@ class _CupertinoSubtitleListPaneState
                     final entry = _visibleEntries[index];
                     final bool isCurrent = index == _currentLocalIndex;
                     return Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 4, horizontal: 4),
                       child: GestureDetector(
                         onTap: () => _seekToTime(entry.startTimeMs),
                         child: Container(
@@ -381,7 +370,7 @@ class _CupertinoSubtitleListPaneState
                             color: isCurrent
                                 ? CupertinoTheme.of(context)
                                     .primaryColor
-                                    .withOpacity(0.12)
+                                    .withValues(alpha: 0.12)
                                 : CupertinoColors.systemGrey6
                                     .resolveFrom(context),
                             borderRadius: BorderRadius.circular(12),
@@ -466,18 +455,12 @@ class _CupertinoSubtitleListPaneState
               child: Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: Center(
-                  child: CupertinoActivityIndicator(radius: 10),
+                  child: AdaptivePlayerMenuProgressIndicator(size: 20),
                 ),
               ),
             ),
           );
         }
-
-        slivers.add(
-          SliverToBoxAdapter(
-            child: CupertinoPaneBackButton(onPressed: widget.onBack),
-          ),
-        );
 
         return slivers;
       },

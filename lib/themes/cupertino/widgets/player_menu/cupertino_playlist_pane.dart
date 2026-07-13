@@ -1,13 +1,15 @@
 import 'dart:io';
 
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle;
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -27,11 +29,9 @@ class CupertinoPlaylistPane extends StatefulWidget {
   const CupertinoPlaylistPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   State<CupertinoPlaylistPane> createState() => _CupertinoPlaylistPaneState();
@@ -666,6 +666,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       await widget.videoState.initializePlayer(
         path,
         playbackSession: playbackSession,
+        playbackDetailContext: widget.videoState.playbackDetailContext,
       );
       if (!mounted) return;
       BlurSnackBar.show(context, '已切换到新的播放项');
@@ -695,10 +696,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '播放列表 · ${_sourceName()}',
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .navTitleTextStyle,
+                      _sourceName(),
+                      style: CupertinoTheme.of(context).textTheme.textStyle,
                     ),
                   ],
                 ),
@@ -717,7 +716,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
-              child: CupertinoActivityIndicator(radius: 16),
+              child: AdaptivePlayerMenuProgressIndicator(size: 32),
             ),
           )
         else if (_error != null)
@@ -736,9 +735,10 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                CupertinoButton(
+                AdaptiveButton(
+                  label: '重试',
+                  style: AdaptiveButtonStyle.glass,
                   onPressed: _loadData,
-                  child: const Text('重试'),
                 ),
               ],
             ),
@@ -798,9 +798,6 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
               childCount: _episodes.length,
             ),
           ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
-        ),
       ],
     );
   }

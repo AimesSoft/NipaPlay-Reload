@@ -17,7 +17,6 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     final externalSupported = globals.isDesktop;
 
     return AdaptiveSettingsPage(
-      title: context.l10n.externalCall,
       children: [
         AdaptiveSettingsSection(
           children: [

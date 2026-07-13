@@ -1674,6 +1674,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appreciationCode => '赞赏码';
 
   @override
+  String get appreciationCodeHint => '点击查看赞赏码';
+
+  @override
   String get appreciationImageLoadFailed => '赞赏码图片加载失败';
 
   @override
@@ -3415,6 +3418,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get appreciationCode => '贊賞碼';
+
+  @override
+  String get appreciationCodeHint => '點擊查看贊賞碼';
 
   @override
   String get appreciationImageLoadFailed => '贊賞碼圖片載入失敗';

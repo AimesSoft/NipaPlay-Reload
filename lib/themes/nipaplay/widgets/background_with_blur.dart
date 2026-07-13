@@ -10,13 +10,8 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 
-String backgroundImageUrl = (globals.isDesktop || globals.isTablet)
-    ? 'assets/images/main_image.png'
-    : 'assets/images/main_image_mobile.png';
-
-String backgroundImageUrl2 = (globals.isDesktop || globals.isTablet)
-    ? 'assets/images/main_image2.png'
-    : 'assets/images/main_image_mobile2.png';
+const String backgroundImageUrl = 'assets/images/main_image.png';
+const String backgroundImageUrl2 = 'assets/images/main_image2.png';
 
 const _themeTransitionDuration = Duration(milliseconds: 420);
 const _themeTransitionCurve = Curves.easeInOutCubic;
@@ -26,15 +21,11 @@ class BackgroundBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<
-      SettingsProvider,
-      ThemeNotifier,
-      ThemeBackgroundRevealProvider
-    >(
+    return Consumer3<SettingsProvider, ThemeNotifier,
+        ThemeBackgroundRevealProvider>(
       builder: (context, settingsProvider, themeNotifier, revealProvider, _) {
-        final Duration backgroundTransitionDuration = revealProvider.isActive
-            ? Duration.zero
-            : _themeTransitionDuration;
+        final Duration backgroundTransitionDuration =
+            revealProvider.isActive ? Duration.zero : _themeTransitionDuration;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -95,9 +86,8 @@ class BackgroundBackdrop extends StatelessWidget {
     required Duration duration,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final baseColor = isDarkMode
-        ? const Color(0xFF1E1E1E)
-        : const Color(0xFFF2F2F2);
+    final baseColor =
+        isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
 
     Widget buildComposite(Widget image) {
       return Stack(
@@ -244,8 +234,8 @@ class _BackgroundRevealOverlayState extends State<_BackgroundRevealOverlay>
       return;
     }
     context.read<ThemeBackgroundRevealProvider>().markAnimationCompleted(
-      widget.epoch,
-    );
+          widget.epoch,
+        );
   }
 
   @override

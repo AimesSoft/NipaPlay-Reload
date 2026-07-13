@@ -7,7 +7,6 @@ import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 
 class CupertinoDebugLogViewerSheet extends StatefulWidget {
   const CupertinoDebugLogViewerSheet({super.key});
@@ -22,7 +21,13 @@ class _CupertinoDebugLogViewerSheetState
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
-  final List<String> _logLevels = const ['全部', 'DEBUG', 'INFO', 'WARN', 'ERROR'];
+  final List<String> _logLevels = const [
+    '全部',
+    'DEBUG',
+    'INFO',
+    'WARN',
+    'ERROR'
+  ];
   List<String> _availableTags = const ['全部'];
 
   late final DebugLogService _logService;
@@ -135,24 +140,17 @@ class _CupertinoDebugLogViewerSheetState
   }
 
   Future<void> _pickLevel() async {
-    final result = await showCupertinoModalPopupWithBottomBar<String>(
+    final result = await CupertinoBottomSheet.showSelection<String>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: const Text('选择日志级别'),
-        actions: _logLevels
-            .map(
-              (level) => CupertinoActionSheetAction(
-                isDefaultAction: level == _selectedLevel,
-                onPressed: () => Navigator.of(context).pop(level),
-                child: Text(level),
-              ),
-            )
-            .toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '选择日志级别',
+      options: [
+        for (final level in _logLevels)
+          CupertinoBottomSheetOption(
+            label: level,
+            value: level,
+            selected: level == _selectedLevel,
+          ),
+      ],
     );
     if (result != null && mounted) {
       setState(() {
@@ -162,24 +160,17 @@ class _CupertinoDebugLogViewerSheetState
   }
 
   Future<void> _pickTag() async {
-    final result = await showCupertinoModalPopupWithBottomBar<String>(
+    final result = await CupertinoBottomSheet.showSelection<String>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: const Text('选择日志标签'),
-        actions: _availableTags
-            .map(
-              (tag) => CupertinoActionSheetAction(
-                isDefaultAction: tag == _selectedTag,
-                onPressed: () => Navigator.of(context).pop(tag),
-                child: Text(tag),
-              ),
-            )
-            .toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-      ),
+      title: '选择日志标签',
+      options: [
+        for (final tag in _availableTags)
+          CupertinoBottomSheetOption(
+            label: tag,
+            value: tag,
+            selected: tag == _selectedTag,
+          ),
+      ],
     );
     if (result != null && mounted) {
       setState(() {
@@ -784,8 +775,8 @@ class _CupertinoLogQrSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   CupertinoButton.filled(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: url));
                       AdaptiveSnackBar.show(

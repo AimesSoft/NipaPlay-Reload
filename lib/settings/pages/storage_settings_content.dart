@@ -42,7 +42,6 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
 
     if (_isLoading) {
       return AdaptiveSettingsPage(
-        title: l10n.storageSettings,
         children: const [
           Center(child: CircularProgressIndicator()),
         ],
@@ -50,7 +49,6 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
     }
 
     return AdaptiveSettingsPage(
-      title: l10n.storageSettings,
       children: [
         AdaptiveSettingsSection(
           children: [

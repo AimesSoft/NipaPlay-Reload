@@ -132,6 +132,7 @@ class _LoadingOverlayState extends State<LoadingOverlay>
     final bool isDark = theme.brightness == Brightness.dark;
     final bool hasCoverImage =
         _coverImageUrl != null && _coverImageUrl!.isNotEmpty;
+    final bool isPhoneSurface = globals.isPhone && !globals.isTablet;
 
     // 计算比例尺寸时考虑屏幕大小，修复clamp参数顺序问题
     final screenWidth = MediaQuery.of(context).size.width;
@@ -161,9 +162,14 @@ class _LoadingOverlayState extends State<LoadingOverlay>
       colorScheme.onSurface,
       isDark ? 0.12 : 0.04,
     )!;
-    final Color cardColor = baseSurface.withOpacity(isDark ? 0.92 : 0.96);
-    final Color cardBorderColor =
-        colorScheme.onSurface.withOpacity(isDark ? 0.2 : 0.12);
+    final Color cardColor = isPhoneSurface
+        ? (isDark ? const Color(0xF2252527) : const Color(0xFAF7F7F8))
+        : baseSurface.withOpacity(isDark ? 0.92 : 0.96);
+    final Color cardBorderColor = isPhoneSurface
+        ? (isDark
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.black.withValues(alpha: 0.09))
+        : colorScheme.onSurface.withOpacity(isDark ? 0.2 : 0.12);
     final Color cardShadowColor =
         Colors.black.withOpacity(isDark ? 0.45 : 0.16);
     final Color cursorColor =

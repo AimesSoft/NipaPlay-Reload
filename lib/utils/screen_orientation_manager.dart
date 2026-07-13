@@ -1,7 +1,5 @@
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'dart:io';
 import 'globals.dart' as globals;
 
 class ScreenOrientationManager {
@@ -58,12 +56,29 @@ class ScreenOrientationManager {
         // 平板设备：已经是横屏，无需改变
         return;
       } else {
-        // 手机设备：切换到横屏
-        // 若已是横屏（例如自动下一集），跳过“先允许竖屏再锁横屏”的过渡，
-        // 避免出现短暂的横/竖来回切换。
-        final bool alreadyLandscape = isLandscape;
-        await _setLandscapeOnly(allowTransientPortrait: !alreadyLandscape);
+        // 手机开始播放时默认进入横屏全屏。
+        await _setLandscapeOnly();
       }
+    } finally {
+      _isTransitioning = false;
+    }
+  }
+
+  Future<void> setPhonePlaybackLandscape() async {
+    if (!globals.isMobilePlatform || globals.isTablet) return;
+    _isTransitioning = true;
+    try {
+      await _setLandscapeOnly();
+    } finally {
+      _isTransitioning = false;
+    }
+  }
+
+  Future<void> setPhonePlaybackPortrait() async {
+    if (!globals.isMobilePlatform || globals.isTablet) return;
+    _isTransitioning = true;
+    try {
+      await _setPortraitOnly();
     } finally {
       _isTransitioning = false;
     }

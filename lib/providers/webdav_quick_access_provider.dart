@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// WebDAV 搜索范围
@@ -133,13 +134,13 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keySearchMaxResults = 'webdav_search_max_results';
 
   // Tab 名称常量
-  static const String tabHome = 'home';
-  static const String tabVideo = 'video';
-  static const String tabMediaLibrary = 'media_library';
-  static const String tabTorrent = 'torrent';
-  static const String tabAccount = 'account';
-  static const String tabSettings = 'settings';
-  static const String tabWebDAV = 'webdav';
+  static const String tabHome = AppPageIds.home;
+  static const String tabVideo = AppPageIds.video;
+  static const String tabMediaLibrary = AppPageIds.mediaLibrary;
+  static const String tabTorrent = AppPageIds.torrent;
+  static const String tabAccount = AppPageIds.account;
+  static const String tabSettings = AppPageIds.settings;
+  static const String tabWebDAV = AppPageIds.webdav;
   static const List<String> _allSupportedTabs = [
     tabHome,
     tabVideo,
@@ -234,10 +235,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
   /// 手机布局可用的默认主页选项
   List<String> get phoneAvailableTabs {
-    if (_showWebDAVTab) {
-      return [tabHome, tabWebDAV, tabMediaLibrary, tabAccount, tabSettings];
-    }
-    return [tabHome, tabMediaLibrary, tabAccount, tabSettings];
+    // 手机与桌面消费同一组主页面定义。设置是应用动作，不是主页面。
+    return desktopTabletAvailableTabs;
   }
 
   /// 获取所有可用的 Tab 选项（根据 WebDAV 是否开启）

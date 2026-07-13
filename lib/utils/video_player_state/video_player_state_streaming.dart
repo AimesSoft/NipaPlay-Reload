@@ -582,6 +582,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         currentPath,
         historyItem: historyItem,
         playbackSession: newSession,
+        playbackDetailContext: _playbackDetailContext,
         resetManualDanmakuOffset: false,
       );
 
@@ -664,6 +665,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
         currentPath,
         historyItem: historyItem,
         playbackSession: newSession,
+        playbackDetailContext: _playbackDetailContext,
         resetManualDanmakuOffset: false,
       );
 

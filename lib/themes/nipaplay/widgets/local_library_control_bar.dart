@@ -1,13 +1,47 @@
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
 
 enum LocalLibrarySortType {
   name,
   dateAdded,
   rating,
+}
+
+class LocalLibraryActionControl extends StatelessWidget {
+  const LocalLibraryActionControl({
+    super.key,
+    required this.label,
+    required this.desktopIcon,
+    required this.phoneIcon,
+    required this.onPressed,
+    this.isDestructive = false,
+  });
+
+  final String label;
+  final IconData desktopIcon;
+  final IconData phoneIcon;
+  final VoidCallback? onPressed;
+  final bool isDestructive;
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveMediaIconButton(
+      desktopIcon: desktopIcon,
+      phoneIcon: phoneIcon,
+      tooltip: label,
+      color: isDestructive ? Colors.redAccent : null,
+      onPressed: onPressed,
+    );
+  }
 }
 
 class LocalLibraryControlBar extends StatefulWidget {
@@ -20,7 +54,9 @@ class LocalLibraryControlBar extends StatefulWidget {
   final VoidCallback? onBack;
   final String? title;
   final bool showSort;
-  final List<Widget>? trailingActions;
+  final List<LocalLibraryActionControl>? trailingActions;
+  final LibraryManagementViewMode? viewMode;
+  final VoidCallback? onToggleViewMode;
 
   LocalLibraryControlBar({
     super.key,
@@ -34,6 +70,8 @@ class LocalLibraryControlBar extends StatefulWidget {
     this.title,
     this.showSort = true,
     this.trailingActions,
+    this.viewMode,
+    this.onToggleViewMode,
   });
 
   @override
@@ -62,21 +100,14 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   Widget build(BuildContext context) {
     assert(!widget.showSort ||
         (widget.currentSort != null && widget.onSortChanged != null));
+    assert((widget.viewMode == null) == (widget.onToggleViewMode == null));
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return _buildPhoneControlBar(context);
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentSort = widget.currentSort ?? LocalLibrarySortType.dateAdded;
 
-    final activeColor = AppAccentColors.current;
-    final idleBorderColor = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.1);
-
-    // 提高背景对比度，日间模式下使用纯白
-    final bgColor =
-        isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white;
-
-    final textColor = isDark
-        ? Colors.white.withValues(alpha: 0.8)
-        : Colors.black.withValues(alpha: 0.7);
     final primaryTextColor = isDark ? Colors.white : Colors.black;
 
     return Container(
@@ -113,56 +144,28 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
           ],
           // 搜索框
           Expanded(
-            child: Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color:
-                      _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
-                  width: _searchFocusNode.hasFocus ? 1.5 : 1,
-                ),
-              ),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  textSelectionTheme: TextSelectionThemeData(
-                    selectionColor: activeColor.withValues(alpha: 0.3),
-                    selectionHandleColor: activeColor,
-                  ),
-                ),
-                child: TextField(
-                  controller: widget.searchController,
-                  focusNode: _searchFocusNode,
-                  onChanged: widget.onSearchChanged,
-                  style: TextStyle(color: primaryTextColor, fontSize: 14),
-                  cursorColor: activeColor,
-                  decoration: InputDecoration(
-                    hintText: '搜索...',
-                    hintStyle: TextStyle(
-                        color: textColor.withValues(alpha: 0.5), fontSize: 14),
-                    prefixIcon: Icon(Ionicons.search_outline,
-                        size: 18,
-                        color: _searchFocusNode.hasFocus
-                            ? activeColor
-                            : textColor.withValues(alpha: 0.5)),
-                    suffixIcon: widget.searchController.text.isNotEmpty
-                        ? SearchBarActionButton(
-                            icon: Ionicons.close_circle,
-                            onPressed: () {
-                              widget.searchController.clear();
-                              widget.onSearchChanged('');
-                              widget.onClearSearch?.call();
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
+            child: AdaptiveMediaSearchField(
+              controller: widget.searchController,
+              focusNode: _searchFocusNode,
+              placeholder: '搜索…',
+              onChanged: widget.onSearchChanged,
+              onClear: widget.onClearSearch,
             ),
           ),
+          if (widget.viewMode != null) ...[
+            const SizedBox(width: 10),
+            SearchBarActionButton(
+              icon: widget.viewMode == LibraryManagementViewMode.icons
+                  ? Ionicons.list_outline
+                  : Ionicons.grid_outline,
+              size: 20,
+              color: primaryTextColor,
+              tooltip: widget.viewMode == LibraryManagementViewMode.icons
+                  ? '切换到列表视图'
+                  : '切换到图标视图',
+              onPressed: widget.onToggleViewMode,
+            ),
+          ],
           if (widget.trailingActions != null &&
               widget.trailingActions!.isNotEmpty) ...[
             SizedBox(width: 12),
@@ -196,6 +199,77 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildPhoneControlBar(BuildContext context) {
+    final actions = <CupertinoMediaSearchToolbarAction>[
+      if (widget.viewMode != null)
+        CupertinoMediaSearchToolbarAction(
+          label: widget.viewMode == LibraryManagementViewMode.icons
+              ? '切换到列表视图'
+              : '切换到图标视图',
+          icon: widget.viewMode == LibraryManagementViewMode.icons
+              ? cupertino.CupertinoIcons.list_bullet
+              : cupertino.CupertinoIcons.square_grid_2x2,
+          onPressed: widget.onToggleViewMode,
+        ),
+      for (final action in widget.trailingActions ?? const [])
+        CupertinoMediaSearchToolbarAction(
+          label: action.label,
+          icon: action.phoneIcon,
+          onPressed: action.onPressed,
+        ),
+      if (widget.showSort)
+        CupertinoMediaSearchToolbarAction(
+          label: '排序',
+          icon: cupertino.CupertinoIcons.arrow_up_arrow_down,
+          onPressed: () => _showPhoneSortMenu(context),
+        ),
+    ];
+    return CupertinoMediaSearchToolbar(
+      controller: widget.searchController,
+      placeholder:
+          widget.title?.isNotEmpty == true ? '搜索${widget.title}' : '搜索…',
+      onChanged: (value) {
+        widget.onSearchChanged(value);
+        if (value.isEmpty) widget.onClearSearch?.call();
+      },
+      leadingAction: widget.showBackButton
+          ? CupertinoMediaSearchToolbarAction(
+              label: '返回',
+              icon: cupertino.CupertinoIcons.back,
+              onPressed: widget.onBack,
+            )
+          : null,
+      actions: actions,
+    );
+  }
+
+  Future<void> _showPhoneSortMenu(BuildContext context) async {
+    final selected =
+        await CupertinoBottomSheet.showSelection<LocalLibrarySortType>(
+      context: context,
+      title: '排序',
+      options: [
+        _phoneSortOption(LocalLibrarySortType.dateAdded, '最近观看'),
+        _phoneSortOption(LocalLibrarySortType.name, '名称排序'),
+        _phoneSortOption(LocalLibrarySortType.rating, '评分排序'),
+      ],
+    );
+    if (selected != null) {
+      widget.onSortChanged?.call(selected);
+    }
+  }
+
+  CupertinoBottomSheetOption<LocalLibrarySortType> _phoneSortOption(
+    LocalLibrarySortType type,
+    String label,
+  ) {
+    return CupertinoBottomSheetOption(
+      label: label,
+      value: type,
+      selected: widget.currentSort == type,
     );
   }
 }

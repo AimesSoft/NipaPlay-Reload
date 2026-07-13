@@ -54,7 +54,7 @@ class AdaptiveListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _buildCupertinoListTile(context);
     }
 

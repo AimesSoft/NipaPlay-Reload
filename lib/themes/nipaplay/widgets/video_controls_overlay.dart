@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 
 class VideoControlsOverlay extends StatelessWidget {
   final bool showFullscreenButton;
+  final bool compactPortrait;
 
   const VideoControlsOverlay({
     super.key,
     this.showFullscreenButton = true,
+    this.compactPortrait = false,
   });
 
   @override
@@ -16,6 +18,10 @@ class VideoControlsOverlay extends StatelessWidget {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         if (!videoState.hasVideo) return const SizedBox.shrink();
+        final controls = ModernVideoControls(
+          showFullscreenButton: showFullscreenButton,
+          compactPortrait: compactPortrait,
+        );
         return Positioned(
           left: 0,
           right: 0,
@@ -28,9 +34,7 @@ class VideoControlsOverlay extends StatelessWidget {
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 150),
                 offset: Offset(0, videoState.showControls ? 0 : 0.1),
-                child: ModernVideoControls(
-                  showFullscreenButton: showFullscreenButton,
-                ),
+                child: controls,
               ),
             ),
           ),
@@ -38,4 +42,4 @@ class VideoControlsOverlay extends StatelessWidget {
       },
     );
   }
-} 
+}

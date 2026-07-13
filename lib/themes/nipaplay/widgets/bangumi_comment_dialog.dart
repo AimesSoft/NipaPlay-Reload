@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
@@ -6,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_comment_dialog.dart';
 
 class BangumiCommentDialog extends StatefulWidget {
   final String animeTitle;
@@ -32,6 +35,17 @@ class BangumiCommentDialog extends StatefulWidget {
     required Future<void> Function(BangumiCollectionSubmitResult result)
         onSubmit,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoCommentDialog.show(
+        context: context,
+        animeTitle: animeTitle,
+        initialRating: initialRating,
+        initialComment: initialComment,
+        collectionType: collectionType,
+        onSubmit: onSubmit,
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,

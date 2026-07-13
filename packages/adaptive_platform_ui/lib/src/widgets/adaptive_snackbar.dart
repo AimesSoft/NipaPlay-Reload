@@ -38,7 +38,7 @@ class AdaptiveSnackBar {
     String? action,
     VoidCallback? onActionPressed,
   }) {
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       _showIOSSnackBar(
         context,
         message: message,

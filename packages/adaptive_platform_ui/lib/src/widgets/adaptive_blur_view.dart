@@ -31,7 +31,8 @@ class AdaptiveBlurView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // iOS 26+ uses native UIVisualEffectView
-    if (PlatformInfo.isIOS && PlatformInfo.isIOSVersionInRange(26, 99)) {
+    if (PlatformInfo.prefersCupertinoControls &&
+        PlatformInfo.isIOSVersionInRange(26, 99)) {
       return Ios26NativeBlurView(
         blurStyle: blurStyle,
         borderRadius: borderRadius,

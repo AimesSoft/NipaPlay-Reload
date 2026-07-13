@@ -1,17 +1,15 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoPlaybackInfoPane extends StatelessWidget {
   const CupertinoPlaybackInfoPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -29,10 +27,10 @@ class CupertinoPlaybackInfoPane extends StatelessWidget {
       }
     }
 
-    final String? danmakuAnimeId = dandanTrack?['animeId']?.toString() ??
-        (videoState.animeId != null ? videoState.animeId.toString() : null);
+    final String? danmakuAnimeId =
+        dandanTrack?['animeId']?.toString() ?? videoState.animeId?.toString();
     final String? danmakuEpisodeId = dandanTrack?['episodeId']?.toString() ??
-        (videoState.episodeId != null ? videoState.episodeId.toString() : null);
+        videoState.episodeId?.toString();
 
     final List<_InfoRow> rows = [
       _InfoRow('作品标题', videoState.animeTitle ?? '未知'),
@@ -64,11 +62,11 @@ class CupertinoPlaybackInfoPane extends StatelessWidget {
           padding: EdgeInsets.only(top: topSpacing, bottom: 24),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              CupertinoListSection.insetGrouped(
+              AdaptivePlayerMenuSection(
                 header: const Text('播放信息'),
                 children: rows
                     .map(
-                      (row) => CupertinoListTile(
+                      (row) => AdaptivePlayerMenuTile(
                         title: Text(row.title),
                         subtitle: Text(row.value),
                       ),
@@ -77,9 +75,6 @@ class CupertinoPlaybackInfoPane extends StatelessWidget {
               ),
             ]),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

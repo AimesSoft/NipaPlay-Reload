@@ -20,6 +20,7 @@ import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
@@ -31,6 +32,10 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
@@ -40,7 +45,10 @@ class MediaServerDetailPage extends StatefulWidget {
     super.key,
     required this.mediaId,
     required this.serverType,
+    this.embedded = false,
   });
+
+  final bool embedded;
 
   @override
   State<MediaServerDetailPage> createState() => _MediaServerDetailPageState();
@@ -57,6 +65,20 @@ class MediaServerDetailPage extends StatefulWidget {
 
   static Future<WatchHistoryItem?> show(
       BuildContext context, String mediaId, MediaServerType serverType) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      final label =
+          serverType == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+      return CupertinoBottomSheet.show<WatchHistoryItem>(
+        context: context,
+        title: '$label 详情',
+        floatingTitle: true,
+        child: MediaServerDetailPage(
+          mediaId: mediaId,
+          serverType: serverType,
+          embedded: true,
+        ),
+      );
+    }
     // 获取外观设置Provider
     final appearanceSettings =
         Provider.of<AppearanceSettingsProvider>(context, listen: false);
@@ -576,8 +598,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(height: 8),
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(textColor),
+          AdaptiveMediaActivityIndicator(
+            color: textColor,
           ),
           SizedBox(height: 16),
           Text(
@@ -693,7 +715,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
 
     Widget child;
     if (_isLoading && _mediaDetail == null) {
-      child = const Center(child: CircularProgressIndicator());
+      child = const Center(child: AdaptiveMediaActivityIndicator());
     } else if (_error != null && _mediaDetail == null) {
       child = NipaplayLargeScreenEmptyState(
         icon: Icons.error_outline_rounded,
@@ -988,7 +1010,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     if (_isLoading &&
         (_episodesBySeasonId[_selectedSeasonId ?? ''] == null ||
             _episodesBySeasonId[_selectedSeasonId ?? '']!.isEmpty)) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: AdaptiveMediaActivityIndicator());
     }
     if (_error != null && _selectedSeasonId != null) {
       return NipaplayLargeScreenEmptyState(
@@ -1166,8 +1188,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
 
     if (_isLoading && _mediaDetail == null) {
       pageContent = Center(
-        child: CircularProgressIndicator(
-            color: isDark ? Colors.white : Colors.black87),
+        child: AdaptiveMediaActivityIndicator(
+          color: isDark ? Colors.white : Colors.black87,
+        ),
       );
     } else if (_error != null && _mediaDetail == null) {
       pageContent = Center(
@@ -1198,11 +1221,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                 fontSize: 16,
               ),
               SizedBox(height: 10),
-              TextButton(
+              AdaptiveMediaActionButton(
+                label: '关闭',
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('关闭',
-                    locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(color: secondaryTextColor)),
+                compact: true,
               ),
             ],
           ),
@@ -1220,7 +1242,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           Provider.of<AppearanceSettingsProvider>(context, listen: false);
       final enableAnimation = appearanceSettings.enablePageAnimation;
       final subtitle = _mediaDetail!.originalTitle;
-      final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+      final bool isDesktopOrTablet =
+          AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone;
 
       pageContent = NipaplayAnimeDetailLayout(
         title: _mediaDetail!.name,
@@ -1247,6 +1270,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     final hasBackdrop = backdropUrl.isNotEmpty;
 
     return NipaplayWindowScaffold(
+      embedded: widget.embedded,
       backgroundImageUrl:
           hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
       blurBackground: !hasBackdrop, // 如果没有横向图而使用竖向图，开启高斯模糊
@@ -1684,7 +1708,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
 
       if (tabChangeNotifier != null) {
         debugPrint('立即切换到播放页面');
-        tabChangeNotifier.changeTab(1);
+        tabChangeNotifier.changePage(AppPageIds.video);
       }
 
       Navigator.of(context).pop();
@@ -1771,7 +1795,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         (_episodesBySeasonId[_selectedSeasonId ?? ''] == null ||
             _episodesBySeasonId[_selectedSeasonId ?? '']!.isEmpty)) {
       return Center(
-        child: CircularProgressIndicator(color: textColor),
+        child: AdaptiveMediaActivityIndicator(color: textColor),
       );
     }
 
@@ -1815,7 +1839,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     }
     if (episodes.isEmpty && _isLoading) {
       // 如果仍在加载，显示加载指示器
-      return Center(child: CircularProgressIndicator(color: textColor));
+      return Center(child: AdaptiveMediaActivityIndicator(color: textColor));
     }
     if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) {
       // 处理没有季的情况
@@ -1863,10 +1887,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                     }
                   }
                 : null,
-            child: ListTile(
+            child: AdaptiveMediaListTile(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              enabled: !_isDetailAutoMatching,
               leading: SizedBox(
                 width: 100, // 调整图片宽度
                 height: 60, // 调整图片高度，保持宽高比
@@ -1965,7 +1988,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                   ),
                 ],
               ),
-              onTap: () => _playEpisode(episode),
+              onTap: _isDetailAutoMatching ? null : () => _playEpisode(episode),
             ),
           );
         },

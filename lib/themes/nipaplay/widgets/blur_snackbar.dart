@@ -3,11 +3,14 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/app_navigation_scope.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
 
 class BlurSnackBar {
   static OverlayEntry? _currentOverlayEntry;
@@ -19,8 +22,8 @@ class BlurSnackBar {
       return false;
     }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    final mainPageState = MainPageState.of(context);
-    final isOnVideoPage = mainPageState?.globalTabController?.index == 1;
+    final isOnVideoPage =
+        AppNavigationScope.maybeOf(context)?.selectedPageId == AppPageIds.video;
     return videoState.status == PlayerStatus.playing && isOnVideoPage;
   }
 
@@ -38,7 +41,8 @@ class BlurSnackBar {
 
     // context 可能是 Navigator 自己的 context（无 Overlay 祖先，如 PlaybackService
     // 传入的 navigatorKey.currentContext），用 maybeOf + 回退到 Navigator 内部 Overlay。
-    final overlay = Overlay.maybeOf(context) ?? navigatorKey.currentState?.overlay;
+    final overlay =
+        Overlay.maybeOf(context) ?? globals.navigatorKey.currentState?.overlay;
     if (overlay == null) {
       debugPrint('[BlurSnackBar] 无可用 Overlay，放弃显示: $content');
       return;
@@ -48,6 +52,9 @@ class BlurSnackBar {
     late final Animation<Offset> slideAnimation;
     late final Animation<double> scaleAnimation;
     bool useGlassBackground;
+    final isPhoneSurface =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone ||
+            globals.isPhone;
     try {
       useGlassBackground = _shouldUseGlassBackground(context);
     } catch (_) {
@@ -69,7 +76,7 @@ class BlurSnackBar {
     _controller?.dispose();
     _controller = AnimationController(
       duration: const Duration(milliseconds: 300),
-      vsync: navigatorKey.currentState ?? Navigator.of(context),
+      vsync: globals.navigatorKey.currentState ?? Navigator.of(context),
     );
 
     animation = CurvedAnimation(
@@ -87,11 +94,11 @@ class BlurSnackBar {
 
     overlayEntry = OverlayEntry(
       builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
         final mediaQuery = MediaQuery.of(context);
         final safePadding = mediaQuery.padding;
+        final baseBottomOffset = 16 + safePadding.bottom;
         final size = mediaQuery.size;
         final maxWidth = math.min(
           360.0,
@@ -105,20 +112,18 @@ class BlurSnackBar {
               .clamp(0.0, size.height)
               .toDouble(),
         );
-        final baseSurface = Color.lerp(
-          colorScheme.surface,
-          colorScheme.onSurface,
-          isDark ? 0.12 : 0.04,
-        )!;
         final backgroundColor = useGlassBackground
-            ? baseSurface.withOpacity(isDark ? 0.18 : 0.22)
-            : baseSurface.withOpacity(isDark ? 0.92 : 0.97);
-        final borderColor = colorScheme.onSurface.withOpacity(
-          useGlassBackground ? (isDark ? 0.25 : 0.18) : (isDark ? 0.2 : 0.12),
-        );
-        final textColor =
-            colorScheme.onSurface.withOpacity(isDark ? 0.92 : 0.88);
-        final actionForeground = AppAccentColors.current;
+            ? (isDark
+                ? Colors.black.withValues(alpha: 0.42)
+                : Colors.white.withValues(alpha: 0.56))
+            : (isDark ? const Color(0xF2252527) : const Color(0xFAF7F7F8));
+        final borderColor = isDark
+            ? Colors.white.withValues(alpha: useGlassBackground ? 0.2 : 0.14)
+            : Colors.black.withValues(alpha: useGlassBackground ? 0.14 : 0.09);
+        final textColor = isDark
+            ? Colors.white.withValues(alpha: 0.92)
+            : Colors.black.withValues(alpha: 0.86);
+        final actionForeground = textColor;
         final shadowColor = isDark
             ? Colors.black.withOpacity(0.45)
             : Colors.black.withOpacity(0.16);
@@ -212,7 +217,7 @@ class BlurSnackBar {
         );
 
         return Positioned(
-          bottom: 16 + safePadding.bottom,
+          bottom: isPhoneSurface ? baseBottomOffset * 2 : baseBottomOffset,
           right: 16 + safePadding.right,
           child: FadeTransition(
             opacity: animation,

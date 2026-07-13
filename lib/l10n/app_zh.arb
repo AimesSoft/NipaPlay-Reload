@@ -884,6 +884,7 @@
     }
   },
   "appreciationCode": "赞赏码",
+  "appreciationCodeHint": "点击查看赞赏码",
   "appreciationImageLoadFailed": "赞赏码图片加载失败",
   "acknowledgements": "致谢",
   "aboutStoryPrefix": "NipaPlay，名字来自《寒蝉鸣泣之时》中古手梨花的口头禅 \"",

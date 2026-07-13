@@ -15,7 +15,7 @@ class DandanplayConnectionConfig {
   final String? apiToken;
 }
 
-/// 显示原生 iOS 26 风格的连接对话框，依次采集地址与 API 密钥
+/// 使用自适应连接对话框依次采集地址与 API 密钥。
 Future<DandanplayConnectionConfig?> showCupertinoDandanplayConnectionDialog({
   required BuildContext context,
   required DandanplayRemoteProvider provider,
@@ -26,29 +26,27 @@ Future<DandanplayConnectionConfig?> showCupertinoDandanplayConnectionDialog({
       ? l10n.dandanRemoteManageAccessTitle
       : l10n.dandanRemoteConnectAccessTitle;
 
-  final String? baseUrl = await showCupertinoDialog<String>(
+  final String? baseUrl = await AdaptiveAlertDialog.inputShow(
     context: context,
-    builder: (context) => IOS26AlertDialog(
-      title: dialogTitle,
-      message: l10n.dandanRemoteAddressPrompt,
-      input: AdaptiveAlertDialogInput(
-        placeholder: l10n.dandanRemoteAddressPlaceholder,
-        initialValue: provider.serverUrl ?? '',
-        keyboardType: TextInputType.url,
-      ),
-      actions: [
-        AlertAction(
-          title: l10n.cancel,
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: l10n.nextStep,
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
+    title: dialogTitle,
+    message: l10n.dandanRemoteAddressPrompt,
+    input: AdaptiveAlertDialogInput(
+      placeholder: l10n.dandanRemoteAddressPlaceholder,
+      initialValue: provider.serverUrl ?? '',
+      keyboardType: TextInputType.url,
     ),
+    actions: [
+      AlertAction(
+        title: l10n.cancel,
+        style: AlertActionStyle.cancel,
+        onPressed: () {},
+      ),
+      AlertAction(
+        title: l10n.nextStep,
+        style: AlertActionStyle.primary,
+        onPressed: () {},
+      ),
+    ],
   );
 
   final String trimmedBaseUrl = baseUrl?.trim() ?? '';
@@ -61,30 +59,29 @@ Future<DandanplayConnectionConfig?> showCupertinoDandanplayConnectionDialog({
 
   final String actionLabel = hasExisting ? l10n.save : l10n.connectAction;
 
-  final String? token = await showCupertinoDialog<String>(
+  final String? token = await AdaptiveAlertDialog.inputShow(
     context: context,
-    builder: (context) => IOS26AlertDialog(
-      title: l10n.dandanRemoteApiTokenOptionalTitle,
-      message: l10n.dandanRemoteApiTokenPrompt(actionLabel),
-      input: AdaptiveAlertDialogInput(
-        placeholder: provider.tokenRequired
-            ? l10n.enterApiToken
-            : l10n.optionalApiTokenHint,
-        obscureText: true,
-      ),
-      actions: [
-        AlertAction(
-          title: l10n.cancel,
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: actionLabel,
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
+    title: l10n.dandanRemoteApiTokenOptionalTitle,
+    message: l10n.dandanRemoteApiTokenPrompt(actionLabel),
+    input: AdaptiveAlertDialogInput(
+      placeholder: provider.tokenRequired
+          ? l10n.enterApiToken
+          : l10n.optionalApiTokenHint,
+      obscureText: true,
     ),
+    allowEmpty: !provider.tokenRequired,
+    actions: [
+      AlertAction(
+        title: l10n.cancel,
+        style: AlertActionStyle.cancel,
+        onPressed: () {},
+      ),
+      AlertAction(
+        title: actionLabel,
+        style: AlertActionStyle.primary,
+        onPressed: () {},
+      ),
+    ],
   );
 
   if (token == null) {

@@ -5,28 +5,25 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'hotkey_service.dart';
 
 /// 弹幕对话框管理器，用于防止多个弹幕对话框堆叠
 class DanmakuDialogManager {
-  static final DanmakuDialogManager _instance = DanmakuDialogManager._internal();
-  
+  static final DanmakuDialogManager _instance =
+      DanmakuDialogManager._internal();
+
   // 单例模式
   factory DanmakuDialogManager() {
     return _instance;
   }
-  
+
   DanmakuDialogManager._internal();
-  
+
   // 是否正在显示弹幕对话框
   bool _isShowingDialog = false;
-  
-  // 热键服务
-  final HotkeyService _hotkeyService = HotkeyService();
-  
+
   // 当前对话框的上下文
   BuildContext? _currentContext;
-  
+
   // 显示弹幕对话框
   Future<void> showSendDanmakuDialog({
     required BuildContext context,
@@ -42,10 +39,10 @@ class DanmakuDialogManager {
       debugPrint('[DanmakuDialogManager] 已经在显示弹幕对话框，不再显示');
       return;
     }
-    
+
     _isShowingDialog = true;
     _currentContext = context;
-    
+
     try {
       final mediaQuery = MediaQuery.of(context);
       final shortestSide = mediaQuery.size.shortestSide;
@@ -59,21 +56,19 @@ class DanmakuDialogManager {
           title: '发送弹幕',
           heightRatio: 0.9,
           barrierDismissible: !disableBackgroundDismiss,
-          child: Builder(
-            builder: (sheetContext) {
-              final keyboardHeight =
-                  MediaQuery.of(sheetContext).viewInsets.bottom;
-              return AnimatedPadding(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                padding: EdgeInsets.only(bottom: keyboardHeight),
-                child: SendDanmakuDialogContent(
-                  episodeId: episodeId,
-                  currentTime: currentTime,
-                  onDanmakuSent: onDanmakuSent,
+          child: CupertinoBottomSheetContentLayout(
+            sliversBuilder: (sheetContext, topSpacing) => [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, topSpacing + 8, 16, 20),
+                sliver: SliverToBoxAdapter(
+                  child: SendDanmakuDialogContent(
+                    episodeId: episodeId,
+                    currentTime: currentTime,
+                    onDanmakuSent: onDanmakuSent,
+                  ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
         );
       } else {
@@ -106,7 +101,7 @@ class DanmakuDialogManager {
       _currentContext = null;
     }
   }
-  
+
   // 关闭当前弹幕对话框
   void closeCurrentDialog() {
     if (_isShowingDialog && _currentContext != null) {
@@ -115,10 +110,11 @@ class DanmakuDialogManager {
       _currentContext = null;
     }
   }
-  
+
   // 注册发送弹幕快捷键处理
   bool handleSendDanmakuHotkey() {
-    debugPrint('[DanmakuDialogManager] 处理发送弹幕快捷键，当前对话框状态: ${_isShowingDialog ? "显示中" : "未显示"}');
+    debugPrint(
+        '[DanmakuDialogManager] 处理发送弹幕快捷键，当前对话框状态: ${_isShowingDialog ? "显示中" : "未显示"}');
 
     final focusedContext = FocusManager.instance.primaryFocus?.context;
     final isEditingText = focusedContext?.widget is EditableText;
@@ -126,15 +122,15 @@ class DanmakuDialogManager {
       debugPrint('[DanmakuDialogManager] 检测到输入焦点，忽略关闭弹幕对话框快捷键');
       return true;
     }
-    
+
     if (_isShowingDialog) {
       // 如果已经在显示弹幕对话框，则关闭它
       debugPrint('[DanmakuDialogManager] 关闭当前弹幕对话框');
       closeCurrentDialog();
       return true; // 返回true表示已处理
     }
-    
+
     // 返回false表示未处理，需要显示新对话框
     return false;
   }
-} 
+}

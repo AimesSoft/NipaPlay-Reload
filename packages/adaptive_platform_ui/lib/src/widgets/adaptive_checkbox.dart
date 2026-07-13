@@ -73,7 +73,7 @@ class AdaptiveCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // iOS - Use custom iOS-style checkbox
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _IOSCheckbox(
         value: value,
         tristate: tristate,

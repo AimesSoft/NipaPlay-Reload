@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +26,10 @@ class BlurLoginDialog extends StatefulWidget {
     this.loginButtonText = '登录',
     required this.onLogin,
     this.onCancel,
+    this.embedded = false,
   });
+
+  final bool embedded;
 
   @override
   State<BlurLoginDialog> createState() => _BlurLoginDialogState();
@@ -36,6 +43,22 @@ class BlurLoginDialog extends StatefulWidget {
     required Future<LoginResult> Function(Map<String, String> values) onLogin,
     VoidCallback? onCancel,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<bool>(
+        context: context,
+        title: title,
+        heightRatio: 0.72,
+        child: BlurLoginDialog(
+          title: title,
+          fields: fields,
+          loginButtonText: loginButtonText,
+          onLogin: onLogin,
+          onCancel: onCancel,
+          embedded: true,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -155,38 +178,20 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
       selectionColor: _accentColor.withOpacity(0.3),
       selectionHandleColor: _accentColor,
     );
-    final buttonStyle = ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return hintColor;
-        }
-        return _accentColor;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(vertical: 12),
-      ),
-    );
-
-    return NipaplayWindowScaffold(
-      maxWidth: dialogWidth,
-      maxHeightFactor: 0.9,
-      onClose: () => Navigator.of(context).maybePop(),
-      backgroundColor: surfaceColor,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: TextSelectionTheme(
-          data: selectionTheme,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: keyboardHeight),
-            child: SizedBox(
-              height: dialogHeight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    final content = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: TextSelectionTheme(
+        data: selectionTheme,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: keyboardHeight),
+          child: SizedBox(
+            height: dialogHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!widget.embedded) ...[
                     Text(
                       widget.title,
                       style: textTheme.titleLarge?.copyWith(
@@ -200,96 +205,110 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                           ),
                       textAlign: TextAlign.left,
                     ),
-                    SizedBox(height: 24),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...widget.fields.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final field = entry.value;
-                              final isLastField =
-                                  index == widget.fields.length - 1;
-                              final nextField =
-                                  isLastField ? null : widget.fields[index + 1];
+                    const SizedBox(height: 24),
+                  ],
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...widget.fields.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final field = entry.value;
+                            final isLastField =
+                                index == widget.fields.length - 1;
+                            final nextField =
+                                isLastField ? null : widget.fields[index + 1];
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: TextField(
-                                  controller: _controllers[field.key],
-                                  focusNode: _focusNodes[field.key],
-                                  cursorColor: _accentColor,
-                                  style:
-                                      TextStyle(color: colorScheme.onSurface),
-                                  obscureText: field.isPassword,
-                                  textInputAction: isLastField
-                                      ? TextInputAction.done
-                                      : TextInputAction.next,
-                                  onSubmitted: (value) {
-                                    if (isLastField) {
-                                      if (!_isLoading) _handleLogin();
-                                    } else {
-                                      if (nextField != null) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    field.label,
+                                    style: TextStyle(
+                                      color: labelColor,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                  AdaptiveMediaTextField(
+                                    controller: _controllers[field.key]!,
+                                    focusNode: _focusNodes[field.key],
+                                    cursorColor: _accentColor,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurface,
+                                    ),
+                                    obscureText: field.isPassword,
+                                    textInputAction: isLastField
+                                        ? TextInputAction.done
+                                        : TextInputAction.next,
+                                    onSubmitted: (value) {
+                                      if (isLastField) {
+                                        if (!_isLoading) _handleLogin();
+                                      } else if (nextField != null) {
                                         _focusNodes[nextField.key]
                                             ?.requestFocus();
                                       }
-                                    }
-                                  },
-                                  decoration: InputDecoration(
-                                    labelText: field.label,
-                                    hintText: field.hint,
-                                    labelStyle: TextStyle(color: labelColor),
-                                    hintStyle: TextStyle(color: hintColor),
-                                    enabledBorder: UnderlineInputBorder(
-                                      borderSide:
-                                          BorderSide(color: borderColor),
-                                    ),
-                                    focusedBorder: UnderlineInputBorder(
-                                      borderSide:
-                                          BorderSide(color: _accentColor),
+                                    },
+                                    decoration: InputDecoration(
+                                      hintText: field.hint,
+                                      hintStyle: TextStyle(color: hintColor),
+                                      filled: true,
+                                      fillColor: surfaceColor,
+                                      enabledBorder: OutlineInputBorder(
+                                        borderSide:
+                                            BorderSide(color: borderColor),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderSide:
+                                            BorderSide(color: _accentColor),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton(
-                        onPressed: _isLoading ? null : _handleLogin,
-                        style: buttonStyle,
-                        child: _isLoading
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    _accentColor,
-                                  ),
-                                ),
-                              )
-                            : Text(
-                                widget.loginButtonText,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                ],
                               ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  SizedBox(height: 16),
+                  if (_isLoading)
+                    Center(
+                      child: AdaptiveMediaActivityIndicator(
+                        color: _accentColor,
+                        size: 20,
+                      ),
+                    )
+                  else
+                    AdaptiveMediaActionButton(
+                      label: widget.loginButtonText,
+                      onPressed: _handleLogin,
+                      emphasis: AdaptiveMediaActionEmphasis.primary,
+                      expand: true,
+                    ),
+                ],
               ),
             ),
           ),
         ),
       ),
+    );
+    if (widget.embedded) return content;
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: 0.9,
+      onClose: () {
+        widget.onCancel?.call();
+        Navigator.of(context).maybePop();
+      },
+      backgroundColor: surfaceColor,
+      child: content,
     );
   }
 }

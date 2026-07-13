@@ -1,29 +1,16 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/pages/account/account_page_view_model.dart';
 
 import '../widgets/account_action_button.dart';
 import '../widgets/account_profile_card.dart';
 
 class CupertinoDandanplayAccountSection extends StatelessWidget {
-  final bool isLoggedIn;
-  final String username;
-  final String? avatarUrl;
-  final bool isLoading;
-  final VoidCallback onLogin;
-  final VoidCallback onRegister;
-  final VoidCallback onLogout;
-  final VoidCallback onDeleteAccount;
+  final DandanplayAccountViewModel data;
   final Widget userActivity;
 
   const CupertinoDandanplayAccountSection({
     super.key,
-    required this.isLoggedIn,
-    required this.username,
-    required this.avatarUrl,
-    required this.isLoading,
-    required this.onLogin,
-    required this.onRegister,
-    required this.onLogout,
-    required this.onDeleteAccount,
+    required this.data,
     required this.userActivity,
   });
 
@@ -51,13 +38,14 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
       );
     }
 
-    if (isLoggedIn) {
+    if (data.isLoggedIn) {
+      final actions = data.actions;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           CupertinoAccountProfileCard(
-            username: username,
-            avatarUrl: avatarUrl,
+            username: data.username,
+            avatarUrl: data.avatarUrl,
           ),
           const SizedBox(height: 16),
           buildCard(
@@ -66,19 +54,19 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
               children: [
                 Expanded(
                   child: CupertinoAccountActionButton(
-                    label: '退出登录',
+                    label: actions[0].label,
                     iosIcon: CupertinoIcons.square_arrow_left,
-                    onPressed: onLogout,
+                    onPressed: actions[0].onPressed,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: CupertinoAccountActionButton(
-                    label: isLoading ? '处理中...' : '注销账号',
+                    label: actions[1].label,
                     iosIcon: CupertinoIcons.delete,
                     destructive: true,
-                    isLoading: isLoading,
-                    onPressed: isLoading ? null : onDeleteAccount,
+                    isLoading: actions[1].isLoading,
+                    onPressed: actions[1].onPressed,
                   ),
                 ),
               ],
@@ -90,6 +78,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
       );
     }
 
+    final actions = data.actions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -99,7 +88,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '登录弹弹play账号',
+                DandanplayAccountViewModel.signedOutTitle,
                 style: CupertinoTheme.of(context)
                     .textTheme
                     .textStyle
@@ -107,7 +96,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '登录后可同步观看记录、收藏和应用设置。',
+                DandanplayAccountViewModel.signedOutDescription,
                 style: CupertinoTheme.of(context)
                     .textTheme
                     .textStyle
@@ -123,15 +112,15 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               CupertinoAccountActionButton(
-                label: '立即登录',
+                label: actions[0].label,
                 iosIcon: CupertinoIcons.person_crop_circle,
-                onPressed: onLogin,
+                onPressed: actions[0].onPressed,
               ),
               const SizedBox(height: 12),
               CupertinoAccountActionButton(
-                label: '注册新账号',
+                label: actions[1].label,
                 iosIcon: CupertinoIcons.person_badge_plus,
-                onPressed: onRegister,
+                onPressed: actions[1].onPressed,
               ),
             ],
           ),

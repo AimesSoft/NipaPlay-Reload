@@ -1,18 +1,14 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SendDanmakuDialogContent extends StatefulWidget {
-  final int episodeId;
-  final double currentTime;
-  final Function(Map<String, dynamic> danmaku)? onDanmakuSent;
-
   const SendDanmakuDialogContent({
     super.key,
     required this.episodeId,
@@ -20,8 +16,12 @@ class SendDanmakuDialogContent extends StatefulWidget {
     this.onDanmakuSent,
   });
 
+  final int episodeId;
+  final double currentTime;
+  final ValueChanged<Map<String, dynamic>>? onDanmakuSent;
+
   @override
-  SendDanmakuDialogContentState createState() =>
+  State<SendDanmakuDialogContent> createState() =>
       SendDanmakuDialogContentState();
 }
 
@@ -29,38 +29,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController textController = TextEditingController();
   final TextEditingController _hexColorController = TextEditingController();
-  Color selectedColor = const Color(0xFFffffff);
-  String danmakuType = 'scroll'; // 'scroll', 'top', 'bottom'
-  bool _isSending = false;
-  bool _isSendButtonHovered = false;
-  bool _isSendButtonPressed = false;
-  bool _isSendButtonFocused = false;
-
   final List<Color> _presetColors = DanmakuColorPresets.sendPresetColors;
 
-  Color _getStrokeColor(Color textColor) {
-    // This logic should match the actual danmaku rendering
-    final luminance = (0.299 * textColor.red +
-            0.587 * textColor.green +
-            0.114 * textColor.blue) /
-        255;
-    return luminance < 0.2 ? Colors.white : Colors.black;
-  }
-
-  Color _darken(Color color, [double amount = .3]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(color);
-    final hslDark = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
-    return hslDark.toColor();
-  }
-
-  Color _lighten(Color color, [double amount = .3]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(color);
-    final hslLight =
-        hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
-    return hslLight.toColor();
-  }
+  Color selectedColor = const Color(0xFFFFFFFF);
+  String danmakuType = 'scroll';
+  bool _isSending = false;
 
   @override
   void dispose() {
@@ -70,630 +43,242 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     super.dispose();
   }
 
-  int _getDanmakuMode() {
-    switch (danmakuType) {
-      case 'top':
-        return 5;
-      case 'bottom':
-        return 4;
-      case 'scroll':
-      default:
-        return 1;
-    }
+  int get _selectedModeIndex => switch (danmakuType) {
+        'top' => 1,
+        'bottom' => 2,
+        _ => 0,
+      };
+
+  int get _danmakuMode => switch (danmakuType) {
+        'top' => 5,
+        'bottom' => 4,
+        _ => 1,
+      };
+
+  Color _strokeColor(Color color) =>
+      color.computeLuminance() < 0.2 ? Colors.white : Colors.black;
+
+  Color _darken(Color color, [double amount = .3]) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
+        .toColor();
   }
 
-  int _colorToInt(Color color) {
-    return (color.red * 256 * 256) + (color.green * 256) + color.blue;
+  Color _lighten(Color color, [double amount = .3]) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness + amount).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  int _colorToInt(Color color) => color.toARGB32() & 0x00FFFFFF;
+
+  void _updateHexColor(String value) {
+    if (value.length != 6) return;
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) return;
+    setState(() => selectedColor = Color(0xFF000000 | parsed));
   }
 
   Future<void> _sendDanmaku() async {
-    if (textController.text.isEmpty) {
+    final comment = textController.text.trim();
+    if (comment.isEmpty) {
       BlurSnackBar.show(context, '弹幕内容不能为空');
       return;
     }
 
-    setState(() {
-      _isSending = true;
-    });
-
+    setState(() => _isSending = true);
     try {
-      final result = await DandanplayService.sendDanmaku(
+      final result = await DanmakuMatchingService.instance.sendDanmaku(
         episodeId: widget.episodeId,
         time: widget.currentTime,
-        mode: _getDanmakuMode(),
+        mode: _danmakuMode,
         color: _colorToInt(selectedColor),
-        comment: textController.text,
+        comment: comment,
       );
-
-      if (mounted) {
-        BlurSnackBar.show(context, '弹幕发送成功');
-        if (result['success'] == true && result.containsKey('danmaku')) {
-          widget.onDanmakuSent?.call(result['danmaku']);
-        }
-        Navigator.of(context).pop(true); // Close the dialog
+      if (!mounted) return;
+      BlurSnackBar.show(context, '弹幕发送成功');
+      final danmaku = result['danmaku'];
+      if (result['success'] == true && danmaku is Map) {
+        widget.onDanmakuSent?.call(Map<String, dynamic>.from(danmaku));
       }
-    } catch (e) {
-      if (mounted) {
-        BlurSnackBar.show(context, '发送失败: $e');
-      }
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '发送失败: $error');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final shortestSide = mediaQuery.size.shortestSide;
-    final bool isRealPhone = globals.isPhone && shortestSide < 600;
-
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = theme.colorScheme;
     final inputThemeColor = AppAccentColors.current;
-
-    final strokeColor = _getStrokeColor(selectedColor);
-
+    final isPhone =
+        globals.isPhone && MediaQuery.sizeOf(context).shortestSide < 600;
+    final strokeColor = _strokeColor(selectedColor);
     final previewStyle = TextStyle(
       fontSize: 18,
       color: selectedColor,
       shadows: [
-        Shadow(
-          offset: Offset(globals.strokeWidth, globals.strokeWidth),
-          blurRadius: 0.0,
-          color: strokeColor,
-        ),
-        Shadow(
-          offset: Offset(-globals.strokeWidth, -globals.strokeWidth),
-          blurRadius: 0.0,
-          color: strokeColor,
-        ),
-        Shadow(
-          offset: Offset(globals.strokeWidth, -globals.strokeWidth),
-          blurRadius: 0.0,
-          color: strokeColor,
-        ),
-        Shadow(
-          offset: Offset(-globals.strokeWidth, globals.strokeWidth),
-          blurRadius: 0.0,
-          color: strokeColor,
-        ),
+        for (final offset in [
+          Offset(globals.strokeWidth, globals.strokeWidth),
+          Offset(-globals.strokeWidth, -globals.strokeWidth),
+          Offset(globals.strokeWidth, -globals.strokeWidth),
+          Offset(-globals.strokeWidth, globals.strokeWidth),
+        ])
+          Shadow(offset: offset, color: strokeColor),
       ],
     );
 
-    Widget content;
-    if (isRealPhone) {
-      content = _buildPhoneLayout(theme, previewStyle, inputThemeColor);
-    } else {
-      // 非手机设备保持原有布局
-      content = Scrollbar(
-        controller: _scrollController,
-        thumbVisibility: true,
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: textController,
-                  autofocus: true,
-                  style: previewStyle,
-                  cursorColor: inputThemeColor,
-                  decoration: InputDecoration(
-                    hintText: '在这里输入弹幕内容...',
-                    hintStyle: TextStyle(
-                      color: theme.hintColor,
-                      fontSize: previewStyle.fontSize,
-                      shadows: const [],
-                    ),
-                    border: OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: inputThemeColor, width: 2),
-                    ),
-                    fillColor: colorScheme.surfaceContainerHighest,
-                    filled: true,
-                  ),
-                  maxLength: 100,
-                  onChanged: (text) {
-                    setState(() {});
-                  },
-                ),
-                SizedBox(height: 16),
-                Text('选择颜色', style: TextStyle(color: colorScheme.onSurface)),
-                SizedBox(height: 8),
-                Wrap(
-                  spacing: 8.0,
-                  runSpacing: 8.0,
-                  children: _presetColors.map((color) {
-                    final isSelected = selectedColor == color;
-                    Color borderColor;
-                    if (isSelected) {
-                      // For white, we can't lighten it, so use a highlight color.
-                      if (color.value == 0xFFFFFFFF) {
-                        borderColor = colorScheme.secondary;
-                      } else {
-                        borderColor = _lighten(color);
-                      }
-                    } else {
-                      // For black, we can't darken it, so use a slightly lighter grey to show the border.
-                      if (color == const Color(0xFF000000) ||
-                          color == const Color(0xFF222222)) {
-                        borderColor = Colors.grey.shade800;
-                      } else {
-                        borderColor = _darken(color);
-                      }
-                    }
-                    return _DanmakuColorSwatch(
-                      color: color,
-                      borderColor: borderColor,
-                      size: 32,
-                      onSelected: () {
-                        setState(() {
-                          selectedColor = color;
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: _hexColorController,
-                  maxLength: 6,
-                  style: TextStyle(color: colorScheme.onSurface),
-                  cursorColor: inputThemeColor,
-                  decoration: InputDecoration(
-                    hintText: '输入六位十六进制颜色值',
-                    counterText: '',
-                    prefixText: '#',
-                    hintStyle: TextStyle(color: theme.hintColor),
-                    prefixStyle: TextStyle(color: theme.hintColor),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: theme.dividerColor),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: inputThemeColor, width: 2),
-                    ),
-                  ),
-                  onChanged: (value) {
-                    if (value.length == 6) {
-                      try {
-                        final colorInt = int.parse(value, radix: 16);
-                        setState(() {
-                          selectedColor = Color(0xFF000000 | colorInt);
-                        });
-                      } catch (e) {
-                        // Ignore invalid hex values
-                      }
-                    }
-                  },
-                ),
-                SizedBox(height: 16),
-                Text('弹幕模式', style: TextStyle(color: colorScheme.onSurface)),
-                SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: theme.dividerColor),
-                  ),
-                  child: ToggleButtons(
-                    isSelected: [
-                      danmakuType == 'scroll',
-                      danmakuType == 'top',
-                      danmakuType == 'bottom',
-                    ],
-                    onPressed: (index) {
-                      setState(() {
-                        if (index == 0) danmakuType = 'scroll';
-                        if (index == 1) danmakuType = 'top';
-                        if (index == 2) danmakuType = 'bottom';
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    selectedColor: inputThemeColor,
-                    fillColor: Colors.transparent,
-                    color: theme.colorScheme.onSurface,
-                    constraints:
-                        const BoxConstraints(minHeight: 32.0, minWidth: 80.0),
-                    children: const [
-                      Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text('滚动')),
-                      Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text('顶部')),
-                      Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text('底部')),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _buildSendButton(
-                    width: 120,
-                    label: '发送',
-                    height: 50,
-                    color: inputThemeColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Material(
-      type: MaterialType.transparency,
-      child: content,
-    );
-  }
-
-  Widget _buildPhoneLayout(
-    ThemeData theme,
-    TextStyle previewStyle,
-    Color inputThemeColor,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+    final form = Padding(
+      padding: EdgeInsets.fromLTRB(
+        isPhone ? 4 : 16,
+        isPhone ? 4 : 16,
+        isPhone ? 4 : 16,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          AdaptiveMediaTextField(
             controller: textController,
-            autofocus: true,
             style: previewStyle,
             cursorColor: inputThemeColor,
+            minLines: 3,
+            maxLines: 5,
+            maxLength: 100,
             decoration: InputDecoration(
               hintText: '输入弹幕内容...',
               hintStyle: TextStyle(
                 color: theme.hintColor,
-                fontSize: previewStyle.fontSize,
+                fontSize: 18,
                 shadows: const [],
               ),
-              border: OutlineInputBorder(),
+              fillColor: colors.surfaceContainerHighest,
+              filled: true,
+              contentPadding: const EdgeInsets.all(14),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: colors.onSurface.withValues(alpha: 0.16),
+                ),
+              ),
               focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: inputThemeColor, width: 2),
               ),
-              fillColor: theme.colorScheme.surfaceContainerHighest,
-              filled: true,
             ),
-            maxLength: 100,
-            onChanged: (text) {
-              setState(() {});
-            },
+            onChanged: (_) => setState(() {}),
           ),
-          SizedBox(height: 12),
-          Text('弹幕模式', style: TextStyle(color: theme.colorScheme.onSurface)),
-          SizedBox(height: 8),
-          CupertinoSegmentedControl<String>(
-            groupValue: danmakuType,
-            selectedColor: inputThemeColor,
-            unselectedColor: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemGrey5,
-              context,
-            ),
-            borderColor: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemGrey3,
-              context,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            children: const {
-              'scroll': Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text('滚动', style: TextStyle(fontSize: 12)),
-              ),
-              'top': Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text('顶部', style: TextStyle(fontSize: 12)),
-              ),
-              'bottom': Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text('底部', style: TextStyle(fontSize: 12)),
-              ),
-            },
-            onValueChanged: (value) {
+          const SizedBox(height: 14),
+          Text('弹幕模式', style: TextStyle(color: colors.onSurface)),
+          const SizedBox(height: 8),
+          AdaptiveSegmentedControl(
+            labels: const ['滚动', '顶部', '底部'],
+            selectedIndex: _selectedModeIndex,
+            onValueChanged: (index) {
               setState(() {
-                danmakuType = value;
+                danmakuType = const ['scroll', 'top', 'bottom'][index];
               });
             },
+            color: inputThemeColor,
           ),
-          SizedBox(height: 16),
-          Text('选择颜色', style: TextStyle(color: theme.colorScheme.onSurface)),
-          SizedBox(height: 8),
+          const SizedBox(height: 16),
+          Text('选择颜色', style: TextStyle(color: colors.onSurface)),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 8.0,
-            runSpacing: 8.0,
-            children: _presetColors.map((color) {
-              final isSelected = selectedColor == color;
-              Color borderColor;
-              if (isSelected) {
-                if (color.value == 0xFFFFFFFF) {
-                  borderColor = theme.colorScheme.secondary;
-                } else {
-                  borderColor = _lighten(color);
-                }
-              } else {
-                if (color == const Color(0xFF000000) ||
-                    color == const Color(0xFF222222)) {
-                  borderColor = Colors.grey.shade800;
-                } else {
-                  borderColor = _darken(color);
-                }
-              }
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    selectedColor = color;
-                  });
-                },
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: borderColor,
-                      width: 2,
-                    ),
-                  ),
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final color in _presetColors)
+                _DanmakuColorSwatch(
+                  color: color,
+                  borderColor: selectedColor == color
+                      ? (color.toARGB32() == 0xFFFFFFFF
+                          ? colors.secondary
+                          : _lighten(color))
+                      : (color.toARGB32() == 0xFF000000 ||
+                              color.toARGB32() == 0xFF222222
+                          ? Colors.grey.shade800
+                          : _darken(color)),
+                  size: isPhone ? 28 : 32,
+                  selected: selectedColor == color,
+                  onSelected: () => setState(() => selectedColor = color),
                 ),
-              );
-            }).toList(),
+            ],
           ),
-          SizedBox(height: 12),
-          TextField(
+          const SizedBox(height: 14),
+          AdaptiveMediaTextField(
             controller: _hexColorController,
             maxLength: 6,
-            style: TextStyle(color: theme.colorScheme.onSurface),
+            style: TextStyle(color: colors.onSurface),
             cursorColor: inputThemeColor,
             decoration: InputDecoration(
-              hintText: '输入六位十六进制颜色值',
-              counterText: '',
-              prefixText: '#',
+              hintText: '# 六位十六进制颜色值',
               hintStyle: TextStyle(color: theme.hintColor),
-              prefixStyle: TextStyle(color: theme.hintColor),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: theme.dividerColor),
+              fillColor: colors.surfaceContainerHighest,
+              filled: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: colors.onSurface.withValues(alpha: 0.16),
+                ),
               ),
-              focusedBorder: UnderlineInputBorder(
+              focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: inputThemeColor, width: 2),
               ),
             ),
-            onChanged: (value) {
-              if (value.length == 6) {
-                try {
-                  final colorInt = int.parse(value, radix: 16);
-                  setState(() {
-                    selectedColor = Color(0xFF000000 | colorInt);
-                  });
-                } catch (e) {
-                  // Ignore invalid hex values
-                }
-              }
-            },
+            onChanged: _updateHexColor,
           ),
-          SizedBox(height: 16),
-          _buildSendButton(
-            width: double.infinity,
-            label: '发送弹幕',
-            height: 46,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSendButton({
-    required double width,
-    required String label,
-    required double height,
-    Color? color,
-  }) {
-    if (_isSending) {
-      return Center(child: CircularProgressIndicator());
-    }
-    final isActive = _isSendButtonHovered || _isSendButtonFocused;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isSendButtonHovered = true),
-      onExit: (_) => setState(() => _isSendButtonHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: KeyboardActivatable(
-        onActivate: _sendDanmaku,
-        onFocusChange: (value) => setState(() => _isSendButtonFocused = value),
-        child: GestureDetector(
-          onTapDown: (_) => setState(() => _isSendButtonPressed = true),
-          onTapUp: (_) => setState(() => _isSendButtonPressed = false),
-          onTapCancel: () => setState(() => _isSendButtonPressed = false),
-          onTap: _sendDanmaku,
-          child: BounceHoverScale(
-            isHovered: isActive,
-            isPressed: _isSendButtonPressed,
-            child: Container(
-              width: width,
-              height: height,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(height / 2),
-                color: color ?? AppAccentColors.current,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+          const SizedBox(height: 18),
+          if (_isSending)
+            const Center(child: AdaptiveMediaActivityIndicator())
+          else
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: isPhone ? double.infinity : 150,
+                child: AdaptiveMediaActionButton(
+                  label: '发送弹幕',
+                  onPressed: _sendDanmaku,
+                  emphasis: AdaptiveMediaActionEmphasis.primary,
+                  expand: true,
                 ),
               ),
             ),
-          ),
-        ),
+        ],
       ),
     );
-  }
 
-  /// 构建输入区域（手机设备左侧）
-  Widget _buildInputSection(
-      ThemeData theme, TextStyle previewStyle, Color inputThemeColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 输入框
-        TextField(
-          controller: textController,
-          autofocus: true,
-          style: previewStyle,
-          cursorColor: inputThemeColor,
-          decoration: InputDecoration(
-            hintText: '输入弹幕内容...',
-            hintStyle: TextStyle(
-              color: theme.hintColor,
-              fontSize: previewStyle.fontSize,
-              shadows: const [],
-            ),
-            border: OutlineInputBorder(),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: inputThemeColor, width: 2),
-            ),
-            fillColor: theme.colorScheme.surfaceContainerHighest,
-            filled: true,
-          ),
-          maxLength: 100,
-          onChanged: (text) {
-            setState(() {});
-          },
-        ),
-
-        SizedBox(height: 16),
-
-        // 弹幕模式选择
-        Text('弹幕模式',
-            style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14)),
-        SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor),
-          ),
-          child: ToggleButtons(
-            isSelected: [
-              danmakuType == 'scroll',
-              danmakuType == 'top',
-              danmakuType == 'bottom',
-            ],
-            onPressed: (index) {
-              setState(() {
-                if (index == 0) danmakuType = 'scroll';
-                if (index == 1) danmakuType = 'top';
-                if (index == 2) danmakuType = 'bottom';
-              });
-            },
-            borderRadius: BorderRadius.circular(8),
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            selectedColor: AppAccentColors.current,
-            fillColor: Colors.transparent,
-            color: theme.colorScheme.onSurface,
-            constraints: const BoxConstraints(minHeight: 32.0, minWidth: 60.0),
-            children: const [
-              Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Text('滚动', style: TextStyle(fontSize: 12))),
-              Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Text('顶部', style: TextStyle(fontSize: 12))),
-              Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Text('底部', style: TextStyle(fontSize: 12))),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 构建颜色选择区域（手机设备右侧）
-  Widget _buildColorSection(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 上部：预设颜色
-        Wrap(
-          spacing: 8.0,
-          runSpacing: 8.0,
-          children: _presetColors.map((color) {
-            final isSelected = selectedColor == color;
-            Color borderColor;
-            if (isSelected) {
-              // For white, we can't lighten it, so use a highlight color.
-              if (color.value == 0xFFFFFFFF) {
-                borderColor = theme.colorScheme.secondary;
-              } else {
-                borderColor = _lighten(color);
-              }
-            } else {
-              // For black, we can't darken it, so use a slightly lighter grey to show the border.
-              if (color == const Color(0xFF000000) ||
-                  color == const Color(0xFF222222)) {
-                borderColor = Colors.grey.shade800;
-              } else {
-                borderColor = _darken(color);
-              }
-            }
-            return _DanmakuColorSwatch(
-              color: color,
-              borderColor: borderColor,
-              size: 28,
-              onSelected: () {
-                setState(() {
-                  selectedColor = color;
-                });
-              },
-            );
-          }).toList(),
-        ),
-
-        const Spacer(), // 推送发送按钮到底部
-
-        // 底部：发送按钮 - 固定在底部
-        Padding(
-          padding: const EdgeInsets.only(top: 16.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: _buildSendButton(
-              width: double.infinity,
-              label: '发送弹幕',
-              height: 45,
-            ),
-          ),
-        ),
-      ],
+    if (isPhone) return form;
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        child: form,
+      ),
     );
   }
 }
 
 class _DanmakuColorSwatch extends StatefulWidget {
-  final Color color;
-  final Color borderColor;
-  final double size;
-  final VoidCallback onSelected;
-
   const _DanmakuColorSwatch({
     required this.color,
     required this.borderColor,
     required this.size,
+    required this.selected,
     required this.onSelected,
   });
+
+  final Color color;
+  final Color borderColor;
+  final double size;
+  final bool selected;
+  final VoidCallback onSelected;
 
   @override
   State<_DanmakuColorSwatch> createState() => _DanmakuColorSwatchState();
@@ -705,8 +290,7 @@ class _DanmakuColorSwatchState extends State<_DanmakuColorSwatch> {
 
   @override
   Widget build(BuildContext context) {
-    final isActive = _isHovered || _isFocused;
-
+    final active = widget.selected || _isHovered || _isFocused;
     return KeyboardActivatable(
       onActivate: widget.onSelected,
       onFocusChange: (value) => setState(() => _isFocused = value),
@@ -717,9 +301,8 @@ class _DanmakuColorSwatchState extends State<_DanmakuColorSwatch> {
         child: GestureDetector(
           onTap: widget.onSelected,
           child: AnimatedScale(
-            scale: isActive ? 1.15 : 1.0,
+            scale: active ? 1.12 : 1,
             duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOutCubic,
             child: Container(
               width: widget.size,
               height: widget.size,
@@ -727,18 +310,11 @@ class _DanmakuColorSwatchState extends State<_DanmakuColorSwatch> {
                 color: widget.color,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isActive ? Colors.white : widget.borderColor,
-                  width: isActive ? 3 : 2,
+                  color: active
+                      ? Theme.of(context).colorScheme.onSurface
+                      : widget.borderColor,
+                  width: active ? 3 : 2,
                 ),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ]
-                    : null,
               ),
             ),
           ),

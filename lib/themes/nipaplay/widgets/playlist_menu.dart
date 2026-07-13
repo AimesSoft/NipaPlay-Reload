@@ -762,6 +762,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             filePath, // 使用Jellyfin协议URL作为标识符
             historyItem: historyItem,
             playbackSession: playbackSession,
+            playbackDetailContext: videoState.playbackDetailContext,
           );
           debugPrint('[播放列表] Jellyfin剧集播放完成');
         } else if (filePath.startsWith('emby://')) {
@@ -831,6 +832,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             filePath, // 使用Emby协议URL作为标识符
             historyItem: historyItem,
             playbackSession: playbackSession,
+            playbackDetailContext: videoState.playbackDetailContext,
           );
           debugPrint('[播放列表] Emby剧集播放完成');
         } else {
@@ -853,6 +855,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               episodeId: cachedHistory?.episodeId,
               historyItem: cachedHistory,
               actualPlayUrl: filePath,
+              detailContext: videoState.playbackDetailContext,
             );
             if (!mounted) {
               return;
@@ -869,6 +872,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               filePath,
               historyItem: cachedHistory,
               actualPlayUrl: filePath,
+              playbackDetailContext: videoState.playbackDetailContext,
             );
             debugPrint('[播放列表] 远程流媒体播放完成');
           } else {
@@ -890,7 +894,10 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               return;
             }
 
-            await videoState.initializePlayer(filePath);
+            await videoState.initializePlayer(
+              filePath,
+              playbackDetailContext: videoState.playbackDetailContext,
+            );
             debugPrint('[播放列表] 文件路径播放完成');
           }
         }

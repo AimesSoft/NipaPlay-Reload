@@ -3,10 +3,12 @@ import 'dart:io' as io;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveButton, AdaptiveButtonStyle, AdaptiveSwitch;
 
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
@@ -21,11 +23,9 @@ class CupertinoDanmakuSettingsPane extends StatefulWidget {
   const CupertinoDanmakuSettingsPane({
     super.key,
     required this.videoState,
-    required this.onBack,
   });
 
   final VideoPlayerState videoState;
-  final VoidCallback onBack;
 
   @override
   State<CupertinoDanmakuSettingsPane> createState() =>
@@ -303,32 +303,18 @@ class _CupertinoDanmakuSettingsPaneState
         SliverPadding(
           padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 12),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '弹幕设置',
-                  style: CupertinoTheme.of(context).textTheme.navTitleTextStyle,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '控制弹幕开关、透明度、字体大小以及屏蔽词',
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(
-                        fontSize: 13,
-                        color:
-                            CupertinoColors.secondaryLabel.resolveFrom(context),
-                      ),
-                ),
-              ],
+            child: Text(
+              '控制弹幕开关、透明度、字体大小以及屏蔽词',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
             ),
           ),
         ),
         SliverList(
           delegate: SliverChildListDelegate([
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               header: const Text('显示设置'),
               children: [
                 _buildSwitchTile(
@@ -352,7 +338,7 @@ class _CupertinoDanmakuSettingsPaneState
                   value: widget.videoState.danmakuRandomColorEnabled,
                   onChanged: widget.videoState.setDanmakuRandomColorEnabled,
                 ),
-                CupertinoListTile(
+                AdaptivePlayerMenuTile(
                   title: const Text('手动匹配弹幕'),
                   subtitle: const Text('选择指定番剧/剧集的弹幕'),
                   trailing: const Icon(CupertinoIcons.right_chevron),
@@ -360,16 +346,16 @@ class _CupertinoDanmakuSettingsPaneState
                 ),
               ],
             ),
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               header: const Text('保存弹幕'),
               children: [
-                CupertinoListTile(
+                AdaptivePlayerMenuTile(
                   title: const Text('保存为 JSON'),
                   subtitle: const Text('通用格式，便于再次导入'),
                   trailing: const Icon(CupertinoIcons.right_chevron),
                   onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
                 ),
-                CupertinoListTile(
+                AdaptivePlayerMenuTile(
                   title: const Text('保存为 XML'),
                   subtitle: const Text('Bilibili XML 格式'),
                   trailing: const Icon(CupertinoIcons.right_chevron),
@@ -377,7 +363,7 @@ class _CupertinoDanmakuSettingsPaneState
                 ),
               ],
             ),
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               header: const Text('弹幕样式'),
               children: [
                 _buildSliderTile(
@@ -404,13 +390,13 @@ class _CupertinoDanmakuSettingsPaneState
                   divisions: 96,
                   onChanged: widget.videoState.setDanmakuFontSize,
                 ),
-                CupertinoListTile(
+                AdaptivePlayerMenuTile(
                   title: const Text('字体选择'),
                   subtitle: Text('当前字体：${_danmakuFontLabel()}'),
                   trailing: const Icon(CupertinoIcons.right_chevron),
                   onTap: _pickDanmakuFontFile,
                 ),
-                CupertinoListTile(
+                AdaptivePlayerMenuTile(
                   title: const Text('恢复默认字体'),
                   subtitle: const Text('使用系统默认弹幕字体'),
                   trailing: const Icon(CupertinoIcons.refresh),
@@ -496,7 +482,7 @@ class _CupertinoDanmakuSettingsPaneState
                   ),
               ],
             ),
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               header: const Text('弹幕屏蔽'),
               children: [
                 _buildSwitchTile(
@@ -522,7 +508,7 @@ class _CupertinoDanmakuSettingsPaneState
                 ),
               ],
             ),
-            CupertinoListSection.insetGrouped(
+            AdaptivePlayerMenuSection(
               header: const Text('屏蔽词管理'),
               children: [
                 Padding(
@@ -531,7 +517,7 @@ class _CupertinoDanmakuSettingsPaneState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CupertinoTextField(
+                      AdaptivePlayerMenuTextField(
                         controller: _blockWordController,
                         placeholder: '输入要屏蔽的词语',
                         onSubmitted: (_) => _addBlockWord(),
@@ -539,11 +525,10 @@ class _CupertinoDanmakuSettingsPaneState
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
+                        child: AdaptiveButton(
+                          label: '添加',
+                          style: AdaptiveButtonStyle.glass,
                           onPressed: _addBlockWord,
-                          child: const Text('添加'),
                         ),
                       ),
                       if (_blockWordError != null)
@@ -565,9 +550,6 @@ class _CupertinoDanmakuSettingsPaneState
             const SizedBox(height: 24),
           ]),
         ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
-        ),
       ],
     );
   }
@@ -579,10 +561,10 @@ class _CupertinoDanmakuSettingsPaneState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return CupertinoListTile(
+    return AdaptivePlayerMenuTile(
       title: Text(title),
       subtitle: Text(subtitle),
-      trailing: CupertinoSwitch(
+      trailing: AdaptiveSwitch(
         value: value,
         onChanged: onChanged,
       ),
@@ -606,7 +588,7 @@ class _CupertinoDanmakuSettingsPaneState
       color: CupertinoColors.secondaryLabel.resolveFrom(context),
     );
 
-    return CupertinoListTile(
+    return AdaptivePlayerMenuTile(
       padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 16),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,7 +635,7 @@ class _CupertinoDanmakuSettingsPaneState
     );
     final normalTextColor = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoListTile(
+    return AdaptivePlayerMenuTile(
       padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 16),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -728,7 +710,7 @@ class _CupertinoDanmakuSettingsPaneState
           decoration: BoxDecoration(
             color: CupertinoColors.systemGrey6
                 .resolveFrom(context)
-                .withOpacity(0.8),
+                .withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(

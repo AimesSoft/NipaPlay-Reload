@@ -69,7 +69,7 @@ class AdaptiveRadio<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // iOS - Use custom iOS-style radio
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _IOSRadio<T>(
         value: value,
         groupValue: groupValue,

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'adaptive_platform_ui'
-  s.version          = '0.1.0'
+  s.version          = '0.1.1'
   s.summary          = 'Adaptive platform-specific widgets for Flutter with iOS 26 native support.'
   s.description      = <<-DESC
 A Flutter package that provides adaptive platform-specific widgets with native iOS 26+ designs,

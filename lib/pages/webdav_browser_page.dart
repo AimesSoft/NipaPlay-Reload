@@ -1,3 +1,6 @@
+library webdav_browser_page;
+
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -14,6 +17,13 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+
+part '../themes/cupertino/widgets/cupertino_webdav_browser_controls.dart';
 
 /// WebDAV 文件浏览器页面
 /// 用于快捷 Tab，提供快速浏览和播放 WebDAV 视频的功能
@@ -398,14 +408,19 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     return null;
   }
 
-  void _showServerSelector() {
+  Future<void> _showServerSelector() async {
     final connections = WebDAVService.instance.connections;
     if (connections.isEmpty) {
       BlurSnackBar.show(context, '没有配置任何 WebDAV 服务器');
       return;
     }
 
-    showModalBottomSheet(
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      await _showCupertinoServerActions();
+      return;
+    }
+
+    await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => _ServerSelectorSheet(
@@ -427,7 +442,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   Future<void> _showAddServerDialog() async {
     final connectionsBefore = WebDAVService.instance.connections.length;
 
-    final result = await WebDAVConnectionDialog.show(context);
+    final result = AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone
+        ? await CupertinoWebDAVConnectionDialog.show(context)
+        : await WebDAVConnectionDialog.show(context);
 
     if (result == true && mounted) {
       // 添加成功
@@ -459,6 +476,10 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return _buildCupertinoWebDavPage();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
         isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5);

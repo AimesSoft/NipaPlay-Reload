@@ -9,7 +9,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dar
     show MediaServerType;
 import 'package:nipaplay/utils/url_name_generator.dart';
 
-/// Cupertino 风格的网络服务器连接弹窗 - 使用原生 iOS 26 风格
+/// 使用自适应手机控件逐步收集网络服务器登录信息。
 class CupertinoNetworkServerConnectionDialog {
   static Future<bool?> show(
     BuildContext context,
@@ -20,28 +20,26 @@ class CupertinoNetworkServerConnectionDialog {
         serverType == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
 
     // 第一步：输入服务器地址
-    final serverUrl = await showCupertinoDialog<String>(
+    final serverUrl = await AdaptiveAlertDialog.inputShow(
       context: context,
-      builder: (context) => IOS26AlertDialog(
-        title: l10n.connectServerDialogTitle(serverLabel),
-        input: AdaptiveAlertDialogInput(
-          placeholder: l10n.serverUrlInputPlaceholder,
-          initialValue: '',
-          keyboardType: TextInputType.url,
-        ),
-        actions: [
-          AlertAction(
-            title: l10n.cancel,
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: l10n.nextStep,
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
+      title: l10n.connectServerDialogTitle(serverLabel),
+      input: AdaptiveAlertDialogInput(
+        placeholder: l10n.serverUrlInputPlaceholder,
+        initialValue: '',
+        keyboardType: TextInputType.url,
       ),
+      actions: [
+        AlertAction(
+          title: l10n.cancel,
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
+        ),
+        AlertAction(
+          title: l10n.nextStep,
+          style: AlertActionStyle.primary,
+          onPressed: () {},
+        ),
+      ],
     );
 
     if (serverUrl == null || serverUrl.isEmpty) {
@@ -51,28 +49,26 @@ class CupertinoNetworkServerConnectionDialog {
     if (!context.mounted) return false;
 
     // 第二步：输入用户名
-    final username = await showCupertinoDialog<String>(
+    final username = await AdaptiveAlertDialog.inputShow(
       context: context,
-      builder: (context) => IOS26AlertDialog(
-        title: l10n.connectServerDialogTitle(serverLabel),
-        input: AdaptiveAlertDialogInput(
-          placeholder: l10n.inputUsernamePlaceholder,
-          initialValue: '',
-          keyboardType: TextInputType.text,
-        ),
-        actions: [
-          AlertAction(
-            title: l10n.cancel,
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: l10n.nextStep,
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
+      title: l10n.connectServerDialogTitle(serverLabel),
+      input: AdaptiveAlertDialogInput(
+        placeholder: l10n.inputUsernamePlaceholder,
+        initialValue: '',
+        keyboardType: TextInputType.text,
       ),
+      actions: [
+        AlertAction(
+          title: l10n.cancel,
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
+        ),
+        AlertAction(
+          title: l10n.nextStep,
+          style: AlertActionStyle.primary,
+          onPressed: () {},
+        ),
+      ],
     );
 
     if (username == null || username.isEmpty) {
@@ -82,29 +78,27 @@ class CupertinoNetworkServerConnectionDialog {
     if (!context.mounted) return false;
 
     // 第三步：输入密码
-    final password = await showCupertinoDialog<String>(
+    final password = await AdaptiveAlertDialog.inputShow(
       context: context,
-      builder: (context) => IOS26AlertDialog(
-        title: l10n.connectServerDialogTitle(serverLabel),
-        input: AdaptiveAlertDialogInput(
-          placeholder: l10n.inputPasswordPlaceholder,
-          initialValue: '',
-          keyboardType: TextInputType.text,
-          obscureText: true,
-        ),
-        actions: [
-          AlertAction(
-            title: l10n.cancel,
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: l10n.connectAction,
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
+      title: l10n.connectServerDialogTitle(serverLabel),
+      input: AdaptiveAlertDialogInput(
+        placeholder: l10n.inputPasswordPlaceholder,
+        initialValue: '',
+        keyboardType: TextInputType.text,
+        obscureText: true,
       ),
+      actions: [
+        AlertAction(
+          title: l10n.cancel,
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
+        ),
+        AlertAction(
+          title: l10n.connectAction,
+          style: AlertActionStyle.primary,
+          onPressed: () {},
+        ),
+      ],
     );
 
     if (password == null) {

@@ -1,7 +1,10 @@
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -32,8 +35,6 @@ class MultiAddressManagerWidget extends StatefulWidget {
 class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
   static Color get _accentColor => AppAccentColors.current;
 
-  final TextEditingController _urlController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
   late List<ServerAddress> _sortedAddresses;
 
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
@@ -43,35 +44,6 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
   Color get _borderColor => _textColor.withOpacity(_isDarkMode ? 0.12 : 0.2);
   Color get _panelColor =>
       _isDarkMode ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
-  Color get _panelAltColor =>
-      _isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
-
-  ButtonStyle _plainTextButtonStyle({Color? baseColor}) {
-    final resolvedBase = baseColor ?? _textColor;
-    return ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return _mutedTextColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return _accentColor;
-        }
-        return resolvedBase;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      ),
-    );
-  }
-
-  TextSelectionThemeData get _selectionTheme => TextSelectionThemeData(
-        cursorColor: _accentColor,
-        selectionColor: _accentColor.withOpacity(0.3),
-        selectionHandleColor: _accentColor,
-      );
-
   @override
   void initState() {
     super.initState();
@@ -94,147 +66,37 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
     }
   }
 
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
   Future<void> _showAddAddressDialog() async {
-    _urlController.clear();
-    _nameController.clear();
-
-    final result = await NipaplayWindow.show<Map<String, String>>(
-      context: context,
-      barrierDismissible: false,
-      child: TextSelectionTheme(
-        data: _selectionTheme,
-        child: NipaplayWindowScaffold(
-          maxWidth: 560,
-          maxHeightFactor: 0.75,
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: _accentColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.add_link,
-                          color: _accentColor,
-                          size: 20,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Text(
-                        '添加服务器地址',
-                        style: TextStyle(
-                          color: _textColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    '为同一服务器添加多个访问地址，系统会自动选择可用的地址连接。',
-                    style: TextStyle(color: _subTextColor, fontSize: 14),
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: _urlController,
-                    cursorColor: _accentColor,
-                    style: TextStyle(color: _textColor),
-                    decoration: InputDecoration(
-                      labelText: '服务器地址',
-                      hintText: '例如：http://192.168.1.100:8096',
-                      labelStyle: TextStyle(color: _subTextColor),
-                      hintStyle: TextStyle(color: _mutedTextColor),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: _borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: _accentColor),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  TextField(
-                    controller: _nameController,
-                    cursorColor: _accentColor,
-                    style: TextStyle(color: _textColor),
-                    decoration: InputDecoration(
-                      labelText: '地址名称（可留空自动生成）',
-                      hintText: '例如：家庭网络、公网访问，或留空自动生成',
-                      labelStyle: TextStyle(color: _subTextColor),
-                      hintStyle: TextStyle(color: _mutedTextColor),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: _borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: _accentColor),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: _plainTextButtonStyle(),
-                        child: const Text('取消'),
-                      ),
-                      SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () {
-                          if (_urlController.text.trim().isNotEmpty) {
-                            final url = _urlController.text.trim();
-                            final name = UrlNameGenerator.generateAddressName(
-                              url,
-                              customName: _nameController.text.trim(),
-                            );
-
-                            Navigator.of(context).pop({
-                              'url': url,
-                              'name': name,
-                            });
-                          } else {
-                            BlurSnackBar.show(context, '请填写服务器地址');
-                          }
-                        },
-                        style: _plainTextButtonStyle(baseColor: _accentColor),
-                        child: const Text('添加'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+    await BlurLoginDialog.show(
+      context,
+      title: '添加服务器地址',
+      fields: const [
+        LoginField(
+          key: 'url',
+          label: '服务器地址',
+          hint: '例如：http://192.168.1.100:8096',
         ),
-      ),
+        LoginField(
+          key: 'name',
+          label: '地址名称（可留空自动生成）',
+          hint: '例如：家庭网络、公网访问',
+          required: false,
+        ),
+      ],
+      loginButtonText: '添加',
+      onLogin: (values) async {
+        final url = values['url']?.trim() ?? '';
+        if (url.isEmpty) {
+          return const LoginResult(success: false, message: '请填写服务器地址');
+        }
+        final name = UrlNameGenerator.generateAddressName(
+          url,
+          customName: values['name']?.trim(),
+        );
+        await widget.onAddAddress(url, name);
+        return const LoginResult(success: true);
+      },
     );
-
-    if (result != null) {
-      widget.onAddAddress(result['url']!, result['name']!);
-    }
   }
 
   Future<void> _confirmRemoveAddress(ServerAddress address) async {
@@ -243,30 +105,24 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
       return;
     }
 
-    final confirm = await showDialog<bool>(
+    final confirm = await BlurDialog.show<bool>(
       context: context,
+      title: '删除地址',
+      content: '确定要删除地址 "${address.name}" 吗？\n${address.url}',
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor:
-            _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2),
-        title: Text('删除地址', style: TextStyle(color: _textColor)),
-        content: Text(
-          '确定要删除地址 "${address.name}" 吗？\n${address.url}',
-          style: TextStyle(color: _subTextColor),
+      actions: [
+        AdaptiveMediaActionButton(
+          label: '取消',
+          onPressed: () => Navigator.of(context).pop(false),
+          compact: true,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            style: _plainTextButtonStyle(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: _plainTextButtonStyle(baseColor: Colors.redAccent),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+        AdaptiveMediaActionButton(
+          label: '删除',
+          onPressed: () => Navigator.of(context).pop(true),
+          emphasis: AdaptiveMediaActionEmphasis.destructive,
+          compact: true,
+        ),
+      ],
     );
 
     if (confirm == true) {
@@ -277,130 +133,35 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
   Future<void> _showPriorityDialog(ServerAddress address) async {
     if (widget.onUpdatePriority == null) return;
 
-    final TextEditingController priorityController = TextEditingController();
-    priorityController.text = address.priority.toString();
-
-    final result = await showDialog<int>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => TextSelectionTheme(
-        data: _selectionTheme,
-        child: AlertDialog(
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2),
-          title: Text('设置优先级', style: TextStyle(color: _textColor)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '地址: ${address.name}',
-                style: TextStyle(color: _subTextColor, fontSize: 14),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'URL: ${address.url}',
-                style: TextStyle(color: _subTextColor, fontSize: 14),
-              ),
-              SizedBox(height: 16),
-              Text(
-                '优先级（数字越小优先级越高）:',
-                style: TextStyle(color: _textColor, fontSize: 16),
-              ),
-              SizedBox(height: 12),
-              // 优先级输入框
-              TextField(
-                controller: priorityController,
-                cursorColor: _accentColor,
-                style: TextStyle(color: _textColor),
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: '输入0-99的数字，0为最高优先级',
-                  hintStyle: TextStyle(color: _mutedTextColor),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: _borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: _accentColor),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.red),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.red),
-                  ),
-                ),
-              ),
-              SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _accentColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _accentColor.withOpacity(0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '优先级说明:',
-                      style: TextStyle(
-                        color: _accentColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '• 0: 最高优先级（优先）\n• 1-3: 高优先级\n• 4-9: 中等优先级\n• 10+: 低优先级',
-                      style: TextStyle(color: _subTextColor, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                priorityController.dispose();
-                Navigator.of(context).pop();
-              },
-              style: _plainTextButtonStyle(),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                final priorityText = priorityController.text.trim();
-                final priority = int.tryParse(priorityText);
-
-                if (priority == null) {
-                  BlurSnackBar.show(context, '请输入有效的数字');
-                  return;
-                }
-
-                if (priority < 0 || priority > 99) {
-                  BlurSnackBar.show(context, '优先级必须在0-99之间');
-                  return;
-                }
-
-                priorityController.dispose();
-                Navigator.of(context).pop(priority);
-              },
-              style: _plainTextButtonStyle(baseColor: _accentColor),
-              child: const Text('确定'),
-            ),
-          ],
+    await BlurLoginDialog.show(
+      context,
+      title: '设置优先级',
+      fields: [
+        LoginField(
+          key: 'priority',
+          label: '优先级（0-99，数字越小越优先）',
+          hint: '0 为最高优先级',
+          initialValue: address.priority.toString(),
         ),
-      ),
+      ],
+      loginButtonText: '确定',
+      onLogin: (values) async {
+        final priority = int.tryParse(values['priority']?.trim() ?? '');
+        if (priority == null) {
+          return const LoginResult(success: false, message: '请输入有效的数字');
+        }
+        if (priority < 0 || priority > 99) {
+          return const LoginResult(
+            success: false,
+            message: '优先级必须在0-99之间',
+          );
+        }
+        if (priority != address.priority) {
+          await widget.onUpdatePriority!(address.id, priority);
+        }
+        return const LoginResult(success: true);
+      },
     );
-
-    if (result != null && result != address.priority) {
-      widget.onUpdatePriority!(address.id, result);
-    }
   }
 
   Widget _buildAddressStatus(ServerAddress address) {
@@ -543,11 +304,12 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            TextButton.icon(
+            AdaptiveMediaActionButton(
+              label: '添加地址',
               onPressed: _showAddAddressDialog,
-              icon: Icon(Icons.add, size: 16),
-              label: const Text('添加地址'),
-              style: _plainTextButtonStyle(baseColor: _accentColor),
+              desktopIcon: Icons.add,
+              phoneIcon: cupertino.CupertinoIcons.add,
+              compact: true,
             ),
           ],
         ),
@@ -560,92 +322,84 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _borderColor),
           ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _sortedAddresses.length,
-              separatorBuilder: (context, index) => Divider(
-                color: _borderColor,
-                height: 1,
-              ),
-              itemBuilder: (context, index) {
-                final address = _sortedAddresses[index];
-                final isCurrent = address.id == widget.currentAddressId;
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _sortedAddresses.length,
+            separatorBuilder: (context, index) => Divider(
+              color: _borderColor,
+              height: 1,
+            ),
+            itemBuilder: (context, index) {
+              final address = _sortedAddresses[index];
+              final isCurrent = address.id == widget.currentAddressId;
 
-                return ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  title: Row(
-                    children: [
-                      // 优先级标记
-                      _buildPriorityBadge(address),
-                      if (widget.addresses.length > 1) SizedBox(width: 8),
-                      Text(
-                        address.name,
-                        style: TextStyle(
-                          color: isCurrent ? Colors.green : _textColor,
-                          fontWeight:
-                              isCurrent ? FontWeight.w600 : FontWeight.normal,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      _buildAddressStatus(address),
-                    ],
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      address.url,
+              return AdaptiveMediaListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                title: Row(
+                  children: [
+                    // 优先级标记
+                    _buildPriorityBadge(address),
+                    if (widget.addresses.length > 1) SizedBox(width: 8),
+                    Text(
+                      address.name,
                       style: TextStyle(
-                        color: _mutedTextColor,
-                        fontSize: 13,
+                        color: isCurrent ? Colors.green : _textColor,
+                        fontWeight:
+                            isCurrent ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
+                    SizedBox(width: 8),
+                    _buildAddressStatus(address),
+                  ],
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    address.url,
+                    style: TextStyle(
+                      color: _mutedTextColor,
+                      fontSize: 13,
+                    ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 优先级设置按钮
-                      if (widget.onUpdatePriority != null &&
-                          widget.addresses.length > 1)
-                        IconButton(
-                          icon: Icon(Icons.tune, color: _subTextColor),
-                          tooltip: '设置优先级',
-                          onPressed: () => _showPriorityDialog(address),
-                          style: IconButton.styleFrom(
-                            overlayColor: Colors.transparent,
-                          ),
-                        ),
-                      // 切换按钮
-                      if (!isCurrent && address.isEnabled)
-                        IconButton(
-                          icon: Icon(Icons.swap_horiz, color: _subTextColor),
-                          tooltip: '切换到此地址',
-                          onPressed: () => widget.onSwitchAddress(address.id),
-                          style: IconButton.styleFrom(
-                            overlayColor: Colors.transparent,
-                          ),
-                        ),
-                      // 删除按钮
-                      if (widget.addresses.length > 1)
-                        IconButton(
-                          icon: Icon(
-                            Icons.delete_outline,
-                            color: Colors.redAccent.withOpacity(0.8),
-                          ),
-                          tooltip: '删除地址',
-                          onPressed: () => _confirmRemoveAddress(address),
-                          style: IconButton.styleFrom(
-                            overlayColor: Colors.transparent,
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 优先级设置按钮
+                    if (widget.onUpdatePriority != null &&
+                        widget.addresses.length > 1)
+                      AdaptiveMediaIconButton(
+                        desktopIcon: Icons.tune,
+                        phoneIcon: cupertino.CupertinoIcons.slider_horizontal_3,
+                        tooltip: '设置优先级',
+                        color: _subTextColor,
+                        onPressed: () => _showPriorityDialog(address),
+                      ),
+                    // 切换按钮
+                    if (!isCurrent && address.isEnabled)
+                      AdaptiveMediaIconButton(
+                        desktopIcon: Icons.swap_horiz,
+                        phoneIcon:
+                            cupertino.CupertinoIcons.arrow_right_arrow_left,
+                        tooltip: '切换到此地址',
+                        color: _subTextColor,
+                        onPressed: () => widget.onSwitchAddress(address.id),
+                      ),
+                    // 删除按钮
+                    if (widget.addresses.length > 1)
+                      AdaptiveMediaIconButton(
+                        desktopIcon: Icons.delete_outline,
+                        phoneIcon: cupertino.CupertinoIcons.delete,
+                        tooltip: '删除地址',
+                        color: Colors.redAccent.withOpacity(0.8),
+                        onPressed: () => _confirmRemoveAddress(address),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
 

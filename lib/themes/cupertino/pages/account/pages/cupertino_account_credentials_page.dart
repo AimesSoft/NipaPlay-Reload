@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_adaptive_native_page.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
@@ -70,11 +71,8 @@ class _CupertinoAccountCredentialsPageState
     );
     final sectionBackground = resolveSettingsSectionBackground(context);
 
-    return AdaptiveScaffold(
-      appBar: AdaptiveAppBar(
-        title: widget.title,
-        useNativeToolbar: true,
-      ),
+    return CupertinoAdaptiveNativePage(
+      title: widget.title,
       body: ColoredBox(
         color: backgroundColor,
         child: SafeArea(
@@ -86,7 +84,8 @@ class _CupertinoAccountCredentialsPageState
                 children: [
                   for (final field in widget.fields)
                     CupertinoFormRow(
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 4),
                       prefix: Text(field.label),
                       child: AdaptiveTextField(
                         controller: field.controller,
@@ -111,7 +110,8 @@ class _CupertinoAccountCredentialsPageState
                     if (_isSubmitting)
                       const CupertinoActivityIndicator(radius: 9)
                     else
-                      const Icon(CupertinoIcons.check_mark_circled_solid, size: 18),
+                      const Icon(CupertinoIcons.check_mark_circled_solid,
+                          size: 18),
                     const SizedBox(width: 8),
                     Text(widget.actionLabel),
                   ],

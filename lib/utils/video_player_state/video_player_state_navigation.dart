@@ -128,6 +128,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                playbackDetailContext: _playbackDetailContext,
               );
             } catch (e) {
               debugPrint('[上一话] 获取Jellyfin播放会话失败: $e');
@@ -154,6 +155,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                playbackDetailContext: _playbackDetailContext,
               );
             } catch (e) {
               debugPrint('[上一话] 获取Emby播放会话失败: $e');
@@ -162,8 +164,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(resolvedHistory.filePath,
-                historyItem: resolvedHistory);
+            await initializePlayer(
+              resolvedHistory.filePath,
+              historyItem: resolvedHistory,
+              playbackDetailContext: _playbackDetailContext,
+            );
           }
         } else {
           _showEpisodeErrorMessage('上一话', '无法加载上一话的历史记录');
@@ -298,6 +303,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                playbackDetailContext: _playbackDetailContext,
               );
             } catch (e) {
               debugPrint('[下一话] 获取Jellyfin播放会话失败: $e');
@@ -324,6 +330,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                playbackDetailContext: _playbackDetailContext,
               );
             } catch (e) {
               debugPrint('[下一话] 获取Emby播放会话失败: $e');
@@ -332,8 +339,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(resolvedHistory.filePath,
-                historyItem: resolvedHistory);
+            await initializePlayer(
+              resolvedHistory.filePath,
+              historyItem: resolvedHistory,
+              playbackDetailContext: _playbackDetailContext,
+            );
           }
         } else {
           _showEpisodeErrorMessage('下一话', '无法加载下一话的历史记录');

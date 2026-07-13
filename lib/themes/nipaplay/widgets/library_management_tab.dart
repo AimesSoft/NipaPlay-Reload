@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as p;
@@ -28,7 +29,6 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
@@ -37,11 +37,83 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
+import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
+
+enum _MountedLibraryType { local, webdav, smb }
+
+class _MountedLibraryLocation {
+  const _MountedLibraryLocation.local(this.localPath)
+      : type = _MountedLibraryType.local,
+        webdavConnection = null,
+        smbConnection = null;
+
+  const _MountedLibraryLocation.webdav(this.webdavConnection)
+      : type = _MountedLibraryType.webdav,
+        localPath = null,
+        smbConnection = null;
+
+  const _MountedLibraryLocation.smb(this.smbConnection)
+      : type = _MountedLibraryType.smb,
+        localPath = null,
+        webdavConnection = null;
+
+  final _MountedLibraryType type;
+  final String? localPath;
+  final WebDAVConnection? webdavConnection;
+  final SMBConnection? smbConnection;
+
+  String get rootPath => switch (type) {
+        _MountedLibraryType.local => localPath!,
+        _MountedLibraryType.webdav || _MountedLibraryType.smb => '/',
+      };
+
+  String get label => switch (type) {
+        _MountedLibraryType.local =>
+          p.basename(localPath!).isEmpty ? localPath! : p.basename(localPath!),
+        _MountedLibraryType.webdav => webdavConnection!.name,
+        _MountedLibraryType.smb => smbConnection!.name,
+      };
+}
+
+class _MountedLibraryEntry {
+  const _MountedLibraryEntry.local(this.localEntity)
+      : webdavFile = null,
+        smbFile = null;
+
+  const _MountedLibraryEntry.webdav(this.webdavFile)
+      : localEntity = null,
+        smbFile = null;
+
+  const _MountedLibraryEntry.smb(this.smbFile)
+      : localEntity = null,
+        webdavFile = null;
+
+  final io.FileSystemEntity? localEntity;
+  final WebDAVFile? webdavFile;
+  final SMBFileEntry? smbFile;
+
+  String get path => localEntity?.path ?? webdavFile?.path ?? smbFile!.path;
+  String get name => localEntity == null
+      ? (webdavFile?.name ?? smbFile!.name)
+      : p.basename(localEntity!.path);
+  bool get isDirectory =>
+      localEntity is io.Directory ||
+      webdavFile?.isDirectory == true ||
+      smbFile?.isDirectory == true;
+}
 
 class _RemoteScrapeCandidate {
   final String filePath;
@@ -68,10 +140,14 @@ class _RemoteScrapeResult {
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
   final LibraryManagementSection section;
+  final LibraryManagementViewMode viewMode;
+  final ValueChanged<LibraryManagementViewMode> onViewModeChanged;
 
   const LibraryManagementTab({
     super.key,
     required this.onPlayEpisode,
+    required this.viewMode,
+    required this.onViewModeChanged,
     this.section = LibraryManagementSection.local,
   });
 
@@ -116,7 +192,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     '文件大小 (小→大)',
     '文件大小 (大→小)',
   ];
-  final GlobalKey _sortDropdownKey = GlobalKey();
 
   static const Set<String> _batchMatchVideoExtensions = {
     '.mp4',
@@ -144,7 +219,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   String? _largeScreenSelectedLocalFolder;
   String? _largeScreenSelectedWebDAVConnectionName;
   String? _largeScreenSelectedSMBConnectionName;
-
+  _MountedLibraryLocation? _mountedLocation;
+  final List<String> _mountedPathStack = [];
+  List<_MountedLibraryEntry> _mountedEntries = const [];
+  bool _isMountedDirectoryLoading = false;
+  String? _mountedDirectoryError;
+  int _mountedDirectoryLoadGeneration = 0;
   bool get _isRemoteMode =>
       kIsWeb &&
       (widget.section == LibraryManagementSection.webdav ||
@@ -320,28 +400,41 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 显示WebDAV连接对话框
   Future<void> _showWebDAVConnectionDialog() async {
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
     if (_isRemoteMode) {
       final provider =
           Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
-      final result = await WebDAVConnectionDialog.show(
-        context,
-        onSave: (connection) async {
-          await provider.addWebDAVConnection(connection);
-          if (provider.managementErrorMessage != null) {
-            throw provider.managementErrorMessage!;
-          }
-          return true;
-        },
-        onTest: (connection) =>
-            provider.testWebDAVConnection(connection: connection),
-      );
+      Future<bool> onSave(WebDAVConnection connection) async {
+        await provider.addWebDAVConnection(connection);
+        if (provider.managementErrorMessage != null) {
+          throw provider.managementErrorMessage!;
+        }
+        return true;
+      }
+
+      final result = isPhone
+          ? await CupertinoWebDAVConnectionDialog.show(
+              context,
+              onSave: onSave,
+              onTest: (connection) =>
+                  provider.testWebDAVConnection(connection: connection),
+            )
+          : await WebDAVConnectionDialog.show(
+              context,
+              onSave: onSave,
+              onTest: (connection) =>
+                  provider.testWebDAVConnection(connection: connection),
+            );
       if (result == true && mounted) {
         BlurSnackBar.show(context, 'WebDAV连接已添加，您可以切换到WebDAV视图查看');
       }
       return;
     }
 
-    final result = await WebDAVConnectionDialog.show(context);
+    final result = isPhone
+        ? await CupertinoWebDAVConnectionDialog.show(context)
+        : await WebDAVConnectionDialog.show(context);
     if (result == true && mounted) {
       // 刷新WebDAV连接列表
       setState(() {
@@ -352,24 +445,33 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   Future<void> _showSMBConnectionDialog({SMBConnection? editConnection}) async {
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
     if (_isRemoteMode) {
       final provider =
           Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
-      final result = await SMBConnectionDialog.show(
-        context,
-        editConnection: editConnection,
-        onSave: (connection) async {
-          if (editConnection != null &&
-              editConnection.name != connection.name) {
-            await provider.removeSMBConnection(editConnection.name);
-            if (provider.managementErrorMessage != null) {
-              return false;
-            }
+      Future<bool> onSave(SMBConnection connection) async {
+        if (editConnection != null && editConnection.name != connection.name) {
+          await provider.removeSMBConnection(editConnection.name);
+          if (provider.managementErrorMessage != null) {
+            return false;
           }
-          await provider.addSMBConnection(connection);
-          return provider.managementErrorMessage == null;
-        },
-      );
+        }
+        await provider.addSMBConnection(connection);
+        return provider.managementErrorMessage == null;
+      }
+
+      final result = isPhone
+          ? await CupertinoSmbConnectionDialog.show(
+              context,
+              editConnection: editConnection,
+              onSave: onSave,
+            )
+          : await SMBConnectionDialog.show(
+              context,
+              editConnection: editConnection,
+              onSave: onSave,
+            );
       if (result == true && mounted) {
         BlurSnackBar.show(
           context,
@@ -379,10 +481,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return;
     }
 
-    final result = await SMBConnectionDialog.show(
-      context,
-      editConnection: editConnection,
-    );
+    final result = isPhone
+        ? await CupertinoSmbConnectionDialog.show(
+            context,
+            editConnection: editConnection,
+          )
+        : await SMBConnectionDialog.show(
+            context,
+            editConnection: editConnection,
+          );
     if (result == true && mounted) {
       setState(() {
         _smbConnections = SMBService.instance.connections;
@@ -942,7 +1049,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(color: _accentColor),
+                    child: AdaptiveMediaActivityIndicator(
+                      color: _accentColor,
+                    ),
                   ),
                 )
               else ...[
@@ -973,8 +1082,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 p.basenameWithoutExtension(entity.path),
               );
 
-              return ListTile(
-                dense: true,
+              return AdaptiveMediaListTile(
                 contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
                 leading:
                     Icon(Icons.videocam_outlined, color: iconColor, size: 18),
@@ -1077,7 +1185,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
     return Column(
       children: [
-        ListTile(
+        AdaptiveMediaListTile(
           leading: Icon(Icons.playlist_add_check, color: iconColor),
           title: Text(
             '批量匹配弹幕（本文件夹）',
@@ -1093,7 +1201,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ),
           onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
         ),
-        ListTile(
+        AdaptiveMediaListTile(
           leading: Icon(Icons.info_outline, color: iconColor),
           title: Text(
             '自定义媒体信息（实验性）',
@@ -1143,20 +1251,54 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  Widget _buildSortDropdown() {
-    return BlurDropdown<int>(
-      dropdownKey: _sortDropdownKey,
-      onItemSelected: (value) => _applySortOption(value),
-      items: _sortOptionLabels
-          .asMap()
-          .entries
-          .map((entry) => DropdownMenuItemData<int>(
-                title: entry.value,
-                value: entry.key,
-                isSelected: entry.key == _sortOption,
-              ))
-          .toList(),
+  LocalLibraryActionControl _buildSortDropdown() {
+    return LocalLibraryActionControl(
+      label: '排序',
+      desktopIcon: Icons.sort_rounded,
+      phoneIcon: cupertino.CupertinoIcons.arrow_up_arrow_down,
+      onPressed: _showFileSortMenu,
     );
+  }
+
+  Future<void> _showFileSortMenu() async {
+    if (AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone) {
+      final selected = await BlurDialog.show<int>(
+        context: context,
+        title: '排序',
+        contentWidget: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in _sortOptionLabels.asMap().entries)
+              AdaptiveMediaListTile(
+                leading: Icon(
+                  entry.key == _sortOption
+                      ? Icons.check_rounded
+                      : Icons.sort_rounded,
+                ),
+                title: Text(entry.value),
+                onTap: () => Navigator.of(context).pop(entry.key),
+              ),
+          ],
+        ),
+      );
+      if (selected != null) _applySortOption(selected);
+      return;
+    }
+    final selected = await CupertinoBottomSheet.showSelection<int>(
+      context: context,
+      title: '排序',
+      options: [
+        for (final entry in _sortOptionLabels.asMap().entries)
+          CupertinoBottomSheetOption(
+            label: entry.value,
+            value: entry.key,
+            selected: entry.key == _sortOption,
+          ),
+      ],
+    );
+    if (selected != null) {
+      _applySortOption(selected);
+    }
   }
 
   // 显示排序选择对话框
@@ -1579,19 +1721,40 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     );
   }
 
-  Widget _buildActionIcon({
+  LocalLibraryActionControl _buildActionIcon({
     required IconData icon,
     required String tooltip,
     required VoidCallback? onPressed,
   }) {
-    return SearchBarActionButton(
-      icon: icon,
-      tooltip: tooltip,
-      onPressed: onPressed ?? () {},
+    return LocalLibraryActionControl(
+      label: tooltip,
+      desktopIcon: icon,
+      phoneIcon: _phoneControlIcon(tooltip),
+      onPressed: onPressed,
+      isDestructive: tooltip.contains('删除') || tooltip.contains('清理'),
     );
   }
 
-  List<Widget> _buildControlBarActionsLocal(ScanService scanService) {
+  IconData _phoneControlIcon(String tooltip) {
+    if (tooltip.contains('添加')) return cupertino.CupertinoIcons.add_circled;
+    if (tooltip.contains('清理') || tooltip.contains('移除')) {
+      return cupertino.CupertinoIcons.delete;
+    }
+    if (tooltip.contains('刷新') || tooltip.contains('扫描')) {
+      return cupertino.CupertinoIcons.refresh;
+    }
+    if (tooltip.contains('权限') || tooltip.contains('安全')) {
+      return cupertino.CupertinoIcons.lock_shield;
+    }
+    if (tooltip.contains('路径') || tooltip.contains('文件夹')) {
+      return cupertino.CupertinoIcons.folder;
+    }
+    return cupertino.CupertinoIcons.ellipsis;
+  }
+
+  List<LocalLibraryActionControl> _buildControlBarActionsLocal(
+    ScanService scanService,
+  ) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final bool isScanning = scanService.isScanning;
@@ -1748,7 +1911,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  List<Widget> _buildControlBarActionsRemote({required bool isBusy}) {
+  List<LocalLibraryActionControl> _buildControlBarActionsRemote({
+    required bool isBusy,
+  }) {
     switch (widget.section) {
       case LibraryManagementSection.webdav:
         return [
@@ -1842,13 +2007,23 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  Widget _buildManagementControlBar(List<Widget> actions) {
+  Widget _buildManagementControlBar(
+    List<LocalLibraryActionControl> actions, {
+    bool showBackButton = false,
+    VoidCallback? onBack,
+    String? title,
+  }) {
     return LocalLibraryControlBar(
       searchController: _searchController,
       onSearchChanged: (_) => setState(() {}),
       onClearSearch: () => setState(() {}),
       showSort: false,
+      showBackButton: showBackButton,
+      onBack: onBack,
+      title: title,
       trailingActions: actions,
+      viewMode: widget.viewMode,
+      onToggleViewMode: _toggleViewMode,
     );
   }
 
@@ -1892,6 +2067,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       );
     }
 
+    final surface = AppDisplaySurfaceScope.of(context);
+    if (surface == AppDisplaySurface.phone ||
+        surface == AppDisplaySurface.desktopTablet) {
+      return _buildAdaptiveManagementView(
+        scanService: scanService,
+        sharedProvider: sharedProvider,
+        isRemoteMode: isRemoteMode,
+        scanProgressBackground: scanProgressBackground,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1917,10 +2103,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   if (scanService!.isScanning && scanService!.scanProgress > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
-                      child: LinearProgressIndicator(
+                      child: AdaptiveMediaProgressBar(
                         value: scanService!.scanProgress,
                         backgroundColor: scanProgressBackground,
-                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                        color: _accentColor,
                       ),
                     ),
                   if (!scanService!.isScanning &&
@@ -1929,16 +2115,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       padding: const EdgeInsets.only(top: 6.0),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
+                        child: AdaptiveMediaActionButton(
                           onPressed: () =>
                               _showFailedScanFilesDialog(scanService!),
-                          icon: Icon(Icons.error_outline,
-                              size: 16, color: Colors.orangeAccent),
-                          label: Text(
-                            '查看失败文件（${scanService!.failedScanFiles.length}）',
-                            style: TextStyle(color: Colors.orangeAccent),
-                          ),
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                          desktopIcon: Icons.error_outline,
+                          phoneIcon:
+                              cupertino.CupertinoIcons.exclamationmark_triangle,
+                          label:
+                              '查看失败文件（${scanService!.failedScanFiles.length}）',
+                          compact: true,
                         ),
                       ),
                     ),
@@ -1993,12 +2178,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                 fontSize: 16),
                           ),
                           const Spacer(),
-                          TextButton(
+                          AdaptiveMediaActionButton(
                             onPressed: () =>
                                 scanService!.clearDetectedChanges(),
-                            child: const Text("忽略",
-                                locale: Locale("zh-Hans", "zh"),
-                                style: TextStyle(color: Colors.white70)),
+                            label: '忽略',
+                            compact: true,
                           ),
                         ],
                       ),
@@ -2032,7 +2216,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                     ],
                                   ),
                                 ),
-                                TextButton(
+                                AdaptiveMediaActionButton(
                                   onPressed: () async {
                                     // 扫描这个有变化的文件夹
                                     await scanService!.startDirectoryScan(
@@ -2043,10 +2227,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                           '已开始扫描: ${change.displayName}');
                                     }
                                   },
-                                  child: const Text("扫描",
-                                      locale: Locale("zh-Hans", "zh"),
-                                      style: TextStyle(
-                                          color: Colors.lightBlueAccent)),
+                                  label: '扫描',
+                                  desktopIcon: Icons.refresh_rounded,
+                                  phoneIcon: cupertino.CupertinoIcons.refresh,
+                                  compact: true,
                                 ),
                               ],
                             ),
@@ -2055,7 +2239,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       Row(
                         children: [
                           Expanded(
-                            child: ElevatedButton(
+                            child: AdaptiveMediaActionButton(
                               onPressed: () async {
                                 // 扫描所有有变化的文件夹
                                 for (final change
@@ -2071,12 +2255,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                   BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
                                 }
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Colors.lightBlueAccent.withOpacity(0.2),
-                                foregroundColor: Colors.lightBlueAccent,
-                              ),
-                              child: const Text("扫描所有变化"),
+                              label: '扫描所有变化',
+                              desktopIcon: Icons.refresh_rounded,
+                              phoneIcon: cupertino.CupertinoIcons.refresh,
+                              emphasis: AdaptiveMediaActionEmphasis.primary,
+                              expand: true,
                             ),
                           ),
                         ],
@@ -2100,10 +2283,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   if (_isRemoteScraping)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
-                      child: LinearProgressIndicator(
+                      child: AdaptiveMediaProgressBar(
                         value: _remoteScrapeProgress,
                         backgroundColor: scanProgressBackground,
-                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                        color: _accentColor,
                       ),
                     ),
                 ],
@@ -2126,6 +2309,854 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ),
       ],
     );
+  }
+
+  Widget _buildAdaptiveManagementView({
+    required ScanService? scanService,
+    required SharedRemoteLibraryProvider? sharedProvider,
+    required bool isRemoteMode,
+    required Color scanProgressBackground,
+  }) {
+    final isBusy = isRemoteMode
+        ? sharedProvider?.isManagementLoading == true ||
+            sharedProvider?.scanStatus?.isScanning == true
+        : scanService?.isScanning == true;
+    final mountedLocation = _mountedLocation;
+    final rootActions = isRemoteMode
+        ? _buildControlBarActionsRemote(isBusy: isBusy)
+        : _buildControlBarActionsLocal(scanService!);
+    final actions = mountedLocation == null
+        ? rootActions
+        : [...rootActions, ..._buildMountedDirectoryActions()];
+    final items = mountedLocation != null
+        ? _buildMountedDirectoryItems(mountedLocation, scanService)
+        : _buildManagementItems(
+            scanService: scanService,
+            sharedProvider: sharedProvider,
+            isRemoteMode: isRemoteMode,
+          );
+    final rootEmptyContent = switch (widget.section) {
+      LibraryManagementSection.local => const LibraryManagementEmptyContent(
+          title: '尚未添加媒体文件夹',
+          subtitle: '从页面操作中添加文件夹，完成扫描后即可在媒体库中使用。',
+        ),
+      LibraryManagementSection.webdav => const LibraryManagementEmptyContent(
+          title: '尚未添加 WebDAV 服务器',
+          subtitle: '从页面操作中添加 WebDAV 连接。',
+        ),
+      LibraryManagementSection.smb => const LibraryManagementEmptyContent(
+          title: '尚未添加 SMB 服务器',
+          subtitle: '从页面操作中添加 SMB 连接。',
+        ),
+    };
+    final emptyContent = mountedLocation == null
+        ? rootEmptyContent
+        : LibraryManagementEmptyContent(
+            title: _mountedDirectoryError != null
+                ? '读取目录失败'
+                : _isMountedDirectoryLoading
+                    ? '正在读取目录'
+                    : _searchController.text.trim().isEmpty
+                        ? '当前目录为空'
+                        : '未找到匹配内容',
+            subtitle: _mountedDirectoryError ?? _currentMountedPath,
+          );
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+
+    return ColoredBox(
+      color: Colors.transparent,
+      child: Column(
+        children: [
+          if (isPhone)
+            CupertinoMediaSearchToolbar(
+              controller: _searchController,
+              placeholder: mountedLocation == null ? '搜索文件夹或服务器' : '搜索文件或文件夹',
+              onChanged: (_) => setState(() {}),
+              leadingAction: mountedLocation == null
+                  ? null
+                  : CupertinoMediaSearchToolbarAction(
+                      label: '返回上级目录',
+                      icon: cupertino.CupertinoIcons.chevron_back,
+                      onPressed: _navigateMountedBack,
+                    ),
+              actions: [
+                CupertinoMediaSearchToolbarAction(
+                  label: widget.viewMode == LibraryManagementViewMode.icons
+                      ? '切换到列表视图'
+                      : '切换到图标视图',
+                  icon: widget.viewMode == LibraryManagementViewMode.icons
+                      ? cupertino.CupertinoIcons.list_bullet
+                      : cupertino.CupertinoIcons.square_grid_2x2,
+                  onPressed: _toggleViewMode,
+                ),
+                CupertinoMediaSearchToolbarAction(
+                  label: '库管理操作',
+                  icon: cupertino.CupertinoIcons.ellipsis,
+                  onPressed: actions.any((action) => action.onPressed != null)
+                      ? () => _showPhoneManagementActions(actions)
+                      : null,
+                ),
+              ],
+            )
+          else
+            _buildManagementControlBar(
+              actions,
+              showBackButton: mountedLocation != null,
+              onBack: mountedLocation == null ? null : _navigateMountedBack,
+              title: mountedLocation == null ? null : mountedLocation.label,
+            ),
+          if (mountedLocation != null)
+            _buildMountedDirectoryPathBar(mountedLocation),
+          _buildAdaptiveManagementStatus(
+            scanService: scanService,
+            isRemoteMode: isRemoteMode,
+            scanProgressBackground: scanProgressBackground,
+          ),
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: AdaptiveLibraryManagementOverview(
+                    items: items,
+                    viewMode: widget.viewMode,
+                    emptyContent: emptyContent,
+                  ),
+                ),
+                if (_isMountedDirectoryLoading && mountedLocation != null)
+                  const Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: AdaptiveMediaActivityIndicator()),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdaptiveManagementStatus({
+    required ScanService? scanService,
+    required bool isRemoteMode,
+    required Color scanProgressBackground,
+  }) {
+    final message =
+        isRemoteMode ? _remoteScrapeMessage : scanService?.scanMessage ?? '';
+    final isWorking =
+        isRemoteMode ? _isRemoteScraping : scanService?.isScanning == true;
+    final progress =
+        isRemoteMode ? _remoteScrapeProgress : scanService?.scanProgress;
+    final hasFailures = !isRemoteMode &&
+        scanService != null &&
+        !scanService.isScanning &&
+        scanService.failedScanFiles.isNotEmpty;
+    final hasChanges = !isRemoteMode &&
+        scanService != null &&
+        !scanService.isScanning &&
+        scanService.detectedChanges.isNotEmpty;
+    if (message.isEmpty && !hasFailures && !hasChanges) {
+      return const SizedBox.shrink();
+    }
+
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondary = isPhone
+        ? cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.secondaryLabel,
+            context,
+          )
+        : colorScheme.onSurface.withValues(alpha: 0.62);
+    final background = isPhone
+        ? cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.secondarySystemGroupedBackground,
+            context,
+          )
+        : colorScheme.onSurface.withValues(alpha: 0.04);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.isNotEmpty)
+            Text(message, style: TextStyle(fontSize: 13, color: secondary)),
+          if (isWorking) ...[
+            const SizedBox(height: 8),
+            AdaptiveMediaProgressBar(
+              value: progress != null && progress > 0 ? progress : null,
+              backgroundColor: scanProgressBackground,
+              color: _accentColor,
+            ),
+          ],
+          if (hasFailures) ...[
+            const SizedBox(height: 6),
+            AdaptiveMediaActionButton(
+              onPressed: () => _showFailedScanFilesDialog(scanService),
+              desktopIcon: Icons.error_outline,
+              phoneIcon: cupertino.CupertinoIcons.exclamationmark_triangle,
+              label: '查看失败文件（${scanService.failedScanFiles.length}）',
+              compact: true,
+            ),
+          ],
+          if (hasChanges) ...[
+            const SizedBox(height: 6),
+            Text(
+              scanService.getChangeDetectionSummary(),
+              style: TextStyle(fontSize: 13, color: secondary),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                AdaptiveMediaActionButton(
+                  onPressed: () => _scanAllDetectedChanges(scanService),
+                  desktopIcon: Icons.refresh,
+                  phoneIcon: cupertino.CupertinoIcons.refresh,
+                  label: '扫描变化',
+                  compact: true,
+                ),
+                AdaptiveMediaActionButton(
+                  onPressed: scanService.clearDetectedChanges,
+                  label: '忽略',
+                  compact: true,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<UnifiedLibraryManagementItem> _buildManagementItems({
+    required ScanService? scanService,
+    required SharedRemoteLibraryProvider? sharedProvider,
+    required bool isRemoteMode,
+  }) {
+    switch (widget.section) {
+      case LibraryManagementSection.local:
+        final folders = _sortFolderPaths(
+          _filterFolderPaths(scanService?.scannedFolders ?? const []),
+        );
+        return [
+          for (final folderPath in folders)
+            UnifiedLibraryManagementItem(
+              id: folderPath,
+              title: p.basename(folderPath).isEmpty
+                  ? folderPath
+                  : p.basename(folderPath),
+              subtitle: folderPath,
+              icon: LibraryManagementIcon.folder,
+              onOpen: () => _openLocalMount(folderPath),
+              actions: [
+                UnifiedLibraryManagementAction(
+                  label: '浏览文件',
+                  icon: LibraryManagementIcon.browse,
+                  onPressed: () => _openLocalMount(folderPath),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '重新扫描',
+                  icon: LibraryManagementIcon.refresh,
+                  onPressed: scanService?.isScanning == true
+                      ? null
+                      : () => _scanLocalFolder(scanService!, folderPath),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '移除文件夹',
+                  icon: LibraryManagementIcon.delete,
+                  destructive: true,
+                  onPressed: scanService?.isScanning == true
+                      ? null
+                      : () => _handleRemoveFolder(folderPath),
+                ),
+              ],
+            ),
+        ];
+      case LibraryManagementSection.webdav:
+        final connections = _filterWebDAVConnections(
+          isRemoteMode
+              ? sharedProvider?.webdavConnections ?? const []
+              : _webdavConnections,
+        );
+        return [
+          for (final connection in connections)
+            UnifiedLibraryManagementItem(
+              id: connection.name,
+              title: connection.name,
+              subtitle: connection.url,
+              status: connection.isConnected ? '已连接' : '未连接',
+              icon: LibraryManagementIcon.cloud,
+              onOpen: !isRemoteMode && connection.isConnected
+                  ? () => _openWebDAVMount(connection)
+                  : null,
+              actions: [
+                UnifiedLibraryManagementAction(
+                  label: '浏览文件',
+                  icon: LibraryManagementIcon.browse,
+                  onPressed: !isRemoteMode && connection.isConnected
+                      ? () => _openWebDAVMount(connection)
+                      : null,
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '编辑连接',
+                  icon: LibraryManagementIcon.edit,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _editWebDAVConnection(connection),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '测试连接',
+                  icon: LibraryManagementIcon.refresh,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _testWebDAVConnection(connection),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '删除连接',
+                  icon: LibraryManagementIcon.delete,
+                  destructive: true,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _removeWebDAVConnection(connection),
+                ),
+              ],
+            ),
+        ];
+      case LibraryManagementSection.smb:
+        final connections = _filterSMBConnections(
+          isRemoteMode
+              ? sharedProvider?.smbConnections ?? const []
+              : _smbConnections,
+        );
+        return [
+          for (final connection in connections)
+            UnifiedLibraryManagementItem(
+              id: connection.name,
+              title: connection.name,
+              subtitle: connection.port == 445
+                  ? connection.host
+                  : '${connection.host}:${connection.port}',
+              status: connection.isConnected ? '已连接' : '未连接',
+              icon: LibraryManagementIcon.server,
+              onOpen: !isRemoteMode && connection.isConnected
+                  ? () => _openSMBMount(connection)
+                  : null,
+              actions: [
+                UnifiedLibraryManagementAction(
+                  label: '浏览文件',
+                  icon: LibraryManagementIcon.browse,
+                  onPressed: !isRemoteMode && connection.isConnected
+                      ? () => _openSMBMount(connection)
+                      : null,
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '编辑连接',
+                  icon: LibraryManagementIcon.edit,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _showSMBConnectionDialog(
+                            editConnection: connection,
+                          ),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '刷新连接',
+                  icon: LibraryManagementIcon.refresh,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _refreshSMBConnection(connection),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '删除连接',
+                  icon: LibraryManagementIcon.delete,
+                  destructive: true,
+                  onPressed: isRemoteMode
+                      ? null
+                      : () => _removeSMBConnection(connection),
+                ),
+              ],
+            ),
+        ];
+    }
+  }
+
+  void _toggleViewMode() {
+    widget.onViewModeChanged(
+      widget.viewMode == LibraryManagementViewMode.icons
+          ? LibraryManagementViewMode.list
+          : LibraryManagementViewMode.icons,
+    );
+  }
+
+  Future<void> _showPhoneManagementActions(
+    List<LocalLibraryActionControl> actions,
+  ) async {
+    final enabled =
+        actions.where((action) => action.onPressed != null).toList();
+    final selected =
+        await CupertinoBottomSheet.showSelection<LocalLibraryActionControl>(
+      context: context,
+      title: '库管理操作',
+      options: [
+        for (final action in enabled)
+          CupertinoBottomSheetOption(
+            label: action.label,
+            value: action,
+            destructive: action.isDestructive,
+          ),
+      ],
+    );
+    selected?.onPressed?.call();
+  }
+
+  String get _currentMountedPath {
+    final location = _mountedLocation;
+    if (_mountedPathStack.isNotEmpty) return _mountedPathStack.last;
+    return location?.rootPath ?? '';
+  }
+
+  List<LocalLibraryActionControl> _buildMountedDirectoryActions() {
+    return [
+      LocalLibraryActionControl(
+        label: '虚拟根目录',
+        desktopIcon: Icons.home_outlined,
+        phoneIcon: cupertino.CupertinoIcons.home,
+        onPressed: _leaveMountedLibrary,
+      ),
+      LocalLibraryActionControl(
+        label: '上一级',
+        desktopIcon: Icons.arrow_upward,
+        phoneIcon: cupertino.CupertinoIcons.arrow_up,
+        onPressed: _navigateMountedBack,
+      ),
+      LocalLibraryActionControl(
+        label: '刷新',
+        desktopIcon: Icons.refresh,
+        phoneIcon: cupertino.CupertinoIcons.refresh,
+        onPressed: _isMountedDirectoryLoading ? null : _loadMountedDirectory,
+      ),
+    ];
+  }
+
+  Widget _buildMountedDirectoryPathBar(_MountedLibraryLocation location) {
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    final color = isPhone
+        ? cupertino.CupertinoDynamicColor.resolve(
+            cupertino.CupertinoColors.secondaryLabel,
+            context,
+          )
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Row(
+        children: [
+          Icon(
+            isPhone ? cupertino.CupertinoIcons.folder : Icons.folder_outlined,
+            size: 16,
+            color: color,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              '${location.label}  ·  $_currentMountedPath',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<UnifiedLibraryManagementItem> _buildMountedDirectoryItems(
+    _MountedLibraryLocation location,
+    ScanService? scanService,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    final entries = _mountedEntries.where((entry) {
+      if (query.isEmpty) return true;
+      return entry.name.toLowerCase().contains(query) ||
+          entry.path.toLowerCase().contains(query);
+    });
+
+    return [
+      for (final entry in entries)
+        UnifiedLibraryManagementItem(
+          id: '${location.type.name}:${entry.path}',
+          title: entry.name.isEmpty ? entry.path : entry.name,
+          subtitle: entry.isDirectory ? '文件夹' : '视频文件',
+          icon: entry.isDirectory
+              ? LibraryManagementIcon.folder
+              : LibraryManagementIcon.video,
+          onOpen: entry.isDirectory
+              ? () => _openMountedDirectory(entry)
+              : () => _playMountedEntry(location, entry),
+          actions: _buildMountedEntryActions(location, entry, scanService),
+        ),
+    ];
+  }
+
+  List<UnifiedLibraryManagementAction> _buildMountedEntryActions(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+    ScanService? scanService,
+  ) {
+    if (entry.isDirectory) {
+      return [
+        UnifiedLibraryManagementAction(
+          label: '打开文件夹',
+          icon: LibraryManagementIcon.browse,
+          onPressed: () => _openMountedDirectory(entry),
+        ),
+        UnifiedLibraryManagementAction(
+          label: '自定义媒体信息',
+          icon: LibraryManagementIcon.info,
+          onPressed: () => unawaited(
+            _showMountedCustomMediaInfo(location, entry),
+          ),
+        ),
+        UnifiedLibraryManagementAction(
+          label: '批量匹配弹幕',
+          icon: LibraryManagementIcon.subtitles,
+          onPressed: () => unawaited(
+            _showMountedBatchMatch(location, entry),
+          ),
+        ),
+        UnifiedLibraryManagementAction(
+          label: location.type == _MountedLibraryType.local ? '扫描文件夹' : '刮削文件夹',
+          icon: LibraryManagementIcon.scan,
+          onPressed: () => unawaited(
+            _scanMountedDirectory(location, entry, scanService),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      UnifiedLibraryManagementAction(
+        label: '自定义媒体信息',
+        icon: LibraryManagementIcon.info,
+        onPressed: () => unawaited(
+          _showMountedCustomMediaInfo(location, entry),
+        ),
+      ),
+      UnifiedLibraryManagementAction(
+        label: '手动匹配弹幕',
+        icon: LibraryManagementIcon.subtitles,
+        onPressed: () => unawaited(
+          _showMountedManualMatch(location, entry),
+        ),
+      ),
+    ];
+  }
+
+  void _mountLibrary(_MountedLibraryLocation location) {
+    _searchController.clear();
+    setState(() {
+      _mountedLocation = location;
+      _mountedPathStack
+        ..clear()
+        ..add(location.rootPath);
+      _mountedEntries = const [];
+      _mountedDirectoryError = null;
+    });
+    unawaited(_loadMountedDirectory());
+  }
+
+  void _openLocalMount(String folderPath) {
+    _mountLibrary(_MountedLibraryLocation.local(folderPath));
+  }
+
+  void _openWebDAVMount(WebDAVConnection connection) {
+    _mountLibrary(_MountedLibraryLocation.webdav(connection));
+  }
+
+  void _openSMBMount(SMBConnection connection) {
+    _mountLibrary(_MountedLibraryLocation.smb(connection));
+  }
+
+  void _openMountedDirectory(_MountedLibraryEntry entry) {
+    if (!entry.isDirectory || _mountedLocation == null) return;
+    _searchController.clear();
+    setState(() {
+      _mountedPathStack.add(entry.path);
+      _mountedEntries = const [];
+      _mountedDirectoryError = null;
+    });
+    unawaited(_loadMountedDirectory());
+  }
+
+  void _navigateMountedBack() {
+    if (_mountedLocation == null) return;
+    if (_mountedPathStack.length <= 1) {
+      _leaveMountedLibrary();
+      return;
+    }
+    _searchController.clear();
+    setState(() {
+      _mountedPathStack.removeLast();
+      _mountedEntries = const [];
+      _mountedDirectoryError = null;
+    });
+    unawaited(_loadMountedDirectory());
+  }
+
+  void _leaveMountedLibrary() {
+    _searchController.clear();
+    setState(() {
+      _mountedLocation = null;
+      _mountedPathStack.clear();
+      _mountedEntries = const [];
+      _mountedDirectoryError = null;
+      _isMountedDirectoryLoading = false;
+      _mountedDirectoryLoadGeneration += 1;
+    });
+  }
+
+  Future<void> _loadMountedDirectory() async {
+    final location = _mountedLocation;
+    if (location == null) return;
+    final path = _currentMountedPath;
+    final generation = ++_mountedDirectoryLoadGeneration;
+    setState(() {
+      _isMountedDirectoryLoading = true;
+      _mountedDirectoryError = null;
+    });
+
+    try {
+      final entries = switch (location.type) {
+        _MountedLibraryType.local => (await _getDirectoryContents(path))
+            .map(_MountedLibraryEntry.local)
+            .toList(),
+        _MountedLibraryType.webdav => (await WebDAVService.instance
+                .listDirectory(location.webdavConnection!, path))
+            .map(_MountedLibraryEntry.webdav)
+            .toList(),
+        _MountedLibraryType.smb => (await SMBService.instance
+                .listDirectory(location.smbConnection!, path))
+            .map(_MountedLibraryEntry.smb)
+            .toList(),
+      };
+      entries.sort((a, b) {
+        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+        final comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        return _sortOption == 1 ? -comparison : comparison;
+      });
+      if (!mounted ||
+          generation != _mountedDirectoryLoadGeneration ||
+          _mountedLocation != location ||
+          _currentMountedPath != path) {
+        return;
+      }
+      setState(() {
+        _mountedEntries = entries;
+        _isMountedDirectoryLoading = false;
+      });
+    } catch (error) {
+      if (!mounted ||
+          generation != _mountedDirectoryLoadGeneration ||
+          _mountedLocation != location ||
+          _currentMountedPath != path) {
+        return;
+      }
+      setState(() {
+        _mountedEntries = const [];
+        _mountedDirectoryError = error.toString();
+        _isMountedDirectoryLoading = false;
+      });
+    }
+  }
+
+  void _playMountedEntry(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+  ) {
+    switch (location.type) {
+      case _MountedLibraryType.local:
+        final historyItem = WatchHistoryItem(
+          filePath: entry.path,
+          animeName: p.basenameWithoutExtension(entry.name),
+          episodeTitle: '',
+          duration: 0,
+          lastPosition: 0,
+          watchProgress: 0,
+          lastWatchTime: DateTime.now(),
+        );
+        widget.onPlayEpisode(historyItem);
+      case _MountedLibraryType.webdav:
+        _playWebDAVFile(location.webdavConnection!, entry.webdavFile!);
+      case _MountedLibraryType.smb:
+        _playSMBFile(location.smbConnection!, entry.smbFile!);
+    }
+  }
+
+  String _mountedEntryPlaybackPath(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+  ) {
+    return switch (location.type) {
+      _MountedLibraryType.local => entry.path,
+      _MountedLibraryType.webdav => WebDAVService.instance.getFileUrl(
+          location.webdavConnection!,
+          entry.path,
+        ),
+      _MountedLibraryType.smb => SMBProxyService.instance.buildStreamUrl(
+          location.smbConnection!,
+          entry.path,
+        ),
+    };
+  }
+
+  Future<void> _showMountedManualMatch(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+  ) async {
+    final filePath = _mountedEntryPlaybackPath(location, entry);
+    final historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+    if (!mounted) return;
+    await _showManualDanmakuMatchDialog(
+      filePath,
+      entry.name,
+      historyItem,
+      onSuccessRefresh: () => setState(() {}),
+    );
+  }
+
+  Future<void> _showMountedCustomMediaInfo(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+  ) async {
+    final directoryPath =
+        entry.isDirectory ? entry.path : p.dirname(entry.path);
+    final sourcePath = switch (location.type) {
+      _MountedLibraryType.local => directoryPath,
+      _MountedLibraryType.webdav =>
+        'webdav://${location.webdavConnection!.name}$directoryPath',
+      _MountedLibraryType.smb =>
+        'smb://${location.smbConnection!.name}$directoryPath',
+    };
+    await CustomMediaInfoDialog.show(
+      context,
+      sourcePath,
+      initialVideoPath:
+          entry.isDirectory ? null : _mountedEntryPlaybackPath(location, entry),
+    );
+  }
+
+  Future<void> _showMountedBatchMatch(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+  ) async {
+    final filePaths = await _collectMountedVideoPaths(location, entry.path);
+    if (!mounted) return;
+    await _showBatchDanmakuMatchDialog(
+      entry.path,
+      filePaths,
+      initialSearchKeyword: entry.name,
+      onSuccessRefresh: () => setState(() {}),
+    );
+  }
+
+  Future<List<String>> _collectMountedVideoPaths(
+    _MountedLibraryLocation location,
+    String path,
+  ) async {
+    switch (location.type) {
+      case _MountedLibraryType.local:
+        final result = <String>[];
+        final directory = io.Directory(path);
+        if (!await directory.exists()) return result;
+        await for (final entity
+            in directory.list(recursive: true, followLinks: false)) {
+          if (entity is io.File &&
+              _batchMatchVideoExtensions
+                  .contains(p.extension(entity.path).toLowerCase())) {
+            result.add(entity.path);
+          }
+        }
+        return result;
+      case _MountedLibraryType.webdav:
+        final files = await _getWebDAVVideoFiles(
+          location.webdavConnection!,
+          path,
+        );
+        return files
+            .map((file) => WebDAVService.instance.getFileUrl(
+                  location.webdavConnection!,
+                  file.path,
+                ))
+            .toList();
+      case _MountedLibraryType.smb:
+        final files = await _getSMBVideoFiles(location.smbConnection!, path);
+        return files
+            .map((file) => SMBProxyService.instance.buildStreamUrl(
+                  location.smbConnection!,
+                  file.path,
+                ))
+            .toList();
+    }
+  }
+
+  Future<void> _scanMountedDirectory(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+    ScanService? scanService,
+  ) async {
+    switch (location.type) {
+      case _MountedLibraryType.local:
+        if (scanService != null) {
+          await _scanLocalFolder(scanService, entry.path);
+        }
+      case _MountedLibraryType.webdav:
+        await _scanWebDAVFolder(
+          location.webdavConnection!,
+          entry.path,
+          entry.name,
+        );
+      case _MountedLibraryType.smb:
+        await _scanSMBFolder(
+          location.smbConnection!,
+          entry.path,
+          entry.name,
+        );
+    }
+  }
+
+  Future<void> _scanLocalFolder(
+    ScanService scanService,
+    String folderPath,
+  ) async {
+    final secondary = cupertino.CupertinoDynamicColor.resolve(
+      cupertino.CupertinoColors.secondaryLabel,
+      context,
+    );
+    final confirmed = await _confirmFolderScan(context, folderPath, secondary);
+    if (confirmed != true || !mounted) return;
+    await scanService.startDirectoryScan(
+      folderPath,
+      skipPreviouslyMatchedUnwatched: false,
+    );
+  }
+
+  Future<void> _scanAllDetectedChanges(ScanService scanService) async {
+    for (final change in List.of(scanService.detectedChanges)) {
+      if (change.changeType == 'deleted') continue;
+      await scanService.startDirectoryScan(
+        change.folderPath,
+        skipPreviouslyMatchedUnwatched: false,
+      );
+    }
+    scanService.clearDetectedChanges();
   }
 
   Widget _buildLargeScreenManagementView({
@@ -2155,13 +3186,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 onChanged: (_) => setState(() {}),
                 suffix: _searchController.text.isEmpty
                     ? null
-                    : IconButton(
+                    : AdaptiveMediaIconButton(
                         tooltip: '清空搜索',
                         onPressed: () {
                           _searchController.clear();
                           setState(() {});
                         },
-                        icon: const Icon(Icons.close_rounded),
+                        desktopIcon: Icons.close_rounded,
+                        phoneIcon: cupertino.CupertinoIcons.clear,
                       ),
               ),
             ),
@@ -2377,10 +3409,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ),
           if (progress != null) ...[
             const SizedBox(height: 10),
-            LinearProgressIndicator(
+            AdaptiveMediaProgressBar(
               value: progress,
               backgroundColor: scanProgressBackground,
-              valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+              color: _accentColor,
             ),
           ],
         ],
@@ -2616,7 +3648,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           const SizedBox(height: 14),
           Expanded(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                ? const Center(child: AdaptiveMediaActivityIndicator())
                 : ListView(
                     padding: const EdgeInsets.only(bottom: 80),
                     children: [
@@ -2638,7 +3670,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         isRemoteMode ? sharedProvider!.webdavConnections : _webdavConnections;
     if (connections.isEmpty) {
       if (isRemoteMode && sharedProvider!.isManagementLoading) {
-        return Center(child: CircularProgressIndicator(color: _accentColor));
+        return const Center(child: AdaptiveMediaActivityIndicator());
       }
       final error =
           isRemoteMode ? sharedProvider!.managementErrorMessage : null;
@@ -2755,7 +3787,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           const SizedBox(height: 14),
           Expanded(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                ? const Center(child: AdaptiveMediaActivityIndicator())
                 : ListView(
                     padding: const EdgeInsets.only(bottom: 80),
                     children: _buildWebDAVFileNodes(connection, '/', 1),
@@ -2774,7 +3806,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         isRemoteMode ? sharedProvider!.smbConnections : _smbConnections;
     if (connections.isEmpty) {
       if (isRemoteMode && sharedProvider!.isManagementLoading) {
-        return Center(child: CircularProgressIndicator(color: _accentColor));
+        return const Center(child: AdaptiveMediaActivityIndicator());
       }
       final error =
           isRemoteMode ? sharedProvider!.managementErrorMessage : null;
@@ -2895,7 +3927,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           const SizedBox(height: 14),
           Expanded(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: _accentColor))
+                ? const Center(child: AdaptiveMediaActivityIndicator())
                 : ListView(
                     padding: const EdgeInsets.only(bottom: 80),
                     children: _buildSMBFileNodes(connection, '/', 1),
@@ -3243,8 +4275,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
         : p.basename(folderPath);
-    return ListTile(
-      dense: true,
+    return AdaptiveMediaListTile(
       contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
       leading: Icon(Icons.playlist_add_check, color: iconColor, size: 18),
       title: Text(
@@ -3282,8 +4313,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
         : p.basename(folderPath);
-    return ListTile(
-      dense: true,
+    return AdaptiveMediaListTile(
       contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
       leading: Icon(Icons.info_outline, color: iconColor, size: 18),
       title: Text(
@@ -3330,8 +4360,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
         : p.basename(folderPath);
-    return ListTile(
-      dense: true,
+    return AdaptiveMediaListTile(
       contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
       leading: Icon(Icons.playlist_add_check, color: iconColor, size: 18),
       title: Text(
@@ -3369,8 +4398,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
         : p.basename(folderPath);
-    return ListTile(
-      dense: true,
+    return AdaptiveMediaListTile(
       contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
       leading: Icon(Icons.info_outline, color: iconColor, size: 18),
       title: Text(
@@ -3599,6 +4627,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return LibraryManagementList<String>(
       scrollController: _listScrollController,
       items: sortedFolders,
+      viewMode: widget.viewMode,
       itemBuilder: (context, folderPath) =>
           _buildFolderTile(folderPath, scanService),
     );
@@ -3645,125 +4674,104 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       builder: (context, snapshot) {
         final displayPath = snapshot.data ?? folderPath;
         final appearance = context.read<AppearanceSettingsProvider>();
+        final expanded = _expandedLocalFolders.contains(folderPath);
 
         return LibraryManagementCard(
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              hoverColor: Colors.transparent,
-              dividerColor: Colors.transparent,
+          child: AdaptiveMediaExpansionTile(
+            leading: Icon(Icons.folder_open_outlined, color: iconColor),
+            iconColor: iconColor,
+            expanded: expanded,
+            title: Text(
+              p.basename(folderPath),
+              style: TextStyle(color: textColor, fontSize: 16),
+              maxLines: appearance.folderNameMaxLines,
+              overflow: appearance.folderNameOverflow,
             ),
-            child: ExpansionTile(
-              key: PageStorageKey<String>(folderPath),
-              leading: Icon(Icons.folder_open_outlined, color: iconColor),
-              iconColor: iconColor,
-              collapsedIconColor: iconColor,
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      p.basename(folderPath),
-                      style: TextStyle(color: textColor, fontSize: 16),
-                      maxLines: appearance.folderNameMaxLines,
-                      overflow: appearance.folderNameOverflow,
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  displayPath,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: secondaryTextColor, fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
+            subtitle: Text(
+              displayPath,
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AdaptiveMediaIconButton(
+                  desktopIcon: Icons.delete_outline,
+                  phoneIcon: cupertino.CupertinoIcons.delete,
+                  tooltip: '移除文件夹',
+                  onPressed: scanService.isScanning
+                      ? null
+                      : () => _handleRemoveFolder(folderPath),
                 ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SearchBarActionButton(
-                    icon: Icons.delete_outline,
-                    tooltip: '移除文件夹',
-                    onPressed: scanService.isScanning
-                        ? null
-                        : () => _handleRemoveFolder(folderPath),
-                  ),
-                  SearchBarActionButton(
-                    icon: Icons.refresh_rounded,
-                    tooltip: '扫描文件夹',
-                    onPressed: scanService.isScanning
-                        ? null
-                        : () async {
-                            if (scanService.isScanning) {
-                              BlurSnackBar.show(context, '已有扫描任务在进行中。');
-                              return;
-                            }
-                            final confirm = await BlurDialog.show<bool>(
-                              context: context,
-                              title: '确认扫描',
-                              content:
-                                  '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
-                              actions: <Widget>[
-                                HoverScaleTextButton(
-                                  child: Text('取消',
-                                      locale: const Locale("zh-Hans", "zh"),
-                                      style:
-                                          TextStyle(color: secondaryTextColor)),
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(false),
-                                ),
-                                HoverScaleTextButton(
-                                  child: const Text('扫描',
-                                      locale: Locale("zh-Hans", "zh"),
-                                      style: TextStyle(
-                                          color: Colors.lightBlueAccent)),
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(true),
-                                ),
-                              ],
+                AdaptiveMediaIconButton(
+                  desktopIcon: Icons.refresh_rounded,
+                  phoneIcon: cupertino.CupertinoIcons.refresh,
+                  tooltip: '扫描文件夹',
+                  onPressed: scanService.isScanning
+                      ? null
+                      : () async {
+                          if (scanService.isScanning) {
+                            BlurSnackBar.show(context, '已有扫描任务在进行中。');
+                            return;
+                          }
+                          final confirm = await _confirmFolderScan(
+                            context,
+                            folderPath,
+                            secondaryTextColor,
+                          );
+                          if (confirm == true) {
+                            await scanService.startDirectoryScan(
+                              folderPath,
+                              skipPreviouslyMatchedUnwatched: false,
                             );
-                            if (confirm == true) {
-                              await scanService.startDirectoryScan(folderPath,
-                                  skipPreviouslyMatchedUnwatched: false);
-                              if (mounted) {
-                                BlurSnackBar.show(context,
-                                    '已开始智能扫描: ${p.basename(folderPath)}');
-                              }
+                            if (mounted) {
+                              BlurSnackBar.show(
+                                context,
+                                '已开始智能扫描: ${p.basename(folderPath)}',
+                              );
                             }
-                          },
-                  ),
-                ],
-              ),
-              onExpansionChanged: (isExpanded) {
-                if (isExpanded &&
-                    _expandedFolderContents[folderPath] == null &&
-                    !_loadingFolders.contains(folderPath)) {
-                  Future.microtask(() => _loadFolderChildren(folderPath));
+                          }
+                        },
+                ),
+              ],
+            ),
+            onExpansionChanged: (isExpanded) {
+              setState(() {
+                if (isExpanded) {
+                  _expandedLocalFolders.add(folderPath);
+                } else {
+                  _expandedLocalFolders.remove(folderPath);
                 }
-              },
-              children: _loadingFolders.contains(folderPath)
-                  ? [
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: CircularProgressIndicator(color: _accentColor),
+              });
+              if (isExpanded &&
+                  _expandedFolderContents[folderPath] == null &&
+                  !_loadingFolders.contains(folderPath)) {
+                Future.microtask(() => _loadFolderChildren(folderPath));
+              }
+            },
+            children: _loadingFolders.contains(folderPath)
+                ? [
+                    Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: AdaptiveMediaActivityIndicator(
+                          color: _accentColor,
                         ),
                       ),
-                    ]
-                  : [
-                      _buildBatchDanmakuMatchFolderAction(
-                        folderPath,
-                        _expandedFolderContents[folderPath] ?? const [],
-                      ),
-                      ..._buildFileSystemNodes(
-                        _expandedFolderContents[folderPath] ?? const [],
-                        folderPath,
-                        1,
-                      ),
-                    ],
-            ),
+                    ),
+                  ]
+                : [
+                    _buildBatchDanmakuMatchFolderAction(
+                      folderPath,
+                      _expandedFolderContents[folderPath] ?? const [],
+                    ),
+                    ..._buildFileSystemNodes(
+                      _expandedFolderContents[folderPath] ?? const [],
+                      folderPath,
+                      1,
+                    ),
+                  ],
           ),
         );
       },
@@ -3789,6 +4797,99 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return _buildResponsiveFolderList(scanService, filteredFolders);
   }
 
+  Future<bool?> _confirmFolderScan(
+    BuildContext context,
+    String folderPath,
+    Color secondaryTextColor,
+  ) {
+    final message = '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n'
+        '• 检测文件夹内容是否有变化\n'
+        '• 如无变化将快速跳过\n'
+        '• 如有变化将进行全面扫描\n\n开始扫描？';
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return cupertino.showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => cupertino.CupertinoAlertDialog(
+          title: const Text('确认扫描'),
+          content: Text(message),
+          actions: [
+            cupertino.CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            cupertino.CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('扫描'),
+            ),
+          ],
+        ),
+      );
+    }
+    return BlurDialog.show<bool>(
+      context: context,
+      title: '确认扫描',
+      content: message,
+      actions: <Widget>[
+        HoverScaleTextButton(
+          child: Text('取消', style: TextStyle(color: secondaryTextColor)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        HoverScaleTextButton(
+          child: const Text(
+            '扫描',
+            style: TextStyle(color: Colors.lightBlueAccent),
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+  }
+
+  Future<bool?> _confirmDestructiveAction({
+    required String title,
+    required String message,
+  }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return cupertino.showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => cupertino.CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            cupertino.CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            cupertino.CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+    }
+    return BlurDialog.show<bool>(
+      context: context,
+      title: title,
+      content: message,
+      actions: [
+        HoverScaleTextButton(
+          child: const Text('取消'),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        HoverScaleTextButton(
+          child: const Text(
+            '删除',
+            style: TextStyle(color: Colors.redAccent),
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+  }
+
   // 构建WebDAV文件夹列表
   Widget _buildWebDAVFoldersList() {
     final remoteProvider =
@@ -3798,7 +4899,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (connections.isEmpty) {
       if (_isRemoteMode && remoteProvider!.isManagementLoading) {
         return Center(
-          child: CircularProgressIndicator(color: _accentColor),
+          child: AdaptiveMediaActivityIndicator(color: _accentColor),
         );
       }
       if (_isRemoteMode && remoteProvider!.managementErrorMessage != null) {
@@ -3822,6 +4923,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return LibraryManagementList<WebDAVConnection>(
       scrollController: _webdavScrollController,
       items: filteredConnections,
+      viewMode: widget.viewMode,
       itemBuilder: (context, connection) =>
           _buildWebDAVConnectionTile(connection),
     );
@@ -3835,7 +4937,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (connections.isEmpty) {
       if (_isRemoteMode && remoteProvider!.isManagementLoading) {
         return Center(
-          child: CircularProgressIndicator(color: _accentColor),
+          child: AdaptiveMediaActivityIndicator(color: _accentColor),
         );
       }
       if (_isRemoteMode && remoteProvider!.managementErrorMessage != null) {
@@ -3859,6 +4961,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return LibraryManagementList<SMBConnection>(
       scrollController: _smbScrollController,
       items: filteredConnections,
+      viewMode: widget.viewMode,
       itemBuilder: (context, connection) => _buildSMBConnectionTile(connection),
     );
   }
@@ -3869,86 +4972,90 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final rootKey = '${connection.name}:/';
+    final expanded = _expandedWebDAVFolders.contains(rootKey);
 
     return LibraryManagementCard(
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          dividerColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          key: PageStorageKey<String>('webdav_${connection.name}'),
-          leading: Icon(Icons.cloud, color: iconColor),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  connection.name,
-                  style: TextStyle(color: textColor, fontSize: 16),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: AdaptiveMediaExpansionTile(
+        leading: Icon(Icons.cloud, color: iconColor),
+        iconColor: iconColor,
+        expanded: expanded,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                connection.name,
+                style: TextStyle(color: textColor, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.2)
-                      : Colors.black.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  connection.isConnected ? '已连接' : '未连接',
-                  style: TextStyle(color: textColor, fontSize: 10),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              connection.url,
-              style: TextStyle(color: secondaryTextColor, fontSize: 11),
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SearchBarActionButton(
-                icon: Icons.edit,
-                tooltip: '编辑连接',
-                onPressed: () => _editWebDAVConnection(connection),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
               ),
-              SearchBarActionButton(
-                icon: Icons.delete_outline,
-                tooltip: '删除连接',
-                onPressed: () => _removeWebDAVConnection(connection),
+              child: Text(
+                connection.isConnected ? '已连接' : '未连接',
+                style: TextStyle(color: textColor, fontSize: 10),
               ),
-              SearchBarActionButton(
-                icon: Icons.refresh,
-                tooltip: '测试连接',
-                onPressed: () => _testWebDAVConnection(connection),
-              ),
-            ],
-          ),
-          onExpansionChanged: (expanded) {
-            if (expanded && _webdavFolderContents[connection.name] == null) {
-              _loadWebDAVFolderChildren(connection, '/');
+            ),
+          ],
+        ),
+        subtitle: Text(
+          connection.url,
+          style: TextStyle(color: secondaryTextColor, fontSize: 11),
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.edit,
+              phoneIcon: cupertino.CupertinoIcons.pencil,
+              tooltip: '编辑连接',
+              onPressed: () => _editWebDAVConnection(connection),
+            ),
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.delete_outline,
+              phoneIcon: cupertino.CupertinoIcons.delete,
+              tooltip: '删除连接',
+              onPressed: () => _removeWebDAVConnection(connection),
+            ),
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.refresh,
+              phoneIcon: cupertino.CupertinoIcons.refresh,
+              tooltip: '测试连接',
+              onPressed: () => _testWebDAVConnection(connection),
+            ),
+          ],
+        ),
+        onExpansionChanged: (isExpanded) {
+          setState(() {
+            if (isExpanded) {
+              _expandedWebDAVFolders.add(rootKey);
+            } else {
+              _expandedWebDAVFolders.remove(rootKey);
             }
-          },
-          children: _loadingWebDAVFolders.contains('${connection.name}:/')
-              ? [
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(color: _accentColor),
+          });
+          if (isExpanded && _webdavFolderContents[rootKey] == null) {
+            _loadWebDAVFolderChildren(connection, '/');
+          }
+        },
+        children: _loadingWebDAVFolders.contains(rootKey)
+            ? [
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: AdaptiveMediaActivityIndicator(
+                      color: _accentColor,
                     ),
                   ),
-                ]
-              : _buildWebDAVFileNodes(connection, '/', 1),
-        ),
+                ),
+              ]
+            : _buildWebDAVFileNodes(connection, '/', 1),
       ),
     );
   }
@@ -3961,87 +5068,91 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final hostLabel = connection.port != 445
         ? '${connection.host}:${connection.port}'
         : connection.host;
+    final rootKey = '${connection.name}:/';
+    final expanded = _expandedSMBFolders.contains(rootKey);
 
     return LibraryManagementCard(
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          dividerColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          key: PageStorageKey<String>('smb_${connection.name}'),
-          leading: Icon(Icons.dns, color: iconColor),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  connection.name,
-                  style: TextStyle(color: textColor, fontSize: 16),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: AdaptiveMediaExpansionTile(
+        leading: Icon(Icons.dns, color: iconColor),
+        iconColor: iconColor,
+        expanded: expanded,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                connection.name,
+                style: TextStyle(color: textColor, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.2)
-                      : Colors.black.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  connection.isConnected ? '已连接' : '未连接',
-                  style: TextStyle(color: textColor, fontSize: 10),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              hostLabel,
-              style: TextStyle(color: secondaryTextColor, fontSize: 11),
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SearchBarActionButton(
-                icon: Icons.edit,
-                tooltip: '编辑连接',
-                onPressed: () =>
-                    _showSMBConnectionDialog(editConnection: connection),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
               ),
-              SearchBarActionButton(
-                icon: Icons.delete_outline,
-                tooltip: '删除连接',
-                onPressed: () => _removeSMBConnection(connection),
+              child: Text(
+                connection.isConnected ? '已连接' : '未连接',
+                style: TextStyle(color: textColor, fontSize: 10),
               ),
-              SearchBarActionButton(
-                icon: Icons.refresh,
-                tooltip: '刷新连接',
-                onPressed: () => _refreshSMBConnection(connection),
-              ),
-            ],
-          ),
-          onExpansionChanged: (expanded) {
-            if (expanded && _smbFolderContents[connection.name] == null) {
-              _loadSMBFolderChildren(connection, '/');
+            ),
+          ],
+        ),
+        subtitle: Text(
+          hostLabel,
+          style: TextStyle(color: secondaryTextColor, fontSize: 11),
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.edit,
+              phoneIcon: cupertino.CupertinoIcons.pencil,
+              tooltip: '编辑连接',
+              onPressed: () =>
+                  _showSMBConnectionDialog(editConnection: connection),
+            ),
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.delete_outline,
+              phoneIcon: cupertino.CupertinoIcons.delete,
+              tooltip: '删除连接',
+              onPressed: () => _removeSMBConnection(connection),
+            ),
+            AdaptiveMediaIconButton(
+              desktopIcon: Icons.refresh,
+              phoneIcon: cupertino.CupertinoIcons.refresh,
+              tooltip: '刷新连接',
+              onPressed: () => _refreshSMBConnection(connection),
+            ),
+          ],
+        ),
+        onExpansionChanged: (isExpanded) {
+          setState(() {
+            if (isExpanded) {
+              _expandedSMBFolders.add(rootKey);
+            } else {
+              _expandedSMBFolders.remove(rootKey);
             }
-          },
-          children: _loadingSMBFolders.contains('${connection.name}:/')
-              ? [
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(color: _accentColor),
+          });
+          if (isExpanded && _smbFolderContents[rootKey] == null) {
+            _loadSMBFolderChildren(connection, '/');
+          }
+        },
+        children: _loadingSMBFolders.contains(rootKey)
+            ? [
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: AdaptiveMediaActivityIndicator(
+                      color: _accentColor,
                     ),
                   ),
-                ]
-              : _buildSMBFileNodes(connection, '/', 1),
-        ),
+                ),
+              ]
+            : _buildSMBFileNodes(connection, '/', 1),
       ),
     );
   }
@@ -4065,7 +5176,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         Center(
             child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: CircularProgressIndicator(color: _accentColor)))
+                child: AdaptiveMediaActivityIndicator(color: _accentColor)))
       ];
     }
 
@@ -4152,7 +5263,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(color: _accentColor),
+                      child: AdaptiveMediaActivityIndicator(
+                        color: _accentColor,
+                      ),
                     ),
                   )
                 else
@@ -4179,8 +5292,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       p.basenameWithoutExtension(file.name),
                     )
                   : null;
-              return ListTile(
-                dense: true,
+              return AdaptiveMediaListTile(
                 contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
                 leading: Icon(
                   canPlay
@@ -4266,7 +5378,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         Center(
             child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: CircularProgressIndicator(color: _accentColor)))
+                child: AdaptiveMediaActivityIndicator(color: _accentColor)))
       ];
     }
 
@@ -4359,7 +5471,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(color: _accentColor),
+                    child: AdaptiveMediaActivityIndicator(
+                      color: _accentColor,
+                    ),
                   ),
                 )
               else
@@ -4386,8 +5500,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     p.basenameWithoutExtension(file.name),
                   )
                 : null;
-            return ListTile(
-              dense: true,
+            return AdaptiveMediaListTile(
               contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
               leading: Icon(
                 canPlay ? Icons.videocam_outlined : Icons.description_outlined,
@@ -4981,20 +6094,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   Future<void> _removeSMBConnection(SMBConnection connection) async {
-    final confirm = await BlurDialog.show<bool>(
-      context: context,
+    final confirm = await _confirmDestructiveAction(
       title: '删除SMB连接',
-      content: '确定要删除SMB连接 "${connection.name}" 吗？',
-      actions: [
-        HoverScaleTextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
-        HoverScaleTextButton(
-          child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
-          onPressed: () => Navigator.of(context).pop(true),
-        ),
-      ],
+      message: '确定要删除SMB连接 "${connection.name}" 吗？',
     );
 
     if (confirm == true && mounted) {
@@ -5075,33 +6177,53 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 编辑WebDAV连接
   Future<void> _editWebDAVConnection(WebDAVConnection connection) async {
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
     if (_isRemoteMode) {
       final provider =
           Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
-      final result = await WebDAVConnectionDialog.show(
-        context,
-        editConnection: connection,
-        onSave: (updated) async {
-          await provider.removeWebDAVConnection(connection.name);
-          if (provider.managementErrorMessage != null) {
-            throw provider.managementErrorMessage!;
-          }
-          await provider.addWebDAVConnection(updated);
-          if (provider.managementErrorMessage != null) {
-            throw provider.managementErrorMessage!;
-          }
-          return true;
-        },
-        onTest: (updated) => provider.testWebDAVConnection(connection: updated),
-      );
+      Future<bool> onSave(WebDAVConnection updated) async {
+        await provider.removeWebDAVConnection(connection.name);
+        if (provider.managementErrorMessage != null) {
+          throw provider.managementErrorMessage!;
+        }
+        await provider.addWebDAVConnection(updated);
+        if (provider.managementErrorMessage != null) {
+          throw provider.managementErrorMessage!;
+        }
+        return true;
+      }
+
+      final result = isPhone
+          ? await CupertinoWebDAVConnectionDialog.show(
+              context,
+              editConnection: connection,
+              onSave: onSave,
+              onTest: (updated) =>
+                  provider.testWebDAVConnection(connection: updated),
+            )
+          : await WebDAVConnectionDialog.show(
+              context,
+              editConnection: connection,
+              onSave: onSave,
+              onTest: (updated) =>
+                  provider.testWebDAVConnection(connection: updated),
+            );
       if (result == true && mounted) {
         BlurSnackBar.show(context, 'WebDAV连接已更新');
       }
       return;
     }
 
-    final result =
-        await WebDAVConnectionDialog.show(context, editConnection: connection);
+    final result = isPhone
+        ? await CupertinoWebDAVConnectionDialog.show(
+            context,
+            editConnection: connection,
+          )
+        : await WebDAVConnectionDialog.show(
+            context,
+            editConnection: connection,
+          );
     if (result == true && mounted) {
       setState(() {
         _webdavConnections = WebDAVService.instance.connections;
@@ -5112,20 +6234,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 删除WebDAV连接
   Future<void> _removeWebDAVConnection(WebDAVConnection connection) async {
-    final confirm = await BlurDialog.show<bool>(
-      context: context,
+    final confirm = await _confirmDestructiveAction(
       title: '删除WebDAV连接',
-      content: '确定要删除WebDAV连接 "${connection.name}" 吗？',
-      actions: [
-        HoverScaleTextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
-        HoverScaleTextButton(
-          child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
-          onPressed: () => Navigator.of(context).pop(true),
-        ),
-      ],
+      message: '确定要删除WebDAV连接 "${connection.name}" 吗？',
     );
 
     if (confirm == true && mounted) {

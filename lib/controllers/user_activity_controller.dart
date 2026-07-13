@@ -8,32 +8,24 @@ import 'package:nipaplay/services/web_remote_access_service.dart';
 
 /// 用户活动记录的业务逻辑控制器
 /// 包含所有共享的功能和状态管理
-mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvider {
-  late TabController tabController;
+mixin UserActivityController<T extends StatefulWidget> on State<T> {
   bool isLoading = true;
-  
+
   // 数据
   List<Map<String, dynamic>> recentWatched = [];
   List<Map<String, dynamic>> favorites = [];
   List<Map<String, dynamic>> rated = [];
-  
+
   // 错误状态
   String? error;
-  
+
   // 分页控制
   static const int maxDisplayItems = 100; // 最大显示数量
 
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: 3, vsync: this);
     loadUserActivity();
-  }
-
-  @override
-  void dispose() {
-    tabController.dispose();
-    super.dispose();
   }
 
   /// 加载用户活动数据
@@ -71,32 +63,38 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
       // 处理观看历史
       final List<Map<String, dynamic>> recentWatchedList = [];
 
-      
-      if (playHistory['success'] == true && playHistory['playHistoryAnimes'] != null) {
+      if (playHistory['success'] == true &&
+          playHistory['playHistoryAnimes'] != null) {
         final animes = playHistory['playHistoryAnimes'] as List;
-        
+
         // 取最近观看的动画（最多显示设定数量）
         final animesToProcess = animes.take(maxDisplayItems);
-        
+
         for (final anime in animesToProcess) {
           final animeId = anime['animeId'];
           final animeTitle = anime['animeTitle'];
-          
+
           // 确保animeId是有效的整数且animeTitle不为空
-          if (animeId != null && animeId is int && animeTitle != null && animeTitle.toString().isNotEmpty) {
+          if (animeId != null &&
+              animeId is int &&
+              animeTitle != null &&
+              animeTitle.toString().isNotEmpty) {
             // 获取最后观看的剧集信息
             String? lastEpisodeTitle;
             String? lastWatchedTime;
-            
-            if (anime['episodes'] != null && (anime['episodes'] as List).isNotEmpty) {
+
+            if (anime['episodes'] != null &&
+                (anime['episodes'] as List).isNotEmpty) {
               final episodes = anime['episodes'] as List;
               DateTime? latestWatchTime;
               // 找到最后观看的剧集，通过比较 lastWatched 时间
               for (final episode in episodes) {
                 if (episode['lastWatched'] != null) {
-                  final currentWatchTime = DateTime.tryParse(episode['lastWatched'] as String);
+                  final currentWatchTime =
+                      DateTime.tryParse(episode['lastWatched'] as String);
                   if (currentWatchTime != null) {
-                    if (latestWatchTime == null || currentWatchTime.isAfter(latestWatchTime)) {
+                    if (latestWatchTime == null ||
+                        currentWatchTime.isAfter(latestWatchTime)) {
                       latestWatchTime = currentWatchTime;
                       lastEpisodeTitle = episode['episodeTitle'] as String?;
                       lastWatchedTime = episode['lastWatched'] as String?;
@@ -105,7 +103,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
                 }
               }
             }
-            
+
             recentWatchedList.add({
               'animeId': animeId,
               'animeTitle': animeTitle.toString(),
@@ -120,19 +118,23 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
       // 处理收藏和评分
       final List<Map<String, dynamic>> favoriteList = [];
       final List<Map<String, dynamic>> ratedList = [];
-      
-      if (favoritesData['success'] == true && favoritesData['favorites'] != null) {
+
+      if (favoritesData['success'] == true &&
+          favoritesData['favorites'] != null) {
         final favs = favoritesData['favorites'] as List;
-        
+
         for (final fav in favs) {
           final animeId = fav['animeId'];
           final animeTitle = fav['animeTitle'];
           final userRating = fav['userRating'];
-          
+
           // 确保animeId是有效的整数且animeTitle不为空
-          if (animeId != null && animeId is int && animeTitle != null && animeTitle.toString().isNotEmpty) {
+          if (animeId != null &&
+              animeId is int &&
+              animeTitle != null &&
+              animeTitle.toString().isNotEmpty) {
             final ratingValue = (userRating is int) ? userRating : 0;
-            
+
             favoriteList.add({
               'animeId': animeId,
               'animeTitle': animeTitle.toString(),
@@ -140,7 +142,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
               'favoriteStatus': fav['favoriteStatus'] as String?,
               'rating': ratingValue,
             });
-            
+
             // 如果有评分，也添加到评分列表
             if (ratingValue > 0) {
               ratedList.add({
@@ -187,14 +189,14 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
   /// 格式化时间显示
   String formatTime(String? timeString) {
     if (timeString == null) return '';
-    
+
     try {
       final dateTime = DateTime.tryParse(timeString);
       if (dateTime == null) return '';
-      
+
       final now = DateTime.now();
       final difference = now.difference(dateTime);
-      
+
       if (difference.inDays > 0) {
         return context.l10n.daysAgo(difference.inDays);
       } else if (difference.inHours > 0) {

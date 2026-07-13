@@ -1,4 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
+    show PlatformInfo;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -27,10 +29,12 @@ class DesktopTabletThemeDescriptor extends ThemeDescriptor {
           supportsDesktop: true,
           supportsPhone: true,
           supportsWeb: false,
+          supportsTelevision: true,
           appBuilder: _buildApp,
         );
 
   static Widget _buildApp(ThemeBuildContext context) {
+    PlatformInfo.setPreferCupertinoControls(false);
     return Consumer<ThemeBackgroundRevealProvider>(
       builder: (buildContext, revealProvider, _) {
         final themeAnimationDuration = revealProvider.isActive
@@ -56,7 +60,7 @@ class DesktopTabletThemeDescriptor extends ThemeDescriptor {
           ],
           supportedLocales: context.supportedLocales,
           navigatorKey: context.navigatorKey,
-          home: context.materialHomeBuilder(),
+          home: context.buildHome(context.environment.displaySurface),
           builder: (buildContext, appChild) {
             final uiScale =
                 buildContext.select<AppearanceSettingsProvider, double>(

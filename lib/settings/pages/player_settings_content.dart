@@ -1,8 +1,9 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -274,7 +275,6 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
             : _selectedKernelType;
     // Web 平台现在允许访问此页面，但部分功能受限
     return AdaptiveSettingsPage(
-      title: context.l10n.playerSettings,
       children: [
         AdaptiveSettingsSection(
           addDividers: false,
@@ -640,27 +640,53 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     value: videoState.timelinePreviewEnabled,
                     onChanged: (bool value) async {
                       if (value) {
-                        final bool? confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('开启警告'),
-                            content: const Text(
-                                '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
-                            actions: [
-                              AdaptiveSettingsActionButton(
-                                label: '取消',
-                                onPressed: () =>
-                                    Navigator.of(context).pop(false),
-                              ),
-                              AdaptiveSettingsActionButton(
-                                label: '确认',
-                                primary: true,
-                                onPressed: () =>
-                                    Navigator.of(context).pop(true),
-                              ),
-                            ],
-                          ),
-                        );
+                        final bool? confirm = AdaptiveSettingsScope
+                                .isPhoneLayout(context)
+                            ? await cupertino.showCupertinoDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) =>
+                                    cupertino.CupertinoAlertDialog(
+                                  title: const Text('开启警告'),
+                                  content: const Text(
+                                      '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
+                                  actions: [
+                                    cupertino.CupertinoDialogAction(
+                                      onPressed: () =>
+                                          Navigator.of(dialogContext)
+                                              .pop(false),
+                                      child: const Text('取消'),
+                                    ),
+                                    cupertino.CupertinoDialogAction(
+                                      isDefaultAction: true,
+                                      onPressed: () =>
+                                          Navigator.of(dialogContext).pop(true),
+                                      child: const Text('确认'),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : await showDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('开启警告'),
+                                  content: const Text(
+                                      '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
+                                  actions: [
+                                    AdaptiveSettingsActionButton(
+                                      label: '取消',
+                                      onPressed: () =>
+                                          Navigator.of(dialogContext)
+                                              .pop(false),
+                                    ),
+                                    AdaptiveSettingsActionButton(
+                                      label: '确认',
+                                      primary: true,
+                                      onPressed: () =>
+                                          Navigator.of(dialogContext).pop(true),
+                                    ),
+                                  ],
+                                ),
+                              );
                         if (confirm != true) return;
                       }
                       await videoState.setTimelinePreviewEnabled(value);

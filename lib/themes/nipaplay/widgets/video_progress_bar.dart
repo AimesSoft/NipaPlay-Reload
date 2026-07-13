@@ -17,6 +17,7 @@ class VideoProgressBar extends StatefulWidget {
   final Function(Offset) onPositionUpdate;
   final Function(bool) onDraggingStateChange;
   final String Function(Duration) formatDuration;
+  final bool compact;
 
   /// MKV 章节列表（用于在轨道上画章节起点竖线标记 + 当前章节高亮段）。
   /// 参考 REFERENCE/mpv/player/lua/osc.lua:2512 markers。
@@ -39,6 +40,7 @@ class VideoProgressBar extends StatefulWidget {
     this.chapters = const [],
     this.durationMs = 0,
     this.currentChapter = -1,
+    this.compact = false,
   });
 
   @override
@@ -77,8 +79,11 @@ class _VideoProgressBarState extends State<VideoProgressBar>
   Offset? _lastDragLocalPosition;
   DateTime? _lastDragUpdateTime;
 
-  Size get _thumbBaseSize =>
-      globals.isPhone ? const Size(34.0, 20.0) : const Size(28.0, 16.0);
+  Size get _thumbBaseSize => widget.compact
+      ? const Size(24.0, 14.0)
+      : globals.isPhone
+          ? const Size(34.0, 20.0)
+          : const Size(28.0, 16.0);
 
   @override
   void initState() {
@@ -224,9 +229,21 @@ class _VideoProgressBarState extends State<VideoProgressBar>
 
           final progressRect =
               Rect.fromLTWH(0, 0, width, sliderBox.size.height);
-          final trackHeight = globals.isPhone ? 6.0 : 4.0;
-          final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
-          final hitPadding = globals.isPhone ? 12.0 : 8.0;
+          final trackHeight = widget.compact
+              ? 4.0
+              : globals.isPhone
+                  ? 6.0
+                  : 4.0;
+          final baseVerticalMargin = widget.compact
+              ? 8.0
+              : globals.isPhone
+                  ? 24.0
+                  : 20.0;
+          final hitPadding = widget.compact
+              ? 8.0
+              : globals.isPhone
+                  ? 12.0
+                  : 8.0;
           final verticalMargin = baseVerticalMargin + hitPadding;
           final thumbProgress =
               widget.videoState.progress.clamp(0.0, 1.0).toDouble();
@@ -366,9 +383,21 @@ class _VideoProgressBarState extends State<VideoProgressBar>
             }
 
             // 根据设备类型调整尺寸
-            final trackHeight = globals.isPhone ? 6.0 : 4.0;
-            final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
-            final hitPadding = globals.isPhone ? 12.0 : 8.0;
+            final trackHeight = widget.compact
+                ? 4.0
+                : globals.isPhone
+                    ? 6.0
+                    : 4.0;
+            final baseVerticalMargin = widget.compact
+                ? 8.0
+                : globals.isPhone
+                    ? 24.0
+                    : 20.0;
+            final hitPadding = widget.compact
+                ? 8.0
+                : globals.isPhone
+                    ? 12.0
+                    : 8.0;
             final verticalMargin = baseVerticalMargin + hitPadding;
             const trackBaseColor = Color.fromARGB(255, 160, 160, 160);
             const bufferTrackColor = Color.fromARGB(255, 225, 225, 225);

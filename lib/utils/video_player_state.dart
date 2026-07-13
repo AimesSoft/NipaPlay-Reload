@@ -46,6 +46,8 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -78,6 +80,7 @@ import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
 import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
+import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'screen_orientation_manager.dart';
 import 'anime4k_shader_manager.dart';
@@ -630,6 +633,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int? _episodeId; // 存储从 historyItem 传入的 episodeId
   int? _animeId; // 存储从 historyItem 传入的 animeId
   WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
+  PlaybackDetailContext? _playbackDetailContext;
 
   // 字幕管理器
   late SubtitleManager _subtitleManager;
@@ -1303,6 +1307,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
+  PlaybackDetailContext? get playbackDetailContext => _playbackDetailContext;
 
   bool hasJellyfinServerAudioSelection(String itemId) =>
       _jellyfinServerAudioSelections.containsKey(itemId);

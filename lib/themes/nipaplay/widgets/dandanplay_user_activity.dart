@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
+import 'package:nipaplay/widgets/user_activity/adaptive_user_activity.dart';
 
 /// 用户活动记录组件的主题适配器
 class DandanplayUserActivity extends StatelessWidget {
@@ -7,6 +7,6 @@ class DandanplayUserActivity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialUserActivity();
+    return const AdaptiveUserActivity();
   }
 }

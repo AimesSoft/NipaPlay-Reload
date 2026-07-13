@@ -5,6 +5,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -31,6 +32,7 @@ class PhoneThemeDescriptor extends ThemeDescriptor {
         );
 
   static Widget _buildApp(ThemeBuildContext context) {
+    PlatformInfo.setPreferCupertinoControls(true);
     return Consumer<AppearanceSettingsProvider>(
       builder: (_, appearanceSettings, __) {
         final accentColor = appearanceSettings.accentColorPreset.color;
@@ -61,7 +63,7 @@ class PhoneThemeDescriptor extends ThemeDescriptor {
               locale: context.locale,
               localizationsDelegates: context.localizationsDelegates,
               supportedLocales: context.supportedLocales,
-              home: context.phoneHomeBuilder(),
+              home: context.buildHome(AppDisplaySurface.phone),
               builder: (buildContext, appChild) {
                 final child = context.overlayBuilder(
                   appChild ?? const SizedBox.shrink(),

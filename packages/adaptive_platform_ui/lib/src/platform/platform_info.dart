@@ -19,6 +19,15 @@ enum PlatformOverride {
 class PlatformInfo {
   static PlatformOverride? _overridePlatform;
   static int? _overrideIOSVersion;
+  static bool _preferCupertinoControls = false;
+
+  /// Lets an application use the Cupertino renderer on non-iOS platforms.
+  /// iOS 26 features still require a real iOS 26 environment.
+  static void setPreferCupertinoControls(bool value) {
+    _preferCupertinoControls = value;
+  }
+
+  static bool get prefersCupertinoControls => isIOS || _preferCupertinoControls;
 
   static void setPlatformOverride(
     PlatformOverride? platform, {

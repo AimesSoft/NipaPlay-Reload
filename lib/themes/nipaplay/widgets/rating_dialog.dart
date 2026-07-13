@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_rating_sheet.dart';
 
 class RatingDialog extends StatefulWidget {
   final String animeTitle;
@@ -22,6 +26,24 @@ class RatingDialog extends StatefulWidget {
     required int initialRating,
     required Function(int rating) onRatingSubmitted,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '为番剧评分',
+        heightRatio: 0.72,
+        child: CupertinoRatingSheet(
+          animeTitle: animeTitle,
+          initialRating: initialRating,
+          isSubmitting: false,
+          onSubmit: (rating) async {
+            await onRatingSubmitted(rating);
+            return true;
+          },
+          onCancel: () => Navigator.of(context).pop(),
+        ),
+      );
+    }
+
     return showGeneralDialog(
       context: context,
       barrierDismissible: true,

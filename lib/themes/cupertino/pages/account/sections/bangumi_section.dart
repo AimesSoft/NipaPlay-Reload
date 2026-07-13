@@ -1,111 +1,24 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:intl/intl.dart';
 
-enum _BangumiSyncHelpService { dandanplay, nipaplay }
-
 class CupertinoBangumiSection extends StatelessWidget {
-  final bool isAuthorized;
-  final Map<String, dynamic>? userInfo;
-  final bool isDandanplayLoggedIn;
-  final Map<String, dynamic>? dandanLinkedBangumiInfo;
-  final DateTime? dandanLinkedBangumiExpireTime;
-  final bool isRequestingDandanBangumiAuth;
-  final bool isRefreshingDandanBangumiStatus;
-  final bool isLoading;
-  final bool isSyncing;
-  final String syncStatus;
-  final DateTime? lastSyncTime;
-  final TextEditingController tokenController;
-  final VoidCallback onRequestDandanBangumiAuth;
-  final VoidCallback onOpenDandanBangumiManage;
-  final VoidCallback onRefreshDandanBangumiStatus;
-  final VoidCallback onSaveToken;
-  final VoidCallback onClearToken;
-  final VoidCallback onSync;
-  final VoidCallback onFullSync;
-  final VoidCallback onTestConnection;
-  final VoidCallback onClearCache;
-  final VoidCallback onOpenHelp;
+  final BangumiAccountViewModel data;
 
   const CupertinoBangumiSection({
     super.key,
-    required this.isAuthorized,
-    required this.userInfo,
-    required this.isDandanplayLoggedIn,
-    required this.dandanLinkedBangumiInfo,
-    required this.dandanLinkedBangumiExpireTime,
-    required this.isRequestingDandanBangumiAuth,
-    required this.isRefreshingDandanBangumiStatus,
-    required this.isLoading,
-    required this.isSyncing,
-    required this.syncStatus,
-    required this.lastSyncTime,
-    required this.tokenController,
-    required this.onRequestDandanBangumiAuth,
-    required this.onOpenDandanBangumiManage,
-    required this.onRefreshDandanBangumiStatus,
-    required this.onSaveToken,
-    required this.onClearToken,
-    required this.onSync,
-    required this.onFullSync,
-    required this.onTestConnection,
-    required this.onClearCache,
-    required this.onOpenHelp,
+    required this.data,
   });
-
-  Future<void> _showBangumiSyncHelpDialog(
-    BuildContext context,
-    _BangumiSyncHelpService service,
-  ) async {
-    final isDandanplay = service == _BangumiSyncHelpService.dandanplay;
-    final title = isDandanplay ? '弹弹play Bangumi同步说明' : 'NipaPlay Bangumi同步说明';
-    final message = isDandanplay
-        ? '这是弹弹play提供的 Bangumi 同步服务，会在你看完后自动同步观看记录。\n\n你可以和下方 NipaPlay 的 Bangumi 同步配合使用，也可以按需只使用其中之一。'
-        : '这是 NipaPlay 提供的 Bangumi 服务。默认需要你在番剧详情页手动配置观看集数；支持打分和写评价，也支持按钮一键同步。\n\n你可以和上方弹弹play同步配合使用，也可以按需只使用其中之一。';
-
-    await CupertinoBottomSheet.show<void>(
-      context: context,
-      title: title,
-      heightRatio: 0.55,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              message,
-              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                    fontSize: 15,
-                    height: 1.45,
-                    color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.label,
-                      context,
-                    ),
-                  ),
-            ),
-            const SizedBox(height: 16),
-            AdaptiveButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: AdaptiveButtonStyle.filled,
-              color: CupertinoTheme.of(context).primaryColor,
-              label: '知道了',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildBangumiSyncHelpButton(
     BuildContext context,
-    _BangumiSyncHelpService service,
+    VoidCallback onPressed,
   ) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
-      minSize: 28,
-      onPressed: () => _showBangumiSyncHelpDialog(context, service),
+      minimumSize: const Size(28, 28),
+      onPressed: onPressed,
       child: Icon(
         CupertinoIcons.question_circle,
         size: 18,
@@ -131,28 +44,8 @@ class CupertinoBangumiSection extends StatelessWidget {
   }
 
   Widget _buildDandanLinkedCard(BuildContext context) {
-    final linked = dandanLinkedBangumiInfo;
-    final expiresAt = dandanLinkedBangumiExpireTime;
-    final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
-    final displayRaw = linked?['display']?.toString();
-    final displayName = (displayRaw != null && displayRaw.trim().isNotEmpty)
-        ? displayRaw.trim()
-        : linked?['userName']?.toString();
-    final userId = linked?['userId']?.toString();
-
-    String statusText;
-    if (!isDandanplayLoggedIn) {
-      statusText = '请先登录弹弹play账号后再绑定。';
-    } else if (linked == null) {
-      statusText = '当前未绑定 Bangumi 账号。';
-    } else {
-      final label = (displayName == null || displayName.isEmpty)
-          ? 'Bangumi用户'
-          : displayName;
-      statusText = userId == null || userId.isEmpty
-          ? '已绑定：$label'
-          : '已绑定：$label（ID: $userId）';
-    }
+    final expiresAt = data.dandanLinkedExpireTime;
+    final isExpired = data.isDandanAuthorizationExpired;
 
     return _buildRoundedCard(
       context,
@@ -164,7 +57,7 @@ class CupertinoBangumiSection extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '弹弹play内置 Bangumi 绑定（仅同步进度）',
+                  BangumiAccountViewModel.dandanTitle,
                   style: CupertinoTheme.of(context)
                       .textTheme
                       .textStyle
@@ -173,13 +66,13 @@ class CupertinoBangumiSection extends StatelessWidget {
               ),
               _buildBangumiSyncHelpButton(
                 context,
-                _BangumiSyncHelpService.dandanplay,
+                data.onOpenDandanHelp,
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            statusText,
+            data.dandanStatusText,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   color: isExpired
                       ? CupertinoColors.systemOrange
@@ -210,39 +103,28 @@ class CupertinoBangumiSection extends StatelessWidget {
           ],
           const SizedBox(height: 14),
           AdaptiveButton(
-            onPressed: (!isDandanplayLoggedIn || isRequestingDandanBangumiAuth)
-                ? null
-                : onRequestDandanBangumiAuth,
+            onPressed: data.requestDandanAuthAction.onPressed,
             style: AdaptiveButtonStyle.filled,
             color: CupertinoTheme.of(context).primaryColor,
-            label: isRequestingDandanBangumiAuth
-                ? '获取授权链接中...'
-                : (linked == null ? '绑定 Bangumi 账号' : '重新授权 Bangumi 账号'),
+            label: data.requestDandanAuthAction.label,
           ),
           const SizedBox(height: 10),
           AdaptiveButton(
-            onPressed: (!isDandanplayLoggedIn ||
-                    linked == null ||
-                    isRequestingDandanBangumiAuth)
-                ? null
-                : onOpenDandanBangumiManage,
+            onPressed: data.manageDandanAction.onPressed,
             style: AdaptiveButtonStyle.bordered,
             color: CupertinoTheme.of(context).primaryColor,
-            label: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
+            label: data.manageDandanAction.label,
           ),
           const SizedBox(height: 10),
           AdaptiveButton(
-            onPressed:
-                (!isDandanplayLoggedIn || isRefreshingDandanBangumiStatus)
-                    ? null
-                    : onRefreshDandanBangumiStatus,
+            onPressed: data.refreshDandanAction.onPressed,
             style: AdaptiveButtonStyle.bordered,
             color: CupertinoTheme.of(context).primaryColor,
-            label: isRefreshingDandanBangumiStatus ? '刷新中...' : '我已完成网页操作，刷新状态',
+            label: data.refreshDandanAction.label,
           ),
           const SizedBox(height: 8),
           Text(
-            '此方式不支持评论，仅用于弹弹服务器自动同步观看历史。',
+            BangumiAccountViewModel.dandanDescription,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 13,
                   color: CupertinoColors.systemGrey,
@@ -254,25 +136,20 @@ class CupertinoBangumiSection extends StatelessWidget {
   }
 
   Widget _buildStatusCard(BuildContext context) {
-    final String title = isAuthorized ? '已连接 Bangumi' : '尚未连接 Bangumi';
-    final Color iconColor =
-        isAuthorized ? CupertinoColors.activeGreen : CupertinoColors.systemGrey;
+    final String title = data.connectionTitle;
+    final Color iconColor = data.isAuthorized
+        ? CupertinoColors.activeGreen
+        : CupertinoColors.systemGrey;
     final Color textColor = CupertinoDynamicColor.resolve(
-      isAuthorized ? CupertinoColors.activeGreen : CupertinoColors.systemGrey,
+      data.isAuthorized
+          ? CupertinoColors.activeGreen
+          : CupertinoColors.systemGrey,
       context,
     );
 
-    final String subtitle;
-    if (isAuthorized) {
-      final nickname = userInfo?['nickname'] ?? userInfo?['username'] ?? '已授权';
-      subtitle = '当前账号：$nickname';
-    } else {
-      subtitle = '保存 Bangumi 访问令牌以启用观看历史同步。';
-    }
-
     final String? syncInfo;
-    if (lastSyncTime != null) {
-      syncInfo = '上次同步：${_formatTime(lastSyncTime!)}';
+    if (data.lastSyncTime != null) {
+      syncInfo = '上次同步：${_formatTime(data.lastSyncTime!)}';
     } else {
       syncInfo = null;
     }
@@ -289,7 +166,7 @@ class CupertinoBangumiSection extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.12),
+                  color: iconColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(CupertinoIcons.cloud_upload, color: iconColor),
@@ -316,13 +193,13 @@ class CupertinoBangumiSection extends StatelessWidget {
                         ),
                         _buildBangumiSyncHelpButton(
                           context,
-                          _BangumiSyncHelpService.nipaplay,
+                          data.onOpenNipaplayHelp,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      data.connectionSubtitle,
                       style: CupertinoTheme.of(context)
                           .textTheme
                           .textStyle
@@ -343,14 +220,14 @@ class CupertinoBangumiSection extends StatelessWidget {
                   ),
             ),
           ],
-          if (isSyncing) ...[
+          if (data.isSyncing) ...[
             const SizedBox(height: 12),
             Row(
               children: [
                 const CupertinoActivityIndicator(radius: 9),
                 const SizedBox(width: 8),
                 Text(
-                  syncStatus.isEmpty ? '同步中...' : syncStatus,
+                  data.syncStatus.isEmpty ? '同步中...' : data.syncStatus,
                   style: CupertinoTheme.of(context)
                       .textTheme
                       .textStyle
@@ -372,7 +249,7 @@ class CupertinoBangumiSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '访问令牌',
+            BangumiAccountViewModel.tokenTitle,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -380,43 +257,43 @@ class CupertinoBangumiSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '在 Bangumi 网站生成访问令牌后粘贴到此处。',
+            BangumiAccountViewModel.tokenDescription,
             style: CupertinoTheme.of(
               context,
             ).textTheme.textStyle.copyWith(color: CupertinoColors.systemGrey),
           ),
           const SizedBox(height: 12),
           AdaptiveTextField(
-            controller: tokenController,
-            placeholder: '请输入 Bangumi 访问令牌',
+            controller: data.tokenController,
+            placeholder: BangumiAccountViewModel.tokenPlaceholder,
             obscureText: true,
-            enabled: !isLoading,
+            enabled: !data.isLoading,
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: AdaptiveButton(
-                  onPressed: isLoading ? null : onSaveToken,
+                  onPressed: data.tokenActions[0].onPressed,
                   style: AdaptiveButtonStyle.filled,
                   color: CupertinoTheme.of(context).primaryColor,
-                  label: '保存令牌',
+                  label: data.tokenActions[0].label,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: AdaptiveButton(
-                  onPressed: isLoading ? null : onClearToken,
+                  onPressed: data.tokenActions[1].onPressed,
                   style: AdaptiveButtonStyle.bordered,
                   color: CupertinoTheme.of(context).primaryColor,
-                  label: '删除令牌',
+                  label: data.tokenActions[1].label,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           AdaptiveButton.child(
-            onPressed: onOpenHelp,
+            onPressed: data.onOpenNipaplayHelp,
             style: AdaptiveButtonStyle.plain,
             color: CupertinoTheme.of(context).primaryColor,
             child: Row(
@@ -429,7 +306,7 @@ class CupertinoBangumiSection extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '如何获取 Bangumi 访问令牌',
+                  BangumiAccountViewModel.tokenHelpLabel,
                   style: TextStyle(
                     color: CupertinoTheme.of(context).primaryColor,
                     fontSize: 14,
@@ -444,6 +321,7 @@ class CupertinoBangumiSection extends StatelessWidget {
   }
 
   Widget _buildActionsCard(BuildContext context) {
+    final actions = data.syncActions;
     return _buildRoundedCard(
       context,
       padding: const EdgeInsets.all(20),
@@ -451,7 +329,7 @@ class CupertinoBangumiSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '同步操作',
+            BangumiAccountViewModel.actionsTitle,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -459,31 +337,31 @@ class CupertinoBangumiSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           AdaptiveButton(
-            onPressed: isSyncing ? null : onSync,
+            onPressed: actions[0].onPressed,
             style: AdaptiveButtonStyle.filled,
             color: CupertinoTheme.of(context).primaryColor,
-            label: '增量同步',
+            label: actions[0].label,
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
-            onPressed: isSyncing ? null : onFullSync,
+            onPressed: actions[1].onPressed,
             style: AdaptiveButtonStyle.tinted,
             color: CupertinoTheme.of(context).primaryColor,
-            label: '全量同步',
+            label: actions[1].label,
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
-            onPressed: isSyncing ? null : onTestConnection,
+            onPressed: actions[2].onPressed,
             style: AdaptiveButtonStyle.bordered,
             color: CupertinoTheme.of(context).primaryColor,
-            label: '测试连接',
+            label: actions[2].label,
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
-            onPressed: isSyncing ? null : onClearCache,
+            onPressed: actions[3].onPressed,
             style: AdaptiveButtonStyle.gray,
             color: CupertinoTheme.of(context).primaryColor,
-            label: '清除同步缓存',
+            label: actions[3].label,
           ),
         ],
       ),

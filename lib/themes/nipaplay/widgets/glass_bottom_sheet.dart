@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
@@ -11,11 +14,13 @@ class GlassBottomSheet extends StatelessWidget {
     required this.title,
     required this.child,
     this.height,
+    this.embedded = false,
   });
 
   final String title;
   final Widget child;
   final double? height;
+  final bool embedded;
 
   static Future<T?> show<T>({
     required BuildContext context,
@@ -23,6 +28,19 @@ class GlassBottomSheet extends StatelessWidget {
     required Widget child,
     double? height,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<T>(
+        context: context,
+        title: title,
+        child: GlassBottomSheet(
+          title: title,
+          height: height,
+          embedded: true,
+          child: child,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -49,17 +67,14 @@ class GlassBottomSheet extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return NipaplayWindowScaffold(
-      maxWidth: dialogWidth,
-      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.9),
-      onClose: () => Navigator.of(context).maybePop(),
-      child: SizedBox(
-        height: sheetHeight,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + keyboardHeight),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final content = SizedBox(
+      height: sheetHeight,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + keyboardHeight),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!embedded) ...[
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -78,11 +93,18 @@ class GlassBottomSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Expanded(child: child),
             ],
-          ),
+            Expanded(child: child),
+          ],
         ),
       ),
+    );
+    if (embedded) return content;
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.9),
+      onClose: () => Navigator.of(context).maybePop(),
+      child: content,
     );
   }
 }

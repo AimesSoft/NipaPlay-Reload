@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -15,7 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:nipaplay/main.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -24,6 +23,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/search/tag_search_controller.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_tag_search_view.dart';
 
 class _TagSearchStyle {
   const _TagSearchStyle({
@@ -109,17 +113,12 @@ class _TagSearchStyle {
   }
 }
 
-enum _TagSearchMode {
-  none,
-  text,
-  advanced,
-}
-
 class TagSearchModal extends StatefulWidget {
   final String? prefilledTag;
   final List<String>? preselectedTags;
   final VoidCallback? onBeforeOpenAnimeDetail;
   final bool useWindow;
+  final bool embedded;
 
   const TagSearchModal({
     super.key,
@@ -127,6 +126,7 @@ class TagSearchModal extends StatefulWidget {
     this.preselectedTags,
     this.onBeforeOpenAnimeDetail,
     this.useWindow = false,
+    this.embedded = false,
   });
 
   @override
@@ -138,6 +138,21 @@ class TagSearchModal extends StatefulWidget {
     List<String>? preselectedTags,
     VoidCallback? onBeforeOpenAnimeDetail,
   }) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<void>(
+        context: context,
+        title: '搜索',
+        floatingTitle: true,
+        heightRatio: 0.94,
+        child: TagSearchModal(
+          prefilledTag: prefilledTag,
+          preselectedTags: preselectedTags,
+          onBeforeOpenAnimeDetail: onBeforeOpenAnimeDetail,
+          embedded: true,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -174,39 +189,12 @@ class _TagSearchModalState extends State<TagSearchModal> {
   static const double _desktopWidthThreshold = 900;
   static const double _desktopSidebarWidth = 320;
 
-  final SearchService _searchService = SearchService.instance;
-  _TagSearchMode _lastSearchMode = _TagSearchMode.none;
+  late final TagSearchController _controller;
   bool _isAddTagHovered = false;
   bool _isAddTagFocused = false;
 
-  // 文本标签搜索相关
   final TextEditingController _textTagController = TextEditingController();
-  final List<String> _textTags = [];
-  List<SearchResultAnime> _textSearchResults = [];
-  List<SearchResultAnime> _displayedTextResults = []; // 当前显示的结果
-  bool _isTextSearching = false;
-
-  // 高级搜索相关
-  SearchConfig? _searchConfig;
   final TextEditingController _keywordController = TextEditingController();
-  final List<int> _selectedTagIds = [];
-  final List<ConfigItem> _selectedTags = [];
-  int? _selectedType;
-  int? _selectedYear;
-  double _minRating = 0.0;
-  double _maxRating = 10.0;
-  final int _sortOption = 0;
-  List<SearchResultAnime> _advancedSearchResults = [];
-  List<SearchResultAnime> _displayedAdvancedResults = []; // 当前显示的结果
-  bool _isAdvancedSearching = false;
-  bool _isLoadingConfig = false;
-
-  // 分页相关
-  static const int _pageSize = 20; // 每页显示的数量
-  int _currentTextPage = 0;
-  int _currentAdvancedPage = 0;
-  bool _isLoadingMoreText = false;
-  bool _isLoadingMoreAdvanced = false;
 
   // 滚动控制器
   final ScrollController _advancedScrollController = ScrollController();
@@ -214,189 +202,80 @@ class _TagSearchModalState extends State<TagSearchModal> {
   // 年份筛选的GlobalKey
   final GlobalKey _yearDropdownKey = GlobalKey();
 
+  TagSearchMode get _lastSearchMode => _controller.mode;
+  List<String> get _textTags => _controller.textTags;
+  List<SearchResultAnime> get _textSearchResults =>
+      _controller.textSearchResults;
+  List<SearchResultAnime> get _displayedTextResults =>
+      _controller.displayedTextResults;
+  bool get _isTextSearching => _controller.isTextSearching;
+  SearchConfig? get _searchConfig => _controller.config;
+  int? get _selectedYear => _controller.selectedYear;
+  double get _minRating => _controller.minRating;
+  double get _maxRating => _controller.maxRating;
+  List<SearchResultAnime> get _advancedSearchResults =>
+      _controller.advancedSearchResults;
+  List<SearchResultAnime> get _displayedAdvancedResults =>
+      _controller.displayedAdvancedResults;
+  bool get _isAdvancedSearching => _controller.isAdvancedSearching;
+  bool get _isLoadingConfig => _controller.isLoadingConfig;
+  bool get _isLoadingMoreText => _controller.isLoadingMoreText;
+  bool get _isLoadingMoreAdvanced => _controller.isLoadingMoreAdvanced;
+
   @override
   void initState() {
     super.initState();
-
-    // 只为高级搜索添加滚动监听器
+    _controller = TagSearchController(
+      initialTag: widget.prefilledTag,
+      suggestedTags: widget.preselectedTags,
+    )..addListener(_handleControllerChanged);
+    _keywordController.addListener(_syncKeyword);
     _advancedScrollController.addListener(_onAdvancedScroll);
-
-    // 如果有预填充标签，直接添加并搜索
-    if (widget.prefilledTag != null) {
-      _textTags.add(widget.prefilledTag!);
-      _performTextSearch();
-    }
-    // 如果有预选择的标签，不自动添加到搜索标签中，只显示在"当前标签"区域
-    else if (widget.preselectedTags != null &&
-        widget.preselectedTags!.isNotEmpty) {
-      // 仍需要加载搜索配置，以防用户切换到高级搜索
-      _loadSearchConfig();
-    } else {
-      _loadSearchConfig();
-    }
+    _controller.initialize();
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleControllerChanged);
+    _controller.dispose();
     _textTagController.dispose();
+    _keywordController.removeListener(_syncKeyword);
     _keywordController.dispose();
-    // 只dispose高级搜索的滚动控制器
     _advancedScrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSearchConfig() async {
-    setState(() {
-      _isLoadingConfig = true;
-    });
+  void _syncKeyword() {
+    _controller.setKeyword(_keywordController.text);
+  }
 
-    try {
-      final config = await _searchService.getSearchConfig();
-      setState(() {
-        _searchConfig = config;
-        _isLoadingConfig = false;
+  void _handleControllerChanged() {
+    if (!mounted) return;
+    final message = _controller.takeError();
+    setState(() {});
+    if (message != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showErrorSnackBar(message);
       });
-    } catch (e) {
-      setState(() {
-        _isLoadingConfig = false;
-      });
-      _showErrorSnackBar('加载搜索配置失败: $e');
     }
   }
 
-  // 文本标签搜索方法
+  Future<void> _loadSearchConfig() => _controller.loadConfig();
+
   void _addTextTag() {
-    final text = _textTagController.text.trim();
-    if (text.isNotEmpty && !_textTags.contains(text)) {
-      if (_textTags.length >= 10) {
-        _showErrorSnackBar('最多只能添加10个标签');
-        return;
-      }
-      if (text.length > 50) {
-        _showErrorSnackBar('单个标签长度不能超过50个字符');
-        return;
-      }
-      setState(() {
-        _textTags.add(text);
-        _textTagController.clear();
-      });
-    }
-  }
-
-  void _removeTextTag(String tag) {
-    setState(() {
-      _textTags.remove(tag);
-    });
-  }
-
-  bool get _hasAdvancedCriteria {
-    final keyword = _keywordController.text.trim();
-    final ratingChanged = _minRating > 0 || _maxRating < 10;
-    return keyword.isNotEmpty ||
-        ratingChanged ||
-        _selectedYear != null ||
-        _selectedType != null ||
-        _selectedTagIds.isNotEmpty;
-  }
-
-  Future<void> _performSmartSearch() async {
-    if (_isTextSearching || _isAdvancedSearching) return;
-
-    if (_hasAdvancedCriteria) {
-      await _performAdvancedSearch();
+    final message = _controller.addTextTag(_textTagController.text);
+    if (message != null) {
+      _showErrorSnackBar(message);
       return;
     }
-
-    if (_textTags.isNotEmpty) {
-      await _performTextSearch();
-      return;
-    }
-
-    _showErrorSnackBar('请添加标签或设置筛选条件');
+    _textTagController.clear();
   }
 
-  Future<void> _performTextSearch() async {
-    if (_textTags.isEmpty) {
-      _showErrorSnackBar('请至少添加一个标签');
-      return;
-    }
+  void _removeTextTag(String tag) => _controller.removeTextTag(tag);
 
-    setState(() {
-      _lastSearchMode = _TagSearchMode.text;
-      _isTextSearching = true;
-      _textSearchResults.clear();
-      _displayedTextResults.clear();
-      _currentTextPage = 0;
-    });
-
-    try {
-      final result = await _searchService.searchAnimeByTags(_textTags);
-      setState(() {
-        _textSearchResults = result.animes;
-        _isTextSearching = false;
-
-        // 显示第一页结果
-        _currentTextPage = 1;
-        final endIndex = (_pageSize).clamp(0, _textSearchResults.length);
-        _displayedTextResults = _textSearchResults.sublist(0, endIndex);
-      });
-    } catch (e) {
-      setState(() {
-        _isTextSearching = false;
-      });
-      _showErrorSnackBar('搜索失败: $e');
-    }
-  }
-
-  // 高级搜索方法
-  void _toggleTag(ConfigItem tag) {
-    setState(() {
-      if (_selectedTagIds.contains(tag.key)) {
-        _selectedTagIds.remove(tag.key);
-        _selectedTags.removeWhere((t) => t.key == tag.key);
-      } else {
-        _selectedTagIds.add(tag.key);
-        _selectedTags.add(tag);
-      }
-    });
-  }
-
-  Future<void> _performAdvancedSearch() async {
-    setState(() {
-      _lastSearchMode = _TagSearchMode.advanced;
-      _isAdvancedSearching = true;
-      _advancedSearchResults.clear();
-      _displayedAdvancedResults.clear();
-      _currentAdvancedPage = 0;
-    });
-
-    try {
-      final result = await _searchService.searchAnimeAdvanced(
-        keyword: _keywordController.text.trim().isEmpty
-            ? null
-            : _keywordController.text.trim(),
-        type: _selectedType,
-        tagIds: _selectedTagIds.isEmpty ? null : _selectedTagIds,
-        year: _selectedYear,
-        minRate: _minRating.round(),
-        maxRate: _maxRating.round(),
-        sort: _sortOption,
-      );
-      setState(() {
-        _advancedSearchResults = result.animes;
-        _isAdvancedSearching = false;
-
-        // 显示第一页结果
-        _currentAdvancedPage = 1;
-        final endIndex = (_pageSize).clamp(0, _advancedSearchResults.length);
-        _displayedAdvancedResults = _advancedSearchResults.sublist(0, endIndex);
-      });
-    } catch (e) {
-      setState(() {
-        _isAdvancedSearching = false;
-      });
-      _showErrorSnackBar('高级搜索失败: $e');
-    }
+  Future<void> _performSmartSearch() {
+    _controller.setKeyword(_keywordController.text);
+    return _controller.performSmartSearch();
   }
 
   void _showErrorSnackBar(String message) {
@@ -502,56 +381,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              try {
-                // 首先尝试通过Navigator找到根context
-                final rootContext =
-                    Navigator.of(context, rootNavigator: true).context;
-                debugPrint('[TagSearchWidget] 尝试使用根context切换页面');
-
-                // 尝试从根context获取MainPageState
-                MainPageState? mainPageState;
-                try {
-                  mainPageState = MainPageState.of(rootContext);
-                } catch (e) {
-                  debugPrint(
-                      '[TagSearchWidget] 从根context获取MainPageState失败: $e');
-                  // 如果失败，尝试从当前context获取
-                  try {
-                    mainPageState = MainPageState.of(context);
-                  } catch (e2) {
-                    debugPrint(
-                        '[TagSearchWidget] 从当前context获取MainPageState也失败: $e2');
-                  }
-                }
-
-                if (mainPageState != null &&
-                    mainPageState.globalTabController != null) {
-                  if (mainPageState.globalTabController!.index != 1) {
-                    mainPageState.globalTabController!.animateTo(1);
-                    debugPrint('[TagSearchWidget] 成功切换到播放页面 (tab 1)');
-                  } else {
-                    debugPrint('[TagSearchWidget] 已经在播放页面 (tab 1)');
-                  }
-                } else {
-                  debugPrint('[TagSearchWidget] 无法获取MainPageState，尝试备用方案');
-                  // 备用方案：使用TabChangeNotifier
-                  try {
-                    final tabNotifier = Provider.of<TabChangeNotifier>(
-                        rootContext,
-                        listen: false);
-                    tabNotifier.changeTab(1);
-                    debugPrint('[TagSearchWidget] 使用TabChangeNotifier成功切换页面');
-                  } catch (e) {
-                    debugPrint('[TagSearchWidget] TabChangeNotifier也失败: $e');
-                    // 最后的备用方案：直接关闭所有模态对话框
-                    Navigator.of(context, rootNavigator: true)
-                        .popUntil((route) => route.isFirst);
-                    debugPrint('[TagSearchWidget] 关闭所有模态对话框作为备用方案');
-                  }
-                }
-              } catch (e) {
-                debugPrint("[TagSearchWidget] 切换页面时出错: $e");
-              }
+              context.read<TabChangeNotifier>().changePage(AppPageIds.video);
               videoPlayerState.removeListener(statusListener);
             } else {
               videoPlayerState.removeListener(statusListener);
@@ -585,8 +415,16 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
   @override
   Widget build(BuildContext context) {
+    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+      return CupertinoTagSearchView(
+        controller: _controller,
+        onOpenAnimeDetail: _openAnimeDetail,
+        onMessage: _showErrorSnackBar,
+      );
+    }
+
     final style = _TagSearchStyle.from(context);
-    final borderRadius = widget.useWindow
+    final borderRadius = widget.useWindow || widget.embedded
         ? BorderRadius.circular(20)
         : const BorderRadius.only(
             topLeft: Radius.circular(20),
@@ -600,7 +438,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
         return Column(
           children: [
-            if (!widget.useWindow)
+            if (!widget.useWindow && !widget.embedded)
               // 拖拽指示器
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -617,20 +455,21 @@ class _TagSearchModalState extends State<TagSearchModal> {
             if (widget.useWindow) SizedBox(height: 12),
 
             // 标题
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  titleText,
-                  style: TextStyle(
-                    color: style.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+            if (!widget.embedded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    titleText,
+                    style: TextStyle(
+                      color: style.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
 
             // 内容区域
             Expanded(
@@ -642,14 +481,14 @@ class _TagSearchModalState extends State<TagSearchModal> {
     );
 
     return Container(
-      height: widget.useWindow
+      height: widget.useWindow || widget.embedded
           ? double.infinity
           : MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: borderRadius,
       ),
-      child: widget.useWindow
+      child: widget.useWindow || widget.embedded
           ? content
           : GlassmorphicContainer(
               width: double.infinity,
@@ -811,9 +650,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                             onTap: () {
                               // 从当前标签添加到已添加标签
                               if (!_textTags.contains(tag)) {
-                                setState(() {
-                                  _textTags.add(tag);
-                                });
+                                _controller.addTextTag(tag);
                               }
                             },
                             borderRadius: BorderRadius.circular(16),
@@ -1076,14 +913,14 @@ class _TagSearchModalState extends State<TagSearchModal> {
   }
 
   bool _shouldShowResultsHeader() {
-    if (_lastSearchMode == _TagSearchMode.advanced) {
+    if (_lastSearchMode == TagSearchMode.advanced) {
       return _displayedAdvancedResults.isNotEmpty || _isAdvancedSearching;
     }
     return _displayedTextResults.isNotEmpty || _isTextSearching;
   }
 
   Widget _buildCombinedResultsPanel(_TagSearchStyle style) {
-    if (_lastSearchMode == _TagSearchMode.advanced) {
+    if (_lastSearchMode == TagSearchMode.advanced) {
       if (_isLoadingConfig) {
         return _buildLoadingState(style);
       }
@@ -1096,7 +933,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
   }
 
   Widget _buildCombinedResultsSection(_TagSearchStyle style) {
-    if (_lastSearchMode == _TagSearchMode.advanced) {
+    if (_lastSearchMode == TagSearchMode.advanced) {
       if (_isLoadingConfig) {
         return _buildLoadingState(style);
       }
@@ -1408,28 +1245,14 @@ class _TagSearchModalState extends State<TagSearchModal> {
               _buildRatingSliderRow(
                 label: '最低评分',
                 value: _minRating,
-                onChanged: (value) {
-                  setState(() {
-                    _minRating = value;
-                    if (_minRating > _maxRating) {
-                      _maxRating = _minRating;
-                    }
-                  });
-                },
+                onChanged: _controller.setMinRating,
                 style: style,
               ),
               SizedBox(height: 12),
               _buildRatingSliderRow(
                 label: '最高评分',
                 value: _maxRating,
-                onChanged: (value) {
-                  setState(() {
-                    _maxRating = value;
-                    if (_maxRating < _minRating) {
-                      _minRating = _maxRating;
-                    }
-                  });
-                },
+                onChanged: _controller.setMaxRating,
                 style: style,
               ),
             ],
@@ -1476,11 +1299,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                             isSelected: _selectedYear == year,
                           )),
                     ],
-                    onItemSelected: (value) {
-                      setState(() {
-                        _selectedYear = value;
-                      });
-                    },
+                    onItemSelected: _controller.setSelectedYear,
                   ),
                 ],
               ),
@@ -1808,57 +1627,12 @@ class _TagSearchModalState extends State<TagSearchModal> {
     }
   }
 
-  // 加载更多文本搜索结果
   void _loadMoreTextResults() {
-    if (_isLoadingMoreText ||
-        _currentTextPage * _pageSize >= _textSearchResults.length) {
-      return;
-    }
-
-    setState(() {
-      _isLoadingMoreText = true;
-    });
-
-    // 模拟异步加载
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        setState(() {
-          _currentTextPage++;
-          final startIndex = (_currentTextPage - 1) * _pageSize;
-          final endIndex = (_currentTextPage * _pageSize)
-              .clamp(0, _textSearchResults.length);
-          _displayedTextResults
-              .addAll(_textSearchResults.sublist(startIndex, endIndex));
-          _isLoadingMoreText = false;
-        });
-      }
-    });
+    _controller.loadMoreTextResults();
   }
 
   // 加载更多高级搜索结果
   void _loadMoreAdvancedResults() {
-    if (_isLoadingMoreAdvanced ||
-        _currentAdvancedPage * _pageSize >= _advancedSearchResults.length) {
-      return;
-    }
-
-    setState(() {
-      _isLoadingMoreAdvanced = true;
-    });
-
-    // 模拟异步加载
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        setState(() {
-          _currentAdvancedPage++;
-          final startIndex = (_currentAdvancedPage - 1) * _pageSize;
-          final endIndex = (_currentAdvancedPage * _pageSize)
-              .clamp(0, _advancedSearchResults.length);
-          _displayedAdvancedResults
-              .addAll(_advancedSearchResults.sublist(startIndex, endIndex));
-          _isLoadingMoreAdvanced = false;
-        });
-      }
-    });
+    _controller.loadMoreAdvancedResults();
   }
 }

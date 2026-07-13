@@ -1,5 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_adaptive_native_page.dart';
 
 /// 排序选项
 enum SortOption {
@@ -87,21 +87,19 @@ class _CupertinoMediaLibrarySortSheetState
 
   @override
   Widget build(BuildContext context) {
-    return AdaptiveScaffold(
-      appBar: AdaptiveAppBar(
-        title: '排序方式',
-        useNativeToolbar: true,
-        actions: [
-          AdaptiveAppBarAction(
-            iosSymbol: 'checkmark',
-            icon: CupertinoIcons.check_mark,
-            onPressed: () {
-              widget.onSortChanged(_selectedSortBy, _selectedSortOrder);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      ),
+    return CupertinoAdaptiveNativePage(
+      title: '排序方式',
+      actions: [
+        CupertinoAdaptivePageAction(
+          label: '应用排序',
+          iosSymbol: 'checkmark',
+          icon: CupertinoIcons.check_mark,
+          onPressed: () {
+            widget.onSortChanged(_selectedSortBy, _selectedSortOrder);
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
       body: CupertinoPageScaffold(
         resizeToAvoidBottomInset: false,
         backgroundColor: CupertinoDynamicColor.resolve(
@@ -152,7 +150,8 @@ class _CupertinoMediaLibrarySortSheetState
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
                             color: isSelected
-                                ? CupertinoColors.systemBlue.withValues(alpha: 0.1)
+                                ? CupertinoColors.systemBlue
+                                    .withValues(alpha: 0.1)
                                 : CupertinoDynamicColor.resolve(
                                     CupertinoColors.systemBackground,
                                     context,
@@ -185,7 +184,8 @@ class _CupertinoMediaLibrarySortSheetState
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         label,
@@ -243,7 +243,8 @@ class _CupertinoMediaLibrarySortSheetState
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 sliver: SliverToBoxAdapter(
                   child: Container(
                     decoration: BoxDecoration(
@@ -280,7 +281,8 @@ class _CupertinoMediaLibrarySortSheetState
                                   children: [
                                     Icon(
                                       isSelected
-                                          ? CupertinoIcons.checkmark_alt_circle_fill
+                                          ? CupertinoIcons
+                                              .checkmark_alt_circle_fill
                                           : CupertinoIcons.circle,
                                       color: isSelected
                                           ? CupertinoColors.systemBlue

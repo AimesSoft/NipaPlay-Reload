@@ -20,7 +20,6 @@ class LabsSettingsContent extends StatelessWidget {
     return Consumer<LabsSettingsProvider>(
       builder: (context, labsSettings, child) {
         return AdaptiveSettingsPage(
-          title: _text(context, '实验室', '實驗室', 'Labs'),
           children: [
             AdaptiveSettingsSection(
               dividerIndent: 56,

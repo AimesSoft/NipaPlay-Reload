@@ -17,7 +17,7 @@ class AdaptiveTimePicker {
     required TimeOfDay initialTime,
     bool use24HourFormat = false,
   }) async {
-    if (PlatformInfo.isIOS) {
+    if (PlatformInfo.prefersCupertinoControls) {
       return _showCupertinoTimePicker(
         context: context,
         initialTime: initialTime,
@@ -128,7 +128,7 @@ class _CupertinoTimePickerContentState
                   padding: EdgeInsets.zero,
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text(
-                    PlatformInfo.isIOS
+                    PlatformInfo.prefersCupertinoControls
                         ? CupertinoLocalizations.of(context).cancelButtonLabel
                         : MaterialLocalizations.of(context).cancelButtonLabel,
                   ),

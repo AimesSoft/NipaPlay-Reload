@@ -1,9 +1,9 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class NipaplayAnimeDetailLayout extends StatelessWidget {
   const NipaplayAnimeDetailLayout({
@@ -42,13 +42,25 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black;
     final Color iconColor = isDark ? Colors.white70 : Colors.black87;
-    final Color tabDividerColor = isDark ? Colors.white24 : Colors.black12;
+    final bottomSheetScope = CupertinoBottomSheetScope.maybeOf(context);
+    final phoneTopInset = isDesktopOrTablet
+        ? 0.0
+        : (bottomSheetScope?.contentTopInset ?? 0) +
+            (bottomSheetScope?.contentTopSpacing ?? 0);
+    final titleStyle = isDesktopOrTablet
+        ? Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+            )
+        : Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: textColor,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            );
 
     final hasEpisodes = episodesView != null;
-    final canShowTabs = !isDesktopOrTablet &&
-        showTabs &&
-        hasEpisodes &&
-        tabController != null;
+    final canShowTabs =
+        !isDesktopOrTablet && showTabs && hasEpisodes && tabController != null;
 
     return Column(
       children: [
@@ -61,51 +73,62 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
             NipaplayWindowPositionProvider.of(context)?.onToggleDisplayMode();
           },
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+            padding: EdgeInsets.fromLTRB(16, 12 + phoneTopInset, 8, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (subtitle != null &&
-                  subtitle!.isNotEmpty &&
-                  subtitle != title)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
                   child: Text(
-                    subtitle!,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: isDark ? Colors.white60 : Colors.black54),
+                    title,
+                    style: titleStyle,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              if (sourceLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: sourceLabelUseContainer
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: (isDark ? Colors.white : Colors.black)
-                                .withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: (isDark ? Colors.white : Colors.black)
-                                    .withOpacity(0.12),
-                                width: 0.5),
-                          ),
-                          child: Row(
+                if (subtitle != null &&
+                    subtitle!.isNotEmpty &&
+                    subtitle != title)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Text(
+                      subtitle!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? Colors.white60 : Colors.black54),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (sourceLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: sourceLabelUseContainer
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: (isDark ? Colors.white : Colors.black)
+                                      .withOpacity(0.12),
+                                  width: 0.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Ionicons.cloud_outline,
+                                    size: 14, color: iconColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  sourceLabel!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: iconColor),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Ionicons.cloud_outline,
@@ -120,65 +143,30 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                               ),
                             ],
                           ),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Ionicons.cloud_outline,
-                                size: 14, color: iconColor),
-                            const SizedBox(width: 4),
-                            Text(
-                              sourceLabel!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: iconColor),
-                            ),
-                          ],
-                        ),
-                ),
-              if (headerActions != null) ...headerActions!,
-            ],
+                  ),
+                if (headerActions != null) ...headerActions!,
+              ],
+            ),
           ),
         ),
-      ),
         if (canShowTabs)
-          TabBar(
-            controller: tabController,
-            dividerColor: tabDividerColor,
-            dividerHeight: 1.0,
-            labelColor: isDark ? Colors.white : Colors.black,
-            unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding:
-                const EdgeInsets.only(top: 46, left: 15, right: 15),
-            indicator: BoxDecoration(
-              color: isDark ? Colors.white : Colors.black,
-              borderRadius: BorderRadius.circular(30),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: AnimatedBuilder(
+                animation: tabController!,
+                builder: (context, _) => AdaptiveSegmentedControl(
+                  labels: const ['简介', '剧集'],
+                  selectedIndex: tabController!.index,
+                  onValueChanged: (index) {
+                    if (tabController!.index != index) {
+                      tabController!.animateTo(index);
+                    }
+                  },
+                ),
+              ),
             ),
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Ionicons.document_text_outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('简介'),
-                  ],
-                ),
-              ),
-              Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Ionicons.film_outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('剧集'),
-                  ],
-                ),
-              ),
-            ],
           ),
         Expanded(
           child: isDesktopOrTablet && desktopView != null

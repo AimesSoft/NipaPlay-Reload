@@ -1,21 +1,12 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show
-        AdaptiveAppBar,
-        AdaptivePopupMenuButton,
-        AdaptivePopupMenuEntry,
-        AdaptivePopupMenuItem,
-        AdaptiveScaffold,
-        AdaptiveSlider,
-        AdaptiveSwitch,
-        PlatformInfo,
-        PopupButtonStyle;
+    show AdaptiveSlider, AdaptiveSwitch;
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -387,27 +378,31 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
     final label =
         selected?.title ?? (items.isNotEmpty ? items.first.title : '');
-    final popupItems = items
-        .map<AdaptivePopupMenuEntry>(
-          (item) => AdaptivePopupMenuItem<T>(
-            label: item.title,
-            value: item.value,
-            enabled: item.enabled,
-          ),
-        )
-        .toList();
-
-    return AdaptivePopupMenuButton.widget<T>(
-      items: popupItems,
-      buttonStyle: PopupButtonStyle.gray,
+    return cupertino.CupertinoButton(
+      padding: material.EdgeInsets.zero,
+      minimumSize: material.Size.zero,
+      onPressed: items.isEmpty
+          ? null
+          : () async {
+              final selectedIndex =
+                  await CupertinoBottomSheet.showSelection<int>(
+                context: context,
+                title: title,
+                options: [
+                  for (final entry in items.asMap().entries)
+                    CupertinoBottomSheetOption(
+                      label: entry.value.title,
+                      value: entry.key,
+                      selected: entry.value.isSelected,
+                      enabled: entry.value.enabled,
+                    ),
+                ],
+              );
+              if (selectedIndex != null) {
+                onDropdownChanged?.call(items[selectedIndex].value);
+              }
+            },
       child: _PhoneMenuChip(label: label),
-      onSelected: (index, entry) {
-        if (!entry.enabled) {
-          return;
-        }
-        final value = entry.value ?? items[index].value;
-        onDropdownChanged?.call(value);
-      },
     );
   }
 
@@ -459,36 +454,14 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     String? label,
   }) {
     final onChanged = enabled ? onSliderChanged : null;
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptiveSlider(
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        activeColor: AppAccentColors.current,
-        onChanged: onChanged,
-      );
-    }
-
-    final accentColor = fluent.AccentColor.swatch({
-      'normal': AppAccentColors.current,
-      'default': AppAccentColors.current,
-    });
-
-    return fluent.FluentTheme(
-      data: fluent.FluentThemeData(
-        brightness: material.Theme.of(context).brightness,
-        accentColor: accentColor,
-      ),
-      child: fluent.Slider(
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        onChanged: onChanged,
-      ),
+    return AdaptiveSlider(
+      value: value,
+      min: min,
+      max: max,
+      divisions: divisions,
+      label: label,
+      activeColor: AppAccentColors.current,
+      onChanged: onChanged,
     );
   }
 
@@ -1135,14 +1108,12 @@ class AdaptiveSettingsSection extends material.StatelessWidget {
 class AdaptiveSettingsPage extends material.StatelessWidget {
   const AdaptiveSettingsPage({
     super.key,
-    required this.title,
     required this.children,
     this.nipaplayPadding = const material.EdgeInsets.all(24),
     this.cupertinoHorizontalPadding = 16,
     this.cupertinoBottomPadding = 32,
   });
 
-  final String title;
   final List<material.Widget> children;
   final material.EdgeInsetsGeometry nipaplayPadding;
   final double cupertinoHorizontalPadding;
@@ -1155,30 +1126,23 @@ class AdaptiveSettingsPage extends material.StatelessWidget {
         cupertino.CupertinoColors.systemGroupedBackground,
         context,
       );
-      final topPadding = material.MediaQuery.of(context).padding.top + 64;
-
-      return AdaptiveScaffold(
-        appBar: AdaptiveAppBar(
-          title: title,
-          useNativeToolbar: true,
-        ),
-        body: material.ColoredBox(
-          color: backgroundColor,
-          child: material.SafeArea(
-            top: false,
-            bottom: false,
-            child: material.ListView(
-              physics: const cupertino.BouncingScrollPhysics(
-                parent: material.AlwaysScrollableScrollPhysics(),
-              ),
-              padding: material.EdgeInsets.fromLTRB(
-                cupertinoHorizontalPadding,
-                topPadding,
-                cupertinoHorizontalPadding,
-                cupertinoBottomPadding,
-              ),
-              children: children,
+      return material.ColoredBox(
+        color: backgroundColor,
+        child: material.SafeArea(
+          top: false,
+          bottom: false,
+          child: material.ListView(
+            physics: const cupertino.BouncingScrollPhysics(
+              parent: material.AlwaysScrollableScrollPhysics(),
             ),
+            padding: material.EdgeInsets.fromLTRB(
+              cupertinoHorizontalPadding,
+              64,
+              cupertinoHorizontalPadding,
+              cupertinoBottomPadding +
+                  material.MediaQuery.viewPaddingOf(context).bottom,
+            ),
+            children: children,
           ),
         ),
       );

@@ -2,7 +2,23 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/app/unified_app_pages.dart';
 
+List<Widget> createUnifiedTabLabels(
+  BuildContext context,
+  List<UnifiedAppPage> pages,
+) {
+  return pages
+      .map(
+        (page) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: HoverZoomTab(text: page.title(context.l10n)),
+        ),
+      )
+      .toList(growable: false);
+}
+
+@Deprecated('Use createUnifiedTabLabels with shared page definitions.')
 List<Widget> createTabLabels(BuildContext context,
     {bool showWebDAVTab = false, bool showDownloaderTab = true}) {
   List<Widget> tabs = [

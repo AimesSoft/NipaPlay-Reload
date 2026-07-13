@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/theme_registry.dart';
@@ -24,6 +25,7 @@ class UIThemeProvider extends ChangeNotifier {
 
   bool get isDesktopTabletLayout => currentThemeId == ThemeIds.desktopTablet;
   bool get isPhoneLayout => currentThemeId == ThemeIds.phone;
+  AppDisplaySurface get displaySurface => _currentEnvironment.displaySurface;
 
   List<ThemeDescriptor> get availableThemes {
     final env = _currentEnvironment;
@@ -46,6 +48,7 @@ class UIThemeProvider extends ChangeNotifier {
         isWeb: kIsWeb,
         isIOS: !kIsWeb && Platform.isIOS,
         isTablet: globals.isTablet,
+        isTelevision: globals.isAndroidTv,
       );
 
   Future<void> _loadTheme() async {

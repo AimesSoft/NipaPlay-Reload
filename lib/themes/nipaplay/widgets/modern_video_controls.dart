@@ -18,11 +18,18 @@ import 'video_settings_menu.dart';
 import 'dart:async';
 import 'package:nipaplay/services/desktop_pip_window_service.dart';
 import 'keyboard_activatable.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 
 class ModernVideoControls extends StatefulWidget {
   final bool showFullscreenButton;
+  final bool compactPortrait;
 
-  const ModernVideoControls({super.key, this.showFullscreenButton = true});
+  const ModernVideoControls({
+    super.key,
+    this.showFullscreenButton = true,
+    this.compactPortrait = false,
+  });
 
   @override
   State<ModernVideoControls> createState() => _ModernVideoControlsState();
@@ -149,11 +156,26 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     );
   }
 
-  void _showSettingsMenu(BuildContext buttonContext) {
+  Future<void> _showSettingsMenu(BuildContext buttonContext) async {
     final videoState = Provider.of<VideoPlayerState>(
       buttonContext,
       listen: false,
     );
+    if (widget.compactPortrait) {
+      videoState.setControlsVisibilityLocked(true);
+      try {
+        await CupertinoBottomSheet.showPage<void>(
+          context: buttonContext,
+          title: '播放器菜单',
+          heightRatio: 0.94,
+          floatingTitle: true,
+          rootPageBuilder: (_) => const CupertinoPlayerMenu(),
+        );
+      } finally {
+        videoState.setControlsVisibilityLocked(false);
+      }
+      return;
+    }
     _playlistOverlay?.remove();
     _playlistOverlay = null;
     _settingsOverlay?.remove();
@@ -300,6 +322,117 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     await pipService.openPipWindow(videoState);
   }
 
+  Widget _buildProgressBar(
+    VideoPlayerState videoState, {
+    bool compact = false,
+  }) {
+    return VideoProgressBar(
+      key: _progressBarKey,
+      videoState: videoState,
+      hoverTime: null,
+      isDragging: _isDragging,
+      compact: compact,
+      chapters:
+          videoState.chapterMarkersEnabled ? videoState.chapters : const [],
+      durationMs: videoState.duration.inMilliseconds,
+      currentChapter: videoState.currentChapter,
+      onPositionUpdate: (_) {},
+      onDraggingStateChange: (isDragging) {
+        if (isDragging && videoState.status == PlayerStatus.paused) {
+          _playStateChangedByDrag = true;
+          videoState.togglePlayPause();
+        } else if (!isDragging && _playStateChangedByDrag) {
+          videoState.togglePlayPause();
+          _playStateChangedByDrag = false;
+        }
+        setState(() {
+          _isDragging = isDragging;
+        });
+      },
+      formatDuration: _formatDuration,
+    );
+  }
+
+  Widget _buildCompactPortraitControls(VideoPlayerState videoState) {
+    const iconSize = 28.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: MouseRegion(
+        onEnter: (_) => videoState.setControlsHovered(true),
+        onExit: (_) => videoState.setControlsHovered(false),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildControlButton(
+              icon: Icon(
+                videoState.status == PlayerStatus.playing
+                    ? Ionicons.pause
+                    : Ionicons.play,
+                key: ValueKey<bool>(
+                  videoState.status == PlayerStatus.playing,
+                ),
+                color: Colors.white,
+                size: 32,
+              ),
+              onTap: videoState.togglePlayPause,
+              isPressed: _isPlayPressed,
+              isHovered: _isPlayHovered,
+              onHover: (value) => setState(() => _isPlayHovered = value),
+              onPressed: (value) => setState(() => _isPlayPressed = value),
+              tooltip: videoState.status == PlayerStatus.playing ? '暂停' : '播放',
+              useAnimatedSwitcher: true,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _buildProgressBar(videoState, compact: true)),
+            const SizedBox(width: 8),
+            Builder(
+              builder: (buttonContext) => SizedBox(
+                key: _settingsButtonKey,
+                child: _buildControlButton(
+                  icon: const Icon(
+                    Icons.tune_rounded,
+                    color: Colors.white,
+                    size: iconSize,
+                  ),
+                  onTap: () => unawaited(_showSettingsMenu(buttonContext)),
+                  isPressed: _isSettingsPressed,
+                  isHovered: _isSettingsHovered,
+                  onHover: (value) =>
+                      setState(() => _isSettingsHovered = value),
+                  onPressed: (value) =>
+                      setState(() => _isSettingsPressed = value),
+                  tooltip: '播放器菜单',
+                ),
+              ),
+            ),
+            if (widget.showFullscreenButton) ...[
+              const SizedBox(width: 8),
+              _buildControlButton(
+                icon: Icon(
+                  videoState.isFullscreen
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  key: ValueKey<bool>(videoState.isFullscreen),
+                  color: Colors.white,
+                  size: iconSize,
+                ),
+                onTap: videoState.toggleFullscreen,
+                isPressed: _isFullscreenPressed,
+                isHovered: _isFullscreenHovered,
+                onHover: (value) =>
+                    setState(() => _isFullscreenHovered = value),
+                onPressed: (value) =>
+                    setState(() => _isFullscreenPressed = value),
+                tooltip: videoState.isFullscreen ? '退出全屏' : '全屏',
+                useCustomAnimation: true,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -307,6 +440,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       builder: (context, child) {
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
+            if (widget.compactPortrait) {
+              return _buildCompactPortraitControls(videoState);
+            }
             return Focus(
               canRequestFocus: true,
               autofocus: true,
@@ -341,41 +477,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                VideoProgressBar(
-                                  key: _progressBarKey,
-                                  videoState: videoState,
-                                  hoverTime: null,
-                                  isDragging: _isDragging,
-                                  // 章节标记受设置开关控制：关闭时传空列表，
-                                  // VideoProgressBar 不渲染分割线/高亮段，点击不触发章节跳转
-                                  chapters: videoState.chapterMarkersEnabled
-                                      ? videoState.chapters
-                                      : const [],
-                                  durationMs:
-                                      videoState.duration.inMilliseconds,
-                                  currentChapter: videoState.currentChapter,
-                                  onPositionUpdate: (position) {},
-                                  onDraggingStateChange: (isDragging) {
-                                    if (isDragging) {
-                                      // 如果是暂停状态，开始拖动时恢复播放
-                                      if (videoState.status ==
-                                          PlayerStatus.paused) {
-                                        _playStateChangedByDrag = true;
-                                        videoState.togglePlayPause();
-                                      }
-                                    } else {
-                                      // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
-                                      if (_playStateChangedByDrag) {
-                                        videoState.togglePlayPause();
-                                        _playStateChangedByDrag = false;
-                                      }
-                                    }
-                                    setState(() {
-                                      _isDragging = isDragging;
-                                    });
-                                  },
-                                  formatDuration: _formatDuration,
-                                ),
+                                _buildProgressBar(videoState),
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
@@ -683,7 +785,11 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                               size: globals.isPhone ? 36 : 28,
                                             ),
                                             onTap: () {
-                                              _showSettingsMenu(buttonContext);
+                                              unawaited(
+                                                _showSettingsMenu(
+                                                  buttonContext,
+                                                ),
+                                              );
                                             },
                                             isPressed: _isSettingsPressed,
                                             isHovered: _isSettingsHovered,
