@@ -958,6 +958,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String get danmakuFontFilePath => _danmakuFontFilePath;
   String get danmakuFontFamily => _danmakuFontFamily;
   DanmakuOutlineStyle get danmakuOutlineStyle => _danmakuOutlineStyle;
+
+  // 弹幕描边是否启用（仅在描边样式不为 none 且描边宽度大于 0 时启用）
+  bool get danmakuOutlineEnabled =>
+      _danmakuOutlineStyle != DanmakuOutlineStyle.none &&
+      _next2DanmakuOutlineWidth > 0.0;
+
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   double get subtitleScale => _subtitleScale;

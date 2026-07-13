@@ -72,6 +72,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reading playback progress…';
 
   @override
+  String get danmakuOpacityTitle => 'Danmaku opacity';
+
+  @override
+  String get danmakuOpacitySubtitle =>
+      'Adjust danmaku text opacity. Newly opened videos will use this setting.';
+
+  @override
+  String get danmakuOutlineEnabledTitle => 'Enable danmaku outline';
+
+  @override
+  String get danmakuOutlineEnabledSubtitle =>
+      'Show an outline around danmaku text. Newly opened videos will use this setting.';
+
+  @override
   String get externalPlayerConsoleResume => 'Resume';
 
   @override

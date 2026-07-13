@@ -70,6 +70,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleProgressLoading => '正在获取播放进度…';
 
   @override
+  String get danmakuOpacityTitle => '弹幕不透明度';
+
+  @override
+  String get danmakuOpacitySubtitle => '调整弹幕文字不透明度，新打开的视频将应用此设置。';
+
+  @override
+  String get danmakuOutlineEnabledTitle => '启用弹幕描边';
+
+  @override
+  String get danmakuOutlineEnabledSubtitle => '控制是否显示弹幕文字描边，新打开的视频将应用此设置。';
+
+  @override
   String get externalPlayerConsoleResume => '继续播放';
 
   @override
@@ -1867,6 +1879,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get externalPlayerConsoleProgressLoading => '正在取得播放進度…';
+
+  @override
+  String get danmakuOpacityTitle => '彈幕不透明度';
+
+  @override
+  String get danmakuOpacitySubtitle => '調整彈幕文字不透明度，新開啟的影片將套用此設定。';
+
+  @override
+  String get danmakuOutlineEnabledTitle => '啟用彈幕描邊';
+
+  @override
+  String get danmakuOutlineEnabledSubtitle => '控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。';
 
   @override
   String get externalPlayerConsoleResume => '繼續播放';

@@ -1389,9 +1389,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   DanmakuOutlineStyle _resolveDanmakuOutlineStyle(int? index) {
-    final DanmakuOutlineStyle fallback = globals.isMobilePlatform
-        ? DanmakuOutlineStyle.stroke
-        : DanmakuOutlineStyle.uniform;
+    final fallback = _defaultDanmakuOutlineStyle;
     if (index == null ||
         index < 0 ||
         index >= DanmakuOutlineStyle.values.length) {
@@ -1399,6 +1397,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     return DanmakuOutlineStyle.values[index];
   }
+
+  DanmakuOutlineStyle get _defaultDanmakuOutlineStyle =>
+      globals.isMobilePlatform
+          ? DanmakuOutlineStyle.stroke
+          : DanmakuOutlineStyle.uniform;
 
   DanmakuShadowStyle _resolveDanmakuShadowStyle(int? index) {
     if (index == null ||
@@ -1612,14 +1615,42 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
-  Future<void> setDanmakuOutlineStyle(DanmakuOutlineStyle style) async {
-    if (_danmakuOutlineStyle == style) {
+  /// 设置弹幕描边样式和宽度
+  Future<void> _setDanmakuOutlineConfiguration(DanmakuOutlineStyle style, double outlineWidth) async {
+
+    final sanitizedWidth = _sanitizeNext2DanmakuOutlineWidth(outlineWidth);
+    if (_danmakuOutlineStyle == style &&
+        (_next2DanmakuOutlineWidth - sanitizedWidth).abs() < 0.0001) {
       return;
     }
     _danmakuOutlineStyle = style;
+    _next2DanmakuOutlineWidth = sanitizedWidth;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_danmakuOutlineStyleKey, style.index);
+    await prefs.setDouble(
+      _next2DanmakuOutlineWidthKey,
+      sanitizedWidth,
+    );
+    _syncErikaDanmakuConfig();
     _notifyListeners();
+  }
+
+  /// 设置是否启用弹幕描边
+  Future<void> setDanmakuOutlineEnabled(bool enabled) async {
+    final style = enabled
+        ? (_danmakuOutlineStyle == DanmakuOutlineStyle.none
+            ? _defaultDanmakuOutlineStyle
+            : _danmakuOutlineStyle)
+        : DanmakuOutlineStyle.none;
+    await _setDanmakuOutlineConfiguration(style, enabled ? 1.0 : 0.0);
+  }
+
+  /// 设置弹幕描边样式
+  Future<void> setDanmakuOutlineStyle(DanmakuOutlineStyle style) async {
+    await _setDanmakuOutlineConfiguration(
+      style,
+      style == DanmakuOutlineStyle.none ? 0.0 : 1.0,
+    );
   }
 
   Future<void> setDanmakuShadowStyle(DanmakuShadowStyle style) async {
@@ -1632,16 +1663,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  /// 设置下一条弹幕的描边宽度
   Future<void> setNext2DanmakuOutlineWidth(double value) async {
     final sanitized = _sanitizeNext2DanmakuOutlineWidth(value);
-    if ((_next2DanmakuOutlineWidth - sanitized).abs() < 0.0001) {
-      return;
-    }
-    _next2DanmakuOutlineWidth = sanitized;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_next2DanmakuOutlineWidthKey, sanitized);
-    _syncErikaDanmakuConfig();
-    _notifyListeners();
+    final style = sanitized > 0.0
+        ? (_danmakuOutlineStyle == DanmakuOutlineStyle.none
+            ? _defaultDanmakuOutlineStyle
+            : _danmakuOutlineStyle)
+        : DanmakuOutlineStyle.none;
+    await _setDanmakuOutlineConfiguration(style, sanitized);
   }
 
   // 获取实际使用的弹幕字体大小
