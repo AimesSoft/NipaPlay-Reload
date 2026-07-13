@@ -27,6 +27,60 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tabAccount => 'Account';
 
   @override
+  String get tabDanmakuConsole => 'Danmaku Console';
+
+  @override
+  String get externalPlayerConsoleTitle => 'External Player Danmaku Console';
+
+  @override
+  String get externalPlayerConsoleEmptyTitle => 'No external player is running';
+
+  @override
+  String get externalPlayerConsoleEmptyDescription =>
+      'Start playback with an external player to see its session and controls here.';
+
+  @override
+  String get externalPlayerConsoleAnime => 'Anime';
+
+  @override
+  String get externalPlayerConsoleEpisode => 'Episode';
+
+  @override
+  String get externalPlayerConsoleEpisodeId => 'Episode ID';
+
+  @override
+  String get externalPlayerConsoleProcessId => 'Player PID';
+
+  @override
+  String get externalPlayerConsoleMediaPath => 'Media path';
+
+  @override
+  String get externalPlayerConsoleUnknownAnime => 'Unknown anime';
+
+  @override
+  String get externalPlayerConsoleUnknownEpisode => 'Unknown episode';
+
+  @override
+  String get externalPlayerConsoleProgress => 'Playback progress';
+
+  @override
+  String get externalPlayerConsoleProgressUnsupported =>
+      'This player does not support progress synchronization.';
+
+  @override
+  String get externalPlayerConsoleProgressLoading =>
+      'Reading playback progress…';
+
+  @override
+  String get externalPlayerConsoleResume => 'Resume';
+
+  @override
+  String get externalPlayerConsolePause => 'Pause';
+
+  @override
+  String get externalPlayerConsoleClose => 'Close Player';
+
+  @override
   String get tabSettings => 'Settings';
 
   @override

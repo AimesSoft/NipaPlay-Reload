@@ -67,6 +67,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
+import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -816,6 +817,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             showWebDAV: webdav.showWebDAVTab,
             showDownloader:
                 globals.isDownloaderSupportedPlatform && downloader.enabled,
+            showExternalPlayerConsole:
+                ExternalPlayerConsoleService.isSupportedPlatform,
           ),
         );
         return pages
@@ -1264,6 +1267,8 @@ class MainPageState extends State<MainPage>
       availability: AppPageAvailability(
         showWebDAV: _showWebDAVTab,
         showDownloader: _showDownloaderTab,
+        showExternalPlayerConsole:
+            ExternalPlayerConsoleService.isSupportedPlatform,
       ),
     );
     _pages = _pageDefinitions

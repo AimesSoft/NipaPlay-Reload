@@ -10,10 +10,12 @@ class AppPageAvailability {
   const AppPageAvailability({
     required this.showWebDAV,
     required this.showDownloader,
+    this.showExternalPlayerConsole = false,
   });
 
   final bool showWebDAV;
   final bool showDownloader;
+  final bool showExternalPlayerConsole;
 }
 
 class UnifiedAppPage {
@@ -142,6 +144,22 @@ List<UnifiedAppPage> buildUnifiedAppPages(
       ],
       actionIds: commonActions,
     ),
+    if (availability.showExternalPlayerConsole)
+      UnifiedAppPage(
+        id: AppPageIds.externalPlayerConsole,
+        titleBuilder: (localizations) => localizations.tabDanmakuConsole,
+        phoneIcon: CupertinoIcons.captions_bubble,
+        phoneActiveIcon: CupertinoIcons.captions_bubble_fill,
+        phoneSymbol: 'captions.bubble',
+        phoneActiveSymbol: 'captions.bubble.fill',
+        components: const [
+          AppPageComponent(
+            id: 'external-player-console',
+            type: AppPageComponentType.externalPlayerConsole,
+          ),
+        ],
+        actionIds: commonActions,
+      ),
   ];
 }
 

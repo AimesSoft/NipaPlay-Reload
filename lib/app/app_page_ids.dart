@@ -7,6 +7,7 @@ class AppPageIds {
   static const String mediaLibrary = 'media_library';
   static const String torrent = 'torrent';
   static const String account = 'account';
+  static const String externalPlayerConsole = 'external_player_console';
   static const String settings = 'settings';
 
   static const List<String> primaryOrder = <String>[
@@ -16,6 +17,7 @@ class AppPageIds {
     mediaLibrary,
     torrent,
     account,
+    externalPlayerConsole,
   ];
 
   // Compatibility order used by callers that still send historical indices.

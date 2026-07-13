@@ -5,6 +5,7 @@ enum AppPageComponentType {
   mediaLibrary,
   torrentTasks,
   account,
+  externalPlayerConsole,
 }
 
 class AppPageComponent {

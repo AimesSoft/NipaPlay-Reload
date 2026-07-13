@@ -7,6 +7,7 @@ import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
+import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -75,6 +76,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         availability: AppPageAvailability(
           showWebDAV: _showWebDAV,
           showDownloader: _showDownloader,
+          showExternalPlayerConsole:
+              ExternalPlayerConsoleService.isSupportedPlatform,
         ),
       );
 

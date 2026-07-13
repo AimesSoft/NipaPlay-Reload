@@ -27,6 +27,7 @@ import 'package:nipaplay/media_library/media_collection_empty_content.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
+import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
@@ -114,6 +115,7 @@ void main() {
         availability: const AppPageAvailability(
           showWebDAV: true,
           showDownloader: true,
+          showExternalPlayerConsole: true,
         ),
       );
 
@@ -232,6 +234,10 @@ void main() {
           id: 'account',
           type: AppPageComponentType.account,
         ),
+        AppPageComponent(
+          id: 'external-player-console',
+          type: AppPageComponentType.externalPlayerConsole,
+        ),
       ];
       const controls = UnifiedAppControlRegistry();
 
@@ -257,6 +263,10 @@ void main() {
       expect(
         controls.build(_FakeBuildContext(), components[4]),
         isA<UnifiedAccountPage>(),
+      );
+      expect(
+        controls.build(_FakeBuildContext(), components[5]),
+        isA<ExternalPlayerConsolePage>(),
       );
     });
   });
