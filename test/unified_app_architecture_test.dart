@@ -653,6 +653,9 @@ void main() {
       'video_player_state_playback_controls.dart',
     ).readAsStringSync();
     final player = File('lib/pages/play_video_page.dart').readAsStringSync();
+    final phoneShell = File(
+      'lib/themes/cupertino/pages/cupertino_main_page.dart',
+    ).readAsStringSync();
     final loading = File(
       'lib/themes/nipaplay/widgets/loading_overlay.dart',
     ).readAsStringSync();
@@ -666,8 +669,53 @@ void main() {
     expect(player, contains('_buildPhonePortraitPlayer(videoState)'));
     expect(player, contains('final stageHeight'));
     expect(player, contains('constraints.maxWidth / aspectRatio'));
+    expect(player, contains('return SafeArea('));
+    expect(player, contains('left: false,'));
+    expect(player, contains('right: false,'));
+    expect(player, contains('final portraitUiScale'));
+    expect(player, contains('portraitUiScale: portraitUiScale'));
+    expect(player, contains('clipBehavior: Clip.hardEdge'));
+    expect(player, contains('final double horizontalCutoutInset'));
+    expect(
+      player,
+      contains('portraitUiScale >= 0.999 ? 24.0 : 0.0'),
+    );
     expect(player, contains('AnimeDetailPage('));
     expect(player, contains('renderInWindowScaffold: false'));
+    expect(
+        phoneShell, contains('Consumer2<BottomBarProvider, VideoPlayerState>'));
+    expect(phoneShell, contains('final isFullscreenPlayback'));
+    expect(phoneShell, contains('selectedPage.id == AppPageIds.video'));
+    expect(
+      phoneShell,
+      contains('bottomBar.isBottomBarVisible && !isFullscreenPlayback'),
+    );
+    final playerUi = File(
+      'lib/themes/nipaplay/widgets/video_player_ui.dart',
+    ).readAsStringSync();
+    final controlsOverlay = File(
+      'lib/themes/nipaplay/widgets/video_controls_overlay.dart',
+    ).readAsStringSync();
+    final danmakuContainer = File(
+      'lib/widgets/danmaku_container.dart',
+    ).readAsStringSync();
+    final danmakuOverlay = File(
+      'lib/widgets/danmaku_overlay.dart',
+    ).readAsStringSync();
+    expect(playerUi, contains('getFontSize(videoState) * widget.danmakuScale'));
+    expect(controlsOverlay, contains('Transform.scale('));
+    expect(controlsOverlay, contains('scale: uiScale'));
+    expect(controlsOverlay, contains('compactDesignWidth = 760.0'));
+    expect(controlsOverlay, contains('compactDesignHeight = 168.0'));
+    expect(
+      player,
+      contains('VideoControlsOverlay.compactDesignWidth'),
+    );
+    expect(danmakuOverlay, contains('fontSize: widget.fontSize'));
+    expect(
+      danmakuContainer,
+      isNot(contains('_currentSize = MediaQuery.of(context).size')),
+    );
     expect(loading, contains('final bool isPhoneSurface'));
     expect(loading, contains('const Color(0xF2252527)'));
     expect(loading, contains('const Color(0xFAF7F7F8)'));

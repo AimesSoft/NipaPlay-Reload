@@ -17,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 const _lightPhoneNavigationGlassSettings = LiquidGlassSettings(
@@ -256,8 +257,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             ? _lightPhoneNavigationGlassSettings
             : _darkPhoneNavigationGlassSettings;
 
-    return Consumer<BottomBarProvider>(
-      builder: (context, bottomBar, _) {
+    return Consumer2<BottomBarProvider, VideoPlayerState>(
+      builder: (context, bottomBar, videoState, _) {
+        final isFullscreenPlayback = selectedPage.id == AppPageIds.video &&
+            videoState.hasVideo &&
+            videoState.isFullscreen;
+        final isBottomNavigationVisible =
+            bottomBar.isBottomBarVisible && !isFullscreenPlayback;
         final body = BackgroundWithBlur(
           child: CupertinoPageActionsScope(
             controller: _pageActionsController,
@@ -310,7 +316,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             minimizeBehavior: TabBarMinimizeBehavior.never,
             enableBlur: true,
             body: body,
-            bottomNavigationBar: bottomBar.isBottomBarVisible
+            bottomNavigationBar: isBottomNavigationVisible
                 ? AdaptiveBottomNavigationBar(
                     useNativeBottomBar: bottomBar.useNativeBottomBar,
                     selectedItemColor: activeColor,
@@ -332,7 +338,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             fit: StackFit.expand,
             children: [
               Positioned.fill(child: body),
-              if (bottomBar.isBottomBarVisible)
+              if (isBottomNavigationVisible)
                 Positioned(
                   left: 0,
                   right: 0,

@@ -94,10 +94,16 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
               // This is the actual GPU renderer
               Consumer<VideoPlayerState>(
                 builder: (context, videoState, child) {
+                  final config =
+                      GPUDanmakuConfig.fromVideoPlayerState(videoState);
                   return GPUDanmakuOverlay(
                     positionedDanmaku: _positionedDanmaku,
                     isPlaying: widget.isPlaying,
-                    config: GPUDanmakuConfig.fromVideoPlayerState(videoState),
+                    config: config.copyWith(
+                      fontSize: widget.fontSize,
+                      danmakuBottomMargin: config.danmakuBottomMargin *
+                          (widget.fontSize / config.fontSize),
+                    ),
                     isVisible: widget.isVisible,
                     opacity: widget.opacity,
                     currentTime:

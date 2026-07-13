@@ -433,15 +433,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     );
   }
 
-  Widget _buildPlayerStage(VideoPlayerState videoState) {
+  Widget _buildPlayerStage(
+    VideoPlayerState videoState, {
+    double portraitUiScale = 1.0,
+  }) {
     return Stack(
       fit: StackFit.expand,
+      clipBehavior: Clip.hardEdge,
       children: [
-        const Positioned.fill(child: VideoPlayerWidget()),
+        Positioned.fill(
+          child: VideoPlayerWidget(danmakuScale: portraitUiScale),
+        ),
         if (videoState.hasVideo)
           NipaplayLargeScreenModeScope.isActiveOf(context)
               ? _buildLargeScreenMaterialControls(videoState)
-              : _buildMaterialControls(videoState),
+              : _buildMaterialControls(
+                  videoState,
+                  portraitUiScale: portraitUiScale,
+                ),
       ],
     );
   }
@@ -453,35 +462,49 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             : 16 / 9;
     final animeId = videoState.animeId;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final requestedVideoHeight = constraints.maxWidth / aspectRatio;
-        final maximumVideoHeight = constraints.maxHeight * 0.58;
-        final stageHeight = requestedVideoHeight > maximumVideoHeight
-            ? maximumVideoHeight
-            : requestedVideoHeight;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: stageHeight,
-              child: ColoredBox(
-                color: Colors.black,
-                child: _buildPlayerStage(videoState),
+    return SafeArea(
+      left: false,
+      right: false,
+      bottom: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final requestedVideoHeight = constraints.maxWidth / aspectRatio;
+          final maximumVideoHeight = constraints.maxHeight * 0.58;
+          final stageHeight = requestedVideoHeight > maximumVideoHeight
+              ? maximumVideoHeight
+              : requestedVideoHeight;
+          final portraitUiScale =
+              (constraints.maxWidth / VideoControlsOverlay.compactDesignWidth)
+                  .clamp(0.35, 0.72)
+                  .toDouble();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: stageHeight,
+                child: ClipRect(
+                  child: ColoredBox(
+                    color: Colors.black,
+                    child: _buildPlayerStage(
+                      videoState,
+                      portraitUiScale: portraitUiScale,
+                    ),
+                  ),
+                ),
               ),
-            ),
-            Expanded(
-              child: animeId != null && animeId > 0
-                  ? AnimeDetailPage(
-                      key: ValueKey('portrait-player-detail-$animeId'),
-                      animeId: animeId,
-                      renderInWindowScaffold: false,
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          ],
-        );
-      },
+              Expanded(
+                child: animeId != null && animeId > 0
+                    ? AnimeDetailPage(
+                        key: ValueKey('portrait-player-detail-$animeId'),
+                        animeId: animeId,
+                        renderInWindowScaffold: false,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -822,7 +845,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     );
   }
 
-  Widget _buildMaterialControls(VideoPlayerState videoState) {
+  Widget _buildMaterialControls(
+    VideoPlayerState videoState, {
+    double portraitUiScale = 1.0,
+  }) {
     final bool uiLocked = globals.isMobilePlatform ? _isUiLocked : false;
     final bool showLockButton = globals.isMobilePlatform &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
@@ -831,6 +857,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool showScreenshotButton = !kIsWeb && globals.isMobilePlatform;
     final bool showAirPlayButton =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final double horizontalCutoutInset =
+        globals.isPhone && portraitUiScale >= 0.999 ? 24.0 : 0.0;
 
     final int rightButtonCount = (showAirPlayButton ? 1 : 0) +
         (showScreenshotButton ? 1 : 0) +
@@ -839,9 +867,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ? rightButtonCount * 42.0 + (rightButtonCount - 1) * 12.0
         : 0.0;
     final double availableTitleWidth = (MediaQuery.of(context).size.width -
-            (16.0 + (globals.isPhone ? 24.0 : 0.0)) -
+            (16.0 + horizontalCutoutInset) -
             116.0 -
-            (16.0 + (globals.isPhone ? 24.0 : 0.0)) -
+            (16.0 + horizontalCutoutInset) -
             rightButtonsWidth -
             (globals.isMobilePlatform ? 86.0 : 0.0) -
             24.0)
@@ -864,109 +892,115 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             duration: const Duration(milliseconds: 150),
             child: IgnorePointer(
               ignoring: !videoState.showControls,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: globals.isPhone ? 24.0 : 0.0,
-                  top: 6.0,
-                  bottom: 12.0,
-                ),
-                child: MouseRegion(
-                  onEnter: (_) => videoState.setControlsHovered(true),
-                  onExit: (_) => videoState.setControlsHovered(false),
-                  child: Row(
-                    children: [
-                      MouseRegion(
-                        cursor: _isHoveringBackButton
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        onEnter: (_) =>
-                            setState(() => _isHoveringBackButton = true),
-                        onExit: (_) =>
-                            setState(() => _isHoveringBackButton = false),
-                        child: BackButtonWidget(videoState: videoState),
-                      ),
-                      const SizedBox(width: 12.0),
-                      if (videoState.playerTopSendDanmakuButtonVisible) ...[
-                        SendDanmakuButton(
-                          onPressed: () => _showSendDanmakuDialog(videoState),
+              child: Transform.scale(
+                scale: portraitUiScale,
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: horizontalCutoutInset,
+                    top: 6.0,
+                    bottom: 12.0,
+                  ),
+                  child: MouseRegion(
+                    onEnter: (_) => videoState.setControlsHovered(true),
+                    onExit: (_) => videoState.setControlsHovered(false),
+                    child: Row(
+                      children: [
+                        MouseRegion(
+                          cursor: _isHoveringBackButton
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          onEnter: (_) =>
+                              setState(() => _isHoveringBackButton = true),
+                          onExit: (_) =>
+                              setState(() => _isHoveringBackButton = false),
+                          child: BackButtonWidget(videoState: videoState),
                         ),
-                        const SizedBox(width: 8.0),
+                        const SizedBox(width: 12.0),
+                        if (videoState.playerTopSendDanmakuButtonVisible) ...[
+                          SendDanmakuButton(
+                            onPressed: () => _showSendDanmakuDialog(videoState),
+                          ),
+                          const SizedBox(width: 8.0),
+                        ],
+                        if (videoState.playerTopSkipButtonVisible) ...[
+                          SkipButton(
+                            onPressed: () => videoState.skip(),
+                          ),
+                          const SizedBox(width: 8.0),
+                        ],
+                        if (globals.isDesktop &&
+                            videoState.playerTopResizeButtonVisible) ...[
+                          ShadowActionButton(
+                            tooltip: ShortcutTooltipManager()
+                                .formatActionWithShortcut(
+                                    'resize_to_video', '窗口适配视频'),
+                            icon: Ionicons.resize_outline,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            onPressed: () =>
+                                videoState.resizeWindowToVideoSize(),
+                          ),
+                          const SizedBox(width: 8.0),
+                        ],
+                        if (globals.isDesktop &&
+                            videoState.playerTopFrameStepButtonsVisible) ...[
+                          ShadowActionButton(
+                            tooltip: ShortcutTooltipManager()
+                                .formatActionWithShortcut(
+                                    'step_backward', '逐帧后退'),
+                            icon: Ionicons.chevron_back_circle_outline,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            onPressed: () => videoState.stepBackward(),
+                          ),
+                          const SizedBox(width: 8.0),
+                          ShadowActionButton(
+                            tooltip: ShortcutTooltipManager()
+                                .formatActionWithShortcut(
+                                    'step_forward', '逐帧前进'),
+                            icon: Ionicons.chevron_forward_circle_outline,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            onPressed: () => videoState.stepForward(),
+                          ),
+                          const SizedBox(width: 8.0),
+                        ],
+                        if (!globals.isDesktop &&
+                            videoState.playerTopFrameStepButtonsVisible) ...[
+                          ShadowActionButton(
+                            tooltip: '逐帧后退',
+                            icon: Ionicons.chevron_back_circle_outline,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            onPressed: () => videoState.stepBackward(),
+                          ),
+                          const SizedBox(width: 8.0),
+                          ShadowActionButton(
+                            tooltip: '逐帧前进',
+                            icon: Ionicons.chevron_forward_circle_outline,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            onPressed: () => videoState.stepForward(),
+                          ),
+                          const SizedBox(width: 8.0),
+                        ],
+                        const SizedBox(width: 4.0),
+                        MouseRegion(
+                          cursor: _isHoveringAnimeInfo
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          onEnter: (_) =>
+                              setState(() => _isHoveringAnimeInfo = true),
+                          onExit: (_) =>
+                              setState(() => _isHoveringAnimeInfo = false),
+                          child: AnimeInfoWidget(
+                            videoState: videoState,
+                            maxWidth: availableTitleWidth,
+                          ),
+                        ),
                       ],
-                      if (videoState.playerTopSkipButtonVisible) ...[
-                        SkipButton(
-                          onPressed: () => videoState.skip(),
-                        ),
-                        const SizedBox(width: 8.0),
-                      ],
-                      if (globals.isDesktop &&
-                          videoState.playerTopResizeButtonVisible) ...[
-                        ShadowActionButton(
-                          tooltip: ShortcutTooltipManager()
-                              .formatActionWithShortcut(
-                                  'resize_to_video', '窗口适配视频'),
-                          icon: Ionicons.resize_outline,
-                          iconSize: 28,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => videoState.resizeWindowToVideoSize(),
-                        ),
-                        const SizedBox(width: 8.0),
-                      ],
-                      if (globals.isDesktop &&
-                          videoState.playerTopFrameStepButtonsVisible) ...[
-                        ShadowActionButton(
-                          tooltip: ShortcutTooltipManager()
-                              .formatActionWithShortcut(
-                                  'step_backward', '逐帧后退'),
-                          icon: Ionicons.chevron_back_circle_outline,
-                          iconSize: 28,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => videoState.stepBackward(),
-                        ),
-                        const SizedBox(width: 8.0),
-                        ShadowActionButton(
-                          tooltip: ShortcutTooltipManager()
-                              .formatActionWithShortcut('step_forward', '逐帧前进'),
-                          icon: Ionicons.chevron_forward_circle_outline,
-                          iconSize: 28,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => videoState.stepForward(),
-                        ),
-                        const SizedBox(width: 8.0),
-                      ],
-                      if (!globals.isDesktop &&
-                          videoState.playerTopFrameStepButtonsVisible) ...[
-                        ShadowActionButton(
-                          tooltip: '逐帧后退',
-                          icon: Ionicons.chevron_back_circle_outline,
-                          iconSize: 28,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => videoState.stepBackward(),
-                        ),
-                        const SizedBox(width: 8.0),
-                        ShadowActionButton(
-                          tooltip: '逐帧前进',
-                          icon: Ionicons.chevron_forward_circle_outline,
-                          iconSize: 28,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => videoState.stepForward(),
-                        ),
-                        const SizedBox(width: 8.0),
-                      ],
-                      const SizedBox(width: 4.0),
-                      MouseRegion(
-                        cursor: _isHoveringAnimeInfo
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        onEnter: (_) =>
-                            setState(() => _isHoveringAnimeInfo = true),
-                        onExit: (_) =>
-                            setState(() => _isHoveringAnimeInfo = false),
-                        child: AnimeInfoWidget(
-                          videoState: videoState,
-                          maxWidth: availableTitleWidth,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -981,57 +1015,61 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             duration: const Duration(milliseconds: 150),
             child: IgnorePointer(
               ignoring: !videoState.showControls,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  right: globals.isPhone ? 24.0 : 0.0,
-                  top: 6.0,
-                  bottom: 12.0,
-                ),
-                child: MouseRegion(
-                  onEnter: (_) => videoState.setControlsHovered(true),
-                  onExit: (_) => videoState.setControlsHovered(false),
-                  child: Row(
-                    children: [
-                      if (showAirPlayButton)
-                        ShadowActionButton(
-                          tooltip: '投屏 (AirPlay)',
-                          icon: Icons.airplay_rounded,
-                          onPressed: () {
-                            videoState.resetHideControlsTimer();
-                            _showAirPlayPicker(videoState);
-                          },
-                        ),
-                      if (showScreenshotButton) ...[
-                        if (!kIsWeb &&
-                            defaultTargetPlatform == TargetPlatform.iOS)
+              child: Transform.scale(
+                scale: portraitUiScale,
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: horizontalCutoutInset,
+                    top: 6.0,
+                    bottom: 12.0,
+                  ),
+                  child: MouseRegion(
+                    onEnter: (_) => videoState.setControlsHovered(true),
+                    onExit: (_) => videoState.setControlsHovered(false),
+                    child: Row(
+                      children: [
+                        if (showAirPlayButton)
+                          ShadowActionButton(
+                            tooltip: '投屏 (AirPlay)',
+                            icon: Icons.airplay_rounded,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _showAirPlayPicker(videoState);
+                            },
+                          ),
+                        if (showScreenshotButton) ...[
+                          if (!kIsWeb &&
+                              defaultTargetPlatform == TargetPlatform.iOS)
+                            const SizedBox(width: 12),
+                          ShadowActionButton(
+                            tooltip: '截图',
+                            icon: Icons.camera_alt_outlined,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _captureScreenshot(videoState);
+                            },
+                          ),
+                        ],
+                        if (showShareButton) ...[
                           const SizedBox(width: 12),
-                        ShadowActionButton(
-                          tooltip: '截图',
-                          icon: Icons.camera_alt_outlined,
-                          onPressed: () {
-                            videoState.resetHideControlsTimer();
-                            _captureScreenshot(videoState);
-                          },
-                        ),
+                          ShadowActionButton(
+                            tooltip: (!kIsWeb &&
+                                    defaultTargetPlatform == TargetPlatform.iOS)
+                                ? '分享 / AirDrop'
+                                : '分享',
+                            icon: (!kIsWeb &&
+                                    defaultTargetPlatform == TargetPlatform.iOS)
+                                ? Icons.ios_share_rounded
+                                : Icons.share_rounded,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _shareCurrentMedia(videoState);
+                            },
+                          ),
+                        ],
                       ],
-                      if (showShareButton) ...[
-                        const SizedBox(width: 12),
-                        ShadowActionButton(
-                          tooltip: (!kIsWeb &&
-                                  defaultTargetPlatform == TargetPlatform.iOS)
-                              ? '分享 / AirDrop'
-                              : '分享',
-                          icon: (!kIsWeb &&
-                                  defaultTargetPlatform == TargetPlatform.iOS)
-                              ? Icons.ios_share_rounded
-                              : Icons.share_rounded,
-                          onPressed: () {
-                            videoState.resetHideControlsTimer();
-                            _shareCurrentMedia(videoState);
-                          },
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1050,9 +1088,13 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 duration: const Duration(milliseconds: 150),
                 child: IgnorePointer(
                   ignoring: !videoState.showControls,
-                  child: const Padding(
-                    padding: EdgeInsets.only(top: 6, right: 8),
-                    child: MobilePlaybackStatus(compact: true),
+                  child: Transform.scale(
+                    scale: portraitUiScale,
+                    alignment: Alignment.topRight,
+                    child: const Padding(
+                      padding: EdgeInsets.only(top: 6, right: 8),
+                      child: MobilePlaybackStatus(compact: true),
+                    ),
                   ),
                 ),
               ),
@@ -1073,7 +1115,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               child: Container(),
             ),
           ),
-        const VideoControlsOverlay(),
+        VideoControlsOverlay(uiScale: portraitUiScale),
         if (uiLocked)
           Positioned.fill(
             child: GestureDetector(
@@ -1084,7 +1126,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         if (globals.isMobilePlatform)
           Positioned(
-            left: 16.0 + (globals.isMobilePlatform ? 24.0 : 0.0),
+            left: 16.0 + horizontalCutoutInset,
             top: 0,
             bottom: 0,
             child: Center(
@@ -1096,9 +1138,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   duration: const Duration(milliseconds: 150),
                   child: IgnorePointer(
                     ignoring: !showLockButton,
-                    child: LockControlsButton(
-                      locked: uiLocked,
-                      onPressed: () => _toggleUiLock(videoState),
+                    child: Transform.scale(
+                      scale: portraitUiScale,
+                      child: LockControlsButton(
+                        locked: uiLocked,
+                        onPressed: () => _toggleUiLock(videoState),
+                      ),
                     ),
                   ),
                 ),

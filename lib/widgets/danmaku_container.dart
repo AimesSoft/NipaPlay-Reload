@@ -56,6 +56,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         (_effectiveFontSize / _defaultFontSize).clamp(0.7, 2.5);
     return _baseVerticalSpacing * scale;
   }
+
   // final double _horizontalSpacing = 20.0; // 左右间距（未使用，移除）
   // 文本宽度缓存，减少 TextPainter.layout 开销
   final Map<String, double> _textWidthCache = {};
@@ -141,13 +142,6 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
     // 初始化文本渲染器
     _initializeTextRenderer();
-
-    // 初始化时获取画布大小
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _currentSize = MediaQuery.of(context).size;
-      });
-    });
 
     // 初始化时对弹幕列表进行预处理和排序
     _preprocessDanmakuList();

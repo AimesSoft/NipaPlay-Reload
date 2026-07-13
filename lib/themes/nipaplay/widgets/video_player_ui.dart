@@ -33,8 +33,13 @@ import 'package:video_player/video_player.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   final Widget? emptyPlaceholder;
+  final double danmakuScale;
 
-  const VideoPlayerUI({super.key, this.emptyPlaceholder});
+  const VideoPlayerUI({
+    super.key,
+    this.emptyPlaceholder,
+    this.danmakuScale = 1.0,
+  });
 
   @override
   State<VideoPlayerUI> createState() => _VideoPlayerUIState();
@@ -105,7 +110,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         currentPosition: videoState.playbackTimeMs.value,
         videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
         isPlaying: videoState.status == PlayerStatus.playing,
-        fontSize: getFontSize(videoState),
+        fontSize: getFontSize(videoState) * widget.danmakuScale,
         isVisible: videoState.danmakuVisible,
         opacity: videoState.mappedDanmakuOpacity,
       ),
@@ -120,7 +125,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           currentPosition: posMs,
           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
           isPlaying: videoState.status == PlayerStatus.playing,
-          fontSize: getFontSize(videoState),
+          fontSize: getFontSize(videoState) * widget.danmakuScale,
           isVisible: videoState.danmakuVisible,
           opacity: videoState.mappedDanmakuOpacity,
         );
