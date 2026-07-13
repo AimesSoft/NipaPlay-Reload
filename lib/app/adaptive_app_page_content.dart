@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/app/app_page_component.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
+import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
@@ -48,6 +49,8 @@ class UnifiedAppControlRegistry {
       AppPageComponentType.mediaLibrary => const AdaptiveMediaLibraryPage(),
       AppPageComponentType.torrentTasks => const TorrentDownloadPage(),
       AppPageComponentType.account => const UnifiedAccountPage(),
+      AppPageComponentType.externalPlayerConsole =>
+        const ExternalPlayerConsolePage(),
     };
   }
 }

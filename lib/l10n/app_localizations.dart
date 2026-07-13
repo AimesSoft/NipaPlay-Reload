@@ -135,6 +135,108 @@ abstract class AppLocalizations {
   /// **'个人中心'**
   String get tabAccount;
 
+  /// No description provided for @tabDanmakuConsole.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕控制台'**
+  String get tabDanmakuConsole;
+
+  /// No description provided for @externalPlayerConsoleTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'外部播放器弹幕控制台'**
+  String get externalPlayerConsoleTitle;
+
+  /// No description provided for @externalPlayerConsoleEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未启动外部播放器'**
+  String get externalPlayerConsoleEmptyTitle;
+
+  /// No description provided for @externalPlayerConsoleEmptyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过外部播放器开始播放后，会话信息和控制操作将显示在这里。'**
+  String get externalPlayerConsoleEmptyDescription;
+
+  /// No description provided for @externalPlayerConsoleAnime.
+  ///
+  /// In zh, this message translates to:
+  /// **'番剧'**
+  String get externalPlayerConsoleAnime;
+
+  /// No description provided for @externalPlayerConsoleEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'剧集'**
+  String get externalPlayerConsoleEpisode;
+
+  /// No description provided for @externalPlayerConsoleEpisodeId.
+  ///
+  /// In zh, this message translates to:
+  /// **'剧集 ID'**
+  String get externalPlayerConsoleEpisodeId;
+
+  /// No description provided for @externalPlayerConsoleProcessId.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放器 PID'**
+  String get externalPlayerConsoleProcessId;
+
+  /// No description provided for @externalPlayerConsoleMediaPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'媒体路径'**
+  String get externalPlayerConsoleMediaPath;
+
+  /// No description provided for @externalPlayerConsoleUnknownAnime.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知番剧'**
+  String get externalPlayerConsoleUnknownAnime;
+
+  /// No description provided for @externalPlayerConsoleUnknownEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知剧集'**
+  String get externalPlayerConsoleUnknownEpisode;
+
+  /// No description provided for @externalPlayerConsoleProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放进度'**
+  String get externalPlayerConsoleProgress;
+
+  /// No description provided for @externalPlayerConsoleProgressUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前播放器暂不支持进度同步。'**
+  String get externalPlayerConsoleProgressUnsupported;
+
+  /// No description provided for @externalPlayerConsoleProgressLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在获取播放进度…'**
+  String get externalPlayerConsoleProgressLoading;
+
+  /// No description provided for @externalPlayerConsoleResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续播放'**
+  String get externalPlayerConsoleResume;
+
+  /// No description provided for @externalPlayerConsolePause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get externalPlayerConsolePause;
+
+  /// No description provided for @externalPlayerConsoleClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭播放器'**
+  String get externalPlayerConsoleClose;
+
   /// No description provided for @tabSettings.
   ///
   /// In zh, this message translates to:

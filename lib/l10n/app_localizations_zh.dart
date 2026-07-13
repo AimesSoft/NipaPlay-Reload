@@ -27,6 +27,58 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tabAccount => '个人中心';
 
   @override
+  String get tabDanmakuConsole => '弹幕控制台';
+
+  @override
+  String get externalPlayerConsoleTitle => '外部播放器弹幕控制台';
+
+  @override
+  String get externalPlayerConsoleEmptyTitle => '尚未启动外部播放器';
+
+  @override
+  String get externalPlayerConsoleEmptyDescription =>
+      '通过外部播放器开始播放后，会话信息和控制操作将显示在这里。';
+
+  @override
+  String get externalPlayerConsoleAnime => '番剧';
+
+  @override
+  String get externalPlayerConsoleEpisode => '剧集';
+
+  @override
+  String get externalPlayerConsoleEpisodeId => '剧集 ID';
+
+  @override
+  String get externalPlayerConsoleProcessId => '播放器 PID';
+
+  @override
+  String get externalPlayerConsoleMediaPath => '媒体路径';
+
+  @override
+  String get externalPlayerConsoleUnknownAnime => '未知番剧';
+
+  @override
+  String get externalPlayerConsoleUnknownEpisode => '未知剧集';
+
+  @override
+  String get externalPlayerConsoleProgress => '播放进度';
+
+  @override
+  String get externalPlayerConsoleProgressUnsupported => '当前播放器暂不支持进度同步。';
+
+  @override
+  String get externalPlayerConsoleProgressLoading => '正在获取播放进度…';
+
+  @override
+  String get externalPlayerConsoleResume => '继续播放';
+
+  @override
+  String get externalPlayerConsolePause => '暂停';
+
+  @override
+  String get externalPlayerConsoleClose => '关闭播放器';
+
+  @override
   String get tabSettings => '设置';
 
   @override
@@ -1772,6 +1824,58 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get tabAccount => '個人中心';
+
+  @override
+  String get tabDanmakuConsole => '彈幕控制台';
+
+  @override
+  String get externalPlayerConsoleTitle => '外部播放器彈幕控制台';
+
+  @override
+  String get externalPlayerConsoleEmptyTitle => '尚未啟動外部播放器';
+
+  @override
+  String get externalPlayerConsoleEmptyDescription =>
+      '透過外部播放器開始播放後，工作階段資訊和控制操作將顯示在這裡。';
+
+  @override
+  String get externalPlayerConsoleAnime => '番劇';
+
+  @override
+  String get externalPlayerConsoleEpisode => '劇集';
+
+  @override
+  String get externalPlayerConsoleEpisodeId => '劇集 ID';
+
+  @override
+  String get externalPlayerConsoleProcessId => '播放器 PID';
+
+  @override
+  String get externalPlayerConsoleMediaPath => '媒體路徑';
+
+  @override
+  String get externalPlayerConsoleUnknownAnime => '未知番劇';
+
+  @override
+  String get externalPlayerConsoleUnknownEpisode => '未知劇集';
+
+  @override
+  String get externalPlayerConsoleProgress => '播放進度';
+
+  @override
+  String get externalPlayerConsoleProgressUnsupported => '目前播放器暫不支援進度同步。';
+
+  @override
+  String get externalPlayerConsoleProgressLoading => '正在取得播放進度…';
+
+  @override
+  String get externalPlayerConsoleResume => '繼續播放';
+
+  @override
+  String get externalPlayerConsolePause => '暫停';
+
+  @override
+  String get externalPlayerConsoleClose => '關閉播放器';
 
   @override
   String get tabSettings => '設定';
