@@ -41,6 +41,22 @@ class DesktopExitHandler
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
 
+  @visibleForTesting
+  static bool supportsWindowCloseInterception({
+    required bool isWindows,
+    required bool isMacOS,
+    required bool isLinux,
+  }) {
+    return isWindows || isMacOS || isLinux;
+  }
+
+  static bool get _supportsWindowCloseInterception =>
+      supportsWindowCloseInterception(
+        isWindows: Platform.isWindows,
+        isMacOS: Platform.isMacOS,
+        isLinux: Platform.isLinux,
+      );
+
   material.GlobalKey<material.NavigatorState>? _navigatorKey;
 
   bool _bindingHooked = false;
@@ -63,7 +79,7 @@ class DesktopExitHandler
       _bindingHooked = true;
     }
 
-    if ((Platform.isMacOS || Platform.isLinux) && !_windowListenerHooked) {
+    if (_supportsWindowCloseInterception && !_windowListenerHooked) {
       try {
         await windowManager.setPreventClose(true);
         _preventCloseEnabled = true;
@@ -107,7 +123,7 @@ class DesktopExitHandler
 
   @override
   void onWindowClose() async {
-    if (!(Platform.isMacOS || Platform.isLinux)) return;
+    if (!_supportsWindowCloseInterception) return;
     if (_closingWindow) return;
     if (_quitting) {
       await _closeWindowSafely();
