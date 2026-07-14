@@ -488,11 +488,13 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.windows);
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.android);
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
-  bool get usesWindowOverlayVideoSurface => _isSupported;
+  bool get usesWindowOverlayVideoSurface =>
+      _isSupported && defaultTargetPlatform != TargetPlatform.android;
 
   @override
   double get volume => _volume;
@@ -945,6 +947,13 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return ErikaVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onPlatformViewIdChanged: onPlatformViewIdChanged,
+      );
+    }
     return _NipaplayErikaWindowOverlayVideoView(
       player: _player,
       debugLabel: debugLabel,
@@ -1224,6 +1233,40 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   }
 
   void _handleEvent(ErikaPlayerEvent event) {
+    if (event.kind == ErikaEventKind.error) {
+      final errorMessage = _formatPlaybackError(event);
+      _mediaInfo = _mediaInfo.copyWith(specificErrorMessage: errorMessage);
+      debugPrint(
+        '[Erika] playback error '
+        'player=${event.playerId} state=${event.state.name} '
+        'status=${event.status} error=${event.error ?? '-'} '
+        'message=${event.message ?? '-'}',
+      );
+    }
+
+    if (event.kind == ErikaEventKind.videoDecoderChanged &&
+        event.decoder case final decoder?) {
+      debugPrint(
+        '[Erika] video decoder changed '
+        'stage=${decoder.stage} requested=${decoder.requestedBackend} '
+        'previous=${decoder.previousBackend ?? '-'} '
+        'active=${decoder.activeBackend} fallbacks=${decoder.fallbackCount} '
+        'codec=${decoder.codec ?? '-'} format=${decoder.pixelFormat ?? '-'} '
+        'reason=${decoder.reason ?? '-'}',
+      );
+    }
+
+    if (event.kind == ErikaEventKind.audioOutputChanged &&
+        event.audio case final audio?) {
+      debugPrint(
+        '[Erika] audio output changed '
+        'state=${audio.recoveryState} errorCode=${audio.lastErrorCode} '
+        'attempts=${audio.recoveryAttempts} recoveries=${audio.recoveryCount} '
+        'failures=${audio.recoveryFailures} '
+        'sequence=${audio.transitionSequence}',
+      );
+    }
+
     if (event.kind == ErikaEventKind.stateChanged ||
         event.kind == ErikaEventKind.error) {
       switch (event.state) {
@@ -1372,6 +1415,19 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     _mediaInfo = updatedInfo;
   }
 
+  static String _formatPlaybackError(ErikaPlayerEvent event) {
+    final error = event.error?.trim();
+    final message = event.message?.trim();
+    final details = <String>[
+      if (error != null && error.isNotEmpty) error,
+      if (message != null && message.isNotEmpty && message != error) message,
+      if (event.status != 0) 'status=${event.status}',
+    ];
+    return details.isEmpty
+        ? 'Erika 播放失败（未返回详细原因）'
+        : 'Erika 播放失败：${details.join('；')}';
+  }
+
   static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
     final parts = <String>[
       if (track.codec != null) 'codec: ${track.codec}',
@@ -1434,7 +1490,8 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-          'Erika is currently only wired on macOS/iOS/Windows.');
+        'Erika is currently only wired on Android/iOS/macOS/Windows.',
+      );
     }
   }
 }

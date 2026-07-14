@@ -138,7 +138,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）\niOS/macOS 原生 Metal 输出，Windows 原生 D3D11 输出，播放、渲染和音频由 Rust 内核负责';
+        return 'Erika Rust 播放器（实验性）\niOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu（Vulkan/GLES 回退）；播放、渲染和音频由 Rust 内核负责';
     }
   }
 

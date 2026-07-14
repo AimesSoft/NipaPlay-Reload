@@ -152,7 +152,11 @@ class PlayerKernelManager {
       return ['FVP', 'Video Player', 'Erika'];
     } else if (Platform.isAndroid) {
       // Android平台支持的内核
-      return ['FVP', 'Media Kit', 'Video Player'];
+      final androidKernels = ['FVP', 'Media Kit', 'Video Player'];
+      if (PlayerFactory.isErikaKernelSupported) {
+        androidKernels.add('Erika');
+      }
+      return androidKernels;
     } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       // 桌面平台支持所有内核
       if (PlayerFactory.isErikaKernelSupported) {
