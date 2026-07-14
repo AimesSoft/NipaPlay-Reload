@@ -44,6 +44,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       TextEditingController();
   bool _spoilerAiControllersInitialized = false;
   bool _isSavingSpoilerAiSettings = false;
+  bool _isSpoilerAiSettingsSheetVisible = false;
   SpoilerAiApiFormat _spoilerAiApiFormatDraft = SpoilerAiApiFormat.openai;
   double _spoilerAiTemperatureDraft = 0.5;
 
@@ -287,48 +288,67 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     VideoPlayerState videoState,
   ) async {
     if (AdaptiveSettingsScope.isPhoneLayout(context)) {
-      await CupertinoBottomSheet.show<void>(
-        context: context,
-        title: '防剧透 AI 设置',
-        floatingTitle: true,
-        child: StatefulBuilder(
-          builder: (sheetContext, sheetSetState) {
-            void updateDialog(VoidCallback change) {
-              setState(change);
-              sheetSetState(() {});
-            }
+      final hideNativeIOS26Switches = usesNativeIOS26SettingsControls;
+      if (hideNativeIOS26Switches) {
+        // UIKit platform views sit above Flutter overlays. Remove the switches
+        // for a complete frame before presenting the nested bottom sheet.
+        setState(() {
+          _isSpoilerAiSettingsSheetVisible = true;
+        });
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+      }
 
-            return CupertinoBottomSheetContentLayout(
-              sliversBuilder: (contentContext, topSpacing) => [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 20),
-                  sliver: SliverToBoxAdapter(
-                    child: _buildSpoilerAiSettingsForm(
-                      contentContext,
-                      isPhoneLayout: true,
-                      updateDialog: updateDialog,
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      child: _buildSpoilerAiSettingsActions(
-                        sheetContext,
-                        videoState: videoState,
+      try {
+        await CupertinoBottomSheet.show<void>(
+          context: context,
+          title: '防剧透 AI 设置',
+          floatingTitle: true,
+          child: StatefulBuilder(
+            builder: (sheetContext, sheetSetState) {
+              void updateDialog(VoidCallback change) {
+                setState(change);
+                sheetSetState(() {});
+              }
+
+              return CupertinoBottomSheetContentLayout(
+                sliversBuilder: (contentContext, topSpacing) => [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 20),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildSpoilerAiSettingsForm(
+                        contentContext,
                         isPhoneLayout: true,
                         updateDialog: updateDialog,
                       ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
-      );
+                  SliverToBoxAdapter(
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        child: _buildSpoilerAiSettingsActions(
+                          sheetContext,
+                          videoState: videoState,
+                          isPhoneLayout: true,
+                          updateDialog: updateDialog,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      } finally {
+        if (hideNativeIOS26Switches && mounted) {
+          setState(() {
+            _isSpoilerAiSettingsSheetVisible = false;
+          });
+        }
+      }
       return;
     }
 
@@ -750,6 +770,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 icon: Ionicons.rocket_outline,
                 value: DanmakuKernelFactory.isNextPlusPlusEnabled,
                 onChanged: _saveNextPlusPlusEngineSetting,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
               ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
@@ -820,7 +841,9 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
               },
             ),
 
-            Divider(color: colorScheme.onSurface.withValues(alpha: 0.12), height: 1),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
 
             // 弹幕描边开关
             Consumer<VideoPlayerState>(
@@ -831,6 +854,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   icon: Icons.border_color,
                   value: videoState.danmakuOutlineEnabled,
                   onChanged: videoState.setDanmakuOutlineEnabled,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                 );
               },
             ),
@@ -846,6 +870,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   subtitle: context.l10n.rememberDanmakuOffsetSubtitle,
                   icon: Icons.av_timer,
                   value: videoState.rememberDanmakuOffset,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                   onChanged: (bool value) async {
                     await videoState.setRememberDanmakuOffset(value);
                     if (!context.mounted) return;
@@ -869,6 +894,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   subtitle: context.l10n.danmakuConvertToSimplifiedSubtitle,
                   icon: Ionicons.language_outline,
                   value: settingsProvider.danmakuConvertToSimplified,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                   onChanged: (bool value) {
                     settingsProvider.setDanmakuConvertToSimplified(value);
                     if (context.mounted) {
@@ -907,6 +933,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                       subtitle: '忽略弹幕原始颜色，按发送弹幕预设色随机分配',
                       icon: Ionicons.color_palette_outline,
                       value: videoState.danmakuRandomColorEnabled,
+                      hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                       onChanged: (value) {
                         videoState.setDanmakuRandomColorEnabled(value);
                       },
@@ -919,6 +946,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                       subtitle: '在视频特定进度(25%/50%/75%/90%)显示弹幕提示',
                       icon: Ionicons.notifications_outline,
                       value: videoState.isTimelineDanmakuEnabled,
+                      hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                       onChanged: (value) {
                         videoState.toggleTimelineDanmaku(value);
                       },
@@ -950,6 +978,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                         subtitle: '允许多条弹幕重叠显示，适合弹幕密集场景',
                         icon: Ionicons.layers_outline,
                         value: videoState.danmakuStacking,
+                        hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                         onChanged: (value) {
                           videoState.setDanmakuStacking(value);
                         },
@@ -973,6 +1002,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                       subtitle: '开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕',
                       icon: Ionicons.shield_outline,
                       value: videoState.spoilerPreventionEnabled,
+                      hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                       onChanged: (bool value) async {
                         if (value && !videoState.spoilerAiConfigReady) {
                           BlurSnackBar.show(context, '请先填写并保存 AI 接口配置');
@@ -1052,6 +1082,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   icon: Ionicons.search_outline,
                   value: settingsProvider
                       .autoMatchDanmakuFirstSearchResultOnHashFail,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
                   onChanged: (bool value) {
                     settingsProvider
                         .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);

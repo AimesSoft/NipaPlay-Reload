@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
+    show PlatformInfo;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -17,6 +19,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
+bool get usesNativeIOS26SettingsControls => PlatformInfo.isIOS26OrHigher();
+
 class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   const AdaptiveSettingsTile._({
     super.key,
@@ -31,6 +35,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     this.dropdownKey,
     this.switchValue,
     this.onSwitchChanged,
+    this.hideNativeIOS26Switch = false,
     this.onTap,
     this.trailingIcon,
     this.phoneTrailingIcon,
@@ -80,6 +85,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     bool enabled = true,
     required bool value,
     required material.ValueChanged<bool> onChanged,
+    bool hideNativeIOS26Switch = false,
   }) {
     return AdaptiveSettingsTile<T>._(
       key: key,
@@ -91,6 +97,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       type: SettingsItemType.toggle,
       switchValue: value,
       onSwitchChanged: onChanged,
+      hideNativeIOS26Switch: hideNativeIOS26Switch,
     );
   }
 
@@ -214,6 +221,10 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   final material.GlobalKey? dropdownKey;
   final bool? switchValue;
   final material.ValueChanged<bool>? onSwitchChanged;
+
+  /// Removes the native UIKit switch on iOS 26 while preserving its layout.
+  /// Other platforms and iOS versions continue to render the switch normally.
+  final bool hideNativeIOS26Switch;
   final material.VoidCallback? onTap;
   final material.IconData? trailingIcon;
   final material.IconData? phoneTrailingIcon;
@@ -304,15 +315,19 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         );
       case SettingsItemType.toggle:
         final value = switchValue ?? false;
+        final hideSwitch =
+            hideNativeIOS26Switch && usesNativeIOS26SettingsControls;
         return CupertinoSettingsTile(
           leading: _buildPhoneLeading(context),
           title: material.Text(title),
           subtitle: _buildPhoneSubtitle(),
-          trailing: AdaptiveSwitch(
-            value: value,
-            onChanged: enabled ? onSwitchChanged : null,
-          ),
-          onTap: enabled && onSwitchChanged != null
+          trailing: hideSwitch
+              ? const material.SizedBox(width: 51, height: 31)
+              : AdaptiveSwitch(
+                  value: value,
+                  onChanged: enabled ? onSwitchChanged : null,
+                ),
+          onTap: !hideSwitch && enabled && onSwitchChanged != null
               ? () => onSwitchChanged!(!value)
               : null,
           backgroundColor: backgroundColor,
