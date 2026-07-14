@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import '../player_abstraction/player_factory.dart';
@@ -115,10 +116,6 @@ enum SubtitleStyleOverrideMode { auto, none, scale, force }
 enum SubtitleAlignX { left, center, right }
 
 enum SubtitleAlignY { top, center, bottom }
-
-enum DanmakuOutlineStyle { none, stroke, uniform }
-
-enum DanmakuShadowStyle { none, soft, medium, strong }
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -257,8 +254,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _instantHidePlayerUiEnabledKey =
       'instant_hide_player_ui_enabled';
   bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
-  final String _playerTopSendDanmakuButtonVisibleKey =
-      'player_top_send_danmaku_button_visible';
   final String _playerTopSkipButtonVisibleKey =
       'player_top_skip_button_visible';
   final String _playerTopResizeButtonVisibleKey =
@@ -367,7 +362,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _minimalProgressBarEnabled = false; // 默认关闭
   final String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
-  final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _precacheBufferSizeMbKey = 'player_precache_buffer_size_mb';
   int _precacheBufferSizeMb = PlayerFactory.defaultPrecacheBufferSizeMb;
@@ -406,15 +400,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlayerKernelType? _timelinePreviewPlayerKernel;
   String? _timelinePreviewPlayerSource;
   Future<void> _timelinePreviewSerialTask = Future.value();
-  final String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
-  final String _danmakuVisibleKey = 'danmaku_visible';
   bool _danmakuVisible = true; // 默认显示弹幕
-  final String _mergeDanmakuKey = 'merge_danmaku';
   bool _mergeDanmaku = false; // 默认不合并弹幕
-  final String _danmakuStackingKey = 'danmaku_stacking';
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
-  final String _danmakuRandomColorEnabledKey = 'danmaku_random_color_enabled';
   bool _danmakuRandomColorEnabled = false; // 默认关闭随机染色
 
   final String _anime4kProfileKey = 'anime4k_profile';
@@ -445,19 +434,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   List<String> _crtShaderPaths = const <String>[];
 
   // 弹幕类型屏蔽
-  final String _blockTopDanmakuKey = 'block_top_danmaku';
-  final String _blockBottomDanmakuKey = 'block_bottom_danmaku';
-  final String _blockScrollDanmakuKey = 'block_scroll_danmaku';
   bool _blockTopDanmaku = false; // 默认不屏蔽顶部弹幕
   bool _blockBottomDanmaku = false; // 默认不屏蔽底部弹幕
   bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
 
   // 时间轴告知弹幕轨道状态
-  final String _timelineDanmakuEnabledKey = 'timeline_danmaku_enabled';
   bool _isTimelineDanmakuEnabled = true;
 
   // 弹幕屏蔽词
-  final String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
   List<String> _pluginDanmakuBlockWords = [];
   VoidCallback? _pluginServiceListener;
@@ -465,7 +449,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
 
   // 防剧透模式
-  final String _spoilerPreventionEnabledKey = 'spoiler_prevention_enabled';
   bool _spoilerPreventionEnabled = false;
   bool _isSpoilerDanmakuAnalyzing = false;
   String? _spoilerDanmakuAnalysisHash;
@@ -478,39 +461,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _spoilerDanmakuPendingTargetVideoPath;
 
   // 防剧透 AI 设置
-  final String _spoilerAiUseCustomKeyKey = 'spoiler_ai_use_custom_key';
   bool _spoilerAiUseCustomKey = true; // 兼容旧设置，固定为自定义接口
-  final String _spoilerAiApiFormatKey = 'spoiler_ai_api_format';
   SpoilerAiApiFormat _spoilerAiApiFormat = SpoilerAiApiFormat.openai;
-  final String _spoilerAiApiUrlKey = 'spoiler_ai_api_url';
   String _spoilerAiApiUrl = '';
-  final String _spoilerAiApiKeyKey = 'spoiler_ai_api_key';
   String _spoilerAiApiKey = '';
-  final String _spoilerAiModelKey = 'spoiler_ai_model';
   String _spoilerAiModel = 'gpt-5';
-  final String _spoilerAiTemperatureKey = 'spoiler_ai_temperature';
   double _spoilerAiTemperature = 0.5;
-  final String _spoilerAiDebugPrintResponseKey =
-      'spoiler_ai_debug_print_response';
   bool _spoilerAiDebugPrintResponse = false;
 
   // 弹幕字体大小设置
-  final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
   Timer? _danmakuFontSizePersistenceTimer;
-  final String _danmakuFontFilePathKey = 'danmaku_font_file_path';
   String _danmakuFontFilePath = '';
-  final String _danmakuFontFamilyKey = 'danmaku_font_family';
   String _danmakuFontFamily = '';
-  final String _danmakuOutlineStyleKey = 'danmaku_outline_style';
   DanmakuOutlineStyle _danmakuOutlineStyle = globals.isMobilePlatform
       ? DanmakuOutlineStyle.stroke
       : DanmakuOutlineStyle.uniform;
-  final String _danmakuShadowStyleKey = 'danmaku_shadow_style';
   DanmakuShadowStyle _danmakuShadowStyle = globals.isMobilePlatform
       ? DanmakuShadowStyle.none
       : DanmakuShadowStyle.strong;
-  final String _next2DanmakuOutlineWidthKey = 'next2_danmaku_outline_width';
   double _next2DanmakuOutlineWidth = 1.0;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
@@ -571,22 +540,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
 
   // 弹幕轨道显示区域设置
-  final String _danmakuDisplayAreaKey = 'danmaku_display_area';
   double _danmakuDisplayArea =
       1.0; // 默认全屏显示（0.0=单行，1.0=全屏，0.67=2/3，0.33=1/3，0.25=1/4，0.125=1/8）
 
   // 弹幕速度设置
-  final String _danmakuSpeedMultiplierKey = 'danmaku_speed_multiplier';
   final double _minDanmakuSpeedMultiplier = 0.5;
   final double _maxDanmakuSpeedMultiplier = 2.0;
   final double _baseDanmakuScrollDurationSeconds = 10.0;
   double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
 
   // DFM+ 弹幕轨道间距比例设置
-  final String _danmakuDfmPlusTrackGapKey = 'danmaku_dfm_plus_track_gap';
   double _danmakuDfmPlusTrackGap = 0.15;
 
-  final String _rememberDanmakuOffsetKey = 'remember_danmaku_offset';
   bool _rememberDanmakuOffset = false; // 是否在切换视频时保留手动弹幕偏移
   double _manualDanmakuOffset = 0.0; // 手动设置的弹幕偏移
   double _autoDanmakuOffset = 0.0; // 弹弹Play自动匹配的时间偏移
@@ -795,7 +760,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> _saveDanmakuFontSizePreference(double fontSize) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_danmakuFontSizeKey, fontSize);
+      await prefs.setDouble(SettingsKeys.danmakuFontSize, fontSize);
     } catch (e) {
       debugPrint('[VideoPlayerState] 保存弹幕字号失败: $e');
     }
@@ -951,7 +916,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   int get precacheBufferSizeMb => _precacheBufferSizeMb;
   int get precacheBufferDurationSeconds => _precacheBufferDurationSeconds;
-  double get danmakuOpacity => _danmakuOpacity;
+  double get danmakuOpacity => _danmakuOpacity; // 获取弹幕透明度
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
   double get danmakuFontSize => _danmakuFontSize;

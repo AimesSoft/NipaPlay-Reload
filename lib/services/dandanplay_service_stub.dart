@@ -2389,7 +2389,7 @@ class DandanplayService {
 
   static Future<int> _getDanmakuChConvertFlag() async {
     final prefs = await SharedPreferences.getInstance();
-    final convert = prefs.getBool('danmaku_convert_to_simplified') ?? true;
+    final convert = prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ?? true;
     return convert ? 1 : 0;
   }
 

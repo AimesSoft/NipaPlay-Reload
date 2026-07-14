@@ -26,7 +26,6 @@ enum DanmakuRenderEngine {
 
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
-  static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
   // Default to Next2 where it is supported; fall back to NipaPlay Next on Web.
   static DanmakuRenderEngine _cachedEngine = _defaultEngine;
   static bool _initialized = false;
@@ -86,7 +85,7 @@ class DanmakuKernelFactory {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final engineIndex = prefs.getInt(_danmakuRenderEngineKey);
+      final engineIndex = prefs.getInt(SettingsKeys.danmakuRenderEngine);
       _setEnableNextPlusPlus(
         prefs.getBool(SettingsKeys.danmakuEnableNextPlusPlusEngine) ?? false,
       );
@@ -116,7 +115,7 @@ class DanmakuKernelFactory {
     try {
       final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_danmakuRenderEngineKey, sanitizedEngine.index);
+      await prefs.setInt(SettingsKeys.danmakuRenderEngine, sanitizedEngine.index);
       final oldEngine = _cachedEngine;
       _cachedEngine = sanitizedEngine;
 

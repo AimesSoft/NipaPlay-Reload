@@ -15,8 +15,6 @@ class SettingsProvider with ChangeNotifier {
 
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
-  static const String _danmakuConvertKey = 'danmaku_convert_to_simplified';
-
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
   bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
 
@@ -60,7 +58,7 @@ class SettingsProvider with ChangeNotifier {
     // Load blur power, defaulting to 0.0 if not set (无模糊)
     _blurPower = _prefs.getDouble(_blurPowerKey) ?? _defaultBlur;
     // 当用户仍为“自动语言”且系统为繁中时，首次默认关闭“弹幕转简体”。
-    final savedDanmakuConvert = _prefs.getBool(_danmakuConvertKey);
+    final savedDanmakuConvert = _prefs.getBool(SettingsKeys.danmakuConvertToSimplified);
     if (savedDanmakuConvert != null) {
       _danmakuConvertToSimplified = savedDanmakuConvert;
     } else {
@@ -138,7 +136,7 @@ class SettingsProvider with ChangeNotifier {
   /// Sets the danmaku convert to simplified Chinese setting.
   Future<void> setDanmakuConvertToSimplified(bool enable) async {
     _danmakuConvertToSimplified = enable;
-    await _prefs.setBool(_danmakuConvertKey, _danmakuConvertToSimplified);
+    await _prefs.setBool(SettingsKeys.danmakuConvertToSimplified, _danmakuConvertToSimplified);
     notifyListeners();
   }
 

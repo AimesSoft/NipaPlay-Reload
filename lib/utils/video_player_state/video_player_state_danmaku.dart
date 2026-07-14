@@ -1666,7 +1666,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_timelineDanmakuEnabledKey, enabled);
+      await prefs.setBool(SettingsKeys.timelineDanmakuEnabled, enabled);
     } catch (e) {
       debugPrint('保存时间轴告知开关失败: $e');
     }

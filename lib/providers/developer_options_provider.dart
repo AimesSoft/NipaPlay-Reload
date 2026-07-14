@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/services/certificate_trust_service.dart';
 
@@ -76,22 +77,22 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     );
     
     _showCanvasDanmakuCollisionBoxes = await SettingsStorage.loadBool(
-      'show_canvas_danmaku_collision_boxes',
+      SettingsKeys.showCanvasDanmakuCollisionBoxes,
       defaultValue: false
     );
     
     _showCanvasDanmakuTrackNumbers = await SettingsStorage.loadBool(
-      'show_canvas_danmaku_track_numbers',
+      SettingsKeys.showCanvasDanmakuTrackNumbers,
       defaultValue: false
     );
     
     _showGPUDanmakuCollisionBoxes = await SettingsStorage.loadBool(
-      'show_gpu_danmaku_collision_boxes',
+      SettingsKeys.showGpuDanmakuCollisionBoxes,
       defaultValue: false
     );
     
     _showGPUDanmakuTrackNumbers = await SettingsStorage.loadBool(
-      'show_gpu_danmaku_track_numbers',
+      SettingsKeys.showGpuDanmakuTrackNumbers,
       defaultValue: false
     );
 
@@ -139,7 +140,7 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   Future<void> setShowCanvasDanmakuCollisionBoxes(bool value) async {
     if (_showCanvasDanmakuCollisionBoxes != value) {
       _showCanvasDanmakuCollisionBoxes = value;
-      await SettingsStorage.saveBool('show_canvas_danmaku_collision_boxes', _showCanvasDanmakuCollisionBoxes);
+      await SettingsStorage.saveBool(SettingsKeys.showCanvasDanmakuCollisionBoxes, _showCanvasDanmakuCollisionBoxes);
       notifyListeners();
     }
   }
@@ -148,7 +149,7 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   Future<void> setShowCanvasDanmakuTrackNumbers(bool value) async {
     if (_showCanvasDanmakuTrackNumbers != value) {
       _showCanvasDanmakuTrackNumbers = value;
-      await SettingsStorage.saveBool('show_canvas_danmaku_track_numbers', _showCanvasDanmakuTrackNumbers);
+      await SettingsStorage.saveBool(SettingsKeys.showCanvasDanmakuTrackNumbers, _showCanvasDanmakuTrackNumbers);
       notifyListeners();
     }
   }
@@ -157,7 +158,7 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   Future<void> setShowGPUDanmakuCollisionBoxes(bool value) async {
     if (_showGPUDanmakuCollisionBoxes != value) {
       _showGPUDanmakuCollisionBoxes = value;
-      await SettingsStorage.saveBool('show_gpu_danmaku_collision_boxes', _showGPUDanmakuCollisionBoxes);
+      await SettingsStorage.saveBool(SettingsKeys.showGpuDanmakuCollisionBoxes, _showGPUDanmakuCollisionBoxes);
       notifyListeners();
     }
   }
@@ -166,7 +167,7 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   Future<void> setShowGPUDanmakuTrackNumbers(bool value) async {
     if (_showGPUDanmakuTrackNumbers != value) {
       _showGPUDanmakuTrackNumbers = value;
-      await SettingsStorage.saveBool('show_gpu_danmaku_track_numbers', _showGPUDanmakuTrackNumbers);
+      await SettingsStorage.saveBool(SettingsKeys.showGpuDanmakuTrackNumbers, _showGPUDanmakuTrackNumbers);
       notifyListeners();
     }
   }

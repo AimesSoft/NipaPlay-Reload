@@ -226,7 +226,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 加载顶部弹幕屏蔽设置
   Future<void> _loadBlockTopDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
-    _blockTopDanmaku = prefs.getBool(_blockTopDanmakuKey) ?? false;
+    _blockTopDanmaku = prefs.getBool(SettingsKeys.blockTopDanmaku) ?? false;
     _notifyListeners();
   }
 
@@ -235,7 +235,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockTopDanmaku != block) {
       _blockTopDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_blockTopDanmakuKey, block);
+      await prefs.setBool(SettingsKeys.blockTopDanmaku, block);
       _updateMergedDanmakuList();
     }
   }
@@ -243,7 +243,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 加载底部弹幕屏蔽设置
   Future<void> _loadBlockBottomDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
-    _blockBottomDanmaku = prefs.getBool(_blockBottomDanmakuKey) ?? false;
+    _blockBottomDanmaku = prefs.getBool(SettingsKeys.blockBottomDanmaku) ?? false;
     _notifyListeners();
   }
 
@@ -252,7 +252,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockBottomDanmaku != block) {
       _blockBottomDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_blockBottomDanmakuKey, block);
+      await prefs.setBool(SettingsKeys.blockBottomDanmaku, block);
       _updateMergedDanmakuList();
     }
   }
@@ -260,7 +260,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 加载滚动弹幕屏蔽设置
   Future<void> _loadBlockScrollDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
-    _blockScrollDanmaku = prefs.getBool(_blockScrollDanmakuKey) ?? false;
+    _blockScrollDanmaku = prefs.getBool(SettingsKeys.blockScrollDanmaku) ?? false;
     _notifyListeners();
   }
 
@@ -269,7 +269,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockScrollDanmaku != block) {
       _blockScrollDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_blockScrollDanmakuKey, block);
+      await prefs.setBool(SettingsKeys.blockScrollDanmaku, block);
       _updateMergedDanmakuList();
     }
   }
@@ -277,7 +277,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 加载弹幕屏蔽词列表
   Future<void> _loadDanmakuBlockWords() async {
     final prefs = await SharedPreferences.getInstance();
-    final blockWordsJson = prefs.getString(_danmakuBlockWordsKey);
+    final blockWordsJson = prefs.getString(SettingsKeys.danmakuBlockWords);
     if (blockWordsJson != null && blockWordsJson.isNotEmpty) {
       try {
         final List<dynamic> decodedList = json.decode(blockWordsJson);
@@ -301,7 +301,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _loadSpoilerPreventionEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     _spoilerPreventionEnabled =
-        prefs.getBool(_spoilerPreventionEnabledKey) ?? false;
+        prefs.getBool(SettingsKeys.spoilerPreventionEnabled) ?? false;
     _notifyListeners();
   }
 
@@ -316,7 +316,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _spoilerPreventionEnabled = enabled;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_spoilerPreventionEnabledKey, enabled);
+    await prefs.setBool(SettingsKeys.spoilerPreventionEnabled, enabled);
 
     _isSpoilerDanmakuAnalyzing = false;
     _spoilerDanmakuAnalysisHash = null;
@@ -366,25 +366,25 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
   Future<void> _loadSpoilerAiSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedUseCustomKey = prefs.getBool(_spoilerAiUseCustomKeyKey);
+    final storedUseCustomKey = prefs.getBool(SettingsKeys.spoilerAiUseCustomKey);
     if (storedUseCustomKey != true) {
       _spoilerAiUseCustomKey = true;
-      await prefs.setBool(_spoilerAiUseCustomKeyKey, true);
+      await prefs.setBool(SettingsKeys.spoilerAiUseCustomKey, true);
     } else {
       _spoilerAiUseCustomKey = true;
     }
     _spoilerAiApiFormat =
-        _parseSpoilerAiApiFormat(prefs.getString(_spoilerAiApiFormatKey));
-    _spoilerAiApiUrl = prefs.getString(_spoilerAiApiUrlKey) ?? '';
-    _spoilerAiApiKey = prefs.getString(_spoilerAiApiKeyKey) ?? '';
-    _spoilerAiModel = prefs.getString(_spoilerAiModelKey) ?? 'gpt-5';
-    final temp = prefs.getDouble(_spoilerAiTemperatureKey) ?? 0.5;
+        _parseSpoilerAiApiFormat(prefs.getString(SettingsKeys.spoilerAiApiFormat));
+    _spoilerAiApiUrl = prefs.getString(SettingsKeys.spoilerAiApiUrl) ?? '';
+    _spoilerAiApiKey = prefs.getString(SettingsKeys.spoilerAiApiKey) ?? '';
+    _spoilerAiModel = prefs.getString(SettingsKeys.spoilerAiModel) ?? 'gpt-5';
+    final temp = prefs.getDouble(SettingsKeys.spoilerAiTemperature) ?? 0.5;
     _spoilerAiTemperature = temp.clamp(0.0, 2.0).toDouble();
     _spoilerAiDebugPrintResponse =
-        prefs.getBool(_spoilerAiDebugPrintResponseKey) ?? false;
+        prefs.getBool(SettingsKeys.spoilerAiDebugPrintResponse) ?? false;
     if (_spoilerPreventionEnabled && !spoilerAiConfigReady) {
       _spoilerPreventionEnabled = false;
-      await prefs.setBool(_spoilerPreventionEnabledKey, false);
+      await prefs.setBool(SettingsKeys.spoilerPreventionEnabled, false);
     }
     _notifyListeners();
   }
@@ -404,7 +404,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
     if (useCustomKey != null && _spoilerAiUseCustomKey != true) {
       _spoilerAiUseCustomKey = true;
-      await prefs.setBool(_spoilerAiUseCustomKeyKey, true);
+      await prefs.setBool(SettingsKeys.spoilerAiUseCustomKey, true);
       changed = true;
       shouldRestartAnalysis = true;
     }
@@ -412,7 +412,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (apiFormat != null && _spoilerAiApiFormat != apiFormat) {
       _spoilerAiApiFormat = apiFormat;
       await prefs.setString(
-        _spoilerAiApiFormatKey,
+        SettingsKeys.spoilerAiApiFormat,
         _spoilerAiApiFormatToPrefs(apiFormat),
       );
       changed = true;
@@ -421,21 +421,21 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
     if (apiUrl != null && _spoilerAiApiUrl != apiUrl) {
       _spoilerAiApiUrl = apiUrl;
-      await prefs.setString(_spoilerAiApiUrlKey, apiUrl);
+      await prefs.setString(SettingsKeys.spoilerAiApiUrl, apiUrl);
       changed = true;
       shouldRestartAnalysis = true;
     }
 
     if (apiKey != null && _spoilerAiApiKey != apiKey) {
       _spoilerAiApiKey = apiKey;
-      await prefs.setString(_spoilerAiApiKeyKey, apiKey);
+      await prefs.setString(SettingsKeys.spoilerAiApiKey, apiKey);
       changed = true;
       shouldRestartAnalysis = true;
     }
 
     if (model != null && _spoilerAiModel != model) {
       _spoilerAiModel = model;
-      await prefs.setString(_spoilerAiModelKey, model);
+      await prefs.setString(SettingsKeys.spoilerAiModel, model);
       changed = true;
       shouldRestartAnalysis = true;
     }
@@ -444,7 +444,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       final resolved = temperature.clamp(0.0, 2.0).toDouble();
       if ((_spoilerAiTemperature - resolved).abs() > 0.0001) {
         _spoilerAiTemperature = resolved;
-        await prefs.setDouble(_spoilerAiTemperatureKey, resolved);
+        await prefs.setDouble(SettingsKeys.spoilerAiTemperature, resolved);
         changed = true;
         shouldRestartAnalysis = true;
       }
@@ -453,7 +453,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (debugPrintResponse != null &&
         _spoilerAiDebugPrintResponse != debugPrintResponse) {
       _spoilerAiDebugPrintResponse = debugPrintResponse;
-      await prefs.setBool(_spoilerAiDebugPrintResponseKey, debugPrintResponse);
+      await prefs.setBool(SettingsKeys.spoilerAiDebugPrintResponse, debugPrintResponse);
       changed = true;
     }
 
@@ -522,7 +522,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _saveDanmakuBlockWords() async {
     final prefs = await SharedPreferences.getInstance();
     final blockWordsJson = json.encode(_danmakuBlockWords);
-    await prefs.setString(_danmakuBlockWordsKey, blockWordsJson);
+    await prefs.setString(SettingsKeys.danmakuBlockWords, blockWordsJson);
   }
 
   // 检查是否是正则表达式规则格式: 规则名称/表达式/

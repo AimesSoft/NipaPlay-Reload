@@ -11,6 +11,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class PlayerRemoteControlBridge {

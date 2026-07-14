@@ -5,6 +5,7 @@ import '../player_abstraction/player_factory.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 import '../danmaku_next/next2_platform_support.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'video_player_state.dart';
 import '../models/watch_history_model.dart';
@@ -215,7 +216,7 @@ class PlayerKernelManager {
   /// 获取当前弹幕内核
   static Future<String> getCurrentDanmakuKernel() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('danmaku_kernel') ??
+    return prefs.getString(SettingsKeys.legacyDanmakuKernel) ??
         (Next2PlatformSupport.isKernelSupported
             ? 'NipaPlay Next2'
             : 'NipaPlay Next');
@@ -224,7 +225,7 @@ class PlayerKernelManager {
   /// 设置弹幕内核
   static Future<void> setDanmakuKernel(String kernel) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('danmaku_kernel', kernel);
+    await prefs.setString(SettingsKeys.legacyDanmakuKernel, kernel);
 
     // 转换为枚举值
     DanmakuRenderEngine engine;

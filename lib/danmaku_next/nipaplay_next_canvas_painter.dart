@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/danmaku/style.dart';
 
 import 'nipaplay_next_engine.dart';
 

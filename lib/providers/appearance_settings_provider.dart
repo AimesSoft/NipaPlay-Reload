@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart' show TextOverflow;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -31,7 +32,6 @@ enum FolderNameDisplayMode {
 class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
   static const String _animeCardActionKey = 'anime_card_action';
-  static const String _showDanmakuDensityKey = 'show_danmaku_density_chart';
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
@@ -111,7 +111,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_widgetBlurEffectKey, false);
-      _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityKey) ?? true;
+      _showDanmakuDensityChart = prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       _accentColorPreset = AppAccentColorPreset.fromStorageKey(
         prefs.getString(_accentColorPresetKey),
@@ -199,7 +199,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showDanmakuDensityKey, value);
+      await prefs.setBool(SettingsKeys.showDanmakuDensityChart, value);
     } catch (e) {
       debugPrint('保存弹幕密度图设置时出错: $e');
     }

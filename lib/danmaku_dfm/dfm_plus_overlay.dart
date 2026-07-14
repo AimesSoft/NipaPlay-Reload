@@ -5,7 +5,7 @@ import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:provider/provider.dart';
 
 import 'dfm_plus_layout_bridge.dart';

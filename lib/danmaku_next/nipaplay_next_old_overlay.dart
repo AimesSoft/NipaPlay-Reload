@@ -15,7 +15,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_old_canvas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_old_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/danmaku/style.dart';
 
 const Locale _danmakuOldLocale = Locale.fromSubtags(
   languageCode: 'zh',
