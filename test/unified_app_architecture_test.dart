@@ -1655,6 +1655,57 @@ void main() {
     expect(find.byType(ElevatedButton), findsNothing);
   });
 
+  testWidgets('phone settings tiles only hide requested switches on iOS 26',
+      (tester) async {
+    Widget buildTile() {
+      return CupertinoApp(
+        home: AdaptiveSettingsScope(
+          style: AdaptiveSettingsStyle.phone,
+          child: AdaptiveSettingsTile.toggle(
+            title: 'Toggle',
+            value: true,
+            onChanged: (_) {},
+            hideNativeIOS26Switch: true,
+          ),
+        ),
+      );
+    }
+
+    PlatformInfo.setPlatformOverride(PlatformOverride.ios, iosVersion: 26);
+    addTearDown(PlatformInfo.clearPlatformOverride);
+
+    await tester.pumpWidget(buildTile());
+
+    expect(find.byType(AdaptiveSwitch), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SizedBox && widget.width == 51 && widget.height == 31,
+      ),
+      findsOneWidget,
+    );
+
+    PlatformInfo.setPlatformOverride(PlatformOverride.ios, iosVersion: 18);
+    await tester.pumpWidget(buildTile());
+
+    expect(find.byType(AdaptiveSwitch), findsOneWidget);
+  });
+
+  test('spoiler AI sheet suppresses every iOS 26 danmaku settings switch', () {
+    final danmaku = File(
+      'lib/settings/pages/danmaku_settings_content.dart',
+    ).readAsStringSync();
+    final toggleCount =
+        RegExp(r'AdaptiveSettingsTile\.toggle\(').allMatches(danmaku).length;
+    final guardedToggleCount =
+        RegExp(r'hideNativeIOS26Switch:').allMatches(danmaku).length;
+
+    expect(toggleCount, greaterThan(0));
+    expect(guardedToggleCount, toggleCount);
+    expect(danmaku, contains('usesNativeIOS26SettingsControls'));
+    expect(danmaku, contains('await WidgetsBinding.instance.endOfFrame;'));
+  });
+
   test('iOS 26 native controls have one liquid-glass fallback layer', () {
     final bridge = File(
       'lib/themes/cupertino/cupertino_adaptive_platform_ui.dart',
