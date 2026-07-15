@@ -109,7 +109,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     // 订阅播放器内核切换事件
     _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
       debugPrint('[VideoPlayerState] 收到播放器内核切换事件，执行热切换');
-      PlayerKernelManager.performPlayerKernelHotSwap(this);
+      _requestPlayerKernelHotSwap();
     });
 
     // 订阅弹幕内核切换事件
@@ -118,6 +118,48 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       debugPrint('[VideoPlayerState] 收到弹幕内核切换事件: $newKernel');
       PlayerKernelManager.performDanmakuKernelHotSwap(this, newKernel);
     });
+  }
+
+  void _requestPlayerKernelHotSwap() {
+    if (_isDisposed) {
+      return;
+    }
+    _playerKernelSwapRequested++;
+    _startPlayerKernelHotSwapDrain();
+  }
+
+  void _startPlayerKernelHotSwapDrain() {
+    if (_isDisposed || _playerKernelSwapDrain != null) {
+      return;
+    }
+    final drain = _drainPlayerKernelHotSwaps();
+    _playerKernelSwapDrain = drain;
+    unawaited(drain);
+  }
+
+  Future<void> _drainPlayerKernelHotSwaps() async {
+    try {
+      while (!_isDisposed &&
+          _playerKernelSwapApplied < _playerKernelSwapRequested) {
+        final targetGeneration = _playerKernelSwapRequested;
+        try {
+          await PlayerKernelManager.performPlayerKernelHotSwap(this);
+        } catch (error, stackTrace) {
+          debugPrint(
+            '[VideoPlayerState] Player hot swap failed '
+            'generation=$targetGeneration: $error\n$stackTrace',
+          );
+        } finally {
+          _playerKernelSwapApplied = targetGeneration;
+        }
+      }
+    } finally {
+      _playerKernelSwapDrain = null;
+      if (!_isDisposed &&
+          _playerKernelSwapApplied < _playerKernelSwapRequested) {
+        _startPlayerKernelHotSwapDrain();
+      }
+    }
   }
 
   Future<void> _loadInitialBrightness() async {

@@ -424,7 +424,7 @@ class _NipaplayErikaWindowOverlayVideoViewState
   }
 }
 
-class ErikaPlayerAdapter implements AbstractPlayer {
+class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   ErikaPlayerAdapter() {
     if (_isSupported) {
       _eventSubscription = _player.events.listen(
@@ -447,6 +447,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   final Map<String, String> _properties = <String, String>{};
 
   StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
+  Future<void>? _disposeFuture;
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   String _media = '';
@@ -672,8 +673,18 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
   @override
   void dispose() {
-    if (_disposed) {
-      return;
+    unawaited(
+      disposeAsync().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Erika: asynchronous dispose failed: $error');
+      }),
+    );
+  }
+
+  @override
+  Future<void> disposeAsync() {
+    final existing = _disposeFuture;
+    if (existing != null) {
+      return existing;
     }
     _disposed = true;
     _danmakuConfigTimer?.cancel();
@@ -685,10 +696,20 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
     _pendingDanmakuConfigCompleters.clear();
     _pendingDanmakuConfig = null;
-    unawaited(_eventSubscription?.cancel());
+    final eventSubscription = _eventSubscription;
     _eventSubscription = null;
-    unawaited(_player.dispose());
     _textureIdNotifier.dispose();
+    return _disposeFuture = _finishDispose(eventSubscription);
+  }
+
+  Future<void> _finishDispose(
+    StreamSubscription<ErikaPlayerEvent>? eventSubscription,
+  ) async {
+    try {
+      await eventSubscription?.cancel();
+    } finally {
+      await _player.dispose();
+    }
   }
 
   @override
@@ -1233,6 +1254,9 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   }
 
   void _handleEvent(ErikaPlayerEvent event) {
+    if (_disposed) {
+      return;
+    }
     if (event.kind == ErikaEventKind.error) {
       final errorMessage = _formatPlaybackError(event);
       _mediaInfo = _mediaInfo.copyWith(specificErrorMessage: errorMessage);

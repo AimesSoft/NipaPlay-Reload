@@ -1,8 +1,7 @@
 // Export all necessary enums, data models, and the abstract interface
 export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
 export './player_data_models.dart';
-export './abstract_player.dart'
-    show AbstractPlayer; // Export only AbstractPlayer type
+export './abstract_player.dart' show AbstractPlayer, AsyncDisposablePlayer;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 
@@ -131,6 +130,15 @@ class Player {
   void seek({required int position}) => _delegate.seek(position: position);
 
   void dispose() => _delegate.dispose();
+
+  Future<void> disposeAsync() async {
+    final delegate = _delegate;
+    if (delegate is core_player.AsyncDisposablePlayer) {
+      await (delegate as core_player.AsyncDisposablePlayer).disposeAsync();
+      return;
+    }
+    delegate.dispose();
+  }
 
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) =>
       _delegate.snapshot(width: width, height: height);
