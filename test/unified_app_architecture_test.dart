@@ -50,6 +50,8 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+String _portablePath(String path) => path.replaceAll('\\', '/');
+
 void main() {
   group('unified application pages', () {
     testWidgets('application chrome inherits the selected display surface',
@@ -528,7 +530,7 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'))
         .where(
-          (file) => !file.path.endsWith(
+          (file) => !_portablePath(file.path).endsWith(
             'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
           ),
         );
