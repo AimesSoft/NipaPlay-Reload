@@ -548,17 +548,30 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     }
     switch (value) {
       case PlayerPlaybackState.playing:
-        unawaited(playDirectly());
+        _dispatchStateCommand('play', playDirectly);
         break;
       case PlayerPlaybackState.paused:
-        unawaited(pauseDirectly());
+        _dispatchStateCommand('pause', pauseDirectly);
         break;
       case PlayerPlaybackState.stopped:
         _state = PlayerPlaybackState.stopped;
         _lastPositionMs = 0;
-        unawaited(_player.stop());
+        _dispatchStateCommand('stop', _player.stop);
         break;
     }
+  }
+
+  void _dispatchStateCommand(
+    String operation,
+    Future<void> Function() command,
+  ) {
+    unawaited(
+      command().catchError((Object error, StackTrace stackTrace) {
+        final message = '$operation failed: $error';
+        _lastNativeError = message;
+        debugPrint('[Erika] $message');
+      }),
+    );
   }
 
   @override
@@ -834,9 +847,21 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   @override
   Future<void> pauseDirectly() async {
     _ensureSupported();
+    if (_state != PlayerPlaybackState.playing) {
+      return;
+    }
     await _player.ensureCreated();
     _lastPositionMs = position;
-    await _player.pause();
+    try {
+      await _player.pause();
+    } catch (error) {
+      if (_state == PlayerPlaybackState.stopped) {
+        debugPrint(
+            '[Erika] pause ignored after native playback stopped: $error');
+        return;
+      }
+      rethrow;
+    }
     _state = PlayerPlaybackState.paused;
     _lastPositionUpdate = DateTime.now();
   }
