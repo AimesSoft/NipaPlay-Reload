@@ -5,6 +5,7 @@ export './abstract_player.dart' show AbstractPlayer, AsyncDisposablePlayer;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 
+import 'dart:async';
 import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart'; // For ValueListenable, used in AbstractPlayer
@@ -33,6 +34,8 @@ enum MediaType { unknown, video, audio, subtitle }
 /// obtained from the `PlayerFactory`.
 class Player {
   final core_player.AbstractPlayer _delegate;
+  Future<void>? _disposeFuture;
+  bool _disposeErrorHandlerAttached = false;
 
   /// Factory constructor that allows `Player()` to be called.
   /// This is what `VideoPlayerState` will use, e.g., `Player player = Player();`.
@@ -40,6 +43,9 @@ class Player {
     // PlayerFactory 会自动从 SharedPreferences 读取播放器内核设置
     return Player._internal(PlayerFactory().createPlayer());
   }
+
+  @visibleForTesting
+  Player.withDelegate(this._delegate);
 
   // Private internal constructor
   Player._internal(this._delegate);
@@ -129,15 +135,53 @@ class Player {
 
   void seek({required int position}) => _delegate.seek(position: position);
 
-  void dispose() => _delegate.dispose();
-
-  Future<void> disposeAsync() async {
-    final delegate = _delegate;
-    if (delegate is core_player.AsyncDisposablePlayer) {
-      await (delegate as core_player.AsyncDisposablePlayer).disposeAsync();
+  void dispose() {
+    final future = _startDispose();
+    if (_disposeErrorHandlerAttached) {
       return;
     }
-    delegate.dispose();
+    _disposeErrorHandlerAttached = true;
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          debugPrint('[Player] asynchronous disposal failed: $error');
+        },
+      ),
+    );
+  }
+
+  Future<void> disposeAsync() => _startDispose();
+
+  Future<void> _startDispose() {
+    final existing = _disposeFuture;
+    if (existing != null) {
+      return existing;
+    }
+
+    // Publish the future before calling the delegate so a re-entrant or
+    // concurrent dispose call observes the same teardown operation.
+    final completer = Completer<void>();
+    _disposeFuture = completer.future;
+    final delegate = _delegate;
+    try {
+      if (delegate is core_player.AsyncDisposablePlayer) {
+        (delegate as core_player.AsyncDisposablePlayer)
+            .disposeAsync()
+            .then<void>(
+          (_) => completer.complete(),
+          onError: (Object error, StackTrace stackTrace) {
+            completer.completeError(error, stackTrace);
+          },
+        );
+      } else {
+        delegate.dispose();
+        completer.complete();
+      }
+    } catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
+    }
+    return completer.future;
   }
 
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) =>

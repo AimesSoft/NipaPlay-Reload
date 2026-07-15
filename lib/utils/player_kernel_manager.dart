@@ -13,9 +13,14 @@ import '../models/watch_history_model.dart';
 /// 播放器内核管理器
 /// 提供多内核支持的静态工具方法
 class PlayerKernelManager {
+  static const Duration defaultHotSwapPlayerDisposalTimeout =
+      Duration(seconds: 5);
+
   /// 为VideoPlayerState执行播放器内核热切换
   static Future<void> performPlayerKernelHotSwap(
-      VideoPlayerState videoPlayerState) async {
+    VideoPlayerState videoPlayerState, {
+    Duration playerDisposalTimeout = defaultHotSwapPlayerDisposalTimeout,
+  }) async {
     if (videoPlayerState.isDisposed) {
       return;
     }
@@ -45,7 +50,10 @@ class PlayerKernelManager {
     if (currentPath == null) {
       debugPrint('[PlayerKernelManager] 没有正在播放的视频，仅创建新播放器实例');
       // 如果没有视频在播放，只需要创建一个新的播放器实例以备后用
-      await _disposePlayerForHotSwap(previousPlayer);
+      await _disposePlayerForHotSwap(
+        previousPlayer,
+        timeout: playerDisposalTimeout,
+      );
       if (videoPlayerState.isDisposed) {
         return;
       }
@@ -66,7 +74,10 @@ class PlayerKernelManager {
 
     // 2. 释放旧播放器资源
     await videoPlayerState.resetPlayer();
-    await _disposePlayerForHotSwap(previousPlayer);
+    await _disposePlayerForHotSwap(
+      previousPlayer,
+      timeout: playerDisposalTimeout,
+    );
     if (videoPlayerState.isDisposed) {
       return;
     }
@@ -120,14 +131,40 @@ class PlayerKernelManager {
     }
   }
 
-  static Future<void> _disposePlayerForHotSwap(Player player) async {
+  static Future<void> _disposePlayerForHotSwap(
+    Player player, {
+    required Duration timeout,
+  }) async {
+    final kernelName = player.getPlayerKernelName();
+    debugPrint(
+      '[PlayerKernelManager] Waiting for old player teardown before hot swap: '
+      'kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
+    );
     try {
-      await player.disposeAsync();
+      await player.disposeAsync().timeout(timeout);
+      debugPrint(
+        '[PlayerKernelManager] Old player teardown completed: '
+        'kernel=$kernelName',
+      );
+    } on TimeoutException catch (_, stackTrace) {
+      final error = TimeoutException(
+        'Old player teardown timed out after ${timeout.inMilliseconds}ms; '
+        'replacement creation was aborted to avoid overlapping resources.',
+        timeout,
+      );
+      debugPrint(
+        '[PlayerKernelManager] Native/backend player teardown timed out; '
+        'replacement creation aborted: kernel=$kernelName '
+        'timeoutMs=${timeout.inMilliseconds}\n$stackTrace',
+      );
+      Error.throwWithStackTrace(error, stackTrace);
     } catch (error, stackTrace) {
       debugPrint(
-        '[PlayerKernelManager] Native player disposal failed during hot swap: '
+        '[PlayerKernelManager] Native/backend player teardown failed; '
+        'replacement creation aborted: kernel=$kernelName '
         '$error\n$stackTrace',
       );
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 

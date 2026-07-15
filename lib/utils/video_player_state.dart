@@ -1583,33 +1583,42 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowEvent(String eventName) {
     if (eventName == 'enter-full-screen' || eventName == 'leave-full-screen') {
-      windowManager.isFullScreen().then((isFullscreen) {
-        if (isFullscreen != _isFullscreen) {
-          _isFullscreen = isFullscreen;
-          notifyListeners();
-        }
-      });
+      unawaited(_refreshFullscreenStateFromWindowManager());
     }
   }
 
   @override
   void onWindowEnterFullScreen() {
-    windowManager.isFullScreen().then((isFullscreen) {
-      if (isFullscreen != _isFullscreen) {
-        _isFullscreen = isFullscreen;
-        notifyListeners();
-      }
-    });
+    unawaited(_refreshFullscreenStateFromWindowManager());
   }
 
   @override
   void onWindowLeaveFullScreen() {
-    windowManager.isFullScreen().then((isFullscreen) {
-      if (!isFullscreen && _isFullscreen) {
-        _isFullscreen = false;
-        notifyListeners();
+    unawaited(
+      _refreshFullscreenStateFromWindowManager(onlyHandleExit: true),
+    );
+  }
+
+  Future<void> _refreshFullscreenStateFromWindowManager({
+    bool onlyHandleExit = false,
+  }) async {
+    try {
+      final isFullscreen = await windowManager.isFullScreen();
+      if (_isDisposed || (onlyHandleExit && isFullscreen)) {
+        return;
       }
-    });
+      if (isFullscreen != _isFullscreen) {
+        _isFullscreen = isFullscreen;
+        _notifyListeners();
+      }
+    } catch (error, stackTrace) {
+      if (!_isDisposed) {
+        debugPrint(
+          '[VideoPlayerState] Failed to refresh desktop fullscreen state: '
+          '$error\n$stackTrace',
+        );
+      }
+    }
   }
 
   @override
