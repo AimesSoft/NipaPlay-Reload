@@ -386,13 +386,15 @@ void main() {
       ).existsSync(),
       isFalse,
     );
-    expect(
-      Directory('lib/themes/cupertino/pages/network_media')
-          .listSync()
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.dart')),
-      isEmpty,
-    );
+    final legacyNetworkMediaDirectory =
+        Directory('lib/themes/cupertino/pages/network_media');
+    final legacyNetworkMediaPages = legacyNetworkMediaDirectory.existsSync()
+        ? legacyNetworkMediaDirectory
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))
+        : const <File>[];
+    expect(legacyNetworkMediaPages, isEmpty);
     final appRegistry =
         File('lib/app/adaptive_app_page_content.dart').readAsStringSync();
     expect(appRegistry, isNot(contains('forSurface')));
