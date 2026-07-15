@@ -9,6 +9,7 @@ import 'subtitle_parser.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/subtitle_language_utils.dart';
 
@@ -877,6 +878,9 @@ class SubtitleManager extends ChangeNotifier {
   Future<void> autoDetectAndLoadSubtitle(String videoPath) async {
     if (kIsWeb) {
       debugPrint('SubtitleManager: Web平台跳过自动检测字幕文件');
+      return;
+    }
+    if (MediaSourceUtils.isContentUri(videoPath)) {
       return;
     }
     try {
