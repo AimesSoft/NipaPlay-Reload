@@ -13,13 +13,14 @@ class SettingsKeys {
 
   static const String danmakuAutoLoadStrategy = 'danmaku_auto_load_strategy';
 
-  static const String useExternalPlayer = 'external_player_enabled';
 
-  static const String externalPlayerPath = 'external_player_path';
+  // =========================== 外部播放器相关设置 ============================
 
-  /// 外部播放器弹幕外挂开关（ASS 字幕注入）。
-  static const String externalPlayerDanmakuOverlay =
-      'external_player_danmaku_overlay';
+  static const String useExternalPlayer                        = 'external_player_enabled';                        // 是否启用外部播放器
+  static const String externalPlayerPath                       = 'external_player_path';                           // 外部播放器路径
+  static const String externalPlayerDanmakuOverlay             = 'external_player_danmaku_overlay';                // 外部播放器弹幕外挂开关 (ASS 字幕注入)
+  static const String externalPlayerAutoSwitchToDanmakuConsole = 'external_player_auto_switch_to_danmaku_console'; // 启动外部播放器后自动切换到弹幕控制台
+
 
   /// 自定义播放器请求视频的 User-Agent（空字符串 = 用内核默认 UA）。
   static const String customPlayerUA = 'custom_player_ua';

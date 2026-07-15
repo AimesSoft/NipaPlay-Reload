@@ -24,9 +24,9 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                     ? const _EmptyConsole()
                     : _ConsoleCard(
                         session: session,
-                        progress: service.progress,
-                        isPaused: service.isPaused,
-                        isSendingPauseCommand: service.isSendingPauseCommand,
+                        isPaused: session.isPaused ?? false,
+                        danmakuOpacity: session.danmakuOpacity ?? 1.0,
+                        supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                       ),
               ),
             ),
@@ -76,15 +76,15 @@ class _EmptyConsole extends StatelessWidget {
 class _ConsoleCard extends StatelessWidget {
   const _ConsoleCard({
     required this.session,
-    required this.progress,
     required this.isPaused,
-    required this.isSendingPauseCommand,
+    required this.danmakuOpacity,
+    required this.supportsDanmakuOpacity,
   });
 
   final ExternalPlayerSession session;
-  final ExternalPlayerPlaybackProgress? progress;
   final bool isPaused;
-  final bool isSendingPauseCommand;
+  final double danmakuOpacity;
+  final bool supportsDanmakuOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +149,8 @@ class _ConsoleCard extends StatelessWidget {
             const SizedBox(height: 20),
             _buildProgress(context),
             const SizedBox(height: 20),
+            _buildDanmakuOpacity(context),
+            const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerRight,
               child: Wrap(
@@ -156,9 +158,9 @@ class _ConsoleCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   FilledButton.tonalIcon(
-                    onPressed: session.ipcPath == null || isSendingPauseCommand
+                    onPressed: session.ipcPath == null
                         ? null
-                        : ExternalPlayerConsoleService.instance.togglePause,
+                        : ExternalPlayerConsoleService.togglePause,
                     icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
                     label: Text(
                       isPaused
@@ -167,8 +169,8 @@ class _ConsoleCard extends StatelessWidget {
                     ),
                   ),
                   FilledButton.icon(
-                    onPressed: ExternalPlayerConsoleService
-                        .instance.closePlayerAndConsole,
+                    onPressed:
+                        ExternalPlayerConsoleService.closePlayerAndConsole,
                     icon: const Icon(Icons.close),
                     label: Text(localizations.externalPlayerConsoleClose),
                   ),
@@ -212,13 +214,14 @@ class _ConsoleCard extends StatelessWidget {
     final theme = Theme.of(context);
     final localizations = context.l10n;
     final supportsProgress = session.ipcPath != null;
-    final current = progress;
+    final hasProgress =
+        session.position != null && session.duration > Duration.zero;
     final progressText = !supportsProgress
         ? localizations.externalPlayerConsoleProgressUnsupported
-        : current == null
+        : !hasProgress
             ? localizations.externalPlayerConsoleProgressLoading
-            : '${_formatDuration(current.position)} / '
-                '${_formatDuration(current.duration)}';
+            : '${_formatDuration(session.position!)} / '
+                '${_formatDuration(session.duration)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +232,7 @@ class _ConsoleCard extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         LinearProgressIndicator(
-          value: supportsProgress ? current?.fraction : 0,
+          value: supportsProgress ? session.fraction : 0,
           minHeight: 6,
           borderRadius: BorderRadius.circular(3),
         ),
@@ -239,6 +242,42 @@ class _ConsoleCard extends StatelessWidget {
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDanmakuOpacity(BuildContext context) {
+    final theme = Theme.of(context);
+    final localizations = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                localizations.danmakuOpacityTitle,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              '${(danmakuOpacity * 100).round()}%',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: danmakuOpacity,
+          min: 0,
+          max: 1,
+          divisions: 100,
+          label: '${(danmakuOpacity * 100).round()}%',
+          onChanged: supportsDanmakuOpacity
+              ? ExternalPlayerConsoleService.setDanmakuOpacity
+              : null,
         ),
       ],
     );

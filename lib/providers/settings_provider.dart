@@ -27,6 +27,7 @@ class SettingsProvider with ChangeNotifier {
   bool _useExternalPlayer = false;
   String _externalPlayerPath = '';
   bool _externalPlayerDanmakuOverlay = true; // 弹幕外挂默认开启
+  bool _externalPlayerAutoSwitchToDanmakuConsole = true;
 
   // GitHub 代理设置
   String _githubProxyUrl = '';
@@ -46,6 +47,7 @@ class SettingsProvider with ChangeNotifier {
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
   bool get externalPlayerDanmakuOverlay => _externalPlayerDanmakuOverlay;
+  bool get externalPlayerAutoSwitchToDanmakuConsole => _externalPlayerAutoSwitchToDanmakuConsole;
   String get githubProxyUrl => _githubProxyUrl;
   double get danmakuSupersample => _danmakuSupersample;
 
@@ -93,6 +95,7 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
     _externalPlayerDanmakuOverlay =
         _prefs.getBool(SettingsKeys.externalPlayerDanmakuOverlay) ?? true;
+    _externalPlayerAutoSwitchToDanmakuConsole = _prefs.getBool(SettingsKeys.externalPlayerAutoSwitchToDanmakuConsole) ?? true;
     _githubProxyUrl =
         _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
     // 弹幕超采样：默认对平板和低 DPR 桌面设备开启 2x
@@ -208,6 +211,19 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.externalPlayerDanmakuOverlay,
       _externalPlayerDanmakuOverlay,
     );
+    notifyListeners();
+  }
+
+  Future<void> setExternalPlayerAutoSwitchToDanmakuConsole(bool enable) async {
+
+    if   ( _externalPlayerAutoSwitchToDanmakuConsole == enable) { return; }
+    else { _externalPlayerAutoSwitchToDanmakuConsole =  enable; }
+
+    await _prefs.setBool(
+      SettingsKeys.externalPlayerAutoSwitchToDanmakuConsole,
+      _externalPlayerAutoSwitchToDanmakuConsole,
+    );
+
     notifyListeners();
   }
 

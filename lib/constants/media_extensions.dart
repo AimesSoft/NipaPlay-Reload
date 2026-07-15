@@ -26,3 +26,14 @@ const Set<String> fontExtensions = {
   '.otf',
   '.ttc',
 };
+
+
+/// 外部播放器类型,
+/// 决定弹幕 ASS 字幕的注入参数
+enum ExternalPlayerType {
+  mpv,
+  mpvNet,
+  potPlayer,
+  vlc,
+  generic,
+}
