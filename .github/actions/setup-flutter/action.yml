@@ -27,7 +27,10 @@ runs:
       with:
         path: |
           ~/.fvm
-          ~/.pub-cache
+          ~/.pub-cache/bin
+          ~/.pub-cache/git/cache
+          ~/.pub-cache/global_packages
+          ~/.pub-cache/hosted
         key: ${{ runner.os }}-fvm-${{ hashFiles('.fvmrc') }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v1
         restore-keys: |
           ${{ runner.os }}-fvm-
@@ -38,7 +41,10 @@ runs:
       with:
         path: |
           ${{ env.USERPROFILE }}\.fvm
-          ${{ env.LOCALAPPDATA }}\Pub\Cache
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\bin
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\git\cache
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\global_packages
+          ${{ env.LOCALAPPDATA }}\Pub\Cache\hosted
         key: ${{ runner.os }}-fvm-${{ hashFiles('.fvmrc') }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v1
         restore-keys: |
           ${{ runner.os }}-fvm-
@@ -130,14 +136,27 @@ runs:
           exit 1
         fi
 
-        ERIKA_REF="${ERIKA_REF:-main}"
-        ERIKA_REMOTE="https://github.com/AimesSoft/Erika.git"
-        ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/heads/${ERIKA_REF}" | awk '{print $1}')"
-        if [ -z "${ERIKA_SHA}" ]; then
-          ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}^{}" | awk '{print $1}')"
+        CONFIGURED_ERIKA_REF="$(awk '
+          /^  erika_flutter:/ {in_erika=1; next}
+          in_erika && /^      ref:/ {print $2; exit}
+          in_erika && /^  [^ ]/ {exit}
+        ' pubspec.yaml)"
+        ERIKA_REF="${ERIKA_REF:-${CONFIGURED_ERIKA_REF}}"
+        if [ -z "${ERIKA_REF}" ]; then
+          echo "Unable to resolve the Erika ref from pubspec.yaml."
+          exit 1
         fi
-        if [ -z "${ERIKA_SHA}" ]; then
-          ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}" | awk '{print $1}')"
+        ERIKA_REMOTE="https://github.com/AimesSoft/Erika.git"
+        if [[ "${ERIKA_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          ERIKA_SHA="$(printf '%s' "${ERIKA_REF}" | tr '[:upper:]' '[:lower:]')"
+        else
+          ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/heads/${ERIKA_REF}" | awk '{print $1}')"
+          if [ -z "${ERIKA_SHA}" ]; then
+            ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}^{}" | awk '{print $1}')"
+          fi
+          if [ -z "${ERIKA_SHA}" ]; then
+            ERIKA_SHA="$(git ls-remote "${ERIKA_REMOTE}" "refs/tags/${ERIKA_REF}" | awk '{print $1}')"
+          fi
         fi
         if [ -z "${ERIKA_SHA}" ]; then
           echo "❌ 无法解析 Erika ref: ${ERIKA_REF}。"
