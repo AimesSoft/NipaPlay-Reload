@@ -469,6 +469,7 @@ class AdaptiveAlertDialog {
         oneTimeCode: oneTimeCode,
       );
     }
+    final navigator = Navigator.of(context, rootNavigator: true);
     await GlassDialog.show<void>(
       context: context,
       title: title,
@@ -480,7 +481,7 @@ class AdaptiveAlertDialog {
         iconColor: iconColor,
         oneTimeCode: oneTimeCode,
       ),
-      actions: _glassActions<void>(context, actions),
+      actions: _glassActions<void>(navigator, actions),
     );
   }
 
@@ -508,6 +509,7 @@ class AdaptiveAlertDialog {
       );
     }
 
+    final navigator = Navigator.of(context, rootNavigator: true);
     final controller = TextEditingController(text: input.initialValue);
     try {
       return await GlassDialog.show<String?>(
@@ -538,7 +540,7 @@ class AdaptiveAlertDialog {
           ],
         ),
         actions: _glassActions<String?>(
-          context,
+          navigator,
           actions,
           resultForAction: (action) {
             if (action.style == platform_ui.AlertActionStyle.cancel) {
@@ -586,7 +588,7 @@ class AdaptiveAlertDialog {
   }
 
   static List<GlassDialogAction> _glassActions<T>(
-    BuildContext context,
+    NavigatorState navigator,
     List<platform_ui.AlertAction> actions, {
     T Function(platform_ui.AlertAction action)? resultForAction,
   }) {
@@ -599,7 +601,8 @@ class AdaptiveAlertDialog {
               action.style == platform_ui.AlertActionStyle.destructive,
           onPressed: action.enabled
               ? () {
-                  Navigator.of(context).pop<T>(resultForAction?.call(action));
+                  if (!navigator.mounted) return;
+                  navigator.pop<T>(resultForAction?.call(action));
                   action.onPressed();
                 }
               : _noop,
