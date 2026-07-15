@@ -81,6 +81,20 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     }
   }
 
+  Map<String, dynamic> _detailedInfoFor(VideoPlayerState videoState) {
+    final live = videoState.player.getDetailedMediaInfo();
+    final snapshot = _asyncDetailedInfo;
+    if (snapshot == null) {
+      return live;
+    }
+    if (!_isErikaKernel) {
+      return snapshot;
+    }
+    // The async snapshot refreshes presenter/output data. Runtime decoder,
+    // audio recovery, and error events continue updating the live adapter.
+    return <String, dynamic>{...snapshot, ...live};
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -428,8 +442,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       String colorSpace = '未知';
       String decodeMethod = '未知';
 
-      final detailedInfo =
-          _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+      final detailedInfo = _detailedInfoFor(videoState);
       // 使用详细信息（若异步已填充，则优先）
       if (detailedInfo.isNotEmpty) {
         final mpvProps = detailedInfo['mpvProperties'] as Map?;
@@ -499,8 +512,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
   }
 
   List<InfoItem> _getErikaUpscalerInfo(VideoPlayerState videoState) {
-    final detailedInfo =
-        _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+    final detailedInfo = _detailedInfoFor(videoState);
     final rawUpscaler = detailedInfo['upscaler'];
     if (rawUpscaler is! Map) {
       return const <InfoItem>[];
@@ -535,10 +547,21 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     if (!_isErikaKernel) {
       return const <InfoItem>[];
     }
-    final detailedInfo =
-        _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
-    final stats = detailedInfo['presenterStats'];
-    if (stats is! Map || stats.isEmpty) {
+    final detailedInfo = _detailedInfoFor(videoState);
+    final rawStats = detailedInfo['presenterStats'];
+    final stats = rawStats is Map ? rawStats : const <dynamic, dynamic>{};
+    final rawOutput = detailedInfo['outputStatus'];
+    final output = rawOutput is Map ? rawOutput : const <dynamic, dynamic>{};
+    final rawDecoder = detailedInfo['decoder'];
+    final decoder = rawDecoder is Map ? rawDecoder : const <dynamic, dynamic>{};
+    final rawAudio = detailedInfo['audioOutput'];
+    final audio = rawAudio is Map ? rawAudio : const <dynamic, dynamic>{};
+    final lastError = _normalizeText(detailedInfo['lastError']);
+    if (stats.isEmpty &&
+        output.isEmpty &&
+        decoder.isEmpty &&
+        audio.isEmpty &&
+        lastError == null) {
       return const <InfoItem>[];
     }
     final rendered = _toNum(stats['renderedVideoFrames'])?.toInt() ?? 0;
@@ -552,17 +575,61 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     final audioQueued = _toNum(stats['audioClockQueuedFrames'])?.toInt() ?? 0;
     final renderMicros = _toNum(stats['lastRenderMicros'])?.toInt() ?? 0;
     final hdrActive = stats['hdr10OutputActive'] == true;
+    final activeEncoding =
+        _normalizeText(output['activeEncoding']) ?? 'unknown';
+    final surfaceFormat = _normalizeText(output['surfaceFormat']) ?? 'unknown';
+    final outputFallback = _normalizeText(output['fallbackReason']) ?? 'none';
+    final outputFallbackCount = _toNum(output['fallbackCount'])?.toInt() ?? 0;
+    final activeHeadroom = _toNum(output['activeHeadroom'])?.toDouble() ?? 1.0;
+    final decoderBackend =
+        _normalizeText(decoder['activeBackend']) ?? 'unknown';
+    final decoderFallbackCount = _toNum(decoder['fallbackCount'])?.toInt() ?? 0;
+    final decoderReason = _normalizeText(decoder['reason']);
+    final audioState = _normalizeText(audio['recoveryState']) ?? 'unknown';
+    final audioFailures = _toNum(audio['recoveryFailures'])?.toInt() ?? 0;
 
     return [
-      InfoItem('视频帧', 'decoded $decoded / rendered $rendered'),
-      InfoItem('硬解帧', '$hardware', hardware > 0),
-      InfoItem('软解帧', '$software'),
-      InfoItem('零拷贝', '$zeroCopy', zeroCopy > 0),
-      InfoItem('CPU回退', '$cpuFallback', cpuFallback == 0),
-      InfoItem('音频队列', 'queued $audioQueued / underflow $audioUnderflow',
-          audioUnderflow == 0),
-      InfoItem('最近渲染', _formatMicrosAsMs(renderMicros)),
-      InfoItem('HDR10输出', hdrActive ? '开启' : '关闭', hdrActive),
+      if (stats.isNotEmpty) ...[
+        InfoItem('视频帧', 'decoded $decoded / rendered $rendered'),
+        InfoItem('硬解帧', '$hardware', hardware > 0),
+        InfoItem('软解帧', '$software'),
+        InfoItem('零拷贝', '$zeroCopy', zeroCopy > 0),
+        InfoItem('CPU回退', '$cpuFallback', cpuFallback == 0),
+        InfoItem(
+          '音频队列',
+          'queued $audioQueued / underflow $audioUnderflow',
+          audioUnderflow == 0,
+        ),
+        InfoItem('最近渲染', _formatMicrosAsMs(renderMicros)),
+        InfoItem('HDR10输出', hdrActive ? '开启' : '关闭', hdrActive),
+      ],
+      if (output.isNotEmpty) ...[
+        InfoItem('输出编码', activeEncoding),
+        InfoItem('Surface格式', surfaceFormat),
+        InfoItem('输出余量', activeHeadroom.toStringAsFixed(2)),
+        InfoItem(
+          '输出回退',
+          '$outputFallback ($outputFallbackCount)',
+          outputFallback == 'none' && outputFallbackCount == 0,
+        ),
+      ],
+      if (decoder.isNotEmpty) ...[
+        InfoItem('解码后端', decoderBackend),
+        InfoItem(
+          '解码回退',
+          decoderReason == null
+              ? '$decoderFallbackCount'
+              : '$decoderFallbackCount · $decoderReason',
+          decoderFallbackCount == 0,
+        ),
+      ],
+      if (audio.isNotEmpty)
+        InfoItem(
+          '音频恢复',
+          '$audioState / failures $audioFailures',
+          audioFailures == 0,
+        ),
+      if (lastError != null) InfoItem('最近错误', lastError),
     ];
   }
 
@@ -676,8 +743,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       String channels = '未知';
       String bitRate = '未知';
 
-      final detailedInfo =
-          _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+      final detailedInfo = _detailedInfoFor(videoState);
       // 使用详细信息（若异步已填充，则优先）
       if (detailedInfo.isNotEmpty) {
         final mpvProps = detailedInfo['mpvProperties'] as Map?;

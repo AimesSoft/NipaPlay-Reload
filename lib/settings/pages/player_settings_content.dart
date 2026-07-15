@@ -30,11 +30,14 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
   bool _macOSNativeVideoEnabled = false;
   String _androidAudioOutput = 'opensles';
+  PlayerErikaAndroidOutputMode _erikaAndroidOutputMode =
+      PlayerErikaAndroidOutputMode.sdr;
 
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
   final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
+  final GlobalKey _erikaAndroidOutputDropdownKey = GlobalKey();
   final GlobalKey _seekStepDropdownKey = GlobalKey();
   final GlobalKey _speedBoostDropdownKey = GlobalKey();
 
@@ -70,6 +73,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
     _loadPlayerKernelSettings();
     _loadMacOSNativeVideoSettings();
     _loadAndroidAudioOutputSettings();
+    _loadErikaAndroidOutputSettings();
   }
 
   Future<void> _loadPlayerKernelSettings() async {
@@ -127,6 +131,30 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
     });
     final displayName = output == 'audiotrack' ? 'AudioTrack' : 'OpenSL ES';
     BlurSnackBar.show(context, 'Android 音频后端已切换为 $displayName，需重启APP生效');
+  }
+
+  Future<void> _loadErikaAndroidOutputSettings() async {
+    final mode = PlayerFactory.getErikaAndroidOutputMode();
+    if (!mounted) return;
+    setState(() {
+      _erikaAndroidOutputMode = mode;
+    });
+  }
+
+  Future<void> _saveErikaAndroidOutputSettings(
+    PlayerErikaAndroidOutputMode mode,
+  ) async {
+    await PlayerFactory.saveErikaAndroidOutputMode(mode);
+    if (!mounted) return;
+    setState(() {
+      _erikaAndroidOutputMode = mode;
+    });
+    BlurSnackBar.show(
+      context,
+      mode == PlayerErikaAndroidOutputMode.extendedLinearHdr
+          ? 'Erika 已切换到扩展线性 HDR；不支持时会明确回退 SDR'
+          : 'Erika 已切换到 SDR 输出',
+    );
   }
 
   String _getPlayerKernelDescription(PlayerKernelType type) {
@@ -390,6 +418,38 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),
+              if (!kIsWeb && Platform.isAndroid) ...[
+                AdaptiveSettingsTile.dropdown(
+                  title: 'Erika Android 输出',
+                  subtitle: '选择兼容 SDR，或在支持的 HDR 设备上启用扩展线性 scRGB',
+                  icon: Ionicons.color_filter_outline,
+                  items: [
+                    DropdownMenuItemData(
+                      title: 'SDR（兼容）',
+                      value: PlayerErikaAndroidOutputMode.sdr,
+                      isSelected: _erikaAndroidOutputMode ==
+                          PlayerErikaAndroidOutputMode.sdr,
+                      description: '8-bit sRGB 输出；HDR 视频会映射到 SDR',
+                    ),
+                    DropdownMenuItemData(
+                      title: '扩展线性 HDR（实验性）',
+                      value: PlayerErikaAndroidOutputMode.extendedLinearHdr,
+                      isSelected: _erikaAndroidOutputMode ==
+                          PlayerErikaAndroidOutputMode.extendedLinearHdr,
+                      description:
+                          '使用 Hybrid Composition 与 16-bit float scRGB；能力不足时明确回退 SDR',
+                    ),
+                  ],
+                  onChanged: (dynamic value) async {
+                    if (value is! PlayerErikaAndroidOutputMode) return;
+                    await _saveErikaAndroidOutputSettings(value);
+                  },
+                  dropdownKey: _erikaAndroidOutputDropdownKey,
+                ),
+                Divider(
+                    color: colorScheme.onSurface.withValues(alpha: 0.12),
+                    height: 1),
+              ],
             ],
             if (visibleKernelType == PlayerKernelType.mdk ||
                 visibleKernelType == PlayerKernelType.mediaKit) ...[

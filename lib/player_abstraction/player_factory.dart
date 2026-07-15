@@ -3,6 +3,7 @@ import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
 import './media_kit_player_adapter.dart'; // 导入新的MediaKit适配器
 import './erika_player_adapter.dart';
+import './player_data_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -25,6 +26,7 @@ class PlayerFactory {
   static const String _macOSNativeVideoEnabledKey =
       'macos_native_video_enabled';
   static const String _androidAudioOutputKey = 'android_audio_output';
+  static const String _erikaAndroidOutputModeKey = 'erika_android_output_mode';
   static const int defaultPrecacheBufferSizeMb = 32;
   static const int minPrecacheBufferSizeMb = 4;
   static const int maxPrecacheBufferSizeMb = 512;
@@ -32,6 +34,8 @@ class PlayerFactory {
   static int _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
   static bool _cachedMacOSNativeVideoEnabled = false;
   static String _cachedAndroidAudioOutput = 'opensles';
+  static PlayerErikaAndroidOutputMode _cachedErikaAndroidOutputMode =
+      PlayerErikaAndroidOutputMode.sdr;
   static String _cachedCustomPlayerUA = ''; // 自定义播放器 UA，空=用内核默认
   static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
   static bool _hasLoadedSettings = false;
@@ -67,6 +71,8 @@ class PlayerFactory {
           prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
       final androidAudioOutput =
           prefs.getString(_androidAudioOutputKey) ?? 'opensles';
+      final erikaAndroidOutputModeIndex =
+          prefs.getInt(_erikaAndroidOutputModeKey);
 
       if (kernelTypeIndex != null &&
           kernelTypeIndex < PlayerKernelType.values.length) {
@@ -84,7 +90,10 @@ class PlayerFactory {
         _cachedMacOSNativeVideoEnabled,
       );
       _cachedAndroidAudioOutput = androidAudioOutput;
-      _cachedCustomPlayerUA = prefs.getString(SettingsKeys.customPlayerUA) ?? '';
+      _cachedErikaAndroidOutputMode =
+          _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
+      _cachedCustomPlayerUA =
+          prefs.getString(SettingsKeys.customPlayerUA) ?? '';
 
       _hasLoadedSettings = true;
     } catch (e) {
@@ -93,6 +102,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
+      _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
       _cachedCustomPlayerUA = '';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
@@ -107,6 +117,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
+      _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
       _cachedCustomPlayerUA = '';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
@@ -119,6 +130,8 @@ class PlayerFactory {
             prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
         final androidAudioOutput =
             prefs.getString(_androidAudioOutputKey) ?? 'opensles';
+        final erikaAndroidOutputModeIndex =
+            prefs.getInt(_erikaAndroidOutputModeKey);
         if (kernelTypeIndex != null &&
             kernelTypeIndex < PlayerKernelType.values.length) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
@@ -134,7 +147,10 @@ class PlayerFactory {
           _cachedMacOSNativeVideoEnabled,
         );
         _cachedAndroidAudioOutput = androidAudioOutput;
-        _cachedCustomPlayerUA = prefs.getString(SettingsKeys.customPlayerUA) ?? '';
+        _cachedErikaAndroidOutputMode =
+            _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
+        _cachedCustomPlayerUA =
+            prefs.getString(SettingsKeys.customPlayerUA) ?? '';
       });
 
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
@@ -143,6 +159,7 @@ class PlayerFactory {
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedAndroidAudioOutput = 'opensles';
+      _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
     }
   }
 
@@ -248,6 +265,42 @@ class PlayerFactory {
     }
   }
 
+  static PlayerErikaAndroidOutputMode getErikaAndroidOutputMode() {
+    if (!_hasLoadedSettings) {
+      _loadSettingsSync();
+    }
+    return _cachedErikaAndroidOutputMode;
+  }
+
+  static Future<void> saveErikaAndroidOutputMode(
+    PlayerErikaAndroidOutputMode mode,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_erikaAndroidOutputModeKey, mode.index);
+      final previous = _cachedErikaAndroidOutputMode;
+      _cachedErikaAndroidOutputMode = mode;
+      if (previous != mode &&
+          (_cachedKernelType ?? getKernelType()) == PlayerKernelType.erika) {
+        _kernelChangeController.add(PlayerKernelType.erika);
+      }
+    } catch (e) {
+      debugPrint(
+          '[PlayerFactory] Failed to save Erika Android output mode: $e');
+    }
+  }
+
+  static PlayerErikaAndroidOutputMode _decodeErikaAndroidOutputMode(
+    int? index,
+  ) {
+    if (index != null &&
+        index >= 0 &&
+        index < PlayerErikaAndroidOutputMode.values.length) {
+      return PlayerErikaAndroidOutputMode.values[index];
+    }
+    return PlayerErikaAndroidOutputMode.sdr;
+  }
+
   /// 保存自定义播放器 User-Agent。空字符串表示用内核默认 UA。
   /// 即时生效于"下一次打开视频"（当前正在播放的视频不会重新请求）。
   static Future<void> saveCustomPlayerUA(String ua) async {
@@ -288,7 +341,9 @@ class PlayerFactory {
         );
       case PlayerKernelType.erika:
         debugPrint('[PlayerFactory] 创建 Erika 播放器');
-        return ErikaPlayerAdapter();
+        return ErikaPlayerAdapter(
+          androidOutputMode: getErikaAndroidOutputMode(),
+        );
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());
       //   throw UnimplementedError('Other player types not yet supported.');

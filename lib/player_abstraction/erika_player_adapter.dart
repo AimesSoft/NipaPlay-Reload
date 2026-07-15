@@ -425,7 +425,12 @@ class _NipaplayErikaWindowOverlayVideoViewState
 }
 
 class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
-  ErikaPlayerAdapter() {
+  ErikaPlayerAdapter({
+    PlayerErikaAndroidOutputMode androidOutputMode =
+        PlayerErikaAndroidOutputMode.sdr,
+  }) : _player = ErikaPlayer(
+          outputMode: _resolveNativeOutputMode(androidOutputMode),
+        ) {
     if (_isSupported) {
       _eventSubscription = _player.events.listen(
         _handleEvent,
@@ -436,7 +441,7 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     }
   }
 
-  final ErikaPlayer _player = ErikaPlayer();
+  final ErikaPlayer _player;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: const <String>[],
@@ -455,6 +460,10 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   double _playbackRate = 1.0;
   PlayerUpscalerStatus _lastUpscalerStatus = const PlayerUpscalerStatus.off();
   Map<String, dynamic> _lastPresenterStats = const <String, dynamic>{};
+  Map<String, dynamic> _lastOutputStatus = const <String, dynamic>{};
+  Map<String, dynamic> _lastDecoderStatus = const <String, dynamic>{};
+  Map<String, dynamic> _lastAudioOutputStatus = const <String, dynamic>{};
+  String? _lastNativeError;
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
   int? _pendingSeekTargetMs;
@@ -484,6 +493,19 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   static const bool _subtitleTraceEnabled = bool.fromEnvironment(
     'NIPAPLAY_ERIKA_SUBTITLE_TRACE',
   );
+
+  static ErikaOutputMode? _resolveNativeOutputMode(
+    PlayerErikaAndroidOutputMode mode,
+  ) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return null;
+    }
+    return switch (mode) {
+      PlayerErikaAndroidOutputMode.sdr => ErikaOutputMode.sdr,
+      PlayerErikaAndroidOutputMode.extendedLinearHdr =>
+        ErikaOutputMode.extendedLinear,
+    };
+  }
 
   static bool get _isSupported =>
       !kIsWeb &&
@@ -644,6 +666,11 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
       _mediaInfo = PlayerMediaInfo(duration: 0);
+      _lastPresenterStats = const <String, dynamic>{};
+      _lastOutputStatus = const <String, dynamic>{};
+      _lastDecoderStatus = const <String, dynamic>{};
+      _lastAudioOutputStatus = const <String, dynamic>{};
+      _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
       _externalSubtitleGeneration++;
     }
@@ -1171,6 +1198,10 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
       'duration': _mediaInfo.duration,
       'upscaler': _lastUpscalerStatus.toMap(),
       'presenterStats': _lastPresenterStats,
+      'outputStatus': _lastOutputStatus,
+      'decoder': _lastDecoderStatus,
+      'audioOutput': _lastAudioOutputStatus,
+      if (_lastNativeError != null) 'lastError': _lastNativeError,
       'tracks': <String, dynamic>{
         'video': _videoTrackInfos.map(_erikaTrackToDebugMap).toList(),
         'audio': _audioTrackInfos.map(_erikaTrackToDebugMap).toList(),
@@ -1201,6 +1232,30 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     } catch (error) {
       debugPrint('Erika: get presenter stats failed: $error');
     }
+    try {
+      final output = await _player.getOutputStatus();
+      _lastOutputStatus = _outputStatusToMap(output);
+    } catch (error) {
+      debugPrint('Erika: get output status failed: $error');
+    }
+  }
+
+  static Map<String, dynamic> _outputStatusToMap(ErikaOutputStatus status) {
+    return <String, dynamic>{
+      'requestedMode': status.requestedMode.name,
+      'activeEncoding': status.activeEncoding.name,
+      'surfaceFormat': status.surfaceFormat.name,
+      'nativeDataSpace': status.nativeDataSpace,
+      'requestedHeadroom': status.requestedHeadroom,
+      'activeHeadroom': status.activeHeadroom,
+      'activeHeadroomKnown': status.activeHeadroomKnown,
+      'extendedLinearActive': status.extendedLinearActive,
+      'fallbackReason': status.fallbackReason.label,
+      'fallbackCount': status.fallbackCount,
+      'dataSpaceFailures': status.dataSpaceFailures,
+      'headroomUpdates': status.headroomUpdates,
+      'extendedLinearFrames': status.extendedLinearFrames,
+    };
   }
 
   ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
@@ -1259,6 +1314,7 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     }
     if (event.kind == ErikaEventKind.error) {
       final errorMessage = _formatPlaybackError(event);
+      _lastNativeError = errorMessage;
       _mediaInfo = _mediaInfo.copyWith(specificErrorMessage: errorMessage);
       debugPrint(
         '[Erika] playback error '
@@ -1268,8 +1324,19 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
       );
     }
 
-    if (event.kind == ErikaEventKind.videoDecoderChanged &&
-        event.decoder case final decoder?) {
+    final decoder = event.decoder;
+    if (event.kind == ErikaEventKind.videoDecoderChanged && decoder != null) {
+      _lastDecoderStatus = <String, dynamic>{
+        'stage': decoder.stage,
+        'requestedBackend': decoder.requestedBackend,
+        'previousBackend': decoder.previousBackend,
+        'activeBackend': decoder.activeBackend,
+        'fallbackCount': decoder.fallbackCount,
+        'codec': decoder.codec,
+        'pixelFormat': decoder.pixelFormat,
+        'lineSizes': decoder.lineSizes,
+        'reason': decoder.reason,
+      };
       debugPrint(
         '[Erika] video decoder changed '
         'stage=${decoder.stage} requested=${decoder.requestedBackend} '
@@ -1280,8 +1347,16 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
       );
     }
 
-    if (event.kind == ErikaEventKind.audioOutputChanged &&
-        event.audio case final audio?) {
+    final audio = event.audio;
+    if (event.kind == ErikaEventKind.audioOutputChanged && audio != null) {
+      _lastAudioOutputStatus = <String, dynamic>{
+        'recoveryState': audio.recoveryState,
+        'lastErrorCode': audio.lastErrorCode,
+        'recoveryAttempts': audio.recoveryAttempts,
+        'recoveryCount': audio.recoveryCount,
+        'recoveryFailures': audio.recoveryFailures,
+        'transitionSequence': audio.transitionSequence,
+      };
       debugPrint(
         '[Erika] audio output changed '
         'state=${audio.recoveryState} errorCode=${audio.lastErrorCode} '
