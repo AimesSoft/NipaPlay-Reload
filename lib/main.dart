@@ -1743,8 +1743,9 @@ class MainPageState extends State<MainPage>
                   isLargeScreenLayoutActive: isLargeScreenLayoutActive,
                   topPadding: topPadding,
                   rightPadding: rightPadding,
-                  showWindowsButtons:
-                      !kIsWeb && (Platform.isWindows || Platform.isLinux),
+                  showWindowsButtons: !kIsWeb &&
+                      (Platform.isWindows || Platform.isLinux) &&
+                      !isLargeScreenLayoutActive,
                   isMaximized: isMaximized,
                   onToggleLargeScreen: allowLargeScreenControls
                       ? _toggleLargeScreenLayout

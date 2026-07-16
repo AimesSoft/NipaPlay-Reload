@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
 
@@ -50,31 +51,73 @@ class RemoteControlClientService {
       },
     );
 
+    // 收集本机远程访问地址，用于过滤扫描到自己
+    final selfHostPortKeys = await _collectSelfHostPortKeys();
+
     final udpDevices = found.values.toList(growable: false);
     final validUdpDevices = await _filterRemoteControlCompatible(udpDevices);
     if (validUdpDevices.isNotEmpty) {
-      return validUdpDevices;
+      return _excludeSelfDevices(validUdpDevices, selfHostPortKeys);
     }
 
     if (targets.candidates.isEmpty) return const [];
 
     final fallback = await _fallbackProbeByDefaultPort(targets.candidates);
-    return await _filterRemoteControlCompatible(fallback);
+    final fallbackValid = await _filterRemoteControlCompatible(fallback);
+    return _excludeSelfDevices(fallbackValid, selfHostPortKeys);
+  }
+
+  /// 收集本机远程访问服务的所有 host:port，用于在扫描结果中过滤掉自己。
+  /// 本机远程访问关闭时返回空集合（此时本机不广播，扫描不到自己，无需过滤）。
+  static Future<Set<String>> _collectSelfHostPortKeys() async {
+    try {
+      final urls = await ServiceProvider.webServer.getAccessUrls();
+      final keys = <String>{};
+      for (final url in urls) {
+        final uri = Uri.tryParse(url);
+        if (uri == null) continue;
+        final host = uri.host;
+        if (host.isEmpty) continue;
+        keys.add('$host:${uri.port}');
+      }
+      return keys;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// 从扫描结果中排除本机设备（ip:port 命中本机访问地址）
+  static List<RemoteControlDiscoveredDevice> _excludeSelfDevices(
+    List<RemoteControlDiscoveredDevice> devices,
+    Set<String> selfHostPortKeys,
+  ) {
+    if (selfHostPortKeys.isEmpty) return devices;
+    return devices
+        .where(
+            (device) => !selfHostPortKeys.contains('${device.ip}:${device.port}'))
+        .toList(growable: false);
   }
 
   static Future<RemoteControlDiscoveredDevice?> autoMatchDevice() async {
+    final selfHostPortKeys = await _collectSelfHostPortKeys();
     final savedBaseUrl = await RemoteControlSettings.getMatchedBaseUrl();
     final savedHostname = await RemoteControlSettings.getMatchedHostname();
     if (savedBaseUrl != null) {
       final normalized = normalizeBaseUrl(savedBaseUrl);
-      final state = await fetchState(normalized);
-      if (state != null) {
-        return RemoteControlDiscoveredDevice(
-          ip: Uri.parse(normalized).host,
-          port: Uri.parse(normalized).port,
-          baseUrl: normalized,
-          hostname: savedHostname,
-        );
+      // 若保存的目标是自己，则跳过，重新扫描其它设备
+      final savedUri = Uri.tryParse(normalized);
+      final isSelf = savedUri != null &&
+          selfHostPortKeys.contains('${savedUri.host}:${savedUri.port}');
+      if (!isSelf) {
+        final state = await fetchState(normalized);
+        if (state != null) {
+          return RemoteControlDiscoveredDevice(
+            ip: Uri.parse(normalized).host,
+            port: Uri.parse(normalized).port,
+            baseUrl: normalized,
+            hostname: savedHostname,
+          );
+        }
       }
     }
 
