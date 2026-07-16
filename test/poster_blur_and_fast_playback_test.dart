@@ -51,6 +51,24 @@ void main() {
     expect(prefs.getBool(SettingsKeys.fastPlaybackStartup), isFalse);
   });
 
+  test('fast playback toggle lives in Player settings', () {
+    final generalSettings = File(
+      'lib/settings/pages/general_settings_content.dart',
+    ).readAsStringSync();
+    final playerSettings = File(
+      'lib/settings/pages/player_settings_content.dart',
+    ).readAsStringSync();
+
+    expect(generalSettings, isNot(contains('fastPlaybackStartup')));
+    expect(generalSettings, isNot(contains('快速开始播放')));
+    expect(playerSettings, contains('快速开始播放'));
+    expect(playerSettings, contains('settingsProvider.fastPlaybackStartup'));
+    expect(
+      playerSettings,
+      contains('settingsProvider.setFastPlaybackStartup'),
+    );
+  });
+
   test('home recommendations support diffuse and subtle blur strengths', () {
     final source = File(
       'lib/themes/nipaplay/widgets/dashboard_home_page_build_hero.dart',

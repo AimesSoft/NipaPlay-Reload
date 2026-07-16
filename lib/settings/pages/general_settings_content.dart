@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
@@ -70,7 +69,6 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
-    final settingsProvider = context.watch<SettingsProvider>();
     final children = <Widget>[];
 
     if (globals.isDesktop) {
@@ -252,24 +250,6 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
               await _saveDefaultPagePreference(index);
             },
             dropdownKey: _defaultPageDropdownKey,
-          ),
-          AdaptiveSettingsTile<bool>.toggle(
-            title: _text(
-              context,
-              '快速开始播放',
-              '快速開始播放',
-              'Start Playback Immediately',
-            ),
-            subtitle: _text(
-              context,
-              '跳过视频就绪后的识别加载界面，开始播放后在后台识别番剧并加载弹幕',
-              '跳過影片就緒後的識別載入畫面，開始播放後在後台識別番劇並載入彈幕',
-              'Start as soon as the video is ready, then identify it and load danmaku in the background.',
-            ),
-            icon: Ionicons.flash_outline,
-            phoneIcon: cupertino.CupertinoIcons.bolt,
-            value: settingsProvider.fastPlaybackStartup,
-            onChanged: settingsProvider.setFastPlaybackStartup,
           ),
           const AutoUpdateSettingTile(),
         ],
