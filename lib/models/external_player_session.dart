@@ -12,13 +12,13 @@ import 'package:nipaplay/constants/media_extensions.dart';
 
 /// 掌管外部播放器会话的神
 ///
-/// 管理一个 mpv 进程及其 IPC, 播放状态和 ASS 弹幕交互.
+/// 管理一个外部播放器进程; Linux mpv 额外管理 IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类不保存番剧, 剧集或媒体展示信息; 这些信息由控制台服务管理.
 class ExternalPlayerSession extends ChangeNotifier {
 
-  /// 构造函数
-  ExternalPlayerSession(
+  /// 关联一个已经存在的外部播放器进程.
+  ExternalPlayerSession.attach(
     {
       required this.type,
       required this.playerPath,
@@ -28,24 +28,88 @@ class ExternalPlayerSession extends ChangeNotifier {
 
       this.position = Duration.zero,
       this.isPaused = false,
+      bool monitorProcess = true,
     }
-  );
+  ) { if (monitorProcess) _startLifecycleMonitoring(); }
+
+  /// 启动外部播放器; Linux mpv 额外启用 IPC 和生命周期监控.
+  static Future<ExternalPlayerSession> launch({
+    required ExternalPlayerType type,
+    required String       playerPath,
+    required String       mediaPath,
+    required List<String> extraArgs,
+    Duration duration = Duration.zero,
+    Duration position = Duration.zero,
+  }) async {
+
+    // Windows 和 macOS 直接启动进程, 不使用 IPC
+    if (Platform.isWindows) {
+      final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
+      final process = isShortcut
+          ? await Process.start('cmd',['/c', 'start',  '', playerPath, mediaPath, ...extraArgs], runInShell: true)
+          : await Process.start(playerPath, [mediaPath, ...extraArgs], mode: ProcessStartMode.detached);
+      return ExternalPlayerSession.attach(
+        type       : type,
+        playerPath : playerPath,
+        processId  : process.pid,
+        ipcPath    : null,
+        duration   : duration,
+        position   : position,
+        monitorProcess: false,
+      );
+    }
+    if (Platform.isMacOS) {
+      final isAppBundle = playerPath.toLowerCase().endsWith('.app');
+      final process = isAppBundle
+          ? await Process.start('open', ['-a', playerPath, mediaPath])
+          : await Process.start(playerPath, [mediaPath, ...extraArgs]);
+      return ExternalPlayerSession.attach(
+        type       : type,
+        playerPath : playerPath,
+        processId  : process.pid,
+        ipcPath    : null,
+        duration   : duration,
+        position   : position,
+        monitorProcess: false,
+      );
+    }
+
+    // Linux 需要额外处理 mpv IPC
+    final ipcPath    = (type == ExternalPlayerType.mpv) ? _createMpvIpcPath() : null;
+    final launchArgs = [mediaPath, ...extraArgs, if (ipcPath != null) '--input-ipc-server=$ipcPath'];
+
+    debugPrint('[ExternalPlayerSession] Launching external player: type=$type, playerPath="$playerPath", args=$launchArgs');
+
+    final process = await Process.start(playerPath, launchArgs, mode: ProcessStartMode.detached);
+
+    debugPrint('[ExternalPlayerSession] External player started: type=$type, pid=${process.pid}, ipcPath=$ipcPath');
+
+    return ExternalPlayerSession.attach(
+      type       : type,
+      playerPath : playerPath,
+      processId  : process.pid,
+      ipcPath    : ipcPath,
+      duration   : duration,
+      position   : position,
+    );
+  }
 
   // 外部播放器相关
-  final ExternalPlayerType type;  // 外部播放器类型
-  final String   playerPath;      // 外部播放器的路径
-  final int      processId;       // 外部播放器进程 ID
-  final String?  ipcPath;         // 外部播放器的 IPC 通道路径
+  final ExternalPlayerType type; // 外部播放器类型
+  final String   playerPath;     // 外部播放器的路径
+  final int      processId;      // 外部播放器进程 ID
+  final String?  ipcPath;        // 外部播放器的 IPC 通道路径
 
   // 播放相关
-  Duration       duration;        // 媒体文件总时长
-  Duration?      position;        // 当前播放位置
-  bool?          isPaused;        // 是否暂停
+  Duration       duration;       // 媒体文件总时长
+  Duration?      position;       // 当前播放位置
+  bool?          isPaused;       // 是否暂停
 
   // 进程轮询相关
   static const Duration _processPollingInterval = Duration(milliseconds: 250);
   Timer? _processPollingTimer;
-  bool   _closed = false; // 外部播放器会话是否已关闭, 关闭后不再轮询进程和播放状态
+  bool   _closed   = false; // 外部播放器会话是否已关闭, 关闭后不再轮询进程和播放状态
+  bool   _disposed = false; // ChangeNotifier 是否已被 dispose, dispose 后不再通知监听器
 
 
   // --- Setters & Getters --- //
@@ -55,19 +119,19 @@ class ExternalPlayerSession extends ChangeNotifier {
     if (position == null || duration <= Duration.zero) return null;
     return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
   }
+  bool get isClosed => _closed;
 
   // --- mpv Process Interaction --- //
 
   /// 终止当前外部播放器进程.
   void terminate() {
     if (_closed) return;
-    _closed = true;
-    stopProcessPolling();
     try {
       final killed = Process.killPid(processId, ProcessSignal.sigterm);
       if (!killed) debugPrint('[ExternalPlayerSession] Failed to terminate player: pid=$processId');
     }
     catch (error) { debugPrint('[ExternalPlayerSession] Failed to close player: $error'); }
+    _close();
   }
 
   /// 切换 mpv 的暂停状态.
@@ -141,22 +205,42 @@ class ExternalPlayerSession extends ChangeNotifier {
     }
   }
 
-  // --- Process Polling --- //
+  // --- Private Methods --- //
 
-  /// 开始轮询外部播放器进程和播放状态
-  void startProcessPolling(VoidCallback onProcessExit) {
-    stopProcessPolling();
-    _scheduleNextProcessPoll(onProcessExit);
+  void _startLifecycleMonitoring() {
+    _stopLifecycleMonitoring();
+    _scheduleNextProcessPoll();
   }
 
-  /// 停止轮询外部播放器进程和播放状态
-  void stopProcessPolling() {
+  void _stopLifecycleMonitoring() {
     _processPollingTimer?.cancel();
     _processPollingTimer = null;
   }
 
+  void _close() {
+    if (_closed) return;
+    _closed = true;
+    _stopLifecycleMonitoring();
+    _deleteIpcSocket();
+    if (!_disposed) notifyListeners();
+  }
 
-  // --- Private Methods --- //
+  void _deleteIpcSocket() {
+    final path = ipcPath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final socketFile = File(path);
+      if (socketFile.existsSync()) socketFile.deleteSync();
+    } catch (error) {
+      debugPrint('[ExternalPlayerSession] Failed to delete IPC socket: $error');
+    }
+  }
+
+  static String _createMpvIpcPath() {
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    return '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'nipaplay_mpv_${pid}_$timestamp.sock';
+  }
 
   Future<void> _setMpvPaused(bool paused) async {
     final path = ipcPath;
@@ -256,17 +340,17 @@ class ExternalPlayerSession extends ChangeNotifier {
   }
 
   /// 计划下一次轮询
-  void _scheduleNextProcessPoll(VoidCallback onProcessExit) {
+  void _scheduleNextProcessPoll() {
     late final Timer timer;
     timer = Timer(
       _processPollingInterval,
-      () => unawaited(_pollProcessState(timer, onProcessExit)),
+      () => unawaited(_pollProcessState(timer)),
     );
     _processPollingTimer = timer;
   }
 
   /// 轮询外部播放器进程和播放状态
-  Future<void> _pollProcessState(Timer timer, VoidCallback onProcessExit) async {
+  Future<void> _pollProcessState(Timer timer) async {
     bool running;
     try {
       running = await _refreshProcessState(timer);
@@ -277,14 +361,12 @@ class ExternalPlayerSession extends ChangeNotifier {
 
     if (!identical(_processPollingTimer, timer)) return;
     if (!running) {
-      _closed = true;
-      _processPollingTimer = null;
-      onProcessExit();
+      _close();
       return;
     }
 
     // 继续轮询
-    _scheduleNextProcessPoll(onProcessExit);
+    _scheduleNextProcessPoll();
   }
 
   Future<bool> _refreshProcessState(Timer timer) async {
@@ -396,8 +478,9 @@ class ExternalPlayerSession extends ChangeNotifier {
 
   @override
   void dispose() {
-    _closed = true;
-    stopProcessPolling();
+    _disposed = true;
+    if (!_closed) terminate();
+    _stopLifecycleMonitoring();
     super.dispose();
   }
 

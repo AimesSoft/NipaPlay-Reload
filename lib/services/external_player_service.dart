@@ -50,28 +50,9 @@ class ExternalPlayerConfig {
   bool get isReady => enabled && playerPath.trim().isNotEmpty;
 }
 
-/// 外部播放器进程的启动结果.
-///
-/// [started] 仅表示系统已成功派生启动命令, 不保证播放器已经完成媒体加载.
-/// 当前只有 Linux 直接启动播放器时会返回 [processId], 且仅 mpv 会同时返回
-/// 可供后续控制使用的 [ipcPath].
-class ExternalPlayerLaunchResult {
-
-  const ExternalPlayerLaunchResult({
-    required this.started,
-    this.processId,
-    this.ipcPath,
-  });
-
-  final bool    started;    // 是否已成功派生外部播放器或系统启动命令
-  final int?    processId;  // 已派生播放器的进程 ID; 无法可靠取得时为 `null`
-  final String? ipcPath;    // mpv JSON IPC socket 路径; 未启用 IPC 时为 `null`
-}
-
-
 /// 项目里掌管协调桌面端外部播放器启动, 播放参数注入和弹幕导出的神.
 ///
-/// 服务支持 Windows, macOS 和 Linux.
+/// 服务支持在 Windows, macOS 和 Linux 上启动外部播放器.
 ///
 /// 1. 从设置中读取播放器配置
 /// 2. 选择实际媒体地址
@@ -129,31 +110,36 @@ class ExternalPlayerService {
     return videoPath;
   }
 
-  /// 使用 [playerPath] 打开 [mediaPath], 并附加 [extraArgs].
+  /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
   ///
   /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
   /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
   /// 模式启动; macOS 应用包通过 `open -a` 打开; Linux 播放器以 detached
-  /// 模式启动. Linux 原版 mpv 会额外获得 JSON IPC socket 参数.
+  /// 模式启动. 只有 Linux mpv 会额外启用 JSON IPC 和弹幕控制台能力.
   ///
-  /// 不支持的平台, 空路径, 文件不存在或进程派生异常都会返回
-  /// `started == false`, 异常不会向调用方抛出. [ExternalPlayerLaunchResult.started]
-  /// 只代表启动命令已成功派生, 不代表媒体已成功开始播放.
-  static Future<ExternalPlayerLaunchResult>
-  launchWithResult(String playerPath, String mediaPath, List<String> extraArgs) async {
+  /// 成功派生进程时返回对应的 [ExternalPlayerSession]. 不支持的平台, 空路径,
+  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
+  /// Session 仅表示启动命令执行成功, 不保证播放器已经完成媒体加载.
+  static Future<ExternalPlayerSession?> launch({
+    required String playerPath,
+    required String mediaPath,
+    List<String> extraArgs = const [],
+    Duration duration = Duration.zero,
+    Duration position = Duration.zero,
+  }) async {
 
     debugPrint('[ExtPlayer] launch: playerPath="$playerPath", '
         'mediaPath="$mediaPath", extraArgs=$extraArgs');
     if (!isSupportedPlatform) {
       debugPrint('[ExtPlayer] launch: 平台不支持');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     final resolvedPath = await _resolvePlayerPath(playerPath.trim());
     debugPrint('[ExtPlayer] launch: resolvedPath="$resolvedPath"');
     if (resolvedPath == null || resolvedPath.isEmpty) {
       debugPrint('[ExtPlayer] launch: resolvedPath 为空, 中止');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     final exists = await FileSystemEntity.type(resolvedPath) !=
@@ -161,84 +147,22 @@ class ExternalPlayerService {
     debugPrint('[ExtPlayer] launch: 文件存在=$exists ($resolvedPath)');
     if (!exists) {
       debugPrint('[ExtPlayer] launch: 外部播放器不存在: $resolvedPath');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     try {
-      if (Platform.isWindows) {
-        final isLnk = resolvedPath.toLowerCase().endsWith('.lnk');
-        if (isLnk) {
-          // .lnk 快捷方式: cmd /c start 解析快捷方式目标并自动分离.
-          final args = <String>[
-            '/c',
-            'start',
-            '',
-            resolvedPath,
-            mediaPath,
-            ...extraArgs,
-          ];
-          debugPrint('[ExtPlayer] launch: .lnk → '
-              'Process.start("cmd", $args, runInShell:true)');
-          final proc = await Process.start('cmd', args, runInShell: true);
-          debugPrint('[ExtPlayer] launch: cmd 已派生 pid=${proc.pid}');
-        } else {
-          // .exe: 直启, 参数由 Dart 直接传递（绕过 cmd/start 的引号 quirks,
-          // 对带空格/特殊字符的媒体路径和 --sub-file=xxx / --script=xxx 参数最可靠）.
-          final args = <String>[mediaPath, ...extraArgs];
-          debugPrint('[ExtPlayer] launch: .exe → '
-              'Process.start("$resolvedPath", $args, mode:detached)');
-          final proc = await Process.start(
-            resolvedPath,
-            args,
-            mode: ProcessStartMode.detached,
-          );
-          debugPrint('[ExtPlayer] launch: 已派生 pid=${proc.pid}');
-        }
-        return const ExternalPlayerLaunchResult(started: true);
-      }
-
-      if (Platform.isMacOS) {
-        if (resolvedPath.toLowerCase().endsWith('.app')) {
-          debugPrint('[ExtPlayer] launch: macOS open -a "$resolvedPath"');
-          await Process.start('open', ['-a', resolvedPath, mediaPath]);
-        } else {
-          debugPrint('[ExtPlayer] launch: macOS 直启 + extraArgs=$extraArgs');
-          await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
-        }
-        return const ExternalPlayerLaunchResult(started: true);
-      }
-
-      // Linux
-      String? ipcPath;
-      var linuxExtraArgs = extraArgs;
-      if (_detectPlayer(resolvedPath) == ExternalPlayerType.mpv) {
-        ipcPath = _createMpvIpcPath();
-        linuxExtraArgs = [...extraArgs, '--input-ipc-server=$ipcPath'];
-        debugPrint('[ExtPlayer] 已启用 mpv JSON IPC: $ipcPath');
-      }
-      debugPrint(
-        '[ExtPlayer] launch: Linux 直启 + '
-        'extraArgs=$linuxExtraArgs, mode=detached',
-      );
-
-      final proc = await Process.start(
-        resolvedPath,
-        [mediaPath, ...linuxExtraArgs],
-        mode: ProcessStartMode.detached,
-      );
-
-      // 打印派生进程 PID, 方便调试
-      debugPrint('[ExtPlayer] launch: 已派生 pid=${proc.pid}');
-
-      return ExternalPlayerLaunchResult(
-        started: true,
-        processId: proc.pid,
-        ipcPath: ipcPath,
+      return await ExternalPlayerSession.launch(
+        type: _detectPlayer(resolvedPath),
+        playerPath: resolvedPath,
+        mediaPath: mediaPath,
+        extraArgs: extraArgs,
+        duration: duration,
+        position: position,
       );
     } catch (e, st) {
       debugPrint('[ExtPlayer] launch: 启动异常: $e');
       debugPrintStack(stackTrace: st);
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
   }
 
@@ -367,14 +291,22 @@ class ExternalPlayerService {
     }
 
     // 启动外部播放器, 并获取启动结果
-    final launchResult = await launchWithResult(playerPath, mediaPath, extraArgs);
+    final history = item.historyItem;
+    final session = await launch(
+      playerPath: playerPath,
+      mediaPath: mediaPath,
+      extraArgs: extraArgs,
+      duration: Duration(milliseconds: history?.duration ?? 0),
+      position: Duration(milliseconds: history?.lastPosition ?? 0),
+    );
 
-    final launched = launchResult.started;
+    final launched = session != null;
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
-    // Linux 下, 若外部播放器启动成功且返回了进程 ID, 则在控制台显示会话信息
-    if (launched && Platform.isLinux && launchResult.processId != null) {
-      final history = item.historyItem;
+    // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
+    if (Platform.isLinux &&
+        session != null &&
+        session.type == ExternalPlayerType.mpv) {
       final sessionItem = PlayableItem(
         videoPath: mediaPath,
         title: history?.animeName ?? item.title,
@@ -387,17 +319,8 @@ class ExternalPlayerService {
         detailContext: item.detailContext,
       );
 
-      final s = ExternalPlayerSession(
-        type      : _detectPlayer(playerPath),
-        playerPath: playerPath,
-        processId : launchResult.processId!,
-        ipcPath   : launchResult.ipcPath,
-        duration  : Duration(milliseconds: history?.duration ?? 0),
-        position  : Duration(milliseconds: history?.lastPosition ?? 0),
-      );
-
       ExternalPlayerConsoleService.showSession(
-        s,
+        session,
         playableItem: sessionItem,
         danmakuAssets: danmakuAssets,
       );
@@ -807,20 +730,13 @@ end)
     }
   }
 
-  static String _createMpvIpcPath() {
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    return '${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'nipaplay_mpv_${pid}_$timestamp.sock';
-  }
-
   static Future<String?> _resolvePlayerPath(String path) async {
-    if (path.isEmpty) {
-      return null;
-    }
+    if (path.isEmpty) return null;
     if (Platform.isMacOS) {
       final resolved = await SecurityBookmarkService.resolveBookmark(path);
       return resolved ?? path;
     }
     return path;
   }
+
 }

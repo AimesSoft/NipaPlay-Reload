@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -136,13 +137,20 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     PlayableItem? playableItem,
     DanmakuLaunchAssets? danmakuAssets,
   }) {
+
+    // 目前仅支持 Linux + mpv, 其他平台直接忽略
+    if (!isSupportedPlatform || session.type != ExternalPlayerType.mpv) return;
+
+    // 先移除之前会话的监听器
     final previous = _instance._session;
     previous?.removeListener(_handleSessionChanged);
-    previous?.stopProcessPolling();
-    if (previous != null && previous.processId != session.processId) {
+
+    // 如果之前有会话且不是同一个实例, 先关闭之前的会话
+    if (previous != null && !identical(previous, session)) {
       previous.terminate();
     }
 
+    // 设置新的会话和媒体信息
     _instance._session = session;
     _instance._mediaPath = playableItem?.videoPath;
     _instance._animeTitle = playableItem?.title;
@@ -151,7 +159,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._episodeId = playableItem?.episodeId;
     _instance._setDanmakuAssets(danmakuAssets);
     session.addListener(_handleSessionChanged);
-    session.startProcessPolling(() => _clearSession(session));
+
+    // 如果新会话已经关闭, 立即清理
+    if (session.isClosed) {
+      _clearSession(session);
+      return;
+    }
+
+    // 通知监听器更新 UI
     _instance.notifyListeners();
   }
 
@@ -199,7 +214,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   @override
   void dispose() {
     _session?.removeListener(_handleSessionChanged);
-    _session?.stopProcessPolling();
+    _session?.terminate();
     _session = null;
     _clearMediaInfo();
     _clearDanmakuState();
@@ -312,6 +327,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
   static void _handleSessionChanged() {
+    final current = _instance._session;
+    if (current != null && current.isClosed) {
+      _clearSession(current);
+      return;
+    }
     _instance.notifyListeners();
   }
 
@@ -319,7 +339,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (!identical(_instance._session, session)) return;
 
     session.removeListener(_handleSessionChanged);
-    session.stopProcessPolling();
     _instance._session = null;
     _instance._clearMediaInfo();
     _instance._clearDanmakuState();

@@ -12,6 +12,7 @@ import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
@@ -41,6 +42,7 @@ ExternalPlayerSession _session(
     isPaused: isPaused,
     danmakuList: danmakuList,
     danmakuAssSettings: danmakuAssSettings,
+    monitorProcess: true,
   );
 }
 
@@ -55,15 +57,17 @@ ExternalPlayerSession _sessionFromProcessId(
   bool isPaused = false,
   List<DanmakuItem> danmakuList = const [],
   AssExportSettings? danmakuAssSettings,
+  bool monitorProcess = false,
 }) {
-  final session = ExternalPlayerSession(
-    ExternalPlayerType.mpv,
-    '/bin/mpv',
-    processId,
-    ipcPath,
-    duration,
+  final session = ExternalPlayerSession.attach(
+    type: ExternalPlayerType.mpv,
+    playerPath: '/bin/mpv',
+    processId: processId,
+    ipcPath: ipcPath,
+    duration: duration,
     position: position,
     isPaused: isPaused,
+    monitorProcess: monitorProcess,
   );
   if (danmakuAssSettings != null || danmakuList.isNotEmpty) {
     final assPath = danmakuAssPath ?? '/tmp/nipaplay_test_$processId.ass';
@@ -118,6 +122,21 @@ Future<void> _waitUntil(
 }
 
 void main() {
+  test('launches a generic Linux player without opening the console', () async {
+    ExternalPlayerConsoleService.closePlayerAndConsole();
+    final session = await ExternalPlayerService.launch(
+      playerPath: '/bin/sleep',
+      mediaPath: '30',
+    );
+    if (session == null) fail('Expected the generic player to start');
+    addTearDown(session.terminate);
+
+    expect(session.type, ExternalPlayerType.generic);
+    expect(session.ipcPath, isNull);
+    ExternalPlayerConsoleService.showSession(session);
+    expect(ExternalPlayerConsoleService.instance.hasActiveSession, isFalse);
+  });
+
   group('ExternalPlayerSession progress', () {
     test('clamps its fraction to the valid range', () {
       final session = _sessionFromProcessId(
