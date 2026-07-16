@@ -106,7 +106,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
 
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
+    final targetGeneration = _playbackGeneration;
+    bool canContinue() =>
+        !_isDisposed &&
+        _currentVideoPath == targetVideoPath &&
+        _playbackGeneration == targetGeneration;
 
     try {
       final dirPath = p.dirname(videoPath);
@@ -275,7 +279,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
+    final targetGeneration = _playbackGeneration;
+    bool canContinue() =>
+        !_isDisposed &&
+        _currentVideoPath == targetVideoPath &&
+        _playbackGeneration == targetGeneration;
 
     try {
       debugPrint('尝试为episodeId=$episodeId, animeId=$animeIdStr加载弹幕');
@@ -466,7 +474,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       bool setStatusMessage = true}) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
+    final targetGeneration = _playbackGeneration;
+    bool canContinue() =>
+        !_isDisposed &&
+        _currentVideoPath == targetVideoPath &&
+        _playbackGeneration == targetGeneration;
 
     try {
       debugPrint('开始从本地JSON加载弹幕...');

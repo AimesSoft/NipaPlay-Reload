@@ -398,6 +398,13 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   // 检查是否是流媒体视频并使用现有的IDs直接加载弹幕
   Future<bool> _checkAndLoadStreamingDanmaku(
       String videoPath, WatchHistoryItem? historyItem) async {
+    if (_isDisposed || _currentVideoPath != videoPath) return false;
+    final targetGeneration = _playbackGeneration;
+    bool canContinue() =>
+        !_isDisposed &&
+        _currentVideoPath == videoPath &&
+        _playbackGeneration == targetGeneration;
+
     // 检查是否是Jellyfin视频URL (多种可能格式)
     bool isJellyfinStream = videoPath.startsWith('jellyfin://') ||
         (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
@@ -427,6 +434,7 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
               message: '正在为Jellyfin流媒体加载弹幕...');
           await loadDanmaku(
               historyItem.episodeId.toString(), historyItem.animeId.toString());
+          if (!canContinue()) return true;
 
           // 更新当前实例的弹幕ID
           _episodeId = historyItem.episodeId;
@@ -441,10 +449,12 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
 
             // 立即更新历史记录，确保UI显示正确的信息
             await _updateHistoryWithNewTitles();
+            if (!canContinue()) return true;
           }
 
           return true; // 表示已处理
         } catch (e) {
+          if (!canContinue()) return true;
           debugPrint('Jellyfin流媒体弹幕加载失败: $e');
           _danmakuList = [];
           _danmakuListVersion++;

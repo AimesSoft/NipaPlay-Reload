@@ -2,6 +2,8 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -279,6 +281,31 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
         AdaptiveSettingsSection(
           addDividers: false,
           children: [
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '快速开始播放',
+                    '快速開始播放',
+                    'Start Playback Immediately',
+                  ),
+                  subtitle: _text(
+                    context,
+                    '跳过视频就绪后的识别加载界面，开始播放后在后台识别番剧并加载弹幕',
+                    '跳過影片就緒後的識別載入畫面，開始播放後在後台識別番劇並載入彈幕',
+                    'Start as soon as the video is ready, then identify it and load danmaku in the background.',
+                  ),
+                  icon: Ionicons.flash_outline,
+                  phoneIcon: cupertino.CupertinoIcons.bolt,
+                  value: settingsProvider.fastPlaybackStartup,
+                  onChanged: settingsProvider.setFastPlaybackStartup,
+                );
+              },
+            ),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
             if (!kIsWeb) ...[
               AdaptiveSettingsTile.dropdown(
                 title: "播放器内核",
@@ -969,5 +996,17 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
         ),
       ],
     );
+  }
+
+  String _text(
+    BuildContext context,
+    String simplified,
+    String traditional,
+    String english,
+  ) {
+    final locale = context.l10n.localeName;
+    if (locale == 'en') return english;
+    if (locale == 'zh_Hant') return traditional;
+    return simplified;
   }
 }
