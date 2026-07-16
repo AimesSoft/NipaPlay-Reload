@@ -33,6 +33,7 @@ import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
 import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
 import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
@@ -1149,6 +1150,7 @@ void main() {
 
   testWidgets('phone library management renders one item model in both views',
       (tester) async {
+    SharedPreferences.setMockInitialValues(const {});
     const items = <UnifiedLibraryManagementItem>[
       UnifiedLibraryManagementItem(
         id: 'library-a',
@@ -1161,13 +1163,16 @@ void main() {
 
     Future<void> pump(LibraryManagementViewMode viewMode) {
       return tester.pumpWidget(
-        CupertinoApp(
-          home: CupertinoPageScaffold(
-            child: CupertinoLibraryManagementOverview(
-              items: items,
-              viewMode: viewMode,
-              emptyTitle: '没有目录',
-              emptySubtitle: '请添加目录',
+        ChangeNotifierProvider(
+          create: (_) => AppearanceSettingsProvider(),
+          child: CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: CupertinoLibraryManagementOverview(
+                items: items,
+                viewMode: viewMode,
+                emptyTitle: '没有目录',
+                emptySubtitle: '请添加目录',
+              ),
             ),
           ),
         ),
@@ -1185,35 +1190,39 @@ void main() {
 
   testWidgets('desktop library management honors the shared view mode',
       (tester) async {
+    SharedPreferences.setMockInitialValues(const {});
     Future<void> pump(LibraryManagementViewMode viewMode) {
       return tester.pumpWidget(
-        MaterialApp(
-          home: AppDisplaySurfaceScope(
-            surface: AppDisplaySurface.desktopTablet,
-            child: SizedBox(
-              width: 900,
-              height: 600,
-              child: AdaptiveLibraryManagementOverview(
-                items: const [
-                  UnifiedLibraryManagementItem(
-                    id: 'a',
-                    title: '目录 A',
-                    subtitle: '/media/a',
-                    icon: LibraryManagementIcon.folder,
-                    onOpen: null,
+        ChangeNotifierProvider(
+          create: (_) => AppearanceSettingsProvider(),
+          child: MaterialApp(
+            home: AppDisplaySurfaceScope(
+              surface: AppDisplaySurface.desktopTablet,
+              child: SizedBox(
+                width: 900,
+                height: 600,
+                child: AdaptiveLibraryManagementOverview(
+                  items: const [
+                    UnifiedLibraryManagementItem(
+                      id: 'a',
+                      title: '目录 A',
+                      subtitle: '/media/a',
+                      icon: LibraryManagementIcon.folder,
+                      onOpen: null,
+                    ),
+                    UnifiedLibraryManagementItem(
+                      id: 'b',
+                      title: '目录 B',
+                      subtitle: '/media/b',
+                      icon: LibraryManagementIcon.folder,
+                      onOpen: null,
+                    ),
+                  ],
+                  viewMode: viewMode,
+                  emptyContent: const LibraryManagementEmptyContent(
+                    title: '没有目录',
+                    subtitle: '请添加目录',
                   ),
-                  UnifiedLibraryManagementItem(
-                    id: 'b',
-                    title: '目录 B',
-                    subtitle: '/media/b',
-                    icon: LibraryManagementIcon.folder,
-                    onOpen: null,
-                  ),
-                ],
-                viewMode: viewMode,
-                emptyContent: const LibraryManagementEmptyContent(
-                  title: '没有目录',
-                  subtitle: '请添加目录',
                 ),
               ),
             ),
