@@ -2,7 +2,6 @@
 // 为外部 mpv 生成弹幕 ASS
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
 import 'package:nipaplay/src/rust/rust_init.dart';
@@ -12,7 +11,7 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 /// 基于会话保存的强类型弹幕生成 mpv 使用的 ASS.
 ///
 /// 优先复用 DFM+ 布局能力; 初始化或布局失败时回退到经典 ASS 算法.
-Future<DanmakuAssConversionResult> generateExternalPlayerDanmakuAss(
+Future<String> generateExternalPlayerDanmakuAss(
   List<DanmakuItem> danmakuList,
   AssExportSettings settings, {
   required bool allowStacking,
@@ -23,10 +22,10 @@ Future<DanmakuAssConversionResult> generateExternalPlayerDanmakuAss(
     allowStacking: allowStacking,
   );
   if (dfmConversion != null) return dfmConversion;
-  return convertDanmakuItemsToAssWithEvents(danmakuList, settings);
+  return convertDanmakuItemsToAss(danmakuList, settings);
 }
 
-Future<DanmakuAssConversionResult?> _generateAssViaDfmLayout(
+Future<String?> _generateAssViaDfmLayout(
   List<DanmakuItem> danmakuList,
   AssExportSettings settings, {
   required bool allowStacking,
@@ -81,7 +80,7 @@ Future<DanmakuAssConversionResult?> _generateAssViaDfmLayout(
     final kept = items.where((item) => !item.isFiltered).length;
     debugPrint('[ExtPlayer] DFM+ 布局: 共 ${items.length} 条, 入 ASS $kept 条');
 
-    return convertDanmakuToAssFromPreparedWithEvents(
+    return convertDanmakuToAssFromPrepared(
       items,
       playResX: kAssPlayResX,
       playResY: kAssPlayResY,

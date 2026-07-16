@@ -321,7 +321,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         return;
       }
 
-      final conversion = await generateExternalPlayerDanmakuAss(
+      final ass = await generateExternalPlayerDanmakuAss(
         session.danmakuList,
         settings,
         allowStacking: session.danmakuAllowStacking,
@@ -334,7 +334,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       temporaryFile = File('$assPath.nipaplay.tmp');
       await temporaryFile.writeAsString(
-        conversion.ass,
+        ass,
         encoding: utf8,
         flush: true,
       );

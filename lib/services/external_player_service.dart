@@ -572,12 +572,11 @@ class ExternalPlayerService {
           'scrollDur=${assSettings.scrollDurationSeconds}, '
           'offset=${assSettings.timeOffsetSeconds}, merge=${assSettings.mergeDuplicates}');
       // 优先用 DFM+ 内核布局层预算运动参数（碰撞/追赶规避）, 失败回退经典算法.
-      final conversion = await generateExternalPlayerDanmakuAss(
+      final ass = await generateExternalPlayerDanmakuAss(
         danmakuList,
         assSettings,
         allowStacking: vps.danmakuStacking,
       );
-      final ass = conversion.ass;
       debugPrint('[ExtPlayer] ASS 生成完成: ${ass.length} 字符');
       debugPrint('[ExtPlayer] 会话弹幕 ${danmakuList.length} 条');
       final assPath = await _writeAssTempFile(ass, episodeId);
