@@ -22,6 +22,7 @@ class SettingsProvider with ChangeNotifier {
   bool _autoMatchDanmakuOnPlay = true; // 默认开启
   DanmakuAutoLoadStrategy _danmakuAutoLoadStrategy =
       DanmakuAutoLoadStrategy.remoteAndLocal;
+  bool _fastPlaybackStartup = false;
 
   // 外部播放器设置
   bool _useExternalPlayer = false;
@@ -44,6 +45,7 @@ class SettingsProvider with ChangeNotifier {
   bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
   DanmakuAutoLoadStrategy get danmakuAutoLoadStrategy =>
       _danmakuAutoLoadStrategy;
+  bool get fastPlaybackStartup => _fastPlaybackStartup;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
   bool get externalPlayerDanmakuOverlay => _externalPlayerDanmakuOverlay;
@@ -83,6 +85,8 @@ class SettingsProvider with ChangeNotifier {
       _prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
       legacyAutoMatchOnPlay: _autoMatchDanmakuOnPlay,
     );
+    _fastPlaybackStartup =
+        _prefs.getBool(SettingsKeys.fastPlaybackStartup) ?? false;
     if (!_prefs.containsKey(SettingsKeys.danmakuAutoLoadStrategy)) {
       await _prefs.setString(
         SettingsKeys.danmakuAutoLoadStrategy,
@@ -183,6 +187,13 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.autoMatchDanmakuOnPlay,
       _autoMatchDanmakuOnPlay,
     );
+    notifyListeners();
+  }
+
+  Future<void> setFastPlaybackStartup(bool enable) async {
+    if (_fastPlaybackStartup == enable) return;
+    _fastPlaybackStartup = enable;
+    await _prefs.setBool(SettingsKeys.fastPlaybackStartup, enable);
     notifyListeners();
   }
 

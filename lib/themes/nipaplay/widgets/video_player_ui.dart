@@ -970,6 +970,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                       episodeTitle: videoState.episodeTitle,
                       fileName: videoState.currentVideoPath?.split('/').last,
                       animeId: videoState.animeId,
+                      coverImageUrl: videoState.loadingCoverImageUrl,
                     ),
                 ],
               );
@@ -1091,6 +1092,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                               ?.split('/')
                                               .last,
                                           animeId: videoState.animeId,
+                                          coverImageUrl:
+                                              videoState.loadingCoverImageUrl,
                                         ),
                                       ),
                                     if (videoState.hasVideo)
@@ -1176,6 +1179,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                 ?.split('/')
                                                 .last,
                                             animeId: videoState.animeId,
+                                            coverImageUrl:
+                                                videoState.loadingCoverImageUrl,
                                           ),
                                         ),
                                       if (videoState.hasVideo)

@@ -13,6 +13,8 @@ class SettingsKeys {
 
   static const String danmakuAutoLoadStrategy = 'danmaku_auto_load_strategy';
 
+  static const String fastPlaybackStartup = 'fast_playback_startup';
+
 
   // =========================== 外部播放器相关设置 ============================
 

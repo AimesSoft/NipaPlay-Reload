@@ -38,6 +38,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
   static const String _accentColorPresetKey = 'app_accent_color_preset';
   static const String _folderNameDisplayModeKey = 'folder_name_display_mode';
+  static const String _diffuseLowResolutionPostersKey =
+      'diffuse_low_resolution_recommendation_posters';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -53,6 +55,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
   late FolderNameDisplayMode _folderNameDisplayMode;
+  late bool _diffuseLowResolutionPosters;
 
   // 获取设置值
   // 页面滑动动画始终启用
@@ -67,6 +70,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
   FolderNameDisplayMode get folderNameDisplayMode => _folderNameDisplayMode;
+  bool get diffuseLowResolutionPosters => _diffuseLowResolutionPosters;
 
   /// 目录名称最大行数：省略号模式为 1，多行模式为 null（不限制，完整显示）
   int? get folderNameMaxLines =>
@@ -89,6 +93,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _accentColorPreset = AppAccentColorPreset.rose;
     _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
+    _diffuseLowResolutionPosters = true;
     AppAccentColors.setCurrent(_accentColorPreset);
     _loadSettings();
   }
@@ -113,6 +118,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_widgetBlurEffectKey, false);
       _showDanmakuDensityChart = prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
+      _diffuseLowResolutionPosters =
+          prefs.getBool(_diffuseLowResolutionPostersKey) ?? true;
       _accentColorPreset = AppAccentColorPreset.fromStorageKey(
         prefs.getString(_accentColorPresetKey),
       );
@@ -290,6 +297,20 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setInt(_folderNameDisplayModeKey, value.index);
     } catch (e) {
       debugPrint('保存目录名称显示模式设置时出错: $e');
+    }
+  }
+
+  Future<void> setDiffuseLowResolutionPosters(bool value) async {
+    if (_diffuseLowResolutionPosters == value) return;
+
+    _diffuseLowResolutionPosters = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_diffuseLowResolutionPostersKey, value);
+    } catch (e) {
+      debugPrint('保存低清推荐海报晕染设置时出错: $e');
     }
   }
 }

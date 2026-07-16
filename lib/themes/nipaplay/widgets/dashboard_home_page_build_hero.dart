@@ -133,6 +133,10 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
 
   Widget _buildMainHeroBannerItem(RecommendedItem item,
       {bool compact = false}) {
+    final lowResolutionBlurSigma =
+        context.watch<AppearanceSettingsProvider>().diffuseLowResolutionPosters
+            ? 40.0
+            : 3.0;
     final card = Container(
       key: ValueKey('hero_banner_${item.id}_${item.source.name}'), // 添加唯一key
       margin: _isLargeScreenModeActive
@@ -164,7 +168,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   forceBlur: item.source != RecommendedItemSource.dandanplay
                       ? item.isLowRes
                       : false,
-                  lowResBlurSigma: 3,
+                  lowResBlurSigma: lowResolutionBlurSigma,
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
@@ -395,6 +399,10 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
   }
 
   Widget _buildSmallRecommendationCard(RecommendedItem item, int index) {
+    final lowResolutionBlurSigma =
+        context.watch<AppearanceSettingsProvider>().diffuseLowResolutionPosters
+            ? 40.0
+            : 3.0;
     final card = Container(
       key: ValueKey(
           'small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
@@ -425,7 +433,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   forceBlur: item.source != RecommendedItemSource.dandanplay
                       ? item.isLowRes
                       : false,
-                  lowResBlurSigma: 3,
+                  lowResBlurSigma: lowResolutionBlurSigma,
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
