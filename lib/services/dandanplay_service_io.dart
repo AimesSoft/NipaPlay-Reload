@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
@@ -1703,12 +1704,14 @@ class DandanplayService {
       ////debugPrint('获取到原始弹幕数: ${comments.length}');
 
       final formattedComments = comments.map((comment) {
+        final raw = Map<String, dynamic>.from(comment as Map);
         // 解析 p 字段，格式为 "时间,模式,颜色,用户ID"
-        final pParts = (comment['p'] as String).split(',');
+        final pParts = (raw['p'] as String).split(',');
         final time = double.tryParse(pParts[0]) ?? 0.0;
         final mode = DanmakuMode.fromCode(int.tryParse(pParts[1]));
         final color = int.tryParse(pParts[2]) ?? 16777215; // 默认白色
-        final content = comment['m'] as String;
+        final content = raw['m'] as String;
+        final senderId = resolveDanmakuSenderId(raw);
 
         // 转换颜色格式
         final r = (color >> 16) & 0xFF;
@@ -1722,6 +1725,9 @@ class DandanplayService {
           'type': mode.typeName,
           'color': colorValue,
           'isMe': false,
+          if (senderId != null) 'senderId': senderId,
+          if (raw['cid'] != null) 'cid': raw['cid'],
+          'source': 'dandanplay',
         };
       }).toList();
 

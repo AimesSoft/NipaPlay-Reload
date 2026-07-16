@@ -710,8 +710,16 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       debugPrint('[ExtDanmaku] 缓存查询: ${cached?.length ?? 0} 条, '
           '耗时=${DateTime.now().difference(tCache).inMilliseconds}ms');
       if (cached != null && cached.isNotEmpty) {
-        raw = cached;
-      } else {
+        final hasSenderMetadata = cached.any((comment) =>
+            comment is Map &&
+            comment['source']?.toString() == 'dandanplay');
+        if (hasSenderMetadata) {
+          raw = cached;
+        } else {
+          debugPrint('[ExtDanmaku] 缓存不含发送者元数据，重新请求网络');
+        }
+      }
+      if (raw == null) {
         debugPrint('[ExtDanmaku] 缓存未命中，发起网络请求…');
         final animeIdInt = int.tryParse(animeId) ?? 0;
         final tNet = DateTime.now();
