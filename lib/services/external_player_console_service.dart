@@ -229,12 +229,15 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   AssExportSettings? get _currentDanmakuAssSettings {
     final settings = _danmakuAssSettings;
     if (settings == null) return null;
+    final outlineStyle = settings.outlineStyle == AssOutlineStyle.none
+        ? AssOutlineStyle.stroke
+        : settings.outlineStyle;
     return settings.copyWith(
       opacity: _danmakuOpacity,
       outlineStyle: _danmakuOutlineEnabled
-          ? settings.outlineStyle
+          ? outlineStyle
           : AssOutlineStyle.none,
-      outlineWidth: _danmakuOutlineEnabled ? settings.outlineWidth : 0.0,
+      outlineWidth: _danmakuOutlineEnabled ? _danmakuOutlineWidth : 0.0,
     );
   }
 
@@ -360,9 +363,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuAssSettings = assets?.assSettings;
     _danmakuAllowStacking = assets?.allowStacking ?? true;
     _danmakuOpacity = assets?.opacity ?? 1.0;
-    final outlineWidth = assets?.outlineWidth ?? 1.0;
+    final settings = assets?.assSettings;
+    final outlineWidth = settings?.outlineWidth ?? 1.0;
     _danmakuOutlineWidth = outlineWidth > 0.0 ? outlineWidth : 1.0;
-    _danmakuOutlineEnabled = outlineWidth > 0.0;
+    _danmakuOutlineEnabled = settings != null &&
+        settings.outlineStyle != AssOutlineStyle.none &&
+        outlineWidth > 0.0;
   }
 
   void _clearDanmakuState() {

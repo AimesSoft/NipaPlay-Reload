@@ -559,7 +559,7 @@ void main() {
           await _stopProcess(process);
           await tempDir.delete(recursive: true);
         });
-        _showSession(_session(
+        final session = _session(
           process,
           ipcPath: socketPath,
           danmakuAssPath: assFile.path,
@@ -578,7 +578,8 @@ void main() {
             fontSize: 30,
             opacity: 0.8,
           ),
-        ));
+        );
+        _showSession(session);
 
         expect(service.danmakuOpacity, 0.8);
         expect(service.supportsDanmakuOpacity, isTrue);
@@ -652,7 +653,7 @@ void main() {
           await _stopProcess(process);
           await tempDir.delete(recursive: true);
         });
-        _showSession(_session(
+        final session = _session(
           process,
           ipcPath: socketPath,
           danmakuAssPath: assFile.path,
@@ -669,7 +670,8 @@ void main() {
             outlineStyle: AssOutlineStyle.stroke,
             outlineWidth: 2.5,
           ),
-        ));
+        );
+        _showSession(session);
 
         expect(service.supportsDanmakuOutline, isTrue);
         expect(service.danmakuOutlineEnabled, isTrue);
@@ -684,6 +686,33 @@ void main() {
         expect(service.danmakuOutlineEnabled, isTrue);
         expect(await assFile.readAsString(), contains('$stylePrefix' '2.5,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
+
+        _danmakuAssets[session] = DanmakuLaunchAssets(
+          assPath: assFile.path,
+          luaPath: '${assFile.path}.lua',
+          opacity: 1.0,
+          outlineWidth: 0.0,
+          danmakuList: [
+            DanmakuItem(
+              time: const Duration(seconds: 1),
+              content: 'initially disabled outline comment',
+            ),
+          ],
+          assSettings: const AssExportSettings(
+            fontSize: 30,
+            fontFamily: 'Arial',
+            outlineStyle: AssOutlineStyle.none,
+            outlineWidth: 0.0,
+          ),
+          allowStacking: true,
+        );
+        _showSession(session);
+
+        expect(service.danmakuOutlineEnabled, isFalse);
+        ExternalPlayerConsoleService.setDanmakuOutlineEnabled(true);
+        await _waitUntil(() => reloadCommands.length == 3);
+        expect(service.danmakuOutlineEnabled, isTrue);
+        expect(await assFile.readAsString(), contains('$stylePrefix' '1.0,0.0'));
       });
 
       test('replacing a session clears the previous progress', () async {
