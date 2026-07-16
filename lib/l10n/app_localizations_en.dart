@@ -72,6 +72,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reading playback progress…';
 
   @override
+  String get externalPlayerConsoleTimestampLabel => 'Exact timestamp';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => 'HH:MM:SS / MM:SS / seconds';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => 'Enter a valid timestamp';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => 'Jump';
+
+  @override
   String get externalPlayerConsoleDanmakuList => 'Danmaku list';
 
   @override

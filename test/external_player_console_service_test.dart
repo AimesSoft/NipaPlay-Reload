@@ -329,6 +329,14 @@ void main() {
 
           expect(find.textContaining('sender-hash'), findsOneWidget);
           expect(find.textContaining('dandanplay'), findsNothing);
+          expect(
+            find.byKey(const Key('external-player-timestamp-input')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('external-player-timestamp-seek')),
+            findsOneWidget,
+          );
         } finally {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           Process.killPid(process.pid, ProcessSignal.sigkill);
@@ -520,6 +528,26 @@ void main() {
           service.activeDanmakuItems.map((item) => item.danmakuId),
           ['seek-target'],
         );
+
+        expect(
+          ExternalPlayerConsoleService.seekToTimestamp('12:34.567'),
+          isTrue,
+        );
+        await _waitUntil(() => commands.length == 2);
+        expect(
+          service.session?.position,
+          const Duration(minutes: 12, seconds: 34, milliseconds: 567),
+        );
+        expect(
+          commands.last,
+          <dynamic>['seek', 754.567, 'absolute+exact'],
+        );
+
+        expect(
+          ExternalPlayerConsoleService.seekToTimestamp('invalid'),
+          isFalse,
+        );
+        expect(commands.length, 2);
       });
 
       test('coalesces rapid danmaku opacity updates without truncating ASS', () async {

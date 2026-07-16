@@ -781,12 +781,24 @@ class _SeekProgress extends StatefulWidget {
 /// 显示外部播放器进度的滑块组件的状态类
 class _SeekProgressState extends State<_SeekProgress> {
   double? _dragFraction;
+  final TextEditingController _timestampController = TextEditingController();
+  bool _timestampInvalid = false;
+
+  @override
+  void dispose() {
+    _timestampController.dispose();
+    super.dispose();
+  }
 
   /// 当 widget 更新时, 如果 session 发生变化, 则重置拖动进度
   @override
   void didUpdateWidget(_SeekProgress oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.session, widget.session)) _dragFraction = null;
+    if (!identical(oldWidget.session, widget.session)) {
+      _dragFraction = null;
+      _timestampController.clear();
+      _timestampInvalid = false;
+    }
   }
 
   /// 构建进度滑块组件
@@ -836,8 +848,56 @@ class _SeekProgressState extends State<_SeekProgress> {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 280,
+              child: TextField(
+                key: const Key('external-player-timestamp-input'),
+                controller: _timestampController,
+                enabled: supportsProgress,
+                keyboardType: TextInputType.datetime,
+                textInputAction: TextInputAction.go,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  labelText: localizations.externalPlayerConsoleTimestampLabel,
+                  hintText: localizations.externalPlayerConsoleTimestampHint,
+                  errorText: _timestampInvalid
+                      ? localizations.externalPlayerConsoleTimestampInvalid
+                      : null,
+                  prefixIcon: const Icon(Icons.schedule),
+                ),
+                onChanged: (_) {
+                  if (_timestampInvalid) {
+                    setState(() => _timestampInvalid = false);
+                  }
+                },
+                onSubmitted: supportsProgress ? (_) => _seekToTimestamp() : null,
+              ),
+            ),
+            FilledButton.tonalIcon(
+              key: const Key('external-player-timestamp-seek'),
+              onPressed: supportsProgress ? _seekToTimestamp : null,
+              icon: const Icon(Icons.my_location),
+              label: Text(localizations.externalPlayerConsoleTimestampSeek),
+            ),
+          ],
+        ),
       ],
     );
+  }
+
+  void _seekToTimestamp() {
+    final succeeded = ExternalPlayerConsoleService.seekToTimestamp(
+      _timestampController.text,
+    );
+    setState(() => _timestampInvalid = !succeeded);
+    if (succeeded) FocusScope.of(context).unfocus();
   }
 
   /// 将给定的 Duration 转换为格式化的字符串 (HH:MM:SS 或 MM:SS)

@@ -193,6 +193,13 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._session?.seekToFraction(fraction);
   }
 
+  /// 将时间戳解析为绝对位置并让 mpv 精确跳转.
+  static bool seekToTimestamp(String timestamp) {
+    final target = _parseTimestamp(timestamp);
+    if (target == null) return false;
+    return _instance._session?.seekToPosition(target) ?? false;
+  }
+
   /// 设置弹幕的不透明度, 范围为 0.0 到 1.0
   static void setDanmakuOpacity(double opacity) {
     if (!_instance.supportsDanmakuOpacity) return;
@@ -225,6 +232,33 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ------------------------------ //
   // -------- 私有实现方法 -------- //
   // ------------------------------ //
+
+  static Duration? _parseTimestamp(String timestamp) {
+    final value = timestamp.trim();
+    if (value.isEmpty) return null;
+    final parts = value.split(':');
+    if (parts.isEmpty || parts.length > 3) return null;
+
+    final secondsPattern = RegExp(r'^\d+(?:\.\d{1,3})?$');
+    if (!secondsPattern.hasMatch(parts.last)) return null;
+    final seconds = double.tryParse(parts.last);
+    if (seconds == null || !seconds.isFinite) return null;
+
+    var hours = 0;
+    var minutes = 0;
+    if (parts.length >= 2) {
+      minutes = int.tryParse(parts[parts.length - 2]) ?? -1;
+      if (minutes < 0) return null;
+    }
+    if (parts.length == 3) {
+      hours = int.tryParse(parts.first) ?? -1;
+      if (hours < 0 || minutes >= 60) return null;
+    }
+    if (parts.length > 1 && seconds >= 60) return null;
+
+    final totalMilliseconds = ((hours * 3600 + minutes * 60 + seconds) * 1000).round();
+    return Duration(milliseconds: totalMilliseconds);
+  }
 
   AssExportSettings? get _currentDanmakuAssSettings {
     final settings = _danmakuAssSettings;

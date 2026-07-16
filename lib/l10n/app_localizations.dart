@@ -219,6 +219,30 @@ abstract class AppLocalizations {
   /// **'正在获取播放进度…'**
   String get externalPlayerConsoleProgressLoading;
 
+  /// No description provided for @externalPlayerConsoleTimestampLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确时间戳'**
+  String get externalPlayerConsoleTimestampLabel;
+
+  /// No description provided for @externalPlayerConsoleTimestampHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'时:分:秒 / 分:秒 / 秒数'**
+  String get externalPlayerConsoleTimestampHint;
+
+  /// No description provided for @externalPlayerConsoleTimestampInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的时间戳'**
+  String get externalPlayerConsoleTimestampInvalid;
+
+  /// No description provided for @externalPlayerConsoleTimestampSeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确跳转'**
+  String get externalPlayerConsoleTimestampSeek;
+
   /// No description provided for @externalPlayerConsoleDanmakuList.
   ///
   /// In zh, this message translates to:

@@ -70,6 +70,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleProgressLoading => '正在获取播放进度…';
 
   @override
+  String get externalPlayerConsoleTimestampLabel => '精确时间戳';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => '时:分:秒 / 分:秒 / 秒数';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => '请输入有效的时间戳';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => '精确跳转';
+
+  @override
   String get externalPlayerConsoleDanmakuList => '弹幕列表';
 
   @override
@@ -1914,6 +1926,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get externalPlayerConsoleProgressLoading => '正在取得播放進度…';
+
+  @override
+  String get externalPlayerConsoleTimestampLabel => '精確時間戳';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => '時:分:秒 / 分:秒 / 秒數';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => '請輸入有效的時間戳';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => '精確跳轉';
 
   @override
   String get externalPlayerConsoleDanmakuList => '彈幕列表';

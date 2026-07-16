@@ -148,9 +148,20 @@ class ExternalPlayerSession extends ChangeNotifier {
     final target = Duration(
       milliseconds: (duration.inMilliseconds * value).round(),
     );
-    position = target;
+    seekToPosition(target);
+  }
+
+  /// 将 mpv 精确跳转到指定的绝对播放位置.
+  bool seekToPosition(Duration target) {
+    if (_closed || ipcPath == null || target < Duration.zero) return false;
+    final targetMilliseconds = duration > Duration.zero
+        ? target.inMilliseconds.clamp(0, duration.inMilliseconds)
+        : target.inMilliseconds;
+    final value = Duration(milliseconds: targetMilliseconds);
+    position = value;
     notifyListeners();
-    _seekMpv(target);
+    _seekMpv(value);
+    return true;
   }
 
 

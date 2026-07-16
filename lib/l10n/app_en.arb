@@ -20,6 +20,10 @@
   "externalPlayerConsoleProgress": "Playback progress",
   "externalPlayerConsoleProgressUnsupported": "This player does not support progress synchronization.",
   "externalPlayerConsoleProgressLoading": "Reading playback progress…",
+  "externalPlayerConsoleTimestampLabel": "Exact timestamp",
+  "externalPlayerConsoleTimestampHint": "HH:MM:SS / MM:SS / seconds",
+  "externalPlayerConsoleTimestampInvalid": "Enter a valid timestamp",
+  "externalPlayerConsoleTimestampSeek": "Jump",
   "externalPlayerConsoleDanmakuList": "Danmaku list",
   "externalPlayerConsoleDanmakuStats": "{total} total · {active} on screen",
   "@externalPlayerConsoleDanmakuStats": {
