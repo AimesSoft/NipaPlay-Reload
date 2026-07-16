@@ -206,21 +206,22 @@ void main() {
         await _waitUntil(() => service.session == null);
       });
 
-      testWidgets('does not show danmaku sources in the list', (tester) async {
+      testWidgets('shows sender identity without showing danmaku sources', (tester) async {
         final process = await tester.runAsync(_startPlayer);
         if (process == null) fail('Failed to start the test player process');
         try {
           ExternalPlayerConsoleService.showSession(_session(
             process,
             danmakuList: [
-              DanmakuItem(
-                danmakuId: 'source-visible',
-                content: 'source test',
-                time: const Duration(seconds: 1),
-                colorRgb: 0xFFFFFF,
-                mode: DanmakuMode.scroll,
-                source: 'bilibili',
-              ),
+              DanmakuItem.fromMap({
+                'time': 1.0,
+                'content': 'source test',
+                'type': 'scroll',
+                'color': 'rgb(255,255,255)',
+                'p': '1.0,1,16777215,sender-hash',
+                'cid': 'comment-id',
+                'source': 'dandanplay',
+              }),
             ],
           ));
 
@@ -231,7 +232,8 @@ void main() {
             home: ExternalPlayerConsolePage(),
           ));
 
-          expect(find.textContaining('bilibili'), findsNothing);
+          expect(find.textContaining('sender-hash'), findsOneWidget);
+          expect(find.textContaining('dandanplay'), findsNothing);
         } finally {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           Process.killPid(process.pid, ProcessSignal.sigkill);

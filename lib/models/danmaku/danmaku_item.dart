@@ -279,7 +279,15 @@ class DanmakuItem {
         if (value != null) return value;
       }
     }
-    return null;
+
+    // 弹弹 play 原始弹幕的 p 字段格式为 时间,模式,颜色,发送者标识.
+    // C++ 标准化路径会透传 p, 但不会额外生成 senderId.
+    final p = raw['p']?.toString().split(',');
+    if (p != null && p.length > 3) {
+      final value = _nonEmptyString(p[3]);
+      if (value != null) return value;
+    }
+    return _nonEmptyString(raw['cid']);
   }
 
   static String? _nonEmptyString(dynamic value) {
