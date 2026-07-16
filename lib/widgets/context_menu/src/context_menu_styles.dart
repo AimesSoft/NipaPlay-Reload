@@ -13,7 +13,7 @@ class ContextMenuStyles {
 
     return ContextMenuStyle(
       width: 196,
-      itemHeight: 44,
+      itemHeight: 36,
       borderRadius: 8,
       itemPadding: const EdgeInsets.symmetric(horizontal: 14),
       iconSize: 18,

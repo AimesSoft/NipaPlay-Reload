@@ -74,4 +74,26 @@ class PlaybackDetailContext {
       sourceKind == PlaybackSourceKind.localLibrary &&
       animeId != null &&
       animeId! > 0;
+
+  PlaybackDetailContext withAnimeMatch({
+    required int animeId,
+    String? title,
+  }) {
+    assert(animeId > 0);
+    final matchedTitle = title?.trim();
+    final isLocalFile = sourceKind == PlaybackSourceKind.localFile;
+
+    return PlaybackDetailContext(
+      sourceKind: isLocalFile ? PlaybackSourceKind.localLibrary : sourceKind,
+      sourceLabel: isLocalFile ? '本地媒体库' : sourceLabel,
+      sourceKey: '$sourceKey:anime:$animeId',
+      title: matchedTitle?.isNotEmpty == true ? matchedTitle! : this.title,
+      subtitle: subtitle,
+      summary: summary,
+      imageUrl: imageUrl,
+      animeId: animeId,
+      isIdentified: true,
+      episodeLoader: episodeLoader,
+    );
+  }
 }

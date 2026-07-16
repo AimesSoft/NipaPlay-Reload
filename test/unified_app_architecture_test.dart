@@ -872,15 +872,71 @@ void main() {
     expect(recognizedItem.detailContext, isNull);
   });
 
+  test('anime matching preserves source-specific detail episodes', () async {
+    var loadCount = 0;
+    final localFile = PlaybackDetailContext(
+      sourceKind: PlaybackSourceKind.localFile,
+      sourceLabel: '本地文件',
+      sourceKey: 'local:/media/Anime',
+      title: '01',
+      isIdentified: false,
+      episodeLoader: () async {
+        loadCount += 1;
+        return const <PlaybackDetailEpisode>[
+          PlaybackDetailEpisode(
+            id: 'episode-1',
+            videoPath: '/media/Anime/01.mkv',
+            title: '01',
+          ),
+        ];
+      },
+    );
+
+    final matched = localFile.withAnimeMatch(
+      animeId: 42,
+      title: 'Example',
+    );
+    final episodes = await matched.episodeLoader();
+
+    expect(matched.sourceKind, PlaybackSourceKind.localLibrary);
+    expect(matched.sourceLabel, '本地媒体库');
+    expect(matched.sourceKey, 'local:/media/Anime:anime:42');
+    expect(matched.title, 'Example');
+    expect(matched.animeId, 42);
+    expect(matched.isIdentified, isTrue);
+    expect(matched.usesLocalLibraryDetail, isTrue);
+    expect(episodes.single.videoPath, '/media/Anime/01.mkv');
+    expect(loadCount, 1);
+
+    final webDav = PlaybackDetailContext(
+      sourceKind: PlaybackSourceKind.webDav,
+      sourceLabel: 'WebDAV',
+      sourceKey: 'webdav:example:/Anime',
+      title: '01',
+      isIdentified: false,
+      episodeLoader: () async => const <PlaybackDetailEpisode>[],
+    ).withAnimeMatch(animeId: 42);
+
+    expect(webDav.sourceKind, PlaybackSourceKind.webDav);
+    expect(webDav.sourceLabel, 'WebDAV');
+    expect(webDav.usesLocalLibraryDetail, isFalse);
+  });
+
   test('playback sources reuse the canonical anime detail renderer', () {
     final player = File('lib/pages/play_video_page.dart').readAsStringSync();
     final detail = File('lib/pages/anime_detail_page.dart').readAsStringSync();
+    final contextMenu = File(
+      'lib/themes/nipaplay/widgets/video_player_ui.dart',
+    ).readAsStringSync();
 
     expect(player, contains('AnimeDetailPage('));
     expect(player, contains('playbackDetailContext: detailContext'));
     expect(detail, contains('PlaybackDetailContext? playbackDetailContext'));
     expect(detail, contains('NipaplayAnimeDetailLayout('));
     expect(detail, contains('BangumiCommentsWidget('));
+    expect(contextMenu, contains("label: '番剧详情'"));
+    expect(contextMenu, contains('videoState.animeDetailContext'));
+    expect(contextMenu, contains('playbackDetailContext: detailContext'));
     expect(
       File('lib/playback/adaptive_playback_detail_view.dart').existsSync(),
       isFalse,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/control_shadow.dart';
+import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
 
 void main() {
@@ -25,6 +26,22 @@ void main() {
       shadow.shadows.every((item) => item.offset == Offset.zero),
       isTrue,
     );
+  });
+
+  testWidgets('player context menu uses compact item spacing', (tester) async {
+    ContextMenuStyle? style;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            style = ContextMenuStyles.playerOverlay(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(style?.itemHeight, 36);
   });
 
   test('portrait controls rebuild unscaled and danmaku keeps phone size', () {

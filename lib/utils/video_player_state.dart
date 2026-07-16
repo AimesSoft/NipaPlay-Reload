@@ -1280,6 +1280,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
   PlaybackDetailContext? get playbackDetailContext => _playbackDetailContext;
+  PlaybackDetailContext? get animeDetailContext {
+    final detailContext = _playbackDetailContext;
+    if (detailContext == null) return null;
+    if (detailContext.isIdentified) return detailContext;
+
+    final matchedAnimeId = _animeId;
+    if (matchedAnimeId == null || matchedAnimeId <= 0) return null;
+    return detailContext.withAnimeMatch(
+      animeId: matchedAnimeId,
+      title: _animeTitle,
+    );
+  }
 
   bool hasJellyfinServerAudioSelection(String itemId) =>
       _jellyfinServerAudioSelections.containsKey(itemId);

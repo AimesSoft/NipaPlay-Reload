@@ -99,7 +99,8 @@ class AnimeDetailPage extends StatefulWidget {
     String? sharedSourceLabel,
     PlaybackDetailContext? playbackDetailContext,
   }) {
-    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context) &&
+        playbackDetailContext == null) {
       return Navigator.of(context).push<WatchHistoryItem>(
         NipaplayLargeScreenWindowPageRoute<WatchHistoryItem>(
           enableAnimation: true,
