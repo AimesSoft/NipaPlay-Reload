@@ -32,9 +32,15 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                     ? const _EmptyConsole()
                     : _ConsoleCard(
                         session: session,
+                        mediaPath: service.mediaPath,
+                        animeTitle: service.animeTitle,
+                        episodeTitle: service.episodeTitle,
+                        episodeId: service.episodeId,
+                        danmakuList: service.danmakuList,
+                        danmakuStartTime: service.danmakuStartTime,
                         isPaused: session.isPaused ?? false,
-                        danmakuOpacity: session.danmakuOpacity ?? 1.0,
-                        danmakuOutlineEnabled: session.danmakuOutlineEnabled,
+                        danmakuOpacity: service.danmakuOpacity,
+                        danmakuOutlineEnabled: service.danmakuOutlineEnabled,
                         supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                         supportsDanmakuOutline: service.supportsDanmakuOutline,
                         activeDanmakuIndices: service.activeDanmakuIndices,
@@ -87,6 +93,12 @@ class _EmptyConsole extends StatelessWidget {
 class _ConsoleCard extends StatelessWidget {
   const _ConsoleCard({
     required this.session,
+    required this.mediaPath,
+    required this.animeTitle,
+    required this.episodeTitle,
+    required this.episodeId,
+    required this.danmakuList,
+    required this.danmakuStartTime,
     required this.isPaused,
     required this.danmakuOpacity,
     required this.danmakuOutlineEnabled,
@@ -96,6 +108,12 @@ class _ConsoleCard extends StatelessWidget {
   });
 
   final ExternalPlayerSession session;
+  final String? mediaPath;
+  final String? animeTitle;
+  final String? episodeTitle;
+  final int? episodeId;
+  final List<DanmakuItem> danmakuList;
+  final Duration Function(DanmakuItem) danmakuStartTime;
   final bool isPaused;
   final double danmakuOpacity;
   final bool danmakuOutlineEnabled;
@@ -136,7 +154,7 @@ class _ConsoleCard extends StatelessWidget {
               context,
               localizations.externalPlayerConsoleAnime,
               _nonEmptyOr(
-                session.animeTitle,
+                animeTitle,
                 localizations.externalPlayerConsoleUnknownAnime,
               ),
             ),
@@ -144,14 +162,14 @@ class _ConsoleCard extends StatelessWidget {
               context,
               localizations.externalPlayerConsoleEpisode,
               _nonEmptyOr(
-                session.episodeTitle,
+                episodeTitle,
                 localizations.externalPlayerConsoleUnknownEpisode,
               ),
             ),
             _detailRow(
               context,
               localizations.externalPlayerConsoleEpisodeId,
-              session.episodeId?.toString() ?? '-',
+              episodeId?.toString() ?? '-',
             ),
             _detailRow(
               context,
@@ -161,7 +179,7 @@ class _ConsoleCard extends StatelessWidget {
             _detailRow(
               context,
               localizations.externalPlayerConsoleMediaPath,
-              session.mediaPath,
+              mediaPath ?? '-',
             ),
             const SizedBox(height: 20),
             _buildProgress(context),
@@ -201,6 +219,8 @@ class _ConsoleCard extends StatelessWidget {
             const SizedBox(height: 16),
             _DanmakuList(
               session: session,
+              items: danmakuList,
+              startTimeFor: danmakuStartTime,
               activeIndices: activeDanmakuIndices,
             ),
           ],
@@ -320,10 +340,14 @@ class _ConsoleCard extends StatelessWidget {
 class _DanmakuList extends StatefulWidget {
   const _DanmakuList({
     required this.session,
+    required this.items,
+    required this.startTimeFor,
     required this.activeIndices,
   });
 
   final ExternalPlayerSession session;
+  final List<DanmakuItem> items;
+  final Duration Function(DanmakuItem) startTimeFor;
   final List<int> activeIndices;
 
   @override
@@ -421,7 +445,7 @@ class _DanmakuListState extends State<_DanmakuList> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localizations = context.l10n;
-    final items = widget.session.danmakuList;
+    final items = widget.items;
     final activeIndices = widget.activeIndices.toSet();
     final followDescription = _followPlayback
         ? localizations.externalPlayerConsoleDanmakuFollowEnabled
@@ -512,8 +536,7 @@ class _DanmakuListState extends State<_DanmakuList> {
                           item: items[index],
                           itemId:
                               '$index-${items[index].danmakuId ?? ''}',
-                          startTime:
-                              widget.session.danmakuStartTime(items[index]),
+                          startTime: widget.startTimeFor(items[index]),
                           active: activeIndices.contains(index),
                           compact: compact,
                         );

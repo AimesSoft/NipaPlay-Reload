@@ -386,24 +386,21 @@ class ExternalPlayerService {
         playbackSession: item.playbackSession,
         detailContext: item.detailContext,
       );
-      final s = ExternalPlayerSession(
-        _detectPlayer(playerPath),
-        playerPath,
-        launchResult.processId!,
-        launchResult.ipcPath,
-        Duration(milliseconds: history?.duration ?? 0),
-        danmakuAssets?.assPath,
-        sessionItem,
-        danmakuList: danmakuAssets?.danmakuList ?? const [],
-        danmakuAssSettings: danmakuAssets?.assSettings,
-        danmakuAllowStacking: danmakuAssets?.allowStacking ?? true,
-      )..initialize(
-          danmakuOpacity: danmakuAssets?.opacity ?? 1.0,
-          danmakuOutlineWidth: danmakuAssets?.outlineWidth ?? 1.0,
-          position: Duration(milliseconds: history?.lastPosition ?? 0),
-        );
 
-      ExternalPlayerConsoleService.showSession(s);
+      final s = ExternalPlayerSession(
+        type      : _detectPlayer(playerPath),
+        playerPath: playerPath,
+        processId : launchResult.processId!,
+        ipcPath   : launchResult.ipcPath,
+        duration  : Duration(milliseconds: history?.duration ?? 0),
+        position  : Duration(milliseconds: history?.lastPosition ?? 0),
+      );
+
+      ExternalPlayerConsoleService.showSession(
+        s,
+        playableItem: sessionItem,
+        danmakuAssets: danmakuAssets,
+      );
 
       // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面
       if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {
@@ -756,7 +753,11 @@ local function reload_danmaku_track()
     end)
 end
 
-mp.register_script_message("nipaplay-danmaku-reload", function()
+mp.register_script_message("nipaplay-danmaku-reload", function(ass_path)
+    if ass_path and ass_path ~= "" then
+        local ass_name = string.match(ass_path, "([^/\\\\]+)\$")
+        if ass_name then TARGET = ass_name end
+    end
     if reload_timer then reload_timer:kill() end
     reload_timer = mp.add_timeout(0.05, reload_danmaku_track)
 end)

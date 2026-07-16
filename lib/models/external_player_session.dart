@@ -8,54 +8,28 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-// import 'package:nipaplay/constants/settings_keys.dart';
-// import 'package:nipaplay/utils/settings_storage.dart';
 
 
 /// 掌管外部播放器会话的神
+///
+/// 管理一个 mpv 进程及其 IPC, 播放状态和 ASS 弹幕交互.
+///
+/// 本类不保存番剧, 剧集或媒体展示信息; 这些信息由控制台服务管理.
 class ExternalPlayerSession extends ChangeNotifier {
 
   /// 构造函数
   ExternalPlayerSession(
-    this.type,
-    this.playerPath,
-    this.processId,
-    this.ipcPath,
-    this.duration,
-    this.danmakuAssPath,
-    PlayableItem playableItem,
     {
-      List<DanmakuItem> danmakuList = const [],
-      this.danmakuAssSettings,
-      this.danmakuAllowStacking = true,
+      required this.type,
+      required this.playerPath,
+      required this.processId,
+      required this.ipcPath,
+      required this.duration,
+
+      this.position = Duration.zero,
+      this.isPaused = false,
     }
-  ) :
-  _danmakuList = _sortDanmakuItems(danmakuList),
-  mediaPath    = playableItem.videoPath,
-  animeTitle   = playableItem.title,
-  episodeTitle = playableItem.subtitle,
-  animeId      = playableItem.animeId,
-  episodeId    = playableItem.episodeId;
-
-
-  /// 初始化外部播放器会话的播放状态
-  void initialize({
-    double   danmakuOpacity = 1.0,
-    double   danmakuOutlineWidth = 1.0,
-    Duration position       = Duration.zero,
-    bool     isPaused       = false,
-  }) {
-    this.danmakuOpacity = danmakuOpacity;
-    this.danmakuOutlineWidth = danmakuOutlineWidth > 0.0
-        ? danmakuOutlineWidth
-        : 1.0;
-    danmakuOutlineEnabled = danmakuOutlineWidth > 0.0;
-    this.position       = position;
-    this.isPaused       = isPaused;
-  }
+  );
 
   // 外部播放器相关
   final ExternalPlayerType type;  // 外部播放器类型
@@ -63,57 +37,18 @@ class ExternalPlayerSession extends ChangeNotifier {
   final int      processId;       // 外部播放器进程 ID
   final String?  ipcPath;         // 外部播放器的 IPC 通道路径
 
-  // 媒体文件相关
-  final String   mediaPath;       // 媒体文件路径
-  Duration       duration;        // 媒体文件总时长
-
-  // 番剧相关
-  final String?  animeTitle;      // 番剧标题
-  final String?  episodeTitle;    // 剧集标题
-  final int?     animeId;         // 番剧 ID
-  final int?     episodeId;       // 剧集 ID
-
-  // 弹幕相关
-  final String?  danmakuAssPath;  // 弹幕 ASS 文件路径
-  double?        danmakuOpacity;  // 弹幕透明度, 范围 0.0 ~ 1.0
-  double         danmakuOutlineWidth = 1.0; // 启用时使用的 ASS 描边宽度
-  bool           danmakuOutlineEnabled = true; // 是否显示弹幕描边
-  final List<DanmakuItem> _danmakuList; // 生成 ASS 和控制台共用的源弹幕
-  final AssExportSettings? danmakuAssSettings; // 重新生成 ASS 所需的初始设置
-  final bool danmakuAllowStacking; // DFM+ 布局是否允许弹幕堆叠
-
   // 播放相关
+  Duration       duration;        // 媒体文件总时长
   Duration?      position;        // 当前播放位置
   bool?          isPaused;        // 是否暂停
 
   // 进程轮询相关
   static const Duration _processPollingInterval = Duration(milliseconds: 250);
   Timer? _processPollingTimer;
+  bool   _closed = false; // 外部播放器会话是否已关闭, 关闭后不再轮询进程和播放状态
 
 
   // --- Setters & Getters --- //
-
-  set setPosition(Duration newPosition) { position = newPosition; }
-  set setPaused  (bool paused)          { isPaused = paused;      }
-
-  void togglePaused() { if (isPaused != null) isPaused = !isPaused!; }
-
-  Duration? get getPosition => position;
-  bool?     get getPaused   => isPaused;
-  List<DanmakuItem> get danmakuList => _danmakuList;
-
-  /// 合并控制台当前样式状态后的 ASS 设置.
-  AssExportSettings? get currentDanmakuAssSettings {
-    final settings = danmakuAssSettings;
-    if (settings == null) return null;
-    return settings.copyWith(
-      opacity: danmakuOpacity ?? settings.opacity,
-      outlineStyle: danmakuOutlineEnabled
-          ? settings.outlineStyle
-          : AssOutlineStyle.none,
-      outlineWidth: danmakuOutlineEnabled ? settings.outlineWidth : 0.0,
-    );
-  }
 
   /// 获取播放进度的百分比, 范围 0.0 ~ 1.0
   double? get fraction {
@@ -121,87 +56,90 @@ class ExternalPlayerSession extends ChangeNotifier {
     return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
   }
 
-  /// 获取指定播放位置正在显示的弹幕索引
-  ///
-  /// 弹幕已按开始时间排序. 先二分找到已开始的最后一条, 再只检查最长弹幕
-  /// 显示时长覆盖的时间窗口, 避免播放状态刷新时扫描全部弹幕.
-  List<int> activeDanmakuIndicesAt(Duration currentPosition) {
-    final maximumDuration = _maxDanmakuDuration;
-    if (_danmakuList.isEmpty || maximumDuration <= Duration.zero) {
-      return const [];
+  // --- mpv Process Interaction --- //
+
+  /// 终止当前外部播放器进程.
+  void terminate() {
+    if (_closed) return;
+    _closed = true;
+    stopProcessPolling();
+    try {
+      final killed = Process.killPid(processId, ProcessSignal.sigterm);
+      if (!killed) debugPrint('[ExternalPlayerSession] Failed to terminate player: pid=$processId');
+    }
+    catch (error) { debugPrint('[ExternalPlayerSession] Failed to close player: $error'); }
+  }
+
+  /// 切换 mpv 的暂停状态.
+  void togglePause() {
+    final paused = isPaused;
+    if (_closed || ipcPath == null || paused == null) return;
+    _setMpvPaused(!paused);
+  }
+
+  /// 将 mpv 跳转到总时长中的指定比例.
+  void seekToFraction(double fraction) {
+    if (_closed || ipcPath == null || duration <= Duration.zero) return;
+    final value = fraction.clamp(0.0, 1.0).toDouble();
+    final target = Duration(
+      milliseconds: (duration.inMilliseconds * value).round(),
+    );
+    position = target;
+    notifyListeners();
+    _seekMpv(target);
+  }
+
+
+  /// 通知指定的 mpv Lua 脚本重新加载 ASS 弹幕轨.
+  Future<bool> refreshDanmaku(String assPath, String luaPath) async {
+    final path = ipcPath;
+    if (_closed || path == null || path.isEmpty ||
+        assPath.isEmpty || luaPath.isEmpty) {
+      return false;
     }
 
-    var low = 0;
-    var high = _danmakuList.length;
-    while (low < high) {
-      final middle = low + ((high - low) >> 1);
-      if (danmakuStartTime(_danmakuList[middle]) <= currentPosition) {
-        low = middle + 1;
-      } else {
-        high = middle;
+    final luaFilename = luaPath.split(Platform.pathSeparator).last;
+    final luaScriptName = luaFilename.toLowerCase().endsWith('.lua')
+        ? luaFilename.substring(0, luaFilename.length - 4)
+        : luaFilename;
+
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress(path, type: InternetAddressType.unix),
+        0,
+        timeout: const Duration(milliseconds: 500),
+      );
+      socket.write('${jsonEncode({
+            'command': [
+              'script-message-to',
+              luaScriptName,
+              'nipaplay-danmaku-reload',
+              assPath,
+            ],
+            'request_id': 5,
+          })}\n');
+      await socket.flush();
+
+      final lines = socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(milliseconds: 800));
+      await for (final line in lines) {
+        final value = jsonDecode(line);
+        if (value is! Map<String, dynamic> || value['request_id'] != 5) {
+          continue;
+        }
+        return value['error'] == 'success';
       }
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      socket?.destroy();
     }
-
-    final earliestPossibleStart = currentPosition - maximumDuration;
-    final active = <int>[];
-    for (var index = low - 1; index >= 0; index--) {
-      final item = _danmakuList[index];
-      final startTime = danmakuStartTime(item);
-      if (startTime < earliestPossibleStart) break;
-      if (currentPosition >= startTime &&
-          currentPosition < startTime + danmakuDisplayDuration(item)) {
-        active.add(index);
-      }
-    }
-    return List<int>.unmodifiable(active.reversed);
   }
-
-  /// 获取指定播放位置正在显示的弹幕
-  List<DanmakuItem> activeDanmakuAt(Duration currentPosition) {
-    return List<DanmakuItem>.unmodifiable(
-      activeDanmakuIndicesAt(currentPosition).map((index) => _danmakuList[index]),
-    );
-  }
-
-  Duration danmakuStartTime(DanmakuItem item) {
-    final offsetSeconds = danmakuAssSettings?.timeOffsetSeconds ?? 0.0;
-    return item.time + Duration(
-      microseconds:
-          (offsetSeconds * Duration.microsecondsPerSecond).round(),
-    );
-  }
-
-  Duration danmakuDisplayDuration(DanmakuItem item) {
-    final seconds = item.mode.isScrolling
-        ? danmakuAssSettings?.scrollDurationSeconds ?? 10.0
-        : kAssFixedDanmakuDurationSeconds;
-    if (!seconds.isFinite || seconds <= 0) {
-      return item.mode.isScrolling
-          ? const Duration(seconds: 10)
-          : const Duration(seconds: 5);
-    }
-    return Duration(
-      microseconds: (seconds * Duration.microsecondsPerSecond).round(),
-    );
-  }
-
-  /// 对弹幕进行排序, 以便后续二分查找
-  /// 按照 startTime 升序排序
-  static List<DanmakuItem> _sortDanmakuItems(List<DanmakuItem> items) {
-    final sorted = List<DanmakuItem>.of(items);
-    sorted.sort((a, b) => a.time.compareTo(b.time));
-    return List<DanmakuItem>.unmodifiable(sorted);
-  }
-
-  Duration get _maxDanmakuDuration {
-    var maximum = Duration.zero;
-    for (final item in _danmakuList) {
-      final duration = danmakuDisplayDuration(item);
-      if (duration > maximum) maximum = duration;
-    }
-    return maximum;
-  }
-
 
   // --- Process Polling --- //
 
@@ -215,6 +153,106 @@ class ExternalPlayerSession extends ChangeNotifier {
   void stopProcessPolling() {
     _processPollingTimer?.cancel();
     _processPollingTimer = null;
+  }
+
+
+  // --- Private Methods --- //
+
+  Future<void> _setMpvPaused(bool paused) async {
+    final path = ipcPath;
+    if (_closed || path == null) return;
+
+    Socket? socket;
+    var changed = false;
+    try {
+      final host = InternetAddress(path, type: InternetAddressType.unix);
+      final command = jsonEncode({
+        'command': ['set_property', 'pause', paused],
+        'request_id': 4,
+      });
+      socket = await Socket.connect(
+        host,
+        0,
+        timeout: const Duration(milliseconds: 500),
+      );
+      socket.write('$command\n');
+      await socket.flush();
+
+      final lines = socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(milliseconds: 800));
+      await for (final line in lines) {
+        final value = jsonDecode(line);
+        if (value is! Map<String, dynamic> || value['request_id'] != 4) {
+          continue;
+        }
+        debugPrint(
+          '[ExternalPlayerSession] _setMpvPaused response: ${value['error']}',
+        );
+        changed = value['error'] == 'success';
+        break;
+      }
+    } catch (error) {
+      debugPrint('[ExternalPlayerSession] Failed to set mpv pause: $error');
+    } finally {
+      socket?.destroy();
+    }
+
+    if (!_closed && changed) {
+      isPaused = paused;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _seekMpv(Duration target) async {
+    final path = ipcPath;
+    if (_closed || path == null) return;
+
+    Socket? socket;
+    try {
+      final host = InternetAddress(path, type: InternetAddressType.unix);
+      socket = await Socket.connect(
+        host,
+        0,
+        timeout: const Duration(milliseconds: 500),
+      );
+      if (_closed) return;
+
+      final command = jsonEncode({
+        'command': [
+          'seek',
+          target.inMilliseconds / 1000.0,
+          'absolute+exact',
+        ],
+        'request_id': 6,
+      });
+      socket.write('$command\n');
+      await socket.flush();
+
+      final lines = socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(milliseconds: 800));
+      await for (final line in lines) {
+        final value = jsonDecode(line);
+        if (value is! Map<String, dynamic> || value['request_id'] != 6) {
+          continue;
+        }
+        if (value['error'] != 'success') {
+          debugPrint(
+            '[ExternalPlayerSession] Failed to seek mpv: ${value['error']}',
+          );
+        }
+        return;
+      }
+    } catch (error) {
+      debugPrint('[ExternalPlayerSession] Failed to seek mpv: $error');
+    } finally {
+      socket?.destroy();
+    }
   }
 
   /// 计划下一次轮询
@@ -239,6 +277,7 @@ class ExternalPlayerSession extends ChangeNotifier {
 
     if (!identical(_processPollingTimer, timer)) return;
     if (!running) {
+      _closed = true;
       _processPollingTimer = null;
       onProcessExit();
       return;
@@ -357,6 +396,7 @@ class ExternalPlayerSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _closed = true;
     stopProcessPolling();
     super.dispose();
   }
