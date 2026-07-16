@@ -1,4 +1,12 @@
+
+// lib/constants/danmaku/ass_kind.dart
+// 实现 弹幕数据 -> ASS 字幕文本
+
+import 'package:nipaplay/constants/danmaku/ass_kind.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+
 
 /// ASS 字幕导出用的描边样式。
 /// 与 [DanmakuOutlineStyle] 一一对应，但保持本转换器零外部依赖以便单测。
@@ -62,8 +70,6 @@ class AssExportSettings {
   });
 }
 
-/// 弹幕条目类型。
-enum _DanmakuKind { scroll, top, bottom }
 
 /// 把过滤后的弹幕列表转换为 ASS 字幕文本。
 ///
@@ -73,6 +79,14 @@ enum _DanmakuKind { scroll, top, bottom }
 /// 滚动弹幕使用经典 Danmaku2ASS 车道碰撞算法：每条分配一条水平车道，
 /// 前一条"完全进入屏幕"后释放车道。顶/底部弹幕用固定时长 + 垂直车道。
 String convertDanmakuToAss(
+  List<Map<String, dynamic>> danmaku,
+  AssExportSettings settings,
+) {
+  return convertDanmakuToAssWithEvents(danmaku, settings).ass;
+}
+
+/// 转换 ASS, 并返回所有实际写入 ASS 的事件
+DanmakuAssConversionResult convertDanmakuToAssWithEvents(
   List<Map<String, dynamic>> danmaku,
   AssExportSettings settings,
 ) {
@@ -113,6 +127,7 @@ String convertDanmakuToAss(
   final scrollLanes = List<double?>.filled(laneCount, null, growable: false);
   final topLanes = List<double?>.filled(laneCount, null, growable: false);
   final bottomLanes = List<double?>.filled(laneCount, null, growable: false);
+  final events = <AssDanmakuEvent>[];
 
   buffer.writeln('[Events]');
   buffer.writeln(
@@ -121,7 +136,7 @@ String convertDanmakuToAss(
   for (final d in merged) {
     final width = _estimateWidth(d.content, assFontSize);
     switch (d.kind) {
-      case _DanmakuKind.scroll:
+      case DanmakuKind.scroll:
         final duration =
             (settings.scrollDurationSeconds.isFinite &&
                     settings.scrollDurationSeconds > 0)
@@ -144,8 +159,15 @@ String convertDanmakuToAss(
           style: 'Danmaku',
           text: line,
         );
+        events.add(AssDanmakuEvent(
+          content: d.content,
+          startSeconds: d.time,
+          endSeconds: d.time + duration,
+          colorRgb: d.color,
+          type: DanmakuKind.scroll,
+        ));
         break;
-      case _DanmakuKind.top:
+      case DanmakuKind.top:
         const duration = kAssFixedDanmakuDurationSeconds;
         final lane = _pickFixedLane(topLanes, d.time, duration);
         final yTop = (lane * laneHeight + 2).toDouble();
@@ -161,8 +183,15 @@ String convertDanmakuToAss(
           style: 'DanmakuTop',
           text: line,
         );
+        events.add(AssDanmakuEvent(
+          content: d.content,
+          startSeconds: d.time,
+          endSeconds: d.time + duration,
+          colorRgb: d.color,
+          type: DanmakuKind.top,
+        ));
         break;
-      case _DanmakuKind.bottom:
+      case DanmakuKind.bottom:
         const duration = kAssFixedDanmakuDurationSeconds;
         final lane = _pickFixedLane(bottomLanes, d.time, duration);
         final yBottom = (kAssPlayResY - lane * laneHeight - 2).toDouble();
@@ -178,17 +207,28 @@ String convertDanmakuToAss(
           style: 'DanmakuBottom',
           text: line,
         );
+        events.add(AssDanmakuEvent(
+          content: d.content,
+          startSeconds: d.time,
+          endSeconds: d.time + duration,
+          colorRgb: d.color,
+          type: DanmakuKind.bottom,
+        ));
         break;
     }
   }
 
-  return buffer.toString();
+  // 返回 ASS 文本 + 实际写入的事件清单
+  return DanmakuAssConversionResult(
+    ass: buffer.toString(),
+    events: List<AssDanmakuEvent>.unmodifiable(events),
+  );
 }
 
 class _ParsedDanmaku {
   final String content;
   final double time;
-  final _DanmakuKind kind;
+  final DanmakuKind kind;
   final int color; // 0xRRGGBB
 
   const _ParsedDanmaku({
@@ -214,28 +254,22 @@ String _resolveContent(Map<String, dynamic> item) {
   return v.toString();
 }
 
-_DanmakuKind _resolveKind(Map<String, dynamic> item) {
+DanmakuKind _resolveKind(Map<String, dynamic> item) {
+
   final original = item['originalType'];
-  if (original is num) {
-    final code = original.toInt();
-    if (code == 5) return _DanmakuKind.top;
-    if (code == 4) return _DanmakuKind.bottom;
-    return _DanmakuKind.scroll;
-  }
+  if (original is num) return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
+
   final v = item['type'] ?? item['y'];
-  if (v is num) {
-    final code = v.toInt();
-    if (code == 5) return _DanmakuKind.top;
-    if (code == 4) return _DanmakuKind.bottom;
-    return _DanmakuKind.scroll;
-  }
-  switch (v?.toString().toLowerCase()) {
-    case 'top':
-      return _DanmakuKind.top;
-    case 'bottom':
-      return _DanmakuKind.bottom;
-    default:
-      return _DanmakuKind.scroll;
+  if (v is num) { return _kindFromMode(DanmakuMode.fromCode     (v .toInt()   )); }
+  else          { return _kindFromMode(DanmakuMode.fromTypeName (v?.toString())); }
+}
+
+DanmakuKind _kindFromMode(DanmakuMode mode) {
+  switch (mode)
+  {
+  case DanmakuMode.top    : return DanmakuKind.top   ;
+  case DanmakuMode.bottom : return DanmakuKind.bottom;
+  default                 : return DanmakuKind.scroll;
   }
 }
 
@@ -545,6 +579,21 @@ String convertDanmakuToAssFromPrepared(
   required int playResY,
   required AssExportSettings settings,
 }) {
+  return convertDanmakuToAssFromPreparedWithEvents(
+    items,
+    playResX: playResX,
+    playResY: playResY,
+    settings: settings,
+  ).ass;
+}
+
+/// 烘焙预算条目，并返回所有实际写入 ASS 的事件
+DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
+  List<PreparedDanmakuItem> items, {
+  required int playResX,
+  required int playResY,
+  required AssExportSettings settings,
+}) {
   final assFontSize = resolveAssFontSize(settings.fontSize);
   final alphaHex = _alphaHexFromOpacity(settings.opacity);
   final styleName = _styleFontName(settings.fontFamily);
@@ -559,6 +608,7 @@ String convertDanmakuToAssFromPrepared(
   buffer.writeln('[Events]');
   buffer.writeln(
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text');
+  final events = <AssDanmakuEvent>[];
 
   for (final it in items) {
     if (it.isFiltered) continue;
@@ -590,8 +640,15 @@ String convertDanmakuToAssFromPrepared(
           '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
       _writeDialogue(buffer,
           layer: 0, start: start, end: end, style: 'Danmaku', text: line);
+      events.add(AssDanmakuEvent(
+        content: it.text,
+        startSeconds: start,
+        endSeconds: end,
+        colorRgb: it.colorRgb,
+        type: DanmakuKind.scroll,
+      ));
     } else {
-      final isBottom = it.typeCode == 4;
+      final isBottom = DanmakuMode.fromCode(it.typeCode) == DanmakuMode.bottom;
       // 顶/底部居中：用 \an8 顶中对齐 + \pos(PlayResX/2, y)，让 libass 按自身
       // 字体度量居中，避免 DFM+ paint_width 与 libass 渲染宽度不一致导致长弹幕偏移。
       final line =
@@ -604,8 +661,20 @@ String convertDanmakuToAssFromPrepared(
         style: isBottom ? 'DanmakuBottom' : 'DanmakuTop',
         text: line,
       );
+      events.add(AssDanmakuEvent(
+        content: it.text,
+        startSeconds: start,
+        endSeconds: end,
+        colorRgb: it.colorRgb,
+        type: isBottom
+            ? DanmakuKind.bottom
+            : DanmakuKind.top,
+      ));
     }
   }
 
-  return buffer.toString();
+  return DanmakuAssConversionResult(
+    ass: buffer.toString(),
+    events: List<AssDanmakuEvent>.unmodifiable(events),
+  );
 }

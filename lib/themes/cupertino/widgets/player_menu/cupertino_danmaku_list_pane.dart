@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveSwitch;
@@ -427,24 +428,20 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
   }
 
   Color _typeColor(int type) {
-    switch (type) {
-      case 4:
-        return CupertinoColors.activeGreen;
-      case 5:
-        return CupertinoColors.activeOrange;
-      default:
-        return CupertinoColors.activeBlue;
+    switch (DanmakuMode.fromCode(type))
+    {
+    case DanmakuMode.bottom : return CupertinoColors.activeGreen;
+    case DanmakuMode.top    : return CupertinoColors.activeOrange;
+    default                 : return CupertinoColors.activeBlue;
     }
   }
 
   String _danmakuTypeLabel(int type) {
-    switch (type) {
-      case 4:
-        return '底部';
-      case 5:
-        return '顶部';
-      default:
-        return '滚动';
+    switch (DanmakuMode.fromCode(type))
+    {
+    case DanmakuMode.bottom : return '底部';
+    case DanmakuMode.top    : return '顶部';
+    default                 : return '滚动';
     }
   }
 }

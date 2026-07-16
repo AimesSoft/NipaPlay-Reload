@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:xml/xml.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/cpp_native/bindings/danmaku_parser.dart';
 
 String encodeDanmakuXmlText(String input) {
@@ -110,25 +111,17 @@ Map<String, dynamic>? _buildBilibiliDanmakuComment({
     final fontSize = int.tryParse(pParams[2]) ?? 25;
     final colorCode = int.tryParse(pParams[3]) ?? 16777215;
 
-    String danmakuType;
-    switch (typeCode) {
-      case 4:
-        danmakuType = 'bottom';
-        break;
-      case 5:
-        danmakuType = 'top';
-        break;
-      case 1:
-      case 6:
-      default:
-        danmakuType = 'scroll';
-        break;
-    }
+    final danmakuType = DanmakuMode.fromCode(typeCode).typeName;
 
     final r = (colorCode >> 16) & 0xFF;
     final g = (colorCode >> 8) & 0xFF;
     final b = colorCode & 0xFF;
     final color = 'rgb($r,$g,$b)';
+
+    // 可选字段: timestamp, senderId, cid
+    final timestamp = pParams.length > 4 ? int.tryParse(pParams[4]) : null;
+    final senderId = pParams.length > 6 ? pParams[6].trim() : '';
+    final danmakuId = pParams.length > 7 ? pParams[7].trim() : '';
 
     return {
       't': time,
@@ -137,6 +130,11 @@ Map<String, dynamic>? _buildBilibiliDanmakuComment({
       'r': color,
       'fontSize': fontSize,
       'originalType': typeCode,
+
+      if (timestamp != null && timestamp > 0) 'timestamp': timestamp,
+      if (senderId.isNotEmpty && senderId != '0') 'senderId': senderId,
+      if (danmakuId.isNotEmpty && danmakuId != '0') 'cid': danmakuId,
+      'source': 'bilibili', // 标记来源, 便于后续处理
     };
   } catch (_) {
     return null;

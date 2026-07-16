@@ -23,6 +23,7 @@ class DanmakuParser {
 public:
     // 解析 Bilibili XML 弹幕，返回预序列化 JSON 字符串
     // 输出格式: {"count":N,"comments":[{"t":...,"c":...,"y":...,"r":...,"fontSize":...,"originalType":...},...]}
+    // 输出格式包含标准字段及 timestamp, senderId, cid, source 等元数据
     // 与 Dart 侧 convertBilibiliXmlDanmakuToJson 输出完全一致
     static std::string parseXmlToJson(std::string_view xml_content);
 

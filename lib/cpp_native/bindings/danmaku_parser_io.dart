@@ -23,6 +23,7 @@ class DanmakuParser {
 
   /// 解析 Bilibili 弹幕 XML，返回 JSON 字符串
   /// 输出格式: {"count":N,"comments":[{"t":...,"c":...,"y":...,"r":...,"fontSize":...,"originalType":...},...]}
+  /// 输出格式包含标准字段及 timestamp, senderId, cid, source 等元数据
   /// 与 Dart 侧 convertBilibiliXmlDanmakuToJson 输出完全一致
   ///
   /// 成功返回 JSON 字符串，失败返回 null（调用方应 fallback 到 Dart 原实现）

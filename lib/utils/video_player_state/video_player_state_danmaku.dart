@@ -710,8 +710,16 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       debugPrint('[ExtDanmaku] 缓存查询: ${cached?.length ?? 0} 条, '
           '耗时=${DateTime.now().difference(tCache).inMilliseconds}ms');
       if (cached != null && cached.isNotEmpty) {
-        raw = cached;
-      } else {
+        final hasSenderMetadata = cached.any((comment) =>
+            comment is Map &&
+            comment['source']?.toString() == 'dandanplay');
+        if (hasSenderMetadata) {
+          raw = cached;
+        } else {
+          debugPrint('[ExtDanmaku] 缓存不含发送者元数据，重新请求网络');
+        }
+      }
+      if (raw == null) {
         debugPrint('[ExtDanmaku] 缓存未命中，发起网络请求…');
         final animeIdInt = int.tryParse(animeId) ?? 0;
         final tNet = DateTime.now();
@@ -767,6 +775,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     } else {
       debugPrint('[ExtDanmaku] 插件未修改 (pluginService=${_pluginService != null})');
     }
+    parsed = parsed.map((item) {
+      final source = item['source']?.toString().trim();
+      if (source != null && source.isNotEmpty) return item;
+      return <String, dynamic>{
+        ...item,
+        'source': 'dandanplay',
+      };
+    }).toList();
 
     // 4. 屏蔽过滤 + 随机色（复用 _updateMergedDanmakuList 同款谓词）
     final beforeBlock = parsed.length;
@@ -892,15 +908,13 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
 
     final typeText = typeValue?.toString().toLowerCase();
-    switch (typeText) {
-      case 'top':
-        return 5;
-      case 'bottom':
-        return 4;
-      case 'scroll':
-      case 'right':
-      default:
-        return 1;
+    switch (typeText)
+    {
+    case 'top'    : return DanmakuMode.top   .code;
+    case 'bottom' : return DanmakuMode.bottom.code;
+    case 'scroll' : return DanmakuMode.scroll.code;
+    case 'right'  : return DanmakuMode.scroll.code;
+    default       : return DanmakuMode.scroll.code;
     }
   }
 

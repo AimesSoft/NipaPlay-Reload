@@ -219,6 +219,72 @@ abstract class AppLocalizations {
   /// **'正在获取播放进度…'**
   String get externalPlayerConsoleProgressLoading;
 
+  /// No description provided for @externalPlayerConsoleDanmakuList.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕列表'**
+  String get externalPlayerConsoleDanmakuList;
+
+  /// No description provided for @externalPlayerConsoleDanmakuStats.
+  ///
+  /// In zh, this message translates to:
+  /// **'共 {total} 条，正在显示 {active} 条'**
+  String externalPlayerConsoleDanmakuStats(int total, int active);
+
+  /// No description provided for @externalPlayerConsoleDanmakuEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次播放没有加载弹幕。'**
+  String get externalPlayerConsoleDanmakuEmpty;
+
+  /// No description provided for @externalPlayerConsoleDanmakuUnknownSender.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get externalPlayerConsoleDanmakuUnknownSender;
+
+  /// No description provided for @externalPlayerConsoleDanmakuSender.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送者'**
+  String get externalPlayerConsoleDanmakuSender;
+
+  /// No description provided for @externalPlayerConsoleDanmakuTypeScroll.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚动'**
+  String get externalPlayerConsoleDanmakuTypeScroll;
+
+  /// No description provided for @externalPlayerConsoleDanmakuTypeTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'顶部'**
+  String get externalPlayerConsoleDanmakuTypeTop;
+
+  /// No description provided for @externalPlayerConsoleDanmakuTypeBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'底部'**
+  String get externalPlayerConsoleDanmakuTypeBottom;
+
+  /// No description provided for @externalPlayerConsoleDanmakuActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在显示'**
+  String get externalPlayerConsoleDanmakuActive;
+
+  /// No description provided for @externalPlayerConsoleDanmakuFollowEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在跟随播放'**
+  String get externalPlayerConsoleDanmakuFollowEnabled;
+
+  /// No description provided for @externalPlayerConsoleDanmakuFollowDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停自动跟随'**
+  String get externalPlayerConsoleDanmakuFollowDisabled;
+
   /// No description provided for @danmakuOpacityTitle.
   ///
   /// In zh, this message translates to:

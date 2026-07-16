@@ -2,6 +2,7 @@ import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
@@ -342,15 +343,7 @@ class DfmPlusLayoutBridge {
       final code = raw.toInt();
       return code;
     }
-    final value = raw?.toString().toLowerCase() ?? 'scroll';
-    switch (value) {
-      case 'top':
-        return 5;
-      case 'bottom':
-        return 4;
-      default:
-        return 1;
-    }
+    return DanmakuMode.fromTypeName(raw?.toString()).code;
   }
 
   int _parseColor(dynamic raw) {
@@ -391,13 +384,11 @@ class DfmPlusLayoutBridge {
   }
 
   DanmakuItemType _toItemType(int typeCode) {
-    switch (typeCode) {
-      case 5:
-        return DanmakuItemType.top;
-      case 4:
-        return DanmakuItemType.bottom;
-      default:
-        return DanmakuItemType.scroll;
+    switch (DanmakuMode.fromCode(typeCode))
+    {
+    case DanmakuMode.top    : return DanmakuItemType.top   ;
+    case DanmakuMode.bottom : return DanmakuItemType.bottom;
+    default                 : return DanmakuItemType.scroll;
     }
   }
 }

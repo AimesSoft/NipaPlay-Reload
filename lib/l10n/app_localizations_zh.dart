@@ -70,6 +70,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleProgressLoading => '正在获取播放进度…';
 
   @override
+  String get externalPlayerConsoleDanmakuList => '弹幕列表';
+
+  @override
+  String externalPlayerConsoleDanmakuStats(int total, int active) {
+    return '共 $total 条，正在显示 $active 条';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuEmpty => '本次播放没有加载弹幕。';
+
+  @override
+  String get externalPlayerConsoleDanmakuUnknownSender => '未知';
+
+  @override
+  String get externalPlayerConsoleDanmakuSender => '发送者';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeScroll => '滚动';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeTop => '顶部';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeBottom => '底部';
+
+  @override
+  String get externalPlayerConsoleDanmakuActive => '正在显示';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowEnabled => '正在跟随播放';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowDisabled => '已暂停自动跟随';
+
+  @override
   String get danmakuOpacityTitle => '弹幕不透明度';
 
   @override
@@ -1879,6 +1914,41 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get externalPlayerConsoleProgressLoading => '正在取得播放進度…';
+
+  @override
+  String get externalPlayerConsoleDanmakuList => '彈幕列表';
+
+  @override
+  String externalPlayerConsoleDanmakuStats(int total, int active) {
+    return '共 $total 條，正在顯示 $active 條';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuEmpty => '本次播放沒有載入彈幕。';
+
+  @override
+  String get externalPlayerConsoleDanmakuUnknownSender => '未知';
+
+  @override
+  String get externalPlayerConsoleDanmakuSender => '發送者';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeScroll => '滾動';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeTop => '頂部';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeBottom => '底部';
+
+  @override
+  String get externalPlayerConsoleDanmakuActive => '正在顯示';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowEnabled => '正在跟隨播放';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowDisabled => '已暫停自動跟隨';
 
   @override
   String get danmakuOpacityTitle => '彈幕不透明度';

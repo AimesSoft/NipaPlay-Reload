@@ -20,6 +20,23 @@
   "externalPlayerConsoleProgress": "播放进度",
   "externalPlayerConsoleProgressUnsupported": "当前播放器暂不支持进度同步。",
   "externalPlayerConsoleProgressLoading": "正在获取播放进度…",
+  "externalPlayerConsoleDanmakuList": "弹幕列表",
+  "externalPlayerConsoleDanmakuStats": "共 {total} 条，正在显示 {active} 条",
+  "@externalPlayerConsoleDanmakuStats": {
+    "placeholders": {
+      "total": {"type": "int"},
+      "active": {"type": "int"}
+    }
+  },
+  "externalPlayerConsoleDanmakuEmpty": "本次播放没有加载弹幕。",
+  "externalPlayerConsoleDanmakuUnknownSender": "未知",
+  "externalPlayerConsoleDanmakuSender": "发送者",
+  "externalPlayerConsoleDanmakuTypeScroll": "滚动",
+  "externalPlayerConsoleDanmakuTypeTop": "顶部",
+  "externalPlayerConsoleDanmakuTypeBottom": "底部",
+  "externalPlayerConsoleDanmakuActive": "正在显示",
+  "externalPlayerConsoleDanmakuFollowEnabled": "正在跟随播放",
+  "externalPlayerConsoleDanmakuFollowDisabled": "已暂停自动跟随",
   "danmakuOpacityTitle": "弹幕不透明度",
   "danmakuOpacitySubtitle": "调整弹幕文字不透明度，新打开的视频将应用此设置。",
   "danmakuOutlineEnabledTitle": "启用弹幕描边",

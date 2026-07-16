@@ -72,6 +72,42 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reading playback progress…';
 
   @override
+  String get externalPlayerConsoleDanmakuList => 'Danmaku list';
+
+  @override
+  String externalPlayerConsoleDanmakuStats(int total, int active) {
+    return '$total total · $active on screen';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuEmpty =>
+      'No danmaku was loaded for this playback session.';
+
+  @override
+  String get externalPlayerConsoleDanmakuUnknownSender => 'Unknown';
+
+  @override
+  String get externalPlayerConsoleDanmakuSender => 'Sender';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeScroll => 'Scroll';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeTop => 'Top';
+
+  @override
+  String get externalPlayerConsoleDanmakuTypeBottom => 'Bottom';
+
+  @override
+  String get externalPlayerConsoleDanmakuActive => 'On screen';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowEnabled => 'Following playback';
+
+  @override
+  String get externalPlayerConsoleDanmakuFollowDisabled => 'Auto-follow paused';
+
+  @override
   String get danmakuOpacityTitle => 'Danmaku opacity';
 
   @override

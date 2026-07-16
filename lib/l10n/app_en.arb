@@ -20,6 +20,23 @@
   "externalPlayerConsoleProgress": "Playback progress",
   "externalPlayerConsoleProgressUnsupported": "This player does not support progress synchronization.",
   "externalPlayerConsoleProgressLoading": "Reading playback progress…",
+  "externalPlayerConsoleDanmakuList": "Danmaku list",
+  "externalPlayerConsoleDanmakuStats": "{total} total · {active} on screen",
+  "@externalPlayerConsoleDanmakuStats": {
+    "placeholders": {
+      "total": {"type": "int"},
+      "active": {"type": "int"}
+    }
+  },
+  "externalPlayerConsoleDanmakuEmpty": "No danmaku was loaded for this playback session.",
+  "externalPlayerConsoleDanmakuUnknownSender": "Unknown",
+  "externalPlayerConsoleDanmakuSender": "Sender",
+  "externalPlayerConsoleDanmakuTypeScroll": "Scroll",
+  "externalPlayerConsoleDanmakuTypeTop": "Top",
+  "externalPlayerConsoleDanmakuTypeBottom": "Bottom",
+  "externalPlayerConsoleDanmakuActive": "On screen",
+  "externalPlayerConsoleDanmakuFollowEnabled": "Following playback",
+  "externalPlayerConsoleDanmakuFollowDisabled": "Auto-follow paused",
   "danmakuOpacityTitle": "Danmaku opacity",
   "danmakuOpacitySubtitle": "Adjust danmaku text opacity. Newly opened videos will use this setting.",
   "danmakuOutlineEnabledTitle": "Enable danmaku outline",

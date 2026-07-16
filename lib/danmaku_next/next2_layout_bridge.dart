@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/next2.dart' as rust_next2;
@@ -144,20 +145,16 @@ class Next2LayoutBridge {
   }
 
   int _parseType(dynamic raw) {
-    if (raw is num) {
-      final code = raw.toInt();
-      if (code == 5) return 1;
-      if (code == 4) return 2;
-      return 0;
-    }
-    final value = raw?.toString().toLowerCase() ?? 'scroll';
-    switch (value) {
-      case 'top':
-        return 1;
-      case 'bottom':
-        return 2;
-      default:
-        return 0;
+
+    DanmakuMode? mode;
+    if      (raw is num   ) { mode = DanmakuMode.fromCode(raw.toInt()); }
+    else if (raw is String) { mode = DanmakuMode.fromTypeName(raw);     }
+
+    switch (mode)
+    {
+    case DanmakuMode.top    : return 1;
+    case DanmakuMode.bottom : return 2;
+    default                 : return 0;
     }
   }
 

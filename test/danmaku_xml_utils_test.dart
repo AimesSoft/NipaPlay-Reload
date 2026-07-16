@@ -7,7 +7,7 @@ void main() {
       const xml = '''
 <?xml version="1.0" encoding="UTF-8"?>
 <i>
-  <d p="1.5,1,25,16777215,1700000000,0,0,0">hello &amp; world</d>
+  <d p="1.5,1,25,16777215,1700000000,0,sender-hash,danmaku-id">hello &amp; world</d>
   <d p="2.0,5,30,16711680,1700000001,0,0,0">top</d>
 </i>
 ''';
@@ -20,6 +20,10 @@ void main() {
       expect(comments[0]['c'], 'hello & world');
       expect(comments[0]['y'], 'scroll');
       expect(comments[0]['r'], 'rgb(255,255,255)');
+      expect(comments[0]['timestamp'], 1700000000);
+      expect(comments[0]['senderId'], 'sender-hash');
+      expect(comments[0]['cid'], 'danmaku-id');
+      expect(comments[0]['source'], 'bilibili');
       expect(comments[1]['y'], 'top');
       expect(comments[1]['fontSize'], 30);
       expect(comments[1]['originalType'], 5);

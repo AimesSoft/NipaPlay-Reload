@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay/models/external_player_danmaku_item.dart';
 import 'package:nipaplay/models/playable_item.dart';
 // import 'package:nipaplay/constants/settings_keys.dart';
 // import 'package:nipaplay/utils/settings_storage.dart';
@@ -24,23 +25,30 @@ class ExternalPlayerSession extends ChangeNotifier {
     this.ipcPath,
     this.duration,
     this.danmakuAssPath,
-    PlayableItem playableItem
+    PlayableItem playableItem,
+    { List<ExternalPlayerDanmakuItem> danmakuItems = const [] }
   ) :
-    mediaPath    = playableItem.videoPath,
-    animeTitle   = playableItem.title,
-    episodeTitle = playableItem.subtitle,
-    animeId      = playableItem.animeId,
-    episodeId    = playableItem.episodeId
-  ;
+  danmakuItems  = _sortDanmakuItems(danmakuItems),
+  _maxDanmakuDuration = _findMaxDanmakuDuration(danmakuItems),
+  mediaPath    = playableItem.videoPath,
+  animeTitle   = playableItem.title,
+  episodeTitle = playableItem.subtitle,
+  animeId      = playableItem.animeId,
+  episodeId    = playableItem.episodeId;
 
 
   /// 初始化外部播放器会话的播放状态
   void initialize({
     double   danmakuOpacity = 1.0,
+    double   danmakuOutlineWidth = 1.0,
     Duration position       = Duration.zero,
     bool     isPaused       = false,
   }) {
     this.danmakuOpacity = danmakuOpacity;
+    this.danmakuOutlineWidth = danmakuOutlineWidth > 0.0
+        ? danmakuOutlineWidth
+        : 1.0;
+    danmakuOutlineEnabled = danmakuOutlineWidth > 0.0;
     this.position       = position;
     this.isPaused       = isPaused;
   }
@@ -64,13 +72,17 @@ class ExternalPlayerSession extends ChangeNotifier {
   // 弹幕相关
   final String?  danmakuAssPath;  // 弹幕 ASS 文件路径
   double?        danmakuOpacity;  // 弹幕透明度, 范围 0.0 ~ 1.0
+  double         danmakuOutlineWidth = 1.0; // 启用时使用的 ASS 描边宽度
+  bool           danmakuOutlineEnabled = true; // 是否显示弹幕描边
+  final Duration _maxDanmakuDuration; // 弹幕中最长的显示时长, 用于二分查找优化
+  final List<ExternalPlayerDanmakuItem> danmakuItems; // 实际加载的弹幕
 
   // 播放相关
   Duration?      position;        // 当前播放位置
   bool?          isPaused;        // 是否暂停
 
   // 进程轮询相关
-  static const Duration _processPollingInterval = Duration(seconds: 1);
+  static const Duration _processPollingInterval = Duration(milliseconds: 250);
   Timer? _processPollingTimer;
 
 
@@ -88,6 +100,61 @@ class ExternalPlayerSession extends ChangeNotifier {
   double? get fraction {
     if (position == null || duration <= Duration.zero) return null;
     return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// 获取指定播放位置正在显示的弹幕索引
+  ///
+  /// 弹幕已按开始时间排序. 先二分找到已开始的最后一条, 再只检查最长弹幕
+  /// 显示时长覆盖的时间窗口, 避免播放状态刷新时扫描全部弹幕.
+  List<int> activeDanmakuIndicesAt(Duration currentPosition) {
+    if (danmakuItems.isEmpty || _maxDanmakuDuration <= Duration.zero) {
+      return const [];
+    }
+
+    var low = 0;
+    var high = danmakuItems.length;
+    while (low < high) {
+      final middle = low + ((high - low) >> 1);
+      if (danmakuItems[middle].startTime <= currentPosition) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+
+    final earliestPossibleStart = currentPosition - _maxDanmakuDuration;
+    final active = <int>[];
+    for (var index = low - 1; index >= 0; index--) {
+      final item = danmakuItems[index];
+      if (item.startTime < earliestPossibleStart) break;
+      if (item.isActiveAt(currentPosition)) active.add(index);
+    }
+    return List<int>.unmodifiable(active.reversed);
+  }
+
+  /// 获取指定播放位置正在显示的弹幕
+  List<ExternalPlayerDanmakuItem> activeDanmakuAt(Duration currentPosition) {
+    return List<ExternalPlayerDanmakuItem>.unmodifiable(
+      activeDanmakuIndicesAt(currentPosition).map((index) => danmakuItems[index]),
+    );
+  }
+
+  /// 对弹幕进行排序, 以便后续二分查找
+  /// 按照 startTime 升序排序
+  static List<ExternalPlayerDanmakuItem> _sortDanmakuItems(List<ExternalPlayerDanmakuItem> items) {
+    final sorted = List<ExternalPlayerDanmakuItem>.of(items);
+    sorted.sort((a, b) => a.startTime.compareTo(b.startTime));
+    return List<ExternalPlayerDanmakuItem>.unmodifiable(sorted);
+  }
+
+  static Duration _findMaxDanmakuDuration(
+    List<ExternalPlayerDanmakuItem> items,
+  ) {
+    var maximum = Duration.zero;
+    for (final item in items) {
+      if (item.displayDuration > maximum) maximum = item.displayDuration;
+    }
+    return maximum;
   }
 
 

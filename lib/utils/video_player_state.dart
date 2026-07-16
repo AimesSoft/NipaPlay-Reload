@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT

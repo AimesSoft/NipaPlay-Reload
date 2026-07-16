@@ -1,4 +1,47 @@
 
+// lib/utils/danmaku_parser.dart
+// 弹幕解析工具
+
+
+/// 从不同弹幕数据源的字段中读取统一的发送者身份标识
+String? resolveDanmakuSenderId(Map<dynamic, dynamic> item) {
+  for (final key in const [
+    'senderId',
+    'sender',
+    'userId',
+    'userID',
+    'uid',
+    'midHash',
+    'userHash',
+    'hash',
+  ]) {
+    final value = _nonEmptyDanmakuIdentity(item[key]);
+    if (value != null) return value;
+  }
+
+  for (final identity in [item['user'], item['sender']]) {
+    if (identity is! Map) continue;
+    for (final key in const ['id', 'uid', 'hash']) {
+      final value = _nonEmptyDanmakuIdentity(identity[key]);
+      if (value != null) return value;
+    }
+  }
+
+  final p = item['p']?.toString().split(',');
+  if (p != null && p.length > 3) {
+    final value = _nonEmptyDanmakuIdentity(p[3]);
+    if (value != null) return value;
+  }
+  return _nonEmptyDanmakuIdentity(item['cid']);
+}
+
+String? _nonEmptyDanmakuIdentity(dynamic value) {
+  if (value == null || value is Map || value is Iterable) return null;
+  final text = value.toString().trim();
+  if (text.isEmpty || text == '0' || text.toLowerCase() == 'null') return null;
+  return text;
+}
+
 // Top-level function for parsing danmaku data in a background isolate
 List<Map<String, dynamic>> parseDanmakuListInBackground(List<dynamic>? rawDanmakuList) {
   if (rawDanmakuList == null || rawDanmakuList.isEmpty) {
@@ -89,6 +132,8 @@ List<Map<String, dynamic>> parseDanmakuListInBackground(List<dynamic>? rawDanmak
             standardizedItem[entry.key] = entry.value;
           }
         }
+        final senderId = resolveDanmakuSenderId(danmakuItem);
+        if (senderId != null) standardizedItem['senderId'] = senderId;
         
         // 只添加有效的弹幕数据（有内容且时间有效）
         if (standardizedItem['content'] != null && 

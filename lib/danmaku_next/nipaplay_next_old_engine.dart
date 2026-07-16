@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint, listEquals, kIsWeb, kReleaseMode;
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -846,10 +847,12 @@ class NipaPlayNextOldEngine {
   DanmakuItemType _parseType(dynamic raw) {
     if (raw is DanmakuItemType) return raw;
     if (raw is num) {
-      final code = raw.toInt();
-      if (code == 5) return DanmakuItemType.top;
-      if (code == 4) return DanmakuItemType.bottom;
-      return DanmakuItemType.scroll;
+      switch (DanmakuMode.fromCode(raw.toInt()))
+      {
+      case DanmakuMode.top    : return DanmakuItemType.top;
+      case DanmakuMode.bottom : return DanmakuItemType.bottom;
+      default                 : return DanmakuItemType.scroll;
+      }
     }
 
     final value = raw?.toString().toLowerCase() ?? 'scroll';

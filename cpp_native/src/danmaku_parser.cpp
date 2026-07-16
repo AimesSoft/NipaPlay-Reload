@@ -208,6 +208,7 @@ std::string_view DanmakuParser::stripControlChars(std::string_view input, std::s
 
 // 辅助：将 DanmakuItem 写入 rapidjson Writer（XML 解析路径输出格式）
 // 输出字段: t, c, y, r, fontSize, originalType — 与 Dart 侧 _buildBilibiliDanmakuComment 完全一致
+// 还有 timestamp, senderId, cid, source 等元数据字段
 static void writeDanmakuItemXml(rapidjson::Writer<rapidjson::StringBuffer>& writer, const DanmakuItem& item) {
     writer.StartObject();
     writer.Key("t");
@@ -223,6 +224,23 @@ static void writeDanmakuItemXml(rapidjson::Writer<rapidjson::StringBuffer>& writ
     writer.Int(item.font_size);
     writer.Key("originalType");
     writer.Int(item.mode);
+
+    // 可选字段: timestamp, senderId, cid
+    if (item.send_timestamp > 0) {
+        writer.Key("timestamp");
+        writer.Int64(item.send_timestamp);
+    }
+    if (!item.sender_hash.empty() && item.sender_hash != "0") {
+        writer.Key("senderId");
+        writer.String(item.sender_hash.c_str());
+    }
+    if (!item.danmaku_id.empty() && item.danmaku_id != "0") {
+        writer.Key("cid");
+        writer.String(item.danmaku_id.c_str());
+    }
+    writer.Key("source");
+    writer.String("bilibili");
+
     writer.EndObject();
 }
 

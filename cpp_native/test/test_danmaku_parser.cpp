@@ -28,6 +28,9 @@ void test_parse_xml_basic() {
     REQUIRE(json.find("\"r\":\"rgb(255,255,255)\"") != std::string::npos, "color field missing");
     REQUIRE(json.find("\"fontSize\":25") != std::string::npos, "fontSize field missing");
     REQUIRE(json.find("\"originalType\":1") != std::string::npos, "originalType field missing");
+    REQUIRE(json.find("\"timestamp\":1717000000") != std::string::npos, "timestamp field missing");
+    REQUIRE(json.find("\"senderId\":\"ABC\"") != std::string::npos, "senderId field missing");
+    REQUIRE(json.find("\"source\":\"bilibili\"") != std::string::npos, "source field missing");
     REQUIRE(json.find("\"count\":1") != std::string::npos, "count field missing");
     PASS();
 }
