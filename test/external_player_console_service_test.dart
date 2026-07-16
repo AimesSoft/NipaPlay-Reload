@@ -4,13 +4,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
 ExternalPlayerSession _session(
   Process process, {
@@ -21,7 +23,8 @@ ExternalPlayerSession _session(
   Duration position = Duration.zero,
   Duration duration = Duration.zero,
   bool isPaused = false,
-  List<ExternalPlayerDanmakuItem> danmakuItems = const [],
+  List<DanmakuItem> danmakuList = const [],
+  AssExportSettings? danmakuAssSettings,
 }) {
   return _sessionFromProcessId(
     process.pid,
@@ -32,7 +35,8 @@ ExternalPlayerSession _session(
     position: position,
     duration: duration,
     isPaused: isPaused,
-    danmakuItems: danmakuItems,
+    danmakuList: danmakuList,
+    danmakuAssSettings: danmakuAssSettings,
   );
 }
 
@@ -45,7 +49,8 @@ ExternalPlayerSession _sessionFromProcessId(
   Duration position = Duration.zero,
   Duration duration = Duration.zero,
   bool isPaused = false,
-  List<ExternalPlayerDanmakuItem> danmakuItems = const [],
+  List<DanmakuItem> danmakuList = const [],
+  AssExportSettings? danmakuAssSettings,
 }) {
   final mediaPath = '/video/$processId.mkv';
   final playableItem = PlayableItem(
@@ -62,7 +67,8 @@ ExternalPlayerSession _sessionFromProcessId(
     duration,
     danmakuAssPath,
     playableItem,
-    danmakuItems: danmakuItems,
+    danmakuList: danmakuList,
+    danmakuAssSettings: danmakuAssSettings,
   )..initialize(
       danmakuOpacity: danmakuOpacity,
       danmakuOutlineWidth: danmakuOutlineWidth,
@@ -122,27 +128,29 @@ void main() {
     test('finds every danmaku active at an interval boundary', () {
       final session = _sessionFromProcessId(
         1,
-        danmakuItems: const [
-          ExternalPlayerDanmakuItem(
-            id: 'later',
+        danmakuList: [
+          DanmakuItem(
+            danmakuId: 'later',
             content: 'later',
-            startTime: Duration(seconds: 3),
-            endTime: Duration(seconds: 8),
+            time: const Duration(seconds: 3),
             colorRgb: 0xFFFFFF,
-            type: ExternalPlayerDanmakuType.top,
+            mode: DanmakuMode.top,
           ),
-          ExternalPlayerDanmakuItem(
-            id: 'first',
+          DanmakuItem(
+            danmakuId: 'first',
             content: 'first',
-            startTime: Duration(seconds: 1),
-            endTime: Duration(seconds: 6),
+            time: const Duration(seconds: 1),
             colorRgb: 0xFF0000,
-            type: ExternalPlayerDanmakuType.scroll,
+            mode: DanmakuMode.scroll,
           ),
         ],
+        danmakuAssSettings: const AssExportSettings(
+          fontSize: 30,
+          scrollDurationSeconds: 5,
+        ),
       );
 
-      expect(session.danmakuItems.map((item) => item.id), ['first', 'later']);
+      expect(session.danmakuList.map((item) => item.danmakuId), ['first', 'later']);
       expect(session.activeDanmakuIndicesAt(const Duration(seconds: 3)), [0, 1]);
       expect(session.activeDanmakuIndicesAt(const Duration(seconds: 6)), [1]);
       expect(session.activeDanmakuIndicesAt(const Duration(seconds: 8)), isEmpty);
@@ -204,14 +212,13 @@ void main() {
         try {
           ExternalPlayerConsoleService.showSession(_session(
             process,
-            danmakuItems: const [
-              ExternalPlayerDanmakuItem(
-                id: 'source-visible',
+            danmakuList: [
+              DanmakuItem(
+                danmakuId: 'source-visible',
                 content: 'source test',
-                startTime: Duration(seconds: 1),
-                endTime: Duration(seconds: 6),
+                time: const Duration(seconds: 1),
                 colorRgb: 0xFFFFFF,
-                type: ExternalPlayerDanmakuType.scroll,
+                mode: DanmakuMode.scroll,
                 source: 'bilibili',
               ),
             ],
@@ -387,16 +394,19 @@ void main() {
           ipcPath: socketPath,
           duration: const Duration(minutes: 20),
           position: const Duration(minutes: 2),
-          danmakuItems: const [
-            ExternalPlayerDanmakuItem(
-              id: 'seek-target',
+          danmakuList: [
+            DanmakuItem(
+              danmakuId: 'seek-target',
               content: 'seek target',
-              startTime: Duration(minutes: 12),
-              endTime: Duration(minutes: 13),
+              time: const Duration(minutes: 12),
               colorRgb: 0xFFFFFF,
-              type: ExternalPlayerDanmakuType.scroll,
+              mode: DanmakuMode.scroll,
             ),
           ],
+          danmakuAssSettings: const AssExportSettings(
+            fontSize: 30,
+            scrollDurationSeconds: 60,
+          ),
         ));
 
         ExternalPlayerConsoleService.seekToFraction(0.625);
@@ -409,7 +419,10 @@ void main() {
         expect(commands, <List<dynamic>>[
           <dynamic>['seek', 750.0, 'absolute+exact'],
         ]);
-        expect(service.activeDanmakuItems.map((item) => item.id), ['seek-target']);
+        expect(
+          service.activeDanmakuItems.map((item) => item.danmakuId),
+          ['seek-target'],
+        );
       });
 
       test('coalesces rapid danmaku opacity updates without truncating ASS', () async {
@@ -418,12 +431,7 @@ void main() {
             await Directory.systemTemp.createTemp('nipaplay_ipc_test_');
         final socketPath = '${tempDir.path}/mpv.sock';
         final assFile = File('${tempDir.path}/danmaku.ass');
-        final dialogueLines = List<String>.generate(
-          2000,
-          (index) => 'Dialogue: 0,{\\1a&H33&}test $index',
-        );
-        final originalAss = '[Script Info]\n${dialogueLines.join('\n')}\n';
-        await assFile.writeAsString(originalAss);
+        await assFile.writeAsString('[Script Info]\nstale ASS\n');
         final reloadCommands = <List<dynamic>>[];
         final server = await ServerSocket.bind(
           InternetAddress(socketPath, type: InternetAddressType.unix),
@@ -459,6 +467,20 @@ void main() {
           ipcPath: socketPath,
           danmakuAssPath: assFile.path,
           danmakuOpacity: 0.8,
+          danmakuList: [
+            DanmakuItem(
+              time: const Duration(seconds: 1),
+              content: 'first regenerated comment',
+            ),
+            DanmakuItem(
+              time: const Duration(seconds: 12),
+              content: 'second regenerated comment',
+            ),
+          ],
+          danmakuAssSettings: const AssExportSettings(
+            fontSize: 30,
+            opacity: 0.8,
+          ),
         ));
 
         expect(service.session?.danmakuOpacity, 0.8);
@@ -479,8 +501,9 @@ void main() {
             .toList();
         expect(updatedAss, isNotEmpty);
         expect(updatedAss.startsWith('[Script Info]\n'), isTrue);
-        expect(updatedAss.split('\n').length, originalAss.split('\n').length);
-        expect(opacityTags.length, dialogueLines.length);
+        expect(updatedAss, contains('first regenerated comment'));
+        expect(updatedAss, contains('second regenerated comment'));
+        expect(opacityTags, isNotEmpty);
         expect(opacityTags, everyElement(r'\1a&H80&'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
         expect(reloadCommands, <List<dynamic>>[
@@ -532,6 +555,18 @@ void main() {
           ipcPath: socketPath,
           danmakuAssPath: assFile.path,
           danmakuOutlineWidth: 2.5,
+          danmakuList: [
+            DanmakuItem(
+              time: const Duration(seconds: 1),
+              content: 'outline regenerated comment',
+            ),
+          ],
+          danmakuAssSettings: const AssExportSettings(
+            fontSize: 30,
+            fontFamily: 'Arial',
+            outlineStyle: AssOutlineStyle.stroke,
+            outlineWidth: 2.5,
+          ),
         ));
 
         expect(service.supportsDanmakuOutline, isTrue);

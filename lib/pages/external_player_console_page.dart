@@ -4,8 +4,9 @@
 
 
 import 'package:flutter/material.dart';
+import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 
@@ -315,7 +316,7 @@ class _ConsoleCard extends StatelessWidget {
 }
 
 
-/// 显示本次外部播放实际加载的全部弹幕
+/// 显示当前外部播放会话保存的源弹幕
 class _DanmakuList extends StatefulWidget {
   const _DanmakuList({
     required this.session,
@@ -420,7 +421,7 @@ class _DanmakuListState extends State<_DanmakuList> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localizations = context.l10n;
-    final items = widget.session.danmakuItems;
+    final items = widget.session.danmakuList;
     final activeIndices = widget.activeIndices.toSet();
     final followDescription = _followPlayback
         ? localizations.externalPlayerConsoleDanmakuFollowEnabled
@@ -509,6 +510,10 @@ class _DanmakuListState extends State<_DanmakuList> {
                       itemBuilder: (context, index) {
                         return _DanmakuRow(
                           item: items[index],
+                          itemId:
+                              '$index-${items[index].danmakuId ?? ''}',
+                          startTime:
+                              widget.session.danmakuStartTime(items[index]),
                           active: activeIndices.contains(index),
                           compact: compact,
                         );
@@ -527,11 +532,15 @@ class _DanmakuListState extends State<_DanmakuList> {
 class _DanmakuRow extends StatelessWidget {
   const _DanmakuRow({
     required this.item,
+    required this.itemId,
+    required this.startTime,
     required this.active,
     required this.compact,
   });
 
-  final ExternalPlayerDanmakuItem item;
+  final DanmakuItem item;
+  final String itemId;
+  final Duration startTime;
   final bool active;
   final bool compact;
 
@@ -541,12 +550,14 @@ class _DanmakuRow extends StatelessWidget {
     final localizations = context.l10n;
     final sender = item.senderId ??
         localizations.externalPlayerConsoleDanmakuUnknownSender;
-    final type = switch (item.type) {
-      ExternalPlayerDanmakuType.scroll =>
+    final type = switch (item.mode) {
+      DanmakuMode.scroll ||
+      DanmakuMode.reverseScroll ||
+      DanmakuMode.advanced =>
         localizations.externalPlayerConsoleDanmakuTypeScroll,
-      ExternalPlayerDanmakuType.top =>
+      DanmakuMode.top =>
         localizations.externalPlayerConsoleDanmakuTypeTop,
-      ExternalPlayerDanmakuType.bottom =>
+      DanmakuMode.bottom =>
         localizations.externalPlayerConsoleDanmakuTypeBottom,
     };
     final rgb = item.colorRgb & 0xFFFFFF;
@@ -554,7 +565,7 @@ class _DanmakuRow extends StatelessWidget {
     final color = Color(0xFF000000 | rgb);
 
     return Container(
-      key: ValueKey('external-player-danmaku-${item.id}'),
+      key: ValueKey('external-player-danmaku-$itemId'),
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 12 : 14,
         vertical: compact ? 8 : 6,
@@ -578,7 +589,7 @@ class _DanmakuRow extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      _formatDanmakuTime(item.startTime),
+                      _formatDanmakuTime(startTime),
                       style: theme.textTheme.labelMedium,
                     ),
                     const SizedBox(width: 10),
@@ -589,7 +600,7 @@ class _DanmakuRow extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (active) _ActiveDanmakuIndicator(itemId: item.id),
+                    if (active) _ActiveDanmakuIndicator(itemId: itemId),
                   ],
                 ),
                 const SizedBox(height: 5),
@@ -625,7 +636,7 @@ class _DanmakuRow extends StatelessWidget {
                 SizedBox(
                   width: 96,
                   child: Text(
-                    _formatDanmakuTime(item.startTime),
+                    _formatDanmakuTime(startTime),
                     style: theme.textTheme.labelMedium,
                   ),
                 ),
@@ -667,7 +678,7 @@ class _DanmakuRow extends StatelessWidget {
                 SizedBox(
                   width: 32,
                   child: active
-                      ? _ActiveDanmakuIndicator(itemId: item.id)
+                      ? _ActiveDanmakuIndicator(itemId: itemId)
                       : null,
                 ),
               ],

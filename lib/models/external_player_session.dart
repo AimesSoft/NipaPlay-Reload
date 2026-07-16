@@ -8,8 +8,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 // import 'package:nipaplay/constants/settings_keys.dart';
 // import 'package:nipaplay/utils/settings_storage.dart';
 
@@ -26,10 +27,13 @@ class ExternalPlayerSession extends ChangeNotifier {
     this.duration,
     this.danmakuAssPath,
     PlayableItem playableItem,
-    { List<ExternalPlayerDanmakuItem> danmakuItems = const [] }
+    {
+      List<DanmakuItem> danmakuList = const [],
+      this.danmakuAssSettings,
+      this.danmakuAllowStacking = true,
+    }
   ) :
-  danmakuItems  = _sortDanmakuItems(danmakuItems),
-  _maxDanmakuDuration = _findMaxDanmakuDuration(danmakuItems),
+  _danmakuList = _sortDanmakuItems(danmakuList),
   mediaPath    = playableItem.videoPath,
   animeTitle   = playableItem.title,
   episodeTitle = playableItem.subtitle,
@@ -74,8 +78,9 @@ class ExternalPlayerSession extends ChangeNotifier {
   double?        danmakuOpacity;  // 弹幕透明度, 范围 0.0 ~ 1.0
   double         danmakuOutlineWidth = 1.0; // 启用时使用的 ASS 描边宽度
   bool           danmakuOutlineEnabled = true; // 是否显示弹幕描边
-  final Duration _maxDanmakuDuration; // 弹幕中最长的显示时长, 用于二分查找优化
-  final List<ExternalPlayerDanmakuItem> danmakuItems; // 实际加载的弹幕
+  final List<DanmakuItem> _danmakuList; // 生成 ASS 和控制台共用的源弹幕
+  final AssExportSettings? danmakuAssSettings; // 重新生成 ASS 所需的初始设置
+  final bool danmakuAllowStacking; // DFM+ 布局是否允许弹幕堆叠
 
   // 播放相关
   Duration?      position;        // 当前播放位置
@@ -95,6 +100,20 @@ class ExternalPlayerSession extends ChangeNotifier {
 
   Duration? get getPosition => position;
   bool?     get getPaused   => isPaused;
+  List<DanmakuItem> get danmakuList => _danmakuList;
+
+  /// 合并控制台当前样式状态后的 ASS 设置.
+  AssExportSettings? get currentDanmakuAssSettings {
+    final settings = danmakuAssSettings;
+    if (settings == null) return null;
+    return settings.copyWith(
+      opacity: danmakuOpacity ?? settings.opacity,
+      outlineStyle: danmakuOutlineEnabled
+          ? settings.outlineStyle
+          : AssOutlineStyle.none,
+      outlineWidth: danmakuOutlineEnabled ? settings.outlineWidth : 0.0,
+    );
+  }
 
   /// 获取播放进度的百分比, 范围 0.0 ~ 1.0
   double? get fraction {
@@ -107,52 +126,78 @@ class ExternalPlayerSession extends ChangeNotifier {
   /// 弹幕已按开始时间排序. 先二分找到已开始的最后一条, 再只检查最长弹幕
   /// 显示时长覆盖的时间窗口, 避免播放状态刷新时扫描全部弹幕.
   List<int> activeDanmakuIndicesAt(Duration currentPosition) {
-    if (danmakuItems.isEmpty || _maxDanmakuDuration <= Duration.zero) {
+    final maximumDuration = _maxDanmakuDuration;
+    if (_danmakuList.isEmpty || maximumDuration <= Duration.zero) {
       return const [];
     }
 
     var low = 0;
-    var high = danmakuItems.length;
+    var high = _danmakuList.length;
     while (low < high) {
       final middle = low + ((high - low) >> 1);
-      if (danmakuItems[middle].startTime <= currentPosition) {
+      if (danmakuStartTime(_danmakuList[middle]) <= currentPosition) {
         low = middle + 1;
       } else {
         high = middle;
       }
     }
 
-    final earliestPossibleStart = currentPosition - _maxDanmakuDuration;
+    final earliestPossibleStart = currentPosition - maximumDuration;
     final active = <int>[];
     for (var index = low - 1; index >= 0; index--) {
-      final item = danmakuItems[index];
-      if (item.startTime < earliestPossibleStart) break;
-      if (item.isActiveAt(currentPosition)) active.add(index);
+      final item = _danmakuList[index];
+      final startTime = danmakuStartTime(item);
+      if (startTime < earliestPossibleStart) break;
+      if (currentPosition >= startTime &&
+          currentPosition < startTime + danmakuDisplayDuration(item)) {
+        active.add(index);
+      }
     }
     return List<int>.unmodifiable(active.reversed);
   }
 
   /// 获取指定播放位置正在显示的弹幕
-  List<ExternalPlayerDanmakuItem> activeDanmakuAt(Duration currentPosition) {
-    return List<ExternalPlayerDanmakuItem>.unmodifiable(
-      activeDanmakuIndicesAt(currentPosition).map((index) => danmakuItems[index]),
+  List<DanmakuItem> activeDanmakuAt(Duration currentPosition) {
+    return List<DanmakuItem>.unmodifiable(
+      activeDanmakuIndicesAt(currentPosition).map((index) => _danmakuList[index]),
+    );
+  }
+
+  Duration danmakuStartTime(DanmakuItem item) {
+    final offsetSeconds = danmakuAssSettings?.timeOffsetSeconds ?? 0.0;
+    return item.time + Duration(
+      microseconds:
+          (offsetSeconds * Duration.microsecondsPerSecond).round(),
+    );
+  }
+
+  Duration danmakuDisplayDuration(DanmakuItem item) {
+    final seconds = item.mode.isScrolling
+        ? danmakuAssSettings?.scrollDurationSeconds ?? 10.0
+        : kAssFixedDanmakuDurationSeconds;
+    if (!seconds.isFinite || seconds <= 0) {
+      return item.mode.isScrolling
+          ? const Duration(seconds: 10)
+          : const Duration(seconds: 5);
+    }
+    return Duration(
+      microseconds: (seconds * Duration.microsecondsPerSecond).round(),
     );
   }
 
   /// 对弹幕进行排序, 以便后续二分查找
   /// 按照 startTime 升序排序
-  static List<ExternalPlayerDanmakuItem> _sortDanmakuItems(List<ExternalPlayerDanmakuItem> items) {
-    final sorted = List<ExternalPlayerDanmakuItem>.of(items);
-    sorted.sort((a, b) => a.startTime.compareTo(b.startTime));
-    return List<ExternalPlayerDanmakuItem>.unmodifiable(sorted);
+  static List<DanmakuItem> _sortDanmakuItems(List<DanmakuItem> items) {
+    final sorted = List<DanmakuItem>.of(items);
+    sorted.sort((a, b) => a.time.compareTo(b.time));
+    return List<DanmakuItem>.unmodifiable(sorted);
   }
 
-  static Duration _findMaxDanmakuDuration(
-    List<ExternalPlayerDanmakuItem> items,
-  ) {
+  Duration get _maxDanmakuDuration {
     var maximum = Duration.zero;
-    for (final item in items) {
-      if (item.displayDuration > maximum) maximum = item.displayDuration;
+    for (final item in _danmakuList) {
+      final duration = danmakuDisplayDuration(item);
+      if (duration > maximum) maximum = duration;
     }
     return maximum;
   }

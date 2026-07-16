@@ -5,6 +5,7 @@
 import 'package:nipaplay/constants/danmaku/ass_kind.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
 
 
@@ -68,6 +69,33 @@ class AssExportSettings {
     this.outlineWidth = 1.0,
     this.shadowStyle = AssShadowStyle.none,
   });
+
+  AssExportSettings copyWith({
+    double? fontSize,
+    double? opacity,
+    double? displayArea,
+    double? scrollDurationSeconds,
+    double? timeOffsetSeconds,
+    bool? mergeDuplicates,
+    String? fontFamily,
+    AssOutlineStyle? outlineStyle,
+    double? outlineWidth,
+    AssShadowStyle? shadowStyle,
+  }) {
+    return AssExportSettings(
+      fontSize: fontSize ?? this.fontSize,
+      opacity: opacity ?? this.opacity,
+      displayArea: displayArea ?? this.displayArea,
+      scrollDurationSeconds:
+          scrollDurationSeconds ?? this.scrollDurationSeconds,
+      timeOffsetSeconds: timeOffsetSeconds ?? this.timeOffsetSeconds,
+      mergeDuplicates: mergeDuplicates ?? this.mergeDuplicates,
+      fontFamily: fontFamily ?? this.fontFamily,
+      outlineStyle: outlineStyle ?? this.outlineStyle,
+      outlineWidth: outlineWidth ?? this.outlineWidth,
+      shadowStyle: shadowStyle ?? this.shadowStyle,
+    );
+  }
 }
 
 
@@ -83,6 +111,25 @@ String convertDanmakuToAss(
   AssExportSettings settings,
 ) {
   return convertDanmakuToAssWithEvents(danmaku, settings).ass;
+}
+
+/// 把强类型应用层弹幕转换为 ASS 字幕文本.
+String convertDanmakuItemsToAss(
+  List<DanmakuItem> danmaku,
+  AssExportSettings settings,
+) {
+  return convertDanmakuItemsToAssWithEvents(danmaku, settings).ass;
+}
+
+/// 转换强类型应用层弹幕, 并返回所有实际写入 ASS 的事件.
+DanmakuAssConversionResult convertDanmakuItemsToAssWithEvents(
+  List<DanmakuItem> danmaku,
+  AssExportSettings settings,
+) {
+  return convertDanmakuToAssWithEvents(
+    danmaku.map((item) => item.toMap()).toList(growable: false),
+    settings,
+  );
 }
 
 /// 转换 ASS, 并返回所有实际写入 ASS 的事件

@@ -6,8 +6,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 
 
 /// 项目里掌管外部播放器控制台的唯一神
@@ -23,12 +24,18 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   static bool get isSupportedPlatform => !kIsWeb && Platform.isLinux;
 
-  // --- Setters & Getters --- //
+
+  // ======================================================================== //
+  // ======================== Setters & Getters ============================= //
+  // ======================================================================== //
 
   ExternalPlayerSession? get session => _session;
   bool get hasActiveSession => _session != null;
-  bool get supportsDanmakuOpacity => _session?.ipcPath != null && _session?.danmakuAssPath != null;
-  bool get supportsDanmakuOutline => _session?.ipcPath != null && _session?.danmakuAssPath != null;
+  bool get supportsDanmakuOpacity =>
+      _session?.ipcPath != null &&
+      _session?.danmakuAssPath != null &&
+      _session?.danmakuAssSettings != null;
+  bool get supportsDanmakuOutline => supportsDanmakuOpacity;
 
   /// 获取当前播放位置正在显示的弹幕索引列表, 按照 startTime 升序排列
   List<int> get activeDanmakuIndices {
@@ -39,7 +46,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
   /// 获取当前播放位置正在显示的弹幕, 按照 startTime 升序排列
-  List<ExternalPlayerDanmakuItem> get activeDanmakuItems {
+  List<DanmakuItem> get activeDanmakuItems {
     final current = _session;
     final position = current?.position;
     if (current == null || position == null) return const [];
@@ -47,7 +54,9 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
 
-  // --- 主要功能 --- //
+  // ======================================================================== //
+  // ============================= Main Features ============================ //
+  // ======================================================================== //
 
   /// 设置新的外部播放器会话, 并显示控制台
   static void showSession(ExternalPlayerSession session) {
@@ -127,12 +136,20 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     final value = opacity.clamp(0.0, 1.0).toDouble();
     current.danmakuOpacity = value;
     _instance.notifyListeners();
+    final outlineEnabled = current.danmakuOutlineEnabled;
     _instance._danmakuStyleUpdateQueue =
         _instance._danmakuStyleUpdateQueue.then((_) async {
-      if (!_isCurrentSession(current) || current.danmakuOpacity != value) {
+      if (!_isCurrentSession(current) ||
+          current.danmakuOpacity != value ||
+          current.danmakuOutlineEnabled != outlineEnabled) {
         return;
       }
-      await _setDanmakuOpacity(current, assPath, value);
+      await _regenerateDanmakuAss(
+        current,
+        assPath,
+        opacity: value,
+        outlineEnabled: outlineEnabled,
+      );
     });
   }
 
@@ -147,18 +164,27 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
     current.danmakuOutlineEnabled = enabled;
     _instance.notifyListeners();
+    final opacity = current.danmakuOpacity;
     _instance._danmakuStyleUpdateQueue =
         _instance._danmakuStyleUpdateQueue.then((_) async {
       if (!_isCurrentSession(current) ||
-          current.danmakuOutlineEnabled != enabled) {
+          current.danmakuOutlineEnabled != enabled ||
+          current.danmakuOpacity != opacity) {
         return;
       }
-      await _setDanmakuOutlineEnabled(current, assPath, enabled);
+      await _regenerateDanmakuAss(
+        current,
+        assPath,
+        opacity: opacity,
+        outlineEnabled: enabled,
+      );
     });
   }
 
 
-  // --- Private Methods --- //
+  // ======================================================================== //
+  // =========================== Private Methods ============================ //
+  // ======================================================================== //
 
   static void _handleSessionChanged() {
     _instance.notifyListeners();
@@ -277,86 +303,44 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     finally { socket?.destroy(); }
   }
 
-  static Future<void> _setDanmakuOpacity(
+  static Future<void> _regenerateDanmakuAss(
     ExternalPlayerSession session,
     String assPath,
-    double opacity,
-  ) async {
-    File? temporaryFile;
-    try {
-      final file = File(assPath);
-      final originalAss = await file.readAsString();
-      if (!_isCurrentSession(session) || session.danmakuOpacity != opacity) {
-        return;
-      }
-
-      final alpha = ((1.0 - opacity) * 255.0).round().clamp(0, 255);
-      final alphaHex = alpha.toRadixString(16).toUpperCase().padLeft(2, '0');
-      final alphaPattern = RegExp(r'\\1a&H[0-9A-Fa-f]{2}&');
-      if (!alphaPattern.hasMatch(originalAss)) {
-        debugPrint('[ExtPlayerConsole] Danmaku ASS has no opacity tags: $assPath');
-        return;
-      }
-      final updated = originalAss.replaceAll(
-        alphaPattern,
-        '\\1a&H$alphaHex&',
-      );
-
-      temporaryFile = File('$assPath.nipaplay.tmp');
-      await temporaryFile.writeAsString(updated, encoding: utf8, flush: true);
-      if (!_isCurrentSession(session) || session.danmakuOpacity != opacity) {
-        return;
-      }
-
-      temporaryFile.renameSync(assPath);
-      temporaryFile = null;
-      final reloaded = await _reloadMpvDanmaku(session);
-      if (!reloaded) {
-        debugPrint('[ExtPlayerConsole] Failed to reload danmaku after opacity update');
-      }
-    } catch (error) {
-      debugPrint('[ExtPlayerConsole] Failed to update danmaku opacity: $error');
-    } finally {
-      if (temporaryFile?.existsSync() == true) {
-        temporaryFile?.deleteSync();
-      }
+    {
+      required double? opacity,
+      required bool outlineEnabled,
     }
-  }
-
-  static Future<void> _setDanmakuOutlineEnabled(
-    ExternalPlayerSession session,
-    String assPath,
-    bool enabled,
   ) async {
     File? temporaryFile;
     try {
-      final file = File(assPath);
-      final originalAss = await file.readAsString();
-      if (!_isCurrentSession(session) ||
-          session.danmakuOutlineEnabled != enabled) {
+      final settings = session.currentDanmakuAssSettings;
+      if (settings == null ||
+          !_isCurrentSession(session) ||
+          session.danmakuOpacity != opacity ||
+          session.danmakuOutlineEnabled != outlineEnabled) {
         return;
       }
 
-      final stylePattern = RegExp(
-        r'^(Style:\s*(?:[^,\r\n]*,){16})([^,\r\n]*)(,.*)$',
-        multiLine: true,
+      final conversion = await generateExternalPlayerDanmakuAss(
+        session.danmakuList,
+        settings,
+        allowStacking: session.danmakuAllowStacking,
       );
-      if (!stylePattern.hasMatch(originalAss)) {
-        debugPrint('[ExtPlayerConsole] Danmaku ASS has no style outlines: $assPath');
+      if (!_isCurrentSession(session) ||
+          session.danmakuOpacity != opacity ||
+          session.danmakuOutlineEnabled != outlineEnabled) {
         return;
       }
-      final outlineWidth = enabled
-          ? session.danmakuOutlineWidth.toStringAsFixed(1)
-          : '0.0';
-      final updated = originalAss.replaceAllMapped(
-        stylePattern,
-        (match) => '${match.group(1)}$outlineWidth${match.group(3)}',
-      );
 
       temporaryFile = File('$assPath.nipaplay.tmp');
-      await temporaryFile.writeAsString(updated, encoding: utf8, flush: true);
+      await temporaryFile.writeAsString(
+        conversion.ass,
+        encoding: utf8,
+        flush: true,
+      );
       if (!_isCurrentSession(session) ||
-          session.danmakuOutlineEnabled != enabled) {
+          session.danmakuOpacity != opacity ||
+          session.danmakuOutlineEnabled != outlineEnabled) {
         return;
       }
 
@@ -364,10 +348,10 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       temporaryFile = null;
       final reloaded = await _reloadMpvDanmaku(session);
       if (!reloaded) {
-        debugPrint('[ExtPlayerConsole] Failed to reload danmaku after outline update');
+        debugPrint('[ExtPlayerConsole] Failed to reload regenerated danmaku');
       }
     } catch (error) {
-      debugPrint('[ExtPlayerConsole] Failed to update danmaku outline: $error');
+      debugPrint('[ExtPlayerConsole] Failed to regenerate danmaku ASS: $error');
     } finally {
       if (temporaryFile?.existsSync() == true) {
         temporaryFile?.deleteSync();

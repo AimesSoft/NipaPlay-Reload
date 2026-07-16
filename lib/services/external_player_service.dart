@@ -3,18 +3,14 @@
 // 掌管外部播放器启动, 弹幕导出和参数注入的服务
 
 import 'dart:convert';
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/constants/danmaku/ass_kind.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -22,13 +18,11 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
-import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
-import 'package:nipaplay/src/rust/rust_init.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -400,7 +394,9 @@ class ExternalPlayerService {
         Duration(milliseconds: history?.duration ?? 0),
         danmakuAssets?.assPath,
         sessionItem,
-        danmakuItems: danmakuAssets?.danmakuItems ?? const [],
+        danmakuList: danmakuAssets?.danmakuList ?? const [],
+        danmakuAssSettings: danmakuAssets?.assSettings,
+        danmakuAllowStacking: danmakuAssets?.allowStacking ?? true,
       )..initialize(
           danmakuOpacity: danmakuAssets?.opacity ?? 1.0,
           danmakuOutlineWidth: danmakuAssets?.outlineWidth ?? 1.0,
@@ -568,29 +564,22 @@ class ExternalPlayerService {
         return null;
       }
       final assSettings = _buildAssSettings(vps);
+      final danmakuList = List<DanmakuItem>.unmodifiable(
+        list.map(DanmakuItem.fromMap),
+      );
       debugPrint('[ExtPlayer] ASS 设置: fontSize=${assSettings.fontSize}, '
           'opacity=${assSettings.opacity}, displayArea=${assSettings.displayArea}, '
           'scrollDur=${assSettings.scrollDurationSeconds}, '
           'offset=${assSettings.timeOffsetSeconds}, merge=${assSettings.mergeDuplicates}');
       // 优先用 DFM+ 内核布局层预算运动参数（碰撞/追赶规避）, 失败回退经典算法.
-      DanmakuAssConversionResult conversion;
-      String assPathLabel;
-      final dfmConversion = await _generateAssViaDfmLayout(list, assSettings, vps);
-      if (dfmConversion != null) {
-        conversion = dfmConversion;
-        assPathLabel = 'DFM+布局';
-      } else {
-        conversion = convertDanmakuToAssWithEvents(list, assSettings);
-        assPathLabel = '经典算法';
-      }
-      final ass = conversion.ass;
-      final consoleItems = _buildConsoleDanmakuItems(
-        conversion.events,
-        list,
-        assSettings.timeOffsetSeconds,
+      final conversion = await generateExternalPlayerDanmakuAss(
+        danmakuList,
+        assSettings,
+        allowStacking: vps.danmakuStacking,
       );
-      debugPrint('[ExtPlayer] ASS 生成完成 ($assPathLabel): ${ass.length} 字符');
-      debugPrint('[ExtPlayer] 控制台弹幕 ${consoleItems.length} 条');
+      final ass = conversion.ass;
+      debugPrint('[ExtPlayer] ASS 生成完成: ${ass.length} 字符');
+      debugPrint('[ExtPlayer] 会话弹幕 ${danmakuList.length} 条');
       final assPath = await _writeAssTempFile(ass, episodeId);
       final assBasename = assPath.split(Platform.pathSeparator).last;
       final luaPath = _writeDanmakuLuaScript(assBasename);
@@ -603,289 +592,15 @@ class ExternalPlayerService {
         luaPath: luaPath,
         opacity: assSettings.opacity,
         outlineWidth: _resolveAssOutlineWidth(assSettings),
-        danmakuItems: consoleItems,
+        danmakuList: danmakuList,
+        assSettings: assSettings,
+        allowStacking: vps.danmakuStacking,
       );
     } catch (e, st) {
       debugPrint('[ExtPlayer] _prepareDanmakuAss 异常: $e');
       debugPrintStack(stackTrace: st);
       return null;
     }
-  }
-
-  /// 用 DFM+ 内核布局层预算运动参数后烘焙 ASS.
-  ///
-  /// DFM+ 的 [rust_dfm.dfmPlusPrepareLayoutFull] 一次性算好全部条目的车道
-  /// (yPosition), 滚动速度(scrollSpeed), 宽度(width), 时长(durationSeconds),
-  /// 居中 x(centeredX), 已做碰撞避让与追赶规避. 本方法把这些参数适配为
-  /// [PreparedDanmakuItem] 交给 [convertDanmakuToAssFromPrepared] 烘焙,
-  /// ASS 渲染时即碰撞无关. 失败返回 null（调用方回退经典算法）.
-  static Future<DanmakuAssConversionResult?> _generateAssViaDfmLayout(
-    List<Map<String, dynamic>> list,
-    AssExportSettings settings,
-    VideoPlayerState vps,
-  ) async {
-    try {
-      final rawItems = <rust_dfm.DfmPlusRawDanmakuItem>[];
-      for (final raw in list) {
-        final text = (raw['content'] ?? raw['c'])?.toString() ?? '';
-        if (text.isEmpty) continue;
-        final time = _resolveDanmakuTime(raw);
-        final typeCode = _resolveDanmakuTypeCode(raw);
-        final colorArgb =
-            _toArgbSigned(parseDanmakuColorToInt(raw['color'] ?? raw['r']));
-        rawItems.add(rust_dfm.DfmPlusRawDanmakuItem(
-          timeSeconds: time,
-          text: text,
-          typeCode: typeCode,
-          colorArgb: colorArgb,
-          isMe: raw['isMe'] == true,
-        ));
-      }
-      if (rawItems.isEmpty) return null;
-
-      await ensureRustInitialized();
-      final mappedFont = resolveAssFontSize(settings.fontSize);
-      final prepared = await rust_dfm.dfmPlusPrepareLayoutFull(
-        rawItems: rawItems,
-        width: kAssPlayResX.toDouble(),
-        height: kAssPlayResY.toDouble(),
-        fontSize: mappedFont,
-        displayArea: settings.displayArea,
-        scrollDurationSeconds: settings.scrollDurationSeconds,
-        allowStacking: vps.danmakuStacking,
-        mergeDanmaku: settings.mergeDuplicates,
-        trackGapRatio: 0.15,
-        outlineWidth: settings.outlineWidth,
-        customFontBytes: null,
-        blockWords: const [],
-      );
-
-      final items = prepared.items
-          .map((pi) => PreparedDanmakuItem(
-                timeSeconds: pi.timeSeconds,
-                text: pi.text,
-                typeCode: pi.typeCode,
-                colorRgb: pi.colorArgb & 0xFFFFFF,
-                yPosition: pi.yPosition,
-                width: pi.width,
-                scrollSpeed: pi.scrollSpeed,
-                durationSeconds: pi.durationSeconds,
-                isScroll: pi.isScroll,
-                centeredX: pi.centeredX,
-                isFiltered: pi.isFiltered,
-              ))
-          .toList();
-      final kept = items.where((i) => !i.isFiltered).length;
-      debugPrint('[ExtPlayer] DFM+ 布局: 共 ${items.length} 条, 入 ASS $kept 条');
-
-      final conversion = convertDanmakuToAssFromPreparedWithEvents(
-        items,
-        playResX: kAssPlayResX,
-        playResY: kAssPlayResY,
-        settings: settings,
-      );
-      await rust_dfm.dfmPlusDropLayout(handle: prepared.handle);
-      return conversion;
-    } catch (e, st) {
-      debugPrint('[ExtPlayer] DFM+ 布局路径失败, 将回退经典算法: $e');
-      debugPrintStack(stackTrace: st);
-      return null;
-    }
-  }
-
-  static double _resolveDanmakuTime(Map<String, dynamic> item) {
-    final v = item['time'] ?? item['t'];
-    if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v) ?? 0.0;
-    return 0.0;
-  }
-
-  static int _resolveDanmakuTypeCode(Map<String, dynamic> item) {
-    final original = item['originalType'];
-    if (original is num) return original.toInt();
-    final v = item['type'] ?? item['y'];
-    if (v is num) return v.toInt();
-    switch (v?.toString().toLowerCase())
-    {
-    case 'top'    : return DanmakuMode.top.code;
-    case 'bottom' : return DanmakuMode.bottom.code;
-    default       : return DanmakuMode.scroll.code;
-    }
-  }
-
-  /// 0xRRGGBB → ARGB signed int (0xFFRRGGBB as i32), DFM+ 要求 colorArgb 为 i32.
-  static int _toArgbSigned(int rgb) {
-    return (0xFF000000 | (rgb & 0xFFFFFF)).toSigned(32);
-  }
-
-  /// 这个函数负责把两个信息来源合并起来:
-  ///
-  /// - ASS 事件: 决定哪些弹幕真正显示, 以及实际显示时间和样式
-  /// - 原始弹幕: 提供发送者身份和弹幕来源
-  ///
-  /// 从而让控制台展示的内容与外部播放器实际加载的 ASS 弹幕保持一致.
-  static List<ExternalPlayerDanmakuItem> _buildConsoleDanmakuItems(
-    List<AssDanmakuEvent> events,
-    List<Map<String, dynamic>> sourceItems,
-    double timeOffsetSeconds,
-  ) {
-    final sources = <_ExternalDanmakuSource>[];
-    final exactMatches = <String, ListQueue<int>>{};
-    final timeMatches = <String, List<int>>{};
-
-    for (final raw in sourceItems) {
-      final content = (raw['content'] ?? raw['c'])?.toString() ?? '';
-      if (content.isEmpty) continue;
-      final startMilliseconds =
-          ((_resolveDanmakuTime(raw) + timeOffsetSeconds) * 1000).floor();
-      if (startMilliseconds < 0) continue;
-      final source = _ExternalDanmakuSource(
-        raw: raw,
-        content: content,
-        startMilliseconds: startMilliseconds,
-        colorRgb: parseDanmakuColorToInt(raw['color'] ?? raw['r']),
-        type: _externalDanmakuTypeFromCode(_resolveDanmakuTypeCode(raw)),
-      );
-      final index = sources.length;
-      sources.add(source);
-      exactMatches
-          .putIfAbsent(source.exactKey, ListQueue<int>.new)
-          .add(index);
-      timeMatches.putIfAbsent(source.timeKey, () => <int>[]).add(index);
-    }
-
-    final usedSourceIndices = <int>{};
-    final result = <ExternalPlayerDanmakuItem>[];
-    for (var index = 0; index < events.length; index++) {
-      final event = events[index];
-      final eventType = _externalDanmakuTypeFromEvent(event.type);
-      final startMilliseconds = (event.startSeconds * 1000).floor();
-
-      _ExternalDanmakuSource? source;
-      for (final delta in const [0, -1, 1]) {
-        final exactKey = _ExternalDanmakuSource.buildExactKey(
-          startMilliseconds + delta,
-          event.colorRgb,
-          eventType,
-          event.content,
-        );
-        final exactQueue = exactMatches[exactKey];
-        while (exactQueue?.isNotEmpty == true) {
-          final sourceIndex = exactQueue!.removeFirst();
-          if (usedSourceIndices.add(sourceIndex)) {
-            source = sources[sourceIndex];
-            break;
-          }
-        }
-        if (source != null) break;
-      }
-      if (source == null) {
-        for (final delta in const [0, -1, 1]) {
-          final timeKey = _ExternalDanmakuSource.buildTimeKey(
-            startMilliseconds + delta,
-            event.colorRgb,
-            eventType,
-          );
-          for (final sourceIndex in timeMatches[timeKey] ?? const <int>[]) {
-            if (usedSourceIndices.contains(sourceIndex)) continue;
-            final candidate = sources[sourceIndex];
-            if (!_matchesMergedContent(event.content, candidate.content)) continue;
-            usedSourceIndices.add(sourceIndex);
-            source = candidate;
-            break;
-          }
-          if (source != null) break;
-        }
-      }
-
-      result.add(ExternalPlayerDanmakuItem(
-        id: 'danmaku-$index',
-        content: event.content,
-        startTime: _durationFromSeconds(event.startSeconds),
-        endTime: _durationFromSeconds(event.endSeconds),
-        colorRgb: event.colorRgb & 0xFFFFFF,
-        senderId: _resolveSenderId(source?.raw),
-        type: eventType,
-        source: _resolveSourceName(source?.raw),
-      ));
-    }
-    return List<ExternalPlayerDanmakuItem>.unmodifiable(result);
-  }
-
-  static ExternalPlayerDanmakuType _externalDanmakuTypeFromEvent(
-    DanmakuKind type,
-  ) {
-    switch (type) {
-      case DanmakuKind.scroll:
-        return ExternalPlayerDanmakuType.scroll;
-      case DanmakuKind.top:
-        return ExternalPlayerDanmakuType.top;
-      case DanmakuKind.bottom:
-        return ExternalPlayerDanmakuType.bottom;
-    }
-  }
-
-  static ExternalPlayerDanmakuType _externalDanmakuTypeFromCode(int typeCode) {
-    if (typeCode == 5) return ExternalPlayerDanmakuType.top;
-    if (typeCode == 4) return ExternalPlayerDanmakuType.bottom;
-    return ExternalPlayerDanmakuType.scroll;
-  }
-
-  static Duration _durationFromSeconds(double seconds) {
-    return Duration(microseconds: (seconds * Duration.microsecondsPerSecond).round());
-  }
-
-  static bool _matchesMergedContent(String eventContent, String sourceContent) {
-    if (eventContent == sourceContent) return true;
-    final prefix = '$sourceContent x';
-    if (!eventContent.startsWith(prefix)) return false;
-    return int.tryParse(eventContent.substring(prefix.length)) != null;
-  }
-
-  static String? _resolveSenderId(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    for (final key in const [
-      'senderId',
-      'sender',
-      'userId',
-      'userID',
-      'uid',
-      'midHash',
-      'userHash',
-      'hash',
-    ]) {
-      final value = _nonEmptyMetadata(raw[key]);
-      if (value != null) return value;
-    }
-    for (final identity in [raw['user'], raw['sender']]) {
-      if (identity is! Map) continue;
-      for (final key in const ['id', 'uid', 'hash']) {
-        final value = _nonEmptyMetadata(identity[key]);
-        if (value != null) return value;
-      }
-    }
-    final p = raw['p']?.toString().split(',');
-    if (p != null && p.length > 3) {
-      final value = _nonEmptyMetadata(p[3]);
-      if (value != null) return value;
-    }
-    return _nonEmptyMetadata(raw['cid']);
-  }
-
-  static String? _resolveSourceName(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    for (final key in const ['source', 'trackName', 'track']) {
-      final value = _nonEmptyMetadata(raw[key]);
-      if (value != null) return value;
-    }
-    return null;
-  }
-
-  static String? _nonEmptyMetadata(dynamic value) {
-    if (value == null || value is Map || value is Iterable) return null;
-    final text = value.toString().trim();
-    if (text.isEmpty || text == '0' || text.toLowerCase() == 'null') return null;
-    return text;
   }
 
   /// 从 [VideoPlayerState] 当前渲染设置构造 ASS 导出设置.
@@ -1107,47 +822,5 @@ end)
       return resolved ?? path;
     }
     return path;
-  }
-}
-
-class _ExternalDanmakuSource {
-  const _ExternalDanmakuSource({
-    required this.raw,
-    required this.content,
-    required this.startMilliseconds,
-    required this.colorRgb,
-    required this.type,
-  });
-
-  final Map<String, dynamic> raw;
-  final String content;
-  final int startMilliseconds;
-  final int colorRgb;
-  final ExternalPlayerDanmakuType type;
-
-  String get exactKey => buildExactKey(
-    startMilliseconds,
-    colorRgb,
-    type,
-    content,
-  );
-
-  String get timeKey => buildTimeKey(startMilliseconds, colorRgb, type);
-
-  static String buildExactKey(
-    int startMilliseconds,
-    int colorRgb,
-    ExternalPlayerDanmakuType type,
-    String content,
-  ) {
-    return '${buildTimeKey(startMilliseconds, colorRgb, type)}\u0000$content';
-  }
-
-  static String buildTimeKey(
-    int startMilliseconds,
-    int colorRgb,
-    ExternalPlayerDanmakuType type,
-  ) {
-    return '$startMilliseconds\u0000${colorRgb & 0xFFFFFF}\u0000${type.name}';
   }
 }
