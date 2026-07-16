@@ -1,6 +1,8 @@
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:provider/provider.dart';
 
 class CupertinoLibraryManagementOverview extends StatelessWidget {
   const CupertinoLibraryManagementOverview({
@@ -96,6 +98,8 @@ class _ManagementGridItem extends StatelessWidget {
       CupertinoColors.label,
       context,
     );
+    // 根据外观设置决定目录名是省略号截断还是多行完整显示
+    final appearance = context.watch<AppearanceSettingsProvider>();
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -128,8 +132,8 @@ class _ManagementGridItem extends StatelessWidget {
               const Spacer(),
               Text(
                 item.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                maxLines: appearance.folderNameMaxLines,
+                overflow: appearance.folderNameOverflow,
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -169,6 +173,8 @@ class _ManagementListItem extends StatelessWidget {
       CupertinoColors.label,
       context,
     );
+    // 根据外观设置决定目录名是省略号截断还是多行完整显示
+    final appearance = context.watch<AppearanceSettingsProvider>();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -193,8 +199,8 @@ class _ManagementListItem extends StatelessWidget {
                       children: [
                         Text(
                           item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: appearance.folderNameMaxLines,
+                          overflow: appearance.folderNameOverflow,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,

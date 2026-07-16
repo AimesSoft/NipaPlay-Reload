@@ -4,8 +4,10 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_management_overview.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
+import 'package:provider/provider.dart';
 
 class AdaptiveLibraryManagementOverview extends material.StatelessWidget {
   const AdaptiveLibraryManagementOverview({
@@ -79,6 +81,8 @@ class _DesktopManagementItem extends material.StatelessWidget {
   material.Widget build(material.BuildContext context) {
     final colors = material.Theme.of(context).colorScheme;
     final secondary = colors.onSurface.withValues(alpha: 0.58);
+    // 根据外观设置决定目录名是省略号截断还是多行完整显示
+    final appearance = context.watch<AppearanceSettingsProvider>();
     final enabledActions = item.actions
         .where((action) => action.onPressed != null)
         .toList(growable: false);
@@ -112,8 +116,8 @@ class _DesktopManagementItem extends material.StatelessWidget {
                         children: [
                           material.Text(
                             item.title,
-                            maxLines: 1,
-                            overflow: material.TextOverflow.ellipsis,
+                            maxLines: appearance.folderNameMaxLines,
+                            overflow: appearance.folderNameOverflow,
                             style: const material.TextStyle(
                               fontSize: 15,
                               fontWeight: material.FontWeight.w600,
