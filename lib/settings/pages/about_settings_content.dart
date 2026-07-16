@@ -29,6 +29,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
   bool _versionLoadFailed = false;
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
+  bool _isUpdateActionHovered = false;
 
   @override
   void initState() {
@@ -256,7 +257,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
             runSpacing: 10,
             children: [
               for (final name in AboutSettingsData.sponsorNames)
-                _buildAcknowledgementBadge(context, name, accentColor),
+                _buildAcknowledgementItem(context, name, accentColor),
             ],
           ),
           _buildCanvasDivider(textColor),
@@ -286,36 +287,72 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
     Color accentColor,
     Color secondaryColor,
   ) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _isCheckingUpdate ? null : _manualCheckForUpdates,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_isCheckingUpdate)
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: accentColor,
-                ),
-              )
-            else
-              Icon(Icons.system_update_alt, size: 18, color: accentColor),
-            const SizedBox(width: 8),
-            Text(
-              _isCheckingUpdate
-                  ? context.l10n.aboutCheckingUpdates
-                  : context.l10n.aboutCheckUpdates,
-              style: TextStyle(
-                color: _isCheckingUpdate ? secondaryColor : accentColor,
-                fontWeight: FontWeight.w600,
+    final isHovered = !_isCheckingUpdate && _isUpdateActionHovered;
+
+    return MouseRegion(
+      cursor: _isCheckingUpdate
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) {
+        if (_isCheckingUpdate || _isUpdateActionHovered) return;
+        setState(() => _isUpdateActionHovered = true);
+      },
+      onExit: (_) {
+        if (!_isUpdateActionHovered) return;
+        setState(() => _isUpdateActionHovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _isCheckingUpdate ? null : _manualCheckForUpdates,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          child: AnimatedScale(
+            scale: isHovered ? 1.08 : 1,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutBack,
+            alignment: Alignment.centerLeft,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(
+                begin: 0,
+                end: isHovered ? 1 : 0,
               ),
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              builder: (context, hoverProgress, child) {
+                final color = Color.lerp(
+                  secondaryColor,
+                  accentColor,
+                  hoverProgress,
+                )!;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isCheckingUpdate)
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: color,
+                        ),
+                      )
+                    else
+                      Icon(Icons.system_update_alt, size: 18, color: color),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isCheckingUpdate
+                          ? context.l10n.aboutCheckingUpdates
+                          : context.l10n.aboutCheckUpdates,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -347,7 +384,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
     );
   }
 
-  Widget _buildAcknowledgementBadge(
+  Widget _buildAcknowledgementItem(
     BuildContext context,
     String name,
     Color accentColor,
@@ -358,27 +395,19 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
             context,
           )
         : Theme.of(context).colorScheme.onSurface;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: accentColor.withValues(alpha: 0.12),
-        border: Border.all(color: accentColor.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Ionicons.ribbon_outline, size: 15, color: accentColor),
-          const SizedBox(width: 7),
-          Text(
-            name,
-            style: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w600,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Ionicons.ribbon_outline, size: 15, color: accentColor),
+        const SizedBox(width: 7),
+        Text(
+          name,
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
