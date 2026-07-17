@@ -41,7 +41,6 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         danmakuStartTime: service.danmakuStartTime,
                         isPaused: session.isPaused ?? false,
                         danmakuOpacity: service.danmakuOpacity,
-                        danmakuOutlineEnabled: service.danmakuOutlineEnabled,
                         danmakuOutlineWidth: service.danmakuOutlineWidth,
                         supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                         supportsDanmakuOutline: service.supportsDanmakuOutline,
@@ -103,7 +102,6 @@ class _ConsoleCard extends StatelessWidget {
     required this.danmakuStartTime,
     required this.isPaused,
     required this.danmakuOpacity,
-    required this.danmakuOutlineEnabled,
     required this.danmakuOutlineWidth,
     required this.supportsDanmakuOpacity,
     required this.supportsDanmakuOutline,
@@ -119,7 +117,6 @@ class _ConsoleCard extends StatelessWidget {
   final Duration Function(DanmakuItem) danmakuStartTime;
   final bool isPaused;
   final double danmakuOpacity;
-  final bool danmakuOutlineEnabled;
   final double danmakuOutlineWidth;
   final bool supportsDanmakuOpacity;
   final bool supportsDanmakuOutline;
@@ -189,8 +186,6 @@ class _ConsoleCard extends StatelessWidget {
             _buildProgress(context),
             const SizedBox(height: 20),
             _buildDanmakuOpacity(context),
-            const SizedBox(height: 8),
-            _buildDanmakuOutline(context),
             const SizedBox(height: 8),
             _buildDanmakuOutlineWidth(context),
             const SizedBox(height: 20),
@@ -315,27 +310,6 @@ class _ConsoleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDanmakuOutline(BuildContext context) {
-    final theme = Theme.of(context);
-    final localizations = context.l10n;
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            localizations.danmakuOutlineEnabledTitle,
-            style: theme.textTheme.titleMedium,
-          ),
-        ),
-        Switch(
-          value: danmakuOutlineEnabled,
-          onChanged: supportsDanmakuOutline
-              ? ExternalPlayerConsoleService.setDanmakuOutlineEnabled
-              : null,
-        ),
-      ],
-    );
-  }
-
   Widget _buildDanmakuOutlineWidth(BuildContext context) {
     final theme = Theme.of(context);
     final localizations = context.l10n;
@@ -360,14 +334,14 @@ class _ConsoleCard extends StatelessWidget {
         ),
         Slider(
           value: danmakuOutlineWidth.clamp(
-            DanmakuStyle.minOutlineWidth,
+            0.0,
             DanmakuStyle.maxOutlineWidth,
           ).toDouble(),
-          min: DanmakuStyle.minOutlineWidth,
+          min: 0.0,
           max: DanmakuStyle.maxOutlineWidth,
-          divisions: 9,
+          divisions: 10,
           label: danmakuOutlineWidth.toStringAsFixed(1),
-          onChanged: supportsDanmakuOutline && danmakuOutlineEnabled
+          onChanged: supportsDanmakuOutline
               ? ExternalPlayerConsoleService.setDanmakuOutlineWidth
               : null,
         ),

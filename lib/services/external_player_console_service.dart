@@ -49,7 +49,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   AssExportSettings? _danmakuAssSettings;
 
   // 弹幕样式相关
-  bool _danmakuAllowStacking = true; // 是否允许弹幕堆叠
   DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
@@ -206,14 +205,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._updateDanmakuStyle((style) => style.opacity = opacity);
   }
 
-  /// 设置弹幕的描边是否启用
-  static void setDanmakuOutlineEnabled(bool enabled) {
-    if (!_instance.supportsDanmakuOutline) return;
-    _instance._updateDanmakuStyle(
-      (style) => style.outlineEnabled = enabled,
-    );
-  }
-
   /// 设置弹幕描边宽度:
   /// [width] 的范围为 0.5 到 5.0, 超出范围将被限制在有效范围内
   static void setDanmakuOutlineWidth(double width) {
@@ -275,10 +266,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         : settings.outlineStyle;
     return settings.copyWith(
       opacity: style.opacity,
-      outlineStyle: style.outlineEnabled
-          ? outlineStyle
-          : AssOutlineStyle.none,
-      outlineWidth: style.outlineEnabled ? style.outlineWidth : 0.0,
+      outlineStyle: style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
+      outlineWidth: style.outlineWidth,
     );
   }
 
@@ -355,7 +344,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       final assStr = await generateExternalPlayerDanmakuAss(
         _danmakuList,
         settings,
-        allowStacking: _danmakuAllowStacking,
+        allowStacking: style.danmakuAllowStacking,
       );
 
       // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
@@ -423,15 +412,15 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuLuaPath = assets?.luaPath;
     _danmakuList = _sortDanmakuItems(assets?.danmakuList ?? const []);
     _danmakuAssSettings = assets?.assSettings;
-    _danmakuAllowStacking = assets?.allowStacking ?? true;
     final settings = assets?.assSettings;
     final outlineWidth = settings?.outlineWidth ?? 1.0;
+    final outlineEnabled = settings != null &&
+        settings.outlineStyle != AssOutlineStyle.none &&
+        outlineWidth > 0.0;
     _danmakuStyle = DanmakuStyle(
       opacity: assets?.opacity ?? DanmakuStyle.maxOpacity,
-      outlineWidth: outlineWidth > 0.0 ? outlineWidth : 1.0,
-      outlineEnabled: settings != null &&
-          settings.outlineStyle != AssOutlineStyle.none &&
-          outlineWidth > 0.0,
+      outlineWidth: outlineEnabled ? outlineWidth : 0.0,
+      danmakuAllowStacking: assets?.allowStacking ?? true,
     );
   }
 

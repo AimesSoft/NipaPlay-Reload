@@ -11,22 +11,22 @@ class DanmakuStyle {
   // 弹幕透明度和描边宽度的范围
   static const double minOpacity      = 0.0;
   static const double maxOpacity      = 1.0;
-  static const double minOutlineWidth = 0.5;
+  static const double minOutlineWidth = 0.5; // 0 表示不启用描边
   static const double maxOutlineWidth = 5.0;
 
-  double  _opacity;         // 弹幕透明度
-  double  _outlineWidth;    // 弹幕描边宽度
-  bool    _outlineEnabled;  // 弹幕描边是否启用
+  double  _opacity;                // 弹幕透明度
+  double  _outlineWidth;           // 弹幕描边宽度
+  bool    _danmakuAllowStacking;   // 是否允许弹幕堆叠
 
   /// 构造函数
   DanmakuStyle({
-    double  opacity         = maxOpacity,
-    double  outlineWidth    = 1.0,
-    bool    outlineEnabled  = true,
+    double  opacity                = maxOpacity,
+    double  outlineWidth           = 1.0,
+    bool    danmakuAllowStacking   = true,
   }) :
-  _opacity        = _normalizeOpacity(opacity),
-  _outlineWidth   = _normalizeOutlineWidth(outlineWidth),
-  _outlineEnabled = outlineEnabled;
+  _opacity                = _normalizeOpacity(opacity),
+  _outlineWidth           = _normalizeOutlineWidth(outlineWidth),
+  _danmakuAllowStacking   = danmakuAllowStacking;
 
 
   // --- Getters and Setters --- //
@@ -38,21 +38,23 @@ class DanmakuStyle {
   set outlineWidth(double value) =>
       _outlineWidth = _normalizeOutlineWidth(value);
 
-  bool get outlineEnabled => _outlineEnabled;
-  set outlineEnabled(bool value) {
-    if (_outlineEnabled == value) return;
-    _outlineEnabled = value;
+  bool get outlineEnabled => _outlineWidth > 0.0;
+
+  bool get danmakuAllowStacking => _danmakuAllowStacking;
+  set danmakuAllowStacking(bool value) {
+    if (_danmakuAllowStacking == value) return;
+    _danmakuAllowStacking = value;
   }
 
   DanmakuStyle copyWith({
     double? opacity,
     double? outlineWidth,
-    bool  ? outlineEnabled,
+    bool  ? danmakuAllowStacking,
   }) {
     return DanmakuStyle(
-      opacity         : opacity         ?? _opacity,
-      outlineWidth    : outlineWidth    ?? _outlineWidth,
-      outlineEnabled  : outlineEnabled  ?? _outlineEnabled,
+      opacity                 : opacity                 ?? _opacity,
+      outlineWidth            : outlineWidth            ?? _outlineWidth,
+      danmakuAllowStacking    : danmakuAllowStacking    ?? _danmakuAllowStacking,
     );
   }
 
@@ -64,6 +66,7 @@ class DanmakuStyle {
 
   static double _normalizeOutlineWidth(double value) {
     if (!value.isFinite) return 1.0;
+    if (value <= 0.0) return 0.0;
     return value.clamp(minOutlineWidth, maxOutlineWidth).toDouble();
   }
 
@@ -74,10 +77,9 @@ class DanmakuStyle {
     other is DanmakuStyle                   &&
     other._opacity == _opacity              &&
     other._outlineWidth == _outlineWidth    &&
-    other._outlineEnabled == _outlineEnabled;
+    other._danmakuAllowStacking == _danmakuAllowStacking;
   }
 
   @override
-  int get hashCode => Object.hash(_opacity, _outlineWidth, _outlineEnabled);
+  int get hashCode => Object.hash(_opacity, _outlineWidth, _danmakuAllowStacking);
 }
- 

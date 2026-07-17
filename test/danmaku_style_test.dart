@@ -8,27 +8,28 @@ void main() {
     expect(style.opacity, 1.0);
     expect(style.outlineWidth, 1.0);
     expect(style.outlineEnabled, isTrue);
+    expect(style.danmakuAllowStacking, isTrue);
   });
 
   test('copyWith only replaces the selected danmaku style fields', () {
     final style = DanmakuStyle(
       opacity: 0.8,
       outlineWidth: 2.5,
-      outlineEnabled: true,
+      danmakuAllowStacking: true,
     );
 
     final updated = style.copyWith(
       opacity: 0.5,
-      outlineEnabled: false,
+      danmakuAllowStacking: false,
     );
 
     expect(updated.opacity, 0.5);
     expect(updated.outlineWidth, 2.5);
-    expect(updated.outlineEnabled, isFalse);
+    expect(updated.danmakuAllowStacking, isFalse);
     expect(updated, DanmakuStyle(
       opacity: 0.5,
       outlineWidth: 2.5,
-      outlineEnabled: false,
+      danmakuAllowStacking: false,
     ));
   });
 
@@ -55,10 +56,13 @@ void main() {
 
     style.opacity = 1.5;
     style.outlineWidth = 0.1;
-    style.outlineEnabled = false;
+    style.danmakuAllowStacking = false;
 
     expect(style.opacity, DanmakuStyle.maxOpacity);
     expect(style.outlineWidth, DanmakuStyle.minOutlineWidth);
+    style.outlineWidth = 0.0;
+    expect(style.outlineWidth, 0.0);
     expect(style.outlineEnabled, isFalse);
+    expect(style.danmakuAllowStacking, isFalse);
   });
 }
