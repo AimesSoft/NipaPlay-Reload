@@ -33,6 +33,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // -------- 内部状态字段 -------- //
   // ------------------------------ //
 
+  static int _stateTimestamp = 0; // 配置变更时间戳, 用于检测异步任务是否已过期
+
   LinuxSession?  _session; // 外部播放器会话
 
   // 动漫元数据相关
@@ -76,6 +78,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   List<String> get blockedKeywords => _blockedKeywords;
   double get danmakuOpacity => _danmakuStyle.opacity;
   double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
+  static int get stateTimestamp => _stateTimestamp;
 
   /// 获取当前播放位置正在显示的弹幕索引列表.
   List<int> get activeDanmakuIndices {
@@ -144,6 +147,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._episodeTitle = playableItem?.subtitle;
     _instance._episodeId = playableItem?.episodeId;
     _instance._setDanmakuAssets(danmakuAssets);
+    _markConfigurationChanged('showSession');
     session.addListener(_handleSessionChanged);
 
     // 如果新会话已经关闭, 立即清理
@@ -166,6 +170,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._session = null;
     _instance._clearMediaInfo();
     _instance._clearDanmakuState();
+    _markConfigurationChanged('closePlayerAndConsole');
     _instance.notifyListeners();
   }
 
@@ -217,6 +222,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       value,
     ]);
     _instance._applyBlockedKeywords();
+    _markConfigurationChanged('addBlockedKeyword');
     _instance.notifyListeners();
     _instance._queueDanmakuRefresh();
     return true;
@@ -230,6 +236,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (keywords.length == _instance._blockedKeywords.length) return;
     _instance._blockedKeywords = List<String>.unmodifiable(keywords);
     _instance._applyBlockedKeywords();
+    _markConfigurationChanged('removeBlockedKeyword');
     _instance.notifyListeners();
     _instance._queueDanmakuRefresh();
   }
@@ -237,6 +244,16 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ------------------------------ //
   // -------- 私有实现方法 -------- //
   // ------------------------------ //
+
+  static void _markConfigurationChanged(String reason) {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    _stateTimestamp = now > _stateTimestamp ? now : _stateTimestamp + 1; // 确保时间戳单调递增
+    debugPrint('[ExternalPlayerConsoleService] Configuration changed: $reason, timestamp=$_stateTimestamp');
+  }
+
+  static bool _configurationHasChanged(int timestamp) {
+    return _stateTimestamp != timestamp;
+  }
 
   static Duration? _parseTimestamp(String timestamp) {
     final value = timestamp.trim();
@@ -281,7 +298,9 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   void _updateDanmakuStyle(void Function(DanmakuStyle style) update) {
     final style = _danmakuStyle.copyWith();
     update(style);
+    if (style == _danmakuStyle) return;
     _danmakuStyle = style;
+    _markConfigurationChanged('updateDanmakuStyle');
     notifyListeners();
     _queueDanmakuRefresh();
   }
@@ -329,19 +348,17 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 记录当前状态
     final currentSession  = _session;
     final style           = _danmakuStyle;
-    final blockedKeywords = _blockedKeywords;
+    final timestamp       = _stateTimestamp;
 
     Future<void> fun(_) async {
       // 如果在队列等待期间状态发生变化, 则跳过当前任务
-      if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style) ||
-          !identical(_blockedKeywords, blockedKeywords)) {
+      if (_configurationHasChanged(timestamp)) {
         return;
       }
       await _regenerateDanmakuAss(
         currentSession,
         style,
-        blockedKeywords,
+        timestamp,
       );
     }
 
@@ -353,7 +370,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   Future<void> _regenerateDanmakuAss(
     LinuxSession? currentSession,
     DanmakuStyle style,
-    List<String> blockedKeywords,
+    int timestamp,
   ) async {
 
     // 参数检查
@@ -373,22 +390,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       );
 
       // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
-      if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style) ||
-          !identical(_blockedKeywords, blockedKeywords)) {
-        return;
-      }
+      if (_configurationHasChanged(timestamp)) return;
 
       // 写入临时文件
       temporaryFile = File('$assPath.nipaplay.tmp');
       await temporaryFile.writeAsString(assStr, encoding: utf8, flush: true);
 
       // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
-      if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style) ||
-          !identical(_blockedKeywords, blockedKeywords)) {
-        return;
-      }
+      if (_configurationHasChanged(timestamp)) return;
 
       // 将临时文件重命名为目标 ASS 文件路径, 覆盖原文件
       temporaryFile.renameSync(assPath);
@@ -423,6 +432,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._session = null;
     _instance._clearMediaInfo();
     _instance._clearDanmakuState();
+    _markConfigurationChanged('clearSession');
     _instance.notifyListeners();
   }
 

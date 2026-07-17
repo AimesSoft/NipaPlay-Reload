@@ -201,9 +201,16 @@ void main() {
           await _stopProcess(secondProcess);
         });
 
+        final initialTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         _showSession(_session(firstProcess));
+        final firstTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         _showSession(_session(secondProcess));
 
+        expect(firstTimestamp, greaterThan(initialTimestamp));
+        expect(
+          ExternalPlayerConsoleService.stateTimestamp,
+          greaterThan(firstTimestamp),
+        );
         expect(service.session?.processId, secondProcess.pid);
         expect(service.session?.duration, Duration.zero);
         expect(await firstProcess.exitCode, isNotNull);
@@ -619,6 +626,7 @@ void main() {
         expect(service.danmakuOpacity, 0.8);
         expect(service.supportsDanmakuOpacity, isTrue);
 
+        final initialTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         for (final opacity in <double>[0.1, 0.2, 0.3, 0.4, 0.5]) {
           ExternalPlayerConsoleService.setDanmakuOpacity(opacity);
         }
@@ -627,6 +635,13 @@ void main() {
         );
 
         expect(service.danmakuOpacity, 0.5);
+        expect(
+          ExternalPlayerConsoleService.stateTimestamp,
+          greaterThan(initialTimestamp),
+        );
+        final styleTimestamp = ExternalPlayerConsoleService.stateTimestamp;
+        ExternalPlayerConsoleService.setDanmakuOpacity(0.5);
+        expect(ExternalPlayerConsoleService.stateTimestamp, styleTimestamp);
         final updatedAss = await assFile.readAsString();
         final opacityTags = RegExp(r'\\1a&H[0-9A-Fa-f]{2}&')
             .allMatches(updatedAss)
@@ -649,13 +664,21 @@ void main() {
         ]);
 
         final secondItem = service.danmakuList[1];
+        final keywordTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         expect(
           ExternalPlayerConsoleService.addBlockedKeyword('SECOND'),
           isTrue,
         );
+        final addedKeywordTimestamp =
+            ExternalPlayerConsoleService.stateTimestamp;
+        expect(addedKeywordTimestamp, greaterThan(keywordTimestamp));
         expect(
           ExternalPlayerConsoleService.addBlockedKeyword('second'),
           isFalse,
+        );
+        expect(
+          ExternalPlayerConsoleService.stateTimestamp,
+          addedKeywordTimestamp,
         );
         await _waitUntil(() => reloadCommands.length == 2);
 
@@ -674,6 +697,10 @@ void main() {
         expect(filteredAss, isNot(contains('second regenerated comment')));
 
         ExternalPlayerConsoleService.removeBlockedKeyword('SECOND');
+        expect(
+          ExternalPlayerConsoleService.stateTimestamp,
+          greaterThan(addedKeywordTimestamp),
+        );
         await _waitUntil(() => reloadCommands.length == 3);
         expect(service.blockedKeywords, isEmpty);
         expect(
