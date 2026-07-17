@@ -363,6 +363,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     PlayerMenuPaneId paneId, {
     required VoidCallback onPaneClose,
     required bool showBackButton,
+    required double height,
   }) {
     late final Widget child;
     switch (paneId) {
@@ -459,7 +460,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
 
     return _wrapMenu(
       showBackItem: showBackButton,
-      height: _heightForPane(paneId),
+      height: height,
       forceShowHeader: !showBackButton,
       useBackButtonOverride: showBackButton,
       child: child,
@@ -494,6 +495,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             .build()
             .where((item) => item.paneId != PlayerMenuPaneId.playlist)
             .toList();
+        final double menuHeight = _heightForSettingsItemCount(menuItems.length);
         final bool hideBackForStandaloneInitialPane =
             widget.hideBackButtonForInitialPane &&
                 widget.initialPaneId != null &&
@@ -506,7 +508,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
         final Widget menuContent = _activePaneId == null
             ? _wrapMenu(
                 showBackItem: false,
-                height: _heightForSettingsItemCount(menuItems.length),
+                height: menuHeight,
                 child: BaseSettingsMenu(
                   title: '设置',
                   width: _menuWidth,
@@ -524,6 +526,9 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                 _activePaneId!,
                 onPaneClose: paneCloseCallback,
                 showBackButton: !hideBackForStandaloneInitialPane,
+                height: hideBackForStandaloneInitialPane
+                    ? _heightForPane(_activePaneId!)
+                    : menuHeight,
               );
         final Widget animatedMenuContent = FadeTransition(
           opacity: _menuFadeAnimation,
