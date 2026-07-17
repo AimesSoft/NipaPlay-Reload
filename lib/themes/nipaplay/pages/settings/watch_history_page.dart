@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
@@ -17,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
@@ -346,7 +346,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: Image.network(
+          child: MediaServerAwareNetworkImage(
             path,
             width: 80,
             height: 45,
@@ -437,7 +437,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                 Container(color: Colors.white),
                 ImageFiltered(
                   imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                  child: CachedNetworkImage(
+                  child: MediaServerAwareCachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) =>

@@ -7,6 +7,22 @@ import './player_data_models.dart';
 import 'dart:async';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
+@visibleForTesting
+const List<String> mdkUserAgentPropertyKeys = [
+  'avformat.user_agent',
+  'avio.user_agent',
+];
+
+@visibleForTesting
+void applyMdkUserAgentProperties(
+  void Function(String key, String value) setter,
+  String userAgent,
+) {
+  for (final key in mdkUserAgentPropertyKeys) {
+    setter(key, userAgent);
+  }
+}
+
 // Enum Converters
 PlayerPlaybackState _toPlayerPlaybackState(mdk.PlaybackState state) {
   if (state == mdk.PlaybackState.stopped) return PlayerPlaybackState.stopped;
@@ -56,7 +72,8 @@ mdk.MediaType _fromPlayerMediaType(PlayerMediaType type) {
   }
 }
 
-PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo, {int internalAudioTrackCount = 0}) {
+PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
+    {int internalAudioTrackCount = 0}) {
   return PlayerMediaInfo(
     duration: mdkInfo.duration,
     video: mdkInfo.video?.map((v) {
@@ -161,7 +178,8 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo, {int internalAudioTrac
         language: language ?? 'unknown',
         metadata: metadata,
         rawRepresentation: rawRepresentation,
-        isExternal: internalAudioTrackCount > 0 && trackIndex >= internalAudioTrackCount,
+        isExternal: internalAudioTrackCount > 0 &&
+            trackIndex >= internalAudioTrackCount,
       );
     }).toList(),
   );
@@ -177,7 +195,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String? _activeAudioDecoder;
   int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
 
-  MdkPlayerAdapter() {
+  // 网络流自定义 User-Agent（留空表示不覆盖 FFmpeg 默认行为）。
+  final String _userAgent;
+
+  MdkPlayerAdapter({String? userAgent})
+      : _userAgent = (userAgent ?? '').trim() {
     _mdkPlayer = mdk.Player();
     _attachMdkEventListeners();
     _applyInitialSettings();
@@ -217,6 +239,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
     try {
       _setStickyProperty('auto_load', '0');
       _setStickyProperty('subtitle', '1');
+      _applyNetworkOptions();
       // 重新应用播放速度设置
       if (_playbackRate != 1.0) {
         _mdkPlayer.playbackRate = _playbackRate;
@@ -227,6 +250,16 @@ class MdkPlayerAdapter implements AbstractPlayer {
     }
 
     _configureSubtitleFonts();
+  }
+
+  /// 将自定义 User-Agent 注入 FFmpeg（MDK 内核）。
+  /// 这些选项通过 sticky 属性保存，切集重建播放器时会自动重新应用。
+  /// 默认 UA 为 `Lavf/...`，部分 WAF/CDN 会因此拦截，可在播放器设置中覆盖。
+  void _applyNetworkOptions() {
+    if (_userAgent.isNotEmpty) {
+      applyMdkUserAgentProperties(_setStickyProperty, _userAgent);
+      debugPrint('MDK: 网络流 User-Agent = $_userAgent');
+    }
   }
 
   void _configureSubtitleFonts() {
@@ -346,7 +379,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo, internalAudioTrackCount: _internalAudioTrackCount);
+  PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo,
+      internalAudioTrackCount: _internalAudioTrackCount);
 
   @override
   List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
@@ -509,9 +543,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   void setUserAgent(String ua) {
     if (ua.isEmpty) return;
-    // mdk-sdk: avio.user_agent 是 AVIOContext/URLProtocol 选项，对 HTTP 请求生效。
-    // setProperty 内部用 sticky property，对后续所有媒体生效。
-    setProperty('avio.user_agent', ua);
+    applyMdkUserAgentProperties(setProperty, ua);
     debugPrint('MDK: 已设置自定义 user-agent: $ua');
   }
 

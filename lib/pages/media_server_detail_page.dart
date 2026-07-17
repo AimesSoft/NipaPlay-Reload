@@ -29,6 +29,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -1450,15 +1451,14 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                     padding: const EdgeInsets.only(right: 12),
                     child: Column(
                       children: [
-                        CircleAvatar(
-                          radius: 30,
+                        MediaServerActorAvatar(
+                          imageUrl: actorImage,
+                          size: 60,
                           backgroundColor: Colors.grey.shade800,
-                          backgroundImage: actorImage != null
-                              ? NetworkImage(actorImage)
-                              : null,
-                          child: actorImage == null
-                              ? Icon(Icons.person, color: secondaryTextColor)
-                              : null,
+                          placeholder: Icon(
+                            Icons.person,
+                            color: secondaryTextColor,
+                          ),
                         ),
                         SizedBox(height: 4),
                         SizedBox(

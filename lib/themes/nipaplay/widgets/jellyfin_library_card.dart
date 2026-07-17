@@ -3,6 +3,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class JellyfinLibraryCard extends StatelessWidget {
   final JellyfinLibrary library;
@@ -34,8 +35,8 @@ class JellyfinLibraryCard extends StatelessWidget {
                 gradient: _getRandomGradient(),
               ),
               child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
+                  ? MediaServerNetworkImage(
+                      Uri.parse(imageUrl),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_network_status.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
   const NipaplayLargeScreenTopStatusOverlay(
@@ -131,7 +132,7 @@ class _NipaplayLargeScreenTopStatusOverlayState
       return Icon(Icons.account_circle_rounded, size: 20, color: textColor);
     }
     return ClipOval(
-      child: Image.network(
+      child: MediaServerAwareNetworkImage(
         avatarUrl,
         width: 20,
         height: 20,
