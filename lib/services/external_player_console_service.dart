@@ -39,7 +39,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   String? _mediaPath;    // 播放的媒体文件路径
   String? _animeTitle;   // 番剧标题
   String? _episodeTitle; // 剧集标题
-  int?    _animeId;      // 番剧 ID
   int?    _episodeId;    // 剧集 ID
 
   // 弹幕资产相关
@@ -72,14 +71,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   String? get mediaPath => _mediaPath;
   String? get animeTitle => _animeTitle;
   String? get episodeTitle => _episodeTitle;
-  int? get animeId => _animeId;
   int? get episodeId => _episodeId;
   List<DanmakuItem> get danmakuList => _danmakuList;
   List<String> get blockedKeywords => _blockedKeywords;
-  DanmakuStyle get danmakuStyle => _danmakuStyle.copyWith();
   double get danmakuOpacity => _danmakuStyle.opacity;
   double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
-  bool get danmakuOutlineEnabled => _danmakuStyle.outlineEnabled;
 
   /// 获取当前播放位置正在显示的弹幕索引列表.
   List<int> get activeDanmakuIndices {
@@ -116,17 +112,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return List<int>.unmodifiable(active.reversed);
   }
 
-  /// 获取当前播放位置正在显示的弹幕.
-  List<DanmakuItem> get activeDanmakuItems {
-    final current = _session;
-    final position = current?.position;
-    if (current == null || position == null) return const [];
-    final indices = activeDanmakuIndices;
-    return List<DanmakuItem>.unmodifiable(
-      indices.map((index) => _danmakuList[index]),
-    );
-  }
-
   /// 获取弹幕的实际显示时间, 考虑了 ASS 设置中的时间偏移
   Duration danmakuStartTime(DanmakuItem item) {
     final offsetSeconds = _danmakuAssSettings?.timeOffsetSeconds ?? 0.0;
@@ -157,7 +142,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._mediaPath = playableItem?.videoPath;
     _instance._animeTitle = playableItem?.title;
     _instance._episodeTitle = playableItem?.subtitle;
-    _instance._animeId = playableItem?.animeId;
     _instance._episodeId = playableItem?.episodeId;
     _instance._setDanmakuAssets(danmakuAssets);
     session.addListener(_handleSessionChanged);
@@ -249,17 +233,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance.notifyListeners();
     _instance._queueDanmakuRefresh();
   }
-
-  @override
-  void dispose() {
-    _session?.removeListener(_handleSessionChanged);
-    _session?.terminate();
-    _session = null;
-    _clearMediaInfo();
-    _clearDanmakuState();
-    super.dispose();
-  }
-
 
   // ------------------------------ //
   // -------- 私有实现方法 -------- //
@@ -457,7 +430,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _mediaPath = null;
     _animeTitle = null;
     _episodeTitle = null;
-    _animeId = null;
     _episodeId = null;
   }
 

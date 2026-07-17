@@ -232,7 +232,6 @@ void main() {
         expect(service.mediaPath, '/video/test.mkv');
         expect(service.animeTitle, '测试番剧');
         expect(service.episodeTitle, '第 1 话');
-        expect(service.animeId, 100);
         expect(service.episodeId, 200);
       });
 
@@ -535,10 +534,7 @@ void main() {
         expect(commands, <List<dynamic>>[
           <dynamic>['seek', 750.0, 'absolute+exact'],
         ]);
-        expect(
-          service.activeDanmakuItems.map((item) => item.danmakuId),
-          ['seek-target'],
-        );
+        expect(service.activeDanmakuIndices, [0]);
 
         expect(
           ExternalPlayerConsoleService.seekToTimestamp('12:34.567'),
@@ -751,7 +747,6 @@ void main() {
         _showSession(session);
 
         expect(service.supportsDanmakuOutline, isTrue);
-        expect(service.danmakuOutlineEnabled, isTrue);
         expect(service.danmakuOutlineWidth, 2.5);
 
         ExternalPlayerConsoleService.setDanmakuOutlineWidth(4.0);
@@ -761,7 +756,7 @@ void main() {
 
         ExternalPlayerConsoleService.setDanmakuOutlineWidth(0.0);
         await _waitUntil(() => reloadCommands.length == 2);
-        expect(service.danmakuOutlineEnabled, isFalse);
+        expect(service.danmakuOutlineWidth, 0.0);
         expect(await assFile.readAsString(), contains('$stylePrefix' '0.0,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
       });
