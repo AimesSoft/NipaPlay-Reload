@@ -1037,86 +1037,95 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     return _subTextColor;
   }
 
+  void _toggleTranscodeSettings() {
+    setState(() {
+      _transcodeSettingsExpanded = !_transcodeSettingsExpanded;
+    });
+  }
+
   Widget _buildTranscodeSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () {
-            setState(() {
-              _transcodeSettingsExpanded = !_transcodeSettingsExpanded;
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          splashFactory: NoSplash.splashFactory,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          focusColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _panelColor,
-              borderRadius: _transcodeSettingsExpanded
-                  ? const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    )
-                  : BorderRadius.circular(12),
-              border: _transcodeSettingsExpanded
-                  ? Border(
-                      top: BorderSide(color: _borderColor),
-                      left: BorderSide(color: _borderColor),
-                      right: BorderSide(color: _borderColor),
-                    )
-                  : Border.all(color: _borderColor),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _accentColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child:
-                      Icon(Icons.high_quality, color: _accentColor, size: 20),
+        Semantics(
+          button: true,
+          expanded: _transcodeSettingsExpanded,
+          onTap: _toggleTranscodeSettings,
+          child: KeyboardActivatable(
+            onActivate: _toggleTranscodeSettings,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: _toggleTranscodeSettings,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _panelColor,
+                  borderRadius: _transcodeSettingsExpanded
+                      ? const BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          topRight: Radius.circular(12),
+                        )
+                      : BorderRadius.circular(12),
+                  border: _transcodeSettingsExpanded
+                      ? Border(
+                          top: BorderSide(color: _borderColor),
+                          left: BorderSide(color: _borderColor),
+                          right: BorderSide(color: _borderColor),
+                        )
+                      : Border.all(color: _borderColor),
                 ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '转码设置',
-                        locale: Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                          color: _textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _accentColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        '当前默认质量: ${_selectedQuality.displayName}',
-                        locale: Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                          color: _subTextColor,
-                          fontSize: 12,
-                        ),
+                      child: Icon(
+                        Icons.high_quality,
+                        color: _accentColor,
+                        size: 20,
                       ),
-                    ],
-                  ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '转码设置',
+                            locale: Locale("zh-Hans", "zh"),
+                            style: TextStyle(
+                              color: _textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '当前默认质量: ${_selectedQuality.displayName}',
+                            locale: Locale("zh-Hans", "zh"),
+                            style: TextStyle(
+                              color: _subTextColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: _transcodeSettingsExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.expand_more,
+                        color: _subTextColor,
+                      ),
+                    ),
+                  ],
                 ),
-                AnimatedRotation(
-                  turns: _transcodeSettingsExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.expand_more,
-                    color: _subTextColor,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

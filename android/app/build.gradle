@@ -8,21 +8,23 @@ plugins {
 android {
     namespace = "com.aimessoft.nipaplay"
     compileSdk = flutter.compileSdkVersion
-    // 多个插件要求 NDK 27.0.12077973，固定版本避免安装多版本导致磁盘耗尽
-    ndkVersion = "27.0.12077973"
+    // Erika、应用 C++ 模块与打包的 libc++_shared.so 统一使用同一 NDK。
+    ndkVersion = rootProject.ext.android_ndk_version
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 
     packagingOptions {
         jniLibs {
-            pickFirsts += ["**/*.so"]
+            // Native runtimes intentionally share one C++ runtime. Other duplicate
+            // libraries are build errors and must not be hidden by a broad *.so rule.
+            pickFirsts += ["**/libc++_shared.so"]
         }
         resources {
             pickFirsts += ["META-INF/*.version"]
@@ -35,7 +37,7 @@ android {
         applicationId = "com.aimessoft.nipaplay"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -113,8 +115,6 @@ flutter {
 }
 
 dependencies {
-    // Kotlin标准库
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
     implementation "androidx.multidex:multidex:2.0.1"
     
     // 添加Kotlin协程库

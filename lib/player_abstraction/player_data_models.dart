@@ -1,5 +1,10 @@
 import 'dart:typed_data';
 
+enum PlayerErikaAndroidOutputMode {
+  sdr,
+  extendedLinearHdr,
+}
+
 enum PlayerUpscalerMode {
   off,
   erikaArtCnnC4F16,

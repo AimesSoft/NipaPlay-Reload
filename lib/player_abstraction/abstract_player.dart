@@ -3,6 +3,11 @@ import 'package:flutter/foundation.dart'; // For ValueListenable
 import './player_enums.dart';
 import './player_data_models.dart';
 
+/// Optional capability for backends whose native teardown must be awaited.
+abstract interface class AsyncDisposablePlayer {
+  Future<void> disposeAsync();
+}
+
 abstract class AbstractPlayer {
   // Properties
   double get volume;

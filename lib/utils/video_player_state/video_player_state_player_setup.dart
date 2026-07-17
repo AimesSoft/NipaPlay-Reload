@@ -10,6 +10,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     PlaybackDetailContext? playbackDetailContext,
     bool resetManualDanmakuOffset = true,
   }) async {
+    var mediaPrepareStarted = false;
+    var mediaPrepareCompleted = false;
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
     try {
       AutoNextEpisodeService.instance.cancelAutoNext();
@@ -69,6 +71,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // 检查是否为网络URL (HTTP或HTTPS)
     bool isNetworkUrl =
         videoPath.startsWith('http://') || videoPath.startsWith('https://');
+    final bool isAndroidContentUri = !kIsWeb &&
+        Platform.isAndroid &&
+        MediaSourceUtils.isContentUri(videoPath);
 
     // 检查是否是流媒体（jellyfin://协议、emby://协议）
     bool isJellyfinStream = videoPath.startsWith('jellyfin://');
@@ -77,8 +82,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? resolvedActualPlayUrl = actualPlayUrl;
 
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
-    bool fileExists =
-        isNetworkUrl || isJellyfinStream || isEmbyStream || kIsWeb;
+    bool fileExists = isNetworkUrl ||
+        isJellyfinStream ||
+        isEmbyStream ||
+        isAndroidContentUri ||
+        kIsWeb;
 
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
@@ -101,7 +109,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
     if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
-      if (Platform.isIOS) {
+      if (isAndroidContentUri) {
+        // Erika resolves SAF sources through Android's ContentResolver and
+        // transfers an owned file descriptor to Rust. Treating this as a
+        // normal File path would reject it before the player can open it.
+        fileExists = true;
+      } else if (Platform.isIOS) {
         final filePickerService = FilePickerService();
 
         // 首先检查文件是否存在
@@ -277,7 +290,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _context?.read<SettingsProvider>().fastPlaybackStartup ?? false;
 
     // 检测本地 fonts 文件夹
-    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (!kIsWeb &&
+        !isNetworkUrl &&
+        !isJellyfinStream &&
+        !isEmbyStream &&
+        !isAndroidContentUri) {
       final localFontsFolder = await _detectLocalFontsFolder(videoPath);
       debugPrint('[VideoPlayerState] 自动检测本地fonts结果: $localFontsFolder');
       if (localFontsFolder != null) {
@@ -386,7 +403,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('4. 准备播放器...');
       // 准备播放器
-      player.prepare();
+      mediaPrepareStarted = true;
+      await player.prepare();
+      mediaPrepareCompleted = true;
 
       // 针对Jellyfin流媒体，给予更长的初始化时间
       final bool isJellyfinStreaming =
@@ -902,12 +921,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
 
       // 尝试自动检测和加载字幕
-      await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
+      if (!isAndroidContentUri) {
+        await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
+      }
 
       // 尝试自动检测和加载同名MKA外部音频
       // MediaKit已通过audio-add在主媒体加载后添加外部音频，此处仅处理MDK内核
       _audioTrackManager.setCurrentVideoPath(videoPath);
-      if (!isMediaKitKernel) {
+      if (!isAndroidContentUri && !isMediaKitKernel) {
         await _audioTrackManager.autoDetectAndLoadExternalAudio(videoPath);
       }
 
@@ -966,6 +987,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           _setStatus(PlayerStatus.error, message: message);
           return;
         }
+      }
+      if (mediaPrepareStarted && !mediaPrepareCompleted) {
+        final message = '播放器打开媒体失败: $e';
+        debugPrint(
+          '[VideoPlayerState] Media prepare failed for $videoPath: $e',
+        );
+        _error = message;
+        _setStatus(PlayerStatus.error, message: message);
+        return;
       }
       _error = '初始化视频播放器时出错: $e';
       _setStatus(PlayerStatus.error, message: '播放器初始化失败');

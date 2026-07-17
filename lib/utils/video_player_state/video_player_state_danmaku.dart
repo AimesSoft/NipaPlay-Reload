@@ -99,6 +99,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     if (videoPath.startsWith('http://') ||
         videoPath.startsWith('https://') ||
+        MediaSourceUtils.isContentUri(videoPath) ||
         videoPath.startsWith('jellyfin://') ||
         videoPath.startsWith('emby://') ||
         SharedRemoteHistoryHelper.isSharedRemoteStreamPath(videoPath)) {

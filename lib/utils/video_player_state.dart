@@ -244,11 +244,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _playbackGeneration = 0;
 
   void _notifyListeners() {
+    if (_isDisposed) {
+      return;
+    }
     notifyListeners();
   }
 
   StreamSubscription? _playerKernelChangeSubscription; // 播放器内核切换事件订阅
   StreamSubscription? _danmakuKernelChangeSubscription; // 弹幕内核切换事件订阅
+  int _playerKernelSwapRequested = 0;
+  int _playerKernelSwapApplied = 0;
+  Future<void>? _playerKernelSwapDrain;
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _showControls = true;
@@ -1502,7 +1508,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _systemVolumeSubscription = null;
     _systemVolumeController?.removeListener();
     _systemVolumeController = null;
-    player.dispose();
+    unawaited(
+      player.disposeAsync().catchError((Object error, StackTrace stackTrace) {
+        debugPrint(
+          '[VideoPlayerState] Native player disposal failed: '
+          '$error\n$stackTrace',
+        );
+      }),
+    );
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器
 
@@ -1570,33 +1583,42 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowEvent(String eventName) {
     if (eventName == 'enter-full-screen' || eventName == 'leave-full-screen') {
-      windowManager.isFullScreen().then((isFullscreen) {
-        if (isFullscreen != _isFullscreen) {
-          _isFullscreen = isFullscreen;
-          notifyListeners();
-        }
-      });
+      unawaited(_refreshFullscreenStateFromWindowManager());
     }
   }
 
   @override
   void onWindowEnterFullScreen() {
-    windowManager.isFullScreen().then((isFullscreen) {
-      if (isFullscreen != _isFullscreen) {
-        _isFullscreen = isFullscreen;
-        notifyListeners();
-      }
-    });
+    unawaited(_refreshFullscreenStateFromWindowManager());
   }
 
   @override
   void onWindowLeaveFullScreen() {
-    windowManager.isFullScreen().then((isFullscreen) {
-      if (!isFullscreen && _isFullscreen) {
-        _isFullscreen = false;
-        notifyListeners();
+    unawaited(
+      _refreshFullscreenStateFromWindowManager(onlyHandleExit: true),
+    );
+  }
+
+  Future<void> _refreshFullscreenStateFromWindowManager({
+    bool onlyHandleExit = false,
+  }) async {
+    try {
+      final isFullscreen = await windowManager.isFullScreen();
+      if (_isDisposed || (onlyHandleExit && isFullscreen)) {
+        return;
       }
-    });
+      if (isFullscreen != _isFullscreen) {
+        _isFullscreen = isFullscreen;
+        _notifyListeners();
+      }
+    } catch (error, stackTrace) {
+      if (!_isDisposed) {
+        debugPrint(
+          '[VideoPlayerState] Failed to refresh desktop fullscreen state: '
+          '$error\n$stackTrace',
+        );
+      }
+    }
   }
 
   @override

@@ -1,5 +1,7 @@
+ext.android_ndk_version = '29.0.14206865'
+
 buildscript {
-    ext.kotlin_version = '2.1.0'
+    ext.kotlin_version = '2.3.21'
     repositories {
         google()
         mavenCentral()
@@ -33,6 +35,14 @@ allprojects {
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects { subproject ->
+    subproject.afterEvaluate {
+        if (subproject.plugins.hasPlugin("com.android.application") ||
+                subproject.plugins.hasPlugin("com.android.library")) {
+            subproject.android.ndkVersion = rootProject.ext.android_ndk_version
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

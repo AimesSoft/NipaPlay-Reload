@@ -461,6 +461,7 @@ class FilePickerService {
           }
         ],
         'confirmButtonText': '选择视频文件',
+        'preserveContentUri': true,
       });
 
       if (result == null || result.isEmpty) {
