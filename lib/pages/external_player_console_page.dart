@@ -41,6 +41,7 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         isPaused: session.isPaused ?? false,
                         danmakuOpacity: service.danmakuOpacity,
                         danmakuOutlineEnabled: service.danmakuOutlineEnabled,
+                        danmakuOutlineWidth: service.danmakuOutlineWidth,
                         supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                         supportsDanmakuOutline: service.supportsDanmakuOutline,
                         activeDanmakuIndices: service.activeDanmakuIndices,
@@ -102,6 +103,7 @@ class _ConsoleCard extends StatelessWidget {
     required this.isPaused,
     required this.danmakuOpacity,
     required this.danmakuOutlineEnabled,
+    required this.danmakuOutlineWidth,
     required this.supportsDanmakuOpacity,
     required this.supportsDanmakuOutline,
     required this.activeDanmakuIndices,
@@ -117,6 +119,7 @@ class _ConsoleCard extends StatelessWidget {
   final bool isPaused;
   final double danmakuOpacity;
   final bool danmakuOutlineEnabled;
+  final double danmakuOutlineWidth;
   final bool supportsDanmakuOpacity;
   final bool supportsDanmakuOutline;
   final List<int> activeDanmakuIndices;
@@ -187,6 +190,8 @@ class _ConsoleCard extends StatelessWidget {
             _buildDanmakuOpacity(context),
             const SizedBox(height: 8),
             _buildDanmakuOutline(context),
+            const SizedBox(height: 8),
+            _buildDanmakuOutlineWidth(context),
             const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerRight,
@@ -324,6 +329,45 @@ class _ConsoleCard extends StatelessWidget {
           value: danmakuOutlineEnabled,
           onChanged: supportsDanmakuOutline
               ? ExternalPlayerConsoleService.setDanmakuOutlineEnabled
+              : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDanmakuOutlineWidth(BuildContext context) {
+    final theme = Theme.of(context);
+    final localizations = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                localizations.danmakuOutlineWidthTitle,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              danmakuOutlineWidth.toStringAsFixed(1),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: danmakuOutlineWidth.clamp(
+            ExternalPlayerConsoleService.minDanmakuOutlineWidth,
+            ExternalPlayerConsoleService.maxDanmakuOutlineWidth,
+          ).toDouble(),
+          min: ExternalPlayerConsoleService.minDanmakuOutlineWidth,
+          max: ExternalPlayerConsoleService.maxDanmakuOutlineWidth,
+          divisions: 9,
+          label: danmakuOutlineWidth.toStringAsFixed(1),
+          onChanged: supportsDanmakuOutline && danmakuOutlineEnabled
+              ? ExternalPlayerConsoleService.setDanmakuOutlineWidth
               : null,
         ),
       ],

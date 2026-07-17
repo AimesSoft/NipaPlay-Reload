@@ -129,6 +129,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get danmakuOutlineEnabledSubtitle => '控制是否显示弹幕文字描边，新打开的视频将应用此设置。';
 
   @override
+  String get danmakuOutlineWidthTitle => '弹幕描边粗细';
+
+  @override
   String get externalPlayerConsoleResume => '继续播放';
 
   @override
@@ -1985,6 +1988,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get danmakuOutlineEnabledSubtitle => '控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。';
+
+  @override
+  String get danmakuOutlineWidthTitle => '彈幕描邊粗細';
 
   @override
   String get externalPlayerConsoleResume => '繼續播放';

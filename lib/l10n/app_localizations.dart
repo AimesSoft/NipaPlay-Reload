@@ -333,6 +333,12 @@ abstract class AppLocalizations {
   /// **'控制是否显示弹幕文字描边，新打开的视频将应用此设置。'**
   String get danmakuOutlineEnabledSubtitle;
 
+  /// No description provided for @danmakuOutlineWidthTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕描边粗细'**
+  String get danmakuOutlineWidthTitle;
+
   /// No description provided for @externalPlayerConsoleResume.
   ///
   /// In zh, this message translates to:

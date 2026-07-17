@@ -45,6 +45,7 @@
   "danmakuOpacitySubtitle": "调整弹幕文字不透明度，新打开的视频将应用此设置。",
   "danmakuOutlineEnabledTitle": "启用弹幕描边",
   "danmakuOutlineEnabledSubtitle": "控制是否显示弹幕文字描边，新打开的视频将应用此设置。",
+  "danmakuOutlineWidthTitle": "弹幕描边粗细",
   "externalPlayerConsoleResume": "继续播放",
   "externalPlayerConsolePause": "暂停",
   "externalPlayerConsoleClose": "关闭播放器",

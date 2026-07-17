@@ -45,6 +45,7 @@
   "danmakuOpacitySubtitle": "Adjust danmaku text opacity. Newly opened videos will use this setting.",
   "danmakuOutlineEnabledTitle": "Enable danmaku outline",
   "danmakuOutlineEnabledSubtitle": "Show an outline around danmaku text. Newly opened videos will use this setting.",
+  "danmakuOutlineWidthTitle": "Danmaku outline thickness",
   "externalPlayerConsoleResume": "Resume",
   "externalPlayerConsolePause": "Pause",
   "externalPlayerConsoleClose": "Close Player",

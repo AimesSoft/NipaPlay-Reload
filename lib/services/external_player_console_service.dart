@@ -48,10 +48,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   AssExportSettings? _danmakuAssSettings;
 
   // 弹幕样式相关
-  bool   _danmakuAllowStacking = true;
-  double _danmakuOpacity = 1.0;
-  double _danmakuOutlineWidth = 1.0;
-  bool   _danmakuOutlineEnabled = true;
+  static const double minDanmakuOutlineWidth = 0.5; // 最小弹幕描边宽度
+  static const double maxDanmakuOutlineWidth = 5.0; // 最大弹幕描边宽度
+  bool   _danmakuAllowStacking  = true; // 是否允许弹幕堆叠
+  double _danmakuOpacity        = 1.0;  // 弹幕不透明度, 范围为 0.0 到 1.0
+  double _danmakuOutlineWidth   = 1.0;  // 弹幕描边宽度, 范围为 0.5 到 5.0
+  bool   _danmakuOutlineEnabled = true; // 弹幕描边是否启用
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
   Future<void> _danmakuStyleUpdateQueue = Future<void>.value();
@@ -206,8 +208,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     final value = opacity.clamp(0.0, 1.0).toDouble();
     _instance._danmakuOpacity = value;
     _instance.notifyListeners();
-    final outlineEnabled = _instance._danmakuOutlineEnabled;
-    _instance._queueDanmakuRefresh(value, outlineEnabled);
+    _instance._queueDanmakuRefresh();
   }
 
   /// 设置弹幕的描边是否启用
@@ -215,7 +216,23 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (!_instance.supportsDanmakuOutline) return;
     _instance._danmakuOutlineEnabled = enabled;
     _instance.notifyListeners();
-    _instance._queueDanmakuRefresh(_instance._danmakuOpacity, enabled);
+    _instance._queueDanmakuRefresh();
+  }
+
+  /// 设置弹幕描边宽度:
+  /// [width] 的范围为 0.5 到 5.0, 超出范围将被限制在有效范围内
+  static void setDanmakuOutlineWidth(double width) {
+
+    // 支持检查
+    if (!_instance.supportsDanmakuOutline) return;
+
+    // 刷新控制台
+    final value = width.clamp(minDanmakuOutlineWidth, maxDanmakuOutlineWidth).toDouble();
+    _instance._danmakuOutlineWidth = value;
+    _instance.notifyListeners();
+
+    // 刷新 mpv
+    _instance._queueDanmakuRefresh();
   }
 
   @override
@@ -298,68 +315,92 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return maximum;
   }
 
-  void _queueDanmakuRefresh(double opacity, bool outlineEnabled) {
-    final currentSession = _session;
-    _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then((_) async {
+  /// 将弹幕样式更新任务加入队列, 以顺序执行样式更新
+  void _queueDanmakuRefresh() {
+
+    // 记录当前状态
+    final currentSession  = _session;
+    final opacity         = _danmakuOpacity;
+    final outlineEnabled  = _danmakuOutlineEnabled;
+    final outlineWidth    = _danmakuOutlineWidth;
+
+    Future<Set<void>> fun(_) async => {
+      // 如果在队列等待期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          _danmakuOpacity != opacity ||
-          _danmakuOutlineEnabled != outlineEnabled) {
-        return;
+        _danmakuOpacity != opacity ||
+        _danmakuOutlineEnabled != outlineEnabled ||
+        _danmakuOutlineWidth != outlineWidth) {
       }
-      await _regenerateDanmakuAss(
+      else await _regenerateDanmakuAss(
         currentSession,
         opacity,
         outlineEnabled,
-      );
-    });
+        outlineWidth,
+      )
+    };
+
+    // 将任务加入队列
+    _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then(fun);
   }
 
+  /// 重新生成 ASS 文件并刷新 mpv 弹幕, 仅在状态未发生变化时执行
   Future<void> _regenerateDanmakuAss(
     ExternalPlayerSession? currentSession,
     double opacity,
     bool outlineEnabled,
+    double outlineWidth,
   ) async {
-    final assPath = _danmakuAssPath;
-    final luaPath = _danmakuLuaPath;
-    final settings = _currentDanmakuAssSettings;
-    if (currentSession == null || assPath == null || luaPath == null ||
-        settings == null) {
-      return;
-    }
 
-    File? temporaryFile;
+    // 参数检查
+    final assPath  = _danmakuAssPath;
+    final luaPath  = _danmakuLuaPath;
+    final settings = _currentDanmakuAssSettings;
+    if (currentSession == null || assPath == null || luaPath == null || settings == null) return;
+
+    File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
     try {
-      final ass = await generateExternalPlayerDanmakuAss(
+
+      // 生成 ASS 内容
+      final assStr = await generateExternalPlayerDanmakuAss(
         _danmakuList,
         settings,
         allowStacking: _danmakuAllowStacking,
       );
+
+      // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
           _danmakuOpacity != opacity ||
-          _danmakuOutlineEnabled != outlineEnabled) {
+          _danmakuOutlineEnabled != outlineEnabled ||
+          _danmakuOutlineWidth != outlineWidth) {
         return;
       }
 
+      // 写入临时文件
       temporaryFile = File('$assPath.nipaplay.tmp');
-      await temporaryFile.writeAsString(ass, encoding: utf8, flush: true);
+      await temporaryFile.writeAsString(assStr, encoding: utf8, flush: true);
+
+      // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
           _danmakuOpacity != opacity ||
-          _danmakuOutlineEnabled != outlineEnabled) {
+          _danmakuOutlineEnabled != outlineEnabled ||
+          _danmakuOutlineWidth != outlineWidth) {
         return;
       }
 
+      // 将临时文件重命名为目标 ASS 文件路径, 覆盖原文件
       temporaryFile.renameSync(assPath);
       temporaryFile = null;
+
+      // 刷新 mpv 弹幕
       final refreshed = await currentSession.refreshDanmaku(assPath, luaPath);
-      if (!refreshed) {
-        debugPrint('[ExternalPlayerConsoleService] Failed to refresh danmaku');
-      }
+      if (!refreshed) debugPrint('[ExternalPlayerConsoleService] Failed to refresh danmaku');
+
     } catch (error) {
       debugPrint('[ExternalPlayerConsoleService] Failed to regenerate ASS: $error');
-    } finally {
-      if (temporaryFile?.existsSync() == true) {
-        temporaryFile?.deleteSync();
-      }
+    }
+    finally {
+      // 删除临时文件, 如果存在的话
+      if (temporaryFile?.existsSync() == true) temporaryFile?.deleteSync();
     }
   }
 

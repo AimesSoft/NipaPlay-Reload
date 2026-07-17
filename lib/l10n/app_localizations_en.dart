@@ -134,6 +134,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Show an outline around danmaku text. Newly opened videos will use this setting.';
 
   @override
+  String get danmakuOutlineWidthTitle => 'Danmaku outline thickness';
+
+  @override
   String get externalPlayerConsoleResume => 'Resume';
 
   @override

@@ -329,6 +329,7 @@ void main() {
 
           expect(find.textContaining('sender-hash'), findsOneWidget);
           expect(find.textContaining('dandanplay'), findsNothing);
+          expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(
             find.byKey(const Key('external-player-timestamp-input')),
             findsOneWidget,
@@ -703,16 +704,22 @@ void main() {
 
         expect(service.supportsDanmakuOutline, isTrue);
         expect(service.danmakuOutlineEnabled, isTrue);
+        expect(service.danmakuOutlineWidth, 2.5);
+
+        ExternalPlayerConsoleService.setDanmakuOutlineWidth(4.0);
+        await _waitUntil(() => reloadCommands.length == 1);
+        expect(service.danmakuOutlineWidth, 4.0);
+        expect(await assFile.readAsString(), contains('$stylePrefix' '4.0,0.0'));
 
         ExternalPlayerConsoleService.setDanmakuOutlineEnabled(false);
-        await _waitUntil(() => reloadCommands.length == 1);
+        await _waitUntil(() => reloadCommands.length == 2);
         expect(service.danmakuOutlineEnabled, isFalse);
         expect(await assFile.readAsString(), contains('$stylePrefix' '0.0,0.0'));
 
         ExternalPlayerConsoleService.setDanmakuOutlineEnabled(true);
-        await _waitUntil(() => reloadCommands.length == 2);
+        await _waitUntil(() => reloadCommands.length == 3);
         expect(service.danmakuOutlineEnabled, isTrue);
-        expect(await assFile.readAsString(), contains('$stylePrefix' '2.5,0.0'));
+        expect(await assFile.readAsString(), contains('$stylePrefix' '4.0,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
 
         _danmakuAssets[session] = DanmakuLaunchAssets(
@@ -738,7 +745,7 @@ void main() {
 
         expect(service.danmakuOutlineEnabled, isFalse);
         ExternalPlayerConsoleService.setDanmakuOutlineEnabled(true);
-        await _waitUntil(() => reloadCommands.length == 3);
+        await _waitUntil(() => reloadCommands.length == 4);
         expect(service.danmakuOutlineEnabled, isTrue);
         expect(await assFile.readAsString(), contains('$stylePrefix' '1.0,0.0'));
       });
