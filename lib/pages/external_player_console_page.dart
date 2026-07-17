@@ -8,7 +8,7 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 
 
@@ -108,7 +108,7 @@ class _ConsoleCard extends StatelessWidget {
     required this.activeDanmakuIndices,
   });
 
-  final ExternalPlayerSession session;
+  final LinuxSession session;
   final String? mediaPath;
   final String? animeTitle;
   final String? episodeTitle;
@@ -364,7 +364,7 @@ class _DanmakuList extends StatefulWidget {
     required this.activeIndices,
   });
 
-  final ExternalPlayerSession session;
+  final LinuxSession session;
   final List<DanmakuItem> items;
   final Duration Function(DanmakuItem) startTimeFor;
   final List<int> activeIndices;
@@ -791,7 +791,7 @@ String _formatDanmakuTime(Duration value) {
 class _SeekProgress extends StatefulWidget {
   const _SeekProgress({required this.session});
 
-  final ExternalPlayerSession session;
+  final LinuxSession session;
 
   @override
   State<_SeekProgress> createState() => _SeekProgressState();

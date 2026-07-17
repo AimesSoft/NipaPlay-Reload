@@ -11,7 +11,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -155,7 +155,7 @@ class ExternalPlayerService {
     try {
       final type = _detectPlayer(resolvedPath);
       if (Platform.isLinux && type == ExternalPlayerType.mpv) {
-        return await ExternalPlayerSession.launch(
+        return await LinuxSession.launch(
           playerPath: resolvedPath,
           mediaPath: mediaPath,
           extraArgs: extraArgs,
@@ -357,7 +357,7 @@ class ExternalPlayerService {
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
     // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
-    if (session is ExternalPlayerSession) {
+    if (session is LinuxSession) {
       final sessionItem = PlayableItem(
         videoPath: mediaPath,
         title: history?.animeName ?? item.title,

@@ -1,5 +1,5 @@
 
-// lib/models/external_player_session.dart
+// lib/models/external_player_session/linux_session.dart
 // 外部播放器相关的模型
 
 import 'dart:async';
@@ -16,10 +16,10 @@ import 'package:nipaplay/models/external_player_session/session.dart';
 /// 管理一个 Linux mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类不保存番剧, 剧集或媒体展示信息; 这些信息由控制台服务管理.
-class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   /// 关联一个已经存在的外部播放器进程.
-  ExternalPlayerSession.attach(
+  LinuxSession.attach(
     {
       required this.playerPath,
       required this.processId,
@@ -33,7 +33,7 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
   ) { if (monitorProcess) _startLifecycleMonitoring(); }
 
   /// 启动 Linux mpv, 并启用 IPC 和生命周期监控.
-  static Future<ExternalPlayerSession> launch({
+  static Future<LinuxSession> launch({
     required String       playerPath,
     required String       mediaPath,
     required List<String> extraArgs,
@@ -44,13 +44,13 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
     final ipcPath    = _createMpvIpcPath();
     final launchArgs = [mediaPath, ...extraArgs, '--input-ipc-server=$ipcPath'];
 
-    debugPrint('[ExternalPlayerSession] Launching Linux mpv: playerPath="$playerPath", args=$launchArgs');
+    debugPrint('[LinuxSession] Launching Linux mpv: playerPath="$playerPath", args=$launchArgs');
 
     final process = await Process.start(playerPath, launchArgs, mode: ProcessStartMode.detached);
 
-    debugPrint('[ExternalPlayerSession] Linux mpv started: pid=${process.pid}, ipcPath=$ipcPath');
+    debugPrint('[LinuxSession] Linux mpv started: pid=${process.pid}, ipcPath=$ipcPath');
 
-    return ExternalPlayerSession.attach(
+    return LinuxSession.attach(
       playerPath : playerPath,
       processId  : process.pid,
       ipcPath    : ipcPath,
@@ -103,9 +103,9 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
     if (_closed) return;
     try {
       final killed = Process.killPid(processId, ProcessSignal.sigterm);
-      if (!killed) debugPrint('[ExternalPlayerSession] Failed to terminate player: pid=$processId');
+      if (!killed) debugPrint('[LinuxSession] Failed to terminate player: pid=$processId');
     }
-    catch (error) { debugPrint('[ExternalPlayerSession] Failed to close player: $error'); }
+    catch (error) { debugPrint('[LinuxSession] Failed to close player: $error'); }
     _close();
   }
 
@@ -222,7 +222,7 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
       final socketFile = File(path);
       if (socketFile.existsSync()) socketFile.deleteSync();
     } catch (error) {
-      debugPrint('[ExternalPlayerSession] Failed to delete IPC socket: $error');
+      debugPrint('[LinuxSession] Failed to delete IPC socket: $error');
     }
   }
 
@@ -263,13 +263,13 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
           continue;
         }
         debugPrint(
-          '[ExternalPlayerSession] _setMpvPaused response: ${value['error']}',
+          '[LinuxSession] _setMpvPaused response: ${value['error']}',
         );
         changed = value['error'] == 'success';
         break;
       }
     } catch (error) {
-      debugPrint('[ExternalPlayerSession] Failed to set mpv pause: $error');
+      debugPrint('[LinuxSession] Failed to set mpv pause: $error');
     } finally {
       socket?.destroy();
     }
@@ -317,13 +317,13 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
         }
         if (value['error'] != 'success') {
           debugPrint(
-            '[ExternalPlayerSession] Failed to seek mpv: ${value['error']}',
+            '[LinuxSession] Failed to seek mpv: ${value['error']}',
           );
         }
         return;
       }
     } catch (error) {
-      debugPrint('[ExternalPlayerSession] Failed to seek mpv: $error');
+      debugPrint('[LinuxSession] Failed to seek mpv: $error');
     } finally {
       socket?.destroy();
     }
@@ -345,7 +345,7 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
     try {
       running = await _refreshProcessState(timer);
     } catch (error) {
-      debugPrint('[ExternalPlayerSession] Failed to refresh player state: $error');
+      debugPrint('[LinuxSession] Failed to refresh player state: $error');
       running = true;
     }
 
@@ -459,7 +459,7 @@ class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaun
         isPaused: paused,
       );
     } catch (error) {
-      debugPrint('[ExternalPlayerSession] Failed to read mpv state: $error');
+      debugPrint('[LinuxSession] Failed to read mpv state: $error');
       return null;
     } finally {
       socket?.destroy();

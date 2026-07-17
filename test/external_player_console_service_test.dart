@@ -8,7 +8,7 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
@@ -20,7 +20,7 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 final Expando<DanmakuLaunchAssets> _danmakuAssets =
     Expando<DanmakuLaunchAssets>();
 
-ExternalPlayerSession _session(
+LinuxSession _session(
   Process process, {
   String? ipcPath,
   String? danmakuAssPath,
@@ -47,7 +47,7 @@ ExternalPlayerSession _session(
   );
 }
 
-ExternalPlayerSession _sessionFromProcessId(
+LinuxSession _sessionFromProcessId(
   int processId, {
   String? ipcPath,
   String? danmakuAssPath,
@@ -60,7 +60,7 @@ ExternalPlayerSession _sessionFromProcessId(
   AssExportSettings? danmakuAssSettings,
   bool monitorProcess = false,
 }) {
-  final session = ExternalPlayerSession.attach(
+  final session = LinuxSession.attach(
     playerPath: '/bin/mpv',
     processId: processId,
     ipcPath: ipcPath,
@@ -85,7 +85,7 @@ ExternalPlayerSession _sessionFromProcessId(
 }
 
 void _showSession(
-  ExternalPlayerSession session, {
+  LinuxSession session, {
   PlayableItem? playableItem,
 }) {
   ExternalPlayerConsoleService.showSession(
@@ -138,7 +138,7 @@ void main() {
     expect(ExternalPlayerConsoleService.instance.hasActiveSession, isFalse);
   });
 
-  group('ExternalPlayerSession progress', () {
+  group('LinuxSession progress', () {
     test('clamps its fraction to the valid range', () {
       final session = _sessionFromProcessId(
         1,

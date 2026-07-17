@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
@@ -18,7 +18,7 @@ import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 /// 管理外部播放器控制台, 当前番剧信息和弹幕渲染状态.
 ///
 /// 本服务维护弹幕源列表和 ASS 设置, 样式变化时重新生成 ASS;
-/// mpv 进程交互统一委托给 [ExternalPlayerSession].
+/// mpv 进程交互统一委托给 [LinuxSession].
 class ExternalPlayerConsoleService extends ChangeNotifier {
 
   // 单例
@@ -33,7 +33,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // -------- 内部状态字段 -------- //
   // ------------------------------ //
 
-  ExternalPlayerSession?  _session; // 外部播放器会话
+  LinuxSession?  _session; // 外部播放器会话
 
   // 动漫元数据相关
   String? _mediaPath;    // 播放的媒体文件路径
@@ -59,7 +59,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // -------- 公共访问接口 -------- //
   // ------------------------------ //
 
-  ExternalPlayerSession? get session => _session;
+  LinuxSession? get session => _session;
   bool get hasActiveSession => _session != null;
   bool get supportsDanmakuOpacity =>
       _session?.ipcPath != null &&
@@ -138,7 +138,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }) {
 
     // 目前仅支持 Linux + mpv, 其他平台直接忽略
-    if (!isSupportedPlatform || session is! ExternalPlayerSession) return;
+    if (!isSupportedPlatform || session is! LinuxSession) return;
 
     // 先移除之前会话的监听器
     final previous = _instance._session;
@@ -327,7 +327,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   /// 重新生成 ASS 文件并刷新 mpv 弹幕, 仅在状态未发生变化时执行
   Future<void> _regenerateDanmakuAss(
-    ExternalPlayerSession? currentSession,
+    LinuxSession? currentSession,
     DanmakuStyle style,
   ) async {
 
@@ -389,7 +389,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance.notifyListeners();
   }
 
-  static void _clearSession(ExternalPlayerSession session) {
+  static void _clearSession(LinuxSession session) {
     if (!identical(_instance._session, session)) return;
 
     session.removeListener(_handleSessionChanged);
