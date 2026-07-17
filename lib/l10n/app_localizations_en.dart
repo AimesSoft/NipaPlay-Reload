@@ -120,6 +120,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get externalPlayerConsoleDanmakuFollowDisabled => 'Auto-follow paused';
 
   @override
+  String get externalPlayerConsoleDanmakuKeywordFilter =>
+      'Block danmaku by keyword';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint =>
+      'Enter a keyword contained in danmaku';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => 'Add';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => 'Blocked by keyword';
+
+  @override
   String get danmakuOpacityTitle => 'Danmaku opacity';
 
   @override

@@ -126,6 +126,7 @@ String convertDanmakuToAss(
   // 解析 + 偏移 + 排序
   final parsed = <_ParsedDanmaku>[];
   for (final item in danmaku) {
+    if (item['visible'] == false) continue;
     final content = _resolveContent(item);
     if (content.isEmpty) continue;
     final time = _resolveTime(item) + settings.timeOffsetSeconds;

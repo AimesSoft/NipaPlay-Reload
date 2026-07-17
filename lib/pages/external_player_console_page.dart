@@ -44,6 +44,7 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         danmakuOutlineWidth: service.danmakuOutlineWidth,
                         supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                         supportsDanmakuOutline: service.supportsDanmakuOutline,
+                        blockedKeywords: service.blockedKeywords,
                         activeDanmakuIndices: service.activeDanmakuIndices,
                       ),
               ),
@@ -105,6 +106,7 @@ class _ConsoleCard extends StatelessWidget {
     required this.danmakuOutlineWidth,
     required this.supportsDanmakuOpacity,
     required this.supportsDanmakuOutline,
+    required this.blockedKeywords,
     required this.activeDanmakuIndices,
   });
 
@@ -120,6 +122,7 @@ class _ConsoleCard extends StatelessWidget {
   final double danmakuOutlineWidth;
   final bool supportsDanmakuOpacity;
   final bool supportsDanmakuOutline;
+  final List<String> blockedKeywords;
   final List<int> activeDanmakuIndices;
 
   @override
@@ -188,6 +191,11 @@ class _ConsoleCard extends StatelessWidget {
             _buildDanmakuOpacity(context),
             const SizedBox(height: 8),
             _buildDanmakuOutlineWidth(context),
+            const SizedBox(height: 8),
+            _DanmakuKeywordFilter(
+              enabled: supportsDanmakuOpacity,
+              keywords: blockedKeywords,
+            ),
             const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerRight,
@@ -351,6 +359,95 @@ class _ConsoleCard extends StatelessWidget {
 
   String _nonEmptyOr(String? value, String fallback) {
     return value == null || value.trim().isEmpty ? fallback : value;
+  }
+}
+
+class _DanmakuKeywordFilter extends StatefulWidget {
+  const _DanmakuKeywordFilter({
+    required this.enabled,
+    required this.keywords,
+  });
+
+  final bool enabled;
+  final List<String> keywords;
+
+  @override
+  State<_DanmakuKeywordFilter> createState() =>
+      _DanmakuKeywordFilterState();
+}
+
+class _DanmakuKeywordFilterState extends State<_DanmakuKeywordFilter> {
+  final TextEditingController _controller = TextEditingController();
+
+  void _addKeyword() {
+    if (ExternalPlayerConsoleService.addBlockedKeyword(_controller.text)) {
+      _controller.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final localizations = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          localizations.externalPlayerConsoleDanmakuKeywordFilter,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('external-player-danmaku-keyword-input'),
+                controller: _controller,
+                enabled: widget.enabled,
+                decoration: InputDecoration(
+                  hintText: localizations
+                      .externalPlayerConsoleDanmakuKeywordHint,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _addKeyword(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonalIcon(
+              key: const Key('external-player-danmaku-keyword-add'),
+              onPressed: widget.enabled ? _addKeyword : null,
+              icon: const Icon(Icons.add),
+              label: Text(
+                localizations.externalPlayerConsoleDanmakuKeywordAdd,
+              ),
+            ),
+          ],
+        ),
+        if (widget.keywords.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: widget.keywords.map((keyword) {
+              return InputChip(
+                label: Text(keyword),
+                onDeleted: () =>
+                    ExternalPlayerConsoleService.removeBlockedKeyword(keyword),
+              );
+            }).toList(growable: false),
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -615,7 +712,9 @@ class _DanmakuRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: active
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
-            : null,
+            : !item.visible
+                ? theme.colorScheme.surfaceContainerHighest
+                : null,
         border: Border(
           bottom: BorderSide(color: theme.colorScheme.outlineVariant),
           left: BorderSide(
@@ -642,6 +741,9 @@ class _DanmakuRow extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
+                    if (!item.visible)
+                      _BlockedDanmakuIndicator(itemId: itemId),
+                    if (!item.visible && active) const SizedBox(width: 6),
                     if (active) _ActiveDanmakuIndicator(itemId: itemId),
                   ],
                 ),
@@ -718,10 +820,16 @@ class _DanmakuRow extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: 32,
-                  child: active
-                      ? _ActiveDanmakuIndicator(itemId: itemId)
-                      : null,
+                  width: 64,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (!item.visible)
+                        _BlockedDanmakuIndicator(itemId: itemId),
+                      if (!item.visible && active) const SizedBox(width: 6),
+                      if (active) _ActiveDanmakuIndicator(itemId: itemId),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -773,6 +881,25 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
         key: ValueKey('external-player-danmaku-active-$itemId'),
         size: 18,
         color: Theme.of(context).colorScheme.primary,
+      ),
+    );
+  }
+}
+
+class _BlockedDanmakuIndicator extends StatelessWidget {
+  const _BlockedDanmakuIndicator({required this.itemId});
+
+  final String itemId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: context.l10n.externalPlayerConsoleDanmakuBlocked,
+      child: Icon(
+        Icons.visibility_off_rounded,
+        key: ValueKey('external-player-danmaku-blocked-$itemId'),
+        size: 18,
+        color: Theme.of(context).colorScheme.error,
       ),
     );
   }

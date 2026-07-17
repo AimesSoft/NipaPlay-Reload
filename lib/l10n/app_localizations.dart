@@ -309,6 +309,30 @@ abstract class AppLocalizations {
   /// **'已暂停自动跟随'**
   String get externalPlayerConsoleDanmakuFollowDisabled;
 
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'按关键词屏蔽弹幕'**
+  String get externalPlayerConsoleDanmakuKeywordFilter;
+
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入弹幕中包含的关键词'**
+  String get externalPlayerConsoleDanmakuKeywordHint;
+
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加'**
+  String get externalPlayerConsoleDanmakuKeywordAdd;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已被关键词屏蔽'**
+  String get externalPlayerConsoleDanmakuBlocked;
+
   /// No description provided for @danmakuOpacityTitle.
   ///
   /// In zh, this message translates to:

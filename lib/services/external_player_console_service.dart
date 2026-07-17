@@ -45,8 +45,9 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕资产相关
   String? _danmakuAssPath;
   String? _danmakuLuaPath;
-  List<DanmakuItem>  _danmakuList = const [];
-  AssExportSettings? _danmakuAssSettings;
+  List<DanmakuItem>   _danmakuList = const []; // 弹幕列表
+  AssExportSettings?  _danmakuAssSettings;
+  List<String>        _blockedKeywords = const []; // 弹幕屏蔽关键词列表
 
   // 弹幕样式相关
   DanmakuStyle _danmakuStyle = DanmakuStyle();
@@ -74,6 +75,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   int? get animeId => _animeId;
   int? get episodeId => _episodeId;
   List<DanmakuItem> get danmakuList => _danmakuList;
+  List<String> get blockedKeywords => _blockedKeywords;
   DanmakuStyle get danmakuStyle => _danmakuStyle.copyWith();
   double get danmakuOpacity => _danmakuStyle.opacity;
   double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
@@ -103,6 +105,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     final active = <int>[];
     for (var index = low - 1; index >= 0; index--) {
       final item = items[index];
+      if (!item.visible) continue;
       final startTime = danmakuStartTime(item);
       if (startTime < earliestPossibleStart) break;
       if (position >= startTime &&
@@ -216,6 +219,37 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._updateDanmakuStyle((style) => style.outlineWidth = width);
   }
 
+  /// 添加一个按内容匹配的弹幕屏蔽关键词.
+  static bool addBlockedKeyword(String keyword) {
+    final value = keyword.trim();
+    if (value.isEmpty) return false;
+    if (_instance._blockedKeywords.any(
+      (item) => item.toLowerCase() == value.toLowerCase(),
+    )) {
+      return false;
+    }
+    _instance._blockedKeywords = List<String>.unmodifiable([
+      ..._instance._blockedKeywords,
+      value,
+    ]);
+    _instance._applyBlockedKeywords();
+    _instance.notifyListeners();
+    _instance._queueDanmakuRefresh();
+    return true;
+  }
+
+  /// 移除一个弹幕屏蔽关键词.
+  static void removeBlockedKeyword(String keyword) {
+    final keywords = _instance._blockedKeywords
+        .where((item) => item != keyword)
+        .toList(growable: false);
+    if (keywords.length == _instance._blockedKeywords.length) return;
+    _instance._blockedKeywords = List<String>.unmodifiable(keywords);
+    _instance._applyBlockedKeywords();
+    _instance.notifyListeners();
+    _instance._queueDanmakuRefresh();
+  }
+
   @override
   void dispose() {
     _session?.removeListener(_handleSessionChanged);
@@ -293,9 +327,23 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     );
   }
 
+  bool _isDanmakuBlocked(DanmakuItem item) {
+    final content = item.content.toLowerCase();
+    return _blockedKeywords.any(
+      (keyword) => content.contains(keyword.toLowerCase()),
+    );
+  }
+
+  void _applyBlockedKeywords() {
+    for (final item in _danmakuList) {
+      item.visible = !_isDanmakuBlocked(item);
+    }
+  }
+
   Duration _maxDanmakuDuration() {
     var maximum = Duration.zero;
     for (final item in _danmakuList) {
+      if (!item.visible) continue;
       final duration = _danmakuDisplayDuration(item);
       if (duration > maximum) maximum = duration;
     }
@@ -308,16 +356,19 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 记录当前状态
     final currentSession  = _session;
     final style           = _danmakuStyle;
+    final blockedKeywords = _blockedKeywords;
 
     Future<void> fun(_) async {
       // 如果在队列等待期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style)) {
+          !identical(_danmakuStyle, style) ||
+          !identical(_blockedKeywords, blockedKeywords)) {
         return;
       }
       await _regenerateDanmakuAss(
         currentSession,
         style,
+        blockedKeywords,
       );
     }
 
@@ -329,6 +380,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   Future<void> _regenerateDanmakuAss(
     LinuxSession? currentSession,
     DanmakuStyle style,
+    List<String> blockedKeywords,
   ) async {
 
     // 参数检查
@@ -349,7 +401,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style)) {
+          !identical(_danmakuStyle, style) ||
+          !identical(_blockedKeywords, blockedKeywords)) {
         return;
       }
 
@@ -359,7 +412,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          !identical(_danmakuStyle, style)) {
+          !identical(_danmakuStyle, style) ||
+          !identical(_blockedKeywords, blockedKeywords)) {
         return;
       }
 
@@ -411,6 +465,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuAssPath = assets?.assPath;
     _danmakuLuaPath = assets?.luaPath;
     _danmakuList = _sortDanmakuItems(assets?.danmakuList ?? const []);
+    _applyBlockedKeywords();
     _danmakuAssSettings = assets?.assSettings;
     final settings = assets?.assSettings;
     final outlineWidth = settings?.outlineWidth ?? 1.0;
@@ -426,6 +481,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   void _clearDanmakuState() {
     _setDanmakuAssets(null);
+    _blockedKeywords = const [];
   }
 
   static List<DanmakuItem> _sortDanmakuItems(List<DanmakuItem> items) {

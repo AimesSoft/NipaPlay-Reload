@@ -34,6 +34,7 @@ Future<String?> _generateAssViaDfmLayout(
   try {
     final rawItems = <rust_dfm.DfmPlusRawDanmakuItem>[];
     for (final item in danmakuList) {
+      if (!item.visible) continue;
       if (item.content.isEmpty) continue;
       rawItems.add(rust_dfm.DfmPlusRawDanmakuItem(
         timeSeconds: item.timeSeconds,

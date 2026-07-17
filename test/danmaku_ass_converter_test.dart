@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
 void main() {
@@ -62,6 +63,27 @@ void main() {
       expect(dialogues, hasLength(1));
       expect(dialogues.single, endsWith('same'));
       expect(ass, isNot(contains('another')));
+    });
+
+    test('skips invisible typed danmaku at ASS rendering time', () {
+      const settings = AssExportSettings(fontSize: 24);
+      final hidden = DanmakuItem(
+        time: const Duration(seconds: 1),
+        content: 'blocked by keyword',
+        visible: false,
+      );
+      final visible = DanmakuItem(
+        time: const Duration(seconds: 2),
+        content: 'kept comment',
+      );
+
+      final ass = convertDanmakuItemsToAss([hidden, visible], settings);
+
+      expect(ass, isNot(contains('blocked by keyword')));
+      expect(ass, contains('kept comment'));
+      expect(hidden.toMap()['visible'], isFalse);
+      expect(DanmakuItem.fromMap(hidden.toMap()).visible, isFalse);
+      expect(hidden.copyWith(visible: true).visible, isTrue);
     });
 
     test('writes prepared ASS and skips filtered entries', () {

@@ -320,6 +320,8 @@ void main() {
               }),
             ],
           ));
+          ExternalPlayerConsoleService.instance.danmakuList.single.visible =
+              false;
 
           await tester.pumpWidget(const MaterialApp(
             locale: Locale('zh'),
@@ -330,6 +332,12 @@ void main() {
 
           expect(find.textContaining('sender-hash'), findsOneWidget);
           expect(find.textContaining('dandanplay'), findsNothing);
+          expect(
+            find.byKey(const ValueKey(
+              'external-player-danmaku-blocked-0-comment-id',
+            )),
+            findsOneWidget,
+          );
           expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(find.text('启用弹幕描边'), findsNothing);
           expect(
@@ -643,6 +651,44 @@ void main() {
             assFile.path,
           ],
         ]);
+
+        final secondItem = service.danmakuList[1];
+        expect(
+          ExternalPlayerConsoleService.addBlockedKeyword('SECOND'),
+          isTrue,
+        );
+        expect(
+          ExternalPlayerConsoleService.addBlockedKeyword('second'),
+          isFalse,
+        );
+        await _waitUntil(() => reloadCommands.length == 2);
+
+        final filteredAss = await assFile.readAsString();
+        expect(service.blockedKeywords, ['SECOND']);
+        expect(
+          service.danmakuList.map((item) => item.content),
+          ['first regenerated comment', 'second regenerated comment'],
+        );
+        expect(
+          service.danmakuList.map((item) => item.visible),
+          [true, false],
+        );
+        expect(identical(service.danmakuList[1], secondItem), isTrue);
+        expect(filteredAss, contains('first regenerated comment'));
+        expect(filteredAss, isNot(contains('second regenerated comment')));
+
+        ExternalPlayerConsoleService.removeBlockedKeyword('SECOND');
+        await _waitUntil(() => reloadCommands.length == 3);
+        expect(service.blockedKeywords, isEmpty);
+        expect(
+          service.danmakuList.map((item) => item.visible),
+          [true, true],
+        );
+        expect(identical(service.danmakuList[1], secondItem), isTrue);
+        expect(
+          await assFile.readAsString(),
+          contains('second regenerated comment'),
+        );
       });
 
       test('adjusts danmaku outline width and disables it at zero', () async {

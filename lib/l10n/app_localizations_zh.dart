@@ -117,6 +117,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暂停自动跟随';
 
   @override
+  String get externalPlayerConsoleDanmakuKeywordFilter => '按关键词屏蔽弹幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint => '输入弹幕中包含的关键词';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => '添加';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => '已被关键词屏蔽';
+
+  @override
   String get danmakuOpacityTitle => '弹幕不透明度';
 
   @override
@@ -1976,6 +1988,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暫停自動跟隨';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordFilter => '按關鍵詞封鎖彈幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint => '輸入彈幕中包含的關鍵詞';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => '新增';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => '已被關鍵詞封鎖';
 
   @override
   String get danmakuOpacityTitle => '彈幕不透明度';
