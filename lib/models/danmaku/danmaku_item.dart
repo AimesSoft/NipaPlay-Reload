@@ -31,6 +31,7 @@ class DanmakuItem {
     this.fontSize,
     this.pool,
     this.weight,
+    this.visible = true,
     Map<String, dynamic> extra = const {},
   }) :
     colorRgb = colorRgb & 0xFFFFFF,
@@ -54,6 +55,8 @@ class DanmakuItem {
   final  double?      fontSize;   // 数据源指定的原始字号
   final  int?         pool;       // 数据源中的弹幕池编号
   final  int?         weight;     // 数据源中的弹幕权重
+
+  bool                visible;    // 是否参与客户端渲染
 
   /// 尚未建模的插件或数据源扩展字段
   final Map<String, dynamic> extra;
@@ -112,6 +115,7 @@ class DanmakuItem {
       'fontsize',
       'pool',
       'weight',
+      'visible',
     };
     for (final key in modeledMapKeys) {
       extra.remove(key);
@@ -138,6 +142,7 @@ class DanmakuItem {
       ),
       pool: _parseInt(raw['pool']),
       weight: _parseInt(raw['weight']),
+      visible: raw['visible'] == null ? true : _parseBool(raw['visible']),
       extra: extra,
     );
   }
@@ -160,6 +165,7 @@ class DanmakuItem {
       if (fontSize != null) 'fontSize': fontSize,
       if (pool != null) 'pool': pool,
       if (weight != null) 'weight': weight,
+      'visible': visible,
     };
   }
 
@@ -177,6 +183,7 @@ class DanmakuItem {
     Object? fontSize = _notProvided,
     Object? pool = _notProvided,
     Object? weight = _notProvided,
+    bool? visible,
     Map<String, dynamic>? extra,
   }) {
     return DanmakuItem(
@@ -204,6 +211,7 @@ class DanmakuItem {
       weight: identical(weight, _notProvided)
           ? this.weight
           : weight as int?,
+      visible: visible ?? this.visible,
       extra: extra ?? this.extra,
     );
   }
@@ -279,7 +287,15 @@ class DanmakuItem {
         if (value != null) return value;
       }
     }
-    return null;
+
+    // 弹弹 play 原始弹幕的 p 字段格式为 时间,模式,颜色,发送者标识.
+    // C++ 标准化路径会透传 p, 但不会额外生成 senderId.
+    final p = raw['p']?.toString().split(',');
+    if (p != null && p.length > 3) {
+      final value = _nonEmptyString(p[3]);
+      if (value != null) return value;
+    }
+    return _nonEmptyString(raw['cid']);
   }
 
   static String? _nonEmptyString(dynamic value) {

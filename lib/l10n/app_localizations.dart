@@ -219,6 +219,30 @@ abstract class AppLocalizations {
   /// **'正在获取播放进度…'**
   String get externalPlayerConsoleProgressLoading;
 
+  /// No description provided for @externalPlayerConsoleTimestampLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确时间戳'**
+  String get externalPlayerConsoleTimestampLabel;
+
+  /// No description provided for @externalPlayerConsoleTimestampHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'时:分:秒 / 分:秒 / 秒数'**
+  String get externalPlayerConsoleTimestampHint;
+
+  /// No description provided for @externalPlayerConsoleTimestampInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的时间戳'**
+  String get externalPlayerConsoleTimestampInvalid;
+
+  /// No description provided for @externalPlayerConsoleTimestampSeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确跳转'**
+  String get externalPlayerConsoleTimestampSeek;
+
   /// No description provided for @externalPlayerConsoleDanmakuList.
   ///
   /// In zh, this message translates to:
@@ -285,6 +309,72 @@ abstract class AppLocalizations {
   /// **'已暂停自动跟随'**
   String get externalPlayerConsoleDanmakuFollowDisabled;
 
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕屏蔽规则'**
+  String get externalPlayerConsoleDanmakuKeywordFilter;
+
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入规则内容'**
+  String get externalPlayerConsoleDanmakuKeywordHint;
+
+  /// No description provided for @externalPlayerConsoleDanmakuKeywordAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加'**
+  String get externalPlayerConsoleDanmakuKeywordAdd;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已被关键词屏蔽'**
+  String get externalPlayerConsoleDanmakuBlocked;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeKeyword.
+  ///
+  /// In zh, this message translates to:
+  /// **'关键词'**
+  String get externalPlayerConsoleDanmakuBlockModeKeyword;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeRegex.
+  ///
+  /// In zh, this message translates to:
+  /// **'正则表达式'**
+  String get externalPlayerConsoleDanmakuBlockModeRegex;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeSender.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送者 ID'**
+  String get externalPlayerConsoleDanmakuBlockModeSender;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效且未重复的规则'**
+  String get externalPlayerConsoleDanmakuBlockInvalid;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除规则'**
+  String get externalPlayerConsoleDanmakuBlockRemove;
+
+  /// No description provided for @externalPlayerConsoleDanmakuShow.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示弹幕'**
+  String get externalPlayerConsoleDanmakuShow;
+
+  /// No description provided for @externalPlayerConsoleDanmakuHide.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏弹幕'**
+  String get externalPlayerConsoleDanmakuHide;
+
   /// No description provided for @danmakuOpacityTitle.
   ///
   /// In zh, this message translates to:
@@ -308,6 +398,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'控制是否显示弹幕文字描边，新打开的视频将应用此设置。'**
   String get danmakuOutlineEnabledSubtitle;
+
+  /// No description provided for @danmakuOutlineWidthTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕描边粗细'**
+  String get danmakuOutlineWidthTitle;
 
   /// No description provided for @externalPlayerConsoleResume.
   ///

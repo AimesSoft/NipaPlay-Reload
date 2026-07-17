@@ -3,7 +3,7 @@
 
 import 'package:nipaplay/constants/danmaku/ass_kind.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
-import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/ass_converter.dart' as rust_ass;
 import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
@@ -68,6 +68,33 @@ class AssExportSettings {
     this.outlineWidth = 1.0,
     this.shadowStyle = AssShadowStyle.none,
   });
+
+  AssExportSettings copyWith({
+    double? fontSize,
+    double? opacity,
+    double? displayArea,
+    double? scrollDurationSeconds,
+    double? timeOffsetSeconds,
+    bool? mergeDuplicates,
+    String? fontFamily,
+    AssOutlineStyle? outlineStyle,
+    double? outlineWidth,
+    AssShadowStyle? shadowStyle,
+  }) {
+    return AssExportSettings(
+      fontSize: fontSize ?? this.fontSize,
+      opacity: opacity ?? this.opacity,
+      displayArea: displayArea ?? this.displayArea,
+      scrollDurationSeconds:
+          scrollDurationSeconds ?? this.scrollDurationSeconds,
+      timeOffsetSeconds: timeOffsetSeconds ?? this.timeOffsetSeconds,
+      mergeDuplicates: mergeDuplicates ?? this.mergeDuplicates,
+      fontFamily: fontFamily ?? this.fontFamily,
+      outlineStyle: outlineStyle ?? this.outlineStyle,
+      outlineWidth: outlineWidth ?? this.outlineWidth,
+      shadowStyle: shadowStyle ?? this.shadowStyle,
+    );
+  }
 }
 
 /// 把过滤后的弹幕列表转换为 ASS 字幕文本。
@@ -78,14 +105,6 @@ class AssExportSettings {
 /// 滚动弹幕使用经典 Danmaku2ASS 车道碰撞算法：每条分配一条水平车道，
 /// 前一条"完全进入屏幕"后释放车道。顶/底部弹幕用固定时长 + 垂直车道。
 String convertDanmakuToAss(
-  List<Map<String, dynamic>> danmaku,
-  AssExportSettings settings,
-) {
-  return convertDanmakuToAssWithEvents(danmaku, settings).ass;
-}
-
-/// 转换 ASS, 并返回所有实际写入 ASS 的事件
-DanmakuAssConversionResult convertDanmakuToAssWithEvents(
   List<Map<String, dynamic>> danmaku,
   AssExportSettings settings,
 ) {
@@ -104,7 +123,7 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
             .toList(growable: false),
         settings: _toRustSettings(settings),
       );
-      return _fromRustResult(result);
+      return result.ass;
     } catch (_) {
       // 原生库不可用或桥接失败时保留 Dart/Web 行为。
     }
@@ -146,8 +165,6 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
   final scrollLanes = List<double?>.filled(laneCount, null, growable: false);
   final topLanes = List<double?>.filled(laneCount, null, growable: false);
   final bottomLanes = List<double?>.filled(laneCount, null, growable: false);
-  final events = <AssDanmakuEvent>[];
-
   buffer.writeln('[Events]');
   buffer.writeln(
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text');
@@ -176,13 +193,6 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
           style: 'Danmaku',
           text: line,
         );
-        events.add(AssDanmakuEvent(
-          content: d.content,
-          startSeconds: d.time,
-          endSeconds: d.time + duration,
-          colorRgb: d.color,
-          type: DanmakuKind.scroll,
-        ));
         break;
       case DanmakuKind.top:
         const duration = kAssFixedDanmakuDurationSeconds;
@@ -200,13 +210,6 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
           style: 'DanmakuTop',
           text: line,
         );
-        events.add(AssDanmakuEvent(
-          content: d.content,
-          startSeconds: d.time,
-          endSeconds: d.time + duration,
-          colorRgb: d.color,
-          type: DanmakuKind.top,
-        ));
         break;
       case DanmakuKind.bottom:
         const duration = kAssFixedDanmakuDurationSeconds;
@@ -224,21 +227,21 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
           style: 'DanmakuBottom',
           text: line,
         );
-        events.add(AssDanmakuEvent(
-          content: d.content,
-          startSeconds: d.time,
-          endSeconds: d.time + duration,
-          colorRgb: d.color,
-          type: DanmakuKind.bottom,
-        ));
         break;
     }
   }
 
-  // 返回 ASS 文本 + 实际写入的事件清单
-  return DanmakuAssConversionResult(
-    ass: buffer.toString(),
-    events: List<AssDanmakuEvent>.unmodifiable(events),
+  return buffer.toString();
+}
+
+/// 把强类型应用层弹幕转换为 ASS 字幕文本.
+String convertDanmakuItemsToAss(
+  List<DanmakuItem> danmaku,
+  AssExportSettings settings,
+) {
+  return convertDanmakuToAss(
+    danmaku.where((item) => item.visible).map((item) => item.toMap()).toList(growable: false), 
+    settings,
   );
 }
 
@@ -272,17 +275,13 @@ String _resolveContent(Map<String, dynamic> item) {
 }
 
 DanmakuKind _resolveKind(Map<String, dynamic> item) {
+
   final original = item['originalType'];
-  if (original is num) {
-    return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
-  }
+  if (original is num) return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
 
   final v = item['type'] ?? item['y'];
-  if (v is num) {
-    return _kindFromMode(DanmakuMode.fromCode(v.toInt()));
-  } else {
-    return _kindFromMode(DanmakuMode.fromTypeName(v?.toString()));
-  }
+  if (v is num) { return _kindFromMode(DanmakuMode.fromCode     (v .toInt()   )); }
+  else          { return _kindFromMode(DanmakuMode.fromTypeName (v?.toString())); }
 }
 
 int _resolveTypeCode(Map<String, dynamic> item) {
@@ -294,13 +293,11 @@ int _resolveTypeCode(Map<String, dynamic> item) {
 }
 
 DanmakuKind _kindFromMode(DanmakuMode mode) {
-  switch (mode) {
-    case DanmakuMode.top:
-      return DanmakuKind.top;
-    case DanmakuMode.bottom:
-      return DanmakuKind.bottom;
-    default:
-      return DanmakuKind.scroll;
+  switch (mode)
+  {
+  case DanmakuMode.top    : return DanmakuKind.top   ;
+  case DanmakuMode.bottom : return DanmakuKind.bottom;
+  default                 : return DanmakuKind.scroll;
   }
 }
 
@@ -615,21 +612,6 @@ String convertDanmakuToAssFromPrepared(
   required int playResY,
   required AssExportSettings settings,
 }) {
-  return convertDanmakuToAssFromPreparedWithEvents(
-    items,
-    playResX: playResX,
-    playResY: playResY,
-    settings: settings,
-  ).ass;
-}
-
-/// 烘焙预算条目，并返回所有实际写入 ASS 的事件
-DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
-  List<PreparedDanmakuItem> items, {
-  required int playResX,
-  required int playResY,
-  required AssExportSettings settings,
-}) {
   if (RustLib.instance.initialized) {
     try {
       final result = rust_ass.convertPreparedDanmakuToAss(
@@ -652,7 +634,7 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
         playResY: playResY,
         settings: _toRustSettings(settings),
       );
-      return _fromRustResult(result);
+      return result.ass;
     } catch (_) {
       // 原生库不可用或桥接失败时保留 Dart/Web 行为。
     }
@@ -671,8 +653,6 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
   buffer.writeln('[Events]');
   buffer.writeln(
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text');
-  final events = <AssDanmakuEvent>[];
-
   for (final it in items) {
     if (it.isFiltered) continue;
     if (it.text.isEmpty) continue;
@@ -703,13 +683,6 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
           '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
       _writeDialogue(buffer,
           layer: 0, start: start, end: end, style: 'Danmaku', text: line);
-      events.add(AssDanmakuEvent(
-        content: it.text,
-        startSeconds: start,
-        endSeconds: end,
-        colorRgb: it.colorRgb,
-        type: DanmakuKind.scroll,
-      ));
     } else {
       final isBottom = DanmakuMode.fromCode(it.typeCode) == DanmakuMode.bottom;
       // 顶/底部居中：用 \an8 顶中对齐 + \pos(PlayResX/2, y)，让 libass 按自身
@@ -724,20 +697,10 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
         style: isBottom ? 'DanmakuBottom' : 'DanmakuTop',
         text: line,
       );
-      events.add(AssDanmakuEvent(
-        content: it.text,
-        startSeconds: start,
-        endSeconds: end,
-        colorRgb: it.colorRgb,
-        type: isBottom ? DanmakuKind.bottom : DanmakuKind.top,
-      ));
     }
   }
 
-  return DanmakuAssConversionResult(
-    ass: buffer.toString(),
-    events: List<AssDanmakuEvent>.unmodifiable(events),
-  );
+  return buffer.toString();
 }
 
 rust_ass.RustAssExportSettings _toRustSettings(AssExportSettings settings) {
@@ -752,24 +715,5 @@ rust_ass.RustAssExportSettings _toRustSettings(AssExportSettings settings) {
     outlineStyle: settings.outlineStyle.index,
     outlineWidth: settings.outlineWidth,
     shadowStyle: settings.shadowStyle.index,
-  );
-}
-
-DanmakuAssConversionResult _fromRustResult(
-  rust_ass.RustAssConversionResult result,
-) {
-  return DanmakuAssConversionResult(
-    ass: result.ass,
-    events: List<AssDanmakuEvent>.unmodifiable(
-      result.events.map(
-        (event) => AssDanmakuEvent(
-          content: event.content,
-          startSeconds: event.startSeconds,
-          endSeconds: event.endSeconds,
-          colorRgb: event.colorRgb,
-          type: _kindFromMode(DanmakuMode.fromCode(event.typeCode)),
-        ),
-      ),
-    ),
   );
 }

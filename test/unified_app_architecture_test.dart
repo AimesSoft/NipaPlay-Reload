@@ -1222,8 +1222,8 @@ void main() {
 
     Future<void> pump(LibraryManagementViewMode viewMode) {
       return tester.pumpWidget(
-        ChangeNotifierProvider<AppearanceSettingsProvider>.value(
-          value: appearanceSettings,
+        ChangeNotifierProvider(
+          create: (_) => AppearanceSettingsProvider(),
           child: CupertinoApp(
             home: CupertinoPageScaffold(
               child: CupertinoLibraryManagementOverview(
@@ -1254,8 +1254,8 @@ void main() {
 
     Future<void> pump(LibraryManagementViewMode viewMode) {
       return tester.pumpWidget(
-        ChangeNotifierProvider<AppearanceSettingsProvider>.value(
-          value: appearanceSettings,
+        ChangeNotifierProvider(
+          create: (_) => AppearanceSettingsProvider(),
           child: MaterialApp(
             home: AppDisplaySurfaceScope(
               surface: AppDisplaySurface.desktopTablet,

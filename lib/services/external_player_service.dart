@@ -3,32 +3,28 @@
 // 掌管外部播放器启动, 弹幕导出和参数注入的服务
 
 import 'dart:convert';
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/constants/danmaku/ass_kind.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
-import 'package:nipaplay/models/external_player_danmaku_item.dart';
-import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/external_player_session/linux_session.dart';
+import 'package:nipaplay/models/external_player_session/other_session.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
-import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
-import 'package:nipaplay/src/rust/rust_init.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -56,28 +52,9 @@ class ExternalPlayerConfig {
   bool get isReady => enabled && playerPath.trim().isNotEmpty;
 }
 
-/// 外部播放器进程的启动结果.
-///
-/// [started] 仅表示系统已成功派生启动命令, 不保证播放器已经完成媒体加载.
-/// 当前只有 Linux 直接启动播放器时会返回 [processId], 且仅 mpv 会同时返回
-/// 可供后续控制使用的 [ipcPath].
-class ExternalPlayerLaunchResult {
-
-  const ExternalPlayerLaunchResult({
-    required this.started,
-    this.processId,
-    this.ipcPath,
-  });
-
-  final bool    started;    // 是否已成功派生外部播放器或系统启动命令
-  final int?    processId;  // 已派生播放器的进程 ID; 无法可靠取得时为 `null`
-  final String? ipcPath;    // mpv JSON IPC socket 路径; 未启用 IPC 时为 `null`
-}
-
-
 /// 项目里掌管协调桌面端外部播放器启动, 播放参数注入和弹幕导出的神.
 ///
-/// 服务支持 Windows, macOS 和 Linux.
+/// 服务支持在 Windows, macOS 和 Linux 上启动外部播放器.
 ///
 /// 1. 从设置中读取播放器配置
 /// 2. 选择实际媒体地址
@@ -135,31 +112,36 @@ class ExternalPlayerService {
     return videoPath;
   }
 
-  /// 使用 [playerPath] 打开 [mediaPath], 并附加 [extraArgs].
+  /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
   ///
   /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
   /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
   /// 模式启动; macOS 应用包通过 `open -a` 打开; Linux 播放器以 detached
-  /// 模式启动. Linux 原版 mpv 会额外获得 JSON IPC socket 参数.
+  /// 模式启动. 只有 Linux mpv 会额外启用 JSON IPC 和弹幕控制台能力.
   ///
-  /// 不支持的平台, 空路径, 文件不存在或进程派生异常都会返回
-  /// `started == false`, 异常不会向调用方抛出. [ExternalPlayerLaunchResult.started]
-  /// 只代表启动命令已成功派生, 不代表媒体已成功开始播放.
-  static Future<ExternalPlayerLaunchResult>
-  launchWithResult(String playerPath, String mediaPath, List<String> extraArgs) async {
+  /// 成功派生进程时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
+  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
+  /// Session 仅表示启动命令执行成功, 不保证播放器已经完成媒体加载.
+  static Future<ExternalPlayerLaunchSession?> launch({
+    required String playerPath,
+    required String mediaPath,
+    List<String> extraArgs = const [],
+    Duration duration = Duration.zero,
+    Duration position = Duration.zero,
+  }) async {
 
     debugPrint('[ExtPlayer] launch: playerPath="$playerPath", '
         'mediaPath="$mediaPath", extraArgs=$extraArgs');
     if (!isSupportedPlatform) {
       debugPrint('[ExtPlayer] launch: 平台不支持');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     final resolvedPath = await _resolvePlayerPath(playerPath.trim());
     debugPrint('[ExtPlayer] launch: resolvedPath="$resolvedPath"');
     if (resolvedPath == null || resolvedPath.isEmpty) {
       debugPrint('[ExtPlayer] launch: resolvedPath 为空, 中止');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     final exists = await FileSystemEntity.type(resolvedPath) !=
@@ -167,85 +149,74 @@ class ExternalPlayerService {
     debugPrint('[ExtPlayer] launch: 文件存在=$exists ($resolvedPath)');
     if (!exists) {
       debugPrint('[ExtPlayer] launch: 外部播放器不存在: $resolvedPath');
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
 
     try {
-      if (Platform.isWindows) {
-        final isLnk = resolvedPath.toLowerCase().endsWith('.lnk');
-        if (isLnk) {
-          // .lnk 快捷方式: cmd /c start 解析快捷方式目标并自动分离.
-          final args = <String>[
-            '/c',
-            'start',
-            '',
-            resolvedPath,
-            mediaPath,
-            ...extraArgs,
-          ];
-          debugPrint('[ExtPlayer] launch: .lnk → '
-              'Process.start("cmd", $args, runInShell:true)');
-          final proc = await Process.start('cmd', args, runInShell: true);
-          debugPrint('[ExtPlayer] launch: cmd 已派生 pid=${proc.pid}');
-        } else {
-          // .exe: 直启, 参数由 Dart 直接传递（绕过 cmd/start 的引号 quirks,
-          // 对带空格/特殊字符的媒体路径和 --sub-file=xxx / --script=xxx 参数最可靠）.
-          final args = <String>[mediaPath, ...extraArgs];
-          debugPrint('[ExtPlayer] launch: .exe → '
-              'Process.start("$resolvedPath", $args, mode:detached)');
-          final proc = await Process.start(
-            resolvedPath,
-            args,
-            mode: ProcessStartMode.detached,
-          );
-          debugPrint('[ExtPlayer] launch: 已派生 pid=${proc.pid}');
-        }
-        return const ExternalPlayerLaunchResult(started: true);
+      final type = _detectPlayer(resolvedPath);
+      if (Platform.isLinux && type == ExternalPlayerType.mpv) {
+        return await LinuxSession.launch(
+          playerPath: resolvedPath,
+          mediaPath: mediaPath,
+          extraArgs: extraArgs,
+          duration: duration,
+          position: position,
+        );
       }
-
-      if (Platform.isMacOS) {
-        if (resolvedPath.toLowerCase().endsWith('.app')) {
-          debugPrint('[ExtPlayer] launch: macOS open -a "$resolvedPath"');
-          await Process.start('open', ['-a', resolvedPath, mediaPath]);
-        } else {
-          debugPrint('[ExtPlayer] launch: macOS 直启 + extraArgs=$extraArgs');
-          await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
-        }
-        return const ExternalPlayerLaunchResult(started: true);
-      }
-
-      // Linux
-      String? ipcPath;
-      var linuxExtraArgs = extraArgs;
-      if (_detectPlayer(resolvedPath) == ExternalPlayerType.mpv) {
-        ipcPath = _createMpvIpcPath();
-        linuxExtraArgs = [...extraArgs, '--input-ipc-server=$ipcPath'];
-        debugPrint('[ExtPlayer] 已启用 mpv JSON IPC: $ipcPath');
-      }
-      debugPrint(
-        '[ExtPlayer] launch: Linux 直启 + '
-        'extraArgs=$linuxExtraArgs, mode=detached',
-      );
-
-      final proc = await Process.start(
-        resolvedPath,
-        [mediaPath, ...linuxExtraArgs],
-        mode: ProcessStartMode.detached,
-      );
-
-      // 打印派生进程 PID, 方便调试
-      debugPrint('[ExtPlayer] launch: 已派生 pid=${proc.pid}');
-
-      return ExternalPlayerLaunchResult(
-        started: true,
-        processId: proc.pid,
-        ipcPath: ipcPath,
+      return await _launchOtherSession(
+        type: type,
+        playerPath: resolvedPath,
+        mediaPath: mediaPath,
+        extraArgs: extraArgs,
+        duration: duration,
+        position: position,
       );
     } catch (e, st) {
       debugPrint('[ExtPlayer] launch: 启动异常: $e');
       debugPrintStack(stackTrace: st);
-      return const ExternalPlayerLaunchResult(started: false);
+      return null;
     }
+  }
+
+  /// 启动 Linux mpv 以外的播放器进程.
+  static Future<OtherSession> _launchOtherSession({
+    required ExternalPlayerType type,
+    required String playerPath,
+    required String mediaPath,
+    required List<String> extraArgs,
+    required Duration duration,
+    required Duration position,
+  }) async {
+    late final Process process;
+    var monitorProcess = false;
+
+    if (Platform.isWindows) {
+      final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
+      process = isShortcut
+          ? await Process.start('cmd',['/c', 'start',  '', playerPath, mediaPath, ...extraArgs], runInShell: true)
+          : await Process.start(playerPath, [mediaPath, ...extraArgs], mode: ProcessStartMode.detached);
+    } else if (Platform.isMacOS) {
+      final isAppBundle = playerPath.toLowerCase().endsWith('.app');
+      process = isAppBundle
+          ? await Process.start('open', ['-a', playerPath, mediaPath])
+          : await Process.start(playerPath, [mediaPath, ...extraArgs]);
+    } else {
+      process = await Process.start(
+        playerPath,
+        [mediaPath, ...extraArgs],
+        mode: ProcessStartMode.detached,
+      );
+      monitorProcess = true;
+    }
+
+    return OtherSession.attach(
+      type: type,
+      playerPath: playerPath,
+      processId: process.pid,
+      duration: duration,
+      position: position,
+      monitorProcess: monitorProcess,
+    );
   }
 
   /// 按当前设置尝试接管 [item] 的播放请求.
@@ -373,14 +344,20 @@ class ExternalPlayerService {
     }
 
     // 启动外部播放器, 并获取启动结果
-    final launchResult = await launchWithResult(playerPath, mediaPath, extraArgs);
+    final history = item.historyItem;
+    final session = await launch(
+      playerPath: playerPath,
+      mediaPath: mediaPath,
+      extraArgs: extraArgs,
+      duration: Duration(milliseconds: history?.duration ?? 0),
+      position: Duration(milliseconds: history?.lastPosition ?? 0),
+    );
 
-    final launched = launchResult.started;
+    final launched = session != null;
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
-    // Linux 下, 若外部播放器启动成功且返回了进程 ID, 则在控制台显示会话信息
-    if (launched && Platform.isLinux && launchResult.processId != null) {
-      final history = item.historyItem;
+    // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
+    if (session is LinuxSession) {
       final sessionItem = PlayableItem(
         videoPath: mediaPath,
         title: history?.animeName ?? item.title,
@@ -392,22 +369,12 @@ class ExternalPlayerService {
         playbackSession: item.playbackSession,
         detailContext: item.detailContext,
       );
-      final s = ExternalPlayerSession(
-        _detectPlayer(playerPath),
-        playerPath,
-        launchResult.processId!,
-        launchResult.ipcPath,
-        Duration(milliseconds: history?.duration ?? 0),
-        danmakuAssets?.assPath,
-        sessionItem,
-        danmakuItems: danmakuAssets?.danmakuItems ?? const [],
-      )..initialize(
-          danmakuOpacity: danmakuAssets?.opacity ?? 1.0,
-          danmakuOutlineWidth: danmakuAssets?.outlineWidth ?? 1.0,
-          position: Duration(milliseconds: history?.lastPosition ?? 0),
-        );
 
-      ExternalPlayerConsoleService.showSession(s);
+      ExternalPlayerConsoleService.showSession(
+        session,
+        playableItem: sessionItem,
+        danmakuAssets: danmakuAssets,
+      );
 
       // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面
       if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {
@@ -568,29 +535,21 @@ class ExternalPlayerService {
         return null;
       }
       final assSettings = _buildAssSettings(vps);
+      final danmakuList = List<DanmakuItem>.unmodifiable(
+        list.map(DanmakuItem.fromMap),
+      );
       debugPrint('[ExtPlayer] ASS 设置: fontSize=${assSettings.fontSize}, '
           'opacity=${assSettings.opacity}, displayArea=${assSettings.displayArea}, '
           'scrollDur=${assSettings.scrollDurationSeconds}, '
           'offset=${assSettings.timeOffsetSeconds}, merge=${assSettings.mergeDuplicates}');
       // 优先用 DFM+ 内核布局层预算运动参数（碰撞/追赶规避）, 失败回退经典算法.
-      DanmakuAssConversionResult conversion;
-      String assPathLabel;
-      final dfmConversion = await _generateAssViaDfmLayout(list, assSettings, vps);
-      if (dfmConversion != null) {
-        conversion = dfmConversion;
-        assPathLabel = 'DFM+布局';
-      } else {
-        conversion = convertDanmakuToAssWithEvents(list, assSettings);
-        assPathLabel = '经典算法';
-      }
-      final ass = conversion.ass;
-      final consoleItems = _buildConsoleDanmakuItems(
-        conversion.events,
-        list,
-        assSettings.timeOffsetSeconds,
+      final ass = await generateExternalPlayerDanmakuAss(
+        danmakuList,
+        assSettings,
+        allowStacking: vps.danmakuStacking,
       );
-      debugPrint('[ExtPlayer] ASS 生成完成 ($assPathLabel): ${ass.length} 字符');
-      debugPrint('[ExtPlayer] 控制台弹幕 ${consoleItems.length} 条');
+      debugPrint('[ExtPlayer] ASS 生成完成: ${ass.length} 字符');
+      debugPrint('[ExtPlayer] 会话弹幕 ${danmakuList.length} 条');
       final assPath = await _writeAssTempFile(ass, episodeId);
       final assBasename = assPath.split(Platform.pathSeparator).last;
       final luaPath = _writeDanmakuLuaScript(assBasename);
@@ -603,289 +562,15 @@ class ExternalPlayerService {
         luaPath: luaPath,
         opacity: assSettings.opacity,
         outlineWidth: _resolveAssOutlineWidth(assSettings),
-        danmakuItems: consoleItems,
+        danmakuList: danmakuList,
+        assSettings: assSettings,
+        allowStacking: vps.danmakuStacking,
       );
     } catch (e, st) {
       debugPrint('[ExtPlayer] _prepareDanmakuAss 异常: $e');
       debugPrintStack(stackTrace: st);
       return null;
     }
-  }
-
-  /// 用 DFM+ 内核布局层预算运动参数后烘焙 ASS.
-  ///
-  /// DFM+ 的 [rust_dfm.dfmPlusPrepareLayoutFull] 一次性算好全部条目的车道
-  /// (yPosition), 滚动速度(scrollSpeed), 宽度(width), 时长(durationSeconds),
-  /// 居中 x(centeredX), 已做碰撞避让与追赶规避. 本方法把这些参数适配为
-  /// [PreparedDanmakuItem] 交给 [convertDanmakuToAssFromPrepared] 烘焙,
-  /// ASS 渲染时即碰撞无关. 失败返回 null（调用方回退经典算法）.
-  static Future<DanmakuAssConversionResult?> _generateAssViaDfmLayout(
-    List<Map<String, dynamic>> list,
-    AssExportSettings settings,
-    VideoPlayerState vps,
-  ) async {
-    try {
-      final rawItems = <rust_dfm.DfmPlusRawDanmakuItem>[];
-      for (final raw in list) {
-        final text = (raw['content'] ?? raw['c'])?.toString() ?? '';
-        if (text.isEmpty) continue;
-        final time = _resolveDanmakuTime(raw);
-        final typeCode = _resolveDanmakuTypeCode(raw);
-        final colorArgb =
-            _toArgbSigned(parseDanmakuColorToInt(raw['color'] ?? raw['r']));
-        rawItems.add(rust_dfm.DfmPlusRawDanmakuItem(
-          timeSeconds: time,
-          text: text,
-          typeCode: typeCode,
-          colorArgb: colorArgb,
-          isMe: raw['isMe'] == true,
-        ));
-      }
-      if (rawItems.isEmpty) return null;
-
-      await ensureRustInitialized();
-      final mappedFont = resolveAssFontSize(settings.fontSize);
-      final prepared = await rust_dfm.dfmPlusPrepareLayoutFull(
-        rawItems: rawItems,
-        width: kAssPlayResX.toDouble(),
-        height: kAssPlayResY.toDouble(),
-        fontSize: mappedFont,
-        displayArea: settings.displayArea,
-        scrollDurationSeconds: settings.scrollDurationSeconds,
-        allowStacking: vps.danmakuStacking,
-        mergeDanmaku: settings.mergeDuplicates,
-        trackGapRatio: 0.15,
-        outlineWidth: settings.outlineWidth,
-        customFontBytes: null,
-        blockWords: const [],
-      );
-
-      final items = prepared.items
-          .map((pi) => PreparedDanmakuItem(
-                timeSeconds: pi.timeSeconds,
-                text: pi.text,
-                typeCode: pi.typeCode,
-                colorRgb: pi.colorArgb & 0xFFFFFF,
-                yPosition: pi.yPosition,
-                width: pi.width,
-                scrollSpeed: pi.scrollSpeed,
-                durationSeconds: pi.durationSeconds,
-                isScroll: pi.isScroll,
-                centeredX: pi.centeredX,
-                isFiltered: pi.isFiltered,
-              ))
-          .toList();
-      final kept = items.where((i) => !i.isFiltered).length;
-      debugPrint('[ExtPlayer] DFM+ 布局: 共 ${items.length} 条, 入 ASS $kept 条');
-
-      final conversion = convertDanmakuToAssFromPreparedWithEvents(
-        items,
-        playResX: kAssPlayResX,
-        playResY: kAssPlayResY,
-        settings: settings,
-      );
-      await rust_dfm.dfmPlusDropLayout(handle: prepared.handle);
-      return conversion;
-    } catch (e, st) {
-      debugPrint('[ExtPlayer] DFM+ 布局路径失败, 将回退经典算法: $e');
-      debugPrintStack(stackTrace: st);
-      return null;
-    }
-  }
-
-  static double _resolveDanmakuTime(Map<String, dynamic> item) {
-    final v = item['time'] ?? item['t'];
-    if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v) ?? 0.0;
-    return 0.0;
-  }
-
-  static int _resolveDanmakuTypeCode(Map<String, dynamic> item) {
-    final original = item['originalType'];
-    if (original is num) return original.toInt();
-    final v = item['type'] ?? item['y'];
-    if (v is num) return v.toInt();
-    switch (v?.toString().toLowerCase())
-    {
-    case 'top'    : return DanmakuMode.top.code;
-    case 'bottom' : return DanmakuMode.bottom.code;
-    default       : return DanmakuMode.scroll.code;
-    }
-  }
-
-  /// 0xRRGGBB → ARGB signed int (0xFFRRGGBB as i32), DFM+ 要求 colorArgb 为 i32.
-  static int _toArgbSigned(int rgb) {
-    return (0xFF000000 | (rgb & 0xFFFFFF)).toSigned(32);
-  }
-
-  /// 这个函数负责把两个信息来源合并起来:
-  ///
-  /// - ASS 事件: 决定哪些弹幕真正显示, 以及实际显示时间和样式
-  /// - 原始弹幕: 提供发送者身份和弹幕来源
-  ///
-  /// 从而让控制台展示的内容与外部播放器实际加载的 ASS 弹幕保持一致.
-  static List<ExternalPlayerDanmakuItem> _buildConsoleDanmakuItems(
-    List<AssDanmakuEvent> events,
-    List<Map<String, dynamic>> sourceItems,
-    double timeOffsetSeconds,
-  ) {
-    final sources = <_ExternalDanmakuSource>[];
-    final exactMatches = <String, ListQueue<int>>{};
-    final timeMatches = <String, List<int>>{};
-
-    for (final raw in sourceItems) {
-      final content = (raw['content'] ?? raw['c'])?.toString() ?? '';
-      if (content.isEmpty) continue;
-      final startMilliseconds =
-          ((_resolveDanmakuTime(raw) + timeOffsetSeconds) * 1000).floor();
-      if (startMilliseconds < 0) continue;
-      final source = _ExternalDanmakuSource(
-        raw: raw,
-        content: content,
-        startMilliseconds: startMilliseconds,
-        colorRgb: parseDanmakuColorToInt(raw['color'] ?? raw['r']),
-        type: _externalDanmakuTypeFromCode(_resolveDanmakuTypeCode(raw)),
-      );
-      final index = sources.length;
-      sources.add(source);
-      exactMatches
-          .putIfAbsent(source.exactKey, ListQueue<int>.new)
-          .add(index);
-      timeMatches.putIfAbsent(source.timeKey, () => <int>[]).add(index);
-    }
-
-    final usedSourceIndices = <int>{};
-    final result = <ExternalPlayerDanmakuItem>[];
-    for (var index = 0; index < events.length; index++) {
-      final event = events[index];
-      final eventType = _externalDanmakuTypeFromEvent(event.type);
-      final startMilliseconds = (event.startSeconds * 1000).floor();
-
-      _ExternalDanmakuSource? source;
-      for (final delta in const [0, -1, 1]) {
-        final exactKey = _ExternalDanmakuSource.buildExactKey(
-          startMilliseconds + delta,
-          event.colorRgb,
-          eventType,
-          event.content,
-        );
-        final exactQueue = exactMatches[exactKey];
-        while (exactQueue?.isNotEmpty == true) {
-          final sourceIndex = exactQueue!.removeFirst();
-          if (usedSourceIndices.add(sourceIndex)) {
-            source = sources[sourceIndex];
-            break;
-          }
-        }
-        if (source != null) break;
-      }
-      if (source == null) {
-        for (final delta in const [0, -1, 1]) {
-          final timeKey = _ExternalDanmakuSource.buildTimeKey(
-            startMilliseconds + delta,
-            event.colorRgb,
-            eventType,
-          );
-          for (final sourceIndex in timeMatches[timeKey] ?? const <int>[]) {
-            if (usedSourceIndices.contains(sourceIndex)) continue;
-            final candidate = sources[sourceIndex];
-            if (!_matchesMergedContent(event.content, candidate.content)) continue;
-            usedSourceIndices.add(sourceIndex);
-            source = candidate;
-            break;
-          }
-          if (source != null) break;
-        }
-      }
-
-      result.add(ExternalPlayerDanmakuItem(
-        id: 'danmaku-$index',
-        content: event.content,
-        startTime: _durationFromSeconds(event.startSeconds),
-        endTime: _durationFromSeconds(event.endSeconds),
-        colorRgb: event.colorRgb & 0xFFFFFF,
-        senderId: _resolveSenderId(source?.raw),
-        type: eventType,
-        source: _resolveSourceName(source?.raw),
-      ));
-    }
-    return List<ExternalPlayerDanmakuItem>.unmodifiable(result);
-  }
-
-  static ExternalPlayerDanmakuType _externalDanmakuTypeFromEvent(
-    DanmakuKind type,
-  ) {
-    switch (type) {
-      case DanmakuKind.scroll:
-        return ExternalPlayerDanmakuType.scroll;
-      case DanmakuKind.top:
-        return ExternalPlayerDanmakuType.top;
-      case DanmakuKind.bottom:
-        return ExternalPlayerDanmakuType.bottom;
-    }
-  }
-
-  static ExternalPlayerDanmakuType _externalDanmakuTypeFromCode(int typeCode) {
-    if (typeCode == 5) return ExternalPlayerDanmakuType.top;
-    if (typeCode == 4) return ExternalPlayerDanmakuType.bottom;
-    return ExternalPlayerDanmakuType.scroll;
-  }
-
-  static Duration _durationFromSeconds(double seconds) {
-    return Duration(microseconds: (seconds * Duration.microsecondsPerSecond).round());
-  }
-
-  static bool _matchesMergedContent(String eventContent, String sourceContent) {
-    if (eventContent == sourceContent) return true;
-    final prefix = '$sourceContent x';
-    if (!eventContent.startsWith(prefix)) return false;
-    return int.tryParse(eventContent.substring(prefix.length)) != null;
-  }
-
-  static String? _resolveSenderId(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    for (final key in const [
-      'senderId',
-      'sender',
-      'userId',
-      'userID',
-      'uid',
-      'midHash',
-      'userHash',
-      'hash',
-    ]) {
-      final value = _nonEmptyMetadata(raw[key]);
-      if (value != null) return value;
-    }
-    for (final identity in [raw['user'], raw['sender']]) {
-      if (identity is! Map) continue;
-      for (final key in const ['id', 'uid', 'hash']) {
-        final value = _nonEmptyMetadata(identity[key]);
-        if (value != null) return value;
-      }
-    }
-    final p = raw['p']?.toString().split(',');
-    if (p != null && p.length > 3) {
-      final value = _nonEmptyMetadata(p[3]);
-      if (value != null) return value;
-    }
-    return _nonEmptyMetadata(raw['cid']);
-  }
-
-  static String? _resolveSourceName(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    for (final key in const ['source', 'trackName', 'track']) {
-      final value = _nonEmptyMetadata(raw[key]);
-      if (value != null) return value;
-    }
-    return null;
-  }
-
-  static String? _nonEmptyMetadata(dynamic value) {
-    if (value == null || value is Map || value is Iterable) return null;
-    final text = value.toString().trim();
-    if (text.isEmpty || text == '0' || text.toLowerCase() == 'null') return null;
-    return text;
   }
 
   /// 从 [VideoPlayerState] 当前渲染设置构造 ASS 导出设置.
@@ -1042,7 +727,11 @@ local function reload_danmaku_track()
     end)
 end
 
-mp.register_script_message("nipaplay-danmaku-reload", function()
+mp.register_script_message("nipaplay-danmaku-reload", function(ass_path)
+    if ass_path and ass_path ~= "" then
+        local ass_name = string.match(ass_path, "([^/\\\\]+)\$")
+        if ass_name then TARGET = ass_name end
+    end
     if reload_timer then reload_timer:kill() end
     reload_timer = mp.add_timeout(0.05, reload_danmaku_track)
 end)
@@ -1092,62 +781,13 @@ end)
     }
   }
 
-  static String _createMpvIpcPath() {
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    return '${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'nipaplay_mpv_${pid}_$timestamp.sock';
-  }
-
   static Future<String?> _resolvePlayerPath(String path) async {
-    if (path.isEmpty) {
-      return null;
-    }
+    if (path.isEmpty) return null;
     if (Platform.isMacOS) {
       final resolved = await SecurityBookmarkService.resolveBookmark(path);
       return resolved ?? path;
     }
     return path;
   }
-}
 
-class _ExternalDanmakuSource {
-  const _ExternalDanmakuSource({
-    required this.raw,
-    required this.content,
-    required this.startMilliseconds,
-    required this.colorRgb,
-    required this.type,
-  });
-
-  final Map<String, dynamic> raw;
-  final String content;
-  final int startMilliseconds;
-  final int colorRgb;
-  final ExternalPlayerDanmakuType type;
-
-  String get exactKey => buildExactKey(
-    startMilliseconds,
-    colorRgb,
-    type,
-    content,
-  );
-
-  String get timeKey => buildTimeKey(startMilliseconds, colorRgb, type);
-
-  static String buildExactKey(
-    int startMilliseconds,
-    int colorRgb,
-    ExternalPlayerDanmakuType type,
-    String content,
-  ) {
-    return '${buildTimeKey(startMilliseconds, colorRgb, type)}\u0000$content';
-  }
-
-  static String buildTimeKey(
-    int startMilliseconds,
-    int colorRgb,
-    ExternalPlayerDanmakuType type,
-  ) {
-    return '$startMilliseconds\u0000${colorRgb & 0xFFFFFF}\u0000${type.name}';
-  }
 }

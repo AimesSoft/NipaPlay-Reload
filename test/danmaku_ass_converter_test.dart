@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/constants/danmaku/ass_kind.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
 void main() {
-  group('ASS conversion events', () {
-    test('match the classic ASS dialogue timing and style', () {
+  group('ASS conversion', () {
+    test('writes the classic ASS dialogue timing and style', () {
       const settings = AssExportSettings(
         fontSize: 24,
         scrollDurationSeconds: 8,
         timeOffsetSeconds: 1,
       );
-      final result = convertDanmakuToAssWithEvents([
+      final ass = convertDanmakuToAss([
         {
           'time': 1.0,
           'content': 'scroll',
@@ -25,17 +25,23 @@ void main() {
         },
       ], settings);
 
-      expect(result.events, hasLength(2));
-      expect(result.events[0].content, 'scroll');
-      expect(result.events[0].startSeconds, 2.0);
-      expect(result.events[0].endSeconds, 10.0);
-      expect(result.events[0].colorRgb, 0xFF0000);
-      expect(result.events[0].type, DanmakuKind.scroll);
-      expect(result.events[1].startSeconds, 3.0);
-      expect(result.events[1].endSeconds, 8.0);
-      expect(result.events[1].colorRgb, 0x00FF00);
-      expect(result.events[1].type, DanmakuKind.top);
-      expect(RegExp(r'^Dialogue:', multiLine: true).allMatches(result.ass), hasLength(2));
+      final dialogues = RegExp(r'^Dialogue:.*$', multiLine: true)
+          .allMatches(ass)
+          .map((match) => match.group(0)!)
+          .toList();
+      expect(dialogues, hasLength(2));
+      expect(
+        dialogues[0],
+        startsWith('Dialogue: 0,0:00:02.00,0:00:10.00,Danmaku,'),
+      );
+      expect(dialogues[0], contains(r'\c&H0000FF&'));
+      expect(dialogues[0], endsWith('scroll'));
+      expect(
+        dialogues[1],
+        startsWith('Dialogue: 1,0:00:03.00,0:00:08.00,DanmakuTop,'),
+      );
+      expect(dialogues[1], contains(r'\c&H00FF00&'));
+      expect(dialogues[1], endsWith('top'));
     });
 
     test('exclude merged and lane-filtered comments', () {
@@ -44,23 +50,48 @@ void main() {
         displayArea: 0.1,
         mergeDuplicates: true,
       );
-      final result = convertDanmakuToAssWithEvents([
+      final ass = convertDanmakuToAss([
         {'time': 1.0, 'content': 'same', 'type': 'scroll'},
         {'time': 1.5, 'content': 'same', 'type': 'scroll'},
         {'time': 1.0, 'content': 'another', 'type': 'scroll'},
       ], settings);
 
-      expect(result.events, hasLength(1));
-      expect(result.events.single.content, 'same');
-      expect(RegExp(r'^Dialogue:', multiLine: true).allMatches(result.ass), hasLength(1));
+      final dialogues = RegExp(r'^Dialogue:.*$', multiLine: true)
+          .allMatches(ass)
+          .map((match) => match.group(0)!)
+          .toList();
+      expect(dialogues, hasLength(1));
+      expect(dialogues.single, endsWith('same'));
+      expect(ass, isNot(contains('another')));
     });
 
-    test('match prepared ASS events and skip filtered entries', () {
+    test('skips invisible typed danmaku at ASS rendering time', () {
+      const settings = AssExportSettings(fontSize: 24);
+      final hidden = DanmakuItem(
+        time: const Duration(seconds: 1),
+        content: 'blocked by keyword',
+        visible: false,
+      );
+      final visible = DanmakuItem(
+        time: const Duration(seconds: 2),
+        content: 'kept comment',
+      );
+
+      final ass = convertDanmakuItemsToAss([hidden, visible], settings);
+
+      expect(ass, isNot(contains('blocked by keyword')));
+      expect(ass, contains('kept comment'));
+      expect(hidden.toMap()['visible'], isFalse);
+      expect(DanmakuItem.fromMap(hidden.toMap()).visible, isFalse);
+      expect(hidden.copyWith(visible: true).visible, isTrue);
+    });
+
+    test('writes prepared ASS and skips filtered entries', () {
       const settings = AssExportSettings(
         fontSize: 24,
         timeOffsetSeconds: 0.5,
       );
-      final result = convertDanmakuToAssFromPreparedWithEvents([
+      final ass = convertDanmakuToAssFromPrepared([
         const PreparedDanmakuItem(
           timeSeconds: 1,
           text: 'visible',
@@ -88,11 +119,18 @@ void main() {
         ),
       ], playResX: 1920, playResY: 1080, settings: settings);
 
-      expect(result.events, hasLength(1));
-      expect(result.events.single.content, 'visible');
-      expect(result.events.single.startSeconds, 1.5);
-      expect(result.events.single.endSeconds, 8.5);
-      expect(result.events.single.colorRgb, 0x123456);
+      final dialogues = RegExp(r'^Dialogue:.*$', multiLine: true)
+          .allMatches(ass)
+          .map((match) => match.group(0)!)
+          .toList();
+      expect(dialogues, hasLength(1));
+      expect(
+        dialogues.single,
+        startsWith('Dialogue: 0,0:00:01.50,0:00:08.50,Danmaku,'),
+      );
+      expect(dialogues.single, contains(r'\c&H563412&'));
+      expect(dialogues.single, endsWith('visible'));
+      expect(ass, isNot(contains('filtered')));
     });
   });
 }

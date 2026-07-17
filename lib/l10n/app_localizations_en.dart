@@ -72,6 +72,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reading playback progress…';
 
   @override
+  String get externalPlayerConsoleTimestampLabel => 'Exact timestamp';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => 'HH:MM:SS / MM:SS / seconds';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => 'Enter a valid timestamp';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => 'Jump';
+
+  @override
   String get externalPlayerConsoleDanmakuList => 'Danmaku list';
 
   @override
@@ -108,6 +120,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get externalPlayerConsoleDanmakuFollowDisabled => 'Auto-follow paused';
 
   @override
+  String get externalPlayerConsoleDanmakuKeywordFilter => 'Danmaku block rules';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint => 'Enter rule content';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => 'Add';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => 'Blocked by keyword';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeKeyword => 'Keyword';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeRegex => 'Regular expression';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeSender => 'Sender ID';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockInvalid =>
+      'Enter a valid, non-duplicate rule';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockRemove => 'Remove rule';
+
+  @override
+  String get externalPlayerConsoleDanmakuShow => 'Show danmaku';
+
+  @override
+  String get externalPlayerConsoleDanmakuHide => 'Hide danmaku';
+
+  @override
   String get danmakuOpacityTitle => 'Danmaku opacity';
 
   @override
@@ -120,6 +166,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get danmakuOutlineEnabledSubtitle =>
       'Show an outline around danmaku text. Newly opened videos will use this setting.';
+
+  @override
+  String get danmakuOutlineWidthTitle => 'Danmaku outline thickness';
 
   @override
   String get externalPlayerConsoleResume => 'Resume';

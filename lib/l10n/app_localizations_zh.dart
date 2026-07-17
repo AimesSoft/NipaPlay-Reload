@@ -70,6 +70,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleProgressLoading => '正在获取播放进度…';
 
   @override
+  String get externalPlayerConsoleTimestampLabel => '精确时间戳';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => '时:分:秒 / 分:秒 / 秒数';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => '请输入有效的时间戳';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => '精确跳转';
+
+  @override
   String get externalPlayerConsoleDanmakuList => '弹幕列表';
 
   @override
@@ -105,6 +117,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暂停自动跟随';
 
   @override
+  String get externalPlayerConsoleDanmakuKeywordFilter => '弹幕屏蔽规则';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint => '输入规则内容';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => '添加';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => '已被关键词屏蔽';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeKeyword => '关键词';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeRegex => '正则表达式';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeSender => '发送者 ID';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockInvalid => '请输入有效且未重复的规则';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockRemove => '删除规则';
+
+  @override
+  String get externalPlayerConsoleDanmakuShow => '显示弹幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuHide => '隐藏弹幕';
+
+  @override
   String get danmakuOpacityTitle => '弹幕不透明度';
 
   @override
@@ -115,6 +160,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get danmakuOutlineEnabledSubtitle => '控制是否显示弹幕文字描边，新打开的视频将应用此设置。';
+
+  @override
+  String get danmakuOutlineWidthTitle => '弹幕描边粗细';
 
   @override
   String get externalPlayerConsoleResume => '继续播放';
@@ -1916,6 +1964,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleProgressLoading => '正在取得播放進度…';
 
   @override
+  String get externalPlayerConsoleTimestampLabel => '精確時間戳';
+
+  @override
+  String get externalPlayerConsoleTimestampHint => '時:分:秒 / 分:秒 / 秒數';
+
+  @override
+  String get externalPlayerConsoleTimestampInvalid => '請輸入有效的時間戳';
+
+  @override
+  String get externalPlayerConsoleTimestampSeek => '精確跳轉';
+
+  @override
   String get externalPlayerConsoleDanmakuList => '彈幕列表';
 
   @override
@@ -1951,6 +2011,39 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暫停自動跟隨';
 
   @override
+  String get externalPlayerConsoleDanmakuKeywordFilter => '彈幕封鎖規則';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordHint => '輸入規則內容';
+
+  @override
+  String get externalPlayerConsoleDanmakuKeywordAdd => '新增';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlocked => '已被關鍵詞封鎖';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeKeyword => '關鍵詞';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeRegex => '正則表達式';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeSender => '發送者 ID';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockInvalid => '請輸入有效且未重複的規則';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockRemove => '刪除規則';
+
+  @override
+  String get externalPlayerConsoleDanmakuShow => '顯示彈幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuHide => '隱藏彈幕';
+
+  @override
   String get danmakuOpacityTitle => '彈幕不透明度';
 
   @override
@@ -1961,6 +2054,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get danmakuOutlineEnabledSubtitle => '控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。';
+
+  @override
+  String get danmakuOutlineWidthTitle => '彈幕描邊粗細';
 
   @override
   String get externalPlayerConsoleResume => '繼續播放';
