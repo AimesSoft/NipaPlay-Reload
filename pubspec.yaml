@@ -86,7 +86,7 @@ dependencies:
       url: https://github.com/AimesSoft/Erika.git
       # Keep Nipa reproducible while Erika Android support is under review.
       # Move this back to main after AimesSoft/Erika#42 is merged.
-      ref: 25cfde9d940dc6cd8dbfff21cf1366c53fdecac8
+      ref: be8192d223f32a1bec512b935446999d3694ddff
       path: packages/erika_flutter
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0
