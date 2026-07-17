@@ -12,6 +12,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import android.content.ContentResolver
+import android.content.ClipData
 import android.content.Context
 import android.database.Cursor
 import android.provider.DocumentsContract
@@ -266,9 +267,19 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_SELECTOR_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "pickFilePathOnly" -> {
+                    if (filePickerResult != null) {
+                        result.error(
+                            "FILE_PICKER_BUSY",
+                            "Another file picker request is already active",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+
                     val params = call.arguments as? Map<*, *>
                     var fileType = "video/*"
                     var mimeTypes = mutableListOf<String>()
+                    val preserveContentUri = params?.get("preserveContentUri") as? Boolean ?: false
                     if (params != null) {
                         fileType = params["type"] as? String ?: "video/*"
                         params["extra_mime_types"]?.let { types ->
@@ -286,6 +297,10 @@ class MainActivity: FlutterActivity() {
                         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                             type = fileType
                             addCategory(Intent.CATEGORY_OPENABLE)
+                            addFlags(
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                            )
                             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
                         }
                         if(mimeTypes.isNotEmpty()) {
@@ -295,12 +310,15 @@ class MainActivity: FlutterActivity() {
                             )
                         }
                         
-                        // 启动文件选择器活动
-                        startActivityForResult(intent, FILE_PICKER_REQUEST_CODE)
-                        
                         // 保存结果回调
                         filePickerResult = result
+                        filePickerPreserveContentUri = preserveContentUri
+
+                        // 启动文件选择器活动
+                        startActivityForResult(intent, FILE_PICKER_REQUEST_CODE)
                     } catch (e: Exception) {
+                        filePickerResult = null
+                        filePickerPreserveContentUri = false
                         Log.e("MainActivity", "Error launching file picker", e)
                         result.error("FILE_PICKER_ERROR", e.message, null)
                     }
@@ -351,18 +369,33 @@ class MainActivity: FlutterActivity() {
 
                     var resolvedMimeType = explicitMimeType ?: "text/plain"
                     if (!filePath.isNullOrEmpty()) {
-                        val file = File(filePath)
-                        if (file.exists()) {
-                            val uri = FileProvider.getUriForFile(
-                                this@MainActivity,
-                                "${this@MainActivity.packageName}.fileprovider",
-                                file
-                            )
-                            intent.putExtra(Intent.EXTRA_STREAM, uri)
+                        val parsedUri = Uri.parse(filePath)
+                        if (ContentResolver.SCHEME_CONTENT == parsedUri.scheme) {
+                            intent.putExtra(Intent.EXTRA_STREAM, parsedUri)
+                            intent.clipData = ClipData.newRawUri("shared media", parsedUri)
                             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
                             if (explicitMimeType == null) {
-                                resolvedMimeType = guessMimeTypeFromPath(filePath) ?: "application/octet-stream"
+                                resolvedMimeType = contentResolver.getType(parsedUri)
+                                    ?: guessMimeTypeFromPath(filePath)
+                                    ?: "application/octet-stream"
+                            }
+                        } else {
+                            val file = File(filePath)
+                            if (file.exists()) {
+                                val uri = FileProvider.getUriForFile(
+                                    this@MainActivity,
+                                    "${this@MainActivity.packageName}.fileprovider",
+                                    file
+                                )
+                                intent.putExtra(Intent.EXTRA_STREAM, uri)
+                                intent.clipData = ClipData.newRawUri("shared media", uri)
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                                if (explicitMimeType == null) {
+                                    resolvedMimeType = guessMimeTypeFromPath(filePath)
+                                        ?: "application/octet-stream"
+                                }
                             }
                         }
                     }
@@ -439,6 +472,7 @@ class MainActivity: FlutterActivity() {
     private val FILE_PICKER_REQUEST_CODE = 9421
     private val SAF_DIRECTORY_PICKER_REQUEST_CODE = 9422
     private var filePickerResult: MethodChannel.Result? = null
+    private var filePickerPreserveContentUri = false
     private var safDirectoryPickerResult: MethodChannel.Result? = null
     
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -471,22 +505,45 @@ class MainActivity: FlutterActivity() {
         }
 
         if (requestCode == FILE_PICKER_REQUEST_CODE && filePickerResult != null) {
+            val pendingResult = filePickerResult
+            val preserveContentUri = filePickerPreserveContentUri
+            filePickerResult = null
+            filePickerPreserveContentUri = false
+
             if (resultCode == RESULT_OK && data != null && data.data != null) {
-                // 获取文件的真实路径
-                val filePath = getPathFromUri(this, data.data!!)
+                val uri = data.data!!
+                if (preserveContentUri && ContentResolver.SCHEME_CONTENT == uri.scheme) {
+                    // Preserve video SAF sources so native backends can open
+                    // the ContentResolver descriptor without copying media.
+                    if (!persistReadPermissionIfAvailable(uri, data.flags)) {
+                        Log.w(
+                            "MainActivity",
+                            "Selected media URI has only an ephemeral read grant; " +
+                                "reopening it from history after process restart may fail: $uri"
+                        )
+                    }
+                    pendingResult?.success(uri.toString())
+                    return
+                }
+                val filePath = if (ContentResolver.SCHEME_CONTENT == uri.scheme) {
+                    // Subtitle consumers still require an app-owned File path.
+                    // A persisted SAF grant does not make provider _data paths
+                    // readable under scoped storage, so copy these small files.
+                    saveContentToCache(this, uri)
+                } else {
+                    getPathFromUri(this, uri)
+                }
                 if (filePath != null) {
                     // 返回文件路径给Flutter
-                    filePickerResult?.success(filePath)
+                    pendingResult?.success(filePath)
                 } else {
                     // 如果无法获取路径，返回错误
-                    filePickerResult?.error("PATH_RESOLUTION_FAILED", "Failed to resolve file path", null)
+                    pendingResult?.error("PATH_RESOLUTION_FAILED", "Failed to resolve file path", null)
                 }
             } else {
                 // 用户取消选择
-                filePickerResult?.success(null)
+                pendingResult?.success(null)
             }
-            // 清除回调引用
-            filePickerResult = null
         }
     }
     
@@ -505,6 +562,20 @@ class MainActivity: FlutterActivity() {
             return null
         }
 
+        if (ContentResolver.SCHEME_CONTENT == uri.scheme) {
+            if (!persistReadPermissionIfAvailable(uri, intent.flags)) {
+                Log.w(
+                    "MainActivity",
+                    "File association URI has only an ephemeral read grant; " +
+                        "reopening it from history after process restart may fail: $uri"
+                )
+            }
+            val mediaSource = uri.toString()
+            Log.d("MainActivity", "File association: $mediaSource")
+            lastDeliveredOpenUri = mediaSource
+            return mediaSource
+        }
+
         val filePath = getPathFromUri(this@MainActivity, uri)
         if (filePath != null) {
             Log.d("MainActivity", "File association: $filePath")
@@ -514,6 +585,25 @@ class MainActivity: FlutterActivity() {
 
         Log.e("MainActivity", "Failed to resolve file path from URI: $uri")
         return null
+    }
+
+    private fun persistReadPermissionIfAvailable(uri: Uri, flags: Int): Boolean {
+        val hasReadGrant = flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+        val isPersistable = flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
+        if (!hasReadGrant || !isPersistable) {
+            return false
+        }
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+            Log.d("MainActivity", "Persisted read permission for $uri")
+            return true
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Unable to persist read permission for $uri", e)
+            return false
+        }
     }
 
     private fun canAccessSafTree(treeUriString: String): Boolean {
@@ -683,7 +773,10 @@ class MainActivity: FlutterActivity() {
                     val type = split[0]
                     
                     if ("primary".equals(type, ignoreCase = true)) {
-                        return "${Environment.getExternalStorageDirectory()}/${split[1]}"
+                        val path = "${Environment.getExternalStorageDirectory()}/${split[1]}"
+                        if (File(path).exists()) {
+                            return path
+                        }
                     }
                     
                     // 处理SD卡和其他外部存储
@@ -692,7 +785,10 @@ class MainActivity: FlutterActivity() {
                     if (firstExternalDir != null) {
                         val storagePath = firstExternalDir.absolutePath
                         val storageId = storagePath.substringBefore("/Android")
-                        return "$storageId/${split[1]}"
+                        val path = "$storageId/${split[1]}"
+                        if (File(path).exists()) {
+                            return path
+                        }
                     }
                 }
             }
@@ -706,13 +802,17 @@ class MainActivity: FlutterActivity() {
                     
                     val contentUri = when (mediaType.lowercase()) {
                         "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                        else -> return null
+                        else -> null
                     }
-                    
-                    val selection = "_id=?"
-                    val selectionArgs = arrayOf(mediaId)
-                    
-                    return getDataColumn(context, contentUri, selection, selectionArgs)
+
+                    if (contentUri != null) {
+                        val selection = "_id=?"
+                        val selectionArgs = arrayOf(mediaId)
+                        val path = getDataColumn(context, contentUri, selection, selectionArgs)
+                        if (path != null) {
+                            return path
+                        }
+                    }
                 }
             }
             
@@ -722,7 +822,15 @@ class MainActivity: FlutterActivity() {
                 val contentUri = ContentResolver.SCHEME_CONTENT + "://downloads/public_downloads"
                 val contentUriParsed = Uri.parse(contentUri)
                 
-                return getDataColumn(context, contentUriParsed, "_id=?", arrayOf(documentId))
+                val path = getDataColumn(
+                    context,
+                    contentUriParsed,
+                    "_id=?",
+                    arrayOf(documentId)
+                )
+                if (path != null) {
+                    return path
+                }
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error resolving document URI", e)
@@ -734,6 +842,7 @@ class MainActivity: FlutterActivity() {
     
     // 保存内容URI指向的文件到缓存目录并返回路径
     private fun saveContentToCache(context: Context, uri: Uri): String? {
+        var outputFile: File? = null
         try {
             // 获取文件名
             var fileName: String? = null
@@ -746,28 +855,40 @@ class MainActivity: FlutterActivity() {
                 }
             }
             
-            if (fileName == null) {
-                fileName = "video_${System.currentTimeMillis()}.mp4"
-            }
-            
-            // 创建缓存文件
+            val extension = fileName
+                ?.substringAfterLast('.', "")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { ".$it" }
+                ?: ".tmp"
+
+            // 创建唯一缓存文件，避免失败重试误用上一次选择的旧内容。
             val cacheDir = context.externalCacheDir ?: context.cacheDir
-            val outputFile = File(cacheDir, fileName)
+            val cacheFile = File.createTempFile("nipaplay_picker_", extension, cacheDir)
+            outputFile = cacheFile
             
             // 复制内容到缓存文件但不将整个文件加载到内存
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                outputFile.outputStream().use { output ->
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Cannot open selected content: $uri")
+            input.use { source ->
+                cacheFile.outputStream().use { output ->
                     val buffer = ByteArray(8 * 1024) // 8KB缓冲区
                     var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                    while (source.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
                     }
                     output.flush()
                 }
             }
-            
-            return outputFile.absolutePath
+
+            if (!cacheFile.exists() || cacheFile.length() <= 0L) {
+                cacheFile.delete()
+                Log.e("MainActivity", "Selected content was empty: $uri")
+                return null
+            }
+
+            return cacheFile.absolutePath
         } catch (e: Exception) {
+            outputFile?.delete()
             Log.e("MainActivity", "Error saving content to cache", e)
             return null
         }

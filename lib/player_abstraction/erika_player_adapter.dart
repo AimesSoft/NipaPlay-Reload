@@ -424,8 +424,13 @@ class _NipaplayErikaWindowOverlayVideoViewState
   }
 }
 
-class ErikaPlayerAdapter implements AbstractPlayer {
-  ErikaPlayerAdapter() {
+class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
+  ErikaPlayerAdapter({
+    PlayerErikaAndroidOutputMode androidOutputMode =
+        PlayerErikaAndroidOutputMode.sdr,
+  }) : _player = ErikaPlayer(
+          outputMode: _resolveNativeOutputMode(androidOutputMode),
+        ) {
     if (_isSupported) {
       _eventSubscription = _player.events.listen(
         _handleEvent,
@@ -436,7 +441,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
   }
 
-  final ErikaPlayer _player = ErikaPlayer();
+  final ErikaPlayer _player;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: const <String>[],
@@ -447,6 +452,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   final Map<String, String> _properties = <String, String>{};
 
   StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
+  Future<void>? _disposeFuture;
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   String _media = '';
@@ -454,6 +460,10 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   double _playbackRate = 1.0;
   PlayerUpscalerStatus _lastUpscalerStatus = const PlayerUpscalerStatus.off();
   Map<String, dynamic> _lastPresenterStats = const <String, dynamic>{};
+  Map<String, dynamic> _lastOutputStatus = const <String, dynamic>{};
+  Map<String, dynamic> _lastDecoderStatus = const <String, dynamic>{};
+  Map<String, dynamic> _lastAudioOutputStatus = const <String, dynamic>{};
+  String? _lastNativeError;
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
   int? _pendingSeekTargetMs;
@@ -484,15 +494,30 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     'NIPAPLAY_ERIKA_SUBTITLE_TRACE',
   );
 
+  static ErikaOutputMode? _resolveNativeOutputMode(
+    PlayerErikaAndroidOutputMode mode,
+  ) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return null;
+    }
+    return switch (mode) {
+      PlayerErikaAndroidOutputMode.sdr => ErikaOutputMode.sdr,
+      PlayerErikaAndroidOutputMode.extendedLinearHdr =>
+        ErikaOutputMode.extendedLinear,
+    };
+  }
+
   static bool get _isSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.windows);
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.android);
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
-  bool get usesWindowOverlayVideoSurface => _isSupported;
+  bool get usesWindowOverlayVideoSurface =>
+      _isSupported && defaultTargetPlatform != TargetPlatform.android;
 
   @override
   double get volume => _volume;
@@ -523,17 +548,30 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
     switch (value) {
       case PlayerPlaybackState.playing:
-        unawaited(playDirectly());
+        _dispatchStateCommand('play', playDirectly);
         break;
       case PlayerPlaybackState.paused:
-        unawaited(pauseDirectly());
+        _dispatchStateCommand('pause', pauseDirectly);
         break;
       case PlayerPlaybackState.stopped:
         _state = PlayerPlaybackState.stopped;
         _lastPositionMs = 0;
-        unawaited(_player.stop());
+        _dispatchStateCommand('stop', _player.stop);
         break;
     }
+  }
+
+  void _dispatchStateCommand(
+    String operation,
+    Future<void> Function() command,
+  ) {
+    unawaited(
+      command().catchError((Object error, StackTrace stackTrace) {
+        final message = '$operation failed: $error';
+        _lastNativeError = message;
+        debugPrint('[Erika] $message');
+      }),
+    );
   }
 
   @override
@@ -641,6 +679,11 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
       _mediaInfo = PlayerMediaInfo(duration: 0);
+      _lastPresenterStats = const <String, dynamic>{};
+      _lastOutputStatus = const <String, dynamic>{};
+      _lastDecoderStatus = const <String, dynamic>{};
+      _lastAudioOutputStatus = const <String, dynamic>{};
+      _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
       _externalSubtitleGeneration++;
     }
@@ -670,8 +713,18 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
   @override
   void dispose() {
-    if (_disposed) {
-      return;
+    unawaited(
+      disposeAsync().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Erika: asynchronous dispose failed: $error');
+      }),
+    );
+  }
+
+  @override
+  Future<void> disposeAsync() {
+    final existing = _disposeFuture;
+    if (existing != null) {
+      return existing;
     }
     _disposed = true;
     _danmakuConfigTimer?.cancel();
@@ -683,10 +736,20 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
     _pendingDanmakuConfigCompleters.clear();
     _pendingDanmakuConfig = null;
-    unawaited(_eventSubscription?.cancel());
+    final eventSubscription = _eventSubscription;
     _eventSubscription = null;
-    unawaited(_player.dispose());
     _textureIdNotifier.dispose();
+    return _disposeFuture = _finishDispose(eventSubscription);
+  }
+
+  Future<void> _finishDispose(
+    StreamSubscription<ErikaPlayerEvent>? eventSubscription,
+  ) async {
+    try {
+      await eventSubscription?.cancel();
+    } finally {
+      await _player.dispose();
+    }
   }
 
   @override
@@ -784,9 +847,21 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   @override
   Future<void> pauseDirectly() async {
     _ensureSupported();
+    if (_state != PlayerPlaybackState.playing) {
+      return;
+    }
     await _player.ensureCreated();
     _lastPositionMs = position;
-    await _player.pause();
+    try {
+      await _player.pause();
+    } catch (error) {
+      if (_state == PlayerPlaybackState.stopped) {
+        debugPrint(
+            '[Erika] pause ignored after native playback stopped: $error');
+        return;
+      }
+      rethrow;
+    }
     _state = PlayerPlaybackState.paused;
     _lastPositionUpdate = DateTime.now();
   }
@@ -945,6 +1020,13 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return ErikaVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onPlatformViewIdChanged: onPlatformViewIdChanged,
+      );
+    }
     return _NipaplayErikaWindowOverlayVideoView(
       player: _player,
       debugLabel: debugLabel,
@@ -1141,6 +1223,10 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       'duration': _mediaInfo.duration,
       'upscaler': _lastUpscalerStatus.toMap(),
       'presenterStats': _lastPresenterStats,
+      'outputStatus': _lastOutputStatus,
+      'decoder': _lastDecoderStatus,
+      'audioOutput': _lastAudioOutputStatus,
+      if (_lastNativeError != null) 'lastError': _lastNativeError,
       'tracks': <String, dynamic>{
         'video': _videoTrackInfos.map(_erikaTrackToDebugMap).toList(),
         'audio': _audioTrackInfos.map(_erikaTrackToDebugMap).toList(),
@@ -1171,6 +1257,30 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     } catch (error) {
       debugPrint('Erika: get presenter stats failed: $error');
     }
+    try {
+      final output = await _player.getOutputStatus();
+      _lastOutputStatus = _outputStatusToMap(output);
+    } catch (error) {
+      debugPrint('Erika: get output status failed: $error');
+    }
+  }
+
+  static Map<String, dynamic> _outputStatusToMap(ErikaOutputStatus status) {
+    return <String, dynamic>{
+      'requestedMode': status.requestedMode.name,
+      'activeEncoding': status.activeEncoding.name,
+      'surfaceFormat': status.surfaceFormat.name,
+      'nativeDataSpace': status.nativeDataSpace,
+      'requestedHeadroom': status.requestedHeadroom,
+      'activeHeadroom': status.activeHeadroom,
+      'activeHeadroomKnown': status.activeHeadroomKnown,
+      'extendedLinearActive': status.extendedLinearActive,
+      'fallbackReason': status.fallbackReason.label,
+      'fallbackCount': status.fallbackCount,
+      'dataSpaceFailures': status.dataSpaceFailures,
+      'headroomUpdates': status.headroomUpdates,
+      'extendedLinearFrames': status.extendedLinearFrames,
+    };
   }
 
   ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
@@ -1224,6 +1334,63 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   }
 
   void _handleEvent(ErikaPlayerEvent event) {
+    if (_disposed) {
+      return;
+    }
+    if (event.kind == ErikaEventKind.error) {
+      final errorMessage = _formatPlaybackError(event);
+      _lastNativeError = errorMessage;
+      _mediaInfo = _mediaInfo.copyWith(specificErrorMessage: errorMessage);
+      debugPrint(
+        '[Erika] playback error '
+        'player=${event.playerId} state=${event.state.name} '
+        'status=${event.status} error=${event.error ?? '-'} '
+        'message=${event.message ?? '-'}',
+      );
+    }
+
+    final decoder = event.decoder;
+    if (event.kind == ErikaEventKind.videoDecoderChanged && decoder != null) {
+      _lastDecoderStatus = <String, dynamic>{
+        'stage': decoder.stage,
+        'requestedBackend': decoder.requestedBackend,
+        'previousBackend': decoder.previousBackend,
+        'activeBackend': decoder.activeBackend,
+        'fallbackCount': decoder.fallbackCount,
+        'codec': decoder.codec,
+        'pixelFormat': decoder.pixelFormat,
+        'lineSizes': decoder.lineSizes,
+        'reason': decoder.reason,
+      };
+      debugPrint(
+        '[Erika] video decoder changed '
+        'stage=${decoder.stage} requested=${decoder.requestedBackend} '
+        'previous=${decoder.previousBackend ?? '-'} '
+        'active=${decoder.activeBackend} fallbacks=${decoder.fallbackCount} '
+        'codec=${decoder.codec ?? '-'} format=${decoder.pixelFormat ?? '-'} '
+        'reason=${decoder.reason ?? '-'}',
+      );
+    }
+
+    final audio = event.audio;
+    if (event.kind == ErikaEventKind.audioOutputChanged && audio != null) {
+      _lastAudioOutputStatus = <String, dynamic>{
+        'recoveryState': audio.recoveryState,
+        'lastErrorCode': audio.lastErrorCode,
+        'recoveryAttempts': audio.recoveryAttempts,
+        'recoveryCount': audio.recoveryCount,
+        'recoveryFailures': audio.recoveryFailures,
+        'transitionSequence': audio.transitionSequence,
+      };
+      debugPrint(
+        '[Erika] audio output changed '
+        'state=${audio.recoveryState} errorCode=${audio.lastErrorCode} '
+        'attempts=${audio.recoveryAttempts} recoveries=${audio.recoveryCount} '
+        'failures=${audio.recoveryFailures} '
+        'sequence=${audio.transitionSequence}',
+      );
+    }
+
     if (event.kind == ErikaEventKind.stateChanged ||
         event.kind == ErikaEventKind.error) {
       switch (event.state) {
@@ -1372,6 +1539,19 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     _mediaInfo = updatedInfo;
   }
 
+  static String _formatPlaybackError(ErikaPlayerEvent event) {
+    final error = event.error?.trim();
+    final message = event.message?.trim();
+    final details = <String>[
+      if (error != null && error.isNotEmpty) error,
+      if (message != null && message.isNotEmpty && message != error) message,
+      if (event.status != 0) 'status=${event.status}',
+    ];
+    return details.isEmpty
+        ? 'Erika 播放失败（未返回详细原因）'
+        : 'Erika 播放失败：${details.join('；')}';
+  }
+
   static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
     final parts = <String>[
       if (track.codec != null) 'codec: ${track.codec}',
@@ -1434,7 +1614,8 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-          'Erika is currently only wired on macOS/iOS/Windows.');
+        'Erika is currently only wired on Android/iOS/macOS/Windows.',
+      );
     }
   }
 }

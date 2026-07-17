@@ -69,6 +69,8 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+        with:
+          java-version: '17'
 
       - name: Generate build info json
         shell: bash

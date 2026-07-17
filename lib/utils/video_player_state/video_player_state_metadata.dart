@@ -544,6 +544,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
     }
     if (filePath.startsWith('http://') ||
         filePath.startsWith('https://') ||
+        MediaSourceUtils.isContentUri(filePath) ||
         filePath.startsWith('jellyfin://') ||
         filePath.startsWith('emby://')) {
       return md5.convert(utf8.encode(filePath)).toString();

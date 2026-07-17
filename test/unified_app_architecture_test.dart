@@ -51,6 +51,8 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+String _portablePath(String path) => path.replaceAll('\\', '/');
+
 void main() {
   group('unified application pages', () {
     testWidgets('application chrome inherits the selected display surface',
@@ -529,7 +531,7 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'))
         .where(
-          (file) => !file.path.endsWith(
+          (file) => !_portablePath(file.path).endsWith(
             'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
           ),
         );
@@ -1206,7 +1208,8 @@ void main() {
 
   testWidgets('phone library management renders one item model in both views',
       (tester) async {
-    SharedPreferences.setMockInitialValues(const {});
+    final appearanceSettings = AppearanceSettingsProvider();
+    addTearDown(appearanceSettings.dispose);
     const items = <UnifiedLibraryManagementItem>[
       UnifiedLibraryManagementItem(
         id: 'library-a',
@@ -1246,7 +1249,9 @@ void main() {
 
   testWidgets('desktop library management honors the shared view mode',
       (tester) async {
-    SharedPreferences.setMockInitialValues(const {});
+    final appearanceSettings = AppearanceSettingsProvider();
+    addTearDown(appearanceSettings.dispose);
+
     Future<void> pump(LibraryManagementViewMode viewMode) {
       return tester.pumpWidget(
         ChangeNotifierProvider(

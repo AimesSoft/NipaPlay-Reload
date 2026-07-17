@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../services/remote_subtitle_service.dart';
+import 'media_source_utils.dart';
 
 /// 外部音频轨道管理器
 /// 负责自动检测同名MKA文件并加载为外部音频轨道
@@ -37,6 +38,7 @@ class AudioTrackManager {
   /// 支持本地文件和共享远程媒体库
   Future<String?> detectExternalAudioPath(String videoPath) async {
     if (kIsWeb) return null;
+    if (MediaSourceUtils.isContentUri(videoPath)) return null;
     if (kDebugMode) debugPrint('[MKA_DEBUG] detectExternalAudioPath: videoPath=$videoPath');
 
     // 检查是否来自共享远程媒体库

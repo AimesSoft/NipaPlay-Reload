@@ -11,6 +11,11 @@ class MediaSourceUtils {
     _remoteWebDavConnections = List<WebDAVConnection>.unmodifiable(connections);
   }
 
+  static bool isContentUri(String value) {
+    final uri = Uri.tryParse(value.trim());
+    return uri != null && uri.scheme.toLowerCase() == 'content';
+  }
+
   static bool isSmbPath(String filePath) {
     if (filePath.isEmpty) return false;
     final lower = filePath.toLowerCase();
