@@ -101,6 +101,7 @@ import 'utils/linux_system_font_loader.dart';
 import 'utils/app_theme.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
+import 'package:nipaplay/src/rust/rust_init.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
 
@@ -159,6 +160,13 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb) {
+    try {
+      await ensureRustInitialized();
+    } catch (error) {
+      debugPrint('Rust 核心初始化失败，将使用 Dart/C++ fallback: $error');
+    }
+  }
   _installFrameTimingTrace();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();

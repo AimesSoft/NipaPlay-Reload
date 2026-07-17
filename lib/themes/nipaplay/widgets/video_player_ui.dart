@@ -13,6 +13,7 @@ import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/macos_native_video_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
@@ -834,6 +835,22 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     }
   }
 
+  Future<void> _showAnimeDetail(VideoPlayerState videoState) async {
+    final detailContext = videoState.animeDetailContext;
+    if (detailContext == null) return;
+
+    try {
+      await ThemedAnimeDetail.show(
+        context,
+        detailContext.animeId ?? 0,
+        playbackDetailContext: detailContext,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '打开番剧详情失败: $e');
+    }
+  }
+
   List<ContextMenuAction> _buildContextMenuActions(
     VideoPlayerState videoState,
   ) {
@@ -850,6 +867,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         enabled: videoState.canPlayNextEpisode,
         onPressed: () => unawaited(videoState.playNextEpisode()),
       ),
+      if (videoState.animeDetailContext != null)
+        ContextMenuAction(
+          icon: Icons.movie_outlined,
+          label: '番剧详情',
+          onPressed: () => unawaited(_showAnimeDetail(videoState)),
+        ),
       ContextMenuAction(
         icon: Icons.fast_forward_rounded,
         label: '快进 ${videoState.seekStepDisplayLabel}',
@@ -947,6 +970,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                       episodeTitle: videoState.episodeTitle,
                       fileName: videoState.currentVideoPath?.split('/').last,
                       animeId: videoState.animeId,
+                      coverImageUrl: videoState.loadingCoverImageUrl,
                     ),
                 ],
               );
@@ -1068,6 +1092,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                               ?.split('/')
                                               .last,
                                           animeId: videoState.animeId,
+                                          coverImageUrl:
+                                              videoState.loadingCoverImageUrl,
                                         ),
                                       ),
                                     if (videoState.hasVideo)
@@ -1153,6 +1179,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                 ?.split('/')
                                                 .last,
                                             animeId: videoState.animeId,
+                                            coverImageUrl:
+                                                videoState.loadingCoverImageUrl,
                                           ),
                                         ),
                                       if (videoState.hasVideo)

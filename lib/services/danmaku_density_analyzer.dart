@@ -1,11 +1,13 @@
 import 'dart:math' as math;
+import 'package:nipaplay/src/rust/api/danmaku_analytics.dart' as rust_density;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 import '../widgets/danmaku_density_chart.dart';
 
 /// 弹幕密度统计服务
 /// 负责分析弹幕数据并生成密度图表数据
 class DanmakuDensityAnalyzer {
   /// 分析弹幕列表，生成密度数据
-  /// 
+  ///
   /// [danmakuList] 弹幕数据列表，每个元素应包含time字段
   /// [videoDurationSeconds] 视频总时长（秒）
   /// [segmentCount] 分段数量，默认100段
@@ -16,6 +18,24 @@ class DanmakuDensityAnalyzer {
     int segmentCount = 100,
     double minSegmentDuration = 1.0,
   }) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_density
+            .analyzeDensity(
+              times: danmakuList
+                  .map(_extractTime)
+                  .whereType<double>()
+                  .toList(growable: false),
+              videoDurationSeconds: videoDurationSeconds,
+              segmentCount: segmentCount,
+              minSegmentDuration: minSegmentDuration,
+            )
+            .map(_fromRustPoint)
+            .toList(growable: false);
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     if (danmakuList.isEmpty || videoDurationSeconds <= 0) {
       return [];
     }
@@ -30,7 +50,7 @@ class DanmakuDensityAnalyzer {
 
     // 计算每段的时长
     final segmentDuration = videoDurationSeconds / actualSegmentCount;
-    
+
     // 初始化每段的弹幕计数
     final segmentCounts = List<int>.filled(actualSegmentCount, 0);
 
@@ -62,13 +82,33 @@ class DanmakuDensityAnalyzer {
   }
 
   /// 分析弹幕高峰时段
-  /// 
+  ///
   /// [densityPoints] 密度数据点
   /// [peakThreshold] 高峰阈值（相对于最大值的比例，0.0-1.0）
   static List<DanmakuPeakSegment> findPeakSegments({
     required List<DanmakuDensityPoint> densityPoints,
     double peakThreshold = 0.6,
   }) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_density
+            .findPeakSegments(
+              points: densityPoints.map(_toRustPoint).toList(growable: false),
+              peakThreshold: peakThreshold,
+            )
+            .map(
+              (peak) => DanmakuPeakSegment(
+                startPosition: peak.startPosition,
+                endPosition: peak.endPosition,
+                maxCount: peak.maxCount,
+                totalCount: peak.totalCount,
+              ),
+            )
+            .toList(growable: false);
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     if (densityPoints.isEmpty) return [];
 
     final maxCount = densityPoints.map((p) => p.count).reduce(math.max);
@@ -76,12 +116,12 @@ class DanmakuDensityAnalyzer {
 
     final threshold = maxCount * peakThreshold;
     final peaks = <DanmakuPeakSegment>[];
-    
+
     DanmakuPeakSegment? currentPeak;
 
     for (int i = 0; i < densityPoints.length; i++) {
       final point = densityPoints[i];
-      
+
       if (point.count >= threshold) {
         if (currentPeak == null) {
           // 开始新的高峰段
@@ -118,7 +158,24 @@ class DanmakuDensityAnalyzer {
   }
 
   /// 获取弹幕密度统计信息
-  static DanmakuDensityStats getDensityStats(List<DanmakuDensityPoint> densityPoints) {
+  static DanmakuDensityStats getDensityStats(
+      List<DanmakuDensityPoint> densityPoints) {
+    if (RustLib.instance.initialized) {
+      try {
+        final stats = rust_density.densityStats(
+          points: densityPoints.map(_toRustPoint).toList(growable: false),
+        );
+        return DanmakuDensityStats(
+          totalCount: stats.totalCount,
+          averageCount: stats.averageCount,
+          maxCount: stats.maxCount,
+          minCount: stats.minCount,
+          peakPositions: List<double>.from(stats.peakPositions),
+        );
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     if (densityPoints.isEmpty) {
       return const DanmakuDensityStats(
         totalCount: 0,
@@ -141,7 +198,7 @@ class DanmakuDensityAnalyzer {
       final current = densityPoints[i];
       final prev = densityPoints[i - 1];
       final next = densityPoints[i + 1];
-      
+
       if (current.count > prev.count && current.count > next.count) {
         peakPositions.add(current.timePosition);
       }
@@ -161,6 +218,19 @@ class DanmakuDensityAnalyzer {
     required List<DanmakuDensityPoint> densityPoints,
     int windowSize = 3,
   }) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_density
+            .smoothDensity(
+              points: densityPoints.map(_toRustPoint).toList(growable: false),
+              windowSize: windowSize,
+            )
+            .map(_fromRustPoint)
+            .toList(growable: false);
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     if (densityPoints.length <= windowSize || windowSize <= 1) {
       return List.from(densityPoints);
     }
@@ -171,15 +241,15 @@ class DanmakuDensityAnalyzer {
     for (int i = 0; i < densityPoints.length; i++) {
       final start = math.max(0, i - halfWindow);
       final end = math.min(densityPoints.length - 1, i + halfWindow);
-      
+
       int sum = 0;
       int count = 0;
-      
+
       for (int j = start; j <= end; j++) {
         sum += densityPoints[j].count;
         count++;
       }
-      
+
       final smoothedCount = (sum / count).round();
       smoothedPoints.add(DanmakuDensityPoint(
         timePosition: densityPoints[i].timePosition,
@@ -194,7 +264,7 @@ class DanmakuDensityAnalyzer {
   static double? _extractTime(Map<String, dynamic> danmaku) {
     // 尝试多种可能的时间字段名
     final timeFields = ['time', 't', 'timestamp', 'stime'];
-    
+
     for (final field in timeFields) {
       final value = danmaku[field];
       if (value != null) {
@@ -206,17 +276,35 @@ class DanmakuDensityAnalyzer {
         }
       }
     }
-    
+
     return null;
+  }
+
+  static rust_density.RustDensityPoint _toRustPoint(
+    DanmakuDensityPoint point,
+  ) {
+    return rust_density.RustDensityPoint(
+      timePosition: point.timePosition,
+      count: point.count,
+    );
+  }
+
+  static DanmakuDensityPoint _fromRustPoint(
+    rust_density.RustDensityPoint point,
+  ) {
+    return DanmakuDensityPoint(
+      timePosition: point.timePosition,
+      count: point.count,
+    );
   }
 }
 
 /// 弹幕高峰时段数据
 class DanmakuPeakSegment {
   final double startPosition; // 开始位置 (0.0-1.0)
-  final double endPosition;   // 结束位置 (0.0-1.0)
-  final int maxCount;         // 该段最大弹幕数
-  final int totalCount;       // 该段总弹幕数
+  final double endPosition; // 结束位置 (0.0-1.0)
+  final int maxCount; // 该段最大弹幕数
+  final int totalCount; // 该段总弹幕数
 
   const DanmakuPeakSegment({
     required this.startPosition,
@@ -243,10 +331,10 @@ class DanmakuPeakSegment {
 
 /// 弹幕密度统计信息
 class DanmakuDensityStats {
-  final int totalCount;           // 总弹幕数
-  final double averageCount;      // 平均每段弹幕数
-  final int maxCount;             // 单段最大弹幕数
-  final int minCount;             // 单段最小弹幕数
+  final int totalCount; // 总弹幕数
+  final double averageCount; // 平均每段弹幕数
+  final int maxCount; // 单段最大弹幕数
+  final int minCount; // 单段最小弹幕数
   final List<double> peakPositions; // 峰值位置列表
 
   const DanmakuDensityStats({

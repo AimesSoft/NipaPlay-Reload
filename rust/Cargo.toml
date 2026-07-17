@@ -25,6 +25,11 @@ rustc-hash = "2"
 smallvec = "1"
 regex = "1"
 aho-corasick = "1"
+futures-util = "0.3.32"
+md-5 = "0.10.6"
+percent-encoding = "2.3.2"
+reqwest = { version = "0.12.4", default-features = false, features = ["rustls-tls", "stream"] }
+url = "2.5.8"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 wgpu-hal = { version = "27.0.4", features = ["metal"] }

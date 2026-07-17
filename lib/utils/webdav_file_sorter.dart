@@ -1,5 +1,7 @@
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 
 class WebDAVFileSorter {
   const WebDAVFileSorter._();
@@ -61,6 +63,13 @@ class WebDAVFileSorter {
   }
 
   static int naturalCompare(String a, String b) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_metadata.naturalCompare(a: a, b: b);
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     final aParts = _tokenize(a);
     final bParts = _tokenize(b);
     final minLength =

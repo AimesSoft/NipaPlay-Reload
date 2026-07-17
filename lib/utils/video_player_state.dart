@@ -28,6 +28,7 @@ import 'package:path/path.dart' as p;
 import 'globals.dart' as globals;
 import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -64,6 +65,7 @@ import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
+import '../providers/settings_provider.dart';
 import 'danmaku_parser.dart';
 import 'danmaku_xml_utils.dart';
 import 'package:nipaplay/cpp_native/bindings/danmaku_parser.dart';
@@ -238,6 +240,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
   bool _isDisposed = false;
+  bool _isBackgroundDanmakuLoading = false;
+  int _playbackGeneration = 0;
 
   void _notifyListeners() {
     notifyListeners();
@@ -1280,6 +1284,37 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
   PlaybackDetailContext? get playbackDetailContext => _playbackDetailContext;
+  String? get loadingCoverImageUrl {
+    final animeId = _animeId;
+    if (animeId != null && animeId > 0) {
+      final cachedUrl =
+          BangumiService.instance.getAnimeDetailsFromMemory(animeId)?.imageUrl;
+      if (_isNetworkImageUrl(cachedUrl)) return cachedUrl;
+    }
+
+    final detailUrl = _playbackDetailContext?.imageUrl;
+    if (_isNetworkImageUrl(detailUrl)) return detailUrl;
+    final historyUrl = _initialHistoryItem?.thumbnailPath;
+    return _isNetworkImageUrl(historyUrl) ? historyUrl : null;
+  }
+
+  bool _isNetworkImageUrl(String? value) {
+    final uri = Uri.tryParse(value?.trim() ?? '');
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
+  PlaybackDetailContext? get animeDetailContext {
+    final detailContext = _playbackDetailContext;
+    if (detailContext == null) return null;
+    if (detailContext.isIdentified) return detailContext;
+
+    final matchedAnimeId = _animeId;
+    if (matchedAnimeId == null || matchedAnimeId <= 0) return null;
+    return detailContext.withAnimeMatch(
+      animeId: matchedAnimeId,
+      title: _animeTitle,
+    );
+  }
 
   bool hasJellyfinServerAudioSelection(String itemId) =>
       _jellyfinServerAudioSelections.containsKey(itemId);

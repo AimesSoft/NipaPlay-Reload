@@ -307,6 +307,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // }
     }
 
+    final preservePlaybackStatus = _isBackgroundDanmakuLoading &&
+        (_status == PlayerStatus.playing || _status == PlayerStatus.paused) &&
+        (newStatus == PlayerStatus.recognizing ||
+            newStatus == PlayerStatus.ready ||
+            newStatus == PlayerStatus.playing);
+    if (preservePlaybackStatus) {
+      _notifyListeners();
+      return;
+    }
+
     _status = newStatus;
 
     // Wakelock logic
@@ -657,6 +667,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _clearPreviousVideoState() {
+    _playbackGeneration++;
+    _isBackgroundDanmakuLoading = false;
     // ════════════════════════════════════════════════════════════════════
     //  切集时清理平滑时钟锚点 + _pausedPlaybackTimeMs（2026-06-21）
     // ════════════════════════════════════════════════════════════════════

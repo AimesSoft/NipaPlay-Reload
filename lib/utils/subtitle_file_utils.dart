@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 
 const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.ass': 70,
@@ -116,10 +118,24 @@ String normalizeExternalSubtitleTrackUri(String path) {
 }
 
 String normalizeSubtitleMatchName(String name) {
+  if (RustLib.instance.initialized) {
+    try {
+      return rust_metadata.subtitleNormalizeMatchName(name: name);
+    } catch (_) {
+      // 使用下方 Dart/Web fallback。
+    }
+  }
   return extractSubtitleMatchTokens(name).join(' ');
 }
 
 Set<String> extractSubtitleMatchTokens(String name) {
+  if (RustLib.instance.initialized) {
+    try {
+      return rust_metadata.subtitleExtractMatchTokens(name: name).toSet();
+    } catch (_) {
+      // 使用下方 Dart/Web fallback。
+    }
+  }
   var working = name.toLowerCase();
   working = working.replaceAll(_subtitleBracketPattern, ' ');
 
@@ -132,6 +148,13 @@ Set<String> extractSubtitleMatchTokens(String name) {
 }
 
 String? pickLikelyEpisodeNumber(List<String> numbers) {
+  if (RustLib.instance.initialized) {
+    try {
+      return rust_metadata.subtitlePickLikelyEpisodeNumber(numbers: numbers);
+    } catch (_) {
+      // 使用下方 Dart/Web fallback。
+    }
+  }
   for (final number in numbers) {
     final parsed = int.tryParse(number);
     if (number.length == 2 && parsed != null && parsed > 0) {
@@ -148,6 +171,19 @@ int computeLocalSubtitleMatchScore({
   required List<String> videoNumbers,
   String? episodeNumber,
 }) {
+  if (RustLib.instance.initialized) {
+    try {
+      return rust_metadata.subtitleComputeMatchScore(
+        videoName: videoName,
+        subtitleName: subtitleName,
+        extension_: extension,
+        videoNumbers: videoNumbers,
+        episodeNumber: episodeNumber,
+      );
+    } catch (_) {
+      // 使用下方 Dart/Web fallback。
+    }
+  }
   final lowerVideo = videoName.toLowerCase();
   final lowerSubtitle = subtitleName.toLowerCase();
   final normalizedVideo = normalizeSubtitleMatchName(videoName);
@@ -236,4 +272,3 @@ bool _isSubtitleNoiseToken(String token) {
   }
   return false;
 }
-
