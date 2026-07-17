@@ -240,3 +240,32 @@ runs:
           exit 1
         fi
         flutter pub get # 暂时移除了--enforce-lockfile
+
+    - name: Configure Erika prebuilt release
+      if: env.ERIKA_PREBUILT == '1' && env.ERIKA_FORCE_SOURCE_BUILD != '1'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ -n "${ERIKA_PREBUILT_TAG:-}" ]; then
+          echo "Using explicitly configured Erika prebuilt release ${ERIKA_PREBUILT_TAG}."
+          exit 0
+        fi
+
+        ERIKA_PACKAGE_VERSION="$(awk '
+          /^  erika_flutter:/ {in_erika=1; next}
+          in_erika && /^    version:/ {
+            gsub(/"/, "", $2)
+            print $2
+            exit
+          }
+          in_erika && /^  [^ ]/ {exit}
+        ' pubspec.lock)"
+        if [ -z "${ERIKA_PACKAGE_VERSION}" ]; then
+          echo "Unable to resolve the Erika package version from pubspec.lock." >&2
+          exit 1
+        fi
+
+        ERIKA_PREBUILT_TAG="v${ERIKA_PACKAGE_VERSION#v}"
+        echo "ERIKA_PREBUILT_TAG=${ERIKA_PREBUILT_TAG}" >> "$GITHUB_ENV"
+        echo "Erika ${ERIKA_REF} uses prebuilt release ${ERIKA_PREBUILT_TAG}."
