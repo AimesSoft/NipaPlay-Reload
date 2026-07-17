@@ -5,10 +5,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
@@ -132,13 +132,13 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   /// 设置新的 mpv 会话和控制台展示信息.
   static void showSession(
-    ExternalPlayerSession session, {
+    ExternalPlayerLaunchSession session, {
     PlayableItem? playableItem,
     DanmakuLaunchAssets? danmakuAssets,
   }) {
 
     // 目前仅支持 Linux + mpv, 其他平台直接忽略
-    if (!isSupportedPlatform || session.type != ExternalPlayerType.mpv) return;
+    if (!isSupportedPlatform || session is! ExternalPlayerSession) return;
 
     // 先移除之前会话的监听器
     final previous = _instance._session;

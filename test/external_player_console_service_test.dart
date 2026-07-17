@@ -9,6 +9,7 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -60,7 +61,6 @@ ExternalPlayerSession _sessionFromProcessId(
   bool monitorProcess = false,
 }) {
   final session = ExternalPlayerSession.attach(
-    type: ExternalPlayerType.mpv,
     playerPath: '/bin/mpv',
     processId: processId,
     ipcPath: ipcPath,
@@ -131,6 +131,7 @@ void main() {
     if (session == null) fail('Expected the generic player to start');
     addTearDown(session.terminate);
 
+    expect(session, isA<OtherSession>());
     expect(session.type, ExternalPlayerType.generic);
     expect(session.ipcPath, isNull);
     ExternalPlayerConsoleService.showSession(session);

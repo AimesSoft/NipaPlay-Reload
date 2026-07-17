@@ -12,6 +12,8 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session.dart';
+import 'package:nipaplay/models/external_player_session/other_session.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
@@ -117,10 +119,10 @@ class ExternalPlayerService {
   /// 模式启动; macOS 应用包通过 `open -a` 打开; Linux 播放器以 detached
   /// 模式启动. 只有 Linux mpv 会额外启用 JSON IPC 和弹幕控制台能力.
   ///
-  /// 成功派生进程时返回对应的 [ExternalPlayerSession]. 不支持的平台, 空路径,
+  /// 成功派生进程时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
   /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
   /// Session 仅表示启动命令执行成功, 不保证播放器已经完成媒体加载.
-  static Future<ExternalPlayerSession?> launch({
+  static Future<ExternalPlayerLaunchSession?> launch({
     required String playerPath,
     required String mediaPath,
     List<String> extraArgs = const [],
@@ -151,8 +153,18 @@ class ExternalPlayerService {
     }
 
     try {
-      return await ExternalPlayerSession.launch(
-        type: _detectPlayer(resolvedPath),
+      final type = _detectPlayer(resolvedPath);
+      if (Platform.isLinux && type == ExternalPlayerType.mpv) {
+        return await ExternalPlayerSession.launch(
+          playerPath: resolvedPath,
+          mediaPath: mediaPath,
+          extraArgs: extraArgs,
+          duration: duration,
+          position: position,
+        );
+      }
+      return await _launchOtherSession(
+        type: type,
         playerPath: resolvedPath,
         mediaPath: mediaPath,
         extraArgs: extraArgs,
@@ -164,6 +176,47 @@ class ExternalPlayerService {
       debugPrintStack(stackTrace: st);
       return null;
     }
+  }
+
+  /// 启动 Linux mpv 以外的播放器进程.
+  static Future<OtherSession> _launchOtherSession({
+    required ExternalPlayerType type,
+    required String playerPath,
+    required String mediaPath,
+    required List<String> extraArgs,
+    required Duration duration,
+    required Duration position,
+  }) async {
+    late final Process process;
+    var monitorProcess = false;
+
+    if (Platform.isWindows) {
+      final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
+      process = isShortcut
+          ? await Process.start('cmd',['/c', 'start',  '', playerPath, mediaPath, ...extraArgs], runInShell: true)
+          : await Process.start(playerPath, [mediaPath, ...extraArgs], mode: ProcessStartMode.detached);
+    } else if (Platform.isMacOS) {
+      final isAppBundle = playerPath.toLowerCase().endsWith('.app');
+      process = isAppBundle
+          ? await Process.start('open', ['-a', playerPath, mediaPath])
+          : await Process.start(playerPath, [mediaPath, ...extraArgs]);
+    } else {
+      process = await Process.start(
+        playerPath,
+        [mediaPath, ...extraArgs],
+        mode: ProcessStartMode.detached,
+      );
+      monitorProcess = true;
+    }
+
+    return OtherSession.attach(
+      type: type,
+      playerPath: playerPath,
+      processId: process.pid,
+      duration: duration,
+      position: position,
+      monitorProcess: monitorProcess,
+    );
   }
 
   /// 按当前设置尝试接管 [item] 的播放请求.
@@ -304,9 +357,7 @@ class ExternalPlayerService {
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
     // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
-    if (Platform.isLinux &&
-        session != null &&
-        session.type == ExternalPlayerType.mpv) {
+    if (session is ExternalPlayerSession) {
       final sessionItem = PlayableItem(
         videoPath: mediaPath,
         title: history?.animeName ?? item.title,

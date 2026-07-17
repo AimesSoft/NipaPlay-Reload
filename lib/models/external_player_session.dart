@@ -8,19 +8,19 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 
 
 /// 掌管外部播放器会话的神
 ///
-/// 管理一个外部播放器进程; Linux mpv 额外管理 IPC, 播放状态和 ASS 弹幕交互.
+/// 管理一个 Linux mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类不保存番剧, 剧集或媒体展示信息; 这些信息由控制台服务管理.
-class ExternalPlayerSession extends ChangeNotifier {
+class ExternalPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   /// 关联一个已经存在的外部播放器进程.
   ExternalPlayerSession.attach(
     {
-      required this.type,
       required this.playerPath,
       required this.processId,
       required this.ipcPath,
@@ -32,9 +32,8 @@ class ExternalPlayerSession extends ChangeNotifier {
     }
   ) { if (monitorProcess) _startLifecycleMonitoring(); }
 
-  /// 启动外部播放器; Linux mpv 额外启用 IPC 和生命周期监控.
+  /// 启动 Linux mpv, 并启用 IPC 和生命周期监控.
   static Future<ExternalPlayerSession> launch({
-    required ExternalPlayerType type,
     required String       playerPath,
     required String       mediaPath,
     required List<String> extraArgs,
@@ -42,50 +41,16 @@ class ExternalPlayerSession extends ChangeNotifier {
     Duration position = Duration.zero,
   }) async {
 
-    // Windows 和 macOS 直接启动进程, 不使用 IPC
-    if (Platform.isWindows) {
-      final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
-      final process = isShortcut
-          ? await Process.start('cmd',['/c', 'start',  '', playerPath, mediaPath, ...extraArgs], runInShell: true)
-          : await Process.start(playerPath, [mediaPath, ...extraArgs], mode: ProcessStartMode.detached);
-      return ExternalPlayerSession.attach(
-        type       : type,
-        playerPath : playerPath,
-        processId  : process.pid,
-        ipcPath    : null,
-        duration   : duration,
-        position   : position,
-        monitorProcess: false,
-      );
-    }
-    if (Platform.isMacOS) {
-      final isAppBundle = playerPath.toLowerCase().endsWith('.app');
-      final process = isAppBundle
-          ? await Process.start('open', ['-a', playerPath, mediaPath])
-          : await Process.start(playerPath, [mediaPath, ...extraArgs]);
-      return ExternalPlayerSession.attach(
-        type       : type,
-        playerPath : playerPath,
-        processId  : process.pid,
-        ipcPath    : null,
-        duration   : duration,
-        position   : position,
-        monitorProcess: false,
-      );
-    }
+    final ipcPath    = _createMpvIpcPath();
+    final launchArgs = [mediaPath, ...extraArgs, '--input-ipc-server=$ipcPath'];
 
-    // Linux 需要额外处理 mpv IPC
-    final ipcPath    = (type == ExternalPlayerType.mpv) ? _createMpvIpcPath() : null;
-    final launchArgs = [mediaPath, ...extraArgs, if (ipcPath != null) '--input-ipc-server=$ipcPath'];
-
-    debugPrint('[ExternalPlayerSession] Launching external player: type=$type, playerPath="$playerPath", args=$launchArgs');
+    debugPrint('[ExternalPlayerSession] Launching Linux mpv: playerPath="$playerPath", args=$launchArgs');
 
     final process = await Process.start(playerPath, launchArgs, mode: ProcessStartMode.detached);
 
-    debugPrint('[ExternalPlayerSession] External player started: type=$type, pid=${process.pid}, ipcPath=$ipcPath');
+    debugPrint('[ExternalPlayerSession] Linux mpv started: pid=${process.pid}, ipcPath=$ipcPath');
 
     return ExternalPlayerSession.attach(
-      type       : type,
       playerPath : playerPath,
       processId  : process.pid,
       ipcPath    : ipcPath,
@@ -95,14 +60,21 @@ class ExternalPlayerSession extends ChangeNotifier {
   }
 
   // 外部播放器相关
-  final ExternalPlayerType type; // 外部播放器类型
+  @override
+  ExternalPlayerType get type => ExternalPlayerType.mpv;
+  @override
   final String   playerPath;     // 外部播放器的路径
+  @override
   final int      processId;      // 外部播放器进程 ID
+  @override
   final String?  ipcPath;        // 外部播放器的 IPC 通道路径
 
   // 播放相关
+  @override
   Duration       duration;       // 媒体文件总时长
+  @override
   Duration?      position;       // 当前播放位置
+  @override
   bool?          isPaused;       // 是否暂停
 
   // 进程轮询相关
@@ -115,15 +87,18 @@ class ExternalPlayerSession extends ChangeNotifier {
   // --- Setters & Getters --- //
 
   /// 获取播放进度的百分比, 范围 0.0 ~ 1.0
+  @override
   double? get fraction {
     if (position == null || duration <= Duration.zero) return null;
     return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
   }
+  @override
   bool get isClosed => _closed;
 
   // --- mpv Process Interaction --- //
 
   /// 终止当前外部播放器进程.
+  @override
   void terminate() {
     if (_closed) return;
     try {
@@ -135,6 +110,7 @@ class ExternalPlayerSession extends ChangeNotifier {
   }
 
   /// 切换 mpv 的暂停状态.
+  @override
   void togglePause() {
     final paused = isPaused;
     if (_closed || ipcPath == null || paused == null) return;
@@ -142,6 +118,7 @@ class ExternalPlayerSession extends ChangeNotifier {
   }
 
   /// 将 mpv 跳转到总时长中的指定比例.
+  @override
   void seekToFraction(double fraction) {
     if (_closed || ipcPath == null || duration <= Duration.zero) return;
     final value = fraction.clamp(0.0, 1.0).toDouble();
@@ -152,6 +129,7 @@ class ExternalPlayerSession extends ChangeNotifier {
   }
 
   /// 将 mpv 精确跳转到指定的绝对播放位置.
+  @override
   bool seekToPosition(Duration target) {
     if (_closed || ipcPath == null || target < Duration.zero) return false;
     final targetMilliseconds = duration > Duration.zero
@@ -166,6 +144,7 @@ class ExternalPlayerSession extends ChangeNotifier {
 
 
   /// 通知指定的 mpv Lua 脚本重新加载 ASS 弹幕轨.
+  @override
   Future<bool> refreshDanmaku(String assPath, String luaPath) async {
     final path = ipcPath;
     if (_closed || path == null || path.isEmpty ||
