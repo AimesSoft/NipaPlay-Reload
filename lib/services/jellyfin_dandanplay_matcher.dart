@@ -1148,7 +1148,7 @@ class JellyfinDandanplayMatcher {
       final remoteHead =
           await RemoteMediaFetcher.fetchHead(Uri.parse(streamUrl));
       debugPrint(
-          'Jellyfin 哈希计算成功，读取 ${remoteHead.headBytes.length} 字节，hash=${remoteHead.hash}');
+          'Jellyfin 哈希计算成功，读取 ${remoteHead.bytesHashed} 字节，hash=${remoteHead.hash}');
 
       // 直接依赖流媒体返回的文件名/大小，跳过额外的媒体信息请求以避免长时间阻塞
       const Map<String, dynamic> mediaInfo = {};

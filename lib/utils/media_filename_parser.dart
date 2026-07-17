@@ -1,4 +1,6 @@
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 
 /// 从常见番组发布文件名中提取更适合搜索的关键词。
 ///
@@ -7,6 +9,15 @@ class MediaFilenameParser {
   MediaFilenameParser._();
 
   static String baseNameWithoutExtension(String pathOrName) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_metadata.mediaBaseNameWithoutExtension(
+          pathOrName: pathOrName,
+        );
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     final trimmed = pathOrName.trim();
     if (trimmed.isEmpty) return '';
     final base = p.basename(trimmed);
@@ -15,6 +26,15 @@ class MediaFilenameParser {
 
   /// 生成用于弹幕“搜索动画”的关键词（尽量接近番名）。
   static String extractAnimeTitleKeyword(String pathOrName) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_metadata.mediaExtractAnimeTitleKeyword(
+          pathOrName: pathOrName,
+        );
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     var name = baseNameWithoutExtension(pathOrName);
     if (name.isEmpty) return '';
 
@@ -93,4 +113,3 @@ class MediaFilenameParser {
     return result.trim();
   }
 }
-
