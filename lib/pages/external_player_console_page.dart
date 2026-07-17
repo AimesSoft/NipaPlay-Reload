@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 
@@ -359,11 +360,11 @@ class _ConsoleCard extends StatelessWidget {
         ),
         Slider(
           value: danmakuOutlineWidth.clamp(
-            ExternalPlayerConsoleService.minDanmakuOutlineWidth,
-            ExternalPlayerConsoleService.maxDanmakuOutlineWidth,
+            DanmakuStyle.minOutlineWidth,
+            DanmakuStyle.maxOutlineWidth,
           ).toDouble(),
-          min: ExternalPlayerConsoleService.minDanmakuOutlineWidth,
-          max: ExternalPlayerConsoleService.maxDanmakuOutlineWidth,
+          min: DanmakuStyle.minOutlineWidth,
+          max: DanmakuStyle.maxOutlineWidth,
           divisions: 9,
           label: danmakuOutlineWidth.toStringAsFixed(1),
           onChanged: supportsDanmakuOutline && danmakuOutlineEnabled

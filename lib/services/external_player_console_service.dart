@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
@@ -44,16 +45,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕资产相关
   String? _danmakuAssPath;
   String? _danmakuLuaPath;
-  List<DanmakuItem> _danmakuList = const [];
+  List<DanmakuItem>  _danmakuList = const [];
   AssExportSettings? _danmakuAssSettings;
 
   // 弹幕样式相关
-  static const double minDanmakuOutlineWidth = 0.5; // 最小弹幕描边宽度
-  static const double maxDanmakuOutlineWidth = 5.0; // 最大弹幕描边宽度
-  bool   _danmakuAllowStacking  = true; // 是否允许弹幕堆叠
-  double _danmakuOpacity        = 1.0;  // 弹幕不透明度, 范围为 0.0 到 1.0
-  double _danmakuOutlineWidth   = 1.0;  // 弹幕描边宽度, 范围为 0.5 到 5.0
-  bool   _danmakuOutlineEnabled = true; // 弹幕描边是否启用
+  bool _danmakuAllowStacking = true; // 是否允许弹幕堆叠
+  DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
   Future<void> _danmakuStyleUpdateQueue = Future<void>.value();
@@ -78,9 +75,10 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   int? get animeId => _animeId;
   int? get episodeId => _episodeId;
   List<DanmakuItem> get danmakuList => _danmakuList;
-  double get danmakuOpacity => _danmakuOpacity;
-  double get danmakuOutlineWidth => _danmakuOutlineWidth;
-  bool get danmakuOutlineEnabled => _danmakuOutlineEnabled;
+  DanmakuStyle get danmakuStyle => _danmakuStyle.copyWith();
+  double get danmakuOpacity => _danmakuStyle.opacity;
+  double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
+  bool get danmakuOutlineEnabled => _danmakuStyle.outlineEnabled;
 
   /// 获取当前播放位置正在显示的弹幕索引列表.
   List<int> get activeDanmakuIndices {
@@ -205,18 +203,15 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   /// 设置弹幕的不透明度, 范围为 0.0 到 1.0
   static void setDanmakuOpacity(double opacity) {
     if (!_instance.supportsDanmakuOpacity) return;
-    final value = opacity.clamp(0.0, 1.0).toDouble();
-    _instance._danmakuOpacity = value;
-    _instance.notifyListeners();
-    _instance._queueDanmakuRefresh();
+    _instance._updateDanmakuStyle((style) => style.opacity = opacity);
   }
 
   /// 设置弹幕的描边是否启用
   static void setDanmakuOutlineEnabled(bool enabled) {
     if (!_instance.supportsDanmakuOutline) return;
-    _instance._danmakuOutlineEnabled = enabled;
-    _instance.notifyListeners();
-    _instance._queueDanmakuRefresh();
+    _instance._updateDanmakuStyle(
+      (style) => style.outlineEnabled = enabled,
+    );
   }
 
   /// 设置弹幕描边宽度:
@@ -227,12 +222,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (!_instance.supportsDanmakuOutline) return;
 
     // 刷新控制台
-    final value = width.clamp(minDanmakuOutlineWidth, maxDanmakuOutlineWidth).toDouble();
-    _instance._danmakuOutlineWidth = value;
-    _instance.notifyListeners();
-
-    // 刷新 mpv
-    _instance._queueDanmakuRefresh();
+    _instance._updateDanmakuStyle((style) => style.outlineWidth = width);
   }
 
   @override
@@ -277,19 +267,27 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return Duration(milliseconds: totalMilliseconds);
   }
 
-  AssExportSettings? get _currentDanmakuAssSettings {
+  AssExportSettings? _danmakuAssSettingsFor(DanmakuStyle style) {
     final settings = _danmakuAssSettings;
     if (settings == null) return null;
     final outlineStyle = settings.outlineStyle == AssOutlineStyle.none
         ? AssOutlineStyle.stroke
         : settings.outlineStyle;
     return settings.copyWith(
-      opacity: _danmakuOpacity,
-      outlineStyle: _danmakuOutlineEnabled
+      opacity: style.opacity,
+      outlineStyle: style.outlineEnabled
           ? outlineStyle
           : AssOutlineStyle.none,
-      outlineWidth: _danmakuOutlineEnabled ? _danmakuOutlineWidth : 0.0,
+      outlineWidth: style.outlineEnabled ? style.outlineWidth : 0.0,
     );
+  }
+
+  void _updateDanmakuStyle(void Function(DanmakuStyle style) update) {
+    final style = _danmakuStyle.copyWith();
+    update(style);
+    _danmakuStyle = style;
+    notifyListeners();
+    _queueDanmakuRefresh();
   }
 
   Duration _danmakuDisplayDuration(DanmakuItem item) {
@@ -320,24 +318,19 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
     // 记录当前状态
     final currentSession  = _session;
-    final opacity         = _danmakuOpacity;
-    final outlineEnabled  = _danmakuOutlineEnabled;
-    final outlineWidth    = _danmakuOutlineWidth;
+    final style           = _danmakuStyle;
 
-    Future<Set<void>> fun(_) async => {
+    Future<void> fun(_) async {
       // 如果在队列等待期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-        _danmakuOpacity != opacity ||
-        _danmakuOutlineEnabled != outlineEnabled ||
-        _danmakuOutlineWidth != outlineWidth) {
+          !identical(_danmakuStyle, style)) {
+        return;
       }
-      else await _regenerateDanmakuAss(
+      await _regenerateDanmakuAss(
         currentSession,
-        opacity,
-        outlineEnabled,
-        outlineWidth,
-      )
-    };
+        style,
+      );
+    }
 
     // 将任务加入队列
     _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then(fun);
@@ -346,15 +339,13 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   /// 重新生成 ASS 文件并刷新 mpv 弹幕, 仅在状态未发生变化时执行
   Future<void> _regenerateDanmakuAss(
     ExternalPlayerSession? currentSession,
-    double opacity,
-    bool outlineEnabled,
-    double outlineWidth,
+    DanmakuStyle style,
   ) async {
 
     // 参数检查
     final assPath  = _danmakuAssPath;
     final luaPath  = _danmakuLuaPath;
-    final settings = _currentDanmakuAssSettings;
+    final settings = _danmakuAssSettingsFor(style);
     if (currentSession == null || assPath == null || luaPath == null || settings == null) return;
 
     File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
@@ -369,9 +360,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          _danmakuOpacity != opacity ||
-          _danmakuOutlineEnabled != outlineEnabled ||
-          _danmakuOutlineWidth != outlineWidth) {
+          !identical(_danmakuStyle, style)) {
         return;
       }
 
@@ -381,9 +370,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
       if (!identical(_session, currentSession) ||
-          _danmakuOpacity != opacity ||
-          _danmakuOutlineEnabled != outlineEnabled ||
-          _danmakuOutlineWidth != outlineWidth) {
+          !identical(_danmakuStyle, style)) {
         return;
       }
 
@@ -437,13 +424,15 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuList = _sortDanmakuItems(assets?.danmakuList ?? const []);
     _danmakuAssSettings = assets?.assSettings;
     _danmakuAllowStacking = assets?.allowStacking ?? true;
-    _danmakuOpacity = assets?.opacity ?? 1.0;
     final settings = assets?.assSettings;
     final outlineWidth = settings?.outlineWidth ?? 1.0;
-    _danmakuOutlineWidth = outlineWidth > 0.0 ? outlineWidth : 1.0;
-    _danmakuOutlineEnabled = settings != null &&
-        settings.outlineStyle != AssOutlineStyle.none &&
-        outlineWidth > 0.0;
+    _danmakuStyle = DanmakuStyle(
+      opacity: assets?.opacity ?? DanmakuStyle.maxOpacity,
+      outlineWidth: outlineWidth > 0.0 ? outlineWidth : 1.0,
+      outlineEnabled: settings != null &&
+          settings.outlineStyle != AssOutlineStyle.none &&
+          outlineWidth > 0.0,
+    );
   }
 
   void _clearDanmakuState() {
