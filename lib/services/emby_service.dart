@@ -13,6 +13,7 @@ import 'debug_log_service.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/emby_transcode_manager.dart';
 import 'package:nipaplay/services/media_server_playback_client.dart';
+import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'media_server_service_base.dart';
 
 class EmbyService extends MediaServerServiceBase
@@ -202,7 +203,11 @@ class EmbyService extends MediaServerServiceBase
   @override
   String? get serverUrl => _serverUrl;
   @override
-  set serverUrl(String? value) => _serverUrl = value;
+  set serverUrl(String? value) {
+    _serverUrl = value;
+    setMediaServerBaseUrl('emby', value);
+  }
+
   @override
   String? get username => _username;
   @override
@@ -1896,8 +1901,13 @@ class EmbyService extends MediaServerServiceBase
         'EmbyService: 下载字幕文件: ${Uri.parse(subtitleUrl).replace(queryParameters: const <String, String>{})}',
       );
       // 下载字幕文件
-      final subtitleResponse = await http
-          .get(WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)));
+      final subtitleResponse = await sendRequestFollowingRedirects(
+        WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 30),
+        redirectLogLabel: 'EmbyService: 下载字幕',
+      );
       if (subtitleResponse.statusCode == 200) {
         // 保存到临时文件
         final tempDir = await getTemporaryDirectory();

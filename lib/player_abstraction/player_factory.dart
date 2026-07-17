@@ -7,6 +7,7 @@ import './player_data_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/utils/http_user_agent.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
 import 'dart:async'; // 导入dart:async库
 
@@ -73,6 +74,7 @@ class PlayerFactory {
           prefs.getString(_androidAudioOutputKey) ?? 'opensles';
       final erikaAndroidOutputModeIndex =
           prefs.getInt(_erikaAndroidOutputModeKey);
+      final customPlayerUA = await _loadCustomPlayerUA(prefs);
 
       if (kernelTypeIndex != null &&
           kernelTypeIndex < PlayerKernelType.values.length) {
@@ -92,8 +94,7 @@ class PlayerFactory {
       _cachedAndroidAudioOutput = androidAudioOutput;
       _cachedErikaAndroidOutputMode =
           _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
-      _cachedCustomPlayerUA =
-          prefs.getString(SettingsKeys.customPlayerUA) ?? '';
+      _cachedCustomPlayerUA = customPlayerUA;
 
       _hasLoadedSettings = true;
     } catch (e) {
@@ -123,7 +124,7 @@ class PlayerFactory {
       _hasLoadedSettings = true;
 
       // 异步加载正确设置并更新缓存
-      SharedPreferences.getInstance().then((prefs) {
+      SharedPreferences.getInstance().then((prefs) async {
         final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
         final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
         final macOSNativeVideoEnabled =
@@ -149,8 +150,9 @@ class PlayerFactory {
         _cachedAndroidAudioOutput = androidAudioOutput;
         _cachedErikaAndroidOutputMode =
             _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
-        _cachedCustomPlayerUA =
-            prefs.getString(SettingsKeys.customPlayerUA) ?? '';
+        _cachedCustomPlayerUA = await _loadCustomPlayerUA(prefs);
+      }).catchError((Object error) {
+        debugPrint('[PlayerFactory] 异步加载设置出错: $error');
       });
 
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
@@ -160,6 +162,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedAndroidAudioOutput = 'opensles';
       _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
+      _cachedCustomPlayerUA = '';
     }
   }
 
@@ -179,10 +182,23 @@ class PlayerFactory {
     return _cachedCustomPlayerUA;
   }
 
+  static Future<String> _loadCustomPlayerUA(
+    SharedPreferences preferences,
+  ) async {
+    final canonical = preferences.getString(SettingsKeys.customPlayerUA);
+    final legacy =
+        preferences.getString(SettingsKeys.legacyPlayerCustomUserAgent);
+    final resolved = sanitizeHttpUserAgent(canonical ?? legacy ?? '');
+    if (canonical == null && legacy != null) {
+      await preferences.setString(SettingsKeys.customPlayerUA, resolved);
+    }
+    return resolved;
+  }
+
   /// 设置一次性 User-Agent（仅下一次打开视频时生效，不持久化，用后即清）。
   /// 优先级高于 [getCustomPlayerUA] 的持久 UA。空字符串清除一次性 UA。
   static void setOneTimeUA(String ua) {
-    final resolved = ua.trim();
+    final resolved = sanitizeHttpUserAgent(ua);
     _oneTimeUA = resolved.isEmpty ? null : resolved;
   }
 
@@ -302,18 +318,25 @@ class PlayerFactory {
   }
 
   /// 保存自定义播放器 User-Agent。空字符串表示用内核默认 UA。
-  /// 即时生效于"下一次打开视频"（当前正在播放的视频不会重新请求）。
+  /// 改动后重建当前播放器，使后续网络请求立即使用新值。
   static Future<void> saveCustomPlayerUA(String ua) async {
-    final resolved = ua.trim();
+    final resolved = sanitizeHttpUserAgent(ua);
+    final changed = resolved != _cachedCustomPlayerUA;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(SettingsKeys.customPlayerUA, resolved);
       _cachedCustomPlayerUA = resolved;
       debugPrint('[PlayerFactory] 已保存自定义播放器 UA: '
           '${resolved.isEmpty ? "(空=默认)" : resolved}');
+      if (changed) _notifyNetworkOptionsChanged();
     } catch (e) {
       debugPrint('[PlayerFactory] 保存自定义播放器 UA 出错: $e');
     }
+  }
+
+  static void _notifyNetworkOptionsChanged() {
+    if (kIsWeb) return;
+    _kernelChangeController.add(_cachedKernelType ?? PlayerKernelType.mdk);
   }
 
   // 创建播放器实例
@@ -326,11 +349,14 @@ class PlayerFactory {
 
     // 如果没有指定内核类型，从缓存或设置中读取
     kernelType ??= getKernelType();
+    final customPlayerUA = getCustomPlayerUA();
 
     switch (kernelType) {
       case PlayerKernelType.mdk:
         debugPrint('[PlayerFactory] 创建 MDK 播放器');
-        return MdkPlayerAdapter();
+        return MdkPlayerAdapter(
+          userAgent: customPlayerUA,
+        );
       case PlayerKernelType.videoPlayer:
         debugPrint('[PlayerFactory] 创建 Video Player 播放器');
         return VideoPlayerAdapter();
@@ -338,6 +364,7 @@ class PlayerFactory {
         return MediaKitPlayerAdapter(
           bufferSize: getPrecacheBufferSizeBytes(),
           androidAudioOutput: getAndroidAudioOutput(),
+          userAgent: customPlayerUA,
         );
       case PlayerKernelType.erika:
         debugPrint('[PlayerFactory] 创建 Erika 播放器');

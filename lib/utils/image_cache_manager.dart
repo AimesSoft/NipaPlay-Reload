@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
+import 'package:path_provider/path_provider.dart'
+    if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'storage_service.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/media_server_image_loader.dart';
 
 // 用于在 isolate 中处理图片的函数
 Future<Uint8List> _processImageInIsolate(Uint8List imageData) async {
@@ -47,7 +47,7 @@ class ImageCacheManager {
 
   Future<void> _initCacheDir() async {
     if (kIsWeb || _isInitialized) return;
-    
+
     try {
       final appDir = await StorageService.getAppStorageDirectory();
       _cacheDir = Directory('${appDir.path}/compressed_images');
@@ -98,7 +98,7 @@ class ImageCacheManager {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
     }
-    
+
     final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
 
     // 如果图片已经在内存缓存中，更新访问时间并增加引用计数
@@ -133,7 +133,7 @@ class ImageCacheManager {
             );
             final frame = await codec.getNextFrame();
             final image = frame.image;
-            
+
             _cache[cacheKey] = image;
             _refCount[cacheKey] = 1;
             _lastAccessed[cacheKey] = DateTime.now();
@@ -143,14 +143,11 @@ class ImageCacheManager {
         }
 
         // 从网络下载
-        final response =
-            await http.get(WebRemoteAccessService.proxyUri(Uri.parse(url)));
-        if (response.statusCode != 200) {
-          throw Exception('Failed to load image with status code ${response.statusCode}');
-        }
+        final downloadedBytes = await loadNetworkImageBytes(Uri.parse(url));
 
         // 在单独的 isolate 中处理图片
-        final processedBytes = await compute(_processImageInIsolate, response.bodyBytes);
+        final processedBytes =
+            await compute(_processImageInIsolate, downloadedBytes);
 
         // 保存到本地缓存 (只保存原图)
         if (!kIsWeb) {
@@ -172,7 +169,6 @@ class ImageCacheManager {
         _refCount[cacheKey] = 1;
         _lastAccessed[cacheKey] = DateTime.now();
         completer.complete(uiImage);
-
       } catch (e) {
         // 如果发生任何错误，都通过completer报告
         completer.completeError(e);
@@ -189,11 +185,13 @@ class ImageCacheManager {
   Future<void> preloadImages(List<String> urls) async {
     final failedUrls = <String>[];
     final futures = <Future>[];
-    
+
     for (final url in urls) {
       try {
         // 检查 URL 是否有效
-        if (url.isEmpty || url == 'assets/backempty.png' || url == 'assets/backEmpty.png') {
+        if (url.isEmpty ||
+            url == 'assets/backempty.png' ||
+            url == 'assets/backEmpty.png') {
           //////debugPrint('跳过无效的图片 URL: $url');
           continue;
         }
@@ -245,18 +243,18 @@ class ImageCacheManager {
   void _cleanupExpiredImages() {
     final now = DateTime.now();
     final expiredUrls = <String>[];
-    
+
     for (final entry in _lastAccessed.entries) {
       final url = entry.key;
       final lastAccessed = entry.value;
-      
+
       // 检查是否过期且没有引用
-      if (now.difference(lastAccessed) > _maxCacheAge && 
+      if (now.difference(lastAccessed) > _maxCacheAge &&
           (_refCount[url] ?? 0) <= 0) {
         expiredUrls.add(url);
       }
     }
-    
+
     // 安全释放过期图片
     for (final url in expiredUrls) {
       try {
@@ -411,8 +409,9 @@ class ImageCacheManager {
         // 清除 cached_network_image 的缓存
         try {
           final cacheDir = await getTemporaryDirectory();
-          final imageCacheDir = Directory('${cacheDir.path}/cached_network_image');
-          
+          final imageCacheDir =
+              Directory('${cacheDir.path}/cached_network_image');
+
           if (await imageCacheDir.exists()) {
             await imageCacheDir.delete(recursive: true);
             //////debugPrint('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
@@ -425,7 +424,7 @@ class ImageCacheManager {
         try {
           final cacheDir = await getTemporaryDirectory();
           final imageCacheDir = Directory('${cacheDir.path}/image_cache');
-          
+
           if (await imageCacheDir.exists()) {
             await imageCacheDir.delete(recursive: true);
             //////debugPrint('已清除自定义图片缓存目录: ${imageCacheDir.path}');
@@ -459,4 +458,4 @@ class ImageCacheManager {
       _isClearingCache = false;
     }
   }
-} 
+}

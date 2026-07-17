@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class CupertinoAccountProfileCard extends StatelessWidget {
   final String username;
@@ -40,17 +41,16 @@ class CupertinoAccountProfileCard extends StatelessWidget {
               children: [
                 Text(
                   username,
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: badgeColor,
                     borderRadius: BorderRadius.circular(14),
@@ -89,7 +89,7 @@ class CupertinoAccountProfileCard extends StatelessWidget {
     if (avatarUrl != null && avatarUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: radius,
-        child: Image.network(
+        child: MediaServerAwareNetworkImage(
           avatarUrl!,
           width: size,
           height: size,

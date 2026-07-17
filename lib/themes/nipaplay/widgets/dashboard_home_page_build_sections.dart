@@ -883,7 +883,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
       final lowerPath = thumbnailPath.toLowerCase();
       if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
-        return CachedNetworkImage(
+        return MediaServerAwareCachedNetworkImage(
           imageUrl: thumbnailPath,
           fit: BoxFit.cover,
           width: double.infinity,
@@ -971,7 +971,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
             Container(color: Colors.white),
             ImageFiltered(
               imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-              child: CachedNetworkImage(
+              child: MediaServerAwareCachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 width: double.infinity,
