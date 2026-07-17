@@ -407,6 +407,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   /// 将弹幕样式更新任务加入队列, 以顺序执行样式更新
   void _queueDanmakuRefresh() {
 
+    // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
+    if (_session?.ipcPath == null ||
+        _danmakuAssPath == null ||
+        _danmakuLuaPath == null ||
+        _danmakuAssSettings == null) {
+      return;
+    }
+
     // 记录当前状态
     final currentSession  = _session;
     final style           = _danmakuStyle;

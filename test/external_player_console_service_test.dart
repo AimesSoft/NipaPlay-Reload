@@ -381,7 +381,7 @@ void main() {
         await _waitUntil(() => service.session == null);
       });
 
-      testWidgets('shows sender identity without showing danmaku sources', (tester) async {
+      testWidgets('toggles one danmaku visibility from the list', (tester) async {
         final process = await tester.runAsync(_startPlayer);
         if (process == null) fail('Failed to start the test player process');
         try {

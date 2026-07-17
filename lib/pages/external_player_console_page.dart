@@ -837,9 +837,11 @@ class _DanmakuRow extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (!item.visible)
-                      _BlockedDanmakuIndicator(itemId: itemId),
-                    if (!item.visible && active) const SizedBox(width: 6),
+                    _DanmakuVisibilityButton(
+                      item: item,
+                      itemId: itemId,
+                    ),
+                    if (active) const SizedBox(width: 6),
                     if (active) _ActiveDanmakuIndicator(itemId: itemId),
                   ],
                 ),
@@ -920,9 +922,11 @@ class _DanmakuRow extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (!item.visible)
-                        _BlockedDanmakuIndicator(itemId: itemId),
-                      if (!item.visible && active) const SizedBox(width: 6),
+                      _DanmakuVisibilityButton(
+                        item: item,
+                        itemId: itemId,
+                      ),
+                      if (active) const SizedBox(width: 6),
                       if (active) _ActiveDanmakuIndicator(itemId: itemId),
                     ],
                   ),
@@ -973,7 +977,7 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
     return Tooltip(
       message: context.l10n.externalPlayerConsoleDanmakuActive,
       child: Icon(
-        Icons.visibility_rounded,
+        Icons.motion_photos_on_rounded,
         key: ValueKey('external-player-danmaku-active-$itemId'),
         size: 18,
         color: Theme.of(context).colorScheme.primary,
@@ -982,21 +986,37 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
   }
 }
 
-class _BlockedDanmakuIndicator extends StatelessWidget {
-  const _BlockedDanmakuIndicator({required this.itemId});
+class _DanmakuVisibilityButton extends StatelessWidget {
+  const _DanmakuVisibilityButton({
+    required this.item,
+    required this.itemId,
+  });
 
+  final DanmakuItem item;
   final String itemId;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: context.l10n.externalPlayerConsoleDanmakuBlocked,
-      child: Icon(
-        Icons.visibility_off_rounded,
-        key: ValueKey('external-player-danmaku-blocked-$itemId'),
-        size: 18,
-        color: Theme.of(context).colorScheme.error,
+    final visible = item.visible;
+    final theme = Theme.of(context);
+    return IconButton(
+      key: ValueKey('external-player-danmaku-visibility-$itemId'),
+      tooltip: visible
+          ? context.l10n.externalPlayerConsoleDanmakuHide
+          : context.l10n.externalPlayerConsoleDanmakuShow,
+      onPressed: () {
+        ExternalPlayerConsoleService.setDanmakuVisible(item, !visible);
+      },
+      icon: Icon(
+        visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+        size: 20,
+        color: visible
+            ? theme.colorScheme.primary
+            : theme.colorScheme.error,
       ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      visualDensity: VisualDensity.compact,
     );
   }
 }
