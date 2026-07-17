@@ -15,6 +15,8 @@ import 'android_saf_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
+import 'package:nipaplay/src/rust/rust_init.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -1501,6 +1503,15 @@ class DandanplayService {
   static Future<String> _d(File file) async {
     if (kIsWeb) return '';
     const int maxBytes = 16 * 1024 * 1024; // 16MB
+    try {
+      await ensureRustInitialized();
+      return await rust_media.hashFileHead(
+        filePath: file.path,
+        maxBytes: maxBytes,
+      );
+    } catch (error) {
+      debugPrint('DandanplayService: Rust 文件哈希失败，回退 Dart: $error');
+    }
     final bytes =
         await file.openRead(0, maxBytes).expand((chunk) => chunk).toList();
     return md5.convert(bytes).toString();

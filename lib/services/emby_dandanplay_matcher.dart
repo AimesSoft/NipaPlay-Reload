@@ -926,7 +926,7 @@ class EmbyDandanplayMatcher {
       final remoteHead =
           await RemoteMediaFetcher.fetchHead(Uri.parse(streamUrl));
       debugPrint(
-          'Emby 哈希计算成功，读取 ${remoteHead.headBytes.length} 字节，hash=${remoteHead.hash}');
+          'Emby 哈希计算成功，读取 ${remoteHead.bytesHashed} 字节，hash=${remoteHead.hash}');
 
       final resolvedFileName = _resolveFileName(
         remoteHead.fileName,

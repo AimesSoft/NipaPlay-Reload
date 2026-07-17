@@ -1,12 +1,12 @@
-
 // lib/constants/danmaku/ass_kind.dart
 // 实现 弹幕数据 -> ASS 字幕文本
 
 import 'package:nipaplay/constants/danmaku/ass_kind.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/models/danmaku/ass_danmaku.dart';
+import 'package:nipaplay/src/rust/api/ass_converter.dart' as rust_ass;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
-
 
 /// ASS 字幕导出用的描边样式。
 /// 与 [DanmakuOutlineStyle] 一一对应，但保持本转换器零外部依赖以便单测。
@@ -70,7 +70,6 @@ class AssExportSettings {
   });
 }
 
-
 /// 把过滤后的弹幕列表转换为 ASS 字幕文本。
 ///
 /// ASS 事件按媒体时间轴渲染，播放器的播放/暂停/跳转/倍速都直接驱动
@@ -90,6 +89,26 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
   List<Map<String, dynamic>> danmaku,
   AssExportSettings settings,
 ) {
+  if (RustLib.instance.initialized) {
+    try {
+      final result = rust_ass.convertDanmakuToAss(
+        items: danmaku
+            .map(
+              (item) => rust_ass.RustAssDanmakuInput(
+                timeSeconds: _resolveTime(item),
+                content: _resolveContent(item),
+                typeCode: _resolveTypeCode(item),
+                colorRgb: parseDanmakuColorToInt(item['color'] ?? item['r']),
+              ),
+            )
+            .toList(growable: false),
+        settings: _toRustSettings(settings),
+      );
+      return _fromRustResult(result);
+    } catch (_) {
+      // 原生库不可用或桥接失败时保留 Dart/Web 行为。
+    }
+  }
   final assFontSize = resolveAssFontSize(settings.fontSize);
   final laneHeight = (assFontSize * 1.3).round().clamp(1, kAssPlayResY);
   final laneCount =
@@ -137,17 +156,15 @@ DanmakuAssConversionResult convertDanmakuToAssWithEvents(
     final width = _estimateWidth(d.content, assFontSize);
     switch (d.kind) {
       case DanmakuKind.scroll:
-        final duration =
-            (settings.scrollDurationSeconds.isFinite &&
-                    settings.scrollDurationSeconds > 0)
-                ? settings.scrollDurationSeconds
-                : 10.0;
+        final duration = (settings.scrollDurationSeconds.isFinite &&
+                settings.scrollDurationSeconds > 0)
+            ? settings.scrollDurationSeconds
+            : 10.0;
         final lane = _pickScrollLane(scrollLanes, d.time, width, duration);
         if (lane < 0) break; // 无车道可放，丢弃（经典行为，避免重叠）
         final yCenter = (lane * laneHeight + laneHeight / 2).toDouble();
         final xEnd = -width;
-        final line =
-            '{\\an4\\move($kAssPlayResX,${yCenter.toStringAsFixed(1)},'
+        final line = '{\\an4\\move($kAssPlayResX,${yCenter.toStringAsFixed(1)},'
             '${xEnd.toStringAsFixed(1)},${yCenter.toStringAsFixed(1)})'
             '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
             '${_escapeAssText(d.content)}';
@@ -255,27 +272,48 @@ String _resolveContent(Map<String, dynamic> item) {
 }
 
 DanmakuKind _resolveKind(Map<String, dynamic> item) {
-
   final original = item['originalType'];
-  if (original is num) return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
+  if (original is num) {
+    return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
+  }
 
   final v = item['type'] ?? item['y'];
-  if (v is num) { return _kindFromMode(DanmakuMode.fromCode     (v .toInt()   )); }
-  else          { return _kindFromMode(DanmakuMode.fromTypeName (v?.toString())); }
+  if (v is num) {
+    return _kindFromMode(DanmakuMode.fromCode(v.toInt()));
+  } else {
+    return _kindFromMode(DanmakuMode.fromTypeName(v?.toString()));
+  }
+}
+
+int _resolveTypeCode(Map<String, dynamic> item) {
+  final original = item['originalType'];
+  if (original is num) return original.toInt();
+  final value = item['type'] ?? item['y'];
+  if (value is num) return value.toInt();
+  return DanmakuMode.fromTypeName(value?.toString()).code;
 }
 
 DanmakuKind _kindFromMode(DanmakuMode mode) {
-  switch (mode)
-  {
-  case DanmakuMode.top    : return DanmakuKind.top   ;
-  case DanmakuMode.bottom : return DanmakuKind.bottom;
-  default                 : return DanmakuKind.scroll;
+  switch (mode) {
+    case DanmakuMode.top:
+      return DanmakuKind.top;
+    case DanmakuMode.bottom:
+      return DanmakuKind.bottom;
+    default:
+      return DanmakuKind.scroll;
   }
 }
 
 // ---------- 字号 / 字体 / 描边 ----------
 
 double resolveAssFontSize(double inAppFontSize) {
+  if (RustLib.instance.initialized) {
+    try {
+      return rust_ass.assResolveFontSize(inAppFontSize: inAppFontSize);
+    } catch (_) {
+      // 使用下方 Dart/Web fallback。
+    }
+  }
   // 内置字号基于播放器 widget 像素，ASS 字号基于 1080 空间。
   // 经验映射 ×1.6 并夹到合理区间；用户可通过内置字号设置微调。
   final mapped = inAppFontSize * 1.6;
@@ -288,8 +326,7 @@ String _styleFontName(String? fontFamily) {
   return trimmed;
 }
 
-(String, String) _resolveOutline(
-    AssOutlineStyle style, double outlineWidth) {
+(String, String) _resolveOutline(AssOutlineStyle style, double outlineWidth) {
   // 返回 (Outline, BorderStyle)。BorderStyle 1=描边+阴影, 3=不透明底框。
   switch (style) {
     case AssOutlineStyle.none:
@@ -518,8 +555,7 @@ void _writeHeader(
   ]) {
     final name = entry[0];
     final alignment = entry[1];
-    buffer.writeln(
-        'Style: $name,$fontName,${fontSize.toStringAsFixed(1)},'
+    buffer.writeln('Style: $name,$fontName,${fontSize.toStringAsFixed(1)},'
         '$primary,$primary,$outlineColor,$backColour,'
         '0,0,0,0,100,100,0,0,$borderStyle,$outlineW,$shadowDepth,'
         '$alignment,0,0,0,1');
@@ -594,6 +630,33 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
   required int playResY,
   required AssExportSettings settings,
 }) {
+  if (RustLib.instance.initialized) {
+    try {
+      final result = rust_ass.convertPreparedDanmakuToAss(
+        items: items
+            .map(
+              (item) => rust_ass.RustPreparedDanmakuInput(
+                timeSeconds: item.timeSeconds,
+                text: item.text,
+                typeCode: item.typeCode,
+                colorRgb: item.colorRgb,
+                yPosition: item.yPosition,
+                width: item.width,
+                durationSeconds: item.durationSeconds,
+                isScroll: item.isScroll,
+                isFiltered: item.isFiltered,
+              ),
+            )
+            .toList(growable: false),
+        playResX: playResX,
+        playResY: playResY,
+        settings: _toRustSettings(settings),
+      );
+      return _fromRustResult(result);
+    } catch (_) {
+      // 原生库不可用或桥接失败时保留 Dart/Web 行为。
+    }
+  }
   final assFontSize = resolveAssFontSize(settings.fontSize);
   final alphaHex = _alphaHexFromOpacity(settings.opacity);
   final styleName = _styleFontName(settings.fontFamily);
@@ -666,9 +729,7 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
         startSeconds: start,
         endSeconds: end,
         colorRgb: it.colorRgb,
-        type: isBottom
-            ? DanmakuKind.bottom
-            : DanmakuKind.top,
+        type: isBottom ? DanmakuKind.bottom : DanmakuKind.top,
       ));
     }
   }
@@ -676,5 +737,39 @@ DanmakuAssConversionResult convertDanmakuToAssFromPreparedWithEvents(
   return DanmakuAssConversionResult(
     ass: buffer.toString(),
     events: List<AssDanmakuEvent>.unmodifiable(events),
+  );
+}
+
+rust_ass.RustAssExportSettings _toRustSettings(AssExportSettings settings) {
+  return rust_ass.RustAssExportSettings(
+    fontSize: settings.fontSize,
+    opacity: settings.opacity,
+    displayArea: settings.displayArea,
+    scrollDurationSeconds: settings.scrollDurationSeconds,
+    timeOffsetSeconds: settings.timeOffsetSeconds,
+    mergeDuplicates: settings.mergeDuplicates,
+    fontFamily: settings.fontFamily,
+    outlineStyle: settings.outlineStyle.index,
+    outlineWidth: settings.outlineWidth,
+    shadowStyle: settings.shadowStyle.index,
+  );
+}
+
+DanmakuAssConversionResult _fromRustResult(
+  rust_ass.RustAssConversionResult result,
+) {
+  return DanmakuAssConversionResult(
+    ass: result.ass,
+    events: List<AssDanmakuEvent>.unmodifiable(
+      result.events.map(
+        (event) => AssDanmakuEvent(
+          content: event.content,
+          startSeconds: event.startSeconds,
+          endSeconds: event.endSeconds,
+          colorRgb: event.colorRgb,
+          type: _kindFromMode(DanmakuMode.fromCode(event.typeCode)),
+        ),
+      ),
+    ),
   );
 }

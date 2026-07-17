@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// WebDAV 搜索范围
@@ -772,6 +774,13 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
   /// 自然排序比较（处理数字）
   static int _naturalCompare(String a, String b) {
+    if (RustLib.instance.initialized) {
+      try {
+        return rust_metadata.naturalCompareCaseSensitive(a: a, b: b);
+      } catch (_) {
+        // 使用下方 Dart/Web fallback。
+      }
+    }
     final regex = RegExp(r'(\d+)|(\D+)');
     final aMatches = regex.allMatches(a).toList();
     final bMatches = regex.allMatches(b).toList();

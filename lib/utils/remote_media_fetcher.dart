@@ -9,8 +9,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:xml/xml.dart';
+import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
+import 'package:nipaplay/src/rust/rust_init.dart';
 
-/// 获取远程媒体文件的基础信息（文件名/大小）并拉取前16MB原始字节。
+/// 获取远程媒体文件的基础信息，并计算前16MB内容的 MD5。
 ///
 /// 弹弹play的识别接口要求提供精确的文件大小和前16MB数据的MD5值。
 /// 对于 WebDAV/HTTP 资源，我们在这里统一处理多种服务器行为：
@@ -25,8 +27,31 @@ class RemoteMediaFetcher {
   /// 请求超时时间
   static const Duration defaultTimeout = Duration(seconds: 20);
 
-  /// 下载远程媒体的元信息及前16MB数据。
+  /// 获取远程媒体元信息并计算首段哈希；原生路径不把媒体字节传回 Dart。
   static Future<RemoteMediaHead> fetchHead(Uri originalUri) async {
+    if (!kIsWeb) {
+      try {
+        await ensureRustInitialized();
+        final result = await rust_media.probeRemoteMedia(
+          originalUrl: originalUri.toString(),
+          maxHashLength: maxHashLength,
+          timeoutSeconds: defaultTimeout.inSeconds,
+        );
+        return RemoteMediaHead(
+          fileName: result.fileName,
+          fileSize: result.fileSize,
+          headBytes: Uint8List(0),
+          bytesHashed: result.bytesHashed,
+          hash: result.hash,
+        );
+      } catch (error) {
+        debugPrint('RemoteMediaFetcher: Rust 路径失败，回退 Dart: $error');
+      }
+    }
+    return _fetchHeadWithDart(originalUri);
+  }
+
+  static Future<RemoteMediaHead> _fetchHeadWithDart(Uri originalUri) async {
     final sanitizedUri = _buildSanitizedUri(originalUri);
     final headers = <String, String>{
       'User-Agent': 'NipaPlay/1.0',
@@ -49,19 +74,22 @@ class RemoteMediaFetcher {
         final headRequest = http.Request('HEAD', sanitizedUri)
           ..headers.addAll(headers)
           ..persistentConnection = false;
-        final headStreamed = await client.send(headRequest).timeout(defaultTimeout);
+        final headStreamed =
+            await client.send(headRequest).timeout(defaultTimeout);
         final headResponse = await http.Response.fromStream(headStreamed);
 
-          if (headResponse.statusCode >= 200 && headResponse.statusCode < 400) {
-            final parsed = _parseContentLength(headResponse.headers);
-            fileSize = (parsed != null && parsed > 0) ? parsed : null;
-            resolvedFileName ??= _parseContentDispositionFileName(headResponse.headers);
-          } else {
-            debugPrint('RemoteMediaFetcher: HEAD 请求失败 (HTTP ${headResponse.statusCode})');
-          }
-        } catch (e) {
-          debugPrint('RemoteMediaFetcher: HEAD 请求异常: $e');
+        if (headResponse.statusCode >= 200 && headResponse.statusCode < 400) {
+          final parsed = _parseContentLength(headResponse.headers);
+          fileSize = (parsed != null && parsed > 0) ? parsed : null;
+          resolvedFileName ??=
+              _parseContentDispositionFileName(headResponse.headers);
+        } else {
+          debugPrint(
+              'RemoteMediaFetcher: HEAD 请求失败 (HTTP ${headResponse.statusCode})');
         }
+      } catch (e) {
+        debugPrint('RemoteMediaFetcher: HEAD 请求异常: $e');
+      }
 
       // 使用 Range=0-16MB 拉取首段
       Uint8List headBytes = Uint8List(0);
@@ -71,23 +99,31 @@ class RemoteMediaFetcher {
           ..headers['Range'] = 'bytes=0-${maxHashLength - 1}'
           ..persistentConnection = false;
 
-        final rangeStreamed = await client.send(rangeRequest).timeout(defaultTimeout);
+        final rangeStreamed =
+            await client.send(rangeRequest).timeout(defaultTimeout);
 
-        if (rangeStreamed.statusCode == 401 || rangeStreamed.statusCode == 403) {
+        if (rangeStreamed.statusCode == 401 ||
+            rangeStreamed.statusCode == 403) {
           throw HttpException('远程服务器拒绝访问 (HTTP ${rangeStreamed.statusCode})');
         }
 
-        if (rangeStreamed.statusCode != 200 && rangeStreamed.statusCode != 206) {
-          debugPrint('RemoteMediaFetcher: Range 请求返回 ${rangeStreamed.statusCode}，尝试读取但可能不完整');
+        if (rangeStreamed.statusCode != 200 &&
+            rangeStreamed.statusCode != 206) {
+          debugPrint(
+              'RemoteMediaFetcher: Range 请求返回 ${rangeStreamed.statusCode}，尝试读取但可能不完整');
         }
 
-        final sizeFromRange =
-            _parseContentRange(rangeStreamed.headers) ?? rangeStreamed.contentLength;
+        final sizeFromRange = _parseContentRange(rangeStreamed.headers) ??
+            rangeStreamed.contentLength;
         if (fileSize == null || fileSize <= 0) {
-          fileSize = (sizeFromRange != null && sizeFromRange > 0) ? sizeFromRange : null;
+          fileSize = (sizeFromRange != null && sizeFromRange > 0)
+              ? sizeFromRange
+              : null;
         }
-        resolvedFileName ??= _parseContentDispositionFileName(rangeStreamed.headers);
-        headBytes = await _readLimitedBytes(rangeStreamed.stream, maxHashLength);
+        resolvedFileName ??=
+            _parseContentDispositionFileName(rangeStreamed.headers);
+        headBytes =
+            await _readLimitedBytes(rangeStreamed.stream, maxHashLength);
       } catch (e) {
         debugPrint('RemoteMediaFetcher: Range 请求异常: $e');
       }
@@ -99,7 +135,8 @@ class RemoteMediaFetcher {
       // 若长度仍未知，尝试 WebDAV PROPFIND
       if (fileSize == null || fileSize <= 0) {
         try {
-          fileSize = await _fetchFileSizeViaPropfind(client, sanitizedUri, headers);
+          fileSize =
+              await _fetchFileSizeViaPropfind(client, sanitizedUri, headers);
         } catch (e) {
           debugPrint('RemoteMediaFetcher: PROPFIND 获取文件大小异常: $e');
         }
@@ -116,13 +153,15 @@ class RemoteMediaFetcher {
       final hash = _computeHash(headBytes, expectedBytes);
 
       if (!hasFullRequiredData) {
-        throw Exception('仅获取到 ${headBytes.length} 字节，无法满足识别所需的 $expectedBytes 字节');
+        throw Exception(
+            '仅获取到 ${headBytes.length} 字节，无法满足识别所需的 $expectedBytes 字节');
       }
 
       return RemoteMediaHead(
         fileName: fileName,
         fileSize: fileSize,
         headBytes: headBytes,
+        bytesHashed: expectedBytes,
         hash: hash,
       );
     } finally {
@@ -137,7 +176,8 @@ class RemoteMediaFetcher {
     return md5.convert(bytes.sublist(0, expectedLength)).toString();
   }
 
-  static Future<Uint8List> _readLimitedBytes(Stream<List<int>> stream, int limit) async {
+  static Future<Uint8List> _readLimitedBytes(
+      Stream<List<int>> stream, int limit) async {
     final completer = Completer<Uint8List>();
     final builder = BytesBuilder(copy: false);
     StreamSubscription<List<int>>? subscription;
@@ -188,7 +228,8 @@ class RemoteMediaFetcher {
   static int? _parseContentRange(Map<String, String> headers) {
     for (final entry in headers.entries) {
       if (entry.key.toLowerCase() == 'content-range') {
-        final match = RegExp(r'bytes\s+\d+-\d+/(\d+|\*)').firstMatch(entry.value);
+        final match =
+            RegExp(r'bytes\s+\d+-\d+/(\d+|\*)').firstMatch(entry.value);
         if (match != null) {
           final total = match.group(1);
           if (total != null && total != '*') {
@@ -255,7 +296,8 @@ class RemoteMediaFetcher {
         final lastSlash = trimmed.lastIndexOf('/');
         final lastBackslash = trimmed.lastIndexOf('\\');
         final cutIndex = math.max(lastSlash, lastBackslash);
-        final candidate = cutIndex >= 0 ? trimmed.substring(cutIndex + 1) : trimmed;
+        final candidate =
+            cutIndex >= 0 ? trimmed.substring(cutIndex + 1) : trimmed;
         if (candidate.trim().isNotEmpty) {
           return candidate.trim();
         }
@@ -425,13 +467,17 @@ class RemoteMediaFetcher {
 class RemoteMediaHead {
   final String fileName;
   final int fileSize;
+
+  /// 仅 Dart fallback 保留原始首段；Rust 路径为空，避免跨 FFI 复制媒体数据。
   final Uint8List headBytes;
+  final int bytesHashed;
   final String hash;
 
   const RemoteMediaHead({
     required this.fileName,
     required this.fileSize,
     required this.headBytes,
+    required this.bytesHashed,
     required this.hash,
   });
 }
