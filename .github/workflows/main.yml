@@ -7,6 +7,11 @@ on:
         description: 'Release title, e.g. 2026.0430'
         required: true
         type: string
+      submit_ios_for_review:
+        description: 'Upload iOS build and automatically submit it for App Review'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -56,6 +61,15 @@ jobs:
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-ios.yml
+    with:
+      upload-to-app-store: true
+      app-store-connect-api-key-id: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+      app-store-connect-issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+    secrets:
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
 
   Build-macOS:
     name: Build macOS
@@ -355,6 +369,14 @@ jobs:
             : > release_notes.md
           fi
 
+      - name: Upload generated release notes for downstream publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release_notes.md
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
@@ -366,6 +388,206 @@ jobs:
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+
+  Publish-iOS-App-Store:
+    name: Publish iOS to App Store Connect
+    needs: [Publish, Build-iOS]
+    if: success()
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      APP_BUNDLE_ID: com.aimessoft.nipaplay
+      APP_VERSION: ${{ needs.Build-iOS.outputs.app-store-version }}
+      APP_BUILD_NUMBER: ${{ needs.Build-iOS.outputs.app-store-build-number }}
+      APP_STORE_ZH_LOCALE: ${{ vars.APP_STORE_ZH_LOCALE || 'zh-Hans' }}
+      APP_STORE_EN_LOCALE: ${{ vars.APP_STORE_EN_LOCALE || 'en-US' }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+      AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
+      AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_HIDE_CHANGELOG: "1"
+      FASTLANE_DISABLE_COLORS: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download signed App Store IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.Build-iOS.outputs.app-store-artifact-name }}
+          path: ${{ runner.temp }}/app-store-ipa
+
+      - name: Download generated GitHub release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes
+
+      - name: Validate App Store publishing inputs
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for variable_name in \
+            APP_VERSION \
+            APP_BUILD_NUMBER \
+            APP_STORE_CONNECT_API_KEY_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_API_PRIVATE_KEY \
+            AI_API_URL \
+            AI_MODEL \
+            AI_API_TOKEN; do
+            if [ -z "${!variable_name:-}" ]; then
+              missing+=("$variable_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing App Store publishing configuration: ${missing[*]}" >&2
+            exit 1
+          fi
+
+          signed_ipa="$(find "$RUNNER_TEMP/app-store-ipa" -maxdepth 2 -type f -name '*.ipa' -print -quit)"
+          if [ -z "$signed_ipa" ]; then
+            echo "Signed App Store IPA was not found in the downloaded artifact." >&2
+            exit 1
+          fi
+
+          release_notes="$RUNNER_TEMP/release-notes/release_notes.md"
+          if [ ! -s "$release_notes" ]; then
+            echo "Generated GitHub release notes are empty; refusing to upload and submit without localized update notes." >&2
+            exit 1
+          fi
+
+          echo "SIGNED_IPA=$signed_ipa" >> "$GITHUB_ENV"
+          echo "GITHUB_RELEASE_NOTES=$release_notes" >> "$GITHUB_ENV"
+
+      - name: Generate Chinese and English App Store release notes
+        shell: bash
+        env:
+          AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
+        run: |
+          python3 .github/workflows/scripts/generate-app-store-release-notes.py \
+            --source "$GITHUB_RELEASE_NOTES" \
+            --output-dir "$RUNNER_TEMP/app-store-metadata" \
+            --zh-locale "$APP_STORE_ZH_LOCALE" \
+            --en-locale "$APP_STORE_EN_LOCALE" \
+            --max-characters 4000 \
+            --max-attempts 5
+
+      - name: Upload App Store release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-release-notes
+          path: ${{ runner.temp }}/app-store-metadata
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Setup Ruby for fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install fastlane
+        run: gem install fastlane --version 2.237.0 --no-document
+
+      - name: Prepare App Store Connect API key
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          api_key_path="$RUNNER_TEMP/app-store-connect-api-key.json"
+          jq -n \
+            --arg key_id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --arg issuer_id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --arg key "$APP_STORE_CONNECT_API_PRIVATE_KEY" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > "$api_key_path"
+          chmod 600 "$api_key_path"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
+
+      - name: Check whether this App Store build is already uploaded
+        id: existing_build
+        shell: bash
+        run: |
+          set +e
+          ruby .github/workflows/scripts/check-app-store-build.rb \
+            "$APP_STORE_CONNECT_API_KEY_PATH" \
+            "$APP_BUNDLE_ID" \
+            "$APP_VERSION" \
+            "$APP_BUILD_NUMBER"
+          status=$?
+          set -e
+
+          case "$status" in
+            0)
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              ;;
+            10)
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unable to check the existing App Store build." >&2
+              exit "$status"
+              ;;
+          esac
+
+      - name: Upload metadata, upload build, and submit for review
+        if: steps.existing_build.outputs.exists != 'true'
+        shell: bash
+        env:
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_ios_for_review }}
+        run: |
+          fastlane deliver \
+            --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+            --ipa "$SIGNED_IPA" \
+            --app_identifier "$APP_BUNDLE_ID" \
+            --app_version "$APP_VERSION" \
+            --platform ios \
+            --metadata_path "$RUNNER_TEMP/app-store-metadata" \
+            --skip_screenshots true \
+            --submit_for_review "$SUBMIT_FOR_REVIEW" \
+            --automatic_release true \
+            --submission_information '{"export_compliance_uses_encryption":false}' \
+            --run_precheck_before_submit false \
+            --version_check_wait_retry_limit 10 \
+            --force true
+
+      - name: Reuse existing build, update metadata, and submit for review
+        if: steps.existing_build.outputs.exists == 'true'
+        shell: bash
+        env:
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_ios_for_review }}
+        run: |
+          fastlane deliver \
+            --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+            --skip_binary_upload true \
+            --build_number "$APP_BUILD_NUMBER" \
+            --app_identifier "$APP_BUNDLE_ID" \
+            --app_version "$APP_VERSION" \
+            --platform ios \
+            --metadata_path "$RUNNER_TEMP/app-store-metadata" \
+            --skip_screenshots true \
+            --submit_for_review "$SUBMIT_FOR_REVIEW" \
+            --automatic_release true \
+            --submission_information '{"export_compliance_uses_encryption":false}' \
+            --run_precheck_before_submit false \
+            --version_check_wait_retry_limit 10 \
+            --force true
+
+      - name: Clean App Store credentials
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/app-store-connect-api-key.json"
 
   UpdateVersion:
     needs: [Publish]

@@ -2,6 +2,33 @@ name: Build iOS
 
 on:
   workflow_call:
+    inputs:
+      upload-to-app-store:
+        description: '是否构建签名 IPA，供 GitHub Release 发布成功后上传到 App Store Connect'
+        required: false
+        default: false
+        type: boolean
+      app-store-connect-api-key-id:
+        description: 'App Store Connect API Key ID'
+        required: false
+        type: string
+      app-store-connect-issuer-id:
+        description: 'App Store Connect API Issuer ID'
+        required: false
+        type: string
+    secrets:
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64:
+        description: '包含 Apple Distribution 证书和私钥的 P12（Base64）'
+        required: false
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:
+        description: 'iOS Distribution P12 密码'
+        required: false
+      APPLE_TEAM_ID:
+        description: 'Apple Developer Team ID'
+        required: false
+      APP_STORE_CONNECT_API_PRIVATE_KEY:
+        description: 'App Store Connect API 私钥（AuthKey_*.p8 完整内容）'
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -9,15 +36,30 @@ on:
       artifact-name:
         description: '构建产物名称'
         value: ${{ jobs.build.outputs.artifact-name }}
+      app-store-artifact-name:
+        description: 'App Store 签名 IPA 的 Actions artifact 名称'
+        value: ${{ jobs.build.outputs.app-store-artifact-name }}
+      app-store-build-number:
+        description: 'App Store 构建号'
+        value: ${{ jobs.build.outputs.app-store-build-number }}
+      app-store-version:
+        description: 'App Store 版本号（不含 pubspec build metadata）'
+        value: ${{ jobs.build.outputs.app-store-version }}
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build iOS IPA
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 90
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-iOS
+      app-store-artifact-name: app-store-iOS
+      app-store-build-number: ${{ steps.app_store_build.outputs.build-number }}
+      app-store-version: ${{ steps.app_store_build.outputs.version }}
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
@@ -35,8 +77,39 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Validate App Store Connect configuration
+        if: inputs.upload-to-app-store
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app-store-connect-issuer-id }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for variable_name in \
+            IOS_DISTRIBUTION_CERTIFICATE_BASE64 \
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            APPLE_TEAM_ID \
+            APP_STORE_CONNECT_API_KEY_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_API_PRIVATE_KEY; do
+            if [ -z "${!variable_name:-}" ]; then
+              missing+=("$variable_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "缺少 App Store Connect 发布配置：${missing[*]}" >&2
+            exit 1
+          fi
+
       - name: Cache iOS Pods
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ios/Pods
           key: ios-pods-${{ hashFiles('ios/Podfile.lock', 'pubspec.lock') }}
@@ -51,16 +124,140 @@ jobs:
         shell: bash
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
-      - name: Build iOS IPA
+      - name: Build unsigned iOS IPA
+        id: unsigned_build
         uses: ./.github/actions/build-ios
         with:
           app-version: ${{ steps.setup.outputs.version }}
+
+      - name: Import iOS distribution certificate
+        if: inputs.upload-to-app-store
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+
+      - name: Prepare App Store Connect API key
+        if: inputs.upload-to-app-store
+        id: app_store_api_key
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          api_key_dir="$RUNNER_TEMP/app-store-connect-private-keys"
+          api_key_path="$api_key_dir/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          mkdir -p "$api_key_dir"
+          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$api_key_path"
+          chmod 600 "$api_key_path"
+
+          if ! grep -q -- '-----BEGIN PRIVATE KEY-----' "$api_key_path"; then
+            echo "APP_STORE_CONNECT_API_PRIVATE_KEY 不是完整的 AuthKey_*.p8 内容。" >&2
+            exit 1
+          fi
+
+          echo "path=$api_key_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build App Store signed IPA
+        if: inputs.upload-to-app-store
+        id: app_store_build
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.setup.outputs.version }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app-store-connect-issuer-id }}
+          APP_STORE_CONNECT_API_KEY_PATH: ${{ steps.app_store_api_key.outputs.path }}
+        run: |
+          set -euo pipefail
+
+          archive_path="$RUNNER_TEMP/NipaPlay.xcarchive"
+          export_path="$RUNNER_TEMP/NipaPlay-AppStore"
+          export_options="$RUNNER_TEMP/ExportOptions-AppStore.plist"
+          marketing_version="${APP_VERSION%%+*}"
+          build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+
+          rm -rf "$archive_path" "$export_path" "$export_options"
+          mkdir -p "$export_path"
+
+          /usr/libexec/PlistBuddy -c 'Add :method string app-store-connect' "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :destination string export' "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :signingStyle string automatic' "$export_options"
+          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :manageAppVersionAndBuildNumber bool false' "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :stripSwiftSymbols bool true' "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :uploadSymbols bool true' "$export_options"
+
+          echo "构建 App Store 归档：版本 $marketing_version，构建号 $build_number"
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$archive_path" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            FLUTTER_BUILD_NAME="$marketing_version" \
+            FLUTTER_BUILD_NUMBER="$build_number" \
+            CURRENT_PROJECT_VERSION="$build_number" \
+            archive \
+            -quiet
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$archive_path" \
+            -exportPath "$export_path" \
+            -exportOptionsPlist "$export_options" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            -quiet
+
+          signed_ipa="$(find "$export_path" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
+          if [ -z "$signed_ipa" ]; then
+            echo "Xcode 导出完成，但未找到签名 IPA。" >&2
+            find "$export_path" -maxdepth 2 -print >&2 || true
+            exit 1
+          fi
+
+          codesign --verify --deep --strict "$archive_path/Products/Applications/Runner.app"
+          echo "ipa-path=$signed_ipa" >> "$GITHUB_OUTPUT"
+          echo "build-number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "version=$marketing_version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed IPA for post-release App Store publishing
+        if: inputs.upload-to-app-store
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-iOS
+          path: ${{ steps.app_store_build.outputs.ipa-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Clean App Store signing files
+        if: always() && inputs.upload-to-app-store
+        shell: bash
+        run: |
+          rm -rf \
+            "$RUNNER_TEMP/app-store-connect-private-keys" \
+            "$RUNNER_TEMP/NipaPlay.xcarchive" \
+            "$RUNNER_TEMP/NipaPlay-AppStore" \
+            "$RUNNER_TEMP/ExportOptions-AppStore.plist"
       
-      - name: Upload iOS Artifacts
+      - name: Upload unsigned iOS Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-iOS
-          path: build/**/*.ipa
+          path: ${{ steps.unsigned_build.outputs.ipa-path }}
 
       - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
         uses: actions/upload-artifact@v4
