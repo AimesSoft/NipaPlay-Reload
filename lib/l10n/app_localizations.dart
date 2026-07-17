@@ -312,13 +312,13 @@ abstract class AppLocalizations {
   /// No description provided for @externalPlayerConsoleDanmakuKeywordFilter.
   ///
   /// In zh, this message translates to:
-  /// **'按关键词屏蔽弹幕'**
+  /// **'弹幕屏蔽规则'**
   String get externalPlayerConsoleDanmakuKeywordFilter;
 
   /// No description provided for @externalPlayerConsoleDanmakuKeywordHint.
   ///
   /// In zh, this message translates to:
-  /// **'输入弹幕中包含的关键词'**
+  /// **'输入规则内容'**
   String get externalPlayerConsoleDanmakuKeywordHint;
 
   /// No description provided for @externalPlayerConsoleDanmakuKeywordAdd.
@@ -332,6 +332,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已被关键词屏蔽'**
   String get externalPlayerConsoleDanmakuBlocked;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeKeyword.
+  ///
+  /// In zh, this message translates to:
+  /// **'关键词'**
+  String get externalPlayerConsoleDanmakuBlockModeKeyword;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeRegex.
+  ///
+  /// In zh, this message translates to:
+  /// **'正则表达式'**
+  String get externalPlayerConsoleDanmakuBlockModeRegex;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockModeSender.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送者 ID'**
+  String get externalPlayerConsoleDanmakuBlockModeSender;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效且未重复的规则'**
+  String get externalPlayerConsoleDanmakuBlockInvalid;
+
+  /// No description provided for @externalPlayerConsoleDanmakuBlockRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除规则'**
+  String get externalPlayerConsoleDanmakuBlockRemove;
+
+  /// No description provided for @externalPlayerConsoleDanmakuShow.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示弹幕'**
+  String get externalPlayerConsoleDanmakuShow;
+
+  /// No description provided for @externalPlayerConsoleDanmakuHide.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏弹幕'**
+  String get externalPlayerConsoleDanmakuHide;
 
   /// No description provided for @danmakuOpacityTitle.
   ///

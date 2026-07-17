@@ -15,6 +15,27 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 
 
+/// 弹幕屏蔽规则类型.
+enum ItemType {
+  keyword,
+  regex,
+  userId,
+}
+
+
+/// 弹幕屏蔽项目
+class BlockedDanmakuItem {
+
+  final String value;
+  final ItemType type;
+
+  const BlockedDanmakuItem({
+    required this.value,
+    required this.type,
+  });
+}
+
+
 /// 管理外部播放器控制台, 当前番剧信息和弹幕渲染状态.
 ///
 /// 本服务维护弹幕源列表和 ASS 设置, 样式变化时重新生成 ASS;
@@ -48,7 +69,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   String? _danmakuLuaPath;
   List<DanmakuItem>   _danmakuList = const []; // 弹幕列表
   AssExportSettings?  _danmakuAssSettings;
-  List<String>        _blockedKeywords = const []; // 弹幕屏蔽关键词列表
+  List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
 
   // 弹幕样式相关
   DanmakuStyle _danmakuStyle = DanmakuStyle();
@@ -75,7 +96,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   String? get episodeTitle => _episodeTitle;
   int? get episodeId => _episodeId;
   List<DanmakuItem> get danmakuList => _danmakuList;
-  List<String> get blockedKeywords => _blockedKeywords;
+  List<BlockedDanmakuItem> get blockedItems => _blockedItems;
   double get danmakuOpacity => _danmakuStyle.opacity;
   double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
   static int get stateTimestamp => _stateTimestamp;
@@ -208,35 +229,57 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._updateDanmakuStyle((style) => style.outlineWidth = width);
   }
 
-  /// 添加一个按内容匹配的弹幕屏蔽关键词.
-  static bool addBlockedKeyword(String keyword) {
-    final value = keyword.trim();
-    if (value.isEmpty) return false;
-    if (_instance._blockedKeywords.any(
-      (item) => item.toLowerCase() == value.toLowerCase(),
-    )) {
-      return false;
-    }
-    _instance._blockedKeywords = List<String>.unmodifiable([
-      ..._instance._blockedKeywords,
-      value,
-    ]);
-    _instance._applyBlockedKeywords();
-    _markConfigurationChanged('addBlockedKeyword');
+  /// 设置单条弹幕是否参与渲染.
+  static bool setDanmakuVisible(DanmakuItem item, bool visible) {
+
+    // 检查弹幕是否属于当前列表, 并且状态是否发生变化
+    if (!_instance._danmakuList.any((candidate) => identical(candidate, item))) return false;
+    if (item.visible == visible) return false;
+
+    item.visible = visible;
+    _markConfigurationChanged('setDanmakuVisible');
     _instance.notifyListeners();
     _instance._queueDanmakuRefresh();
     return true;
   }
 
-  /// 移除一个弹幕屏蔽关键词.
-  static void removeBlockedKeyword(String keyword) {
-    final keywords = _instance._blockedKeywords
-        .where((item) => item != keyword)
+  /// 添加一条弹幕屏蔽规则.
+  static bool addBlockedItem(String input, ItemType type) {
+    final value = input.trim();
+    if (value.isEmpty) return false;
+    if (type == ItemType.regex) {
+      try {
+        RegExp(value, caseSensitive: false);
+      } on FormatException {
+        return false;
+      }
+    }
+    if (_instance._blockedItems.any(
+      (item) => item.type == type &&
+          item.value.toLowerCase() == value.toLowerCase(),
+    )) {
+      return false;
+    }
+    _instance._blockedItems = List<BlockedDanmakuItem>.unmodifiable([
+      ..._instance._blockedItems,
+      BlockedDanmakuItem(value: value, type: type),
+    ]);
+    _instance._applyBlockedItems();
+    _markConfigurationChanged('addBlockedItem');
+    _instance.notifyListeners();
+    _instance._queueDanmakuRefresh();
+    return true;
+  }
+
+  /// 移除一条弹幕屏蔽规则.
+  static void removeBlockedItem(BlockedDanmakuItem blockedItem) {
+    final items = _instance._blockedItems
+        .where((item) => !identical(item, blockedItem))
         .toList(growable: false);
-    if (keywords.length == _instance._blockedKeywords.length) return;
-    _instance._blockedKeywords = List<String>.unmodifiable(keywords);
-    _instance._applyBlockedKeywords();
-    _markConfigurationChanged('removeBlockedKeyword');
+    if (items.length == _instance._blockedItems.length) return;
+    _instance._blockedItems = List<BlockedDanmakuItem>.unmodifiable(items);
+    _instance._applyBlockedItems();
+    _markConfigurationChanged('removeBlockedItem');
     _instance.notifyListeners();
     _instance._queueDanmakuRefresh();
   }
@@ -321,12 +364,31 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   bool _isDanmakuBlocked(DanmakuItem item) {
     final content = item.content.toLowerCase();
-    return _blockedKeywords.any(
-      (keyword) => content.contains(keyword.toLowerCase()),
-    );
+
+    // 根据屏蔽项目类型进行匹配
+    for (final blockedItem in _blockedItems) {
+      final blockedValue = blockedItem.value.toLowerCase();
+      switch (blockedItem.type) {
+        case ItemType.keyword:
+          if (content.contains(blockedValue)) return true;
+          break;
+        case ItemType.regex:
+          if (RegExp(
+            blockedItem.value,
+            caseSensitive: false,
+          ).hasMatch(item.content)) {
+            return true;
+          }
+          break;
+        case ItemType.userId:
+          if (item.senderId?.toLowerCase() == blockedValue) return true;
+          break;
+      }
+    }
+    return false;
   }
 
-  void _applyBlockedKeywords() {
+  void _applyBlockedItems() {
     for (final item in _danmakuList) {
       item.visible = !_isDanmakuBlocked(item);
     }
@@ -447,7 +509,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuAssPath = assets?.assPath;
     _danmakuLuaPath = assets?.luaPath;
     _danmakuList = _sortDanmakuItems(assets?.danmakuList ?? const []);
-    _applyBlockedKeywords();
+    _applyBlockedItems();
     _danmakuAssSettings = assets?.assSettings;
     final settings = assets?.assSettings;
     final outlineWidth = settings?.outlineWidth ?? 1.0;
@@ -463,7 +525,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   void _clearDanmakuState() {
     _setDanmakuAssets(null);
-    _blockedKeywords = const [];
+    _blockedItems = const [];
   }
 
   static List<DanmakuItem> _sortDanmakuItems(List<DanmakuItem> items) {

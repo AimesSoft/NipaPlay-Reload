@@ -44,7 +44,7 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         danmakuOutlineWidth: service.danmakuOutlineWidth,
                         supportsDanmakuOpacity: service.supportsDanmakuOpacity,
                         supportsDanmakuOutline: service.supportsDanmakuOutline,
-                        blockedKeywords: service.blockedKeywords,
+                        blockedItems: service.blockedItems,
                         activeDanmakuIndices: service.activeDanmakuIndices,
                       ),
               ),
@@ -106,7 +106,7 @@ class _ConsoleCard extends StatelessWidget {
     required this.danmakuOutlineWidth,
     required this.supportsDanmakuOpacity,
     required this.supportsDanmakuOutline,
-    required this.blockedKeywords,
+    required this.blockedItems,
     required this.activeDanmakuIndices,
   });
 
@@ -122,7 +122,7 @@ class _ConsoleCard extends StatelessWidget {
   final double danmakuOutlineWidth;
   final bool supportsDanmakuOpacity;
   final bool supportsDanmakuOutline;
-  final List<String> blockedKeywords;
+  final List<BlockedDanmakuItem> blockedItems;
   final List<int> activeDanmakuIndices;
 
   @override
@@ -192,9 +192,9 @@ class _ConsoleCard extends StatelessWidget {
             const SizedBox(height: 8),
             _buildDanmakuOutlineWidth(context),
             const SizedBox(height: 8),
-            _DanmakuKeywordFilter(
+            _DanmakuBlockRuleEditor(
               enabled: supportsDanmakuOpacity,
-              keywords: blockedKeywords,
+              items: blockedItems,
             ),
             const SizedBox(height: 20),
             Align(
@@ -362,27 +362,63 @@ class _ConsoleCard extends StatelessWidget {
   }
 }
 
-class _DanmakuKeywordFilter extends StatefulWidget {
-  const _DanmakuKeywordFilter({
+class _DanmakuBlockRuleEditor extends StatefulWidget {
+  const _DanmakuBlockRuleEditor({
     required this.enabled,
-    required this.keywords,
+    required this.items,
   });
 
   final bool enabled;
-  final List<String> keywords;
+  final List<BlockedDanmakuItem> items;
 
   @override
-  State<_DanmakuKeywordFilter> createState() =>
-      _DanmakuKeywordFilterState();
+  State<_DanmakuBlockRuleEditor> createState() =>
+      _DanmakuBlockRuleEditorState();
 }
 
-class _DanmakuKeywordFilterState extends State<_DanmakuKeywordFilter> {
+class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
   final TextEditingController _controller = TextEditingController();
+  ItemType _selectedType = ItemType.keyword;
+  bool _hasInputError = false;
 
-  void _addKeyword() {
-    if (ExternalPlayerConsoleService.addBlockedKeyword(_controller.text)) {
+  void _addItem() {
+    final value = _controller.text.trim();
+    var valid = value.isNotEmpty;
+    if (valid && _selectedType == ItemType.regex) {
+      try {
+        RegExp(value);
+      } on FormatException {
+        valid = false;
+      }
+    }
+    final added = valid && ExternalPlayerConsoleService.addBlockedItem(
+      value,
+      _selectedType,
+    );
+    setState(() => _hasInputError = !added);
+    if (added) {
       _controller.clear();
     }
+  }
+
+  String _typeLabel(BuildContext context, ItemType type) {
+    final localizations = context.l10n;
+    return switch (type) {
+      ItemType.keyword =>
+        localizations.externalPlayerConsoleDanmakuBlockModeKeyword,
+      ItemType.regex =>
+        localizations.externalPlayerConsoleDanmakuBlockModeRegex,
+      ItemType.userId =>
+        localizations.externalPlayerConsoleDanmakuBlockModeSender,
+    };
+  }
+
+  IconData _typeIcon(ItemType type) {
+    return switch (type) {
+      ItemType.keyword => Icons.text_fields_rounded,
+      ItemType.regex => Icons.data_object_rounded,
+      ItemType.userId => Icons.person_outline_rounded,
+    };
   }
 
   @override
@@ -403,6 +439,30 @@ class _DanmakuKeywordFilterState extends State<_DanmakuKeywordFilter> {
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SegmentedButton<ItemType>(
+            key: const Key('external-player-danmaku-block-mode'),
+            segments: ItemType.values.map((type) {
+              return ButtonSegment<ItemType>(
+                value: type,
+                icon: Icon(_typeIcon(type)),
+                label: Text(_typeLabel(context, type)),
+              );
+            }).toList(growable: false),
+            selected: {_selectedType},
+            showSelectedIcon: false,
+            onSelectionChanged: widget.enabled
+                ? (selection) {
+                    setState(() {
+                      _selectedType = selection.single;
+                      _hasInputError = false;
+                    });
+                  }
+                : null,
+          ),
+        ),
+        const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -414,17 +474,25 @@ class _DanmakuKeywordFilterState extends State<_DanmakuKeywordFilter> {
                 decoration: InputDecoration(
                   hintText: localizations
                       .externalPlayerConsoleDanmakuKeywordHint,
+                  errorText: _hasInputError
+                      ? localizations.externalPlayerConsoleDanmakuBlockInvalid
+                      : null,
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _addKeyword(),
+                onChanged: (_) {
+                  if (_hasInputError) {
+                    setState(() => _hasInputError = false);
+                  }
+                },
+                onSubmitted: (_) => _addItem(),
               ),
             ),
             const SizedBox(width: 8),
             FilledButton.tonalIcon(
               key: const Key('external-player-danmaku-keyword-add'),
-              onPressed: widget.enabled ? _addKeyword : null,
+              onPressed: widget.enabled ? _addItem : null,
               icon: const Icon(Icons.add),
               label: Text(
                 localizations.externalPlayerConsoleDanmakuKeywordAdd,
@@ -432,18 +500,46 @@ class _DanmakuKeywordFilterState extends State<_DanmakuKeywordFilter> {
             ),
           ],
         ),
-        if (widget.keywords.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: widget.keywords.map((keyword) {
-              return InputChip(
-                label: Text(keyword),
-                onDeleted: () =>
-                    ExternalPlayerConsoleService.removeBlockedKeyword(keyword),
-              );
-            }).toList(growable: false),
+        if (widget.items.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: List.generate(widget.items.length, (index) {
+                final item = widget.items[index];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      key: ValueKey(
+                        'external-player-danmaku-block-item-${item.type.name}-${item.value}',
+                      ),
+                      dense: true,
+                      leading: Icon(_typeIcon(item.type)),
+                      title: Text(item.value),
+                      subtitle: Text(_typeLabel(context, item.type)),
+                      trailing: IconButton(
+                        tooltip: localizations
+                            .externalPlayerConsoleDanmakuBlockRemove,
+                        onPressed: () =>
+                            ExternalPlayerConsoleService.removeBlockedItem(item),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ),
+                    if (index < widget.items.length - 1)
+                      Divider(
+                        height: 1,
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                  ],
+                );
+              }),
+            ),
           ),
         ],
       ],

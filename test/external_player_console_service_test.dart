@@ -280,6 +280,79 @@ void main() {
         expect(service.activeDanmakuIndices, isEmpty);
       });
 
+      test('blocks danmaku by keyword, regex, and sender ID', () async {
+        final process = await _startPlayer();
+        final service = ExternalPlayerConsoleService.instance;
+        addTearDown(() async {
+          ExternalPlayerConsoleService.closePlayerAndConsole();
+          await _stopProcess(process);
+        });
+        _showSession(_session(
+          process,
+          danmakuList: [
+            DanmakuItem(
+              content: 'Alpha comment',
+              time: const Duration(seconds: 1),
+              senderId: 'sender-one',
+            ),
+            DanmakuItem(
+              content: 'Episode 123',
+              time: const Duration(seconds: 2),
+              senderId: 'sender-two',
+            ),
+            DanmakuItem(
+              content: 'keep me',
+              time: const Duration(seconds: 3),
+              senderId: 'sender-three',
+            ),
+          ],
+        ));
+
+        expect(
+          ExternalPlayerConsoleService.addBlockedItem(
+            'alpha',
+            ItemType.keyword,
+          ),
+          isTrue,
+        );
+        expect(
+          ExternalPlayerConsoleService.addBlockedItem(
+            r'\d{3}$',
+            ItemType.regex,
+          ),
+          isTrue,
+        );
+        expect(
+          ExternalPlayerConsoleService.addBlockedItem(
+            'sender-three',
+            ItemType.userId,
+          ),
+          isTrue,
+        );
+        expect(
+          service.danmakuList.map((item) => item.visible),
+          [false, false, false],
+        );
+        expect(
+          service.blockedItems.map((item) => item.type),
+          [ItemType.keyword, ItemType.regex, ItemType.userId],
+        );
+        expect(
+          ExternalPlayerConsoleService.addBlockedItem(
+            '[invalid',
+            ItemType.regex,
+          ),
+          isFalse,
+        );
+
+        final regexItem = service.blockedItems[1];
+        ExternalPlayerConsoleService.removeBlockedItem(regexItem);
+        expect(
+          service.danmakuList.map((item) => item.visible),
+          [false, true, false],
+        );
+      });
+
       test('close hides the session and terminates the player', () async {
         final process = await _startPlayer();
         final service = ExternalPlayerConsoleService.instance;
@@ -326,8 +399,15 @@ void main() {
               }),
             ],
           ));
-          ExternalPlayerConsoleService.instance.danmakuList.single.visible =
-              false;
+          final service = ExternalPlayerConsoleService.instance;
+          final item = service.danmakuList.single;
+          expect(
+            ExternalPlayerConsoleService.addBlockedItem(
+              'another-sender',
+              ItemType.userId,
+            ),
+            isTrue,
+          );
 
           await tester.pumpWidget(const MaterialApp(
             locale: Locale('zh'),
@@ -336,14 +416,60 @@ void main() {
             home: ExternalPlayerConsolePage(),
           ));
 
-          expect(find.textContaining('sender-hash'), findsOneWidget);
-          expect(find.textContaining('dandanplay'), findsNothing);
+          final modeSelector = find.byKey(
+            const Key('external-player-danmaku-block-mode'),
+          );
+          expect(modeSelector, findsOneWidget);
+          expect(find.text('关键词'), findsOneWidget);
+          expect(find.text('正则表达式'), findsOneWidget);
+          expect(find.text('发送者 ID'), findsWidgets);
+          expect(service.blockedItems.single.type, ItemType.userId);
+          expect(service.blockedItems.single.value, 'another-sender');
           expect(
             find.byKey(const ValueKey(
-              'external-player-danmaku-blocked-0-comment-id',
+              'external-player-danmaku-block-item-userId-another-sender',
             )),
             findsOneWidget,
           );
+
+          expect(find.textContaining('sender-hash'), findsOneWidget);
+          expect(find.textContaining('dandanplay'), findsNothing);
+          final visibilityButton = find.byKey(const ValueKey(
+            'external-player-danmaku-visibility-0-comment-id',
+          ));
+          expect(visibilityButton, findsOneWidget);
+          expect(
+            find.descendant(
+              of: visibilityButton,
+              matching: find.byIcon(Icons.visibility_rounded),
+            ),
+            findsOneWidget,
+          );
+
+          final initialTimestamp =
+              ExternalPlayerConsoleService.stateTimestamp;
+          await tester.ensureVisible(visibilityButton);
+          await tester.pump();
+          await tester.tap(visibilityButton);
+          await tester.pump();
+          expect(item.visible, isFalse);
+          expect(
+            ExternalPlayerConsoleService.stateTimestamp,
+            greaterThan(initialTimestamp),
+          );
+          expect(
+            find.descendant(
+              of: visibilityButton,
+              matching: find.byIcon(Icons.visibility_off_rounded),
+            ),
+            findsOneWidget,
+          );
+
+          await tester.ensureVisible(visibilityButton);
+          await tester.pump();
+          await tester.tap(visibilityButton);
+          await tester.pump();
+          expect(item.visible, isTrue);
           expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(find.text('启用弹幕描边'), findsNothing);
           expect(
@@ -666,14 +792,20 @@ void main() {
         final secondItem = service.danmakuList[1];
         final keywordTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         expect(
-          ExternalPlayerConsoleService.addBlockedKeyword('SECOND'),
+          ExternalPlayerConsoleService.addBlockedItem(
+            'SECOND',
+            ItemType.keyword,
+          ),
           isTrue,
         );
         final addedKeywordTimestamp =
             ExternalPlayerConsoleService.stateTimestamp;
         expect(addedKeywordTimestamp, greaterThan(keywordTimestamp));
         expect(
-          ExternalPlayerConsoleService.addBlockedKeyword('second'),
+          ExternalPlayerConsoleService.addBlockedItem(
+            'second',
+            ItemType.keyword,
+          ),
           isFalse,
         );
         expect(
@@ -683,7 +815,9 @@ void main() {
         await _waitUntil(() => reloadCommands.length == 2);
 
         final filteredAss = await assFile.readAsString();
-        expect(service.blockedKeywords, ['SECOND']);
+        expect(service.blockedItems, hasLength(1));
+        expect(service.blockedItems.single.value, 'SECOND');
+        expect(service.blockedItems.single.type, ItemType.keyword);
         expect(
           service.danmakuList.map((item) => item.content),
           ['first regenerated comment', 'second regenerated comment'],
@@ -696,13 +830,15 @@ void main() {
         expect(filteredAss, contains('first regenerated comment'));
         expect(filteredAss, isNot(contains('second regenerated comment')));
 
-        ExternalPlayerConsoleService.removeBlockedKeyword('SECOND');
+        ExternalPlayerConsoleService.removeBlockedItem(
+          service.blockedItems.single,
+        );
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(addedKeywordTimestamp),
         );
         await _waitUntil(() => reloadCommands.length == 3);
-        expect(service.blockedKeywords, isEmpty);
+        expect(service.blockedItems, isEmpty);
         expect(
           service.danmakuList.map((item) => item.visible),
           [true, true],

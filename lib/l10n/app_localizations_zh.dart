@@ -117,16 +117,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暂停自动跟随';
 
   @override
-  String get externalPlayerConsoleDanmakuKeywordFilter => '按关键词屏蔽弹幕';
+  String get externalPlayerConsoleDanmakuKeywordFilter => '弹幕屏蔽规则';
 
   @override
-  String get externalPlayerConsoleDanmakuKeywordHint => '输入弹幕中包含的关键词';
+  String get externalPlayerConsoleDanmakuKeywordHint => '输入规则内容';
 
   @override
   String get externalPlayerConsoleDanmakuKeywordAdd => '添加';
 
   @override
   String get externalPlayerConsoleDanmakuBlocked => '已被关键词屏蔽';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeKeyword => '关键词';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeRegex => '正则表达式';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeSender => '发送者 ID';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockInvalid => '请输入有效且未重复的规则';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockRemove => '删除规则';
+
+  @override
+  String get externalPlayerConsoleDanmakuShow => '显示弹幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuHide => '隐藏弹幕';
 
   @override
   String get danmakuOpacityTitle => '弹幕不透明度';
@@ -1990,16 +2011,37 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleDanmakuFollowDisabled => '已暫停自動跟隨';
 
   @override
-  String get externalPlayerConsoleDanmakuKeywordFilter => '按關鍵詞封鎖彈幕';
+  String get externalPlayerConsoleDanmakuKeywordFilter => '彈幕封鎖規則';
 
   @override
-  String get externalPlayerConsoleDanmakuKeywordHint => '輸入彈幕中包含的關鍵詞';
+  String get externalPlayerConsoleDanmakuKeywordHint => '輸入規則內容';
 
   @override
   String get externalPlayerConsoleDanmakuKeywordAdd => '新增';
 
   @override
   String get externalPlayerConsoleDanmakuBlocked => '已被關鍵詞封鎖';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeKeyword => '關鍵詞';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeRegex => '正則表達式';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockModeSender => '發送者 ID';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockInvalid => '請輸入有效且未重複的規則';
+
+  @override
+  String get externalPlayerConsoleDanmakuBlockRemove => '刪除規則';
+
+  @override
+  String get externalPlayerConsoleDanmakuShow => '顯示彈幕';
+
+  @override
+  String get externalPlayerConsoleDanmakuHide => '隱藏彈幕';
 
   @override
   String get danmakuOpacityTitle => '彈幕不透明度';
