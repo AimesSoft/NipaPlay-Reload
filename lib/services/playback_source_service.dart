@@ -17,6 +17,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/utils/media_path_name.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
@@ -873,11 +874,7 @@ class PlaybackSourceService {
   }
 
   static String _pathName(String path) {
-    final uri = Uri.tryParse(path);
-    if (uri != null && uri.pathSegments.isNotEmpty) {
-      return Uri.decodeComponent(uri.pathSegments.last);
-    }
-    return p.basename(path);
+    return mediaPathName(path);
   }
 
   static String? _firstNonEmpty(List<String?> values) {
