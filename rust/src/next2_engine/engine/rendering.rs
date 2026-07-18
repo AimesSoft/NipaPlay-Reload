@@ -478,6 +478,10 @@ fn msdf_worker_loop(
     }
 }
 
+// Diagnostics: sync fallback (entry_for miss) and drain (prefetch upload) counts.
+static SYNC_FALLBACK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static DRAIN_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 struct Next2GlyphAtlas {
     font_key: String,
     fonts: std::sync::Arc<Vec<FontFaceHandle>>,
@@ -737,25 +741,11 @@ impl Next2GlyphAtlas {
     }
 
     fn glyph_from_fonts(&mut self, ch: char, quantized_size: u32) -> Option<GlyphMsdfData> {
-        // Synchronous fallback: rasterize DIRECTLY on the render thread instead
-        // of dispatching to the worker pool. This blocks the render thread for
-        // one glyph (~10-50ms), but critically it does NOT consume a worker -
-        // workers stay dedicated to async prefetch.
-        //
-        // Why not dispatch to workers (the old design): sync fallbacks happen
-        // for chars prefetch hasn't covered yet. Under steady scroll, new chars
-        // appear every frame -> every frame had a few sync fallbacks -> they
-        // hogged all 4 workers -> async prefetch starved -> atlas never filled
-        // -> more sync fallbacks next frame -> stuck at 60fps. Pausing broke
-        // the loop (no sync fallbacks -> workers drained prefetch -> atlas
-        // filled -> 120fps on resume).
-        //
-        // With sync fallback on the render thread, workers are prefetch-only:
-        // the atlas fills fast and sync fallbacks dry up -> 120fps sustained.
-        // The per-fallback render-thread block is the same MSDF cost either
-        // way; the difference is workers stay free to keep the atlas warm.
-        let px = quantized_size as f32;
-        rasterize_glyph_on_face(self.fonts.as_slice(), ch, px)
+        // Synchronous fallback: dispatch to a worker and block until it returns
+        // (2s timeout). Pre-warming should make this rare. (Reverted from a
+        // render-thread-direct attempt: it didn't fix direct-play 60fps and
+        // broke the pause-resume 120fps path - see investigation notes.)
+        self.msdf_worker.rasterize_sync(ch, quantized_size)
     }
 
     fn rasterize_and_upload(
@@ -768,6 +758,7 @@ impl Next2GlyphAtlas {
         // upload. Pre-warming should make this rare; kept so characters are
         // ALWAYS displayed (block-and-wait, never skip) when prefetch hasn't
         // covered them yet - avoids the flicker of a pure-async None return.
+        SYNC_FALLBACK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let msdf = self.glyph_from_fonts(ch, quantized_size)?;
         self.upload_glyph(queue, ch, quantized_size, &msdf)
     }
@@ -942,6 +933,7 @@ impl Next2GlyphAtlas {
     fn drain_prefetch(&mut self, queue: &wgpu::Queue) -> usize {
         let results = self.msdf_worker.try_drain();
         let n = results.len();
+        DRAIN_COUNT.fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         for r in results {
             self.pending.remove(&(r.ch, r.quantized_size));
             // A sync fallback may have already inserted this key; skip re-upload.

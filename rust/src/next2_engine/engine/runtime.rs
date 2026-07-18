@@ -867,10 +867,12 @@ fn run_engine_loop(
                 }
                 if diag_draw_count >= 60 {
                     n2log(&format!(
-                        "DFM+ draw diag: n={} avg={:.2}ms max={:.2}ms",
+                        "DFM+ draw diag: n={} avg={:.2}ms max={:.2}ms | sync_fb={} drain={}",
                         diag_draw_count,
                         diag_draw_ms_sum / diag_draw_count as f32,
-                        diag_draw_ms_max
+                        diag_draw_ms_max,
+                        SYNC_FALLBACK_COUNT.swap(0, std::sync::atomic::Ordering::Relaxed),
+                        DRAIN_COUNT.swap(0, std::sync::atomic::Ordering::Relaxed)
                     ));
                     // Flush so the diag line is visible in next2_debug.log
                     // immediately (n2log otherwise buffers; Android investigation
