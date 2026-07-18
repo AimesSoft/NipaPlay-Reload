@@ -58,7 +58,7 @@ extern "C" {
 const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
-const BASE_ATLAS_SIZE: u32 = 4096;
+const BASE_ATLAS_SIZE: u32 = 8192;
 const MSDF_RANGE: f64 = 6.0;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
 const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;
@@ -697,6 +697,10 @@ fn run_engine_loop(
     let mut has_pending_frame = false;
 
     while running {
+        // Drain completed async glyph prefetches before any command/draw this
+        // iteration, so prefetched glyphs land in the atlas before they're
+        // needed by `draw_to_present`. Non-blocking; cheap when empty.
+        renderer.drain_prefetch(ctx.queue.as_ref());
         let mut received_command = false;
 
         loop {

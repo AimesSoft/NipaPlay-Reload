@@ -11,15 +11,22 @@ class Next2PreparedFramePayload {
   const Next2PreparedFramePayload({
     required this.items,
     required this.emojiGlyphs,
+    this.prefetchChars,
   });
 
   final List<Map<String, dynamic>> items;
   final List<Map<String, dynamic>> emojiGlyphs;
 
+  /// Delta chars to prefetch-rasterize asynchronously on the Rust side
+  /// (lookahead pre-warming). Null/empty = no prefetch this frame.
+  final String? prefetchChars;
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'items': items,
       if (emojiGlyphs.isNotEmpty) 'emoji_glyphs': emojiGlyphs,
+      if (prefetchChars != null && prefetchChars!.isNotEmpty)
+        'prefetch_chars': prefetchChars,
     };
   }
 }
@@ -88,6 +95,7 @@ class Next2EmojiPipeline {
     required double fontScale,
     required Locale? locale,
     double playbackRate = 1.0,
+    String? prefetchChars,
   }) async {
     final List<Map<String, dynamic>> encodedItems = <Map<String, dynamic>>[];
     final Map<String, _EmojiBuildRequest> pending =
@@ -174,6 +182,7 @@ class Next2EmojiPipeline {
     return Next2PreparedFramePayload(
       items: encodedItems,
       emojiGlyphs: visibleGlyphs,
+      prefetchChars: prefetchChars,
     );
   }
 

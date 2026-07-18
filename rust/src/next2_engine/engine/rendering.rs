@@ -371,62 +371,116 @@ impl Next2EmojiAtlas {
 // abandoned (it stays stuck — the same thread leak as the old spawn-per-glyph
 // path) and a fresh worker is spawned lazily on the next call.
 struct MsdfTask {
-    work: Box<dyn FnOnce() -> Vec<u8> + Send + 'static>,
-    result_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    ch: char,
+    quantized_size: u32,
+    /// Some = sync caller waiting on this oneshot; None = async (result -> async_tx).
+    reply: Option<std::sync::mpsc::Sender<Option<GlyphMsdfData>>>,
+}
+
+struct PrefetchResult {
+    ch: char,
+    quantized_size: u32,
+    data: Option<GlyphMsdfData>,
+}
+
+struct WorkerHandle {
+    task_tx: std::sync::mpsc::Sender<MsdfTask>,
 }
 
 struct MsdfWorkerPool {
-    task_tx: Option<std::sync::mpsc::Sender<MsdfTask>>,
+    workers: Vec<WorkerHandle>,
+    next: usize,
+    async_rx: std::sync::mpsc::Receiver<PrefetchResult>,
 }
 
 impl MsdfWorkerPool {
-    fn new() -> Self {
-        Self { task_tx: None }
-    }
+    const WORKER_COUNT: usize = 4;
 
-    fn rasterize<F>(&mut self, work: F) -> Option<Vec<u8>>
-    where
-        F: FnOnce() -> Vec<u8> + Send + 'static,
-    {
-        if self.task_tx.is_none() {
-            let (tx, rx) = std::sync::mpsc::channel::<MsdfTask>();
+    fn new(fonts: std::sync::Arc<Vec<FontFaceHandle>>) -> Self {
+        let (async_tx, async_rx) = std::sync::mpsc::channel::<PrefetchResult>();
+        let mut workers = Vec::with_capacity(Self::WORKER_COUNT);
+        for _ in 0..Self::WORKER_COUNT {
+            let (task_tx, task_rx) = std::sync::mpsc::channel::<MsdfTask>();
+            let fonts = std::sync::Arc::clone(&fonts);
+            let async_tx = async_tx.clone();
             let _ = std::thread::Builder::new()
                 .name("next2-msdf".into())
-                .spawn(move || msdf_worker_loop(rx));
-            self.task_tx = Some(tx);
+                .spawn(move || msdf_worker_loop(task_rx, fonts, async_tx));
+            workers.push(WorkerHandle { task_tx });
         }
-        let (result_tx, result_rx) = std::sync::mpsc::channel::<Vec<u8>>();
-        let task = MsdfTask {
-            work: Box::new(work),
-            result_tx,
-        };
-        if self.task_tx.as_ref().unwrap().send(task).is_err() {
-            // worker died / channel closed
-            self.task_tx = None;
+        Self { workers, next: 0, async_rx }
+    }
+
+    /// Synchronous: dispatch and block until the worker returns (2s timeout).
+    /// Used by the fallback path; pre-warming should make this rare.
+    fn rasterize_sync(&mut self, ch: char, quantized_size: u32) -> Option<GlyphMsdfData> {
+        if self.workers.is_empty() {
             return None;
         }
-        match result_rx.recv_timeout(std::time::Duration::from_secs(2)) {
-            Ok(pixels) => Some(pixels),
-            Err(_) => {
-                // Timeout or disconnect: worker likely stuck on this glyph.
-                // Abandon it; a fresh worker spawns on the next call.
-                self.task_tx = None;
-                None
+        let (tx, rx) = std::sync::mpsc::channel();
+        let task = MsdfTask { ch, quantized_size, reply: Some(tx) };
+        if self.dispatch(task).is_err() {
+            return None;
+        }
+        match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+            Ok(data) => data,
+            Err(_) => None,
+        }
+    }
+
+    /// Asynchronous: dispatch without waiting. Result lands on the shared
+    /// channel; `drain_prefetch` collects it on the render thread.
+    fn submit_async(&mut self, ch: char, quantized_size: u32) {
+        if self.workers.is_empty() {
+            return;
+        }
+        let task = MsdfTask { ch, quantized_size, reply: None };
+        let _ = self.dispatch(task);
+    }
+
+    fn dispatch(&mut self, task: MsdfTask) -> Result<(), MsdfTask> {
+        if self.workers.is_empty() {
+            return Err(task);
+        }
+        let idx = self.next % self.workers.len();
+        self.next = self.next.wrapping_add(1);
+        self.workers[idx].task_tx.send(task).map_err(|e| e.0)
+    }
+
+    /// Non-blocking drain of completed async results.
+    fn try_drain(&mut self) -> Vec<PrefetchResult> {
+        let mut out = Vec::new();
+        while let Ok(r) = self.async_rx.try_recv() {
+            out.push(r);
+        }
+        out
+    }
+}
+
+fn msdf_worker_loop(
+    task_rx: std::sync::mpsc::Receiver<MsdfTask>,
+    fonts: std::sync::Arc<Vec<FontFaceHandle>>,
+    async_tx: std::sync::mpsc::Sender<PrefetchResult>,
+) {
+    while let Ok(task) = task_rx.recv() {
+        let px = task.quantized_size as f32;
+        let data = rasterize_glyph_on_face(fonts.as_slice(), task.ch, px);
+        match task.reply {
+            Some(reply) => { let _ = reply.send(data); }
+            None => {
+                let _ = async_tx.send(PrefetchResult {
+                    ch: task.ch,
+                    quantized_size: task.quantized_size,
+                    data,
+                });
             }
         }
     }
 }
 
-fn msdf_worker_loop(task_rx: std::sync::mpsc::Receiver<MsdfTask>) {
-    while let Ok(task) = task_rx.recv() {
-        let pixels = (task.work)();
-        let _ = task.result_tx.send(pixels);
-    }
-}
-
 struct Next2GlyphAtlas {
     font_key: String,
-    fonts: Vec<FontFaceHandle>,
+    fonts: std::sync::Arc<Vec<FontFaceHandle>>,
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
@@ -441,15 +495,18 @@ struct Next2GlyphAtlas {
     free_list: Vec<FreeRect>,
     /// Monotonically increasing frame counter for LRU eviction.
     frame_counter: u64,
-    /// Persistent MSDF rasterization worker (lazily spawned). Avoids spawning a
-    /// thread per new glyph; see `MsdfWorkerPool`.
+    /// Persistent multi-worker MSDF pool. Workers own `fonts` (Arc-shared) and
+    /// run the full rasterization pipeline off the render thread.
     msdf_worker: MsdfWorkerPool,
+    /// (char, quantized_size) keys dispatched via `submit_async` but not yet
+    /// uploaded to the atlas. Deduplicates prefetch requests.
+    pending: HashSet<(char, u32)>,
 }
 
 impl Next2GlyphAtlas {
     fn new(device: &wgpu::Device, custom_font: Option<FontSource>) -> Result<Self, String> {
         let font_key = custom_font_key(custom_font.as_ref());
-        let fonts = load_font_chain(custom_font)?;
+        let fonts = std::sync::Arc::new(load_font_chain(custom_font)?);
 
         let max_dim = device.limits().max_texture_dimension_2d;
         let atlas_size = BASE_ATLAS_SIZE.min(max_dim);
@@ -482,7 +539,7 @@ impl Next2GlyphAtlas {
 
         Ok(Self {
             font_key,
-            fonts,
+            fonts: std::sync::Arc::clone(&fonts),
             texture,
             texture_view,
             sampler,
@@ -495,7 +552,8 @@ impl Next2GlyphAtlas {
             line_ascent_cache: HashMap::new(),
             free_list: Vec::new(),
             frame_counter: 0,
-            msdf_worker: MsdfWorkerPool::new(),
+            msdf_worker: MsdfWorkerPool::new(fonts),
+            pending: HashSet::new(),
         })
     }
 
@@ -506,6 +564,7 @@ impl Next2GlyphAtlas {
         self.entries.clear();
         self.line_ascent_cache.clear();
         self.free_list.clear();
+        self.pending.clear();
     }
 
     /// Try to find a free rect that fits (w, h). Prefers the smallest-fitting
@@ -629,7 +688,7 @@ impl Next2GlyphAtlas {
 
         let px = quantized_size as f32;
         let mut ascent = (px * 0.82).max(1.0);
-        for font in &self.fonts {
+        for font in self.fonts.iter() {
             ascent = ascent.max(scale_metric_to_px(
                 font.face.ascender() as f32,
                 &font.face,
@@ -677,15 +736,11 @@ impl Next2GlyphAtlas {
         ch
     }
 
-    fn glyph_from_fonts(&mut self, ch: char, px: f32) -> Option<GlyphMsdfData> {
-        for font in &self.fonts {
-            let Some(glyph_id) = font.face.glyph_index(ch) else {
-                continue;
-            };
-            let data = glyph_msdf_from_face(&mut self.msdf_worker, &font.face, glyph_id, px)?;
-            return Some(data);
-        }
-        None
+    fn glyph_from_fonts(&mut self, ch: char, quantized_size: u32) -> Option<GlyphMsdfData> {
+        // Dispatches to the MSDF worker pool (synchronous: blocks until the
+        // worker returns, 2s timeout). Workers own the fonts and run the full
+        // pipeline (shape + MSDF). Pre-warming should make this rare.
+        self.msdf_worker.rasterize_sync(ch, quantized_size)
     }
 
     fn rasterize_and_upload(
@@ -694,9 +749,24 @@ impl Next2GlyphAtlas {
         ch: char,
         quantized_size: u32,
     ) -> Option<()> {
-        let px = quantized_size as f32;
-        let msdf = self.glyph_from_fonts(ch, px)?;
+        // Synchronous fallback path: rasterize on a worker (blocking) then
+        // upload. Pre-warming should make this rare; kept so characters are
+        // ALWAYS displayed (block-and-wait, never skip) when prefetch hasn't
+        // covered them yet - avoids the flicker of a pure-async None return.
+        let msdf = self.glyph_from_fonts(ch, quantized_size)?;
+        self.upload_glyph(queue, ch, quantized_size, &msdf)
+    }
 
+    /// Upload an already-rasterized glyph into the atlas (alloc + write_texture
+    /// + insert entry). Shared by the sync fallback and the async prefetch
+    /// drain path.
+    fn upload_glyph(
+        &mut self,
+        queue: &wgpu::Queue,
+        ch: char,
+        quantized_size: u32,
+        msdf: &GlyphMsdfData,
+    ) -> Option<()> {
         if msdf.width == 0 || msdf.height == 0 || msdf.pixels.is_empty() {
             self.entries.insert(
                 (ch, quantized_size),
@@ -838,6 +908,37 @@ impl Next2GlyphAtlas {
 
         Some(())
     }
+
+    /// Prefetch a glyph asynchronously (fire-and-forget). Deduplicated against
+    /// `entries` and `pending`. Called from `update_frame` for chars in the
+    /// lookahead window; results are collected by `drain_prefetch`.
+    fn request_rasterize(&mut self, ch: char, quantized_size: u32) {
+        let key = (ch, quantized_size);
+        if self.entries.contains_key(&key) || self.pending.contains(&key) {
+            return;
+        }
+        self.pending.insert(key);
+        self.msdf_worker.submit_async(ch, quantized_size);
+    }
+
+    /// Drain completed async prefetch results and upload them to the atlas.
+    /// Called on the render thread at the top of each engine loop iteration.
+    /// Returns the number of results processed.
+    fn drain_prefetch(&mut self, queue: &wgpu::Queue) -> usize {
+        let results = self.msdf_worker.try_drain();
+        let n = results.len();
+        for r in results {
+            self.pending.remove(&(r.ch, r.quantized_size));
+            // A sync fallback may have already inserted this key; skip re-upload.
+            if self.entries.contains_key(&(r.ch, r.quantized_size)) {
+                continue;
+            }
+            if let Some(data) = r.data {
+                let _ = self.upload_glyph(queue, r.ch, r.quantized_size, &data);
+            }
+        }
+        n
+    }
 }
 
 fn scale_metric_to_px(units: f32, face: &Face<'static>, px: f32) -> f32 {
@@ -917,14 +1018,20 @@ fn load_faces_from_owned_bytes(
     Ok(())
 }
 
-fn glyph_msdf_from_face(
-    pool: &mut MsdfWorkerPool,
-    face: &Face<'static>,
-    glyph_id: GlyphId,
-    px: f32,
-) -> Option<GlyphMsdfData> {
+fn rasterize_glyph_on_face(fonts: &[FontFaceHandle], ch: char, px: f32) -> Option<GlyphMsdfData> {
     #[cfg(debug_assertions)]
-    n2log(&format!("glyph_msdf: glyph_id={}, px={}", glyph_id.0, px));
+    n2log(&format!("rasterize_glyph: ch={}, px={}", ch, px));
+    // Find the first font that has this glyph (mirrors the old glyph_from_fonts).
+    let mut face: Option<&Face<'static>> = None;
+    let mut glyph_id = GlyphId(0);
+    for f in fonts {
+        if let Some(id) = f.face.glyph_index(ch) {
+            face = Some(&f.face);
+            glyph_id = id;
+            break;
+        }
+    }
+    let face = face?;
     let advance_units = face
         .glyph_hor_advance(glyph_id)
         .map(|v| v as f32)
@@ -990,35 +1097,27 @@ fn glyph_msdf_from_face(
     // 2s timeout; on timeout/worker-death the worker is abandoned (same thread
     // leak as the old spawn-per-glyph path) and a fresh worker spawns next call.
     #[cfg(debug_assertions)]
-    n2log(&format!("glyph_msdf: generating {}x{}", width, height));
-    let rgba = match pool.rasterize(move || {
-        let mut mtsdf_f32 = Rgba32FImage::new(width, height);
-        generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
-        correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
+    n2log(&format!("rasterize_glyph: generating {}x{}", width, height));
+    // MSDF generation runs directly on this thread (a worker). The old
+    // pool.rasterize indirection is gone - workers own the fonts and run the
+    // full pipeline, so the render thread never blocks on shape prep.
+    let mut mtsdf_f32 = Rgba32FImage::new(width, height);
+    generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
+    correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
 
-        let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
-        let raw_rgba = mtsdf_u8.into_raw();
-        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-        for y in 0..height {
-            let src_y = height - 1 - y;
-            let row_start = (src_y * width * 4) as usize;
-            let row_end = row_start + (width * 4) as usize;
-            for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
-                rgba.extend_from_slice(chunk);
-            }
+    let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
+    let raw_rgba = mtsdf_u8.into_raw();
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    for y in 0..height {
+        let src_y = height - 1 - y;
+        let row_start = (src_y * width * 4) as usize;
+        let row_end = row_start + (width * 4) as usize;
+        for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
+            rgba.extend_from_slice(chunk);
         }
-        rgba
-    }) {
-        Some(pixels) => {
-            #[cfg(debug_assertions)]
-            n2log("glyph_msdf: done");
-            pixels
-        }
-        None => {
-            n2log(&format!("glyph_msdf: TIMEOUT/CRASH glyph_id={}", glyph_id.0));
-            return None;
-        }
-    };
+    }
+    #[cfg(debug_assertions)]
+    n2log("rasterize_glyph: done");
 
     let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
     let offset_x = scale_metric_to_px(side_bearing, face, px) - MSDF_RANGE as f32;

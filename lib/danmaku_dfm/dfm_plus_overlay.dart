@@ -186,6 +186,20 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// wall-clock baseline (the overlay may not have ticked during the seek).
   static const double _hardResyncThresholdSec = 1.0;
 
+  /// Lookahead window (seconds) for rolling glyph prefetch - danmaku entering
+  /// the screen within this window have their chars async-rasterized so they
+  /// hit the atlas before display. 3s balances worker throughput vs coverage.
+  static const double _prefetchLookaheadSec = 3.0;
+
+  /// First-frame prefetch window after configure: pre-warm the opening minute
+  /// (OP lyrics / character names / common chars cluster here). Measured
+  /// 603 new chars in the first minute of a high-density episode.
+  static const double _initialPrefetchLookaheadSec = 90.0;
+
+  /// Whether the initial large-window prefetch has been done since the last
+  /// configure. Reset to false when configure runs.
+  bool _initialPrefetchDone = false;
+
   // ── Submit-rate throttle (P1-4) ──
   // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
   // capped at 60Hz; the native renderer interpolates scroll motion between
@@ -546,6 +560,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           // Reset after configure so motion resumes from the current media time
           // with a fresh wall-clock baseline.
           _resetDisplayTimeToMedia();
+          // Re-arm the initial large-window prefetch for the new content.
+          _initialPrefetchDone = false;
         }
 
         // ── Submit-rate throttle (P1-4) ──
@@ -571,7 +587,19 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // drains its mpsc queue and always renders the latest submission.
         final frame = _bridge.layout(interpolatedTime);
 
-        await _tryUpdateTexture(frame);
+        // Lookahead prefetch: dispatch chars from danmaku entering the screen
+        // in the next few seconds to the Rust MSDF workers (async), so glyphs
+        // are ready in the atlas before display. First frame after configure
+        // uses a large window to pre-warm the opening minute (OP/character
+        // names); subsequent frames send only the small rolling delta.
+        final double prefetchLookahead = _initialPrefetchDone
+            ? _prefetchLookaheadSec
+            : _initialPrefetchLookaheadSec;
+        final String? prefetchChars =
+            _bridge.prefetchChars(_displayMediaTime, prefetchLookahead);
+        _initialPrefetchDone = true;
+
+        await _tryUpdateTexture(frame, prefetchChars: prefetchChars);
         widget.onLayoutCalculated?.call(frame);
       }
     } catch (_) {
@@ -582,7 +610,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     }
   }
 
-  Future<bool> _tryUpdateTexture(List<PositionedDanmakuItem> frame) async {
+  Future<bool> _tryUpdateTexture(List<PositionedDanmakuItem> frame, {String? prefetchChars}) async {
     if (!Next2TextureBridge.isSupported || _layoutSize.isEmpty) {
       return false;
     }
@@ -717,6 +745,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       fontScale: fontScale,
       locale: locale,
       playbackRate: widget.playbackRate,
+      prefetchChars: prefetchChars,
     );
 
     final pushed = await _textureBridge.setFrame(
