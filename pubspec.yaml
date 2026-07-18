@@ -89,6 +89,7 @@ dependencies:
       ref: be8192d223f32a1bec512b935446999d3694ddff
       path: packages/erika_flutter
   qr_flutter: ^4.1.0  # 用于生成二维码
+  flutter_displaymode: ^0.7.0  # Android 高刷新率（弹幕 120fps，解决默认 60Hz 限制）
   mobile_scanner: ^7.2.0
   flutter_svg: ^2.0.14  # 用于显示SVG图标
   flutter_markdown: ^0.7.1
