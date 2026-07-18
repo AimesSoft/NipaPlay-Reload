@@ -576,7 +576,6 @@ impl Next2Renderer {
                 }
                 self.width = surface.width().max(1);
                 self.height = surface.height().max(1);
-                let acquire_start = std::time::Instant::now();
                 let frame = match surface.surface().get_current_texture() {
                     Ok(frame) => frame,
                     Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
@@ -587,42 +586,13 @@ impl Next2Renderer {
                     Err(wgpu::SurfaceError::OutOfMemory) => return,
                     Err(wgpu::SurfaceError::Other) => return,
                 };
-                let acquire_ms = acquire_start.elapsed().as_secs_f32() * 1000.0;
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let glyph_pipeline = self.surface_pipeline.as_ref().unwrap().clone();
                 let screen_pipeline = self.surface_screen_pipeline.as_ref().unwrap().clone();
-                let render_start = std::time::Instant::now();
                 self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, surface_format);
-                let render_ms = render_start.elapsed().as_secs_f32() * 1000.0;
-                let present_start = std::time::Instant::now();
                 frame.present();
-                let present_ms = present_start.elapsed().as_secs_f32() * 1000.0;
-                // Diagnostics: per-60-frame avg of acquire/render/present to locate
-                // the ~16ms draw bottleneck on Android. acquire = get_current_texture
-                // (swapchain/vsync), render = GPU glyph pass, present = queue submit.
-                static T_N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                static T_ACQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                static T_REN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                static T_PRES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                T_N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                T_ACQ.fetch_add((acquire_ms * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-                T_REN.fetch_add((render_ms * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-                T_PRES.fetch_add((present_ms * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-                let n = T_N.load(std::sync::atomic::Ordering::Relaxed);
-                if n >= 60 {
-                    n2log(&format!(
-                        "DFM+ timing: acquire={:.2}ms render={:.2}ms present={:.2}ms",
-                        T_ACQ.load(std::sync::atomic::Ordering::Relaxed) as f32 / 1000.0 / n as f32,
-                        T_REN.load(std::sync::atomic::Ordering::Relaxed) as f32 / 1000.0 / n as f32,
-                        T_PRES.load(std::sync::atomic::Ordering::Relaxed) as f32 / 1000.0 / n as f32,
-                    ));
-                    T_N.store(0, std::sync::atomic::Ordering::Relaxed);
-                    T_ACQ.store(0, std::sync::atomic::Ordering::Relaxed);
-                    T_REN.store(0, std::sync::atomic::Ordering::Relaxed);
-                    T_PRES.store(0, std::sync::atomic::Ordering::Relaxed);
-                }
             }
             PresentTarget::Texture(texture_target) => {
                 self.width = texture_target.width.max(1);

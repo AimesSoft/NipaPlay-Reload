@@ -478,10 +478,6 @@ fn msdf_worker_loop(
     }
 }
 
-// Diagnostics: sync fallback (entry_for miss) and drain (prefetch upload) counts.
-static SYNC_FALLBACK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static DRAIN_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
 struct Next2GlyphAtlas {
     font_key: String,
     fonts: std::sync::Arc<Vec<FontFaceHandle>>,
@@ -758,7 +754,6 @@ impl Next2GlyphAtlas {
         // upload. Pre-warming should make this rare; kept so characters are
         // ALWAYS displayed (block-and-wait, never skip) when prefetch hasn't
         // covered them yet - avoids the flicker of a pure-async None return.
-        SYNC_FALLBACK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let msdf = self.glyph_from_fonts(ch, quantized_size)?;
         self.upload_glyph(queue, ch, quantized_size, &msdf)
     }
@@ -933,7 +928,6 @@ impl Next2GlyphAtlas {
     fn drain_prefetch(&mut self, queue: &wgpu::Queue) -> usize {
         let results = self.msdf_worker.try_drain();
         let n = results.len();
-        DRAIN_COUNT.fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         for r in results {
             self.pending.remove(&(r.ch, r.quantized_size));
             // A sync fallback may have already inserted this key; skip re-upload.

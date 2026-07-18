@@ -16,10 +16,6 @@ inputs:
   key-password:
     description: '密钥密码'
     required: true
-  target-platform:
-    description: '只构建指定架构（如 android-arm64），留空则构建全架构 split + universal（发布默认）'
-    required: false
-    default: ''
 outputs:
   apk-path:
     description: '生成的 APK 文件路径'

@@ -2,12 +2,6 @@ name: Build Android
 
 on:
   workflow_call:
-    inputs:
-      target-platform:
-        description: '只构建指定架构（如 android-arm64），留空则构建全架构 split + universal（发布默认）'
-        required: false
-        type: string
-        default: ''
     secrets:
       SIGNING_KEY:
         description: 'Base64 编码的签名密钥'
@@ -97,7 +91,6 @@ jobs:
           keystore-password: ${{ secrets.KEY_STORE_PASSWORD }}
           key-alias: ${{ secrets.ALIAS }}
           key-password: ${{ secrets.KEY_PASSWORD }}
-          target-platform: ${{ inputs.target-platform }}
       
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
