@@ -370,7 +370,7 @@ class ExternalPlayerService {
       );
       final assets = session.danmakuAssets;
 
-      ExternalPlayerConsoleService.showSession(
+      final consoleState = ConsoleState(
         session: session,
         episodeMetaData: episodeMetaData,
         danmakuList: assets?.danmakuList,
@@ -384,6 +384,7 @@ class ExternalPlayerService {
                 danmakuAllowStacking: assets.allowStacking,
               ),
       );
+      ExternalPlayerConsoleService.setState(consoleState);
 
       // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面
       if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {

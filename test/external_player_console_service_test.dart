@@ -90,7 +90,7 @@ void _showSession(
   EpisodeMetaData? episodeMetaData,
 }) {
   final assets = session.danmakuAssets;
-  ExternalPlayerConsoleService.showSession(
+  final consoleState = ConsoleState(
     session: session,
     episodeMetaData: episodeMetaData,
     danmakuList: assets?.danmakuList,
@@ -104,6 +104,7 @@ void _showSession(
             danmakuAllowStacking: assets.allowStacking,
           ),
   );
+  ExternalPlayerConsoleService.setState(consoleState);
 }
 
 Future<Process> _startPlayer({String duration = '30'}) {

@@ -11,6 +11,7 @@ import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
+import 'package:nipaplay/utils/utils.dart';
 
 
 /// 弹幕屏蔽规则类型.
@@ -43,6 +44,22 @@ class EpisodeMetaData {
     this.animeTitle,
     this.episodeTitle,
     this.episodeId,
+  });
+}
+
+/// 控制台状态
+class ConsoleState {
+
+  final ExternalPlayerLaunchSession session;          // 外部播放器会话
+  final EpisodeMetaData           ? episodeMetaData;  // 番剧元数据
+  final List<DanmakuItem>         ? danmakuList;      // 弹幕列表
+  final DanmakuStyle              ? danmakuStyle;     // 弹幕样式
+
+  const ConsoleState({
+    required this.session,
+    this.episodeMetaData,
+    this.danmakuList,
+    this.danmakuStyle,
   });
 }
 
@@ -152,12 +169,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ------------------------------------------------------------------------ //
 
   /// 设置新的 mpv 会话和控制台展示信息.
-  static void showSession({
-    required ExternalPlayerLaunchSession session, // 外部播放器会话
-    EpisodeMetaData   ? episodeMetaData,  // 番剧元数据
-    List<DanmakuItem> ? danmakuList,      // 弹幕列表
-    DanmakuStyle      ? danmakuStyle,     // 弹幕样式
-  }) {
+  static void setState(ConsoleState state) {
+
+    final session         = state.session;
+    final episodeMetaData = state.episodeMetaData;
+    final danmakuList     = state.danmakuList;
+    final danmakuStyle    = state.danmakuStyle;
 
     // 先移除之前会话的监听器
     final previous = _instance._session;
@@ -217,7 +234,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   /// 将时间戳解析为绝对位置并让 mpv 精确跳转.
   static bool seekToTimestamp(String timestamp) {
-    final target = _parseTimestamp(timestamp);
+    final target = parseTimestamp(timestamp);
     if (target == null) return false;
     return _instance._session?.seekToPosition(target) ?? false;
   }
@@ -312,59 +329,19 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ============================== 私有方法 ================================ //
   // ======================================================================== //
 
+  /// 标记配置已发生变化, 更新时间戳并打印调试信息
   static void _markConfigurationChanged(String reason) {
     final now = DateTime.now().microsecondsSinceEpoch;
     _stateTimestamp = now > _stateTimestamp ? now : _stateTimestamp + 1; // 确保时间戳单调递增
     debugPrint('[ExternalPlayerConsoleService] Configuration changed: $reason, timestamp=$_stateTimestamp');
   }
 
+  /// 检查当前状态是否与给定时间戳不一致, 用于异步任务过期检查
   static bool _configurationHasChanged(int timestamp) {
     return _stateTimestamp != timestamp;
   }
 
-  static Duration? _parseTimestamp(String timestamp) {
-    final value = timestamp.trim();
-    if (value.isEmpty) return null;
-    final parts = value.split(':');
-    if (parts.isEmpty || parts.length > 3) return null;
-
-    final secondsPattern = RegExp(r'^\d+(?:\.\d{1,3})?$');
-    if (!secondsPattern.hasMatch(parts.last)) return null;
-    final seconds = double.tryParse(parts.last);
-    if (seconds == null || !seconds.isFinite) return null;
-
-    var hours = 0;
-    var minutes = 0;
-    if (parts.length >= 2) {
-      minutes = int.tryParse(parts[parts.length - 2]) ?? -1;
-      if (minutes < 0) return null;
-    }
-    if (parts.length == 3) {
-      hours = int.tryParse(parts.first) ?? -1;
-      if (hours < 0 || minutes >= 60) return null;
-    }
-    if (parts.length > 1 && seconds >= 60) return null;
-
-    final totalMilliseconds = ((hours * 3600 + minutes * 60 + seconds) * 1000).round();
-    return Duration(milliseconds: totalMilliseconds);
-  }
-
-  AssExportSettings _danmakuAssSettingsFor(
-    AssExportSettings settings,
-    DanmakuStyle style,
-  ) {
-    final outlineStyle = settings.outlineStyle == AssOutlineStyle.none
-        ? AssOutlineStyle.stroke
-        : settings.outlineStyle;
-    return settings.copyWith(
-      fontSize: style.danmakuFontSize,
-      opacity: style.opacity,
-      timeOffsetSeconds: style.danmakuOffset,
-      outlineStyle: style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
-      outlineWidth: style.outlineWidth,
-    );
-  }
-
+  /// 获取弹幕的实际显示时长, 考虑了滚动弹幕和固定弹幕的不同持续时间设置
   Duration _danmakuDisplayDuration(DanmakuItem item) {
     final current = _session;
     final settings = current is LinuxSession
@@ -438,7 +415,18 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (assets == null) return;
     final assPath  = assets.assPath;
     final luaPath  = assets.luaPath;
-    final settings = _danmakuAssSettingsFor(assets.assSettings, style);
+
+    // 将当前弹幕样式应用到 ASS 导出设置
+    final outlineStyle = assets.assSettings.outlineStyle == AssOutlineStyle.none
+      ? AssOutlineStyle.stroke
+      : assets.assSettings.outlineStyle;
+    final AssExportSettings settings =  assets.assSettings.copyWith(
+      fontSize: style.danmakuFontSize,
+      opacity: style.opacity,
+      timeOffsetSeconds: style.danmakuOffset,
+      outlineStyle: style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
+      outlineWidth: style.outlineWidth,
+    );
 
     File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
     try {
