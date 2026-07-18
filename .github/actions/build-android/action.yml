@@ -27,6 +27,7 @@ runs:
       uses: android-actions/setup-android@v3
 
     - name: Setup Rust for Android
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
@@ -38,10 +39,16 @@ runs:
         yes | sdkmanager --licenses >/dev/null
         set -o pipefail
 
-    - name: Install Android native build dependencies
+    - name: Install Android packaging dependencies
       shell: bash
       run: |
         sudo apt-get update
+        sudo apt-get install -y --no-install-recommends p7zip-full
+
+    - name: Install Erika Android source-build dependencies
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
+      shell: bash
+      run: |
         sudo apt-get install -y --no-install-recommends \
           build-essential \
           cmake \
@@ -50,11 +57,11 @@ runs:
           meson \
           nasm \
           ninja-build \
-          p7zip-full \
           pkg-config \
           python3-venv
 
     - name: Cache Erika Android native dependencies
+      if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
       uses: actions/cache@v4
       with:
         path: |
@@ -112,9 +119,11 @@ runs:
     - name: Configure Gradle
       shell: bash
       run: |
-        ERIKA_CARGO_TARGET_DIR="${RUNNER_TEMP}/erika-android-target"
-        mkdir -p "${ERIKA_CARGO_TARGET_DIR}"
-        echo "CARGO_TARGET_DIR=${ERIKA_CARGO_TARGET_DIR}" >> "$GITHUB_ENV"
+        if [ "${ERIKA_PREBUILT:-}" != "1" ] || [ "${ERIKA_FORCE_SOURCE_BUILD:-}" = "1" ]; then
+          ERIKA_CARGO_TARGET_DIR="${RUNNER_TEMP}/erika-android-target"
+          mkdir -p "${ERIKA_CARGO_TARGET_DIR}"
+          echo "CARGO_TARGET_DIR=${ERIKA_CARGO_TARGET_DIR}" >> "$GITHUB_ENV"
+        fi
         mkdir -p ~/.gradle
         cat > ~/.gradle/gradle.properties << EOF
         org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
