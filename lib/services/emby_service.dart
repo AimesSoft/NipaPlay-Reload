@@ -1772,7 +1772,8 @@ class EmbyService extends MediaServerServiceBase
   }
 
   /// 获取Emby视频的字幕轨道信息，包括内嵌字幕和外挂字幕
-  Future<List<Map<String, dynamic>>> getSubtitleTracks(String itemId) async {
+  Future<List<Map<String, dynamic>>> getSubtitleTracks(String itemId,
+      {String? mediaSourceId}) async {
     if (!_isConnected) {
       throw Exception('未连接到Emby服务器');
     }
@@ -1787,7 +1788,15 @@ class EmbyService extends MediaServerServiceBase
           debugPrint('EmbyService: 未找到媒体源信息');
           return [];
         }
-        final mediaSource = mediaSources[0];
+        dynamic mediaSource = mediaSources[0];
+        if (mediaSourceId != null && mediaSourceId.isNotEmpty) {
+          for (final source in mediaSources) {
+            if (source is Map && source['Id']?.toString() == mediaSourceId) {
+              mediaSource = source;
+              break;
+            }
+          }
+        }
         final mediaStreams = mediaSource['MediaStreams'] as List?;
         if (mediaStreams == null) {
           debugPrint('EmbyService: 未找到媒体流信息');

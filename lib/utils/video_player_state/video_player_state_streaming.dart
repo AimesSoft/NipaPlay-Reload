@@ -628,33 +628,35 @@ extension EmbyQualitySwitch on VideoPlayerState {
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
     int? audioStreamIndex,
+    String? mediaSourceId,
   }) async {
+    final previousSession = _currentPlaybackSession;
+    if (_currentVideoPath == null ||
+        !_currentVideoPath!.startsWith('emby://')) {
+      return;
+    }
+
+    final currentPath = _currentVideoPath!;
+    final currentPosition = _position;
+    final currentDuration = _duration;
+    final currentProgress = _progress;
+    final currentVolume = player.volume;
+    final currentPlaybackRate = _playbackRate;
+    final wasPlaying = _status == PlayerStatus.playing;
+
+    final historyItem = WatchHistoryItem(
+      filePath: currentPath,
+      animeName: _animeTitle ?? '',
+      episodeTitle: _episodeTitle,
+      episodeId: _episodeId,
+      animeId: _animeId,
+      lastPosition: currentPosition.inMilliseconds,
+      duration: currentDuration.inMilliseconds,
+      watchProgress: currentProgress,
+      lastWatchTime: DateTime.now(),
+    );
+
     try {
-      if (_currentVideoPath == null ||
-          !_currentVideoPath!.startsWith('emby://')) {
-        return;
-      }
-
-      final currentPath = _currentVideoPath!;
-      final currentPosition = _position;
-      final currentDuration = _duration;
-      final currentProgress = _progress;
-      final currentVolume = player.volume;
-      final currentPlaybackRate = _playbackRate;
-      final wasPlaying = _status == PlayerStatus.playing;
-
-      final historyItem = WatchHistoryItem(
-        filePath: currentPath,
-        animeName: _animeTitle ?? '',
-        episodeTitle: _episodeTitle,
-        episodeId: _episodeId,
-        animeId: _animeId,
-        lastPosition: currentPosition.inMilliseconds,
-        duration: currentDuration.inMilliseconds,
-        watchProgress: currentProgress,
-        lastWatchTime: DateTime.now(),
-      );
-
       final embyPath = currentPath.replaceFirst('emby://', '');
       final parts = embyPath.split('/');
       final itemId = parts.isNotEmpty ? parts.last : embyPath;
@@ -666,11 +668,8 @@ extension EmbyQualitySwitch on VideoPlayerState {
         subtitleStreamIndex: serverSubtitleIndex,
         burnInSubtitle: burnInSubtitle,
         playSessionId: _currentPlaybackSession?.playSessionId,
-        mediaSourceId: _currentPlaybackSession?.mediaSourceId,
+        mediaSourceId: mediaSourceId ?? _currentPlaybackSession?.mediaSourceId,
       );
-      _currentPlaybackSession = newSession;
-      EmbyPlaybackSyncService().updatePlaybackSession(newSession);
-
       await initializePlayer(
         currentPath,
         historyItem: historyItem,
@@ -678,27 +677,39 @@ extension EmbyQualitySwitch on VideoPlayerState {
         playbackDetailContext: _playbackDetailContext,
         resetManualDanmakuOffset: false,
       );
+      if (_error != null || !hasVideo) {
+        throw StateError(_error ?? 'Emby 播放器初始化失败');
+      }
+      _currentPlaybackSession = newSession;
+      EmbyPlaybackSyncService().updatePlaybackSession(newSession);
+    } catch (e) {
+      _currentPlaybackSession = previousSession;
+      if (previousSession != null) {
+        EmbyPlaybackSyncService().updatePlaybackSession(previousSession);
+      }
+      debugPrint('Emby 清晰度切换失败: $e');
+      rethrow;
+    }
 
-      if (hasVideo) {
-        await Future.delayed(const Duration(milliseconds: 150));
-        if (_useSystemVolume) {
-          _ensurePlayerVolumeMatchesPlatformPolicy();
-        } else {
-          player.volume = currentVolume;
-        }
-        if (currentPlaybackRate != 1.0) {
-          player.setPlaybackRate(currentPlaybackRate);
-        }
-        seekTo(currentPosition);
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (wasPlaying) {
-          play();
-        } else {
-          pause();
-        }
+    try {
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+      } else {
+        player.volume = currentVolume;
+      }
+      if (currentPlaybackRate != 1.0) {
+        player.setPlaybackRate(currentPlaybackRate);
+      }
+      seekTo(currentPosition);
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (wasPlaying) {
+        play();
+      } else {
+        pause();
       }
     } catch (e) {
-      debugPrint('Emby 清晰度切换失败: $e');
+      debugPrint('Emby 切源后恢复播放状态失败: $e');
     }
   }
 }

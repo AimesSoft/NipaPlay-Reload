@@ -4,6 +4,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -12,6 +13,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/emby_media_source_selector.dart';
 
 class CupertinoJellyfinQualityPane extends StatefulWidget {
   const CupertinoJellyfinQualityPane({
@@ -33,6 +35,8 @@ class _CupertinoJellyfinQualityPaneState
   List<Map<String, dynamic>> _serverSubtitles = [];
   int? _selectedServerSubtitle;
   bool _burnIn = false;
+  List<PlaybackMediaSource> _mediaSources = const [];
+  String? _selectedMediaSourceId;
 
   @override
   void initState() {
@@ -44,9 +48,13 @@ class _CupertinoJellyfinQualityPaneState
     try {
       final path = widget.videoState.currentVideoPath;
       if (path != null && path.startsWith('emby://')) {
+        final session = widget.videoState.currentPlaybackSession;
+        _mediaSources = session?.mediaSources ?? const [];
+        _selectedMediaSourceId = session?.mediaSourceId;
         final provider =
             Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await provider.initialize();
+        if (!mounted) return;
         setState(() {
           _currentQuality = provider.currentVideoQuality;
         });
@@ -55,6 +63,7 @@ class _CupertinoJellyfinQualityPaneState
         final provider =
             Provider.of<JellyfinTranscodeProvider>(context, listen: false);
         await provider.initialize();
+        if (!mounted) return;
         setState(() {
           _currentQuality = provider.currentVideoQuality;
         });
@@ -63,6 +72,7 @@ class _CupertinoJellyfinQualityPaneState
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _currentQuality = JellyfinVideoQuality.bandwidth5m;
       });
@@ -73,6 +83,7 @@ class _CupertinoJellyfinQualityPaneState
     if (path.startsWith('jellyfin://')) {
       final itemId = path.replaceFirst('jellyfin://', '');
       final tracks = await JellyfinService.instance.getSubtitleTracks(itemId);
+      if (!mounted) return;
       setState(() {
         _serverSubtitles = tracks;
         final defaultTrack = tracks.firstWhere(
@@ -83,8 +94,12 @@ class _CupertinoJellyfinQualityPaneState
             defaultTrack.isEmpty ? null : defaultTrack['index'] as int?;
       });
     } else if (path.startsWith('emby://')) {
-      final itemId = path.replaceFirst('emby://', '');
-      final tracks = await EmbyService.instance.getSubtitleTracks(itemId);
+      final itemId = path.replaceFirst('emby://', '').split('/').last;
+      final tracks = await EmbyService.instance.getSubtitleTracks(
+        itemId,
+        mediaSourceId: widget.videoState.currentPlaybackSession?.mediaSourceId,
+      );
+      if (!mounted) return;
       setState(() {
         _serverSubtitles = tracks;
         final defaultTrack = tracks.firstWhere(
@@ -97,6 +112,42 @@ class _CupertinoJellyfinQualityPaneState
     }
   }
 
+  Future<void> _selectMediaSource(PlaybackMediaSource source) async {
+    if (_selectedMediaSourceId == source.id) return;
+    setState(() {
+      _selectedMediaSourceId = source.id;
+      _selectedServerSubtitle = null;
+      _burnIn = false;
+      _serverSubtitles = [];
+      _isLoading = true;
+    });
+
+    final path = widget.videoState.currentVideoPath;
+    if (path != null && path.startsWith('emby://')) {
+      final itemId = path.replaceFirst('emby://', '').split('/').last;
+      try {
+        final tracks = await EmbyService.instance
+            .getSubtitleTracks(itemId, mediaSourceId: source.id);
+        if (!mounted || _selectedMediaSourceId != source.id) return;
+        final defaultTrack = tracks.firstWhere(
+          (track) => track['isDefault'] == true,
+          orElse: () => <String, dynamic>{},
+        );
+        setState(() {
+          _serverSubtitles = tracks;
+          _selectedServerSubtitle =
+              defaultTrack.isEmpty ? null : defaultTrack['index'] as int?;
+          _isLoading = false;
+        });
+      } catch (_) {
+        if (!mounted || _selectedMediaSourceId != source.id) return;
+        setState(() => _isLoading = false);
+      }
+    } else if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _applySelection() async {
     if (_currentQuality == null) return;
     setState(() => _isLoading = true);
@@ -104,6 +155,13 @@ class _CupertinoJellyfinQualityPaneState
     try {
       final path = widget.videoState.currentVideoPath;
       if (path != null && path.startsWith('emby://')) {
+        final itemId = path.replaceFirst('emby://', '').split('/').last;
+        final sourceChanged =
+            widget.videoState.currentPlaybackSession?.mediaSourceId !=
+                _selectedMediaSourceId;
+        final audioStreamIndex = sourceChanged
+            ? null
+            : widget.videoState.getEmbyServerAudioSelection(itemId);
         final provider =
             Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await provider.setDefaultVideoQuality(_currentQuality!);
@@ -114,7 +172,17 @@ class _CupertinoJellyfinQualityPaneState
           quality: _currentQuality!,
           serverSubtitleIndex: _selectedServerSubtitle,
           burnInSubtitle: _burnIn,
+          mediaSourceId: _selectedMediaSourceId,
+          audioStreamIndex: audioStreamIndex,
         );
+        widget.videoState.setEmbyServerSubtitleSelection(
+          itemId,
+          _selectedServerSubtitle,
+          burnIn: _burnIn,
+        );
+        if (sourceChanged) {
+          widget.videoState.setEmbyServerAudioSelection(itemId, null);
+        }
       } else {
         final provider =
             Provider.of<JellyfinTranscodeProvider>(context, listen: false);
@@ -169,6 +237,31 @@ class _CupertinoJellyfinQualityPaneState
         else
           SliverList(
             delegate: SliverChildListDelegate([
+              if (_mediaSources.length > 1)
+                AdaptivePlayerMenuSection(
+                  header: const Text('媒体源'),
+                  children: [
+                    for (var index = 0; index < _mediaSources.length; index++)
+                      AdaptivePlayerMenuTile(
+                        title: Text(
+                          embyMediaSourceLabel(
+                            _mediaSources[index],
+                            index: index,
+                          ),
+                        ),
+                        trailing: Icon(
+                          _mediaSources[index].id == _selectedMediaSourceId
+                              ? CupertinoIcons.check_mark_circled_solid
+                              : CupertinoIcons.circle,
+                          color:
+                              _mediaSources[index].id == _selectedMediaSourceId
+                                  ? CupertinoTheme.of(context).primaryColor
+                                  : CupertinoColors.inactiveGray,
+                        ),
+                        onTap: () => _selectMediaSource(_mediaSources[index]),
+                      ),
+                  ],
+                ),
               AdaptivePlayerMenuSection(
                 header: const Text('清晰度'),
                 children: JellyfinVideoQuality.values.map((option) {
