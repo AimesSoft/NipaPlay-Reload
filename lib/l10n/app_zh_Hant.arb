@@ -47,6 +47,7 @@
   "externalPlayerConsoleDanmakuShow": "顯示彈幕",
   "externalPlayerConsoleDanmakuHide": "隱藏彈幕",
   "danmakuOpacityTitle": "彈幕不透明度",
+  "danmakuFontSizeTitle": "彈幕字體大小",
   "danmakuOpacitySubtitle": "調整彈幕文字不透明度，新開啟的影片將套用此設定。",
   "danmakuOutlineEnabledTitle": "啟用彈幕描邊",
   "danmakuOutlineEnabledSubtitle": "控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。",

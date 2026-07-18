@@ -9,8 +9,6 @@ import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
-import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 
@@ -35,11 +33,24 @@ class BlockedDanmakuItem {
   });
 }
 
+/// 番剧元数据
+class EpisodeMetaData {
+  final String? animeTitle;
+  final String? episodeTitle;
+  final int? episodeId;
+
+  const EpisodeMetaData({
+    this.animeTitle,
+    this.episodeTitle,
+    this.episodeId,
+  });
+}
+
 
 /// 管理外部播放器控制台, 当前番剧信息和弹幕渲染状态.
 ///
 /// 本服务维护弹幕源列表和 ASS 设置, 样式变化时重新生成 ASS;
-/// mpv 进程交互统一委托给 [LinuxSession].
+/// 外部播放器进程交互统一委托给 [ExternalPlayerLaunchSession].
 class ExternalPlayerConsoleService extends ChangeNotifier {
 
   // 单例
@@ -50,55 +61,44 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 平台支持
   static bool get isSupportedPlatform => !kIsWeb && Platform.isLinux;
 
-  // ------------------------------ //
-  // -------- 内部状态字段 -------- //
-  // ------------------------------ //
+
+  // ======================================================================== //
+  // =========================== 内部状态字段 =============================== //
+  // ======================================================================== //
 
   static int _stateTimestamp = 0; // 配置变更时间戳, 用于检测异步任务是否已过期
 
-  LinuxSession?  _session; // 外部播放器会话
+  ExternalPlayerLaunchSession?  _session; // 外部播放器会话
 
   // 动漫元数据相关
-  String? _mediaPath;    // 播放的媒体文件路径
   String? _animeTitle;   // 番剧标题
   String? _episodeTitle; // 剧集标题
   int?    _episodeId;    // 剧集 ID
 
   // 弹幕资产相关
-  String? _danmakuAssPath;
-  String? _danmakuLuaPath;
-  List<DanmakuItem>   _danmakuList = const []; // 弹幕列表
-  AssExportSettings?  _danmakuAssSettings;
+  List<DanmakuItem>        _danmakuList = const []; // 弹幕列表
   List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
-
-  // 弹幕样式相关
-  DanmakuStyle _danmakuStyle = DanmakuStyle();
+  /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
+  final DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
   Future<void> _danmakuStyleUpdateQueue = Future<void>.value();
 
 
-  // ------------------------------ //
-  // -------- 公共访问接口 -------- //
-  // ------------------------------ //
+  // ======================================================================== //
+  // ========================= Getters & Setters ============================ //
+  // ======================================================================== //
 
-  LinuxSession? get session => _session;
+  DanmakuStyle get danmakuStyle => _danmakuStyle;
+
+  ExternalPlayerLaunchSession? get session => _session;
   bool get hasActiveSession => _session != null;
-  bool get supportsDanmakuOpacity =>
-      _session?.ipcPath != null &&
-      _danmakuAssPath != null &&
-      _danmakuLuaPath != null &&
-      _danmakuAssSettings != null;
-  bool get supportsDanmakuOutline => supportsDanmakuOpacity;
 
-  String? get mediaPath => _mediaPath;
   String? get animeTitle => _animeTitle;
   String? get episodeTitle => _episodeTitle;
   int? get episodeId => _episodeId;
   List<DanmakuItem> get danmakuList => _danmakuList;
   List<BlockedDanmakuItem> get blockedItems => _blockedItems;
-  double get danmakuOpacity => _danmakuStyle.opacity;
-  double get danmakuOutlineWidth => _danmakuStyle.outlineWidth;
   static int get stateTimestamp => _stateTimestamp;
 
   /// 获取当前播放位置正在显示的弹幕索引列表.
@@ -136,38 +136,44 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return List<int>.unmodifiable(active.reversed);
   }
 
-  /// 获取弹幕的实际显示时间, 考虑了 ASS 设置中的时间偏移
+  /// 获取弹幕的实际显示时间, 考虑了时间偏移
   Duration danmakuStartTime(DanmakuItem item) {
-    final offsetSeconds = _danmakuAssSettings?.timeOffsetSeconds ?? 0.0;
+    final offsetSeconds = _danmakuStyle.danmakuOffset;
     return item.time + Duration(microseconds:(offsetSeconds * Duration.microsecondsPerSecond).round());
   }
 
-  /// 设置新的 mpv 会话和控制台展示信息.
-  static void showSession(
-    ExternalPlayerLaunchSession session, {
-    PlayableItem? playableItem,
-    DanmakuLaunchAssets? danmakuAssets,
-  }) {
 
-    // 目前仅支持 Linux + mpv, 其他平台直接忽略
-    if (!isSupportedPlatform || session is! LinuxSession) return;
+  // ======================================================================== //
+  // ============================== 主要方法 ================================ //
+  // ======================================================================== //
+
+
+  // 会话创建和关闭
+  // ------------------------------------------------------------------------ //
+
+  /// 设置新的 mpv 会话和控制台展示信息.
+  static void showSession({
+    required ExternalPlayerLaunchSession session, // 外部播放器会话
+    EpisodeMetaData   ? episodeMetaData,  // 番剧元数据
+    List<DanmakuItem> ? danmakuList,      // 弹幕列表
+    DanmakuStyle      ? danmakuStyle,     // 弹幕样式
+  }) {
 
     // 先移除之前会话的监听器
     final previous = _instance._session;
     previous?.removeListener(_handleSessionChanged);
 
     // 如果之前有会话且不是同一个实例, 先关闭之前的会话
-    if (previous != null && !identical(previous, session)) {
-      previous.terminate();
-    }
+    if (previous != null && !identical(previous, session)) previous.terminate();
 
     // 设置新的会话和媒体信息
-    _instance._session = session;
-    _instance._mediaPath = playableItem?.videoPath;
-    _instance._animeTitle = playableItem?.title;
-    _instance._episodeTitle = playableItem?.subtitle;
-    _instance._episodeId = playableItem?.episodeId;
-    _instance._setDanmakuAssets(danmakuAssets);
+    _instance._session      = session;
+    _instance._animeTitle   = episodeMetaData?.animeTitle;
+    _instance._episodeTitle = episodeMetaData?.episodeTitle;
+    _instance._episodeId    = episodeMetaData?.episodeId;
+
+    _instance._setDanmakuState(danmakuList: danmakuList, danmakuStyle: danmakuStyle);
+
     _markConfigurationChanged('showSession');
     session.addListener(_handleSessionChanged);
 
@@ -181,7 +187,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance.notifyListeners();
   }
 
-  /// 关闭当前 mpv 会话和控制台
+  /// 关闭当前会话和控制台
   static void closePlayerAndConsole() {
     final current = _instance._session;
     if (current == null) return;
@@ -194,6 +200,10 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _markConfigurationChanged('closePlayerAndConsole');
     _instance.notifyListeners();
   }
+
+
+  // 视频控制
+  // ------------------------------------------------------------------------ //
 
   /// 切换 mpv 的暂停状态
   static void togglePause() {
@@ -212,21 +222,40 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return _instance._session?.seekToPosition(target) ?? false;
   }
 
-  /// 设置弹幕的不透明度, 范围为 0.0 到 1.0
-  static void setDanmakuOpacity(double opacity) {
-    if (!_instance.supportsDanmakuOpacity) return;
-    _instance._updateDanmakuStyle((style) => style.opacity = opacity);
-  }
 
-  /// 设置弹幕描边宽度:
-  /// [width] 的范围为 0.5 到 5.0, 超出范围将被限制在有效范围内
-  static void setDanmakuOutlineWidth(double width) {
+  // 弹幕控制
+  // ------------------------------------------------------------------------ //
 
-    // 支持检查
-    if (!_instance.supportsDanmakuOutline) return;
+  /// 通知监听器并将当前弹幕配置加入刷新队列.
+  ///
+  /// 入队时复制 [danmakuStyle], 以避免后续修改影响正在执行的任务.
+  void queueDanmakuRefresh() {
 
-    // 刷新控制台
-    _instance._updateDanmakuStyle((style) => style.outlineWidth = width);
+    _markConfigurationChanged('queueDanmakuRefresh');
+    notifyListeners();
+
+    // 记录当前状态
+    final currentSession  = _session;
+    // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
+    if (currentSession is! LinuxSession ||
+        currentSession.ipcPath == null ||
+        currentSession.danmakuAssets == null ||
+        _danmakuList.isEmpty) {
+      return;
+    }
+
+    // 保留当前样式和时间戳, 以便在异步任务中检查状态是否已过期
+    final style     = danmakuStyle.copyWith();
+    final timestamp = _stateTimestamp;
+
+    Future<void> fun(_) async {
+      // 如果在队列等待期间状态发生变化, 则跳过当前任务
+      if (_configurationHasChanged(timestamp)) return;
+      await _regenerateDanmakuAss(currentSession, style, timestamp);
+    }
+
+    // 将任务加入队列
+    _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then(fun);
   }
 
   /// 设置单条弹幕是否参与渲染.
@@ -237,9 +266,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (item.visible == visible) return false;
 
     item.visible = visible;
-    _markConfigurationChanged('setDanmakuVisible');
-    _instance.notifyListeners();
-    _instance._queueDanmakuRefresh();
+    _instance.queueDanmakuRefresh();
     return true;
   }
 
@@ -265,9 +292,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       BlockedDanmakuItem(value: value, type: type),
     ]);
     _instance._applyBlockedItems();
-    _markConfigurationChanged('addBlockedItem');
-    _instance.notifyListeners();
-    _instance._queueDanmakuRefresh();
+    _instance.queueDanmakuRefresh();
     return true;
   }
 
@@ -279,14 +304,13 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (items.length == _instance._blockedItems.length) return;
     _instance._blockedItems = List<BlockedDanmakuItem>.unmodifiable(items);
     _instance._applyBlockedItems();
-    _markConfigurationChanged('removeBlockedItem');
-    _instance.notifyListeners();
-    _instance._queueDanmakuRefresh();
+    _instance.queueDanmakuRefresh();
   }
 
-  // ------------------------------ //
-  // -------- 私有实现方法 -------- //
-  // ------------------------------ //
+
+  // ======================================================================== //
+  // ============================== 私有方法 ================================ //
+  // ======================================================================== //
 
   static void _markConfigurationChanged(String reason) {
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -325,32 +349,29 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return Duration(milliseconds: totalMilliseconds);
   }
 
-  AssExportSettings? _danmakuAssSettingsFor(DanmakuStyle style) {
-    final settings = _danmakuAssSettings;
-    if (settings == null) return null;
+  AssExportSettings _danmakuAssSettingsFor(
+    AssExportSettings settings,
+    DanmakuStyle style,
+  ) {
     final outlineStyle = settings.outlineStyle == AssOutlineStyle.none
         ? AssOutlineStyle.stroke
         : settings.outlineStyle;
     return settings.copyWith(
+      fontSize: style.danmakuFontSize,
       opacity: style.opacity,
+      timeOffsetSeconds: style.danmakuOffset,
       outlineStyle: style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
       outlineWidth: style.outlineWidth,
     );
   }
 
-  void _updateDanmakuStyle(void Function(DanmakuStyle style) update) {
-    final style = _danmakuStyle.copyWith();
-    update(style);
-    if (style == _danmakuStyle) return;
-    _danmakuStyle = style;
-    _markConfigurationChanged('updateDanmakuStyle');
-    notifyListeners();
-    _queueDanmakuRefresh();
-  }
-
   Duration _danmakuDisplayDuration(DanmakuItem item) {
+    final current = _session;
+    final settings = current is LinuxSession
+        ? current.danmakuAssets?.assSettings
+        : null;
     final seconds = item.mode.isScrolling
-        ? _danmakuAssSettings?.scrollDurationSeconds ?? 10.0
+        ? settings?.scrollDurationSeconds ?? 10.0
         : kAssFixedDanmakuDurationSeconds;
     if (!seconds.isFinite || seconds <= 0) {
       return item.mode.isScrolling
@@ -404,50 +425,20 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return maximum;
   }
 
-  /// 将弹幕样式更新任务加入队列, 以顺序执行样式更新
-  void _queueDanmakuRefresh() {
-
-    // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
-    if (_session?.ipcPath == null ||
-        _danmakuAssPath == null ||
-        _danmakuLuaPath == null ||
-        _danmakuAssSettings == null) {
-      return;
-    }
-
-    // 记录当前状态
-    final currentSession  = _session;
-    final style           = _danmakuStyle;
-    final timestamp       = _stateTimestamp;
-
-    Future<void> fun(_) async {
-      // 如果在队列等待期间状态发生变化, 则跳过当前任务
-      if (_configurationHasChanged(timestamp)) {
-        return;
-      }
-      await _regenerateDanmakuAss(
-        currentSession,
-        style,
-        timestamp,
-      );
-    }
-
-    // 将任务加入队列
-    _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then(fun);
-  }
-
   /// 重新生成 ASS 文件并刷新 mpv 弹幕, 仅在状态未发生变化时执行
   Future<void> _regenerateDanmakuAss(
-    LinuxSession? currentSession,
+    ExternalPlayerLaunchSession? currentSession,
     DanmakuStyle style,
     int timestamp,
   ) async {
 
     // 参数检查
-    final assPath  = _danmakuAssPath;
-    final luaPath  = _danmakuLuaPath;
-    final settings = _danmakuAssSettingsFor(style);
-    if (currentSession == null || assPath == null || luaPath == null || settings == null) return;
+    if (currentSession is! LinuxSession) return;
+    final assets = currentSession.danmakuAssets;
+    if (assets == null) return;
+    final assPath  = assets.assPath;
+    final luaPath  = assets.luaPath;
+    final settings = _danmakuAssSettingsFor(assets.assSettings, style);
 
     File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
     try {
@@ -495,7 +486,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance.notifyListeners();
   }
 
-  static void _clearSession(LinuxSession session) {
+  static void _clearSession(ExternalPlayerLaunchSession session) {
     if (!identical(_instance._session, session)) return;
 
     session.removeListener(_handleSessionChanged);
@@ -507,32 +498,27 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
   void _clearMediaInfo() {
-    _mediaPath = null;
     _animeTitle = null;
     _episodeTitle = null;
     _episodeId = null;
   }
 
-  void _setDanmakuAssets(DanmakuLaunchAssets? assets) {
-    _danmakuAssPath = assets?.assPath;
-    _danmakuLuaPath = assets?.luaPath;
-    _danmakuList = _sortDanmakuItems(assets?.danmakuList ?? const []);
+  void _setDanmakuState({
+    List<DanmakuItem>? danmakuList,
+    DanmakuStyle? danmakuStyle,
+  }) {
+    _danmakuList = _sortDanmakuItems(danmakuList ?? const []);
     _applyBlockedItems();
-    _danmakuAssSettings = assets?.assSettings;
-    final settings = assets?.assSettings;
-    final outlineWidth = settings?.outlineWidth ?? 1.0;
-    final outlineEnabled = settings != null &&
-        settings.outlineStyle != AssOutlineStyle.none &&
-        outlineWidth > 0.0;
-    _danmakuStyle = DanmakuStyle(
-      opacity: assets?.opacity ?? DanmakuStyle.maxOpacity,
-      outlineWidth: outlineEnabled ? outlineWidth : 0.0,
-      danmakuAllowStacking: assets?.allowStacking ?? true,
-    );
+    final style = danmakuStyle ?? DanmakuStyle();
+    _danmakuStyle.opacity = style.opacity;
+    _danmakuStyle.outlineWidth = style.outlineWidth;
+    _danmakuStyle.danmakuFontSize = style.danmakuFontSize;
+    _danmakuStyle.danmakuOffset = style.danmakuOffset;
+    _danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
   }
 
   void _clearDanmakuState() {
-    _setDanmakuAssets(null);
+    _setDanmakuState();
     _blockedItems = const [];
   }
 

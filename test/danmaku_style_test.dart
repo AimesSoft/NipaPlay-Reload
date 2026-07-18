@@ -8,6 +8,7 @@ void main() {
     expect(style.opacity, 1.0);
     expect(style.outlineWidth, 1.0);
     expect(style.outlineEnabled, isTrue);
+    expect(style.danmakuOffset, 0.0);
     expect(style.danmakuAllowStacking, isTrue);
   });
 
@@ -15,6 +16,7 @@ void main() {
     final style = DanmakuStyle(
       opacity: 0.8,
       outlineWidth: 2.5,
+      danmakuOffset: 1.25,
       danmakuAllowStacking: true,
     );
 
@@ -25,10 +27,12 @@ void main() {
 
     expect(updated.opacity, 0.5);
     expect(updated.outlineWidth, 2.5);
+    expect(updated.danmakuOffset, 1.25);
     expect(updated.danmakuAllowStacking, isFalse);
     expect(updated, DanmakuStyle(
       opacity: 0.5,
       outlineWidth: 2.5,
+      danmakuOffset: 1.25,
       danmakuAllowStacking: false,
     ));
   });
@@ -45,10 +49,12 @@ void main() {
     final normalized = style.copyWith(
       opacity: double.nan,
       outlineWidth: double.infinity,
+      danmakuOffset: double.negativeInfinity,
     );
 
     expect(normalized.opacity, DanmakuStyle.maxOpacity);
     expect(normalized.outlineWidth, 1.0);
+    expect(normalized.danmakuOffset, 0.0);
   });
 
   test('setters normalize and update danmaku style values', () {
@@ -56,10 +62,12 @@ void main() {
 
     style.opacity = 1.5;
     style.outlineWidth = 0.1;
+    style.danmakuOffset = -2.5;
     style.danmakuAllowStacking = false;
 
     expect(style.opacity, DanmakuStyle.maxOpacity);
     expect(style.outlineWidth, DanmakuStyle.minOutlineWidth);
+    expect(style.danmakuOffset, -2.5);
     style.outlineWidth = 0.0;
     expect(style.outlineWidth, 0.0);
     expect(style.outlineEnabled, isFalse);

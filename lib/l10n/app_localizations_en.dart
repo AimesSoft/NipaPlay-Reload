@@ -157,6 +157,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get danmakuOpacityTitle => 'Danmaku opacity';
 
   @override
+  String get danmakuFontSizeTitle => 'Danmaku font size';
+
+  @override
   String get danmakuOpacitySubtitle =>
       'Adjust danmaku text opacity. Newly opened videos will use this setting.';
 

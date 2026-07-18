@@ -8,20 +8,18 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
-import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
-final Expando<DanmakuLaunchAssets> _danmakuAssets =
-    Expando<DanmakuLaunchAssets>();
-
 LinuxSession _session(
   Process process, {
+  String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
   String? danmakuAssPath,
   double danmakuOpacity = 1.0,
@@ -34,6 +32,7 @@ LinuxSession _session(
 }) {
   return _sessionFromProcessId(
     process.pid,
+    mediaPath: mediaPath,
     ipcPath: ipcPath,
     danmakuAssPath: danmakuAssPath,
     danmakuOpacity: danmakuOpacity,
@@ -49,6 +48,7 @@ LinuxSession _session(
 
 LinuxSession _sessionFromProcessId(
   int processId, {
+  String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
   String? danmakuAssPath,
   double danmakuOpacity = 1.0,
@@ -62,6 +62,7 @@ LinuxSession _sessionFromProcessId(
 }) {
   final session = LinuxSession.attach(
     playerPath: '/bin/mpv',
+    mediaPath: mediaPath,
     processId: processId,
     ipcPath: ipcPath,
     duration: duration,
@@ -71,7 +72,7 @@ LinuxSession _sessionFromProcessId(
   );
   if (danmakuAssSettings != null || danmakuList.isNotEmpty) {
     final assPath = danmakuAssPath ?? '/tmp/nipaplay_test_$processId.ass';
-    _danmakuAssets[session] = DanmakuLaunchAssets(
+    session.danmakuAssets = DanmakuLaunchAssets(
       assPath: assPath,
       luaPath: '$assPath.lua',
       opacity: danmakuOpacity,
@@ -86,12 +87,22 @@ LinuxSession _sessionFromProcessId(
 
 void _showSession(
   LinuxSession session, {
-  PlayableItem? playableItem,
+  EpisodeMetaData? episodeMetaData,
 }) {
+  final assets = session.danmakuAssets;
   ExternalPlayerConsoleService.showSession(
-    session,
-    playableItem: playableItem,
-    danmakuAssets: _danmakuAssets[session],
+    session: session,
+    episodeMetaData: episodeMetaData,
+    danmakuList: assets?.danmakuList,
+    danmakuStyle: assets == null
+        ? null
+        : DanmakuStyle(
+            opacity: assets.opacity,
+            outlineWidth: assets.outlineWidth,
+            danmakuFontSize: assets.assSettings.fontSize,
+            danmakuOffset: assets.assSettings.timeOffsetSeconds,
+            danmakuAllowStacking: assets.allowStacking,
+          ),
   );
 }
 
@@ -133,8 +144,8 @@ void main() {
 
     expect(session, isA<OtherSession>());
     expect(session.type, ExternalPlayerType.generic);
+    expect(session.mediaPath, '30');
     expect(session.ipcPath, isNull);
-    ExternalPlayerConsoleService.showSession(session);
     expect(ExternalPlayerConsoleService.instance.hasActiveSession, isFalse);
   });
 
@@ -216,27 +227,25 @@ void main() {
         expect(await firstProcess.exitCode, isNotNull);
       });
 
-      test('keeps playable metadata in the console service', () async {
+      test('keeps media path in the session and playable metadata in the console service', () async {
         final process = await _startPlayer();
         final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
         });
-        final playableItem = PlayableItem(
-          videoPath: '/video/test.mkv',
-          title: '测试番剧',
-          subtitle: '第 1 话',
-          animeId: 100,
+        const episodeMetaData = EpisodeMetaData(
+          animeTitle: '测试番剧',
+          episodeTitle: '第 1 话',
           episodeId: 200,
         );
 
         _showSession(
-          _session(process),
-          playableItem: playableItem,
+          _session(process, mediaPath: '/video/test.mkv'),
+          episodeMetaData: episodeMetaData,
         );
 
-        expect(service.mediaPath, '/video/test.mkv');
+        expect(service.session?.mediaPath, '/video/test.mkv');
         expect(service.animeTitle, '测试番剧');
         expect(service.episodeTitle, '第 1 话');
         expect(service.episodeId, 200);
@@ -470,6 +479,11 @@ void main() {
           await tester.tap(visibilityButton);
           await tester.pump();
           expect(item.visible, isTrue);
+          expect(find.text('弹幕字体大小'), findsOneWidget);
+          expect(
+            find.byKey(const Key('external-player-danmaku-font-size')),
+            findsOneWidget,
+          );
           expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(find.text('启用弹幕描边'), findsNothing);
           expect(
@@ -749,25 +763,22 @@ void main() {
         );
         _showSession(session);
 
-        expect(service.danmakuOpacity, 0.8);
-        expect(service.supportsDanmakuOpacity, isTrue);
+        expect(service.danmakuStyle.opacity, 0.8);
 
         final initialTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         for (final opacity in <double>[0.1, 0.2, 0.3, 0.4, 0.5]) {
-          ExternalPlayerConsoleService.setDanmakuOpacity(opacity);
+          service.danmakuStyle.opacity = opacity;
+          service.queueDanmakuRefresh();
         }
         await _waitUntil(
           () => reloadCommands.isNotEmpty,
         );
 
-        expect(service.danmakuOpacity, 0.5);
+        expect(service.danmakuStyle.opacity, 0.5);
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(initialTimestamp),
         );
-        final styleTimestamp = ExternalPlayerConsoleService.stateTimestamp;
-        ExternalPlayerConsoleService.setDanmakuOpacity(0.5);
-        expect(ExternalPlayerConsoleService.stateTimestamp, styleTimestamp);
         final updatedAss = await assFile.readAsString();
         final opacityTags = RegExp(r'\\1a&H[0-9A-Fa-f]{2}&')
             .allMatches(updatedAss)
@@ -850,7 +861,7 @@ void main() {
         );
       });
 
-      test('adjusts danmaku outline width and disables it at zero', () async {
+      test('adjusts danmaku font size and outline width', () async {
         final process = await _startPlayer();
         final tempDir =
             await Directory.systemTemp.createTemp('nipaplay_ipc_test_');
@@ -905,22 +916,36 @@ void main() {
             fontFamily: 'Arial',
             outlineStyle: AssOutlineStyle.stroke,
             outlineWidth: 2.5,
+            timeOffsetSeconds: 1.5,
           ),
         );
         _showSession(session);
 
-        expect(service.supportsDanmakuOutline, isTrue);
-        expect(service.danmakuOutlineWidth, 2.5);
+        expect(service.danmakuStyle.danmakuFontSize, 30.0);
+        expect(service.danmakuStyle.danmakuOffset, 1.5);
+        expect(service.danmakuStyle.outlineWidth, 2.5);
 
-        ExternalPlayerConsoleService.setDanmakuOutlineWidth(4.0);
+        service.danmakuStyle.danmakuFontSize = 42.0;
+        service.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 1);
-        expect(service.danmakuOutlineWidth, 4.0);
-        expect(await assFile.readAsString(), contains('$stylePrefix' '4.0,0.0'));
+        expect(service.danmakuStyle.danmakuFontSize, 42.0);
+        expect(
+          await assFile.readAsString(),
+          contains('Style: Danmaku,Arial,67.2,'),
+        );
+        expect(await assFile.readAsString(), contains('0:00:02.50'));
 
-        ExternalPlayerConsoleService.setDanmakuOutlineWidth(0.0);
+        service.danmakuStyle.outlineWidth = 4.0;
+        service.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 2);
-        expect(service.danmakuOutlineWidth, 0.0);
-        expect(await assFile.readAsString(), contains('$stylePrefix' '0.0,0.0'));
+        expect(service.danmakuStyle.outlineWidth, 4.0);
+        expect(await assFile.readAsString(), contains('4.0,0.0'));
+
+        service.danmakuStyle.outlineWidth = 0.0;
+        service.queueDanmakuRefresh();
+        await _waitUntil(() => reloadCommands.length == 3);
+        expect(service.danmakuStyle.outlineWidth, 0.0);
+        expect(await assFile.readAsString(), contains('0.0,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
       });
 

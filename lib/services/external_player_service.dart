@@ -11,6 +11,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
@@ -126,6 +127,7 @@ class ExternalPlayerService {
     required String playerPath,
     required String mediaPath,
     List<String> extraArgs = const [],
+    DanmakuLaunchAssets? danmakuAssets,
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
   }) async {
@@ -159,6 +161,7 @@ class ExternalPlayerService {
           playerPath: resolvedPath,
           mediaPath: mediaPath,
           extraArgs: extraArgs,
+          danmakuAssets: danmakuAssets,
           duration: duration,
           position: position,
         );
@@ -212,6 +215,7 @@ class ExternalPlayerService {
     return OtherSession.attach(
       type: type,
       playerPath: playerPath,
+      mediaPath: mediaPath,
       processId: process.pid,
       duration: duration,
       position: position,
@@ -349,6 +353,7 @@ class ExternalPlayerService {
       playerPath: playerPath,
       mediaPath: mediaPath,
       extraArgs: extraArgs,
+      danmakuAssets: danmakuAssets,
       duration: Duration(milliseconds: history?.duration ?? 0),
       position: Duration(milliseconds: history?.lastPosition ?? 0),
     );
@@ -358,22 +363,26 @@ class ExternalPlayerService {
 
     // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
     if (session is LinuxSession) {
-      final sessionItem = PlayableItem(
-        videoPath: mediaPath,
-        title: history?.animeName ?? item.title,
-        subtitle: history?.episodeTitle ?? item.subtitle,
-        animeId: item.animeId,
+      final episodeMetaData = EpisodeMetaData(
+        animeTitle: history?.animeName ?? item.title,
+        episodeTitle: history?.episodeTitle ?? item.subtitle,
         episodeId: item.episodeId,
-        historyItem: history,
-        actualPlayUrl: item.actualPlayUrl,
-        playbackSession: item.playbackSession,
-        detailContext: item.detailContext,
       );
+      final assets = session.danmakuAssets;
 
       ExternalPlayerConsoleService.showSession(
-        session,
-        playableItem: sessionItem,
-        danmakuAssets: danmakuAssets,
+        session: session,
+        episodeMetaData: episodeMetaData,
+        danmakuList: assets?.danmakuList,
+        danmakuStyle: assets == null
+            ? null
+            : DanmakuStyle(
+                opacity: assets.opacity,
+                outlineWidth: assets.outlineWidth,
+                danmakuFontSize: assets.assSettings.fontSize,
+                danmakuOffset: assets.assSettings.timeOffsetSeconds,
+                danmakuAllowStacking: assets.allowStacking,
+              ),
       );
 
       // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面

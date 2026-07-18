@@ -15,6 +15,7 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   OtherSession.attach({
     required this.type,
     required this.playerPath,
+    required this.mediaPath,
     required this.processId,
     required this.duration,
     this.position = Duration.zero,
@@ -26,6 +27,8 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   final ExternalPlayerType type;
   @override
   final String playerPath;
+  @override
+  final String mediaPath;
   @override
   final int processId;
   @override

@@ -381,6 +381,12 @@ abstract class AppLocalizations {
   /// **'弹幕不透明度'**
   String get danmakuOpacityTitle;
 
+  /// No description provided for @danmakuFontSizeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕字体大小'**
+  String get danmakuFontSizeTitle;
+
   /// No description provided for @danmakuOpacitySubtitle.
   ///
   /// In zh, this message translates to:

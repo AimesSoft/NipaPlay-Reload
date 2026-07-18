@@ -153,6 +153,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get danmakuOpacityTitle => '弹幕不透明度';
 
   @override
+  String get danmakuFontSizeTitle => '弹幕字体大小';
+
+  @override
   String get danmakuOpacitySubtitle => '调整弹幕文字不透明度，新打开的视频将应用此设置。';
 
   @override
@@ -2045,6 +2048,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get danmakuOpacityTitle => '彈幕不透明度';
+
+  @override
+  String get danmakuFontSizeTitle => '彈幕字體大小';
 
   @override
   String get danmakuOpacitySubtitle => '調整彈幕文字不透明度，新開啟的影片將套用此設定。';
