@@ -31,4 +31,6 @@ jobs:
     # workflow_dispatch: 手动触发直接放行（无 head_commit，靠短路避免求值）。
     if: github.event_name != 'push' || contains(github.event.head_commit.message, 'build_apk')
     uses: ./.github/workflows/build-android.yml
+    with:
+      target-platform: android-arm64 # 测试构建只出 arm64-v8a 单 APK，省时 + 产物小下载快
     secrets: inherit # 复用 repo 的 SIGNING_KEY / KEY_STORE_PASSWORD / ALIAS / KEY_PASSWORD
