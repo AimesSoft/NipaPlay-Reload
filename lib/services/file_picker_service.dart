@@ -620,6 +620,21 @@ class FilePickerService {
     }
   }
 
+  /// Android SAF tree URI -> 文件系统路径。仅转换 primary（内部存储），
+  /// 因为 app 有 MANAGE_EXTERNAL_STORAGE 可直接访问 /storage/emulated/0/。
+  /// SD/OTG 的 tree URI 无法可靠转路径，保留 content:// 走 SAF 分支。
+  /// 这样普通存储恢复 io.File/io.Directory 兼容（浏览/播放/扫描全走原路径），
+  /// 只有 SD/OTG 才走 PR#599 的 SAF content:// 路径。
+  String _safTreeUriToPath(String treeUri) {
+    final path = AndroidSafService.tryConvertToFilePath(treeUri);
+    if (path == treeUri) return treeUri; // 未转换（SD/OTG 或非 tree URI）
+    // primary 转换后验证可访问（MANAGE_EXTERNAL_STORAGE），不可访问则保留 content://
+    if (io.Directory(path).existsSync()) {
+      return path;
+    }
+    return treeUri;
+  }
+
   // 选择文件夹
   Future<String?> pickDirectory({String? initialDirectory}) async {
     try {
@@ -631,8 +646,10 @@ class FilePickerService {
         if (selectedDirectory == null) {
           return null;
         }
-        await _saveLastDirectory(selectedDirectory, _lastDirKey);
-        return _normalizePath(selectedDirectory);
+        // primary tree URI 转文件路径（io.File 兼容），SD/OTG 保留 content://
+        final resolved = _safTreeUriToPath(selectedDirectory);
+        await _saveLastDirectory(resolved, _lastDirKey);
+        return _normalizePath(resolved);
       }
 
       // macOS上尝试恢复之前的书签访问

@@ -225,7 +225,31 @@ class ScanService with ChangeNotifier {
           }
         }
       } else {
-        _scannedFolders = rawFolders;
+        // Android: 将旧版 PR#599 存的 content:// primary tree URI 迁移为文件路径
+        // （恢复 io.File 兼容）。SD/OTG 的 content:// 保留走 SAF。
+        if (Platform.isAndroid) {
+          final migrated = <String>[];
+          int migratedCount = 0;
+          for (final folder in rawFolders) {
+            final converted = AndroidSafService.tryConvertToFilePath(folder);
+            // 验证转换后的真实路径可访问（MANAGE_EXTERNAL_STORAGE 覆盖）。
+            // 不可访问（如 USB OTG 被 OEM 限制）则保留原 content:// 走 SAF。
+            if (converted != folder && !Directory(converted).existsSync()) {
+              migrated.add(folder);
+            } else {
+              if (converted != folder) migratedCount++;
+              migrated.add(converted);
+            }
+          }
+          _scannedFolders = migrated;
+          if (migratedCount > 0) {
+            await prefs.setStringList(_scannedFoldersPrefsKey, migrated);
+            debugPrint(
+                'ScanService: 迁移 $migratedCount 个 content:// 文件夹到文件路径');
+          }
+        } else {
+          _scannedFolders = rawFolders;
+        }
       }
 
       notifyListeners();

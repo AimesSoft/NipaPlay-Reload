@@ -191,12 +191,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// hit the atlas before display. 3s balances worker throughput vs coverage.
   static const double _prefetchLookaheadSec = 3.0;
 
-  /// First-frame prefetch window after configure: pre-warm the first few
-  /// seconds. A large window (e.g. 90s) caused a long first-frame stall
-  /// because all those chars hit the synchronous fallback before workers
-  /// finished rasterizing them. 15s covers the opening burst without
-  /// overloading the first frame; the rolling 3s lookahead picks up the rest.
-  static const double _initialPrefetchLookaheadSec = 15.0;
+  /// First-frame prefetch window after configure. Kept equal to the rolling
+  /// window (3s) - a larger first-frame window (e.g. 15s) caused a long
+  /// first-frame stall because all those chars hit the synchronous fallback
+  /// before workers finished. 3s covers the on-screen burst; the rolling 3s
+  /// lookahead picks up the rest. Combined with the ensureTexture-time early
+  /// prefetch (isInitialPrefetch in _tryUpdateTexture), workers get a head
+  /// start before the first draw.
+  static const double _initialPrefetchLookaheadSec = 3.0;
 
   /// Whether the initial large-window prefetch has been done since the last
   /// configure. Reset to false when configure runs.
@@ -594,14 +596,19 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // are ready in the atlas before display. First frame after configure
         // uses a large window to pre-warm the opening minute (OP/character
         // names); subsequent frames send only the small rolling delta.
-        final double prefetchLookahead = _initialPrefetchDone
-            ? _prefetchLookaheadSec
-            : _initialPrefetchLookaheadSec;
+        final bool isInitialPrefetch = !_initialPrefetchDone;
+        final double prefetchLookahead = isInitialPrefetch
+            ? _initialPrefetchLookaheadSec
+            : _prefetchLookaheadSec;
         final String? prefetchChars =
             _bridge.prefetchChars(_displayMediaTime, prefetchLookahead);
-        _initialPrefetchDone = true;
 
-        await _tryUpdateTexture(frame, prefetchChars: prefetchChars);
+        await _tryUpdateTexture(
+          frame,
+          prefetchChars: prefetchChars,
+          isInitialPrefetch: isInitialPrefetch,
+        );
+        _initialPrefetchDone = true;
         widget.onLayoutCalculated?.call(frame);
       }
     } catch (_) {
@@ -612,7 +619,11 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     }
   }
 
-  Future<bool> _tryUpdateTexture(List<PositionedDanmakuItem> frame, {String? prefetchChars}) async {
+  Future<bool> _tryUpdateTexture(
+    List<PositionedDanmakuItem> frame, {
+    String? prefetchChars,
+    bool isInitialPrefetch = false,
+  }) async {
     if (!Next2TextureBridge.isSupported || _layoutSize.isEmpty) {
       return false;
     }
@@ -739,6 +750,38 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         .clamp(0.25, 8.0)
         .toDouble();
 
+    // 优化1（首播）：texture 就绪 + fontScale 已算，立即投递首屏预热给 worker，
+    // 然后等 worker 算几帧再继续首帧 draw。首帧 draw 时部分首屏字符已 drain 填入
+    // atlas，减少 sync 兜底阻塞。代价：首帧延迟 200ms（弹幕晚 200ms 显示），
+    // 换首播卡顿减小。仅首播首帧执行（isInitialPrefetch）。
+    String? effectivePrefetch = prefetchChars;
+    if (isInitialPrefetch &&
+        effectivePrefetch != null &&
+        effectivePrefetch.isNotEmpty) {
+      try {
+        await _textureBridge.setFrame(
+          items: const <PositionedDanmakuItem>[],
+          fontSize: widget.fontSize,
+          outlineWidth: widget.outlineWidth,
+          shadowStyle: widget.shadowStyle,
+          opacity: 1.0,
+          customFontFamily: widget.customFontFamily,
+          customFontFilePath: widget.customFontFilePath,
+          scaleX: widthScale,
+          scaleY: heightScale,
+          fontScale: fontScale,
+          playbackRate: widget.playbackRate,
+          framePayload: <String, dynamic>{
+            'items': const <Map<String, dynamic>>[],
+            'prefetch_chars': effectivePrefetch,
+          },
+        );
+        await Future.delayed(const Duration(milliseconds: 200));
+      } catch (_) {}
+      if (!mounted) return false;
+      effectivePrefetch = null;
+    }
+
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
       fontSize: widget.fontSize,
@@ -747,7 +790,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       fontScale: fontScale,
       locale: locale,
       playbackRate: widget.playbackRate,
-      prefetchChars: prefetchChars,
+      prefetchChars: effectivePrefetch,
     );
 
     final pushed = await _textureBridge.setFrame(
