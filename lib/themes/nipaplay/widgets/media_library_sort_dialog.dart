@@ -70,6 +70,11 @@ const List<MediaSortOption> embySortOptions = [
     description: '按文件创建时间排序',
   ),
   MediaSortOption(
+    value: 'DateLastContentAdded',
+    label: '最后一集添加时间',
+    description: '按最后一集添加时间排序',
+  ),
+  MediaSortOption(
     value: 'SortName',
     label: '名称',
     description: '按名称字母顺序排序',
