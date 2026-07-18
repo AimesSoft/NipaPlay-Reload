@@ -737,10 +737,25 @@ impl Next2GlyphAtlas {
     }
 
     fn glyph_from_fonts(&mut self, ch: char, quantized_size: u32) -> Option<GlyphMsdfData> {
-        // Dispatches to the MSDF worker pool (synchronous: blocks until the
-        // worker returns, 2s timeout). Workers own the fonts and run the full
-        // pipeline (shape + MSDF). Pre-warming should make this rare.
-        self.msdf_worker.rasterize_sync(ch, quantized_size)
+        // Synchronous fallback: rasterize DIRECTLY on the render thread instead
+        // of dispatching to the worker pool. This blocks the render thread for
+        // one glyph (~10-50ms), but critically it does NOT consume a worker -
+        // workers stay dedicated to async prefetch.
+        //
+        // Why not dispatch to workers (the old design): sync fallbacks happen
+        // for chars prefetch hasn't covered yet. Under steady scroll, new chars
+        // appear every frame -> every frame had a few sync fallbacks -> they
+        // hogged all 4 workers -> async prefetch starved -> atlas never filled
+        // -> more sync fallbacks next frame -> stuck at 60fps. Pausing broke
+        // the loop (no sync fallbacks -> workers drained prefetch -> atlas
+        // filled -> 120fps on resume).
+        //
+        // With sync fallback on the render thread, workers are prefetch-only:
+        // the atlas fills fast and sync fallbacks dry up -> 120fps sustained.
+        // The per-fallback render-thread block is the same MSDF cost either
+        // way; the difference is workers stay free to keep the atlas warm.
+        let px = quantized_size as f32;
+        rasterize_glyph_on_face(self.fonts.as_slice(), ch, px)
     }
 
     fn rasterize_and_upload(

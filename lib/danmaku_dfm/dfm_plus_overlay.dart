@@ -191,10 +191,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// hit the atlas before display. 3s balances worker throughput vs coverage.
   static const double _prefetchLookaheadSec = 3.0;
 
-  /// First-frame prefetch window after configure: pre-warm the opening minute
-  /// (OP lyrics / character names / common chars cluster here). Measured
-  /// 603 new chars in the first minute of a high-density episode.
-  static const double _initialPrefetchLookaheadSec = 90.0;
+  /// First-frame prefetch window after configure: pre-warm the first few
+  /// seconds. A large window (e.g. 90s) caused a long first-frame stall
+  /// because all those chars hit the synchronous fallback before workers
+  /// finished rasterizing them. 15s covers the opening burst without
+  /// overloading the first frame; the rolling 3s lookahead picks up the rest.
+  static const double _initialPrefetchLookaheadSec = 15.0;
 
   /// Whether the initial large-window prefetch has been done since the last
   /// configure. Reset to false when configure runs.
