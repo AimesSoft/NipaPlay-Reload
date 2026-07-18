@@ -695,6 +695,10 @@ fn run_engine_loop(
     let mut present_target: Option<PresentTarget> = None;
     let mut running = true;
     let mut has_pending_frame = false;
+    // Diagnostics (temporary): per-60-frame avg/max of draw_to_present.
+    let mut diag_draw_count: u32 = 0;
+    let mut diag_draw_ms_sum: f32 = 0.0;
+    let mut diag_draw_ms_max: f32 = 0.0;
 
     while running {
         // Drain completed async glyph prefetches before any command/draw this
@@ -852,8 +856,34 @@ fn run_engine_loop(
         let needs_interp = renderer.needs_interpolation_render();
         if has_pending_frame || needs_interp {
             if let Some(target) = present_target.as_mut() {
+                let draw_start = std::time::Instant::now();
                 renderer.draw_to_present(target);
+                let draw_ms = draw_start.elapsed().as_secs_f32() * 1000.0;
                 signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
+                diag_draw_count += 1;
+                diag_draw_ms_sum += draw_ms;
+                if draw_ms > diag_draw_ms_max {
+                    diag_draw_ms_max = draw_ms;
+                }
+                if diag_draw_count >= 60 {
+                    n2log(&format!(
+                        "DFM+ draw diag: n={} avg={:.2}ms max={:.2}ms",
+                        diag_draw_count,
+                        diag_draw_ms_sum / diag_draw_count as f32,
+                        diag_draw_ms_max
+                    ));
+                    // Flush so the diag line is visible in next2_debug.log
+                    // immediately (n2log otherwise buffers; Android investigation
+                    // relies on reading the file on a rooted device).
+                    if let Some(m) = LOG_FILE.get() {
+                        if let Ok(mut f) = m.lock() {
+                            let _ = f.flush();
+                        }
+                    }
+                    diag_draw_count = 0;
+                    diag_draw_ms_sum = 0.0;
+                    diag_draw_ms_max = 0.0;
+                }
             } else {
                 frame_ready.store(false, Ordering::Release);
             }

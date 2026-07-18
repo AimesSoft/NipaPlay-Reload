@@ -200,6 +200,16 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// configure. Reset to false when configure runs.
   bool _initialPrefetchDone = false;
 
+  // ── Diagnostics (temporary, for Android frame-rate investigation) ──
+  // Per-second avg/max of buildPayload + setFrame await. If setFrame await
+  // < ~8ms, the Dart->Rust submit path is healthy and the bottleneck is Rust
+  // draw/present; if > ~8ms, MethodChannel/update_frame is the bottleneck.
+  int _diagFrameCount = 0;
+  double _diagBuildMsSum = 0;
+  double _diagSetFrameMsSum = 0;
+  double _diagSetFrameMsMax = 0;
+  int _diagLastPrintMs = 0;
+
   // ── Submit-rate throttle (P1-4) ──
   // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
   // capped at 60Hz; the native renderer interpolates scroll motion between
@@ -737,6 +747,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         .clamp(0.25, 8.0)
         .toDouble();
 
+    final sw = Stopwatch()..start();
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
       fontSize: widget.fontSize,
@@ -747,6 +758,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       playbackRate: widget.playbackRate,
       prefetchChars: prefetchChars,
     );
+    final buildMs = sw.elapsedMicroseconds / 1000.0;
 
     final pushed = await _textureBridge.setFrame(
       items: frame,
@@ -762,6 +774,23 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       playbackRate: widget.playbackRate,
       framePayload: prepared.toJson(),
     );
+    final setFrameMs = sw.elapsedMicroseconds / 1000.0 - buildMs;
+
+    // Diagnostics: per-second avg/max of the submit path.
+    _diagFrameCount++;
+    _diagBuildMsSum += buildMs;
+    _diagSetFrameMsSum += setFrameMs;
+    if (setFrameMs > _diagSetFrameMsMax) _diagSetFrameMsMax = setFrameMs;
+    final nowMs = _wallClock.elapsedMilliseconds;
+    if (nowMs - _diagLastPrintMs >= 1000 && _diagFrameCount > 0) {
+      debugPrint(
+          'DFM+ submit diag: n=$_diagFrameCount build=${(_diagBuildMsSum / _diagFrameCount).toStringAsFixed(2)}ms setFrame=${(_diagSetFrameMsSum / _diagFrameCount).toStringAsFixed(2)}ms(max ${_diagSetFrameMsMax.toStringAsFixed(2)}ms)');
+      _diagFrameCount = 0;
+      _diagBuildMsSum = 0;
+      _diagSetFrameMsSum = 0;
+      _diagSetFrameMsMax = 0;
+      _diagLastPrintMs = nowMs;
+    }
 
     if (pushed) {
       _emojiPipeline.markAtlasSynced();
