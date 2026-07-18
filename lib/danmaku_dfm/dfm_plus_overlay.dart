@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
@@ -201,6 +202,11 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// Whether the initial large-window prefetch has been done since the last
   /// configure. Reset to false when configure runs.
   bool _initialPrefetchDone = false;
+
+  /// Whether high-refresh-rate has been requested for this overlay's surface.
+  /// Set once before the first ensure_texture so the wgpu Surface is created
+  /// after the window mode switches to 120Hz (Android only).
+  bool _highRefreshRateSet = false;
 
   // ── Diagnostics (temporary, for Android frame-rate investigation) ──
   // Per-second avg/max of buildPayload + setFrame await. If setFrame await
@@ -677,6 +683,16 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         _surfaceId != _lastTextureSurfaceId;
 
     if (needsNewTexture) {
+      // DFM+ Surface 创建前确保高刷已请求（Android）。await 确保 window mode
+      // 切到 120Hz 后再创建 wgpu Surface，避免 Surface 锁在 60Hz vsync。app 其他
+      // 地方能 120fps 但弹幕 60fps，正是因为 Surface 创建早于 mode 切换。非 Android
+      // 平台 flutter_displaymode 抛异常，catch 吞掉（web 不进这里因 kIsWeb）。
+      if (!_highRefreshRateSet && !kIsWeb) {
+        _highRefreshRateSet = true;
+        try {
+          await FlutterDisplayMode.setHighRefreshRate();
+        } catch (_) {}
+      }
       _lastTextureWidth = pixelWidth;
       _lastTextureHeight = pixelHeight;
       _lastTextureSurfaceId = _surfaceId;

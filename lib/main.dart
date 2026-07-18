@@ -5,7 +5,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
@@ -161,18 +160,6 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Android: 请求高刷新率（120Hz/90Hz）。很多设备默认 60Hz，导致弹幕 vsync
-  // 跑 60Hz、acquire 等 60Hz vsync，DFM+ 渲染虽仅 ~1ms 但被限在 60fps。
-  // flutter_displaymode 直接操作 native DisplayManager 设置 preferred mode，
-  // 比 MainActivity 的 preferredDisplayModeId 更可靠（小米等 OEM 设备）。
-  // 仅 Android 启用（库在 iOS/LTPO/ProMotion 上无效）。
-  if (!kIsWeb && Platform.isAndroid) {
-    try {
-      await FlutterDisplayMode.setHighRefreshRate();
-    } catch (e) {
-      debugPrint('flutter_displaymode 设置高刷失败: $e');
-    }
-  }
   if (!kIsWeb) {
     try {
       await ensureRustInitialized();
