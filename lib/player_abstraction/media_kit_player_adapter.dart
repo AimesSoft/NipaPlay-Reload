@@ -14,12 +14,23 @@ import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
 
+@visibleForTesting
+void applyMediaKitNetworkOptions(
+  void Function(String key, String value) setter, {
+  required String userAgent,
+  String httpProxy = '',
+}) {
+  if (userAgent.isNotEmpty) setter('user-agent', userAgent);
+  if (httpProxy.isNotEmpty) setter('http-proxy', httpProxy);
+}
+
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
   final String? _androidAudioOutput;
+  final String _httpProxy;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
   static const String _windowsHdrValidationFlag =
@@ -284,11 +295,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Media? _pendingPlatformMedia;
   bool _platformVideoSurfaceAvailable = true;
 
-  MediaKitPlayerAdapter({int? bufferSize, String? androidAudioOutput})
-      : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
+  MediaKitPlayerAdapter({
+    int? bufferSize,
+    String? androidAudioOutput,
+    String? httpProxy,
+  })  : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
         _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
         _prefersPlatformVideoSurface = _shouldUsePlatformNativeVideoSurface(),
         _androidAudioOutput = androidAudioOutput,
+        _httpProxy = (httpProxy ?? '').trim(),
         _player = Player(
           configuration: PlayerConfiguration(
             libass: true,
@@ -308,6 +323,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _applyPlatformHdrOutputOptions();
     _applyMpvDiagnosticOptions();
     _applyAndroidAudioOutput();
+    applyMediaKitNetworkOptions(
+      _setMpvPropertyOption,
+      userAgent: '',
+      httpProxy: _httpProxy,
+    );
     _bootstrapPlatformVideoSurface();
     if (!_prefersPlatformVideoSurface) {
       _controller = VideoController(

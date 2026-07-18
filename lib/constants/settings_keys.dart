@@ -32,6 +32,9 @@ class SettingsKeys {
   /// 自定义播放器请求视频的 User-Agent（空字符串 = 用内核默认 UA）。
   static const String customPlayerUA = 'custom_player_ua';
 
+  /// HTTP forward proxy endpoint shared by Dart requests and native players.
+  static const String playerHttpProxy = 'player_http_proxy';
+
   static const String autoCheckUpdatesInBackground =
       'auto_check_updates_in_background';
 
