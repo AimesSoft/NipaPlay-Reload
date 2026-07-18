@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart' as cupertino;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -11,6 +13,16 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/network_settings.dart';
+
+bool supportsUnifiedHttpProxySetting({
+  required bool isWeb,
+  required TargetPlatform platform,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.windows ||
+      platform == TargetPlatform.macOS ||
+      platform == TargetPlatform.linux;
+}
 
 class NetworkSettingsContent extends StatefulWidget {
   const NetworkSettingsContent({super.key});
@@ -150,6 +162,19 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               enabled: _persistentUAHasValue(),
               onTap: _resetPersistentUA,
             ),
+            if (_showHttpProxySetting)
+              AdaptiveSettingsTile<void>.card(
+                title: _text(
+                  context,
+                  '媒体服务器与播放器 HTTP 代理',
+                  '媒體伺服器與播放器 HTTP 代理',
+                  'Media Server & Player HTTP Proxy',
+                ),
+                subtitle: _httpProxySubtitle(context),
+                icon: Ionicons.git_network_outline,
+                phoneIcon: cupertino.CupertinoIcons.arrow_right_arrow_left,
+                onTap: _editHttpProxy,
+              ),
           ],
         ),
         const SizedBox(height: 16),
@@ -406,6 +431,33 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   bool _persistentUAHasValue() => PlayerFactory.getCustomPlayerUA().isNotEmpty;
 
+  bool get _showHttpProxySetting {
+    return supportsUnifiedHttpProxySetting(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+    );
+  }
+
+  String _httpProxySubtitle(BuildContext context) {
+    final proxy = PlayerFactory.getHttpProxy();
+    final supportedKernels = _text(
+      context,
+      '播放器代理仅支持 MDK/MediaKit 内核。',
+      '播放器代理僅支援 MDK/MediaKit 核心。',
+      'Player proxy is supported by MDK/MediaKit only.',
+    );
+    if (proxy.isEmpty) {
+      final disabled = _text(
+        context,
+        '未启用。仅支持 http:// 代理端点，可承载 HTTP/HTTPS 目标流量。',
+        '未啟用。僅支援 http:// 代理端點，可承載 HTTP/HTTPS 目標流量。',
+        'Disabled. Only http:// proxy endpoints are supported for HTTP/HTTPS targets.',
+      );
+      return '$disabled $supportedKernels';
+    }
+    return '$proxy\n$supportedKernels';
+  }
+
   Future<void> _editPersistentUA() async {
     final input = await _showUserAgentInputDialog();
     if (!mounted || input == null) return;
@@ -427,6 +479,90 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
       context,
       message: _text(context, '已恢复默认 UA', '已恢復預設 UA', 'Default UA restored.'),
       type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  Future<void> _editHttpProxy() async {
+    final input = await _showHttpProxyInputDialog();
+    if (!mounted || input == null) return;
+    try {
+      AppHttpProxy.validate(input);
+    } on FormatException {
+      AdaptiveSnackBar.show(
+        context,
+        message: _text(
+          context,
+          '请输入有效的 http:// 代理地址；不支持 HTTPS 代理端点或 SOCKS。',
+          '請輸入有效的 http:// 代理位址；不支援 HTTPS 代理端點或 SOCKS。',
+          'Enter a valid http:// proxy endpoint. HTTPS proxy endpoints and SOCKS are unsupported.',
+        ),
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    await PlayerFactory.saveHttpProxy(input);
+    if (!mounted) return;
+    setState(() {});
+    AdaptiveSnackBar.show(
+      context,
+      message: input.isEmpty
+          ? _text(context, 'HTTP 代理已关闭', 'HTTP 代理已關閉', 'HTTP proxy disabled.')
+          : _text(context, 'HTTP 代理已保存并立即生效', 'HTTP 代理已儲存並立即生效',
+              'HTTP proxy saved and applied.'),
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  Future<String?> _showHttpProxyInputDialog() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    var inputValue = PlayerFactory.getHttpProxy();
+    return BlurDialog.show<String>(
+      context: context,
+      title: _text(
+        context,
+        'HTTP 代理',
+        'HTTP 代理',
+        'HTTP Proxy',
+      ),
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _text(
+              context,
+              '供 Emby/Jellyfin 请求与播放器网络流共用。留空关闭。',
+              '供 Emby/Jellyfin 請求與播放器網路串流共用。留空關閉。',
+              'Shared by Emby/Jellyfin requests and player network streams. Leave empty to disable.',
+            ),
+            style: TextStyle(
+              color: colorScheme.onSurface.withValues(alpha: 0.72),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            initialValue: inputValue,
+            onChanged: (value) => inputValue = value,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              hintText: 'http://127.0.0.1:8000',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        HoverScaleTextButton(
+          text: context.l10n.cancel,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        HoverScaleTextButton(
+          text: context.l10n.save,
+          onPressed: () => Navigator.of(context).pop(inputValue.trim()),
+        ),
+      ],
     );
   }
 
