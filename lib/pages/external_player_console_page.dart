@@ -782,6 +782,7 @@ class _DanmakuListState extends State<_DanmakuList> {
                       itemBuilder: (context, index) {
                         return _DanmakuRow(
                           item: items[index],
+                          danmakuIndex: index,
                           itemId:
                               '$index-${items[index].danmakuId ?? ''}',
                           startTime: widget.startTimeFor(items[index]),
@@ -803,6 +804,7 @@ class _DanmakuListState extends State<_DanmakuList> {
 class _DanmakuRow extends StatelessWidget {
   const _DanmakuRow({
     required this.item,
+    required this.danmakuIndex,
     required this.itemId,
     required this.startTime,
     required this.active,
@@ -810,6 +812,7 @@ class _DanmakuRow extends StatelessWidget {
   });
 
   final DanmakuItem item;
+  final int danmakuIndex;
   final String itemId;
   final Duration startTime;
   final bool active;
@@ -874,7 +877,8 @@ class _DanmakuRow extends StatelessWidget {
                     ),
                     const Spacer(),
                     _DanmakuVisibilityButton(
-                      item: item,
+                      danmakuIndex: danmakuIndex,
+                      visible: item.visible,
                       itemId: itemId,
                     ),
                     if (active) const SizedBox(width: 6),
@@ -959,7 +963,8 @@ class _DanmakuRow extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       _DanmakuVisibilityButton(
-                        item: item,
+                        danmakuIndex: danmakuIndex,
+                        visible: item.visible,
                         itemId: itemId,
                       ),
                       if (active) const SizedBox(width: 6),
@@ -1024,16 +1029,17 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
 
 class _DanmakuVisibilityButton extends StatelessWidget {
   const _DanmakuVisibilityButton({
-    required this.item,
+    required this.danmakuIndex,
+    required this.visible,
     required this.itemId,
   });
 
-  final DanmakuItem item;
+  final int danmakuIndex;
+  final bool visible;
   final String itemId;
 
   @override
   Widget build(BuildContext context) {
-    final visible = item.visible;
     final theme = Theme.of(context);
     return IconButton(
       key: ValueKey('external-player-danmaku-visibility-$itemId'),
@@ -1041,7 +1047,7 @@ class _DanmakuVisibilityButton extends StatelessWidget {
           ? context.l10n.externalPlayerConsoleDanmakuHide
           : context.l10n.externalPlayerConsoleDanmakuShow,
       onPressed: () {
-        ExternalPlayerConsoleService.setDanmakuVisible(item, !visible);
+        ExternalPlayerConsoleService.setDanmakuVisible(danmakuIndex, !visible);
       },
       icon: Icon(
         visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,

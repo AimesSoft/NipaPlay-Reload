@@ -276,10 +276,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
   /// 设置单条弹幕是否参与渲染.
-  static bool setDanmakuVisible(DanmakuItem item, bool visible) {
+  static bool setDanmakuVisible(int danmakuIndex, bool visible) {
 
-    // 检查弹幕是否属于当前列表, 并且状态是否发生变化
-    if (!_instance._danmakuList.any((candidate) => identical(candidate, item))) return false;
+    // 检查弹幕索引是否有效, 并且状态是否发生变化
+    if (danmakuIndex < 0 || danmakuIndex >= _instance._danmakuList.length) return false;
+    final item = _instance._danmakuList[danmakuIndex];
     if (item.visible == visible) return false;
 
     item.visible = visible;
