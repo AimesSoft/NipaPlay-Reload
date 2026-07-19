@@ -1,0 +1,43 @@
+name: liquid_glass_widgets_example
+description: Example app showcasing Apple Liquid Glass widgets
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Local package
+  liquid_glass_widgets:
+    path: ../
+
+  # Required dependencies
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.10+1
+  video_player: ^2.11.0
+  webview_flutter: ^4.13.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: SFSymbols
+      fonts:
+        - asset: assets/fonts/SFSymbols.ttf
+  assets:
+    - assets/wallpaper.jpg
+    - assets/wallpaper_dark.jpg
+    - assets/mountain_landscape.jpg
+    - assets/bulldog.jpeg
+    - assets/news_logo.svg
+    - assets/audio.svg
+    - assets/following.svg
+    - assets/news_images/
+    - assets/modal_sheet_showcase/
+    - assets/podcast_images/

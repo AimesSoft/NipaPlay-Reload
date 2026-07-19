@@ -238,6 +238,9 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
+  # Forked from 0.21.3 to fix obfuscated shape geometry and retain Android blur layers.
+  liquid_glass_widgets:
+    path: packages/liquid_glass_widgets
   media_kit:
     path: packages/media_kit
   media_kit_video:
