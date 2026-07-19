@@ -432,6 +432,13 @@ impl Next2Renderer {
         self.emoji_atlas.clear();
     }
 
+    /// Drain completed async prefetch results and upload to the atlas. Called
+    /// at the top of each engine loop iteration so prefetched glyphs land in
+    /// the atlas before the next draw.
+    pub(crate) fn drain_prefetch(&mut self, queue: &wgpu::Queue) {
+        self.atlas.drain_prefetch(queue);
+    }
+
     fn update_frame(&mut self, input: RenderFrameInput, custom_font: Option<FontSource>) -> bool {
         let parsed = match serde_json::from_str::<FramePayload>(&input.frame_json) {
             Ok(parsed) => parsed,
@@ -479,6 +486,16 @@ impl Next2Renderer {
                 opacity,
                 scroll_speed: item.scroll_speed as f32,
             });
+        }
+
+        // Prefetch-rasterize lookahead chars asynchronously. Workers run the
+        // full pipeline off the render thread; results drain into the atlas
+        // at the top of the next loop iteration. Deduplicated by `pending`.
+        if let Some(chars) = &parsed.prefetch_chars {
+            let qz = font_size.round().clamp(8.0, 256.0) as u32;
+            for ch in chars.chars() {
+                self.atlas.request_rasterize(ch, qz);
+            }
         }
 
         // Re-baseline the interpolation clock to this submission. The render

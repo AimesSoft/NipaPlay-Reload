@@ -335,8 +335,15 @@ class EmbyService extends MediaServerServiceBase
       return trimmed;
     }
 
-    String normalized = trimmed.startsWith('/') ? trimmed : '/$trimmed';
-    if (!normalized.toLowerCase().startsWith('/emby')) {
+    bool bypassEmby = false;
+    String cleanPath = trimmed;
+    if (trimmed.startsWith('[no-emby]')) {
+      bypassEmby = true;
+      cleanPath = trimmed.substring('[no-emby]'.length);
+    }
+
+    String normalized = cleanPath.startsWith('/') ? cleanPath : '/$cleanPath';
+    if (!bypassEmby && !normalized.toLowerCase().startsWith('/emby')) {
       normalized = '/emby$normalized';
     }
 
@@ -361,12 +368,46 @@ class EmbyService extends MediaServerServiceBase
     if (!_isConnected || _userId == null) return;
 
     try {
-      final response =
-          await _makeAuthenticatedRequest('/emby/Library/MediaFolders');
+      List<dynamic>? items;
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['Items'] as List;
+      // Helper function to safely fetch items from a given path
+      Future<List<dynamic>?> fetchItemsFromPath(String path) async {
+        try {
+          final response = await _makeAuthenticatedRequest(path);
+          if (response.statusCode != 200) {
+            return null;
+          }
+          final contentType = response.headers['content-type'] ?? '';
+          if (contentType.toLowerCase().contains('text/html')) {
+            return null;
+          }
+          final data = json.decode(response.body);
+          if (data is Map && data.containsKey('Items')) {
+            final list = data['Items'];
+            if (list is List && list.isNotEmpty) {
+              return list;
+            }
+          }
+        } catch (e) {
+          DebugLogService().addLog('EmbyService: 获取媒体库路径 ($path) 失败: $e');
+        }
+        return null;
+      }
+
+      // 1. Try requesting '/emby/Library/MediaFolders'
+      items = await fetchItemsFromPath('/emby/Library/MediaFolders');
+
+      // 2. Try requesting '/emby/Users/{userId}/Views'
+      if (items == null || items.isEmpty) {
+        items = await fetchItemsFromPath('/emby/Users/$_userId/Views');
+      }
+
+      // 3. Try requesting '/Users/{userId}/Views' (without /emby prefix)
+      if (items == null || items.isEmpty) {
+        items = await fetchItemsFromPath('[no-emby]/Users/$_userId/Views');
+      }
+
+      if (items != null) {
         final List<EmbyLibrary> tempLibraries = [];
 
         for (var item in items) {
@@ -409,7 +450,7 @@ class EmbyService extends MediaServerServiceBase
         }
         _availableLibraries = tempLibraries;
       } else {
-        print('Error response: ${response.statusCode} - ${response.body}');
+        DebugLogService().addLog('EmbyService: 所有媒体库获取路径均失败或返回空项');
       }
     } catch (e, stackTrace) {
       print('Error loading available libraries: $e');

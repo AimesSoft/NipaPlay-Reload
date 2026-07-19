@@ -61,6 +61,35 @@ class AndroidSafService {
     return value.toLowerCase().startsWith('content://');
   }
 
+  /// 将 Android SAF tree URI 转换为文件系统路径。仅转换 primary（内部存储）：
+  /// content://com.android.externalstorage.documents/tree/primary%3AMovies
+  /// -> /storage/emulated/0/Movies。SD/OTG 的 tree URI 无法可靠转路径，原样返回。
+  /// app 有 MANAGE_EXTERNAL_STORAGE，primary 路径可直接用 io.File/io.Directory
+  /// 访问，恢复与普通文件路径的兼容（浏览/播放/扫描全走原路径）。
+  static String tryConvertToFilePath(String uri) {
+    if (!isSafUri(uri)) return uri;
+    final parsed = Uri.tryParse(uri);
+    if (parsed == null) return uri;
+    final segments = parsed.pathSegments;
+    if (segments.length < 2 || segments[0] != 'tree') return uri;
+    // pathSegments 已是解码后的（%3A -> :），不要再 decodeComponent——双重解码
+    // 会在文件夹名含 % 时抛 "Illegal percent"（pathSegments 把 %25 解码成 %，
+    // 再 decodeComponent 遇到孤立的 % 就 FormatException）。
+    final decoded = segments[1];
+    final colonIdx = decoded.indexOf(':');
+    if (colonIdx < 0) return uri;
+    final storageId = decoded.substring(0, colonIdx);
+    final relativePath = decoded.substring(colonIdx + 1);
+    if (storageId == 'primary') {
+      return '/storage/emulated/0/$relativePath';
+    }
+    // SD/USB OTG: /storage/<storageId>/<relativePath>。
+    // MANAGE_EXTERNAL_STORAGE 理论上覆盖 /storage/ 下所有卷，但 USB OTG 实际
+    // 可访问性因 OEM/ROM 而异（某些定制 ROM 即使 MANAGE granted 也拒绝真实路径）。
+    // 返回路径让调用方 existsSync 验证，不可访问则保留 content:// 走 SAF。
+    return '/storage/$storageId/$relativePath';
+  }
+
   static Future<String?> pickDirectory() async {
     return _channel.invokeMethod<String>('pickDirectory');
   }

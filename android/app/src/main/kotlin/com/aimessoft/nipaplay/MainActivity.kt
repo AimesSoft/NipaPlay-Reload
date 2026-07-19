@@ -453,6 +453,24 @@ class MainActivity: FlutterActivity() {
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
+
+        // 请求最高刷新率：高刷屏（120Hz/90Hz）默认可能被系统限到 60Hz，
+        // 导致 wgpu Surface vsync 跑 60Hz、get_current_texture 等 60Hz vsync
+        // (~15ms/帧) -> 弹幕稳 60fps 冲不上去。显式请求最高刷新率 mode 让
+        // Surface vsync 跑屏原生刷新率，弹幕才能 120fps（DFM+ render 本身
+        // 仅 ~1ms，瓶颈完全是 acquire 等 vsync）。实测：双击触发的瞬时
+        // 120fps 段 acquire 降到 0.04ms，证明渲染能力足够，只是被 60Hz 限。
+        @Suppress("DEPRECATION")
+        val disp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay
+        val modes = disp?.supportedModes
+        if (!modes.isNullOrEmpty()) {
+            val highRefreshMode = modes.maxByOrNull { it.refreshRate }
+            if (highRefreshMode != null) {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = highRefreshMode.modeId
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
