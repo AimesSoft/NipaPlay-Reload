@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/utils/cupertino_glass_navigation_insets.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
@@ -254,7 +255,9 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     );
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
-    final glassTabBarBottom = bottomInset > 14 ? bottomInset - 8 : 6.0;
+    final glassTabBarBottom = resolveGlassTabBarBottomOffset(
+      viewPaddingBottom: bottomInset,
+    );
     final glassTabBarSettings =
         CupertinoTheme.brightnessOf(context) == Brightness.light
             ? _lightPhoneNavigationGlassSettings
