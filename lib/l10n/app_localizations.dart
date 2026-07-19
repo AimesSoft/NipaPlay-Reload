@@ -330,7 +330,7 @@ abstract class AppLocalizations {
   /// No description provided for @externalPlayerConsoleDanmakuBlocked.
   ///
   /// In zh, this message translates to:
-  /// **'已被关键词屏蔽'**
+  /// **'已被屏蔽'**
   String get externalPlayerConsoleDanmakuBlocked;
 
   /// No description provided for @externalPlayerConsoleDanmakuBlockModeKeyword.

@@ -44,7 +44,7 @@
   "externalPlayerConsoleDanmakuKeywordFilter": "Danmaku block rules",
   "externalPlayerConsoleDanmakuKeywordHint": "Enter rule content",
   "externalPlayerConsoleDanmakuKeywordAdd": "Add",
-  "externalPlayerConsoleDanmakuBlocked": "Blocked by keyword",
+  "externalPlayerConsoleDanmakuBlocked": "Blocked",
   "externalPlayerConsoleDanmakuBlockModeKeyword": "Keyword",
   "externalPlayerConsoleDanmakuBlockModeRegex": "Regular expression",
   "externalPlayerConsoleDanmakuBlockModeSender": "Sender ID",

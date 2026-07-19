@@ -126,7 +126,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuKeywordAdd => '添加';
 
   @override
-  String get externalPlayerConsoleDanmakuBlocked => '已被关键词屏蔽';
+  String get externalPlayerConsoleDanmakuBlocked => '已被屏蔽';
 
   @override
   String get externalPlayerConsoleDanmakuBlockModeKeyword => '关键词';
@@ -2023,7 +2023,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleDanmakuKeywordAdd => '新增';
 
   @override
-  String get externalPlayerConsoleDanmakuBlocked => '已被關鍵詞封鎖';
+  String get externalPlayerConsoleDanmakuBlocked => '已被封鎖';
 
   @override
   String get externalPlayerConsoleDanmakuBlockModeKeyword => '關鍵詞';

@@ -65,25 +65,25 @@ void main() {
       expect(ass, isNot(contains('another')));
     });
 
-    test('skips invisible typed danmaku at ASS rendering time', () {
+    test('typed danmaku no longer stores legacy visibility state', () {
       const settings = AssExportSettings(fontSize: 24);
-      final hidden = DanmakuItem(
-        time: const Duration(seconds: 1),
-        content: 'blocked by keyword',
-        visible: false,
-      );
-      final visible = DanmakuItem(
+      final legacyItem = DanmakuItem.fromMap({
+        'time': 1,
+        'content': 'legacy visibility value',
+        'visible': false,
+      });
+      final item = DanmakuItem(
         time: const Duration(seconds: 2),
         content: 'kept comment',
       );
 
-      final ass = convertDanmakuItemsToAss([hidden, visible], settings);
+      final ass = convertDanmakuItemsToAss([legacyItem, item], settings);
 
-      expect(ass, isNot(contains('blocked by keyword')));
+      expect(ass, contains('legacy visibility value'));
       expect(ass, contains('kept comment'));
-      expect(hidden.toMap()['visible'], isFalse);
-      expect(DanmakuItem.fromMap(hidden.toMap()).visible, isFalse);
-      expect(hidden.copyWith(visible: true).visible, isTrue);
+      expect(legacyItem.toMap(), isNot(contains('visible')));
+      expect(legacyItem.extra, isNot(contains('visible')));
+      expect(legacyItem.copyWith().toMap(), isNot(contains('visible')));
     });
 
     test('writes prepared ASS and skips filtered entries', () {

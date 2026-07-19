@@ -240,7 +240,7 @@ String convertDanmakuItemsToAss(
   AssExportSettings settings,
 ) {
   return convertDanmakuToAss(
-    danmaku.where((item) => item.visible).map((item) => item.toMap()).toList(growable: false), 
+    danmaku.map((item) => item.toMap()).toList(growable: false),
     settings,
   );
 }

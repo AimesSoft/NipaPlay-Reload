@@ -21,7 +21,6 @@ enum ItemType {
   userId,
 }
 
-
 /// 弹幕屏蔽项目
 class BlockedDanmakuItem {
 
@@ -31,6 +30,25 @@ class BlockedDanmakuItem {
   const BlockedDanmakuItem({
     required this.value,
     required this.type,
+  });
+}
+
+/// 用于显示的弹幕数据项
+class DisplayDanmakuItem {
+
+  final int         index;     // 弹幕在列表中的索引
+  final DanmakuItem item;      // 弹幕元数据引用
+
+  final bool        isActive;  // 弹幕是否在当前播放位置显示
+  final Duration    startTime; // 弹幕实际显示的起始时间 (考虑了时间偏移)
+  final bool        isBlocked; // 弹幕是否被屏蔽
+
+  const DisplayDanmakuItem({
+    required this.item,
+    required this.index,
+    required this.startTime,
+    required this.isBlocked,
+    required this.isActive,
   });
 }
 
@@ -88,13 +106,20 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   ExternalPlayerLaunchSession?  _session; // 外部播放器会话
 
   // 动漫元数据相关
+  // ------------------------------------------------------------------------ //
   String? _animeTitle;   // 番剧标题
   String? _episodeTitle; // 剧集标题
   int?    _episodeId;    // 剧集 ID
 
+
   // 弹幕资产相关
-  List<DanmakuItem>        _danmakuList = const []; // 弹幕列表
+  // ------------------------------------------------------------------------ //
+
+  // 弹幕列表和屏蔽规则
+  List<DanmakuItem>        _danmakuList = const []; // 弹幕源列表
   List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
+  List<DisplayDanmakuItem> _displayDanmakuList = const []; // 用于显示的弹幕列表, 包含屏蔽状态
+
   /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
   final DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
@@ -114,51 +139,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   String? get animeTitle => _animeTitle;
   String? get episodeTitle => _episodeTitle;
   int? get episodeId => _episodeId;
-  List<DanmakuItem> get danmakuList => _danmakuList;
+  List<DisplayDanmakuItem> get displayDanmakuList {
+    _updateDisplayDanmakuList();
+    return _displayDanmakuList;
+  }
   List<BlockedDanmakuItem> get blockedItems => _blockedItems;
   static int get stateTimestamp => _stateTimestamp;
-
-  /// 获取当前播放位置正在显示的弹幕索引列表.
-  List<int> get activeDanmakuIndices {
-    final current = _session;
-    final position = current?.position;
-    if (current == null || position == null) return const [];
-    final items = _danmakuList;
-    final maximumDuration = _maxDanmakuDuration();
-    if (items.isEmpty || maximumDuration <= Duration.zero) return const [];
-
-    var low = 0;
-    var high = items.length;
-    while (low < high) {
-      final middle = low + ((high - low) >> 1);
-      if (danmakuStartTime(items[middle]) <= position) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-
-    final earliestPossibleStart = position - maximumDuration;
-    final active = <int>[];
-    for (var index = low - 1; index >= 0; index--) {
-      final item = items[index];
-      if (!item.visible) continue;
-      final startTime = danmakuStartTime(item);
-      if (startTime < earliestPossibleStart) break;
-      if (position >= startTime &&
-          position < startTime + _danmakuDisplayDuration(item)) {
-        active.add(index);
-      }
-    }
-    return List<int>.unmodifiable(active.reversed);
-  }
-
-  /// 获取弹幕的实际显示时间, 考虑了时间偏移
-  Duration danmakuStartTime(DanmakuItem item) {
-    final offsetSeconds = _danmakuStyle.danmakuOffset;
-    return item.time + Duration(microseconds:(offsetSeconds * Duration.microsecondsPerSecond).round());
-  }
-
 
   // ======================================================================== //
   // ============================== 主要方法 ================================ //
@@ -248,6 +234,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   /// 入队时复制 [danmakuStyle], 以避免后续修改影响正在执行的任务.
   void queueDanmakuRefresh() {
 
+    _updateDisplayDanmakuList();
     _markConfigurationChanged('queueDanmakuRefresh');
     notifyListeners();
 
@@ -275,19 +262,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _danmakuStyleUpdateQueue = _danmakuStyleUpdateQueue.then(fun);
   }
 
-  /// 设置单条弹幕是否参与渲染.
-  static bool setDanmakuVisible(int danmakuIndex, bool visible) {
-
-    // 检查弹幕索引是否有效, 并且状态是否发生变化
-    if (danmakuIndex < 0 || danmakuIndex >= _instance._danmakuList.length) return false;
-    final item = _instance._danmakuList[danmakuIndex];
-    if (item.visible == visible) return false;
-
-    item.visible = visible;
-    _instance.queueDanmakuRefresh();
-    return true;
-  }
-
   /// 添加一条弹幕屏蔽规则.
   static bool addBlockedItem(String input, ItemType type) {
     final value = input.trim();
@@ -309,7 +283,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       ..._instance._blockedItems,
       BlockedDanmakuItem(value: value, type: type),
     ]);
-    _instance._applyBlockedItems();
     _instance.queueDanmakuRefresh();
     return true;
   }
@@ -321,7 +294,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         .toList(growable: false);
     if (items.length == _instance._blockedItems.length) return;
     _instance._blockedItems = List<BlockedDanmakuItem>.unmodifiable(items);
-    _instance._applyBlockedItems();
     _instance.queueDanmakuRefresh();
   }
 
@@ -344,21 +316,15 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   /// 获取弹幕的实际显示时长, 考虑了滚动弹幕和固定弹幕的不同持续时间设置
   Duration _danmakuDisplayDuration(DanmakuItem item) {
-    final current = _session;
-    final settings = current is LinuxSession
-        ? current.danmakuAssets?.assSettings
-        : null;
-    final seconds = item.mode.isScrolling
-        ? settings?.scrollDurationSeconds ?? 10.0
-        : kAssFixedDanmakuDurationSeconds;
+    final current = _session; // 当前会话, 用于获取 ASS 设置
+    final settings = current is LinuxSession ? current.danmakuAssets?.assSettings: null; // 
+
+    final seconds = item.mode.isScrolling? settings?.scrollDurationSeconds ?? 10.0 : kAssFixedDanmakuDurationSeconds;
+
     if (!seconds.isFinite || seconds <= 0) {
-      return item.mode.isScrolling
-          ? const Duration(seconds: 10)
-          : const Duration(seconds: 5);
+      return item.mode.isScrolling ? const Duration(seconds: 10) : const Duration(seconds: 5);
     }
-    return Duration(
-      microseconds: (seconds * Duration.microsecondsPerSecond).round(),
-    );
+    return Duration(microseconds: (seconds * Duration.microsecondsPerSecond).round());
   }
 
   bool _isDanmakuBlocked(DanmakuItem item) {
@@ -385,22 +351,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       }
     }
     return false;
-  }
-
-  void _applyBlockedItems() {
-    for (final item in _danmakuList) {
-      item.visible = !_isDanmakuBlocked(item);
-    }
-  }
-
-  Duration _maxDanmakuDuration() {
-    var maximum = Duration.zero;
-    for (final item in _danmakuList) {
-      if (!item.visible) continue;
-      final duration = _danmakuDisplayDuration(item);
-      if (duration > maximum) maximum = duration;
-    }
-    return maximum;
   }
 
   /// 重新生成 ASS 文件并刷新 mpv 弹幕, 仅在状态未发生变化时执行
@@ -434,7 +384,10 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
       // 生成 ASS 内容
       final assStr = await generateExternalPlayerDanmakuAss(
-        _danmakuList,
+        _displayDanmakuList
+            .where((item) => !item.isBlocked)
+            .map((item) => item.item)
+            .toList(growable: false),
         settings,
         allowStacking: style.danmakuAllowStacking,
       );
@@ -472,6 +425,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       _clearSession(current);
       return;
     }
+    _instance._updateDisplayDanmakuList();
     _instance.notifyListeners();
   }
 
@@ -496,14 +450,22 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     List<DanmakuItem>? danmakuList,
     DanmakuStyle? danmakuStyle,
   }) {
-    _danmakuList = _sortDanmakuItems(danmakuList ?? const []);
-    _applyBlockedItems();
+
+    // 按照时间戳排序弹幕列表, 并创建不可变副本
+    final sorted = List<DanmakuItem>.of(danmakuList ?? const []);
+    sorted.sort((a, b) => a.time.compareTo(b.time));
+    _danmakuList =  List<DanmakuItem>.unmodifiable(sorted);
+
+    // 更新弹幕样式, 如果未提供则保持现有样式
     final style = danmakuStyle ?? DanmakuStyle();
     _danmakuStyle.opacity = style.opacity;
     _danmakuStyle.outlineWidth = style.outlineWidth;
     _danmakuStyle.danmakuFontSize = style.danmakuFontSize;
     _danmakuStyle.danmakuOffset = style.danmakuOffset;
     _danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
+
+    // 更新用于显示的弹幕列表
+    _updateDisplayDanmakuList();
   }
 
   void _clearDanmakuState() {
@@ -511,9 +473,34 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _blockedItems = const [];
   }
 
-  static List<DanmakuItem> _sortDanmakuItems(List<DanmakuItem> items) {
-    final sorted = List<DanmakuItem>.of(items);
-    sorted.sort((a, b) => a.time.compareTo(b.time));
-    return List<DanmakuItem>.unmodifiable(sorted);
+  /// 更新用于显示的弹幕列表
+  void _updateDisplayDanmakuList() {
+
+    final position = _session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
+
+    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(
+      _danmakuList.indexed.map((entry) {
+
+        final (index, item) = entry; // 解构索引和弹幕项
+
+        // 计算弹幕的实际显示时间, 考虑了时间偏移
+        final offsetSeconds = _danmakuStyle.danmakuOffset;
+        final time = item.time + Duration(microseconds:(offsetSeconds * Duration.microsecondsPerSecond).round());
+        final isBlocked = _isDanmakuBlocked(item);
+        final isActive = !isBlocked &&
+            position != null &&
+            position >= time &&
+            position < time + _danmakuDisplayDuration(item);
+
+        return DisplayDanmakuItem(
+          item: item,
+          index: index,
+          startTime: time,
+          isBlocked: isBlocked,
+          isActive: isActive,
+        );
+      }),
+    );
   }
+
 }

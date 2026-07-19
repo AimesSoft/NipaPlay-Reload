@@ -129,7 +129,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get externalPlayerConsoleDanmakuKeywordAdd => 'Add';
 
   @override
-  String get externalPlayerConsoleDanmakuBlocked => 'Blocked by keyword';
+  String get externalPlayerConsoleDanmakuBlocked => 'Blocked';
 
   @override
   String get externalPlayerConsoleDanmakuBlockModeKeyword => 'Keyword';

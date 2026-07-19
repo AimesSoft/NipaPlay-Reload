@@ -37,12 +37,10 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         animeTitle: service.animeTitle,
                         episodeTitle: service.episodeTitle,
                         episodeId: service.episodeId,
-                        danmakuList: service.danmakuList,
-                        danmakuStartTime: service.danmakuStartTime,
+                        danmakuList: service.displayDanmakuList,
                         isPaused: session.isPaused ?? false,
                         danmakuStyle: service.danmakuStyle,
                         blockedItems: service.blockedItems,
-                        activeDanmakuIndices: service.activeDanmakuIndices,
                       ),
               ),
             ),
@@ -97,11 +95,9 @@ class _ConsoleCard extends StatelessWidget {
     required this.episodeTitle,
     required this.episodeId,
     required this.danmakuList,
-    required this.danmakuStartTime,
     required this.isPaused,
     required this.danmakuStyle,
     required this.blockedItems,
-    required this.activeDanmakuIndices,
   });
 
   final ExternalPlayerLaunchSession session;
@@ -109,12 +105,10 @@ class _ConsoleCard extends StatelessWidget {
   final String? animeTitle;
   final String? episodeTitle;
   final int? episodeId;
-  final List<DanmakuItem> danmakuList;
-  final Duration Function(DanmakuItem) danmakuStartTime;
+  final List<DisplayDanmakuItem> danmakuList;
   final bool isPaused;
   final DanmakuStyle danmakuStyle;
   final List<BlockedDanmakuItem> blockedItems;
-  final List<int> activeDanmakuIndices;
 
   @override
   Widget build(BuildContext context) {
@@ -222,8 +216,6 @@ class _ConsoleCard extends StatelessWidget {
             _DanmakuList(
               session: session,
               items: danmakuList,
-              startTimeFor: danmakuStartTime,
-              activeIndices: activeDanmakuIndices,
             ),
           ],
         ),
@@ -584,19 +576,15 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
 }
 
 
-/// 显示当前外部播放会话保存的源弹幕
+/// 显示当前外部播放会话构建的弹幕展示列表
 class _DanmakuList extends StatefulWidget {
   const _DanmakuList({
     required this.session,
     required this.items,
-    required this.startTimeFor,
-    required this.activeIndices,
   });
 
   final ExternalPlayerLaunchSession session;
-  final List<DanmakuItem> items;
-  final Duration Function(DanmakuItem) startTimeFor;
-  final List<int> activeIndices;
+  final List<DisplayDanmakuItem> items;
 
   @override
   State<_DanmakuList> createState() => _DanmakuListState();
@@ -638,7 +626,8 @@ class _DanmakuListState extends State<_DanmakuList> {
   }
 
   int? get _firstActiveIndex {
-    return widget.activeIndices.isEmpty ? null : widget.activeIndices.first;
+    final index = widget.items.indexWhere((item) => item.isActive);
+    return index < 0 ? null : index;
   }
 
   void _scheduleScrollTo(int index) {
@@ -694,7 +683,7 @@ class _DanmakuListState extends State<_DanmakuList> {
     final theme = Theme.of(context);
     final localizations = context.l10n;
     final items = widget.items;
-    final activeIndices = widget.activeIndices.toSet();
+    final activeCount = items.where((item) => item.isActive).length;
     final followDescription = _followPlayback
         ? localizations.externalPlayerConsoleDanmakuFollowEnabled
         : localizations.externalPlayerConsoleDanmakuFollowDisabled;
@@ -718,7 +707,7 @@ class _DanmakuListState extends State<_DanmakuList> {
                   Text(
                     localizations.externalPlayerConsoleDanmakuStats(
                       items.length,
-                      activeIndices.length,
+                      activeCount,
                     ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
@@ -780,13 +769,15 @@ class _DanmakuListState extends State<_DanmakuList> {
                       itemExtent: _itemExtent,
                       itemCount: items.length,
                       itemBuilder: (context, index) {
+                        final displayItem = items[index];
+                        final item = displayItem.item;
                         return _DanmakuRow(
-                          item: items[index],
-                          danmakuIndex: index,
+                          item: item,
                           itemId:
-                              '$index-${items[index].danmakuId ?? ''}',
-                          startTime: widget.startTimeFor(items[index]),
-                          active: activeIndices.contains(index),
+                              '${displayItem.index}-${item.danmakuId ?? ''}',
+                          startTime: displayItem.startTime,
+                          active: displayItem.isActive,
+                          blocked: displayItem.isBlocked,
                           compact: compact,
                         );
                       },
@@ -804,18 +795,18 @@ class _DanmakuListState extends State<_DanmakuList> {
 class _DanmakuRow extends StatelessWidget {
   const _DanmakuRow({
     required this.item,
-    required this.danmakuIndex,
     required this.itemId,
     required this.startTime,
     required this.active,
+    required this.blocked,
     required this.compact,
   });
 
   final DanmakuItem item;
-  final int danmakuIndex;
   final String itemId;
   final Duration startTime;
   final bool active;
+  final bool blocked;
   final bool compact;
 
   @override
@@ -847,7 +838,7 @@ class _DanmakuRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: active
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
-            : !item.visible
+            : blocked
                 ? theme.colorScheme.surfaceContainerHighest
                 : null,
         border: Border(
@@ -876,12 +867,8 @@ class _DanmakuRow extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    _DanmakuVisibilityButton(
-                      danmakuIndex: danmakuIndex,
-                      visible: item.visible,
-                      itemId: itemId,
-                    ),
-                    if (active) const SizedBox(width: 6),
+                    if (blocked) _BlockedDanmakuIndicator(itemId: itemId),
+                    if (blocked && active) const SizedBox(width: 6),
                     if (active) _ActiveDanmakuIndicator(itemId: itemId),
                   ],
                 ),
@@ -962,12 +949,8 @@ class _DanmakuRow extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      _DanmakuVisibilityButton(
-                        danmakuIndex: danmakuIndex,
-                        visible: item.visible,
-                        itemId: itemId,
-                      ),
-                      if (active) const SizedBox(width: 6),
+                      if (blocked) _BlockedDanmakuIndicator(itemId: itemId),
+                      if (blocked && active) const SizedBox(width: 6),
                       if (active) _ActiveDanmakuIndicator(itemId: itemId),
                     ],
                   ),
@@ -1027,38 +1010,21 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
   }
 }
 
-class _DanmakuVisibilityButton extends StatelessWidget {
-  const _DanmakuVisibilityButton({
-    required this.danmakuIndex,
-    required this.visible,
-    required this.itemId,
-  });
+class _BlockedDanmakuIndicator extends StatelessWidget {
+  const _BlockedDanmakuIndicator({required this.itemId});
 
-  final int danmakuIndex;
-  final bool visible;
   final String itemId;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return IconButton(
-      key: ValueKey('external-player-danmaku-visibility-$itemId'),
-      tooltip: visible
-          ? context.l10n.externalPlayerConsoleDanmakuHide
-          : context.l10n.externalPlayerConsoleDanmakuShow,
-      onPressed: () {
-        ExternalPlayerConsoleService.setDanmakuVisible(danmakuIndex, !visible);
-      },
-      icon: Icon(
-        visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-        size: 20,
-        color: visible
-            ? theme.colorScheme.primary
-            : theme.colorScheme.error,
+    return Tooltip(
+      message: context.l10n.externalPlayerConsoleDanmakuBlocked,
+      child: Icon(
+        Icons.block_rounded,
+        key: ValueKey('external-player-danmaku-blocked-$itemId'),
+        size: 18,
+        color: Theme.of(context).colorScheme.error,
       ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-      visualDensity: VisualDensity.compact,
     );
   }
 }

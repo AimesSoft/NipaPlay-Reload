@@ -38,7 +38,7 @@
   "externalPlayerConsoleDanmakuKeywordFilter": "彈幕封鎖規則",
   "externalPlayerConsoleDanmakuKeywordHint": "輸入規則內容",
   "externalPlayerConsoleDanmakuKeywordAdd": "新增",
-  "externalPlayerConsoleDanmakuBlocked": "已被關鍵詞封鎖",
+  "externalPlayerConsoleDanmakuBlocked": "已被封鎖",
   "externalPlayerConsoleDanmakuBlockModeKeyword": "關鍵詞",
   "externalPlayerConsoleDanmakuBlockModeRegex": "正則表達式",
   "externalPlayerConsoleDanmakuBlockModeSender": "發送者 ID",

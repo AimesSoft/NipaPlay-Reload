@@ -44,7 +44,7 @@
   "externalPlayerConsoleDanmakuKeywordFilter": "弹幕屏蔽规则",
   "externalPlayerConsoleDanmakuKeywordHint": "输入规则内容",
   "externalPlayerConsoleDanmakuKeywordAdd": "添加",
-  "externalPlayerConsoleDanmakuBlocked": "已被关键词屏蔽",
+  "externalPlayerConsoleDanmakuBlocked": "已被屏蔽",
   "externalPlayerConsoleDanmakuBlockModeKeyword": "关键词",
   "externalPlayerConsoleDanmakuBlockModeRegex": "正则表达式",
   "externalPlayerConsoleDanmakuBlockModeSender": "发送者 ID",
