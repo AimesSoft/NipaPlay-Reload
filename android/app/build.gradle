@@ -78,7 +78,7 @@ android {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            
+
             // R8 代码收缩 + 资源压缩（release 构建优化：体积↓20-50% + 死代码消除 + 反逆向）
             // proguard-rules.pro 已健全（保留 Flutter/media_kit/FRB/Kotlin/JNI native/自定义类）
             // 配合 gradle.properties 的 android.enableR8.fullMode=true

@@ -567,8 +567,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       // 验证选择的目录是否可访问
       bool accessCheck = false;
       if (io.Platform.isAndroid &&
-          !AndroidSafService.isSafUri(selectedDirectory)) {
-        // 使用原生方法检查目录权限
+          AndroidSafService.isSafUri(selectedDirectory)) {
+        // SAF content:// URI（SD/OTG/U盘）：用 SAF canAccessTree 检查权限。
+        // io.Directory / StorageService.isValidStorageDirectory 不支持 content://，
+        // 会被误判为无权限（PR#599 遗留问题）。
+        accessCheck = await AndroidSafService.canAccessTree(selectedDirectory);
+      } else if (io.Platform.isAndroid) {
+        // 普通文件路径：使用原生方法检查目录权限
         final dirCheck = await AndroidStorageHelper.checkDirectoryPermissions(
             selectedDirectory);
         accessCheck = dirCheck['canRead'] == true;
