@@ -39,6 +39,7 @@ class UnifiedLibraryManagementItem {
     required this.icon,
     required this.onOpen,
     this.status,
+    this.matchSubtitle,
     this.actions = const [],
   });
 
@@ -46,6 +47,8 @@ class UnifiedLibraryManagementItem {
   final String title;
   final String subtitle;
   final String? status;
+  /// 匹配信息，如 "CLANNAD AFTER STORY - 第5话"，仅在视频文件已匹配时显示
+  final String? matchSubtitle;
   final LibraryManagementIcon icon;
   final VoidCallback? onOpen;
   final List<UnifiedLibraryManagementAction> actions;

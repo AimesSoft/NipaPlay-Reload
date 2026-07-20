@@ -2793,6 +2793,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return entry.name.toLowerCase().contains(query) ||
           entry.path.toLowerCase().contains(query);
     });
+    final watchHistory = Provider.of<WatchHistoryProvider>(context);
 
     return [
       for (final entry in entries)
@@ -2800,6 +2801,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           id: '${location.type.name}:${entry.path}',
           title: entry.name.isEmpty ? entry.path : entry.name,
           subtitle: entry.isDirectory ? '文件夹' : '视频文件',
+          matchSubtitle: entry.isDirectory
+              ? null
+              : _buildMountedEntryMatchSubtitle(location, entry, watchHistory),
           icon: entry.isDirectory
               ? LibraryManagementIcon.folder
               : LibraryManagementIcon.video,
@@ -2809,6 +2813,21 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: _buildMountedEntryActions(location, entry, scanService),
         ),
     ];
+  }
+
+  String? _buildMountedEntryMatchSubtitle(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+    WatchHistoryProvider watchHistory,
+  ) {
+    final filePath = _mountedEntryPlaybackPath(location, entry);
+    final historyItem = watchHistory.history
+        .where((item) => item.filePath == filePath)
+        .firstOrNull;
+    return _buildScanSubtitleText(
+      historyItem,
+      p.basenameWithoutExtension(entry.name),
+    );
   }
 
   List<UnifiedLibraryManagementAction> _buildMountedEntryActions(
@@ -4236,6 +4255,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (!mounted) return;
     BlurSnackBar.show(
         context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
+
+    // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+    await context.read<WatchHistoryProvider>().refresh();
+
     if (onSuccessRefresh != null) {
       onSuccessRefresh();
     } else {
@@ -4507,6 +4530,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             if (mounted) {
               BlurSnackBar.show(context, '弹幕匹配成功：$animeTitle - $episodeTitle');
 
+              // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+              await context.read<WatchHistoryProvider>().refresh();
+
               // 刷新UI以显示新的动画信息
               if (onSuccessRefresh != null) {
                 onSuccessRefresh();
@@ -4610,6 +4636,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         // 显示成功提示
         if (mounted) {
           BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
+
+          // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+          await context.read<WatchHistoryProvider>().refresh();
 
           // 刷新UI
           _refreshExpandedFolderContents(p.dirname(filePath));
