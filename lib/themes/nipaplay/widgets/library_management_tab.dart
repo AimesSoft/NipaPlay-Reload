@@ -2793,6 +2793,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return entry.name.toLowerCase().contains(query) ||
           entry.path.toLowerCase().contains(query);
     });
+    final watchHistory = Provider.of<WatchHistoryProvider>(context);
 
     return [
       for (final entry in entries)
@@ -2800,6 +2801,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           id: '${location.type.name}:${entry.path}',
           title: entry.name.isEmpty ? entry.path : entry.name,
           subtitle: entry.isDirectory ? '文件夹' : '视频文件',
+          matchSubtitle: entry.isDirectory
+              ? null
+              : _buildMountedEntryMatchSubtitle(location, entry, watchHistory),
           icon: entry.isDirectory
               ? LibraryManagementIcon.folder
               : LibraryManagementIcon.video,
@@ -2809,6 +2813,21 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: _buildMountedEntryActions(location, entry, scanService),
         ),
     ];
+  }
+
+  String? _buildMountedEntryMatchSubtitle(
+    _MountedLibraryLocation location,
+    _MountedLibraryEntry entry,
+    WatchHistoryProvider watchHistory,
+  ) {
+    final filePath = _mountedEntryPlaybackPath(location, entry);
+    final historyItem = watchHistory.history
+        .where((item) => item.filePath == filePath)
+        .firstOrNull;
+    return _buildScanSubtitleText(
+      historyItem,
+      p.basenameWithoutExtension(entry.name),
+    );
   }
 
   List<UnifiedLibraryManagementAction> _buildMountedEntryActions(

@@ -133,6 +133,18 @@ class _DesktopManagementItem extends material.StatelessWidget {
                               color: secondary,
                             ),
                           ),
+                          if (item.matchSubtitle != null) ...[
+                            const material.SizedBox(height: 2),
+                            material.Text(
+                              item.matchSubtitle!,
+                              maxLines: 2,
+                              overflow: material.TextOverflow.ellipsis,
+                              style: material.TextStyle(
+                                fontSize: 11,
+                                color: colors.primary.withValues(alpha: 0.72),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

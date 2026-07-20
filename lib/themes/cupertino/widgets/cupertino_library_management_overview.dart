@@ -146,6 +146,21 @@ class _ManagementGridItem extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: secondary),
               ),
+              if (item.matchSubtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  item.matchSubtitle!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.activeBlue,
+                      context,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -213,6 +228,21 @@ class _ManagementListItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: secondary),
                         ),
+                        if (item.matchSubtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            item.matchSubtitle!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.activeBlue,
+                                context,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
