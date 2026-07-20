@@ -63,8 +63,8 @@ jobs:
     uses: ./.github/workflows/build-ios.yml
     with:
       upload-to-app-store: true
-      app-store-connect-api-key-id: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
-      app-store-connect-issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+      app-store-connect-api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      app-store-connect-issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
@@ -403,8 +403,8 @@ jobs:
       APP_BUILD_NUMBER: ${{ needs.Build-iOS.outputs.app-store-build-number }}
       APP_STORE_ZH_LOCALE: ${{ vars.APP_STORE_ZH_LOCALE || 'zh-Hans' }}
       APP_STORE_EN_LOCALE: ${{ vars.APP_STORE_EN_LOCALE || 'en-US' }}
-      APP_STORE_CONNECT_API_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
-      APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
       AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
       FASTLANE_SKIP_UPDATE_CHECK: "1"
