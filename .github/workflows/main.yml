@@ -672,7 +672,7 @@ jobs:
             exit 1
           fi
 
-          info_plist_entry="$(unzip -Z1 "$signed_ipa" | awk '/^Payload\/[^/]+\.app\/Info\.plist$/ { print; exit }')"
+          info_plist_entry="$(unzip -Z1 "$signed_ipa" | grep -E '^Payload/[^/]+\.app/Info\.plist$' | head -n 1)"
           if [ -z "$info_plist_entry" ]; then
             echo "Unable to locate the app Info.plist inside the signed IPA." >&2
             exit 1
