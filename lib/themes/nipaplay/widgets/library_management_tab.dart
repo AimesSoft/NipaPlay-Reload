@@ -4255,6 +4255,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (!mounted) return;
     BlurSnackBar.show(
         context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
+
+    // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+    await context.read<WatchHistoryProvider>().refresh();
+
     if (onSuccessRefresh != null) {
       onSuccessRefresh();
     } else {
@@ -4526,6 +4530,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             if (mounted) {
               BlurSnackBar.show(context, '弹幕匹配成功：$animeTitle - $episodeTitle');
 
+              // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+              await context.read<WatchHistoryProvider>().refresh();
+
               // 刷新UI以显示新的动画信息
               if (onSuccessRefresh != null) {
                 onSuccessRefresh();
@@ -4629,6 +4636,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         // 显示成功提示
         if (mounted) {
           BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
+
+          // 刷新 WatchHistoryProvider 内存缓存，确保媒体库管理页的匹配信息同步更新
+          await context.read<WatchHistoryProvider>().refresh();
 
           // 刷新UI
           _refreshExpandedFolderContents(p.dirname(filePath));
