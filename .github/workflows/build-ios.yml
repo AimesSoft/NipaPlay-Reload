@@ -8,17 +8,9 @@ on:
         required: false
         default: false
         type: boolean
-      app-store-connect-api-key-id:
-        description: 'App Store Connect API Key ID'
-        required: false
-        type: string
-      app-store-connect-issuer-id:
-        description: 'App Store Connect API Issuer ID'
-        required: false
-        type: string
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64:
-        description: '包含 Apple Distribution 证书和私钥的 P12（Base64）'
+        description: '包含 Apple Distribution 证书和私钥 of the P12 (Base64)'
         required: false
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:
         description: 'iOS Distribution P12 密码'
@@ -28,6 +20,12 @@ on:
         required: false
       APP_STORE_CONNECT_API_PRIVATE_KEY:
         description: 'App Store Connect API 私钥（AuthKey_*.p8 完整内容）'
+        required: false
+      APP_STORE_CONNECT_API_KEY_ID:
+        description: 'App Store Connect API Key ID'
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        description: 'App Store Connect API Issuer ID'
         required: false
     outputs:
       version:
@@ -82,8 +80,8 @@ jobs:
           IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
           IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app-store-connect-issuer-id }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
@@ -140,7 +138,7 @@ jobs:
         id: app_store_api_key
         shell: bash
         env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
@@ -165,8 +163,8 @@ jobs:
         env:
           APP_VERSION: ${{ steps.setup.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ inputs.app-store-connect-api-key-id }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app-store-connect-issuer-id }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_PATH: ${{ steps.app_store_api_key.outputs.path }}
         run: |
           set -euo pipefail
