@@ -186,7 +186,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :stripSwiftSymbols bool true' "$export_options"
           /usr/libexec/PlistBuddy -c 'Add :uploadSymbols bool true' "$export_options"
 
-          echo "构建 App Store 归档：版本 $marketing_version，构建号 $build_number"
+          echo "构建 App Store 归档：版本 ${marketing_version}，构建号 ${build_number}"
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
