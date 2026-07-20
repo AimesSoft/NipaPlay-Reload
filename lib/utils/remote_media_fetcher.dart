@@ -39,7 +39,7 @@ class RemoteMediaFetcher {
         );
         return RemoteMediaHead(
           fileName: result.fileName,
-          fileSize: result.fileSize,
+          fileSize: result.fileSize.toInt(),
           headBytes: Uint8List(0),
           bytesHashed: result.bytesHashed,
           hash: result.hash,
