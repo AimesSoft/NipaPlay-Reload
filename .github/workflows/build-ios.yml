@@ -199,7 +199,6 @@ jobs:
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY='Apple Distribution' \
             FLUTTER_BUILD_NAME="$marketing_version" \
             FLUTTER_BUILD_NUMBER="$build_number" \
             CURRENT_PROJECT_VERSION="$build_number" \
