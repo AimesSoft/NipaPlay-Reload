@@ -9,7 +9,11 @@ foreachThin(){
            if [ "$mime" == 'application/x-mach-binary' ]  || [ "${file##*.}"x = "dylib"x ]
            then
                 echo thin $file
-                xcrun -sdk iphoneos lipo "$file" -thin arm64 -output "$file"
+                if xcrun -sdk iphoneos lipo -info "$file" | grep -q "Architectures in the fat file"; then
+                     xcrun -sdk iphoneos lipo "$file" -thin arm64 -output "$file"
+                else
+                     echo "$file is already thin, skipping lipo"
+                fi
                 xcrun -sdk iphoneos bitcode_strip "$file" -r -o  "$file"
                 strip -S -x "$file" -o "$file"
            fi
