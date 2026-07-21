@@ -328,3 +328,25 @@ class DanmakuItem {
     return DateTime.tryParse(value?.toString() ?? '');
   }
 }
+
+/// 用于显示的弹幕数据项,
+/// 定义一个在 UI 中渲染的弹幕实例, 包含弹幕元数据和渲染期状态.
+class DisplayDanmakuItem {
+
+  final int         index;     // 弹幕在列表中的索引
+  final DanmakuItem item;      // 弹幕元数据引用
+
+  final bool        isActive;  // 弹幕是否在当前播放位置显示
+  final Duration    startTime; // 弹幕实际显示的起始时间 (考虑了时间偏移)
+  final Duration    duration;  // 弹幕显示持续时间
+  final bool        isBlocked; // 弹幕是否被屏蔽
+
+  const DisplayDanmakuItem({
+    required this.item,
+    required this.index,
+    required this.startTime,
+    required this.duration,
+    required this.isBlocked,
+    required this.isActive,
+  });
+}

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
@@ -13,46 +14,6 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/utils.dart';
 
-
-/// 弹幕屏蔽规则类型.
-enum ItemType {
-  keyword,
-  regex,
-  userId,
-}
-
-/// 弹幕屏蔽项目
-class BlockedDanmakuItem {
-
-  final String value;
-  final ItemType type;
-
-  const BlockedDanmakuItem({
-    required this.value,
-    required this.type,
-  });
-}
-
-/// 用于显示的弹幕数据项
-class DisplayDanmakuItem {
-
-  final int         index;     // 弹幕在列表中的索引
-  final DanmakuItem item;      // 弹幕元数据引用
-
-  final bool        isActive;  // 弹幕是否在当前播放位置显示
-  final Duration    startTime; // 弹幕实际显示的起始时间 (考虑了时间偏移)
-  final Duration    duration;  // 弹幕显示持续时间
-  final bool        isBlocked; // 弹幕是否被屏蔽
-
-  const DisplayDanmakuItem({
-    required this.item,
-    required this.index,
-    required this.startTime,
-    required this.duration,
-    required this.isBlocked,
-    required this.isActive,
-  });
-}
 
 /// 番剧元数据
 class EpisodeMetaData {
@@ -380,10 +341,10 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   }
 
   /// 添加一条弹幕屏蔽规则.
-  static bool addBlockedItem(String input, ItemType type) {
+  static bool addBlockedItem(String input, BlockedItemType type) {
     final value = input.trim();
     if (value.isEmpty) return false;
-    if (type == ItemType.regex) {
+    if (type == BlockedItemType.regex) {
       try {
         RegExp(value, caseSensitive: false);
       } on FormatException {
@@ -492,9 +453,9 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         final blockedValue = b.value.toLowerCase();
         switch (b.type)
         {
-        case ItemType.keyword : if (content.contains(blockedValue)                              ) isBlocked = true; break;
-        case ItemType.regex   : if (RegExp(b.value,caseSensitive: false).hasMatch(item.content) ) isBlocked = true; break;
-        case ItemType.userId  : if (item.senderId?.toLowerCase() == blockedValue                ) isBlocked = true; break;
+        case BlockedItemType.keyword : if (content.contains(blockedValue)                              ) isBlocked = true; break;
+        case BlockedItemType.regex   : if (RegExp(b.value,caseSensitive: false).hasMatch(item.content) ) isBlocked = true; break;
+        case BlockedItemType.userId  : if (item.senderId?.toLowerCase() == blockedValue                ) isBlocked = true; break;
         }
       }
 

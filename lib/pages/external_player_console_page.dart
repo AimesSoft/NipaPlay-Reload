@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -578,13 +579,13 @@ class _DanmakuBlockRuleEditor extends StatefulWidget {
 
 class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
   final TextEditingController _controller = TextEditingController();
-  ItemType _selectedType = ItemType.keyword;
+  BlockedItemType _selectedType = BlockedItemType.keyword;
   bool _hasInputError = false;
 
   void _addItem() {
     final value = _controller.text.trim();
     var valid = value.isNotEmpty;
-    if (valid && _selectedType == ItemType.regex) {
+    if (valid && _selectedType == BlockedItemType.regex) {
       try {
         RegExp(value);
       } on FormatException {
@@ -601,23 +602,23 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
     }
   }
 
-  String _typeLabel(BuildContext context, ItemType type) {
+  String _typeLabel(BuildContext context, BlockedItemType type) {
     final localizations = context.l10n;
     return switch (type) {
-      ItemType.keyword =>
+      BlockedItemType.keyword =>
         localizations.externalPlayerConsoleDanmakuBlockModeKeyword,
-      ItemType.regex =>
+      BlockedItemType.regex =>
         localizations.externalPlayerConsoleDanmakuBlockModeRegex,
-      ItemType.userId =>
+      BlockedItemType.userId =>
         localizations.externalPlayerConsoleDanmakuBlockModeSender,
     };
   }
 
-  IconData _typeIcon(ItemType type) {
+  IconData _typeIcon(BlockedItemType type) {
     return switch (type) {
-      ItemType.keyword => Icons.text_fields_rounded,
-      ItemType.regex => Icons.data_object_rounded,
-      ItemType.userId => Icons.person_outline_rounded,
+      BlockedItemType.keyword => Icons.text_fields_rounded,
+      BlockedItemType.regex => Icons.data_object_rounded,
+      BlockedItemType.userId => Icons.person_outline_rounded,
     };
   }
 
@@ -641,10 +642,10 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: SegmentedButton<ItemType>(
+          child: SegmentedButton<BlockedItemType>(
             key: const Key('external-player-danmaku-block-mode'),
-            segments: ItemType.values.map((type) {
-              return ButtonSegment<ItemType>(
+            segments: BlockedItemType.values.map((type) {
+              return ButtonSegment<BlockedItemType>(
                 value: type,
                 icon: Icon(_typeIcon(type)),
                 label: Text(_typeLabel(context, type)),

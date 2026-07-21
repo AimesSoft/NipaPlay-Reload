@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
@@ -335,21 +336,21 @@ void main() {
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'alpha',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isTrue,
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             r'\d{3}$',
-            ItemType.regex,
+            BlockedItemType.regex,
           ),
           isTrue,
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'sender-three',
-            ItemType.userId,
+            BlockedItemType.userId,
           ),
           isTrue,
         );
@@ -360,12 +361,12 @@ void main() {
         expect(_activeDisplayIndices(), isEmpty);
         expect(
           ExternalPlayerConsoleService.blockedItems.map((item) => item.type),
-          [ItemType.keyword, ItemType.regex, ItemType.userId],
+          [BlockedItemType.keyword, BlockedItemType.regex, BlockedItemType.userId],
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             '[invalid',
-            ItemType.regex,
+            BlockedItemType.regex,
           ),
           isFalse,
         );
@@ -432,7 +433,7 @@ void main() {
           expect(
             ExternalPlayerConsoleService.addBlockedItem(
               'sender-hash',
-              ItemType.userId,
+              BlockedItemType.userId,
             ),
             isTrue,
           );
@@ -451,7 +452,7 @@ void main() {
           expect(find.text('关键词'), findsOneWidget);
           expect(find.text('正则表达式'), findsOneWidget);
           expect(find.text('发送者 ID'), findsWidgets);
-          expect(ExternalPlayerConsoleService.blockedItems.single.type, ItemType.userId);
+          expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.userId);
           expect(ExternalPlayerConsoleService.blockedItems.single.value, 'sender-hash');
           expect(
             find.byKey(const ValueKey(
@@ -833,7 +834,7 @@ void main() {
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'SECOND',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isTrue,
         );
@@ -843,7 +844,7 @@ void main() {
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'second',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isFalse,
         );
@@ -856,7 +857,7 @@ void main() {
         final filteredAss = await assFile.readAsString();
         expect(ExternalPlayerConsoleService.blockedItems, hasLength(1));
         expect(ExternalPlayerConsoleService.blockedItems.single.value, 'SECOND');
-        expect(ExternalPlayerConsoleService.blockedItems.single.type, ItemType.keyword);
+        expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.keyword);
         expect(
           ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
