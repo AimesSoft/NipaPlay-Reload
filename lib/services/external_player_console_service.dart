@@ -116,10 +116,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   static DanmakuStyle get danmakuStyle => _danmakuStyle;
 
-  static List<DisplayDanmakuItem> get displayDanmakuList {
-    _updateDisplayDanmakuList();
-    return _displayDanmakuList;
-  }
+  static List<DisplayDanmakuItem> get displayDanmakuList => _displayDanmakuList;
   static List<BlockedDanmakuItem> get blockedItems => _blockedItems;
   static int get stateTimestamp => _stateTimestamp;
 

@@ -300,8 +300,10 @@ void main() {
         ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 0;
         ExternalPlayerConsoleService.queueDanmakuRefresh();
         session.position = const Duration(seconds: 6);
+        session.notifyListeners();
         expect(_activeDisplayIndices(), [1]);
         session.position = const Duration(seconds: 8);
+        session.notifyListeners();
         expect(_activeDisplayIndices(), isEmpty);
       });
 
