@@ -123,9 +123,10 @@ class DesktopPlayerWindowService extends ChangeNotifier {
     final window = _activeWindow;
     final videoState = _videoState;
     if (window == null || window.isClosed || videoState == null) return;
-    await window.setSize(
-      preferredWindowSizeForAspect(videoState.aspectRatio),
-    );
+    final aspectRatio = normalizeAspectRatio(videoState.aspectRatio);
+    await window.setAspectRatio(aspectRatio);
+    await window.setMinimumSize(minimumWindowSizeForAspect(aspectRatio));
+    await window.setSize(preferredWindowSizeForAspect(aspectRatio));
   }
 
   void _handleWindowClosed() {
@@ -165,8 +166,19 @@ class DesktopPlayerWindowService extends ChangeNotifier {
     if (_lastAspectRatio == null ||
         (nextAspectRatio - _lastAspectRatio!).abs() > 0.001) {
       _lastAspectRatio = nextAspectRatio;
-      unawaited(window.setAspectRatio(nextAspectRatio));
+      unawaited(_applyVideoAspectRatio(window, nextAspectRatio));
     }
+  }
+
+  Future<void> _applyVideoAspectRatio(
+    WindowController window,
+    double aspectRatio,
+  ) async {
+    await window.setAspectRatio(aspectRatio);
+    await window.setMinimumSize(minimumWindowSizeForAspect(aspectRatio));
+    // Metadata can arrive just after the window was created. Resize once the
+    // actual stream ratio is known instead of leaving the fallback 16:9 size.
+    await window.setSize(preferredWindowSizeForAspect(aspectRatio));
   }
 
   static String _buildWindowTitle(VideoPlayerState videoState) {

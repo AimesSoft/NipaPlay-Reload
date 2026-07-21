@@ -20,7 +20,16 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 
 class VideoUploadUI extends StatefulWidget {
-  const VideoUploadUI({super.key});
+  const VideoUploadUI({
+    super.key,
+    this.detachedPlayer = false,
+    this.onLocateDetachedPlayer,
+    this.onReturnDetachedPlayer,
+  });
+
+  final bool detachedPlayer;
+  final VoidCallback? onLocateDetachedPlayer;
+  final VoidCallback? onReturnDetachedPlayer;
 
   @override
   State<VideoUploadUI> createState() => _VideoUploadUIState();
@@ -83,6 +92,9 @@ class _VideoUploadUIState extends State<VideoUploadUI>
       onMascotTap: () => _mascotController.forward(from: 0),
       onSelectFile: _handleUploadVideo,
       onOpenUrlInput: () => unawaited(_showUrlInputDialog()),
+      detachedPlayer: widget.detachedPlayer,
+      onLocateDetachedPlayer: widget.onLocateDetachedPlayer,
+      onReturnDetachedPlayer: widget.onReturnDetachedPlayer,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/macos_native_video_view.dart';
+import 'package:nipaplay/widgets/desktop_transient_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
@@ -28,6 +30,7 @@ import 'loading_overlay.dart';
 import 'macos_hdr_probe_overlay.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
+import 'base_settings_menu.dart';
 import 'playback_info_menu.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
@@ -61,6 +64,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Timer? _doubleTapTimer;
   Timer? _mouseMoveTimer;
   OverlayEntry? _playbackInfoOverlay;
+  DesktopTransientOverlay? _playbackInfoPopup;
   int _tapCount = 0;
   static const _phoneDoubleTapTimeout = Duration(milliseconds: 360);
   static const _desktopDoubleTapTimeout = Duration(milliseconds: 220);
@@ -774,7 +778,31 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   void _showPlaybackInfoOverlay() {
-    if (_playbackInfoOverlay != null) return;
+    if (_playbackInfoOverlay != null || _playbackInfoPopup != null) return;
+
+    if (DesktopMultiWindow.isSecondaryWindow(context)) {
+      final viewSize = MediaQuery.sizeOf(context);
+      final popup = DesktopTransientOverlay.showPopup(
+        context: context,
+        anchorRect: Rect.fromLTWH(
+          viewSize.width - 40,
+          viewSize.height - 72,
+          1,
+          1,
+        ),
+        size: const Size(360, 600),
+        placement: DesktopTransientWindowPlacement.above,
+        contentBuilder: (_, close) => SettingsMenuScope(
+          standaloneWindow: true,
+          child: PlaybackInfoMenu(onClose: close),
+        ),
+        onClosed: () => _playbackInfoPopup = null,
+      );
+      if (popup != null) {
+        _playbackInfoPopup = popup;
+        return;
+      }
+    }
 
     final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;
@@ -798,6 +826,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   void _hidePlaybackInfoOverlay() {
+    _playbackInfoPopup?.close();
+    _playbackInfoPopup = null;
     _playbackInfoOverlay?.remove();
     _playbackInfoOverlay = null;
   }

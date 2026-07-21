@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'video_settings_menu.dart';
+import 'package:nipaplay/widgets/desktop_transient_overlay.dart';
 
 class RightEdgeHoverMenu extends StatefulWidget {
   const RightEdgeHoverMenu({super.key});
@@ -16,6 +18,8 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
   bool _isHoverAreaVisible = false;
   bool _isMenuVisible = false;
   OverlayEntry? _settingsMenuOverlay;
+  DesktopTransientOverlay? _settingsMenuPopup;
+  final GlobalKey _hoverAreaKey = GlobalKey();
   final GlobalKey<VideoSettingsMenuState> _menuKey =
       GlobalKey<VideoSettingsMenuState>();
 
@@ -26,8 +30,43 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
   }
 
   void _showSettingsMenu() {
-    if (_settingsMenuOverlay != null) return;
-    
+    if (_settingsMenuOverlay != null || _settingsMenuPopup != null) return;
+
+    final renderBox =
+        _hoverAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null &&
+        renderBox.hasSize &&
+        DesktopMultiWindow.isSecondaryWindow(context)) {
+      final anchorRect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+      final popup = DesktopTransientOverlay.showPopup(
+        context: context,
+        anchorRect: anchorRect,
+        size: const Size(320, 600),
+        placement: DesktopTransientWindowPlacement.right,
+        barrierDismissible: false,
+        contentBuilder: (_, close) => HoverSettingsMenuWrapper(
+          onClose: close,
+          onRequestClose: _requestCloseSettingsMenu,
+          onHover: _handlePopupHover,
+          menuKey: _menuKey,
+          standaloneWindow: true,
+        ),
+        onClosed: () {
+          _settingsMenuPopup = null;
+          if (mounted) {
+            setState(() => _isMenuVisible = false);
+          }
+        },
+      );
+      if (popup != null) {
+        _settingsMenuPopup = popup;
+        if (mounted) {
+          setState(() => _isMenuVisible = true);
+        }
+        return;
+      }
+    }
+
     _settingsMenuOverlay = OverlayEntry(
       builder: (context) => HoverSettingsMenuWrapper(
         onClose: _hideSettingsMenu,
@@ -51,7 +90,14 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
     }
   }
 
+  void _handlePopupHover(bool isHovered) {
+    if (!mounted) return;
+    setState(() => _isMenuVisible = isHovered);
+  }
+
   void _hideSettingsMenu() {
+    _settingsMenuPopup?.close();
+    _settingsMenuPopup = null;
     _settingsMenuOverlay?.remove();
     _settingsMenuOverlay = null;
     if (mounted) {
@@ -71,6 +117,8 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
   }
 
   void _hideSettingsMenuWithoutSetState() {
+    _settingsMenuPopup?.close();
+    _settingsMenuPopup = null;
     _settingsMenuOverlay?.remove();
     _settingsMenuOverlay = null;
     _isMenuVisible = false;
@@ -90,6 +138,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
           top: 0,
           bottom: 0,
           child: MouseRegion(
+            key: _hoverAreaKey,
             onEnter: (_) {
               setState(() {
                 _isHoverAreaVisible = true;
@@ -118,8 +167,8 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
                         end: Alignment.centerRight,
                         colors: [
                           Colors.transparent,
-                          Colors.white.withOpacity(0.1),
-                          Colors.white.withOpacity(0.15),
+                          Colors.white.withValues(alpha: 0.1),
+                          Colors.white.withValues(alpha: 0.15),
                         ],
                         stops: const [0.0, 0.7, 1.0],
                       )
@@ -128,7 +177,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
                         end: Alignment.centerRight,
                         colors: [
                           Colors.transparent,
-                          Colors.white.withOpacity(0.05),
+                          Colors.white.withValues(alpha: 0.05),
                         ],
                       ),
                 borderRadius: const BorderRadius.only(
@@ -161,6 +210,7 @@ class HoverSettingsMenuWrapper extends StatefulWidget {
   final VoidCallback onRequestClose;
   final ValueChanged<bool> onHover;
   final GlobalKey<VideoSettingsMenuState> menuKey;
+  final bool standaloneWindow;
 
   const HoverSettingsMenuWrapper({
     super.key,
@@ -168,10 +218,12 @@ class HoverSettingsMenuWrapper extends StatefulWidget {
     required this.onRequestClose,
     required this.onHover,
     required this.menuKey,
+    this.standaloneWindow = false,
   });
 
   @override
-  State<HoverSettingsMenuWrapper> createState() => _HoverSettingsMenuWrapperState();
+  State<HoverSettingsMenuWrapper> createState() =>
+      _HoverSettingsMenuWrapperState();
 }
 
 class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
@@ -234,6 +286,7 @@ class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
         key: widget.menuKey,
         onClose: widget.onClose,
         onHoverChanged: _handleSubMenuHover,
+        standaloneWindow: widget.standaloneWindow,
       ),
     );
   }

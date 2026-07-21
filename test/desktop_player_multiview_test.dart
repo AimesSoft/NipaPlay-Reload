@@ -122,6 +122,19 @@ void main() {
           File('lib/widgets/macos_native_video_view.dart').readAsStringSync();
       final playerPageSource =
           File('lib/pages/play_video_page.dart').readAsStringSync();
+      final detachedPlayerSource =
+          File('lib/pages/desktop_player_window.dart').readAsStringSync();
+      final mainPlayerSlotSource =
+          File('lib/widgets/desktop_player_page_slot.dart').readAsStringSync();
+      final tooltipSource = File(
+        'lib/themes/nipaplay/widgets/tooltip_bubble.dart',
+      ).readAsStringSync();
+      final controlsSource = File(
+        'lib/themes/nipaplay/widgets/modern_video_controls.dart',
+      ).readAsStringSync();
+      final contextMenuSource = File(
+        'lib/widgets/context_menu/src/context_menu_controller.dart',
+      ).readAsStringSync();
 
       expect(forkSource, contains('RegularWindowController'));
       expect(forkSource, contains('ViewCollection'));
@@ -132,6 +145,9 @@ void main() {
       expect(forkSource, contains("'startDragging'"));
       expect(forkSource, contains("'setAspectRatio'"));
       expect(forkSource, contains("'setAlwaysOnTop'"));
+      expect(forkSource, contains('PopupWindowController'));
+      expect(forkSource, contains('TooltipWindowController'));
+      expect(forkSource, contains('WindowPositionerConstraintAdjustment'));
       expect(mainSource, contains('runDesktopMultiWindowApp('));
       expect(serviceSource, contains('final GlobalKey playerPageKey'));
       expect(serviceSource, isNot(contains('initializePlayer')));
@@ -145,7 +161,19 @@ void main() {
       expect(macOSRunnerSource, contains('contentAspectRatio'));
       expect(macOSRunnerSource, contains('canJoinAllSpaces'));
       expect(macOSRunnerSource, contains('NSEvent.mouseLocation'));
+      expect(macOSRunnerSource, contains('DesktopWindowDragView'));
+      expect(macOSRunnerSource, contains('mouseDownCanMoveWindow'));
+      expect(macOSRunnerSource, contains('DesktopDetachedPlayerPanel'));
+      expect(macOSRunnerSource, contains('DesktopInteractivePopupPanel'));
+      expect(macOSRunnerSource, contains('.nonactivatingPanel'));
+      expect(macOSRunnerSource, contains('configureTransientWindow'));
       expect(playerPageSource, contains('Icons.push_pin_rounded'));
+      expect(detachedPlayerSource, isNot(contains('_WindowDragHandle')));
+      expect(mainPlayerSlotSource, contains('VideoUploadUI('));
+      expect(mainPlayerSlotSource, isNot(contains('FilledButton')));
+      expect(tooltipSource, contains('createTooltipWindow'));
+      expect(controlsSource, contains('DesktopTransientOverlay.showPopup'));
+      expect(contextMenuSource, contains('DesktopTransientOverlay.showPopup'));
       expect(windowsVideoSource, contains('flutterViewId'));
       expect(windowsVideoSource, contains('FLUTTER_HOST_WINDOW'));
       expect(nativeSurfaceSource,

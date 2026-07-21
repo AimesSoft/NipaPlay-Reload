@@ -20,6 +20,7 @@ class SettingsMenuScope extends InheritedWidget {
   final double pointerHeight;
   final double? height;
   final Future<void> Function()? requestClose;
+  final bool standaloneWindow;
 
   const SettingsMenuScope({
     super.key,
@@ -36,6 +37,7 @@ class SettingsMenuScope extends InheritedWidget {
     this.pointerHeight = 8,
     this.height,
     this.requestClose,
+    this.standaloneWindow = false,
   });
 
   static SettingsMenuScope? maybeOf(BuildContext context) {
@@ -55,7 +57,8 @@ class SettingsMenuScope extends InheritedWidget {
         pointerWidth != oldWidget.pointerWidth ||
         pointerHeight != oldWidget.pointerHeight ||
         height != oldWidget.height ||
-        requestClose != oldWidget.requestClose;
+        requestClose != oldWidget.requestClose ||
+        standaloneWindow != oldWidget.standaloneWindow;
   }
 }
 
@@ -98,6 +101,7 @@ class BaseSettingsMenu extends StatelessWidget {
         final bool showHeader = scope?.showHeader ?? true;
         final bool showBackItem = scope?.showBackItem ?? false;
         final bool lockControlsVisible = scope?.lockControlsVisible ?? false;
+        final bool standaloneWindow = scope?.standaloneWindow ?? false;
         final Rect? anchorRect = scope?.anchorRect;
         final bool showPointer = scope?.showPointer ?? (anchorRect != null);
         final double pointerWidth = scope?.pointerWidth ?? 16;
@@ -105,8 +109,11 @@ class BaseSettingsMenu extends StatelessWidget {
         final Size screenSize = MediaQuery.of(context).size;
         final double screenMaxHeight =
             globals.isPhone ? screenSize.height - 120 : screenSize.height - 200;
-        final double resolvedHeight =
-            math.min(scope?.height ?? height, screenMaxHeight);
+        final double resolvedHeight = standaloneWindow
+            ? screenSize.height
+            : math.min(scope?.height ?? height, screenMaxHeight);
+        final double effectiveWidth =
+            standaloneWindow ? screenSize.width : resolvedWidth;
         const double horizontalMargin = 12;
         const double pointerPadding = 12;
         bool pointUp = true;
@@ -156,14 +163,18 @@ class BaseSettingsMenu extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned(
-                      right: anchorRect == null ? resolvedRightOffset : null,
+                      right: standaloneWindow
+                          ? 0
+                          : (anchorRect == null ? resolvedRightOffset : null),
                       left: anchorRect != null ? left : null,
-                      top: anchorRect != null
-                          ? top
-                          : (globals.isPhone ? 10 : 80),
+                      top: standaloneWindow
+                          ? 0
+                          : anchorRect != null
+                              ? top
+                              : (globals.isPhone ? 10 : 80),
                       bottom: anchorRect != null ? bottom : null,
                       child: SizedBox(
-                        width: resolvedWidth,
+                        width: effectiveWidth,
                         height: resolvedHeight,
                         child: MouseRegion(
                           onEnter: (_) {

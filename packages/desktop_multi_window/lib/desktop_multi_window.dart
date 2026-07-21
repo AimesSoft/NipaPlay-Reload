@@ -10,10 +10,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/src/foundation/_features.dart' as flutter_features;
 import 'package:flutter/src/widgets/_window.dart' as flutter_windowing;
+import 'package:flutter/src/widgets/_window_positioner.dart'
+    as flutter_window_positioning;
 import 'package:flutter/widgets.dart';
 
 typedef DesktopWindowBuilder = Widget Function(
     BuildContext context, WindowController controller);
+
+enum DesktopTransientWindowPlacement {
+  above,
+  below,
+  right,
+  pointer,
+}
 
 /// Boots the application into the real desktop FlutterView.
 ///
@@ -148,6 +157,12 @@ class DesktopMultiWindow {
         defaultTargetPlatform == TargetPlatform.linux;
   }
 
+  /// Flutter 3.44 currently implements interactive popup windows on macOS.
+  static bool get supportsInteractivePopupWindows =>
+      isSupported && defaultTargetPlatform == TargetPlatform.macOS;
+
+  static bool get supportsTooltipWindows => isSupported;
+
   /// Creates a regular native window backed by a new [FlutterView] in the
   /// current engine and isolate.
   static Future<WindowController> createWindow({
@@ -251,6 +266,89 @@ class DesktopMultiWindow {
         .toList(growable: false);
   }
 
+  static DesktopPopupWindowController? createPopupWindow({
+    required BuildContext context,
+    required Rect anchorRect,
+    required Size size,
+    DesktopTransientWindowPlacement placement =
+        DesktopTransientWindowPlacement.above,
+    double gap = 8.0,
+    VoidCallback? onClosed,
+  }) {
+    if (!supportsInteractivePopupWindows) return null;
+    final parent = maybeControllerOf(context);
+    if (parent == null || parent.isClosed) return null;
+
+    final delegate = _SameEnginePopupWindowDelegate();
+    try {
+      final nativeController = _withWindowingEnabled(
+        () => flutter_windowing.PopupWindowController(
+          parent: parent._nativeController,
+          anchorRect: anchorRect,
+          positioner: _positionerFor(placement, gap),
+          preferredConstraints: BoxConstraints.tight(size),
+          delegate: delegate,
+        ),
+      );
+      final controller = DesktopPopupWindowController._(
+        nativeController: nativeController,
+        onClosed: onClosed,
+      );
+      delegate.attach(controller);
+      unawaited(_invokeHostForViewId<void>(
+        'configureTransientWindow',
+        controller.flutterView.viewId,
+        const <String, Object?>{'interactive': true},
+      ));
+      return controller;
+    } on UnimplementedError catch (error) {
+      debugPrint('[DesktopMultiWindow] popup windows unimplemented: $error');
+      return null;
+    } on UnsupportedError catch (error) {
+      debugPrint('[DesktopMultiWindow] popup windows unsupported: $error');
+      return null;
+    }
+  }
+
+  static DesktopTooltipWindowController? createTooltipWindow({
+    required BuildContext context,
+    required Rect anchorRect,
+    required Size size,
+    DesktopTransientWindowPlacement placement =
+        DesktopTransientWindowPlacement.above,
+    double gap = 8.0,
+    VoidCallback? onClosed,
+  }) {
+    if (!supportsTooltipWindows) return null;
+    final parent = maybeControllerOf(context);
+    if (parent == null || parent.isClosed) return null;
+
+    final delegate = _SameEngineTooltipWindowDelegate();
+    try {
+      final nativeController = _withWindowingEnabled(
+        () => flutter_windowing.TooltipWindowController(
+          parent: parent._nativeController,
+          anchorRect: anchorRect,
+          positioner: _positionerFor(placement, gap),
+          preferredConstraints: BoxConstraints.tight(size),
+          delegate: delegate,
+        ),
+      );
+      final controller = DesktopTooltipWindowController._(
+        nativeController: nativeController,
+        onClosed: onClosed,
+      );
+      delegate.attach(controller);
+      return controller;
+    } on UnimplementedError catch (error) {
+      debugPrint('[DesktopMultiWindow] tooltip windows unimplemented: $error');
+      return null;
+    } on UnsupportedError catch (error) {
+      debugPrint('[DesktopMultiWindow] tooltip windows unsupported: $error');
+      return null;
+    }
+  }
+
   static BoxConstraints? _constraintsFor({
     Size? minimumSize,
     Size? maximumSize,
@@ -273,9 +371,21 @@ class DesktopMultiWindow {
     WindowController controller, [
     Map<String, Object?> arguments = const <String, Object?>{},
   ]) async {
+    return _invokeHostForViewId<T>(
+      method,
+      controller.flutterView.viewId,
+      arguments,
+    );
+  }
+
+  static Future<T?> _invokeHostForViewId<T>(
+    String method,
+    int viewId, [
+    Map<String, Object?> arguments = const <String, Object?>{},
+  ]) async {
     try {
       return await _hostChannel.invokeMethod<T>(method, <String, Object?>{
-        'viewId': controller.flutterView.viewId,
+        'viewId': viewId,
         ...arguments,
       });
     } on MissingPluginException catch (error) {
@@ -288,6 +398,186 @@ class DesktopMultiWindow {
       );
       return null;
     }
+  }
+
+  static T _withWindowingEnabled<T>(T Function() action) {
+    final previousFeatureState = flutter_features.isWindowingEnabled;
+    flutter_features.isWindowingEnabled = true;
+    try {
+      return action();
+    } finally {
+      flutter_features.isWindowingEnabled = previousFeatureState;
+    }
+  }
+
+  static flutter_window_positioning.WindowPositioner _positionerFor(
+    DesktopTransientWindowPlacement placement,
+    double gap,
+  ) {
+    final adjustment =
+        flutter_window_positioning.WindowPositionerConstraintAdjustment(
+      flipX: placement != DesktopTransientWindowPlacement.pointer,
+      flipY: placement != DesktopTransientWindowPlacement.pointer,
+      slideX: true,
+      slideY: true,
+      resizeX: true,
+      resizeY: true,
+    );
+    return switch (placement) {
+      DesktopTransientWindowPlacement.above =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor: flutter_window_positioning.WindowPositionerAnchor.top,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.bottom,
+          offset: Offset(0, -gap),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.below =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.bottom,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.top,
+          offset: Offset(0, gap),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.right =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor: flutter_window_positioning.WindowPositionerAnchor.right,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.left,
+          offset: Offset(gap, 0),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.pointer =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.topLeft,
+          childAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.topLeft,
+          offset: Offset(gap, gap),
+          constraintAdjustment: adjustment,
+        ),
+    };
+  }
+}
+
+class DesktopPopupWindowController {
+  DesktopPopupWindowController._({
+    required flutter_windowing.PopupWindowController nativeController,
+    VoidCallback? onClosed,
+  })  : _nativeController = nativeController,
+        _onClosed = onClosed;
+
+  final flutter_windowing.PopupWindowController _nativeController;
+  final VoidCallback? _onClosed;
+  bool _isClosed = false;
+
+  FlutterView get flutterView => _nativeController.rootView;
+  bool get isClosed => _isClosed;
+
+  void close() {
+    if (_isClosed) return;
+    _nativeController.destroy();
+  }
+
+  void updatePosition({
+    Rect? anchorRect,
+    DesktopTransientWindowPlacement? placement,
+    double gap = 8.0,
+  }) {
+    if (_isClosed) return;
+    _nativeController.updatePosition(
+      anchorRect: anchorRect,
+      positioner: placement == null
+          ? null
+          : DesktopMultiWindow._positionerFor(placement, gap),
+    );
+  }
+
+  void _handleNativeDestroyed() {
+    if (_isClosed) return;
+    _isClosed = true;
+    _onClosed?.call();
+  }
+}
+
+class DesktopTooltipWindowController {
+  DesktopTooltipWindowController._({
+    required flutter_windowing.TooltipWindowController nativeController,
+    VoidCallback? onClosed,
+  })  : _nativeController = nativeController,
+        _onClosed = onClosed;
+
+  final flutter_windowing.TooltipWindowController _nativeController;
+  final VoidCallback? _onClosed;
+  bool _isClosed = false;
+
+  FlutterView get flutterView => _nativeController.rootView;
+  bool get isClosed => _isClosed;
+
+  void close() {
+    if (_isClosed) return;
+    _nativeController.destroy();
+  }
+
+  void updatePosition({
+    Rect? anchorRect,
+    DesktopTransientWindowPlacement? placement,
+    double gap = 8.0,
+  }) {
+    if (_isClosed) return;
+    _nativeController.updatePosition(
+      anchorRect: anchorRect,
+      positioner: placement == null
+          ? null
+          : DesktopMultiWindow._positionerFor(placement, gap),
+    );
+  }
+
+  void _handleNativeDestroyed() {
+    if (_isClosed) return;
+    _isClosed = true;
+    _onClosed?.call();
+  }
+}
+
+class DesktopPopupWindow extends StatelessWidget {
+  const DesktopPopupWindow({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  final DesktopPopupWindowController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopMultiWindow._withWindowingEnabled(
+      () => flutter_windowing.PopupWindow(
+        controller: controller._nativeController,
+        child: child,
+      ),
+    );
+  }
+}
+
+class DesktopTooltipWindow extends StatelessWidget {
+  const DesktopTooltipWindow({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  final DesktopTooltipWindowController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopMultiWindow._withWindowingEnabled(
+      () => flutter_windowing.TooltipWindow(
+        controller: controller._nativeController,
+        child: child,
+      ),
+    );
   }
 }
 
@@ -473,6 +763,34 @@ class _SameEngineWindowDelegate
     flutter_windowing.RegularWindowController controller,
   ) {
     controller.destroy();
+  }
+
+  @override
+  void onWindowDestroyed() {
+    _controller?._handleNativeDestroyed();
+  }
+}
+
+class _SameEnginePopupWindowDelegate
+    with flutter_windowing.PopupWindowControllerDelegate {
+  DesktopPopupWindowController? _controller;
+
+  void attach(DesktopPopupWindowController controller) {
+    _controller = controller;
+  }
+
+  @override
+  void onWindowDestroyed() {
+    _controller?._handleNativeDestroyed();
+  }
+}
+
+class _SameEngineTooltipWindowDelegate
+    with flutter_windowing.TooltipWindowControllerDelegate {
+  DesktopTooltipWindowController? _controller;
+
+  void attach(DesktopTooltipWindowController controller) {
+    _controller = controller;
   }
 
   @override

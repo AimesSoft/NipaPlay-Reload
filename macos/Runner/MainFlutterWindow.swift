@@ -1013,6 +1013,34 @@ private final class MultiviewPluginRegistrarCompatibility {
 /// wrapper deliberately throws for undecorated windows on macOS. This plugin
 /// changes only the NSWindow that owns the requested FlutterView; it never
 /// creates an engine, isolate, player, or replacement Flutter view.
+private final class DesktopWindowDragView: NSView {
+  override var mouseDownCanMoveWindow: Bool { true }
+
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    bounds.contains(point) ? self : nil
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    window?.performDrag(with: event)
+  }
+}
+
+/// Same storage layout as the NSWindow created by Flutter, but with panel
+/// activation semantics suitable for an always-on-top video companion.
+private final class DesktopDetachedPlayerPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
+}
+
+/// Flutter's stock popup panel deliberately refuses key focus. Player menus
+/// contain sliders and text fields, so the NipaPlay fork upgrades only its
+/// transient popup instance while retaining the same engine-owned window.
+private final class DesktopInteractivePopupPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
+  override var acceptsFirstResponder: Bool { true }
+}
+
 private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   private static let channelName = "nipaplay/desktop_multi_window_host"
   private struct WindowDragState {
@@ -1061,6 +1089,11 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       let alwaysOnTop = boolValue(arguments["alwaysOnTop"]) ?? false
       applyAlwaysOnTop(alwaysOnTop, to: window)
       result(alwaysOnTop)
+    case "configureTransientWindow":
+      if boolValue(arguments["interactive"]) == true {
+        makeInteractivePopup(window)
+      }
+      result(nil)
     case "startDragging":
       dragStates[window.windowNumber] = WindowDragState(
         mouseLocation: NSEvent.mouseLocation,
@@ -1099,14 +1132,52 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   }
 
   private func makeFrameless(_ window: NSWindow) {
+    if !(window is NSPanel) {
+      object_setClass(window, DesktopDetachedPlayerPanel.self)
+    }
     var styleMask = window.styleMask
     styleMask.remove([.titled, .fullSizeContentView])
-    styleMask.insert([.closable, .miniaturizable, .resizable])
+    styleMask.insert([
+      .closable,
+      .miniaturizable,
+      .resizable,
+      .nonactivatingPanel,
+    ])
     window.styleMask = styleMask
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
-    window.isMovableByWindowBackground = false
+    window.isMovableByWindowBackground = true
     window.hasShadow = true
+    installDragRegion(in: window)
+  }
+
+  private func makeInteractivePopup(_ window: NSWindow) {
+    guard window is NSPanel else {
+      return
+    }
+    object_setClass(window, DesktopInteractivePopupPanel.self)
+    window.styleMask.insert(.nonactivatingPanel)
+    window.hidesOnDeactivate = false
+    window.isExcludedFromWindowsMenu = true
+    if let panel = window as? NSPanel {
+      panel.becomesKeyOnlyIfNeeded = false
+      panel.isFloatingPanel = true
+    }
+  }
+
+  private func installDragRegion(in window: NSWindow) {
+    guard let contentView = window.contentView,
+          !contentView.subviews.contains(where: { $0 is DesktopWindowDragView }) else {
+      return
+    }
+    let dragView = DesktopWindowDragView(frame: NSRect(
+      x: 72,
+      y: max(0, contentView.bounds.height - 38),
+      width: max(0, contentView.bounds.width - 144),
+      height: 38
+    ))
+    dragView.autoresizingMask = [.width, .minYMargin]
+    contentView.addSubview(dragView, positioned: .above, relativeTo: nil)
   }
 
   private func applyAspectRatio(_ value: Any?, to window: NSWindow) {
@@ -1134,11 +1205,29 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   private func applyAlwaysOnTop(_ alwaysOnTop: Bool, to window: NSWindow) {
     window.level = alwaysOnTop ? .floating : .normal
     window.hidesOnDeactivate = false
+    window.isExcludedFromWindowsMenu = true
+    if let panel = window as? NSPanel {
+      panel.isFloatingPanel = alwaysOnTop
+      panel.becomesKeyOnlyIfNeeded = false
+    }
+    if window is DesktopDetachedPlayerPanel {
+      window.styleMask.insert(.nonactivatingPanel)
+    } else if !alwaysOnTop {
+      window.styleMask.remove(.nonactivatingPanel)
+    }
     var collectionBehavior = window.collectionBehavior
     if alwaysOnTop {
-      collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
+      collectionBehavior.insert([
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+        .transient,
+      ])
     } else {
-      collectionBehavior.remove([.canJoinAllSpaces, .fullScreenAuxiliary])
+      collectionBehavior.remove([
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+        .transient,
+      ])
     }
     window.collectionBehavior = collectionBehavior
   }
