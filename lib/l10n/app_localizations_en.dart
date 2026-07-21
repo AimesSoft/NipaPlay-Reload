@@ -213,7 +213,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get danmakuOutlineEnabledSubtitle =>
-      'Show an outline around danmaku text. Newly opened videos will use this setting.';
+      '0 disables the outline, 1 uses a thin outline, and 2 restores the original thick outline. Newly opened videos use this setting.';
 
   @override
   String get danmakuOutlineWidthTitle => 'Danmaku outline thickness';
