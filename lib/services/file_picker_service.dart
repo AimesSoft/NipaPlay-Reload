@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
 import 'android_saf_service.dart';
 import 'security_bookmark_service.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
 
@@ -17,7 +18,8 @@ class FilePickerService {
   static final FilePickerService _instance = FilePickerService._internal();
   static final Map<String, String> _webObjectUrls = <String, String>{};
   static final Map<String, String> _webMimeTypes = <String, String>{};
-  static final Map<String, _WebFileInfo> _webFileInfo = <String, _WebFileInfo>{};
+  static final Map<String, _WebFileInfo> _webFileInfo =
+      <String, _WebFileInfo>{};
   static const int _webHashMaxBytes = 16 * 1024 * 1024;
 
   factory FilePickerService() {
@@ -358,8 +360,8 @@ class FilePickerService {
       _registerWebFileInfo(file.name, fileHash, bytes.length);
 
       final resolvedMimeType = resolveWebMimeType(fileName: file.name);
-      final blob =
-          web_html.Blob([bytes], resolvedMimeType ?? 'application/octet-stream');
+      final blob = web_html.Blob(
+          [bytes], resolvedMimeType ?? 'application/octet-stream');
       final url = web_html.Url.createObjectUrlFromBlob(blob);
       _registerWebObjectUrl(file.name, url, mimeType: resolvedMimeType);
       return file.name;
@@ -571,6 +573,13 @@ class FilePickerService {
     try {
       initialDirectory ??= await _getLastDirectory(_lastExternalPlayerDirKey);
 
+      // Homebrew formula 不会创建 mpv.app。首次选择时直接打开已检测到的 mpv
+      // 所在目录，避免用户必须手动输入隐藏的 /opt 路径。
+      if (io.Platform.isMacOS && initialDirectory == null) {
+        final detected = await ExternalPlayerService.detectInstalledMpv();
+        if (detected != null) initialDirectory = p.dirname(detected);
+      }
+
       if (io.Platform.isMacOS && initialDirectory != null) {
         final resolvedPath =
             await SecurityBookmarkService.resolveBookmark(initialDirectory);
@@ -581,15 +590,18 @@ class FilePickerService {
 
       XTypeGroup? typeGroup;
       if (io.Platform.isWindows) {
-        typeGroup = XTypeGroup(
+        typeGroup = const XTypeGroup(
           label: '播放器程序',
-          extensions: const ['exe', 'lnk'],
+          extensions: ['exe', 'lnk'],
         );
       } else if (io.Platform.isMacOS) {
         typeGroup = const XTypeGroup(
-          label: '应用程序',
+          label: '播放器应用或可执行文件',
           extensions: ['app'],
-          uniformTypeIdentifiers: ['com.apple.application-bundle'],
+          uniformTypeIdentifiers: [
+            'com.apple.application-bundle',
+            'public.unix-executable',
+          ],
         );
       }
 

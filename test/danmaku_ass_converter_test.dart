@@ -44,6 +44,24 @@ void main() {
       expect(dialogues[1], endsWith('top'));
     });
 
+    test('applies opacity to text outline and shadow together', () {
+      const settings = AssExportSettings(
+        fontSize: 24,
+        opacity: 0.5,
+      );
+
+      final ass = convertDanmakuToAss([
+        {
+          'time': 1.0,
+          'content': 'half transparent',
+          'type': 'scroll',
+        },
+      ], settings);
+
+      expect(ass, contains(r'\alpha&H80&'));
+      expect(ass, isNot(contains(r'\1a&H80&')));
+    });
+
     test('exclude merged and lane-filtered comments', () {
       const settings = AssExportSettings(
         fontSize: 96,
@@ -129,6 +147,7 @@ void main() {
         startsWith('Dialogue: 0,0:00:01.50,0:00:08.50,Danmaku,'),
       );
       expect(dialogues.single, contains(r'\c&H563412&'));
+      expect(dialogues.single, contains(r'\alpha&H00&'));
       expect(dialogues.single, endsWith('visible'));
       expect(ass, isNot(contains('filtered')));
     });

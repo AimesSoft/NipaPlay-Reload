@@ -708,6 +708,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    ExternalPlayerConsoleService.sessionAvailability
+        .addListener(_onExternalPlayerConsoleAvailabilityChanged);
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (globals.isDesktop) {
@@ -745,7 +747,13 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ExternalPlayerConsoleService.sessionAvailability
+        .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
     super.dispose();
+  }
+
+  void _onExternalPlayerConsoleAvailabilityChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -826,7 +834,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             showDownloader:
                 globals.isDownloaderSupportedPlatform && downloader.enabled,
             showExternalPlayerConsole:
-                ExternalPlayerConsoleService.isSupportedPlatform,
+                ExternalPlayerConsoleService.isSupportedPlatform &&
+                    ExternalPlayerConsoleService.hasActiveSession,
           ),
         );
         return pages
@@ -1100,6 +1109,9 @@ class MainPageState extends State<MainPage>
   List<Widget> _pages = [];
   bool _showWebDAVTab = false;
   bool _showDownloaderTab = globals.isDownloaderSupportedPlatform;
+  bool _showExternalPlayerConsoleTab =
+      ExternalPlayerConsoleService.isSupportedPlatform &&
+          ExternalPlayerConsoleService.hasActiveSession;
   WebDAVQuickAccessProvider? _webdavQuickAccessProvider;
   PluginService? _pluginService;
 
@@ -1190,6 +1202,8 @@ class MainPageState extends State<MainPage>
   @override
   void initState() {
     super.initState();
+    ExternalPlayerConsoleService.sessionAvailability
+        .addListener(_onExternalPlayerConsoleAvailabilityChanged);
     _initialize();
   }
 
@@ -1222,6 +1236,9 @@ class MainPageState extends State<MainPage>
     } catch (_) {}
 
     // 构建初始页面列表
+    _showExternalPlayerConsoleTab =
+        ExternalPlayerConsoleService.isSupportedPlatform &&
+            ExternalPlayerConsoleService.hasActiveSession;
     _rebuildPages();
 
     await _initializeController();
@@ -1270,13 +1287,33 @@ class MainPageState extends State<MainPage>
     );
   }
 
+  void _onExternalPlayerConsoleAvailabilityChanged() {
+    if (!mounted) return;
+    final shouldShow = ExternalPlayerConsoleService.isSupportedPlatform &&
+        ExternalPlayerConsoleService.hasActiveSession;
+    if (shouldShow == _showExternalPlayerConsoleTab) return;
+
+    final currentPageId = _selectedPageId;
+    _showExternalPlayerConsoleTab = shouldShow;
+    _rebuildPages();
+    if (globalTabController == null) {
+      setState(() {});
+      return;
+    }
+    _rebuildTabController(
+      targetPageId:
+          !shouldShow && currentPageId == AppPageIds.externalPlayerConsole
+              ? AppPageIds.home
+              : currentPageId,
+    );
+  }
+
   void _rebuildPages() {
     _pageDefinitions = buildUnifiedAppPages(
       availability: AppPageAvailability(
         showWebDAV: _showWebDAVTab,
         showDownloader: _showDownloaderTab,
-        showExternalPlayerConsole:
-            ExternalPlayerConsoleService.isSupportedPlatform,
+        showExternalPlayerConsole: _showExternalPlayerConsoleTab,
       ),
     );
     _pages = _pageDefinitions
@@ -1443,6 +1480,8 @@ class MainPageState extends State<MainPage>
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
     _downloaderSettingsProvider?.removeListener(_onDownloaderSettingsChanged);
     _pluginService?.removeListener(_onDownloaderSettingsChanged);
+    ExternalPlayerConsoleService.sessionAvailability
+        .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
     _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
