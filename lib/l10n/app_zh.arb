@@ -52,6 +52,29 @@
   "externalPlayerConsoleDanmakuBlockRemove": "删除规则",
   "externalPlayerConsoleDanmakuShow": "显示弹幕",
   "externalPlayerConsoleDanmakuHide": "隐藏弹幕",
+  "externalPlayerConsoleDanmakuOffsetTitle": "弹幕时间偏移",
+  "externalPlayerConsoleDanmakuOffsetAdvance": "提前 {seconds} 秒",
+  "@externalPlayerConsoleDanmakuOffsetAdvance": {
+    "placeholders": {"seconds": {"type": "String"}}
+  },
+  "externalPlayerConsoleDanmakuOffsetDelay": "延后 {seconds} 秒",
+  "@externalPlayerConsoleDanmakuOffsetDelay": {
+    "placeholders": {"seconds": {"type": "String"}}
+  },
+  "externalPlayerConsoleDanmakuOffsetReset": "恢复初始",
+  "externalPlayerConsoleDanmakuOffsetCustomLabel": "自定义偏移秒数",
+  "externalPlayerConsoleDanmakuOffsetCustomHint": "负数提前，正数延后",
+  "externalPlayerConsoleDanmakuOffsetInvalid": "请输入有效的秒数",
+  "externalPlayerConsoleDanmakuOffsetApply": "应用",
+  "externalPlayerConsoleDanmakuOffsetCurrentAdvance": "当前弹幕提前出现 {seconds} 秒",
+  "@externalPlayerConsoleDanmakuOffsetCurrentAdvance": {
+    "placeholders": {"seconds": {"type": "String"}}
+  },
+  "externalPlayerConsoleDanmakuOffsetCurrentDelay": "当前弹幕延后出现 {seconds} 秒",
+  "@externalPlayerConsoleDanmakuOffsetCurrentDelay": {
+    "placeholders": {"seconds": {"type": "String"}}
+  },
+  "externalPlayerConsoleDanmakuOffsetCurrentNone": "当前弹幕偏移量为 0 秒",
   "danmakuOpacityTitle": "弹幕不透明度",
   "danmakuFontSizeTitle": "弹幕字体大小",
   "danmakuOpacitySubtitle": "调整弹幕文字不透明度，新打开的视频将应用此设置。",

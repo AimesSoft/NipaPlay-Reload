@@ -188,6 +188,12 @@ class _ConsoleCard extends StatelessWidget {
             const SizedBox(height: 8),
             _buildDanmakuOutlineWidth(context),
             const SizedBox(height: 8),
+            _DanmakuOffsetControl(
+              sessionId: processId,
+              offset: danmakuStyle.danmakuOffset,
+              initialOffset: 0.0,
+            ),
+            const SizedBox(height: 8),
             _DanmakuBlockRuleEditor(
               enabled: danmakuList.isNotEmpty,
               items: blockedItems,
@@ -403,6 +409,157 @@ class _ConsoleCard extends StatelessWidget {
   String _nonEmptyOr(String? value, String fallback) {
     return value == null || value.trim().isEmpty ? fallback : value;
   }
+}
+
+class _DanmakuOffsetControl extends StatefulWidget {
+  const _DanmakuOffsetControl({
+    required this.sessionId,
+    required this.offset,
+    required this.initialOffset,
+  });
+
+  final int? sessionId;
+  final double offset;
+  final double initialOffset;
+
+  @override
+  State<_DanmakuOffsetControl> createState() => _DanmakuOffsetControlState();
+}
+
+class _DanmakuOffsetControlState extends State<_DanmakuOffsetControl> {
+  static const double _stepSeconds = 0.5;
+  late final TextEditingController _controller;
+  bool _invalid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _formatSeconds(widget.offset));
+  }
+
+  @override
+  void didUpdateWidget(_DanmakuOffsetControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId || oldWidget.offset != widget.offset) {
+      _controller.text = _formatSeconds(widget.offset);
+      _invalid = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _applyCustomOffset() {
+    final value = double.tryParse(_controller.text.trim());
+    if (value == null || !value.isFinite) {
+      setState(() => _invalid = true);
+      return;
+    }
+    setState(() => _invalid = false);
+    ExternalPlayerConsoleService.setDanmakuOffset(value);
+  }
+
+  String _currentOffsetText(BuildContext context) {
+    final localizations = context.l10n;
+    final seconds = _formatSeconds(widget.offset.abs());
+    if (widget.offset < 0) {
+      return localizations.externalPlayerConsoleDanmakuOffsetCurrentAdvance(seconds);
+    }
+    if (widget.offset > 0) {
+      return localizations.externalPlayerConsoleDanmakuOffsetCurrentDelay(seconds);
+    }
+    return localizations.externalPlayerConsoleDanmakuOffsetCurrentNone;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final localizations = context.l10n;
+    final step = _formatSeconds(_stepSeconds);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          localizations.externalPlayerConsoleDanmakuOffsetTitle,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _currentOffsetText(context),
+          key: const Key('external-player-danmaku-offset-current'),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              key: const Key('external-player-danmaku-offset-advance'),
+              onPressed: () => ExternalPlayerConsoleService.adjustDanmakuOffset(-_stepSeconds),
+              icon: const Icon(Icons.fast_rewind),
+              label: Text(localizations.externalPlayerConsoleDanmakuOffsetAdvance(step)),
+            ),
+            OutlinedButton.icon(
+              key: const Key('external-player-danmaku-offset-delay'),
+              onPressed: () => ExternalPlayerConsoleService.adjustDanmakuOffset(_stepSeconds),
+              icon: const Icon(Icons.fast_forward),
+              label: Text(localizations.externalPlayerConsoleDanmakuOffsetDelay(step)),
+            ),
+            TextButton(
+              key: const Key('external-player-danmaku-offset-reset'),
+              onPressed: widget.offset == widget.initialOffset
+                  ? null
+                  : ExternalPlayerConsoleService.resetDanmakuOffset,
+              child: Text(localizations.externalPlayerConsoleDanmakuOffsetReset),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            SizedBox(
+              width: 240,
+              child: TextField(
+                key: const Key('external-player-danmaku-offset-input'),
+                controller: _controller,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: localizations.externalPlayerConsoleDanmakuOffsetCustomLabel,
+                  hintText: localizations.externalPlayerConsoleDanmakuOffsetCustomHint,
+                  errorText: _invalid
+                      ? localizations.externalPlayerConsoleDanmakuOffsetInvalid
+                      : null,
+                ),
+                onSubmitted: (_) => _applyCustomOffset(),
+              ),
+            ),
+            FilledButton.tonal(
+              key: const Key('external-player-danmaku-offset-apply'),
+              onPressed: _applyCustomOffset,
+              child: Text(localizations.externalPlayerConsoleDanmakuOffsetApply),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+String _formatSeconds(double value) {
+  final text = value.toStringAsFixed(3);
+  return text.replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 class _DanmakuBlockRuleEditor extends StatefulWidget {

@@ -154,6 +154,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get externalPlayerConsoleDanmakuHide => 'Hide danmaku';
 
   @override
+  String get externalPlayerConsoleDanmakuOffsetTitle => 'Danmaku timing offset';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetAdvance(String seconds) {
+    return 'Show ${seconds}s earlier';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetDelay(String seconds) {
+    return 'Show ${seconds}s later';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetReset => 'Reset';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomLabel =>
+      'Custom offset in seconds';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomHint =>
+      'Negative is earlier, positive is later';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetInvalid =>
+      'Enter a valid number of seconds';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetApply => 'Apply';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentAdvance(String seconds) {
+    return 'Danmaku currently appears ${seconds}s earlier';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentDelay(String seconds) {
+    return 'Danmaku currently appears ${seconds}s later';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCurrentNone =>
+      'Current danmaku offset is 0s';
+
+  @override
   String get danmakuOpacityTitle => 'Danmaku opacity';
 
   @override

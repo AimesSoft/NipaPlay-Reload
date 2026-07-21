@@ -273,6 +273,22 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕控制
   // ------------------------------------------------------------------------ //
 
+  static void adjustDanmakuOffset(double seconds) {
+    if (!seconds.isFinite) return;
+    setDanmakuOffset(_danmakuStyle.danmakuOffset + seconds);
+  }
+
+  static void setDanmakuOffset(double seconds) {
+    if (!seconds.isFinite) _danmakuStyle.danmakuOffset = 0.0;
+    _danmakuStyle.danmakuOffset = seconds;
+    queueDanmakuRefresh();
+  }
+
+  static void resetDanmakuOffset() {
+    _danmakuStyle.danmakuOffset = 0.0;
+    queueDanmakuRefresh();
+  }
+
   /// 通知监听器并将当前弹幕配置加入刷新队列.
   ///
   /// 入队时复制 [danmakuStyle], 以避免后续修改影响正在执行的任务.

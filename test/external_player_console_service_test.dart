@@ -487,6 +487,37 @@ void main() {
           );
           expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(find.text('启用弹幕描边'), findsNothing);
+          expect(find.text('弹幕时间偏移'), findsOneWidget);
+          expect(find.text('当前弹幕偏移量为 0 秒'), findsOneWidget);
+          final advanceOffset = find.byKey(
+            const Key('external-player-danmaku-offset-advance'),
+          );
+          await tester.ensureVisible(advanceOffset);
+          await tester.tap(advanceOffset);
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, -0.5);
+          expect(find.text('当前弹幕提前出现 0.5 秒'), findsOneWidget);
+
+          final offsetInput = find.byKey(
+            const Key('external-player-danmaku-offset-input'),
+          );
+          await tester.ensureVisible(offsetInput);
+          await tester.enterText(offsetInput, '1.25');
+          await tester.tap(find.byKey(
+            const Key('external-player-danmaku-offset-apply'),
+          ));
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 1.25);
+          expect(find.text('当前弹幕延后出现 1.25 秒'), findsOneWidget);
+
+          final resetOffset = find.byKey(
+            const Key('external-player-danmaku-offset-reset'),
+          );
+          await tester.ensureVisible(resetOffset);
+          await tester.tap(resetOffset);
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 0.0);
+          expect(find.text('当前弹幕偏移量为 0 秒'), findsOneWidget);
           expect(
             find.byKey(const Key('external-player-timestamp-input')),
             findsOneWidget,
