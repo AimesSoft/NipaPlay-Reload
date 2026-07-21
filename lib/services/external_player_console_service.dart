@@ -1,3 +1,4 @@
+
 // lib/services/external_player_console_service.dart
 // Linux 外部播放器控制台服务
 
@@ -92,8 +93,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ========================= Getters & Setters ============================ //
   // ======================================================================== //
 
-  static Listenable get instance => _instance;
+  // 控制台相关
+  // ------------------------------------------------------------------------ //
+  static Listenable get instance         => _instance;
   static bool       get hasActiveSession => _session != null;
+  static int        get stateTimestamp   => _stateTimestamp;
 
   // 播放状态相关
   // ------------------------------------------------------------------------ //
@@ -114,16 +118,16 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static String ? get episodeTitle => _episodeTitle;
   static int    ? get episodeId    => _episodeId;
 
-  static DanmakuStyle get danmakuStyle => _danmakuStyle;
-
+  // 弹幕相关
+  // ------------------------------------------------------------------------ //
+  static DanmakuStyle             get danmakuStyle       => _danmakuStyle;
   static List<DisplayDanmakuItem> get displayDanmakuList => _displayDanmakuList;
-  static List<BlockedDanmakuItem> get blockedItems => _blockedItems;
-  static int get stateTimestamp => _stateTimestamp;
+  static List<BlockedDanmakuItem> get blockedItems       => _blockedItems;
+
 
   // ======================================================================== //
   // ============================== 主要方法 ================================ //
   // ======================================================================== //
-
 
   // 会话创建和关闭
   // ------------------------------------------------------------------------ //
