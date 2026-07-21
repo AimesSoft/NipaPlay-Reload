@@ -1,6 +1,7 @@
 // lib/services/external_player_console_service.dart
 // Linux/macOS 外部播放器控制台服务
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,7 @@ import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay/services/external_player_window_service.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/utils.dart';
@@ -33,12 +35,14 @@ class ConsoleState {
   final EpisodeMetaData? episodeMetaData; // 番剧元数据
   final List<DanmakuItem>? danmakuList; // 弹幕列表
   final DanmakuStyle? danmakuStyle; // 弹幕样式
+  final bool shrinkMainWindow; // 播放期间是否将主窗口缩至当前屏幕半宽
 
   const ConsoleState({
     required this.session,
     this.episodeMetaData,
     this.danmakuList,
     this.danmakuStyle,
+    this.shrinkMainWindow = false,
   });
 }
 
@@ -63,6 +67,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static int _stateTimestamp = 0; // 配置变更时间戳, 用于检测异步任务是否已过期
 
   static ExternalPlayerLaunchSession? _session; // 外部播放器会话
+  static final ValueNotifier<bool> _sessionAvailability =
+      ValueNotifier<bool>(false);
 
   // 动漫元数据相关
   // ------------------------------------------------------------------------ //
@@ -91,7 +97,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 控制台相关
   // ------------------------------------------------------------------------ //
   static Listenable get instance => _instance;
-  static bool get hasActiveSession => _session != null;
+  static ValueListenable<bool> get sessionAvailability => _sessionAvailability;
+  static bool get hasActiveSession => _sessionAvailability.value;
   static int get stateTimestamp => _stateTimestamp;
 
   // 播放状态相关
@@ -142,6 +149,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
     // 设置新的会话和媒体信息
     _session = session;
+    _sessionAvailability.value = true;
     _animeTitle = episodeMetaData?.animeTitle;
     _episodeTitle = episodeMetaData?.episodeTitle;
     _episodeId = episodeMetaData?.episodeId;
@@ -177,6 +185,12 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _markConfigurationChanged('showSession');
     session.addListener(_handleSessionChanged);
 
+    if (state.shrinkMainWindow) {
+      unawaited(ExternalPlayerWindowService.shrinkToHalfScreenWidth());
+    } else {
+      unawaited(ExternalPlayerWindowService.restore());
+    }
+
     // 通知监听器更新 UI
     _instance.notifyListeners();
   }
@@ -189,6 +203,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     current.removeListener(_handleSessionChanged);
     current.terminate();
     _session = null;
+    _sessionAvailability.value = false;
+    unawaited(ExternalPlayerWindowService.restore());
 
     // 清空媒体信息
     _animeTitle = null;
@@ -395,6 +411,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (current != null && current.isClosed) {
       current.removeListener(_handleSessionChanged);
       _session = null;
+      _sessionAvailability.value = false;
+      unawaited(ExternalPlayerWindowService.restore());
       _animeTitle = null;
       _episodeTitle = null;
       _episodeId = null;

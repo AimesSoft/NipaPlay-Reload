@@ -146,7 +146,7 @@ pub fn convert_danmaku_to_ass(
                 let Some(lane) = lane else { continue };
                 let y = lane as f64 * lane_height as f64 + lane_height as f64 / 2.0;
                 let text = format!(
-                    "{{\\an4\\move({},{:.1},{:.1},{:.1}){}{}\\1a{}}}{}",
+                    "{{\\an4\\move({},{:.1},{:.1},{:.1}){}{}\\alpha{}}}{}",
                     DEFAULT_PLAY_RES_X, y, -width, y, color, outline, alpha, escaped
                 );
                 write_dialogue(
@@ -163,7 +163,7 @@ pub fn convert_danmaku_to_ass(
                 let lane = pick_fixed_lane(&mut top_lanes, item.time, FIXED_DURATION_SECONDS);
                 let y = lane as f64 * lane_height as f64 + 2.0;
                 let text = format!(
-                    "{{\\an8\\pos({},{:.1}){}{}\\1a{}}}{}",
+                    "{{\\an8\\pos({},{:.1}){}{}\\alpha{}}}{}",
                     DEFAULT_PLAY_RES_X / 2,
                     y,
                     color,
@@ -185,7 +185,7 @@ pub fn convert_danmaku_to_ass(
                 let lane = pick_fixed_lane(&mut bottom_lanes, item.time, FIXED_DURATION_SECONDS);
                 let y = DEFAULT_PLAY_RES_Y as f64 - lane as f64 * lane_height as f64 - 2.0;
                 let text = format!(
-                    "{{\\an2\\pos({},{:.1}){}{}\\1a{}}}{}",
+                    "{{\\an2\\pos({},{:.1}){}{}\\alpha{}}}{}",
                     DEFAULT_PLAY_RES_X / 2,
                     y,
                     color,
@@ -261,7 +261,7 @@ pub fn convert_prepared_danmaku_to_ass(
                 "Danmaku",
                 Kind::Scroll,
                 format!(
-                    "{{\\an7\\move({},{},{},{}){}{}\\1a{}}}{}",
+                    "{{\\an7\\move({},{},{},{}){}{}\\alpha{}}}{}",
                     x1, y, x2, y, color, outline, alpha, escaped
                 ),
             )
@@ -271,7 +271,7 @@ pub fn convert_prepared_danmaku_to_ass(
                 "DanmakuBottom",
                 Kind::Bottom,
                 format!(
-                    "{{\\an8\\pos({},{}){}{}\\1a{}}}{}",
+                    "{{\\an8\\pos({},{}){}{}\\alpha{}}}{}",
                     center_x, y, color, outline, alpha, escaped
                 ),
             )
@@ -281,7 +281,7 @@ pub fn convert_prepared_danmaku_to_ass(
                 "DanmakuTop",
                 Kind::Top,
                 format!(
-                    "{{\\an8\\pos({},{}){}{}\\1a{}}}{}",
+                    "{{\\an8\\pos({},{}){}{}\\alpha{}}}{}",
                     center_x, y, color, outline, alpha, escaped
                 ),
             )
@@ -564,5 +564,23 @@ mod tests {
         assert_eq!(result.events[1].type_code, 5);
         assert_eq!(result.ass.matches("Dialogue:").count(), 2);
         assert!(result.ass.contains("\\move(1920,25.0,-138.2,25.0)"));
+    }
+
+    #[test]
+    fn opacity_fades_text_outline_and_shadow_together() {
+        let mut settings = settings();
+        settings.opacity = 0.5;
+        let result = convert_danmaku_to_ass(
+            vec![RustAssDanmakuInput {
+                time_seconds: 1.0,
+                content: "half transparent".into(),
+                type_code: 1,
+                color_rgb: 0xffffff,
+            }],
+            settings,
+        );
+
+        assert!(result.ass.contains("\\alpha&H80&"));
+        assert!(!result.ass.contains("\\1a&H80&"));
     }
 }

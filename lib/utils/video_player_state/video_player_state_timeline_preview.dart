@@ -3,6 +3,13 @@ part of video_player_state;
 const int _timelinePreviewMaxHeight = 180;
 const int _timelinePreviewDefaultWidth = 320;
 
+/// Timeline preview uses an extra background player to capture frames. Keep it
+/// on MDK only: enabling the MDK preference must not start another libmpv
+/// instance after the playback kernel is switched to MediaKit.
+bool supportsTimelinePreviewForKernel(PlayerKernelType kernel) {
+  return kernel == PlayerKernelType.mdk;
+}
+
 extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   bool get timelinePreviewEnabled => _timelinePreviewEnabled;
   bool get isTimelinePreviewAvailable =>
@@ -199,8 +206,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
   bool _isTimelinePreviewKernelSupported() {
     final kernel = PlayerFactory.getKernelType();
-    return kernel == PlayerKernelType.mdk ||
-        kernel == PlayerKernelType.mediaKit;
+    return supportsTimelinePreviewForKernel(kernel);
   }
 
   Future<AbstractPlayer?> _ensureTimelinePreviewPlayer(

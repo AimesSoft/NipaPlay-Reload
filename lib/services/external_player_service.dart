@@ -422,6 +422,7 @@ class ExternalPlayerService {
 
       final consoleState = ConsoleState(
         session: session,
+        shrinkMainWindow: settings.externalPlayerShrinkWindow,
         episodeMetaData: episodeMetaData,
         danmakuList: assets?.danmakuList,
         danmakuStyle: assets == null

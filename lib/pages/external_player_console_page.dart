@@ -1,8 +1,4 @@
-
-// lib/pages/external_player_console_page.dart
-// 掌管 Linux/macOS 平台下外部播放器会话的控制台页面
-
-
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
@@ -10,9 +6,12 @@ import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-
-/// 一个用于显示外部播放器会话信息的控制台页面
+/// Linux/macOS mpv 外部播放会话的桌面控制台。
 class ExternalPlayerConsolePage extends StatelessWidget {
   const ExternalPlayerConsolePage({super.key});
 
@@ -21,28 +20,56 @@ class ExternalPlayerConsolePage extends StatelessWidget {
     return AnimatedBuilder(
       animation: ExternalPlayerConsoleService.instance,
       builder: (context, _) {
-        return SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040),
-                child: !ExternalPlayerConsoleService.hasActiveSession
-                    ? const _EmptyConsole()
-                    : _ConsoleCard(
+        final hasSession = ExternalPlayerConsoleService.hasActiveSession;
+        final animeTitle = ExternalPlayerConsoleService.animeTitle;
+        final episodeTitle = ExternalPlayerConsoleService.episodeTitle;
+        final subtitle = <String>[
+          if (animeTitle != null && animeTitle.trim().isNotEmpty) animeTitle,
+          if (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+            episodeTitle,
+        ].join(' · ');
+
+        return fluent.FluentTheme(
+          data: fluent.FluentThemeData(
+            brightness: Theme.of(context).brightness,
+            accentColor: fluent.AccentColor.swatch({
+              'normal': AppAccentColors.current,
+              'default': AppAccentColors.current,
+            }),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: SafeArea(
+              child: NipaplayLargeScreenPageScaffold(
+                title: context.l10n.externalPlayerConsoleTitle,
+                subtitle: hasSession && subtitle.isNotEmpty ? subtitle : null,
+                padding: const EdgeInsets.fromLTRB(34, 24, 34, 28),
+                headerBottomSpacing: 18,
+                showBackgroundEffects: false,
+                child: hasSession
+                    ? _ConsoleWorkspace(
                         processId: ExternalPlayerConsoleService.processId,
                         mediaPath: ExternalPlayerConsoleService.mediaPath,
-                        animeTitle: ExternalPlayerConsoleService.animeTitle,
-                        episodeTitle: ExternalPlayerConsoleService.episodeTitle,
+                        animeTitle: animeTitle,
+                        episodeTitle: episodeTitle,
                         episodeId: ExternalPlayerConsoleService.episodeId,
-                        danmakuList: ExternalPlayerConsoleService.displayDanmakuList,
-                        isPaused: ExternalPlayerConsoleService.isPaused ?? false,
-                        supportsSessionControl: ExternalPlayerConsoleService.ipcPath != null,
+                        danmakuList:
+                            ExternalPlayerConsoleService.displayDanmakuList,
+                        isPaused:
+                            ExternalPlayerConsoleService.isPaused ?? false,
+                        supportsSessionControl:
+                            ExternalPlayerConsoleService.ipcPath != null,
                         position: ExternalPlayerConsoleService.position,
                         duration: ExternalPlayerConsoleService.duration,
                         fraction: ExternalPlayerConsoleService.fraction,
                         danmakuStyle: ExternalPlayerConsoleService.danmakuStyle,
                         blockedItems: ExternalPlayerConsoleService.blockedItems,
+                      )
+                    : NipaplayLargeScreenEmptyState(
+                        icon: Icons.subtitles_outlined,
+                        title: context.l10n.externalPlayerConsoleEmptyTitle,
+                        subtitle:
+                            context.l10n.externalPlayerConsoleEmptyDescription,
                       ),
               ),
             ),
@@ -53,44 +80,8 @@ class ExternalPlayerConsolePage extends StatelessWidget {
   }
 }
 
-class _EmptyConsole extends StatelessWidget {
-  const _EmptyConsole();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 80),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.subtitles_outlined,
-            size: 64,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            context.l10n.externalPlayerConsoleEmptyTitle,
-            style: theme.textTheme.titleLarge,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.externalPlayerConsoleEmptyDescription,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConsoleCard extends StatelessWidget {
-  const _ConsoleCard({
+class _ConsoleWorkspace extends StatelessWidget {
+  const _ConsoleWorkspace({
     required this.processId,
     required this.mediaPath,
     required this.animeTitle,
@@ -122,293 +113,325 @@ class _ConsoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final localizations = context.l10n;
-    return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.subtitles_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    localizations.externalPlayerConsoleTitle,
-                    style: theme.textTheme.titleLarge,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _detailRow(
-              context,
-              localizations.externalPlayerConsoleAnime,
-              _nonEmptyOr(
-                animeTitle,
-                localizations.externalPlayerConsoleUnknownAnime,
-              ),
-            ),
-            _detailRow(
-              context,
-              localizations.externalPlayerConsoleEpisode,
-              _nonEmptyOr(
-                episodeTitle,
-                localizations.externalPlayerConsoleUnknownEpisode,
-              ),
-            ),
-            _detailRow(
-              context,
-              localizations.externalPlayerConsoleEpisodeId,
-              episodeId?.toString() ?? '-',
-            ),
-            _detailRow(
-              context,
-              localizations.externalPlayerConsoleProcessId,
-              processId?.toString() ?? '-',
-            ),
-            _detailRow(
-              context,
-              localizations.externalPlayerConsoleMediaPath,
-              mediaPath ?? '-',
-            ),
-            const SizedBox(height: 20),
-            _buildProgress(context),
-            const SizedBox(height: 20),
-            _buildDanmakuOpacity(context),
-            const SizedBox(height: 8),
-            _buildDanmakuFontSize(context),
-            const SizedBox(height: 8),
-            _buildDanmakuOutlineWidth(context),
-            const SizedBox(height: 8),
-            _DanmakuOffsetControl(
-              sessionId: processId,
-              offset: danmakuStyle.danmakuOffset,
-              initialOffset: 0.0,
-            ),
-            const SizedBox(height: 8),
-            _DanmakuBlockRuleEditor(
-              enabled: danmakuList.isNotEmpty,
-              items: blockedItems,
-            ),
-            const SizedBox(height: 20),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: !supportsSessionControl
-                        ? null
-                        : ExternalPlayerConsoleService.togglePause,
-                    icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
-                    label: Text(
-                      isPaused
-                          ? localizations.externalPlayerConsoleResume
-                          : localizations.externalPlayerConsolePause,
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed:
-                        ExternalPlayerConsoleService.closePlayerAndConsole,
-                    icon: const Icon(Icons.close),
-                    label: Text(localizations.externalPlayerConsoleClose),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Divider(color: theme.colorScheme.outlineVariant),
-            const SizedBox(height: 16),
-            _DanmakuList(
-              sessionId: processId,
-              items: danmakuList,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoColumns = constraints.maxWidth >= 980;
+        final controlPanels = <Widget>[
+          _buildSessionPanel(context),
+          const SizedBox(height: 14),
+          _buildAppearancePanel(context),
+          const SizedBox(height: 14),
+          _buildRulesPanel(context),
+        ];
+        final listPanel = NipaplayLargeScreenPanel(
+          padding: const EdgeInsets.all(16),
+          child: _DanmakuList(
+            sessionId: processId,
+            items: danmakuList,
+            fillAvailableHeight: useTwoColumns,
+          ),
+        );
 
-  Widget _detailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 480) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        if (!useTwoColumns) {
+          return SingleChildScrollView(
+            key: const Key('external-player-console-single-column'),
+            padding: const EdgeInsets.only(right: 4),
+            child: Column(
               children: [
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 4),
-                SelectableText(value),
+                ...controlPanels,
+                const SizedBox(height: 14),
+                listPanel,
               ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: 140, child: Text(label)),
-              Expanded(child: SelectableText(value)),
-            ],
+            ),
           );
-        },
+        }
+
+        return Row(
+          key: const Key('external-player-console-two-column'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 9,
+              child: ListView(
+                padding: const EdgeInsets.only(right: 4),
+                children: controlPanels,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(flex: 11, child: listPanel),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSessionPanel(BuildContext context) {
+    final localizations = context.l10n;
+    return NipaplayLargeScreenPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: _localized(context, '播放会话', '播放工作階段', 'Playback Session'),
+            subtitle: _localized(
+              context,
+              'mpv 播放状态与精确定位',
+              'mpv 播放狀態與精確定位',
+              'mpv status and precise seeking',
+            ),
+          ),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: localizations.externalPlayerConsoleAnime,
+            value: _nonEmptyOr(
+              animeTitle,
+              localizations.externalPlayerConsoleUnknownAnime,
+            ),
+          ),
+          _DetailRow(
+            label: localizations.externalPlayerConsoleEpisode,
+            value: _nonEmptyOr(
+              episodeTitle,
+              localizations.externalPlayerConsoleUnknownEpisode,
+            ),
+          ),
+          _DetailRow(
+            label: localizations.externalPlayerConsoleEpisodeId,
+            value: episodeId?.toString() ?? '-',
+          ),
+          _DetailRow(
+            label: localizations.externalPlayerConsoleProcessId,
+            value: processId?.toString() ?? '-',
+          ),
+          _DetailRow(
+            label: localizations.externalPlayerConsoleMediaPath,
+            value: mediaPath ?? '-',
+          ),
+          const SizedBox(height: 16),
+          Text(
+            localizations.externalPlayerConsoleProgress,
+            style: _sectionLabelStyle(context),
+          ),
+          const SizedBox(height: 10),
+          _SeekProgress(
+            sessionId: processId,
+            supportsProgress: supportsSessionControl,
+            position: position,
+            duration: duration,
+            fraction: fraction,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              NipaplayLargeScreenActionButton(
+                icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                label: isPaused
+                    ? localizations.externalPlayerConsoleResume
+                    : localizations.externalPlayerConsolePause,
+                onPressed: supportsSessionControl
+                    ? ExternalPlayerConsoleService.togglePause
+                    : null,
+                compact: true,
+              ),
+              NipaplayLargeScreenActionButton(
+                icon: Icons.close_rounded,
+                label: localizations.externalPlayerConsoleClose,
+                onPressed: ExternalPlayerConsoleService.closePlayerAndConsole,
+                compact: true,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildProgress(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildAppearancePanel(BuildContext context) {
     final localizations = context.l10n;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          localizations.externalPlayerConsoleProgress,
-          style: theme.textTheme.titleMedium,
-        ),
-        const SizedBox(height: 10),
-        _SeekProgress(
-          sessionId: processId,
-          supportsProgress: supportsSessionControl,
-          position: position,
-          duration: duration,
-          fraction: fraction,
-        ),
-      ],
+    return NipaplayLargeScreenPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: _localized(context, '弹幕显示', '彈幕顯示', 'Danmaku Appearance'),
+            subtitle: _localized(
+              context,
+              '修改后会立即重新生成并加载弹幕',
+              '修改後會立即重新產生並載入彈幕',
+              'Changes are regenerated and loaded immediately',
+            ),
+          ),
+          const SizedBox(height: 16),
+          _ConsoleSlider(
+            label: localizations.danmakuOpacityTitle,
+            valueText: '${(danmakuStyle.opacity * 100).round()}%',
+            value: danmakuStyle.opacity,
+            min: 0,
+            max: 1,
+            divisions: 100,
+            onChanged: (value) {
+              danmakuStyle.opacity = value;
+              ExternalPlayerConsoleService.queueDanmakuRefresh();
+            },
+          ),
+          const SizedBox(height: 12),
+          _ConsoleSlider(
+            sliderKey: const Key('external-player-danmaku-font-size'),
+            label: localizations.danmakuFontSizeTitle,
+            valueText: '${danmakuStyle.danmakuFontSize.toStringAsFixed(1)}px',
+            value: danmakuStyle.danmakuFontSize
+                .clamp(
+                  DanmakuStyle.minDanmakuFontSize,
+                  DanmakuStyle.maxDanmakuFontSize,
+                )
+                .toDouble(),
+            min: DanmakuStyle.minDanmakuFontSize,
+            max: DanmakuStyle.maxDanmakuFontSize,
+            divisions: 96,
+            onChanged: (value) {
+              danmakuStyle.danmakuFontSize = value;
+              ExternalPlayerConsoleService.queueDanmakuRefresh();
+            },
+          ),
+          const SizedBox(height: 12),
+          _ConsoleSlider(
+            label: localizations.danmakuOutlineWidthTitle,
+            valueText: danmakuStyle.outlineWidth.toStringAsFixed(1),
+            value: danmakuStyle.outlineWidth
+                .clamp(0.0, DanmakuStyle.maxOutlineWidth)
+                .toDouble(),
+            min: 0,
+            max: DanmakuStyle.maxOutlineWidth,
+            divisions: 10,
+            onChanged: (value) {
+              danmakuStyle.outlineWidth = value;
+              ExternalPlayerConsoleService.queueDanmakuRefresh();
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildDanmakuOpacity(BuildContext context) {
-    final theme = Theme.of(context);
-    final localizations = context.l10n;
+  Widget _buildRulesPanel(BuildContext context) {
+    return NipaplayLargeScreenPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NipaplayLargeScreenSectionHeader(
+            title: _localized(context, '同步与过滤', '同步與過濾', 'Sync & Filters'),
+            subtitle: _localized(
+              context,
+              '校正时间偏移并管理当前会话的屏蔽规则',
+              '校正時間偏移並管理目前工作階段的封鎖規則',
+              'Correct timing and manage filters for this session',
+            ),
+          ),
+          const SizedBox(height: 16),
+          _DanmakuOffsetControl(
+            sessionId: processId,
+            offset: danmakuStyle.danmakuOffset,
+            initialOffset: 0,
+          ),
+          const SizedBox(height: 20),
+          _DanmakuBlockRuleEditor(
+            enabled: danmakuList.isNotEmpty,
+            items: blockedItems,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color.withValues(alpha: 0.58),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              maxLines: 2,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleSlider extends StatelessWidget {
+  const _ConsoleSlider({
+    this.sliderKey,
+    required this.label,
+    required this.valueText,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  final Key? sliderKey;
+  final String label;
+  final String valueText;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                localizations.danmakuOpacityTitle,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
+            Expanded(child: Text(label, style: _sectionLabelStyle(context))),
             Text(
-              '${(danmakuStyle.opacity * 100).round()}%',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              valueText,
+              style: TextStyle(color: muted, fontWeight: FontWeight.w700),
             ),
           ],
         ),
-        Slider(
-          value: danmakuStyle.opacity,
-          min: 0,
-          max: 1,
-          divisions: 100,
-          label: '${(danmakuStyle.opacity * 100).round()}%',
-          onChanged: (value) {
-            danmakuStyle.opacity = value;
-            ExternalPlayerConsoleService.queueDanmakuRefresh();
-          },
+        const SizedBox(height: 4),
+        NipaplayLargeScreenEditableSlider(
+          key: sliderKey,
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: valueText,
+          onChanged: onChanged,
         ),
       ],
     );
-  }
-
-  Widget _buildDanmakuOutlineWidth(BuildContext context) {
-    final theme = Theme.of(context);
-    final localizations = context.l10n;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                localizations.danmakuOutlineWidthTitle,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
-            Text(
-              danmakuStyle.outlineWidth.toStringAsFixed(1),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          value: danmakuStyle.outlineWidth.clamp(
-            0.0,
-            DanmakuStyle.maxOutlineWidth,
-          ).toDouble(),
-          min: 0.0,
-          max: DanmakuStyle.maxOutlineWidth,
-          divisions: 10,
-          label: danmakuStyle.outlineWidth.toStringAsFixed(1),
-          onChanged: (value) {
-            danmakuStyle.outlineWidth = value;
-            ExternalPlayerConsoleService.queueDanmakuRefresh();
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDanmakuFontSize(BuildContext context) {
-    final theme = Theme.of(context);
-    final localizations = context.l10n;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                localizations.danmakuFontSizeTitle,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
-            Text(
-              '${danmakuStyle.danmakuFontSize.toStringAsFixed(1)}px',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          key: const Key('external-player-danmaku-font-size'),
-          value: danmakuStyle.danmakuFontSize.clamp(
-            DanmakuStyle.minDanmakuFontSize,
-            DanmakuStyle.maxDanmakuFontSize,
-          ).toDouble(),
-          min: DanmakuStyle.minDanmakuFontSize,
-          max: DanmakuStyle.maxDanmakuFontSize,
-          divisions: 96,
-          label: '${danmakuStyle.danmakuFontSize.toStringAsFixed(1)}px',
-          onChanged: (value) {
-            danmakuStyle.danmakuFontSize = value;
-            ExternalPlayerConsoleService.queueDanmakuRefresh();
-          },
-        ),
-      ],
-    );
-  }
-
-  String _nonEmptyOr(String? value, String fallback) {
-    return value == null || value.trim().isEmpty ? fallback : value;
   }
 }
 
@@ -441,7 +464,8 @@ class _DanmakuOffsetControlState extends State<_DanmakuOffsetControl> {
   @override
   void didUpdateWidget(_DanmakuOffsetControl oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sessionId != widget.sessionId || oldWidget.offset != widget.offset) {
+    if (oldWidget.sessionId != widget.sessionId ||
+        oldWidget.offset != widget.offset) {
       _controller.text = _formatSeconds(widget.offset);
       _invalid = false;
     }
@@ -467,17 +491,18 @@ class _DanmakuOffsetControlState extends State<_DanmakuOffsetControl> {
     final localizations = context.l10n;
     final seconds = _formatSeconds(widget.offset.abs());
     if (widget.offset < 0) {
-      return localizations.externalPlayerConsoleDanmakuOffsetCurrentAdvance(seconds);
+      return localizations
+          .externalPlayerConsoleDanmakuOffsetCurrentAdvance(seconds);
     }
     if (widget.offset > 0) {
-      return localizations.externalPlayerConsoleDanmakuOffsetCurrentDelay(seconds);
+      return localizations
+          .externalPlayerConsoleDanmakuOffsetCurrentDelay(seconds);
     }
     return localizations.externalPlayerConsoleDanmakuOffsetCurrentNone;
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final localizations = context.l10n;
     final step = _formatSeconds(_stepSeconds);
     return Column(
@@ -485,82 +510,94 @@ class _DanmakuOffsetControlState extends State<_DanmakuOffsetControl> {
       children: [
         Text(
           localizations.externalPlayerConsoleDanmakuOffsetTitle,
-          style: theme.textTheme.titleMedium,
+          style: _sectionLabelStyle(context),
         ),
         const SizedBox(height: 4),
         Text(
           _currentOffsetText(context),
           key: const Key('external-player-danmaku-offset-current'),
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+          style: _mutedStyle(context),
         ),
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            OutlinedButton.icon(
+            KeyedSubtree(
               key: const Key('external-player-danmaku-offset-advance'),
-              onPressed: () => ExternalPlayerConsoleService.adjustDanmakuOffset(-_stepSeconds),
-              icon: const Icon(Icons.fast_rewind),
-              label: Text(localizations.externalPlayerConsoleDanmakuOffsetAdvance(step)),
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.fast_rewind_rounded,
+                label: localizations
+                    .externalPlayerConsoleDanmakuOffsetAdvance(step),
+                onPressed: () =>
+                    ExternalPlayerConsoleService.adjustDanmakuOffset(
+                  -_stepSeconds,
+                ),
+                compact: true,
+              ),
             ),
-            OutlinedButton.icon(
+            KeyedSubtree(
               key: const Key('external-player-danmaku-offset-delay'),
-              onPressed: () => ExternalPlayerConsoleService.adjustDanmakuOffset(_stepSeconds),
-              icon: const Icon(Icons.fast_forward),
-              label: Text(localizations.externalPlayerConsoleDanmakuOffsetDelay(step)),
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.fast_forward_rounded,
+                label:
+                    localizations.externalPlayerConsoleDanmakuOffsetDelay(step),
+                onPressed: () =>
+                    ExternalPlayerConsoleService.adjustDanmakuOffset(
+                  _stepSeconds,
+                ),
+                compact: true,
+              ),
             ),
-            TextButton(
+            KeyedSubtree(
               key: const Key('external-player-danmaku-offset-reset'),
-              onPressed: widget.offset == widget.initialOffset
-                  ? null
-                  : ExternalPlayerConsoleService.resetDanmakuOffset,
-              child: Text(localizations.externalPlayerConsoleDanmakuOffsetReset),
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.restart_alt_rounded,
+                label: localizations.externalPlayerConsoleDanmakuOffsetReset,
+                onPressed: widget.offset == widget.initialOffset
+                    ? null
+                    : ExternalPlayerConsoleService.resetDanmakuOffset,
+                compact: true,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 240,
-              child: TextField(
+            KeyedSubtree(
+              key: const Key('external-player-danmaku-offset-apply'),
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.done_rounded,
+                label: localizations.externalPlayerConsoleDanmakuOffsetApply,
+                onPressed: _applyCustomOffset,
+                compact: true,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ConsoleTextField(
                 key: const Key('external-player-danmaku-offset-input'),
                 controller: _controller,
+                hintText:
+                    localizations.externalPlayerConsoleDanmakuOffsetCustomHint,
+                prefixIcon: Icons.timelapse_rounded,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                   signed: true,
                 ),
-                decoration: InputDecoration(
-                  labelText: localizations.externalPlayerConsoleDanmakuOffsetCustomLabel,
-                  hintText: localizations.externalPlayerConsoleDanmakuOffsetCustomHint,
-                  errorText: _invalid
-                      ? localizations.externalPlayerConsoleDanmakuOffsetInvalid
-                      : null,
-                ),
+                errorText: _invalid
+                    ? localizations.externalPlayerConsoleDanmakuOffsetInvalid
+                    : null,
                 onSubmitted: (_) => _applyCustomOffset(),
               ),
-            ),
-            FilledButton.tonal(
-              key: const Key('external-player-danmaku-offset-apply'),
-              onPressed: _applyCustomOffset,
-              child: Text(localizations.externalPlayerConsoleDanmakuOffsetApply),
             ),
           ],
         ),
       ],
     );
   }
-}
-
-String _formatSeconds(double value) {
-  final text = value.toStringAsFixed(3);
-  return text.replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 class _DanmakuBlockRuleEditor extends StatefulWidget {
@@ -592,14 +629,10 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
         valid = false;
       }
     }
-    final added = valid && ExternalPlayerConsoleService.addBlockedItem(
-      value,
-      _selectedType,
-    );
+    final added = valid &&
+        ExternalPlayerConsoleService.addBlockedItem(value, _selectedType);
     setState(() => _hasInputError = !added);
-    if (added) {
-      _controller.clear();
-    }
+    if (added) _controller.clear();
   }
 
   String _typeLabel(BuildContext context, BlockedItemType type) {
@@ -630,58 +663,53 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final localizations = context.l10n;
+    final borderColor =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.10);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           localizations.externalPlayerConsoleDanmakuKeywordFilter,
-          style: theme.textTheme.titleMedium,
+          style: _sectionLabelStyle(context),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         SingleChildScrollView(
+          key: const Key('external-player-danmaku-block-mode'),
           scrollDirection: Axis.horizontal,
-          child: SegmentedButton<BlockedItemType>(
-            key: const Key('external-player-danmaku-block-mode'),
-            segments: BlockedItemType.values.map((type) {
-              return ButtonSegment<BlockedItemType>(
-                value: type,
-                icon: Icon(_typeIcon(type)),
-                label: Text(_typeLabel(context, type)),
+          child: Row(
+            children: BlockedItemType.values.map((type) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _ChoiceButton(
+                  icon: _typeIcon(type),
+                  label: _typeLabel(context, type),
+                  selected: _selectedType == type,
+                  onPressed: widget.enabled
+                      ? () => setState(() {
+                            _selectedType = type;
+                            _hasInputError = false;
+                          })
+                      : null,
+                ),
               );
             }).toList(growable: false),
-            selected: {_selectedType},
-            showSelectedIcon: false,
-            onSelectionChanged: widget.enabled
-                ? (selection) {
-                    setState(() {
-                      _selectedType = selection.single;
-                      _hasInputError = false;
-                    });
-                  }
-                : null,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: TextField(
+              child: _ConsoleTextField(
                 key: const Key('external-player-danmaku-keyword-input'),
                 controller: _controller,
                 enabled: widget.enabled,
-                decoration: InputDecoration(
-                  hintText: localizations
-                      .externalPlayerConsoleDanmakuKeywordHint,
-                  errorText: _hasInputError
-                      ? localizations.externalPlayerConsoleDanmakuBlockInvalid
-                      : null,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                textInputAction: TextInputAction.done,
+                hintText: localizations.externalPlayerConsoleDanmakuKeywordHint,
+                prefixIcon: _typeIcon(_selectedType),
+                errorText: _hasInputError
+                    ? localizations.externalPlayerConsoleDanmakuBlockInvalid
+                    : null,
                 onChanged: (_) {
                   if (_hasInputError) {
                     setState(() => _hasInputError = false);
@@ -691,55 +719,72 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton.tonalIcon(
+            KeyedSubtree(
               key: const Key('external-player-danmaku-keyword-add'),
-              onPressed: widget.enabled ? _addItem : null,
-              icon: const Icon(Icons.add),
-              label: Text(
-                localizations.externalPlayerConsoleDanmakuKeywordAdd,
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.add_rounded,
+                label: localizations.externalPlayerConsoleDanmakuKeywordAdd,
+                onPressed: widget.enabled ? _addItem : null,
+                compact: true,
               ),
             ),
           ],
         ),
         if (widget.items.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: List.generate(widget.items.length, (index) {
-                final item = widget.items[index];
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      key: ValueKey(
-                        'external-player-danmaku-block-item-${item.type.name}-${item.value}',
-                      ),
-                      dense: true,
-                      leading: Icon(_typeIcon(item.type)),
-                      title: Text(item.value),
-                      subtitle: Text(_typeLabel(context, item.type)),
-                      trailing: IconButton(
-                        tooltip: localizations
-                            .externalPlayerConsoleDanmakuBlockRemove,
-                        onPressed: () =>
-                            ExternalPlayerConsoleService.removeBlockedItem(item),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                      ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(border: Border.all(color: borderColor)),
+              child: Column(
+                children: List.generate(widget.items.length, (index) {
+                  final item = widget.items[index];
+                  return Container(
+                    key: ValueKey(
+                      'external-player-danmaku-block-item-${item.type.name}-${item.value}',
                     ),
-                    if (index < widget.items.length - 1)
-                      Divider(
-                        height: 1,
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                  ],
-                );
-              }),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                    decoration: BoxDecoration(
+                      border: index == widget.items.length - 1
+                          ? null
+                          : Border(bottom: BorderSide(color: borderColor)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(_typeIcon(item.type), size: 19),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.value,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                _typeLabel(context, item.type),
+                                style: _mutedStyle(context),
+                              ),
+                            ],
+                          ),
+                        ),
+                        NipaplayLargeScreenIconButton(
+                          icon: Icons.delete_outline_rounded,
+                          tooltip: localizations
+                              .externalPlayerConsoleDanmakuBlockRemove,
+                          onPressed: () =>
+                              ExternalPlayerConsoleService.removeBlockedItem(
+                                  item),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
             ),
           ),
         ],
@@ -748,16 +793,16 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
   }
 }
 
-
-/// 显示当前外部播放会话构建的弹幕展示列表
 class _DanmakuList extends StatefulWidget {
   const _DanmakuList({
     required this.sessionId,
     required this.items,
+    required this.fillAvailableHeight,
   });
 
   final int? sessionId;
   final List<DisplayDanmakuItem> items;
+  final bool fillAvailableHeight;
 
   @override
   State<_DanmakuList> createState() => _DanmakuListState();
@@ -770,7 +815,12 @@ class _DanmakuListState extends State<_DanmakuList> {
   int _scrollGeneration = 0;
   int? _lastFirstActiveIndex;
   int? _pendingScrollIndex;
-  double _itemExtent = 64;
+  double _itemExtent = 72;
+
+  int? get _firstActiveIndex {
+    final index = widget.items.indexWhere((item) => item.isActive);
+    return index < 0 ? null : index;
+  }
 
   @override
   void initState() {
@@ -789,18 +839,12 @@ class _DanmakuListState extends State<_DanmakuList> {
       _lastFirstActiveIndex = null;
       if (_scrollController.hasClients) _scrollController.jumpTo(0);
     }
-
     final firstActiveIndex = _firstActiveIndex;
     if (firstActiveIndex == _lastFirstActiveIndex) return;
     _lastFirstActiveIndex = firstActiveIndex;
     if (_followPlayback && firstActiveIndex != null) {
       _scheduleScrollTo(firstActiveIndex);
     }
-  }
-
-  int? get _firstActiveIndex {
-    final index = widget.items.indexWhere((item) => item.isActive);
-    return index < 0 ? null : index;
   }
 
   void _scheduleScrollTo(int index) {
@@ -810,29 +854,23 @@ class _DanmakuListState extends State<_DanmakuList> {
       final pendingIndex = _pendingScrollIndex;
       _pendingScrollIndex = null;
       if (pendingIndex == null) return;
-
       final target = (pendingIndex * _itemExtent)
           .clamp(0.0, _scrollController.position.maxScrollExtent)
           .toDouble();
       final generation = ++_scrollGeneration;
       _programmaticScroll = true;
-      _scrollController.animateTo(
+      _scrollController
+          .animateTo(
         target,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
-      ).whenComplete(() {
+      )
+          .whenComplete(() {
         if (mounted && generation == _scrollGeneration) {
           _programmaticScroll = false;
         }
       });
     });
-  }
-
-  void _toggleFollowPlayback() {
-    setState(() => _followPlayback = !_followPlayback);
-    if (_followPlayback && _firstActiveIndex != null) {
-      _scheduleScrollTo(_firstActiveIndex!);
-    }
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
@@ -845,6 +883,13 @@ class _DanmakuListState extends State<_DanmakuList> {
     return false;
   }
 
+  void _toggleFollowPlayback() {
+    setState(() => _followPlayback = !_followPlayback);
+    if (_followPlayback && _firstActiveIndex != null) {
+      _scheduleScrollTo(_firstActiveIndex!);
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -853,113 +898,98 @@ class _DanmakuListState extends State<_DanmakuList> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final localizations = context.l10n;
-    final items = widget.items;
-    final activeCount = items.where((item) => item.isActive).length;
+    final activeCount = widget.items.where((item) => item.isActive).length;
     final followDescription = _followPlayback
         ? localizations.externalPlayerConsoleDanmakuFollowEnabled
         : localizations.externalPlayerConsoleDanmakuFollowDisabled;
+    final list = LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 620;
+        _itemExtent = compact ? 104 : 72;
+        final borderColor =
+            Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.09);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(border: Border.all(color: borderColor)),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _handleScrollNotification,
+              child: Scrollbar(
+                controller: _scrollController,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  itemExtent: _itemExtent,
+                  itemCount: widget.items.length,
+                  itemBuilder: (context, index) {
+                    final displayItem = widget.items[index];
+                    final item = displayItem.item;
+                    return _DanmakuRow(
+                      item: item,
+                      itemId: '${displayItem.index}-${item.danmakuId ?? ''}',
+                      startTime: displayItem.startTime,
+                      active: displayItem.isActive,
+                      blocked: displayItem.isBlocked,
+                      compact: compact,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.view_list_outlined, color: theme.colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    localizations.externalPlayerConsoleDanmakuList,
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    localizations.externalPlayerConsoleDanmakuStats(
-                      items.length,
-                      activeCount,
-                    ),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Tooltip(
-              message: followDescription,
-              child: IconButton(
-                onPressed: items.isEmpty ? null : _toggleFollowPlayback,
-                icon: Icon(
-                  _followPlayback
-                      ? Icons.my_location
-                      : Icons.location_disabled_outlined,
-                ),
-              ),
-            ),
-          ],
+        NipaplayLargeScreenSectionHeader(
+          title: localizations.externalPlayerConsoleDanmakuList,
+          subtitle: localizations.externalPlayerConsoleDanmakuStats(
+            widget.items.length,
+            activeCount,
+          ),
+          trailing: NipaplayLargeScreenIconButton(
+            icon: _followPlayback
+                ? Icons.my_location_rounded
+                : Icons.location_disabled_outlined,
+            tooltip: followDescription,
+            onPressed: widget.items.isEmpty ? null : _toggleFollowPlayback,
+          ),
         ),
         const SizedBox(height: 12),
-        if (items.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            child: Text(
-              localizations.externalPlayerConsoleDanmakuEmpty,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+        if (widget.items.isEmpty && widget.fillAvailableHeight)
+          Expanded(
+            child: NipaplayLargeScreenEmptyState(
+              icon: Icons.speaker_notes_off_outlined,
+              title: localizations.externalPlayerConsoleDanmakuEmpty,
+              subtitle: _localized(
+                context,
+                '当前播放会话没有可显示的弹幕。',
+                '目前播放工作階段沒有可顯示的彈幕。',
+                'There are no danmaku comments for this session.',
               ),
             ),
           )
+        else if (widget.items.isEmpty)
+          SizedBox(
+            height: 430,
+            child: NipaplayLargeScreenEmptyState(
+              icon: Icons.speaker_notes_off_outlined,
+              title: localizations.externalPlayerConsoleDanmakuEmpty,
+              subtitle: _localized(
+                context,
+                '当前播放会话没有可显示的弹幕。',
+                '目前播放工作階段沒有可顯示的彈幕。',
+                'There are no danmaku comments for this session.',
+              ),
+            ),
+          )
+        else if (widget.fillAvailableHeight)
+          Expanded(child: list)
         else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 680;
-              _itemExtent = compact ? 106 : 64;
-              return Container(
-                height: 384,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: _handleScrollNotification,
-                  child: Scrollbar(
-                    controller: _scrollController,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      itemExtent: _itemExtent,
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final displayItem = items[index];
-                        final item = displayItem.item;
-                        return _DanmakuRow(
-                          item: item,
-                          itemId:
-                              '${displayItem.index}-${item.danmakuId ?? ''}',
-                          startTime: displayItem.startTime,
-                          active: displayItem.isActive,
-                          blocked: displayItem.isBlocked,
-                          compact: compact,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+          SizedBox(height: 430, child: list),
       ],
     );
   }
@@ -993,14 +1023,14 @@ class _DanmakuRow extends StatelessWidget {
       DanmakuMode.reverseScroll ||
       DanmakuMode.advanced =>
         localizations.externalPlayerConsoleDanmakuTypeScroll,
-      DanmakuMode.top =>
-        localizations.externalPlayerConsoleDanmakuTypeTop,
+      DanmakuMode.top => localizations.externalPlayerConsoleDanmakuTypeTop,
       DanmakuMode.bottom =>
         localizations.externalPlayerConsoleDanmakuTypeBottom,
     };
     final rgb = item.colorRgb & 0xFFFFFF;
     final colorText = '#${rgb.toRadixString(16).toUpperCase().padLeft(6, '0')}';
     final color = Color(0xFF000000 | rgb);
+    final divider = theme.colorScheme.onSurface.withValues(alpha: 0.08);
 
     return Container(
       key: ValueKey('external-player-danmaku-$itemId'),
@@ -1010,14 +1040,14 @@ class _DanmakuRow extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: active
-            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
+            ? AppAccentColors.current.withValues(alpha: 0.15)
             : blocked
-                ? theme.colorScheme.surfaceContainerHighest
+                ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
                 : null,
         border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+          bottom: BorderSide(color: divider),
           left: BorderSide(
-            color: active ? theme.colorScheme.primary : Colors.transparent,
+            color: active ? AppAccentColors.current : Colors.transparent,
             width: 3,
           ),
         ),
@@ -1025,48 +1055,34 @@ class _DanmakuRow extends StatelessWidget {
       child: compact
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(
                   children: [
-                    Text(
-                      _formatDanmakuTime(startTime),
-                      style: theme.textTheme.labelMedium,
-                    ),
+                    Text(_formatDanmakuTime(startTime),
+                        style: theme.textTheme.labelMedium),
                     const SizedBox(width: 10),
-                    Text(
-                      type,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                    Text(type, style: _mutedStyle(context)),
                     const Spacer(),
-                    if (blocked) _BlockedDanmakuIndicator(itemId: itemId),
+                    if (blocked) _BlockedIndicator(itemId: itemId),
                     if (blocked && active) const SizedBox(width: 6),
-                    if (active) _ActiveDanmakuIndicator(itemId: itemId),
+                    if (active) _ActiveIndicator(itemId: itemId),
                   ],
                 ),
                 const SizedBox(height: 5),
-                Text(
-                  item.content,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(item.content,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 5),
                 Row(
                   children: [
                     _DanmakuColor(color: color, label: colorText),
                     const SizedBox(width: 14),
                     Expanded(
-                      child: Tooltip(
-                        message: sender,
-                        child: Text(
-                          '${localizations.externalPlayerConsoleDanmakuSender}: $sender',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
+                      child: Text(
+                        '${localizations.externalPlayerConsoleDanmakuSender}: $sender',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _mutedStyle(context),
                       ),
                     ),
                   ],
@@ -1076,58 +1092,32 @@ class _DanmakuRow extends StatelessWidget {
           : Row(
               children: [
                 SizedBox(
-                  width: 96,
-                  child: Text(
-                    _formatDanmakuTime(startTime),
-                    style: theme.textTheme.labelMedium,
-                  ),
+                  width: 92,
+                  child: Text(_formatDanmakuTime(startTime),
+                      style: theme.textTheme.labelMedium),
                 ),
                 SizedBox(
-                  width: 112,
-                  child: _DanmakuColor(color: color, label: colorText),
-                ),
+                    width: 112,
+                    child: _DanmakuColor(color: color, label: colorText)),
                 SizedBox(
-                  width: 72,
-                  child: Text(
-                    type,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
+                    width: 64, child: Text(type, style: _mutedStyle(context))),
                 SizedBox(
-                  width: 150,
-                  child: Tooltip(
-                    message: sender,
-                    child: Text(
-                      sender,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
+                  width: 120,
                   child: Text(
-                    item.content,
-                    maxLines: 2,
+                    sender,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: _mutedStyle(context),
                   ),
                 ),
-                SizedBox(
-                  width: 64,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (blocked) _BlockedDanmakuIndicator(itemId: itemId),
-                      if (blocked && active) const SizedBox(width: 6),
-                      if (active) _ActiveDanmakuIndicator(itemId: itemId),
-                    ],
-                  ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(item.content,
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
+                if (blocked) _BlockedIndicator(itemId: itemId),
+                if (blocked && active) const SizedBox(width: 6),
+                if (active) _ActiveIndicator(itemId: itemId),
               ],
             ),
     );
@@ -1152,7 +1142,9 @@ class _DanmakuColor extends StatelessWidget {
             color: color,
             borderRadius: BorderRadius.circular(3),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline,
+              color: Theme.of(context).colorScheme.onSurface.withValues(
+                    alpha: 0.25,
+                  ),
               width: 0.5,
             ),
           ),
@@ -1164,8 +1156,8 @@ class _DanmakuColor extends StatelessWidget {
   }
 }
 
-class _ActiveDanmakuIndicator extends StatelessWidget {
-  const _ActiveDanmakuIndicator({required this.itemId});
+class _ActiveIndicator extends StatelessWidget {
+  const _ActiveIndicator({required this.itemId});
 
   final String itemId;
 
@@ -1177,14 +1169,14 @@ class _ActiveDanmakuIndicator extends StatelessWidget {
         Icons.motion_photos_on_rounded,
         key: ValueKey('external-player-danmaku-active-$itemId'),
         size: 18,
-        color: Theme.of(context).colorScheme.primary,
+        color: AppAccentColors.current,
       ),
     );
   }
 }
 
-class _BlockedDanmakuIndicator extends StatelessWidget {
-  const _BlockedDanmakuIndicator({required this.itemId});
+class _BlockedIndicator extends StatelessWidget {
+  const _BlockedIndicator({required this.itemId});
 
   final String itemId;
 
@@ -1202,16 +1194,6 @@ class _BlockedDanmakuIndicator extends StatelessWidget {
   }
 }
 
-String _formatDanmakuTime(Duration value) {
-  final hours = value.inHours.toString().padLeft(2, '0');
-  final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-  final milliseconds = value.inMilliseconds.remainder(1000).toString().padLeft(3, '0');
-  return '$hours:$minutes:$seconds.$milliseconds';
-}
-
-
-/// 显示外部播放器进度的滑块组件
 class _SeekProgress extends StatefulWidget {
   const _SeekProgress({
     required this.sessionId,
@@ -1231,19 +1213,11 @@ class _SeekProgress extends StatefulWidget {
   State<_SeekProgress> createState() => _SeekProgressState();
 }
 
-/// 显示外部播放器进度的滑块组件的状态类
 class _SeekProgressState extends State<_SeekProgress> {
   double? _dragFraction;
   final TextEditingController _timestampController = TextEditingController();
   bool _timestampInvalid = false;
 
-  @override
-  void dispose() {
-    _timestampController.dispose();
-    super.dispose();
-  }
-
-  /// 当 widget 更新时, 如果 session 发生变化, 则重置拖动进度
   @override
   void didUpdateWidget(_SeekProgress oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1254,19 +1228,26 @@ class _SeekProgressState extends State<_SeekProgress> {
     }
   }
 
-  /// 构建进度滑块组件
+  @override
+  void dispose() {
+    _timestampController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme            = Theme.of(context);
-    final localizations    = context.l10n;
-    final supportsProgress = widget.supportsProgress;
-    final hasProgress      = widget.position != null && widget.duration > Duration.zero;
-    final canSeek          = supportsProgress && hasProgress;
-    final fraction         = (_dragFraction ?? widget.fraction ?? 0.0).clamp(0.0, 1.0).toDouble();
-    final displayPosition  = _dragFraction == null || !hasProgress
+    final localizations = context.l10n;
+    final hasProgress =
+        widget.position != null && widget.duration > Duration.zero;
+    final canSeek = widget.supportsProgress && hasProgress;
+    final fraction =
+        (_dragFraction ?? widget.fraction ?? 0).clamp(0.0, 1.0).toDouble();
+    final displayPosition = _dragFraction == null || !hasProgress
         ? widget.position
-        : Duration(milliseconds: (widget.duration.inMilliseconds * fraction).round());
-    final progressText = !supportsProgress
+        : Duration(
+            milliseconds: (widget.duration.inMilliseconds * fraction).round(),
+          );
+    final progressText = !widget.supportsProgress
         ? localizations.externalPlayerConsoleProgressUnsupported
         : !hasProgress
             ? localizations.externalPlayerConsoleProgressLoading
@@ -1275,17 +1256,15 @@ class _SeekProgressState extends State<_SeekProgress> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Slider(
+        NipaplayLargeScreenEditableSlider(
           value: fraction,
           min: 0,
           max: 1,
           label: hasProgress ? _formatDuration(displayPosition!) : null,
-          onChangeStart: canSeek
-              ? (value) => setState(() => _dragFraction = value)
-              : null,
-          onChanged: canSeek
-              ? (value) => setState(() => _dragFraction = value)
-              : null,
+          onChangeStart:
+              canSeek ? (value) => setState(() => _dragFraction = value) : null,
+          onChanged:
+              canSeek ? (value) => setState(() => _dragFraction = value) : null,
           onChangeEnd: canSeek
               ? (value) {
                   ExternalPlayerConsoleService.seekToFraction(value);
@@ -1293,50 +1272,41 @@ class _SeekProgressState extends State<_SeekProgress> {
                 }
               : null,
         ),
-        const SizedBox(height: 8),
-        Text(
-          progressText,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        const SizedBox(height: 6),
+        Text(progressText, style: _mutedStyle(context)),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 280,
-              child: TextField(
+            Expanded(
+              child: _ConsoleTextField(
                 key: const Key('external-player-timestamp-input'),
                 controller: _timestampController,
-                enabled: supportsProgress,
+                enabled: widget.supportsProgress,
+                hintText: localizations.externalPlayerConsoleTimestampHint,
+                prefixIcon: Icons.schedule_rounded,
                 keyboardType: TextInputType.datetime,
-                textInputAction: TextInputAction.go,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  labelText: localizations.externalPlayerConsoleTimestampLabel,
-                  hintText: localizations.externalPlayerConsoleTimestampHint,
-                  errorText: _timestampInvalid
-                      ? localizations.externalPlayerConsoleTimestampInvalid
-                      : null,
-                  prefixIcon: const Icon(Icons.schedule),
-                ),
+                errorText: _timestampInvalid
+                    ? localizations.externalPlayerConsoleTimestampInvalid
+                    : null,
                 onChanged: (_) {
                   if (_timestampInvalid) {
                     setState(() => _timestampInvalid = false);
                   }
                 },
-                onSubmitted: supportsProgress ? (_) => _seekToTimestamp() : null,
+                onSubmitted:
+                    widget.supportsProgress ? (_) => _seekToTimestamp() : null,
               ),
             ),
-            FilledButton.tonalIcon(
+            const SizedBox(width: 8),
+            KeyedSubtree(
               key: const Key('external-player-timestamp-seek'),
-              onPressed: supportsProgress ? _seekToTimestamp : null,
-              icon: const Icon(Icons.my_location),
-              label: Text(localizations.externalPlayerConsoleTimestampSeek),
+              child: NipaplayLargeScreenActionButton(
+                icon: Icons.my_location_rounded,
+                label: localizations.externalPlayerConsoleTimestampSeek,
+                onPressed: widget.supportsProgress ? _seekToTimestamp : null,
+                compact: true,
+              ),
             ),
           ],
         ),
@@ -1352,11 +1322,156 @@ class _SeekProgressState extends State<_SeekProgress> {
     if (succeeded) FocusScope.of(context).unfocus();
   }
 
-  /// 将给定的 Duration 转换为格式化的字符串 (HH:MM:SS 或 MM:SS)
   static String _formatDuration(Duration value) {
     final hours = value.inHours;
     final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
+}
+
+class _ChoiceButton extends StatelessWidget {
+  const _ChoiceButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppAccentColors.current;
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? accent.withValues(alpha: 0.24)
+            : Colors.white.withValues(alpha: 0.08),
+        idleBackgroundLight: selected
+            ? accent.withValues(alpha: 0.16)
+            : Colors.black.withValues(alpha: 0.04),
+        focusStrokeColor: accent,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 7),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleTextField extends StatelessWidget {
+  const _ConsoleTextField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.prefixIcon,
+    this.enabled = true,
+    this.keyboardType,
+    this.errorText,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final IconData prefixIcon;
+  final bool enabled;
+  final TextInputType? keyboardType;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = Theme.of(context).colorScheme.onSurface;
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: color.withValues(alpha: 0.10)),
+    );
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: keyboardType,
+      textInputAction: TextInputAction.done,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.075)
+            : Colors.white.withValues(alpha: 0.72),
+        prefixIcon: Icon(prefixIcon, size: 19),
+        hintText: hintText,
+        errorText: errorText,
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border.copyWith(
+          borderSide: BorderSide(color: AppAccentColors.current, width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+    );
+  }
+}
+
+TextStyle _sectionLabelStyle(BuildContext context) {
+  return TextStyle(
+    color: Theme.of(context).colorScheme.onSurface,
+    fontSize: 15,
+    fontWeight: FontWeight.w800,
+  );
+}
+
+TextStyle _mutedStyle(BuildContext context) {
+  return TextStyle(
+    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.60),
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+  );
+}
+
+String _nonEmptyOr(String? value, String fallback) {
+  return value == null || value.trim().isEmpty ? fallback : value;
+}
+
+String _formatSeconds(double value) {
+  final text = value.toStringAsFixed(3);
+  return text.replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
+String _formatDanmakuTime(Duration value) {
+  final hours = value.inHours.toString().padLeft(2, '0');
+  final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+  final milliseconds =
+      value.inMilliseconds.remainder(1000).toString().padLeft(3, '0');
+  return '$hours:$minutes:$seconds.$milliseconds';
+}
+
+String _localized(
+  BuildContext context,
+  String simplified,
+  String traditional,
+  String english,
+) {
+  return switch (context.l10n.localeName) {
+    'en' => english,
+    'zh_Hant' => traditional,
+    _ => simplified,
+  };
 }

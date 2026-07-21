@@ -538,6 +538,28 @@ exec /bin/sleep 30
         expect(await process.exitCode, isNotNull);
       });
 
+      test('publishes tab availability only while a session is active',
+          () async {
+        final process = await _startPlayer();
+        final values = <bool>[];
+        void listener() {
+          values.add(ExternalPlayerConsoleService.sessionAvailability.value);
+        }
+
+        ExternalPlayerConsoleService.sessionAvailability.addListener(listener);
+        addTearDown(() async {
+          ExternalPlayerConsoleService.sessionAvailability
+              .removeListener(listener);
+          ExternalPlayerConsoleService.closePlayerAndConsole();
+          await _stopProcess(process);
+        });
+
+        _showSession(_session(process));
+        ExternalPlayerConsoleService.closePlayerAndConsole();
+
+        expect(values, <bool>[true, false]);
+      });
+
       test('automatically clears the session after the player exits', () async {
         final process = await _startPlayer(duration: '0.05');
         addTearDown(() async {
@@ -650,9 +672,12 @@ exec /bin/sleep 30
           );
           await tester.ensureVisible(offsetInput);
           await tester.enterText(offsetInput, '1.25');
-          await tester.tap(find.byKey(
+          final applyOffset = find.byKey(
             const Key('external-player-danmaku-offset-apply'),
-          ));
+          );
+          await tester.ensureVisible(applyOffset);
+          await tester.pumpAndSettle();
+          await tester.tap(applyOffset);
           await tester.pump();
           expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 1.25);
           expect(find.text('当前弹幕延后出现 1.25 秒'), findsOneWidget);
@@ -673,6 +698,46 @@ exec /bin/sleep 30
             find.byKey(const Key('external-player-timestamp-seek')),
             findsOneWidget,
           );
+        } finally {
+          ExternalPlayerConsoleService.closePlayerAndConsole();
+          Process.killPid(process.pid, ProcessSignal.sigkill);
+        }
+      });
+
+      testWidgets('uses a two-column workspace on desktop widths',
+          (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final process = await tester.runAsync(_startPlayer);
+        if (process == null) fail('Failed to start the test player process');
+        try {
+          _showSession(_session(
+            process,
+            danmakuList: [
+              DanmakuItem(
+                time: const Duration(seconds: 1),
+                content: 'desktop layout comment',
+              ),
+            ],
+          ));
+          await tester.pumpWidget(const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ExternalPlayerConsolePage(),
+          ));
+
+          expect(
+            find.byKey(const Key('external-player-console-two-column')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('external-player-console-single-column')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
         } finally {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           Process.killPid(process.pid, ProcessSignal.sigkill);
@@ -962,7 +1027,7 @@ exec /bin/sleep 30
           greaterThan(initialTimestamp),
         );
         final updatedAss = await assFile.readAsString();
-        final opacityTags = RegExp(r'\\1a&H[0-9A-Fa-f]{2}&')
+        final opacityTags = RegExp(r'\\alpha&H[0-9A-Fa-f]{2}&')
             .allMatches(updatedAss)
             .map((match) => match.group(0))
             .toList();
@@ -971,7 +1036,7 @@ exec /bin/sleep 30
         expect(updatedAss, contains('first regenerated comment'));
         expect(updatedAss, contains('second regenerated comment'));
         expect(opacityTags, isNotEmpty);
-        expect(opacityTags, everyElement(r'\1a&H80&'));
+        expect(opacityTags, everyElement(r'\alpha&H80&'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
         expect(reloadCommands, <List<dynamic>>[
           <dynamic>[

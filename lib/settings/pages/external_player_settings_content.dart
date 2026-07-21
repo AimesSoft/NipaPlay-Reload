@@ -123,7 +123,33 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                 );
               },
             ),
-            _autoSwitchToDanmakuConsoleTile
+            _autoSwitchToDanmakuConsoleTile,
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '外部播放时缩小主窗口',
+                    '外部播放時縮小主視窗',
+                    'Resize Main Window During External Playback',
+                  ),
+                  subtitle: externalSupported
+                      ? _text(
+                          context,
+                          '播放期间将 NipaPlay 缩至当前屏幕一半宽度，播放结束后自动恢复',
+                          '播放期間將 NipaPlay 縮至目前螢幕一半寬度，播放結束後自動恢復',
+                          'Resize NipaPlay to half of the current screen width during playback, then restore it automatically.',
+                        )
+                      : context.l10n.desktopOnlySupported,
+                  icon: Ionicons.resize_outline,
+                  phoneIcon:
+                      cupertino.CupertinoIcons.rectangle_compress_vertical,
+                  enabled: externalSupported,
+                  value: settingsProvider.externalPlayerShrinkWindow,
+                  onChanged: settingsProvider.setExternalPlayerShrinkWindow,
+                );
+              },
+            ),
           ],
         ),
       ],

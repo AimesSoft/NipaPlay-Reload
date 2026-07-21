@@ -16,6 +16,7 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
     this.trailing,
     this.padding = const EdgeInsets.fromLTRB(44, 28, 44, 32),
     this.headerBottomSpacing = 24,
+    this.showBackgroundEffects = true,
   });
 
   final String title;
@@ -25,6 +26,7 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
   final double headerBottomSpacing;
+  final bool showBackgroundEffects;
   final Widget child;
 
   @override
@@ -35,43 +37,45 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
 
     return Stack(
       children: [
-        Positioned.fill(
-          child: ColoredBox(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.34)
-                : Colors.white.withValues(alpha: 0.18),
+        if (showBackgroundEffects) ...[
+          Positioned.fill(
+            child: ColoredBox(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.34)
+                  : Colors.white.withValues(alpha: 0.18),
+            ),
           ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(-0.78, -0.72),
-                radius: 1.35,
-                colors: [
-                  AppAccentColors.current
-                      .withValues(alpha: isDark ? 0.12 : 0.08),
-                  Colors.transparent,
-                ],
-                stops: const [0, 0.66],
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(-0.78, -0.72),
+                  radius: 1.35,
+                  colors: [
+                    AppAccentColors.current
+                        .withValues(alpha: isDark ? 0.12 : 0.08),
+                    Colors.transparent,
+                  ],
+                  stops: const [0, 0.66],
+                ),
               ),
             ),
           ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: isDark ? 0.08 : 0.00),
-                  Colors.black.withValues(alpha: isDark ? 0.28 : 0.04),
-                ],
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: isDark ? 0.08 : 0.00),
+                    Colors.black.withValues(alpha: isDark ? 0.28 : 0.04),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
         Positioned.fill(
           child: Padding(
             padding: padding,

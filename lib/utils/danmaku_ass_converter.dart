@@ -183,7 +183,7 @@ String convertDanmakuToAss(
         final xEnd = -width;
         final line = '{\\an4\\move($kAssPlayResX,${yCenter.toStringAsFixed(1)},'
             '${xEnd.toStringAsFixed(1)},${yCenter.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\alpha$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -200,7 +200,7 @@ String convertDanmakuToAss(
         final yTop = (lane * laneHeight + 2).toDouble();
         final line =
             '{\\an8\\pos(${(kAssPlayResX ~/ 2)},${yTop.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\alpha$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -217,7 +217,7 @@ String convertDanmakuToAss(
         final yBottom = (kAssPlayResY - lane * laneHeight - 2).toDouble();
         final line =
             '{\\an2\\pos(${(kAssPlayResX ~/ 2)},${yBottom.toStringAsFixed(1)})'
-            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\1a$alphaHex}'
+            '${_colorOverride(d.color)}${_outlineColorOverride(d.color)}\\alpha$alphaHex}'
             '${_escapeAssText(d.content)}';
         _writeDialogue(
           buffer,
@@ -275,13 +275,17 @@ String _resolveContent(Map<String, dynamic> item) {
 }
 
 DanmakuKind _resolveKind(Map<String, dynamic> item) {
-
   final original = item['originalType'];
-  if (original is num) return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
+  if (original is num) {
+    return _kindFromMode(DanmakuMode.fromCode(original.toInt()));
+  }
 
   final v = item['type'] ?? item['y'];
-  if (v is num) { return _kindFromMode(DanmakuMode.fromCode     (v .toInt()   )); }
-  else          { return _kindFromMode(DanmakuMode.fromTypeName (v?.toString())); }
+  if (v is num) {
+    return _kindFromMode(DanmakuMode.fromCode(v.toInt()));
+  } else {
+    return _kindFromMode(DanmakuMode.fromTypeName(v?.toString()));
+  }
 }
 
 int _resolveTypeCode(Map<String, dynamic> item) {
@@ -293,11 +297,13 @@ int _resolveTypeCode(Map<String, dynamic> item) {
 }
 
 DanmakuKind _kindFromMode(DanmakuMode mode) {
-  switch (mode)
-  {
-  case DanmakuMode.top    : return DanmakuKind.top   ;
-  case DanmakuMode.bottom : return DanmakuKind.bottom;
-  default                 : return DanmakuKind.scroll;
+  switch (mode) {
+    case DanmakuMode.top:
+      return DanmakuKind.top;
+    case DanmakuMode.bottom:
+      return DanmakuKind.bottom;
+    default:
+      return DanmakuKind.scroll;
   }
 }
 
@@ -540,8 +546,8 @@ void _writeHeader(
       'OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, '
       'ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, '
       'Alignment, MarginL, MarginR, MarginV, Encoding');
-  // 样式用不透明白色；每条弹幕按需用 \c 覆盖颜色、\1a 覆盖主透明度。
-  // 阴影透明度由 BackColour(4a) 承载，不被 \1a 覆盖，保持阴影独立观感。
+  // 样式用不透明白色；每条弹幕按需用 \c 覆盖颜色、\alpha 同步覆盖
+  // 主体、描边和阴影透明度，避免主体变淡后黑色描边反而主导视觉。
   const primary = '&H00FFFFFF';
   const outlineColor = '&H00000000';
   final (outlineW, borderStyle) = outline;
@@ -680,7 +686,7 @@ String convertDanmakuToAssFromPrepared(
         x2 = (-it.width).toStringAsFixed(1);
       }
       final line =
-          '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
+          '{\\an7\\move($x1,$yStr,$x2,$yStr)$colorOverride$outlineOverride\\alpha$alphaHex}$escaped';
       _writeDialogue(buffer,
           layer: 0, start: start, end: end, style: 'Danmaku', text: line);
     } else {
@@ -688,7 +694,7 @@ String convertDanmakuToAssFromPrepared(
       // 顶/底部居中：用 \an8 顶中对齐 + \pos(PlayResX/2, y)，让 libass 按自身
       // 字体度量居中，避免 DFM+ paint_width 与 libass 渲染宽度不一致导致长弹幕偏移。
       final line =
-          '{\\an8\\pos($centerX,$yStr)$colorOverride$outlineOverride\\1a$alphaHex}$escaped';
+          '{\\an8\\pos($centerX,$yStr)$colorOverride$outlineOverride\\alpha$alphaHex}$escaped';
       _writeDialogue(
         buffer,
         layer: isBottom ? 2 : 1,
