@@ -118,9 +118,8 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // ------------------------------------------------------------------------ //
 
   // 弹幕列表和屏蔽规则
-  List<DanmakuItem>        _danmakuList = const []; // 弹幕源列表
   List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
-  List<DisplayDanmakuItem> _displayDanmakuList = const []; // 用于显示的弹幕列表, 包含屏蔽状态
+  List<DisplayDanmakuItem> _displayDanmakuList = const []; // 弹幕列表, 包含源数据和显示状态
 
   /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
   final DanmakuStyle _danmakuStyle = DanmakuStyle();
@@ -177,11 +176,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._episodeTitle = episodeMetaData?.episodeTitle;
     _instance._episodeId    = episodeMetaData?.episodeId;
 
-    // 按照时间戳排序弹幕列表, 并创建不可变副本
-    final sorted = List<DanmakuItem>.of(danmakuList ?? const []);
-    sorted.sort((a, b) => a.time.compareTo(b.time));
-    _instance._danmakuList =  List<DanmakuItem>.unmodifiable(sorted);
-
     // 更新弹幕样式, 如果未提供则保持现有样式
     final style = danmakuStyle ?? DanmakuStyle();
     _instance._danmakuStyle.opacity = style.opacity;
@@ -190,8 +184,25 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     _instance._danmakuStyle.danmakuOffset = style.danmakuOffset;
     _instance._danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
 
+    // 按照时间戳排序弹幕列表, 并创建初始显示项目
+    final sorted = List<DanmakuItem>.of(danmakuList ?? const []);
+    sorted.sort((a, b) => a.time.compareTo(b.time));
+    _instance._displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(
+      sorted.indexed.map((entry) {
+        final (index, item) = entry;
+        return DisplayDanmakuItem(
+          item      : item,
+          index     : index,
+          startTime : item.time,
+          duration  : Duration.zero,
+          isBlocked : false,
+          isActive  : false,
+        );
+      }),
+    );
+
     // 更新用于显示的弹幕列表
-    _instance._updateDisplayDanmakuList();
+    _updateDisplayDanmakuList();
 
     _markConfigurationChanged('showSession');
     session.addListener(_handleSessionChanged);
@@ -208,10 +219,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     current.removeListener(_handleSessionChanged);
     current.terminate();
     _instance._session = null;
-    _instance._clearMediaInfo();
+
+    // 清空媒体信息
+    _instance._animeTitle = null;
+    _instance._episodeTitle = null;
+    _instance._episodeId = null;
 
     // 清空弹幕状态, 包括源列表和屏蔽规则
-    _instance._setDanmakuState();
+    _instance._displayDanmakuList = const [];
     _instance._blockedItems = const [];
 
     _markConfigurationChanged('closePlayerAndConsole');
@@ -258,7 +273,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     if (currentSession is! LinuxSession ||
         currentSession.ipcPath == null ||
         currentSession.danmakuAssets == null ||
-        _danmakuList.isEmpty) {
+        _displayDanmakuList.isEmpty) {
       return;
     }
 
@@ -385,61 +400,41 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     return _stateTimestamp != timestamp;
   }
 
+  /// 处理会话状态变化的回调
   static void _handleSessionChanged() {
+
     final current = _instance._session;
+
+    // 如果当前会话已关闭, 则清空会话和媒体信息, 并通知监听器更新 UI
     if (current != null && current.isClosed) {
-      _clearSession(current);
+
+      current.removeListener(_handleSessionChanged);
+      _instance._session = null;
+      _instance._animeTitle = null;
+      _instance._episodeTitle = null;
+      _instance._episodeId = null;
+      _instance._displayDanmakuList = const [];
+      _instance._blockedItems = const [];
+
+      _markConfigurationChanged('clearSession');
+      _instance.notifyListeners();
       return;
     }
-    _instance._updateDisplayDanmakuList();
-    _instance.notifyListeners();
-  }
 
-  static void _clearSession(ExternalPlayerLaunchSession session) {
-    if (!identical(_instance._session, session)) return;
-
-    session.removeListener(_handleSessionChanged);
-    _instance._session = null;
-    _instance._clearMediaInfo();
-    _instance._setDanmakuState();
-    _instance._blockedItems = const [];
-    _markConfigurationChanged('clearSession');
-    _instance.notifyListeners();
-  }
-
-  void _clearMediaInfo() {
-    _animeTitle = null;
-    _episodeTitle = null;
-    _episodeId = null;
-  }
-
-  void _setDanmakuState({
-    List<DanmakuItem>? danmakuList,
-    DanmakuStyle? danmakuStyle,
-  }) {
-
-    // 按照时间戳排序弹幕列表, 并创建不可变副本
-    final sorted = List<DanmakuItem>.of(danmakuList ?? const []);
-    sorted.sort((a, b) => a.time.compareTo(b.time));
-    _danmakuList =  List<DanmakuItem>.unmodifiable(sorted);
-
-    // 更新弹幕样式, 如果未提供则保持现有样式
-    final style = danmakuStyle ?? DanmakuStyle();
-    _danmakuStyle.opacity = style.opacity;
-    _danmakuStyle.outlineWidth = style.outlineWidth;
-    _danmakuStyle.danmakuFontSize = style.danmakuFontSize;
-    _danmakuStyle.danmakuOffset = style.danmakuOffset;
-    _danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
-
-    // 更新用于显示的弹幕列表
+    // 如果会话仍然存在, 则更新用于显示的弹幕列表并通知监听器更新 UI
     _updateDisplayDanmakuList();
+    _instance.notifyListeners();
   }
 
   /// 更新用于显示的弹幕列表
-  void _updateDisplayDanmakuList() {
+  static void _updateDisplayDanmakuList() {
 
-    final position = _session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
-    final currentSession = _session;
+    final sourceItems = _instance._displayDanmakuList
+      .map((item) => item.item)
+      .toList(growable: false);
+
+    final position = _instance._session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
+    final currentSession = _instance._session;
     final configuredScrollSeconds = currentSession is LinuxSession
       ? currentSession.danmakuAssets?.assSettings.scrollDurationSeconds ?? 10.0
       : 10.0;
@@ -447,47 +442,47 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       ? Duration(microseconds: (configuredScrollSeconds * Duration.microsecondsPerSecond).round())
       : const Duration(seconds: 10);
 
-    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(
-      _danmakuList.indexed.map((entry) {
+    DisplayDanmakuItem function(entry) {
 
-        // 解构索引和弹幕项
-        final (index, item) = entry;
+      // 解构索引和弹幕项
+      final (index, item) = entry;
 
-        // 计算弹幕的实际显示时间, 考虑了时间偏移
-        final displayTime = item.time + Duration(microseconds:(_danmakuStyle.danmakuOffset * Duration.microsecondsPerSecond).round());
+      // 计算弹幕的实际显示时间, 考虑了时间偏移
+      final displayTime = item.time + Duration(microseconds:(_instance._danmakuStyle.danmakuOffset * Duration.microsecondsPerSecond).round());
 
-        // 设置弹幕的显示持续时间, 滚动弹幕和固定弹幕使用不同的默认值
-        final duration = item.mode.isScrolling ? scrollDuration : const Duration(seconds: 5);
+      // 设置弹幕的显示持续时间, 滚动弹幕和固定弹幕使用不同的默认值
+      final duration = item.mode.isScrolling ? scrollDuration : const Duration(seconds: 5);
 
-        // 判断弹幕是否被屏蔽
-        bool isBlocked = false;
-        // 根据屏蔽项目类型进行匹配
-        final content = item.content.toLowerCase();
-        for (final b in _blockedItems) {
-          final blockedValue = b.value.toLowerCase();
-          switch (b.type)
-          {
-          case ItemType.keyword : if (content.contains(blockedValue)                              ) isBlocked = true; break;
-          case ItemType.regex   : if (RegExp(b.value,caseSensitive: false).hasMatch(item.content) ) isBlocked = true; break;
-          case ItemType.userId  : if (item.senderId?.toLowerCase() == blockedValue                ) isBlocked = true; break;
-          }
+      // 判断弹幕是否被屏蔽
+      bool isBlocked = false;
+      // 根据屏蔽项目类型进行匹配
+      final content = item.content.toLowerCase();
+      for (final b in _instance._blockedItems) {
+        final blockedValue = b.value.toLowerCase();
+        switch (b.type)
+        {
+        case ItemType.keyword : if (content.contains(blockedValue)                              ) isBlocked = true; break;
+        case ItemType.regex   : if (RegExp(b.value,caseSensitive: false).hasMatch(item.content) ) isBlocked = true; break;
+        case ItemType.userId  : if (item.senderId?.toLowerCase() == blockedValue                ) isBlocked = true; break;
         }
+      }
 
-        // 判断弹幕是否在当前播放位置显示
-        final isInRange = position != null && position >= displayTime && position < displayTime + duration;
-        final isActive = !isBlocked && isInRange;
+      // 判断弹幕是否在当前播放位置显示
+      final isInRange = position != null && position >= displayTime && position < displayTime + duration;
+      final isActive = !isBlocked && isInRange;
 
-        // 创建用于显示的弹幕数据项
-        return DisplayDanmakuItem(
-          item      : item,
-          index     : index,
-          startTime : displayTime,
-          duration  : duration,
-          isBlocked : isBlocked,
-          isActive  : isActive,
-        );
-      }),
-    );
+      // 创建用于显示的弹幕数据项
+      return DisplayDanmakuItem(
+        item      : item,
+        index     : index,
+        startTime : displayTime,
+        duration  : duration,
+        isBlocked : isBlocked,
+        isActive  : isActive,
+      );
+    }
+
+    _instance._displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(sourceItems.indexed.map(function));
   }
 
 }
