@@ -2,7 +2,6 @@ import Cocoa
 import FlutterMacOS
 import ObjectiveC.runtime
 import QuartzCore
-import desktop_multi_window
 import media_kit_video
 
 class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
@@ -526,6 +525,8 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
     private var views: [Int64: WeakMacOSNativeVideoSurfaceHostBox] = [:]
     private weak var flutterHostView: NSView?
     private weak var flutterHostViewController: NSViewController?
+    private weak var windowHostedOverlay: MacOSWindowNativeVideoOverlayView?
+    private var requestedFlutterViewIdentifier: Int64?
 
     init(flutterHostView: NSView?, flutterHostViewController: NSViewController?) {
         self.flutterHostView = flutterHostView
@@ -598,6 +599,9 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
                 return
             }
             let visible = boolValue(args["visible"]) ?? true
+            if let flutterViewId = int64Value(args["flutterViewId"]) {
+                requestedFlutterViewIdentifier = flutterViewId
+            }
             let frame = convertedRectValue(from: args, host: host)
             if !visible {
                 macOSHdrExitTrace("plugin setOverlayFrame hide viewId=\(host.platformViewId)")
@@ -676,18 +680,20 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
     }
 
     private func ensureWindowHostedOverlayInstalled() -> MacOSWindowNativeVideoOverlayView? {
-        guard let flutterHostView else {
+        guard let activeFlutterHostView else {
             return nil
         }
-        guard let hostWindow = flutterHostView.window else {
+        guard let hostWindow = activeFlutterHostView.window else {
             return nil
         }
-        guard let hostSuperview = flutterHostView.superview else {
+        guard let hostSuperview = activeFlutterHostView.superview else {
             return nil
         }
 
-        let overlayHost = hostWindow.nipaplayNativeVideoOverlayHost ??
+        let overlayHost = windowHostedOverlay ??
+            hostWindow.nipaplayNativeVideoOverlayHost ??
             MacOSWindowNativeVideoOverlayView(frame: .zero)
+        let previousWindow = overlayHost.window
 
         if overlayHost.superview !== hostSuperview {
             overlayHost.removeFromSuperview()
@@ -696,18 +702,43 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
             hostSuperview.addSubview(
                 overlayHost,
                 positioned: shouldPlaceWindowHostedOverlayAboveFlutter() ? .above : .below,
-                relativeTo: flutterHostView
+                relativeTo: activeFlutterHostView
             )
         } else {
             hostSuperview.addSubview(
                 overlayHost,
                 positioned: shouldPlaceWindowHostedOverlayAboveFlutter() ? .above : .below,
-                relativeTo: flutterHostView
+                relativeTo: activeFlutterHostView
             )
         }
 
+        if previousWindow !== hostWindow {
+            previousWindow?.nipaplayNativeVideoOverlayHost = nil
+        }
         hostWindow.nipaplayNativeVideoOverlayHost = overlayHost
+        windowHostedOverlay = overlayHost
         return overlayHost
+    }
+
+    /// The player page can move between FlutterViews without rebuilding its
+    /// State. Follow the active Flutter window so the existing native renderer
+    /// moves with that page instead of remaining under the main window.
+    private var activeFlutterHostView: NSView? {
+        if let requestedFlutterViewIdentifier,
+           let requestedController = NSApp.windows
+            .compactMap(\.nipaplayFlutterViewController)
+            .first(where: {
+                Int64($0.viewIdentifier) == requestedFlutterViewIdentifier
+            }) {
+            return requestedController.view
+        }
+        if let keyController = NSApp.keyWindow?.nipaplayFlutterViewController {
+            return keyController.view
+        }
+        if let mainController = NSApp.mainWindow?.nipaplayFlutterViewController {
+            return mainController.view
+        }
+        return flutterHostView ?? flutterHostViewController?.view
     }
 
     private func shouldPlaceWindowHostedOverlayAboveFlutter() -> Bool {
@@ -731,17 +762,17 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
         guard width > 0, height > 0 else {
             return nil
         }
-        guard let flutterHostView else {
+        guard let activeFlutterHostView else {
             return CGRect(x: x, y: y, width: width, height: height)
         }
         guard let targetSuperview = host.hostView.superview else {
             return CGRect(x: x, y: y, width: width, height: height)
         }
-        let sourceY = flutterHostView.isFlipped
+        let sourceY = activeFlutterHostView.isFlipped
             ? y
-            : flutterHostView.bounds.height - y - height
+            : activeFlutterHostView.bounds.height - y - height
         let rect = CGRect(x: x, y: sourceY, width: width, height: height)
-        return flutterHostView.convert(rect, to: targetSuperview)
+        return activeFlutterHostView.convert(rect, to: targetSuperview)
     }
 
     private func int64Value(_ value: Any?) -> Int64? {
@@ -906,9 +937,271 @@ final class MacOSNativeVideoPlatformView: NSView, MacOSNativeVideoSurfaceHost {
     }
 }
 
+/// Flutter's legacy macOS registrar accessors are hard-coded to view id 0.
+/// A multiview engine assigns real views ids starting at 1, so unmodified
+/// plugins such as window_manager would otherwise see a nil main window.
+/// Keep those backwards-compatible accessors useful until Flutter exposes a
+/// public view-aware registrar API.
+private final class MultiviewPluginRegistrarCompatibility {
+  static let shared = MultiviewPluginRegistrarCompatibility()
+
+  private weak var mainViewController: FlutterViewController?
+  private var isInstalled = false
+
+  private init() {}
+
+  func install(
+    registrar: FlutterPluginRegistrar,
+    mainViewController: FlutterViewController
+  ) {
+    self.mainViewController = mainViewController
+    guard !isInstalled else {
+      return
+    }
+
+    guard let registrarClass = object_getClass(registrar as AnyObject) else {
+      preconditionFailure("Unable to inspect Flutter's plugin registrar")
+    }
+
+    replaceGetter(
+      on: registrarClass,
+      named: "view",
+      block: { [weak self] (_: AnyObject) -> NSView? in
+        self?.activeFlutterViewController?.view
+      } as @convention(block) (AnyObject) -> NSView?
+    )
+    replaceGetter(
+      on: registrarClass,
+      named: "viewController",
+      block: { [weak self] (_: AnyObject) -> NSViewController? in
+        self?.activeFlutterViewController
+      } as @convention(block) (AnyObject) -> NSViewController?
+    )
+    isInstalled = true
+  }
+
+  private var activeFlutterViewController: FlutterViewController? {
+    if let activeController = NSApp.keyWindow?.contentViewController
+        as? FlutterViewController {
+      return activeController
+    }
+    return mainViewController
+  }
+
+  private func replaceGetter<T>(
+    on registrarClass: AnyClass,
+    named name: String,
+    block: T
+  ) {
+    let selector = NSSelectorFromString(name)
+    guard let method = class_getInstanceMethod(registrarClass, selector),
+          let typeEncoding = method_getTypeEncoding(method) else {
+      preconditionFailure("Flutter's plugin registrar is missing \(name)")
+    }
+    class_replaceMethod(
+      registrarClass,
+      selector,
+      imp_implementationWithBlock(block),
+      typeEncoding
+    )
+  }
+}
+
+/// Native chrome controls for the same-engine Flutter window fork.
+///
+/// Flutter 3.44 can create regular secondary windows, but its public Dart
+/// wrapper deliberately throws for undecorated windows on macOS. This plugin
+/// changes only the NSWindow that owns the requested FlutterView; it never
+/// creates an engine, isolate, player, or replacement Flutter view.
+private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
+  private static let channelName = "nipaplay/desktop_multi_window_host"
+  private struct WindowDragState {
+    let mouseLocation: NSPoint
+    let windowOrigin: NSPoint
+  }
+
+  private var dragStates: [Int: WindowDragState] = [:]
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: registrar.messenger
+    )
+    registrar.addMethodCallDelegate(
+      DesktopMultiWindowHostPlugin(),
+      channel: channel
+    )
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any],
+          let window = resolveWindow(arguments) else {
+      result(FlutterError(
+        code: "WINDOW_NOT_FOUND",
+        message: "No macOS window owns the requested FlutterView",
+        details: nil
+      ))
+      return
+    }
+
+    switch call.method {
+    case "configureWindow":
+      if boolValue(arguments["frameless"]) == true {
+        makeFrameless(window)
+      }
+      applyAspectRatio(arguments["aspectRatio"], to: window)
+      applyPreferredContentSize(arguments, to: window)
+      let alwaysOnTop = boolValue(arguments["alwaysOnTop"]) ?? false
+      applyAlwaysOnTop(alwaysOnTop, to: window)
+      result(alwaysOnTop)
+    case "setAspectRatio":
+      applyAspectRatio(arguments["aspectRatio"], to: window)
+      result(nil)
+    case "setAlwaysOnTop":
+      let alwaysOnTop = boolValue(arguments["alwaysOnTop"]) ?? false
+      applyAlwaysOnTop(alwaysOnTop, to: window)
+      result(alwaysOnTop)
+    case "startDragging":
+      dragStates[window.windowNumber] = WindowDragState(
+        mouseLocation: NSEvent.mouseLocation,
+        windowOrigin: window.frame.origin
+      )
+      result(nil)
+    case "updateDragging":
+      guard let dragState = dragStates[window.windowNumber] else {
+        result(nil)
+        return
+      }
+      let mouseLocation = NSEvent.mouseLocation
+      window.setFrameOrigin(NSPoint(
+        x: dragState.windowOrigin.x + mouseLocation.x - dragState.mouseLocation.x,
+        y: dragState.windowOrigin.y + mouseLocation.y - dragState.mouseLocation.y
+      ))
+      result(nil)
+    case "endDragging":
+      dragStates.removeValue(forKey: window.windowNumber)
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func resolveWindow(_ arguments: [String: Any]) -> NSWindow? {
+    guard let viewIdentifier = int64Value(arguments["viewId"]) else {
+      return nil
+    }
+    return NSApp.windows.first(where: { window in
+      guard let controller = window.nipaplayFlutterViewController else {
+        return false
+      }
+      return Int64(controller.viewIdentifier) == viewIdentifier
+    })
+  }
+
+  private func makeFrameless(_ window: NSWindow) {
+    var styleMask = window.styleMask
+    styleMask.remove([.titled, .fullSizeContentView])
+    styleMask.insert([.closable, .miniaturizable, .resizable])
+    window.styleMask = styleMask
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = false
+    window.hasShadow = true
+  }
+
+  private func applyAspectRatio(_ value: Any?, to window: NSWindow) {
+    guard let aspectRatio = doubleValue(value),
+          aspectRatio.isFinite,
+          aspectRatio > 0 else {
+      return
+    }
+    window.contentAspectRatio = NSSize(width: aspectRatio, height: 1)
+  }
+
+  private func applyPreferredContentSize(
+    _ arguments: [String: Any],
+    to window: NSWindow
+  ) {
+    guard let width = doubleValue(arguments["width"]),
+          let height = doubleValue(arguments["height"]),
+          width > 0,
+          height > 0 else {
+      return
+    }
+    window.setContentSize(NSSize(width: width, height: height))
+  }
+
+  private func applyAlwaysOnTop(_ alwaysOnTop: Bool, to window: NSWindow) {
+    window.level = alwaysOnTop ? .floating : .normal
+    window.hidesOnDeactivate = false
+    var collectionBehavior = window.collectionBehavior
+    if alwaysOnTop {
+      collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
+    } else {
+      collectionBehavior.remove([.canJoinAllSpaces, .fullScreenAuxiliary])
+    }
+    window.collectionBehavior = collectionBehavior
+  }
+
+  private func int64Value(_ value: Any?) -> Int64? {
+    if let value = value as? Int64 {
+      return value
+    }
+    if let value = value as? NSNumber {
+      return value.int64Value
+    }
+    return nil
+  }
+
+  private func doubleValue(_ value: Any?) -> Double? {
+    if let value = value as? Double {
+      return value
+    }
+    if let value = value as? NSNumber {
+      return value.doubleValue
+    }
+    return nil
+  }
+
+  private func boolValue(_ value: Any?) -> Bool? {
+    if let value = value as? Bool {
+      return value
+    }
+    if let value = value as? NSNumber {
+      return value.boolValue
+    }
+    return nil
+  }
+}
+
 class MainFlutterWindow: NSWindow {
+  private var nipaplayFlutterEngine: FlutterEngine?
+
   override func awakeFromNib() {
-    let flutterViewController = FlutterViewController()
+    // macOS must enter multiview mode before its first FlutterViewController
+    // is attached. The Dart-side window fork then reuses this same engine.
+    let flutterEngine = FlutterEngine(
+      name: "io.flutter",
+      project: nil,
+      allowHeadlessExecution: true
+    )
+    let enableMultiView = NSSelectorFromString("enableMultiView")
+    precondition(
+      flutterEngine.responds(to: enableMultiView),
+      "This Flutter engine does not expose same-engine desktop multiview"
+    )
+    flutterEngine.perform(enableMultiView)
+    precondition(
+      flutterEngine.run(withEntrypoint: nil),
+      "Failed to start the multiview Flutter engine"
+    )
+    nipaplayFlutterEngine = flutterEngine
+
+    let flutterViewController = FlutterViewController(
+      engine: flutterEngine,
+      nibName: nil,
+      bundle: nil
+    )
     if Self.shouldUseTransparentFlutterSurface() {
       self.isOpaque = false
       self.backgroundColor = NSColor.clear
@@ -917,6 +1210,34 @@ class MainFlutterWindow: NSWindow {
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    self.contentView?.layoutSubtreeIfNeeded()
+
+    // The engine was started before this non-implicit view existed, so its
+    // automatic startup metrics pass could not include the main window.
+    // Seed the real dimensions now instead of leaving the first Dart view at
+    // the zero-sized placeholder used by FlutterAddView.
+    let updateMetrics = NSSelectorFromString(
+      "updateWindowMetricsForViewController:"
+    )
+    precondition(
+      flutterEngine.responds(to: updateMetrics),
+      "This Flutter engine cannot seed multiview window metrics"
+    )
+    flutterEngine.perform(updateMetrics, with: flutterViewController)
+
+    let compatibilityRegistrar = flutterViewController.registrar(
+      forPlugin: "NipaPlayMultiviewRegistrarCompatibility"
+    )
+    MultiviewPluginRegistrarCompatibility.shared.install(
+      registrar: compatibilityRegistrar,
+      mainViewController: flutterViewController
+    )
+
+    DesktopMultiWindowHostPlugin.register(
+      with: flutterViewController.registrar(
+        forPlugin: "DesktopMultiWindowHostPlugin"
+      )
+    )
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     
@@ -924,13 +1245,6 @@ class MainFlutterWindow: NSWindow {
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
-
-    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
-      RegisterGeneratedPlugins(registry: controller)
-      SecurityBookmarkPlugin.register(with: controller.registrar(forPlugin: "SecurityBookmarkPlugin"))
-      SystemSharePlugin.register(with: controller.registrar(forPlugin: "SystemSharePlugin"))
-      MacOSNativeVideoPlugin.register(with: controller.registrar(forPlugin: "MacOSNativeVideoPlugin"))
-    }
 
     super.awakeFromNib()
   }

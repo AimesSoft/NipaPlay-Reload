@@ -7,7 +7,6 @@ import Foundation
 
 import battery_plus
 import desktop_drop
-import desktop_multi_window
 import dynamic_color
 import erika_flutter
 import file_picker
@@ -34,7 +33,6 @@ import window_manager
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   BatteryPlusMacosPlugin.register(with: registry.registrar(forPlugin: "BatteryPlusMacosPlugin"))
   DesktopDropPlugin.register(with: registry.registrar(forPlugin: "DesktopDropPlugin"))
-  FlutterMultiWindowPlugin.register(with: registry.registrar(forPlugin: "FlutterMultiWindowPlugin"))
   DynamicColorPlugin.register(with: registry.registrar(forPlugin: "DynamicColorPlugin"))
   ErikaFlutterPlugin.register(with: registry.registrar(forPlugin: "ErikaFlutterPlugin"))
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))

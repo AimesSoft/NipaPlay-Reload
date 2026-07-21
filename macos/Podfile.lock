@@ -1,6 +1,4 @@
 PODS:
-  - desktop_multi_window (0.0.1):
-    - FlutterMacOS
   - erika_flutter (0.1.3):
     - FlutterMacOS
   - flutter_js (0.0.1):
@@ -31,7 +29,6 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
-  - desktop_multi_window (from `Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos`)
   - erika_flutter (from `Flutter/ephemeral/.symlinks/plugins/erika_flutter/macos`)
   - flutter_js (from `Flutter/ephemeral/.symlinks/plugins/flutter_js/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
@@ -51,8 +48,6 @@ SPEC REPOS:
     - HotKey
 
 EXTERNAL SOURCES:
-  desktop_multi_window:
-    :path: Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos
   erika_flutter:
     :path: Flutter/ephemeral/.symlinks/plugins/erika_flutter/macos
   flutter_js:
@@ -81,7 +76,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
 
 SPEC CHECKSUMS:
-  desktop_multi_window: 93667594ccc4b88d91a97972fd3b1b89667fa80a
   erika_flutter: 6d35f15e9b475282807ce46dc7f0d0478b059c1a
   flutter_js: 79c3c70d33ba464c67d8eb88639a61aa718cd8b8
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1

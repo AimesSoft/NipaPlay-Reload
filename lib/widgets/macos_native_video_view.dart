@@ -436,6 +436,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
+          'flutterViewId': View.of(context).viewId,
           'generation': _surfaceGeneration,
           'x': platformRect.left,
           'y': platformRect.top,

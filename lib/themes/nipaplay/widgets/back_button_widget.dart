@@ -45,14 +45,13 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
       setState(() => _isBackButtonPressed = false);
     }
     try {
-      // 先调用handleBackButton处理截图
-      final shouldExit = await widget.videoState.handleBackButton();
       if (widget.onExit != null) {
-        if (!shouldExit) return;
-        await widget.videoState.resetPlayer();
         await widget.onExit!();
         return;
       }
+      // 先调用handleBackButton处理截图
+      final shouldExit = await widget.videoState.handleBackButton();
+      if (!shouldExit) return;
       // 然后重置播放器状态
       await widget.videoState.resetPlayer();
     } catch (e) {

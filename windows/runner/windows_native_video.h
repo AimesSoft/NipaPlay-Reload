@@ -39,9 +39,13 @@ class WindowsNativeVideoPlugin {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleDesktopWindowMethodCall(
+      const flutter::MethodCall<flutter::EncodableValue>& method_call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   HWND EnsureOverlayWindow();
   void HideOverlayWindow(bool reset_generation = true);
+  void UpdateHostWindowForFlutterView(int64_t flutter_view_id);
   void UpdateOverlayFrame(const flutter::EncodableMap& args);
   void SyncOverlayWindowToHost(bool force_log = false);
   flutter::EncodableMap BuildHandles() const;
@@ -50,6 +54,9 @@ class WindowsNativeVideoPlugin {
 
   HWND host_window_ = nullptr;
   HWND flutter_view_ = nullptr;
+  HWND main_host_window_ = nullptr;
+  HWND main_flutter_view_ = nullptr;
+  int64_t active_flutter_view_id_ = 0;
   HWND overlay_window_ = nullptr;
   std::optional<int64_t> overlay_frame_generation_;
   bool overlay_frame_rect_valid_ = false;
@@ -69,6 +76,8 @@ class WindowsNativeVideoPlugin {
   std::unique_ptr<WindowsOpenGLVideoRenderer> video_renderer_;
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      desktop_window_channel_;
 };
 
 #endif  // RUNNER_WINDOWS_NATIVE_VIDEO_H_
