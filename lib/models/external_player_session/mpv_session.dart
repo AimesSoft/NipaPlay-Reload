@@ -1,5 +1,4 @@
-
-// lib/models/external_player_session/linux_session.dart
+// lib/models/external_player_session/mpv_session.dart
 // 外部播放器相关的模型
 
 import 'dart:async';
@@ -11,57 +10,82 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 
-
 /// 掌管外部播放器会话的神
 ///
-/// 管理一个 Linux mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
+/// 管理一个 Linux 或 macOS mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类保存当前媒体路径; 番剧和剧集展示信息由控制台服务管理.
-class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
-
+class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   /// 关联一个已经存在的外部播放器进程.
-  LinuxSession.attach(
-    {
-      required this.playerPath,
-      required this.mediaPath,
-      required this.processId,
-      required this.ipcPath,
-      required this.duration,
+  MpvSession.attach({
+    required this.playerPath,
+    required this.mediaPath,
+    required this.processId,
+    required this.ipcPath,
+    required this.duration,
+    this.position = Duration.zero,
+    this.isPaused = false,
+    this.danmakuAssets,
+    Future<int>? processExitCode,
+    bool monitorProcess = true,
+  }) : _processExitCode = processExitCode {
+    if (monitorProcess) _startLifecycleMonitoring();
+  }
 
-      this.position = Duration.zero,
-      this.isPaused = false,
-      this.danmakuAssets,
-      bool monitorProcess = true,
-    }
-  ) { if (monitorProcess) _startLifecycleMonitoring(); }
-
-  /// 启动 Linux mpv, 并启用 IPC 和生命周期监控.
-  static Future<LinuxSession> launch({
-    required String       playerPath,
-    required String       mediaPath,
+  /// 启动 Linux 或 macOS mpv, 并启用 IPC 和生命周期监控.
+  static Future<MpvSession> launch({
+    required String playerPath,
+    required String mediaPath,
     required List<String> extraArgs,
     DanmakuLaunchAssets? danmakuAssets,
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
   }) async {
+    final ipcPath = _createMpvIpcPath();
+    final launchArgs = [
+      mediaPath,
+      ...extraArgs,
+      '--input-ipc-server=$ipcPath',
+    ];
+    final executablePath = await _resolveExecutablePath(playerPath);
 
-    final ipcPath    = _createMpvIpcPath();
-    final launchArgs = [mediaPath, ...extraArgs, '--input-ipc-server=$ipcPath'];
+    debugPrint(
+      '[MpvSession] Launching mpv: playerPath="$playerPath", '
+      'executablePath="$executablePath", args=$launchArgs',
+    );
 
-    debugPrint('[LinuxSession] Launching Linux mpv: playerPath="$playerPath", args=$launchArgs');
+    // 不通过 `open --args` 启动 mpv.app。沙盒应用交给 LaunchServices 后，
+    // 参数可能不会转交给新实例，最终只会出现一个未加载媒体的空白 mpv 窗口。
+    // 直接执行包内主程序也能让 processId 精确指向本次 mpv 会话。
+    final monitorThroughProcessHandle = Platform.isMacOS;
+    final process = await Process.start(
+      executablePath,
+      launchArgs,
+      mode: monitorThroughProcessHandle
+          ? ProcessStartMode.normal
+          : ProcessStartMode.detached,
+    );
+    Future<int>? processExitCode;
+    if (monitorThroughProcessHandle) {
+      process.stdin.close();
+      unawaited(process.stdout.drain<void>());
+      unawaited(process.stderr.drain<void>());
+      processExitCode = process.exitCode;
+    }
 
-    final process = await Process.start(playerPath, launchArgs, mode: ProcessStartMode.detached);
+    debugPrint(
+      '[MpvSession] mpv started: pid=${process.pid}, ipcPath=$ipcPath',
+    );
 
-    debugPrint('[LinuxSession] Linux mpv started: pid=${process.pid}, ipcPath=$ipcPath');
-
-    return LinuxSession.attach(
-      playerPath : playerPath,
-      mediaPath  : mediaPath,
-      processId  : process.pid,
-      ipcPath    : ipcPath,
-      duration   : duration,
-      position   : position,
+    return MpvSession.attach(
+      playerPath: playerPath,
+      mediaPath: mediaPath,
+      processId: process.pid,
+      ipcPath: ipcPath,
+      duration: duration,
+      position: position,
       danmakuAssets: danmakuAssets,
+      processExitCode: processExitCode,
     );
   }
 
@@ -69,29 +93,29 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   ExternalPlayerType get type => ExternalPlayerType.mpv;
   @override
-  final String   playerPath;     // 外部播放器的路径
+  final String playerPath; // 外部播放器的路径
   @override
-  final String   mediaPath;      // 当前播放的媒体路径
+  final String mediaPath; // 当前播放的媒体路径
   @override
-  final int      processId;      // 外部播放器进程 ID
+  final int processId; // 外部播放器进程 ID
   @override
-  final String?  ipcPath;        // 外部播放器的 IPC 通道路径
+  final String? ipcPath; // 外部播放器的 IPC 通道路径
   DanmakuLaunchAssets? danmakuAssets; // 启动时加载的弹幕文件和导出设置
 
   // 播放相关
   @override
-  Duration       duration;       // 媒体文件总时长
+  Duration duration; // 媒体文件总时长
   @override
-  Duration?      position;       // 当前播放位置
+  Duration? position; // 当前播放位置
   @override
-  bool?          isPaused;       // 是否暂停
+  bool? isPaused; // 是否暂停
 
   // 进程轮询相关
   static const Duration _processPollingInterval = Duration(milliseconds: 250);
   Timer? _processPollingTimer;
-  bool   _closed   = false; // 外部播放器会话是否已关闭, 关闭后不再轮询进程和播放状态
-  bool   _disposed = false; // ChangeNotifier 是否已被 dispose, dispose 后不再通知监听器
-
+  bool _closed = false; // 外部播放器会话是否已关闭, 关闭后不再轮询进程和播放状态
+  bool _disposed = false; // ChangeNotifier 是否已被 dispose, dispose 后不再通知监听器
+  final Future<int>? _processExitCode;
 
   // --- Setters & Getters --- //
 
@@ -99,8 +123,11 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   double? get fraction {
     if (position == null || duration <= Duration.zero) return null;
-    return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
+    return (position!.inMilliseconds / duration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
+
   @override
   bool get isClosed => _closed;
 
@@ -110,11 +137,15 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   void terminate() {
     if (_closed) return;
+
     try {
       final killed = Process.killPid(processId, ProcessSignal.sigterm);
-      if (!killed) debugPrint('[LinuxSession] Failed to terminate player: pid=$processId');
+      if (!killed) {
+        debugPrint('[MpvSession] Failed to terminate player: pid=$processId');
+      }
+    } catch (error) {
+      debugPrint('[MpvSession] Failed to close player: $error');
     }
-    catch (error) { debugPrint('[LinuxSession] Failed to close player: $error'); }
     _close();
   }
 
@@ -151,13 +182,15 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
     return true;
   }
 
-
   /// 通知指定的 mpv Lua 脚本重新加载 ASS 弹幕轨.
   @override
   Future<bool> refreshDanmaku(String assPath, String luaPath) async {
     final path = ipcPath;
-    if (_closed || path == null || path.isEmpty ||
-        assPath.isEmpty || luaPath.isEmpty) {
+    if (_closed ||
+        path == null ||
+        path.isEmpty ||
+        assPath.isEmpty ||
+        luaPath.isEmpty) {
       return false;
     }
 
@@ -208,6 +241,17 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
 
   void _startLifecycleMonitoring() {
     _stopLifecycleMonitoring();
+    final processExitCode = _processExitCode;
+    if (processExitCode != null) {
+      processExitCode.then(
+        (_) {
+          if (!_closed) _close();
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          debugPrint('[MpvSession] Failed to watch player exit: $error');
+        },
+      );
+    }
     _scheduleNextProcessPoll();
   }
 
@@ -231,14 +275,37 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
       final socketFile = File(path);
       if (socketFile.existsSync()) socketFile.deleteSync();
     } catch (error) {
-      debugPrint('[LinuxSession] Failed to delete IPC socket: $error');
+      debugPrint('[MpvSession] Failed to delete IPC socket: $error');
     }
   }
 
   static String _createMpvIpcPath() {
     final timestamp = DateTime.now().microsecondsSinceEpoch;
+    // macOS 的 sockaddr_un.sun_path 最多只能容纳 104 字节（含结尾的 NUL）。
+    // 沙盒的 systemTemp 本身已经很长，因此文件名必须保持紧凑。
+    final compactTimestamp = timestamp.toRadixString(36);
     return '${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'nipaplay_mpv_${pid}_$timestamp.sock';
+        'np_${pid}_$compactTimestamp.sock';
+  }
+
+  static Future<String> _resolveExecutablePath(String playerPath) async {
+    if (!Platform.isMacOS || !playerPath.toLowerCase().endsWith('.app')) {
+      return playerPath;
+    }
+
+    final executablePath = [
+      playerPath,
+      'Contents',
+      'MacOS',
+      'mpv',
+    ].join(Platform.pathSeparator);
+    if (await File(executablePath).exists()) return executablePath;
+
+    throw ProcessException(
+      playerPath,
+      const [],
+      'mpv.app 中未找到 Contents/MacOS/mpv',
+    );
   }
 
   Future<void> _setMpvPaused(bool paused) async {
@@ -272,13 +339,13 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
           continue;
         }
         debugPrint(
-          '[LinuxSession] _setMpvPaused response: ${value['error']}',
+          '[MpvSession] _setMpvPaused response: ${value['error']}',
         );
         changed = value['error'] == 'success';
         break;
       }
     } catch (error) {
-      debugPrint('[LinuxSession] Failed to set mpv pause: $error');
+      debugPrint('[MpvSession] Failed to set mpv pause: $error');
     } finally {
       socket?.destroy();
     }
@@ -326,13 +393,13 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
         }
         if (value['error'] != 'success') {
           debugPrint(
-            '[LinuxSession] Failed to seek mpv: ${value['error']}',
+            '[MpvSession] Failed to seek mpv: ${value['error']}',
           );
         }
         return;
       }
     } catch (error) {
-      debugPrint('[LinuxSession] Failed to seek mpv: $error');
+      debugPrint('[MpvSession] Failed to seek mpv: $error');
     } finally {
       socket?.destroy();
     }
@@ -354,7 +421,7 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
     try {
       running = await _refreshProcessState(timer);
     } catch (error) {
-      debugPrint('[LinuxSession] Failed to refresh player state: $error');
+      debugPrint('[MpvSession] Failed to refresh player state: $error');
       running = true;
     }
 
@@ -369,7 +436,7 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   }
 
   Future<bool> _refreshProcessState(Timer timer) async {
-    final running = await _isLinuxProcessRunning();
+    final running = await _isProcessRunning();
     if (!identical(_processPollingTimer, timer) || !running) return running;
 
     final nextState = await _readMpvState();
@@ -390,17 +457,39 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
     return true;
   }
 
-  Future<bool> _isLinuxProcessRunning() async {
+  Future<bool> _isProcessRunning() async {
     if (processId <= 0) return false;
 
-    try {
-      final value = await File('/proc/$processId/stat').readAsString();
-      final closingParen = value.lastIndexOf(')');
-      if (closingParen < 0 || closingParen + 2 >= value.length) return true;
-      return value.substring(closingParen + 2, closingParen + 3) != 'Z';
-    } on FileSystemException {
-      return false;
+    // macOS 沙盒内执行 `ps` 可能失败并把仍在播放的 mpv 误判为已退出。
+    // launch 创建的会话通过 Process.exitCode 精确监听，轮询期间保持存活。
+    if (_processExitCode != null) return true;
+
+    if (Platform.isLinux) {
+      try {
+        final value = await File('/proc/$processId/stat').readAsString();
+        final closingParen = value.lastIndexOf(')');
+        if (closingParen < 0 || closingParen + 2 >= value.length) return true;
+        return value.substring(closingParen + 2, closingParen + 3) != 'Z';
+      } on FileSystemException {
+        return false;
+      }
     }
+
+    if (Platform.isMacOS) {
+      try {
+        final result = await Process.run(
+          '/bin/ps',
+          ['-p', '$processId', '-o', 'stat='],
+        );
+        if (result.exitCode != 0) return false;
+        final state = (result.stdout as String).trim();
+        return state.isNotEmpty && !state.startsWith('Z');
+      } on ProcessException {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   Future<_ExternalPlayerPlaybackState?> _readMpvState() async {
@@ -468,7 +557,7 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
         isPaused: paused,
       );
     } catch (error) {
-      debugPrint('[LinuxSession] Failed to read mpv state: $error');
+      debugPrint('[MpvSession] Failed to read mpv state: $error');
       return null;
     } finally {
       socket?.destroy();
@@ -482,7 +571,6 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
     _stopLifecycleMonitoring();
     super.dispose();
   }
-
 }
 
 /// 外部播放器本轮轮询得到的播放状态

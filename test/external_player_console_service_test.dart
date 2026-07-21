@@ -10,7 +10,7 @@ import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/linux_session.dart';
+import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -18,7 +18,7 @@ import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
-LinuxSession _session(
+MpvSession _session(
   Process process, {
   String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
@@ -47,7 +47,7 @@ LinuxSession _session(
   );
 }
 
-LinuxSession _sessionFromProcessId(
+MpvSession _sessionFromProcessId(
   int processId, {
   String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
@@ -61,7 +61,7 @@ LinuxSession _sessionFromProcessId(
   AssExportSettings? danmakuAssSettings,
   bool monitorProcess = false,
 }) {
-  final session = LinuxSession.attach(
+  final session = MpvSession.attach(
     playerPath: '/bin/mpv',
     mediaPath: mediaPath,
     processId: processId,
@@ -87,7 +87,7 @@ LinuxSession _sessionFromProcessId(
 }
 
 void _showSession(
-  LinuxSession session, {
+  MpvSession session, {
   EpisodeMetaData? episodeMetaData,
 }) {
   final assets = session.danmakuAssets;
@@ -142,7 +142,25 @@ Future<void> _waitUntil(
 }
 
 void main() {
-  test('launches a generic Linux player without opening the console', () async {
+  test('detects mpv from an explicit candidate list', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'nipaplay_mpv_detection_test_',
+    );
+    final fakeMpv = File('${tempDir.path}/mpv');
+    await fakeMpv.writeAsString('fake mpv');
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final detected = await ExternalPlayerService.detectInstalledMpv(
+      candidatePaths: [
+        '${tempDir.path}/missing-mpv',
+        fakeMpv.path,
+      ],
+    );
+
+    expect(detected, fakeMpv.path);
+  });
+
+  test('launches a generic Unix player without opening the console', () async {
     ExternalPlayerConsoleService.closePlayerAndConsole();
     final session = await ExternalPlayerService.launch(
       playerPath: '/bin/sleep',
@@ -158,7 +176,119 @@ void main() {
     expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
   });
 
-  group('LinuxSession progress', () {
+  test(
+    'launches mpv with a JSON IPC socket on supported Unix desktops',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'nipaplay_mpv_launch_test_',
+      );
+      final fakeMpv = File('${tempDir.path}/fake-mpv');
+      final argsFile = File('${fakeMpv.path}.args');
+      await fakeMpv.writeAsString(r'''#!/bin/sh
+printf '%s\n' "$@" > "${0}.args"
+exec /bin/sleep 30
+''');
+      final chmod = await Process.run('/bin/chmod', ['+x', fakeMpv.path]);
+      expect(chmod.exitCode, 0);
+
+      MpvSession? session;
+      addTearDown(() async {
+        session?.terminate();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+      });
+
+      final launched = await ExternalPlayerService.launch(
+        playerPath: fakeMpv.path,
+        mediaPath: '/tmp/test-video.mkv',
+        extraArgs: const ['--pause=yes'],
+      );
+      expect(launched, isA<MpvSession>());
+      session = launched! as MpvSession;
+      await _waitUntil(argsFile.existsSync);
+
+      final args = await argsFile.readAsLines();
+      expect(args, contains('/tmp/test-video.mkv'));
+      expect(args, contains('--pause=yes'));
+      expect(
+        args,
+        contains('--input-ipc-server=${session.ipcPath}'),
+      );
+      if (Platform.isMacOS) {
+        expect(utf8.encode(session.ipcPath!).length, lessThanOrEqualTo(103));
+      }
+    },
+    skip: !(Platform.isLinux || Platform.isMacOS),
+  );
+
+  test(
+    'launches a macOS mpv app through its bundled executable',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'nipaplay_mpv_app_launch_test_',
+      );
+      final appBundle = Directory('${tempDir.path}/fake-mpv.app');
+      final executable = File(
+        '${appBundle.path}/Contents/MacOS/mpv',
+      );
+      final argsFile = File('${executable.path}.args');
+      await executable.parent.create(recursive: true);
+      await executable.writeAsString(r'''#!/bin/sh
+printf '%s\n' "$@" > "${0}.args"
+exec /bin/sleep 30
+''');
+      final chmod = await Process.run('/bin/chmod', ['+x', executable.path]);
+      expect(chmod.exitCode, 0);
+
+      MpvSession? session;
+      addTearDown(() async {
+        session?.terminate();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+      });
+
+      final launched = await ExternalPlayerService.launch(
+        playerPath: appBundle.path,
+        mediaPath: '/tmp/test-video.mkv',
+        extraArgs: const ['--pause=yes'],
+      );
+      expect(launched, isA<MpvSession>());
+      session = launched! as MpvSession;
+      await _waitUntil(argsFile.existsSync);
+
+      final args = await argsFile.readAsLines();
+      expect(args, contains('/tmp/test-video.mkv'));
+      expect(args, contains('--pause=yes'));
+      expect(
+        args,
+        contains('--input-ipc-server=${session.ipcPath}'),
+      );
+      expect(utf8.encode(session.ipcPath!).length, lessThanOrEqualTo(103));
+    },
+    skip: !Platform.isMacOS,
+  );
+
+  test('uses the supplied process exit future for lifecycle monitoring',
+      () async {
+    final exitCode = Completer<int>();
+    final session = MpvSession.attach(
+      playerPath: '/Applications/mpv.app',
+      mediaPath: '/tmp/test-video.mkv',
+      processId: 999999,
+      ipcPath: null,
+      duration: Duration.zero,
+      processExitCode: exitCode.future,
+    );
+    addTearDown(session.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(session.isClosed, isFalse);
+
+    exitCode.complete(0);
+    await _waitUntil(() => session.isClosed);
+  });
+
+  group('MpvSession progress', () {
     test('clamps its fraction to the valid range', () {
       final session = _sessionFromProcessId(
         1,
@@ -209,7 +339,7 @@ void main() {
   });
 
   group(
-    'ExternalPlayerConsoleService on Linux',
+    'ExternalPlayerConsoleService on Linux and macOS',
     () {
       test('only keeps the latest external player session', () async {
         final firstProcess = await _startPlayer();
@@ -235,7 +365,9 @@ void main() {
         expect(await firstProcess.exitCode, isNotNull);
       });
 
-      test('keeps media path in the session and playable metadata in the console service', () async {
+      test(
+          'keeps media path in the session and playable metadata in the console service',
+          () async {
         final process = await _startPlayer();
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
@@ -289,12 +421,15 @@ void main() {
         _showSession(session);
 
         expect(_activeDisplayIndices(), [0, 1]);
-        final initialDisplayList = ExternalPlayerConsoleService.displayDanmakuList;
+        final initialDisplayList =
+            ExternalPlayerConsoleService.displayDanmakuList;
         ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 1;
         ExternalPlayerConsoleService.queueDanmakuRefresh();
-        expect(ExternalPlayerConsoleService.displayDanmakuList, isNot(same(initialDisplayList)));
+        expect(ExternalPlayerConsoleService.displayDanmakuList,
+            isNot(same(initialDisplayList)));
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.startTime),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.startTime),
           [const Duration(seconds: 2), const Duration(seconds: 4)],
         );
         ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 0;
@@ -357,13 +492,18 @@ void main() {
           isTrue,
         );
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.isBlocked),
           [true, true, true],
         );
         expect(_activeDisplayIndices(), isEmpty);
         expect(
           ExternalPlayerConsoleService.blockedItems.map((item) => item.type),
-          [BlockedItemType.keyword, BlockedItemType.regex, BlockedItemType.userId],
+          [
+            BlockedItemType.keyword,
+            BlockedItemType.regex,
+            BlockedItemType.userId
+          ],
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
@@ -376,7 +516,8 @@ void main() {
         final regexItem = ExternalPlayerConsoleService.blockedItems[1];
         ExternalPlayerConsoleService.removeBlockedItem(regexItem);
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.isBlocked),
           [true, false, true],
         );
         expect(_activeDisplayIndices(), [1]);
@@ -408,7 +549,8 @@ void main() {
         await _waitUntil(() => !ExternalPlayerConsoleService.hasActiveSession);
       });
 
-      testWidgets('does not expose per-item visibility controls', (tester) async {
+      testWidgets('does not expose per-item visibility controls',
+          (tester) async {
         final process = await tester.runAsync(_startPlayer);
         if (process == null) fail('Failed to start the test player process');
         try {
@@ -454,8 +596,10 @@ void main() {
           expect(find.text('关键词'), findsOneWidget);
           expect(find.text('正则表达式'), findsOneWidget);
           expect(find.text('发送者 ID'), findsWidgets);
-          expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.userId);
-          expect(ExternalPlayerConsoleService.blockedItems.single.value, 'sender-hash');
+          expect(ExternalPlayerConsoleService.blockedItems.single.type,
+              BlockedItemType.userId);
+          expect(ExternalPlayerConsoleService.blockedItems.single.value,
+              'sender-hash');
           expect(
             find.byKey(const ValueKey(
               'external-player-danmaku-block-item-userId-sender-hash',
@@ -577,7 +721,9 @@ void main() {
         expect(ExternalPlayerConsoleService.duration, Duration.zero);
 
         await _waitUntil(
-          () => ExternalPlayerConsoleService.duration == const Duration(minutes: 25),
+          () =>
+              ExternalPlayerConsoleService.duration ==
+              const Duration(minutes: 25),
         );
         expect(ExternalPlayerConsoleService.position, Duration.zero);
 
@@ -638,11 +784,15 @@ void main() {
 
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 1 && ExternalPlayerConsoleService.isPaused == true,
+          () =>
+              commands.length == 1 &&
+              ExternalPlayerConsoleService.isPaused == true,
         );
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 2 && ExternalPlayerConsoleService.isPaused == false,
+          () =>
+              commands.length == 2 &&
+              ExternalPlayerConsoleService.isPaused == false,
         );
 
         expect(commands, <bool>[true, false]);
@@ -736,7 +886,8 @@ void main() {
         expect(commands.length, 2);
       });
 
-      test('coalesces rapid danmaku opacity updates without truncating ASS', () async {
+      test('coalesces rapid danmaku opacity updates without truncating ASS',
+          () async {
         final process = await _startPlayer();
         final tempDir =
             await Directory.systemTemp.createTemp('nipaplay_ipc_test_');
@@ -831,7 +982,8 @@ void main() {
           ],
         ]);
 
-        final secondItem = ExternalPlayerConsoleService.displayDanmakuList[1].item;
+        final secondItem =
+            ExternalPlayerConsoleService.displayDanmakuList[1].item;
         final keywordTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
@@ -858,18 +1010,23 @@ void main() {
 
         final filteredAss = await assFile.readAsString();
         expect(ExternalPlayerConsoleService.blockedItems, hasLength(1));
-        expect(ExternalPlayerConsoleService.blockedItems.single.value, 'SECOND');
-        expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.keyword);
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
+            ExternalPlayerConsoleService.blockedItems.single.value, 'SECOND');
+        expect(ExternalPlayerConsoleService.blockedItems.single.type,
+            BlockedItemType.keyword);
+        expect(
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
         );
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.isBlocked),
           [false, true],
         );
         expect(
-          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item,
+              secondItem),
           isTrue,
         );
         expect(filteredAss, contains('first regenerated comment'));
@@ -885,15 +1042,18 @@ void main() {
         await _waitUntil(() => reloadCommands.length == 3);
         expect(ExternalPlayerConsoleService.blockedItems, isEmpty);
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
         );
         expect(
-          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList
+              .map((item) => item.isBlocked),
           [false, false],
         );
         expect(
-          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item,
+              secondItem),
           isTrue,
         );
         expect(
@@ -908,8 +1068,7 @@ void main() {
             await Directory.systemTemp.createTemp('nipaplay_ipc_test_');
         final socketPath = '${tempDir.path}/mpv.sock';
         final assFile = File('${tempDir.path}/danmaku.ass');
-        const stylePrefix =
-            'Style: Danmaku,Arial,48.0,&H00FFFFFF,&H00FFFFFF,'
+        const stylePrefix = 'Style: Danmaku,Arial,48.0,&H00FFFFFF,&H00FFFFFF,'
             '&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,';
         await assFile.writeAsString(
           '[V4+ Styles]\n$stylePrefix' '2.5,0.0,2,0,0,0,1\n',
@@ -1041,6 +1200,6 @@ void main() {
         expect(ExternalPlayerConsoleService.duration, Duration.zero);
       });
     },
-    skip: !Platform.isLinux,
+    skip: !(Platform.isLinux || Platform.isMacOS),
   );
 }

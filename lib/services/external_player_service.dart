@@ -1,4 +1,3 @@
-
 // lib/services/external_player_service.dart
 // 掌管外部播放器启动, 弹幕导出和参数注入的服务
 
@@ -12,7 +11,7 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/linux_session.dart';
+import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -30,7 +29,6 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 
 /// 外部播放器功能的持久化配置.
 ///
@@ -62,12 +60,11 @@ class ExternalPlayerConfig {
 /// 3. 按播放器类型生成命令行参数
 /// 4. 在需要时把当前弹幕导出为 ASS 文件
 ///
-/// Linux 上还会为 mpv 创建 IPC socket, 并把已启动进程注册到
+/// Linux 和 macOS 上还会为 mpv 创建 IPC socket, 并把已启动进程注册到
 /// [ExternalPlayerConsoleService].
 ///
 /// 此服务只负责发起启动, 无法保证外部播放器最终成功解码或播放媒体.
 class ExternalPlayerService {
-
   // 单例访问
   ExternalPlayerService._();
   static final instance = ExternalPlayerService._();
@@ -75,7 +72,57 @@ class ExternalPlayerService {
   /// 当前运行平台是否支持由本服务启动外部播放器.
   ///
   /// Web, 移动端以及未显式支持的桌面平台均返回 `false`.
-  static bool get isSupportedPlatform => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  static bool get isSupportedPlatform =>
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+  /// 查找当前系统中已安装的 mpv.
+  ///
+  /// macOS 优先使用应用包, 随后检查 Homebrew、Intel Homebrew 和 MacPorts
+  /// 的常见可执行文件位置；Linux 会检查常见系统路径。最后再搜索 PATH。
+  /// [candidatePaths] 仅用于测试或调用方需要限定搜索范围的场景。
+  static Future<String?> detectInstalledMpv({
+    Iterable<String>? candidatePaths,
+  }) async {
+    if (kIsWeb || !(Platform.isMacOS || Platform.isLinux)) return null;
+
+    final candidates = candidatePaths ?? _defaultMpvCandidatePaths();
+    for (final candidate in candidates) {
+      final path = candidate.trim();
+      if (path.isEmpty) continue;
+      final type = await FileSystemEntity.type(path);
+      if (type == FileSystemEntityType.file ||
+          type == FileSystemEntityType.link ||
+          (Platform.isMacOS &&
+              type == FileSystemEntityType.directory &&
+              path.toLowerCase().endsWith('.app'))) {
+        return path;
+      }
+    }
+    return null;
+  }
+
+  static Iterable<String> _defaultMpvCandidatePaths() sync* {
+    if (Platform.isMacOS) {
+      yield '/Applications/mpv.app';
+      final home = Platform.environment['HOME'];
+      if (home != null && home.isNotEmpty) {
+        yield '$home/Applications/mpv.app';
+      }
+      yield '/opt/homebrew/bin/mpv';
+      yield '/usr/local/bin/mpv';
+      yield '/opt/local/bin/mpv';
+    } else if (Platform.isLinux) {
+      yield '/usr/bin/mpv';
+      yield '/usr/local/bin/mpv';
+      yield '/snap/bin/mpv';
+    }
+
+    final path = Platform.environment['PATH'];
+    if (path == null || path.isEmpty) return;
+    for (final directory in path.split(':')) {
+      if (directory.isNotEmpty) yield '$directory/mpv';
+    }
+  }
 
   /// 从持久化设置中读取外部播放器配置.
   ///
@@ -117,8 +164,8 @@ class ExternalPlayerService {
   ///
   /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
   /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
-  /// 模式启动; macOS 应用包通过 `open -a` 打开; Linux 播放器以 detached
-  /// 模式启动. 只有 Linux mpv 会额外启用 JSON IPC 和弹幕控制台能力.
+  /// 模式启动; macOS 的 mpv.app 直接执行包内主程序; Linux 播放器以 detached
+  /// 模式启动. Linux 和 macOS 的 mpv 会额外启用 JSON IPC 和弹幕控制台能力.
   ///
   /// 成功派生进程时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
   /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
@@ -131,7 +178,6 @@ class ExternalPlayerService {
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
   }) async {
-
     debugPrint('[ExtPlayer] launch: playerPath="$playerPath", '
         'mediaPath="$mediaPath", extraArgs=$extraArgs');
     if (!isSupportedPlatform) {
@@ -156,8 +202,9 @@ class ExternalPlayerService {
 
     try {
       final type = _detectPlayer(resolvedPath);
-      if (Platform.isLinux && type == ExternalPlayerType.mpv) {
-        return await LinuxSession.launch(
+      if ((Platform.isLinux || Platform.isMacOS) &&
+          type == ExternalPlayerType.mpv) {
+        return await MpvSession.launch(
           playerPath: resolvedPath,
           mediaPath: mediaPath,
           extraArgs: extraArgs,
@@ -181,7 +228,7 @@ class ExternalPlayerService {
     }
   }
 
-  /// 启动 Linux mpv 以外的播放器进程.
+  /// 启动 Linux/macOS mpv 以外的播放器进程.
   static Future<OtherSession> _launchOtherSession({
     required ExternalPlayerType type,
     required String playerPath,
@@ -196,8 +243,11 @@ class ExternalPlayerService {
     if (Platform.isWindows) {
       final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
       process = isShortcut
-          ? await Process.start('cmd',['/c', 'start',  '', playerPath, mediaPath, ...extraArgs], runInShell: true)
-          : await Process.start(playerPath, [mediaPath, ...extraArgs], mode: ProcessStartMode.detached);
+          ? await Process.start(
+              'cmd', ['/c', 'start', '', playerPath, mediaPath, ...extraArgs],
+              runInShell: true)
+          : await Process.start(playerPath, [mediaPath, ...extraArgs],
+              mode: ProcessStartMode.detached);
     } else if (Platform.isMacOS) {
       final isAppBundle = playerPath.toLowerCase().endsWith('.app');
       process = isAppBundle
@@ -227,8 +277,8 @@ class ExternalPlayerService {
   ///
   /// 本方法是外部播放器功能的主要入口. 它从 [context] 读取
   /// [SettingsProvider], 解析媒体地址, 并按设置选择性导出弹幕, 注入字幕,
-  /// Lua, 平滑渲染和 User-Agent 参数, 最后启动播放器. Linux 启动成功后还会
-  /// 建立供外部播放器控制台使用的会话.
+  /// Lua, 平滑渲染和 User-Agent 参数, 最后启动播放器. Linux 或 macOS 的 mpv
+  /// 启动成功后还会建立供外部播放器控制台使用的会话.
   ///
   /// 返回 `false` 仅表示外部播放器功能未启用, 调用方应继续使用内置播放器.
   /// 一旦功能已启用, 本方法即返回 `true` 表示播放请求已被接管; 平台不支持,
@@ -287,14 +337,14 @@ class ExternalPlayerService {
     final danmakuEnabled = settings.externalPlayerDanmakuOverlay;
     DanmakuLaunchAssets? danmakuAssets; // ASS + Lua 脚本产物
     if (danmakuEnabled && episodeId.isNotEmpty) {
-
       debugPrint('[ExtPlayer] 弹幕外挂开启, 开始准备弹幕…');
       _safeSnack(context, '正在准备弹幕…');
 
       // 获取弹幕
       final t0 = DateTime.now(); // 计时, 方便调试弹幕生成耗时
-      try { danmakuAssets = await _prepareDanmakuAss(context, episodeId, animeId); }
-      catch (e, st) {
+      try {
+        danmakuAssets = await _prepareDanmakuAss(context, episodeId, animeId);
+      } catch (e, st) {
         debugPrint('[ExtPlayer] _prepareDanmakuAss 顶层异常: $e');
         debugPrintStack(stackTrace: st);
         danmakuAssets = null;
@@ -303,11 +353,10 @@ class ExternalPlayerService {
       // 计算弹幕准备耗时
       final dt = DateTime.now().difference(t0).inMilliseconds;
       debugPrint('[ExtPlayer] 弹幕准备完成: '
-      'assPath=${danmakuAssets?.assPath}, luaPath=${danmakuAssets?.luaPath}, 耗时=${dt}ms');
+          'assPath=${danmakuAssets?.assPath}, luaPath=${danmakuAssets?.luaPath}, 耗时=${dt}ms');
 
       // 若弹幕产物不为空, 则注入 ASS + Lua 脚本参数; 否则提示弹幕加载失败
       if (danmakuAssets != null) {
-
         // 构建弹幕外挂参数: --sub-file=xxx + --script=xxx + mpv/mpv.net 平滑参数
         extraArgs = _buildSubArgs(playerPath, danmakuAssets);
 
@@ -321,16 +370,15 @@ class ExternalPlayerService {
           extraArgs = [...extraArgs, ...smoothArgs];
           debugPrint('[ExtPlayer] 注入弹幕平滑参数: $smoothArgs');
         }
-        debugPrint('[ExtPlayer] 注入弹幕参数: extraArgs=$extraArgs, playerType=${_detectPlayer(playerPath)}');
-
+        debugPrint(
+            '[ExtPlayer] 注入弹幕参数: extraArgs=$extraArgs, playerType=${_detectPlayer(playerPath)}');
       } else {
         debugPrint('[ExtPlayer] 弹幕为空/失败, 将无弹幕启动');
         if (context.mounted) _safeSnack(context, '弹幕加载失败, 将无弹幕启动');
       }
-
     } else {
       debugPrint('[ExtPlayer] 跳过弹幕外挂 '
-      '(enabled=$danmakuEnabled, episodeId="$episodeId")');
+          '(enabled=$danmakuEnabled, episodeId="$episodeId")');
     }
 
     // 自定义 User-Agent（mpv/mpv.net/vlc 支持; 与弹幕参数合并）
@@ -340,10 +388,12 @@ class ExternalPlayerService {
       debugPrint('[ExtPlayer] 注入自定义 UA 参数: $uaArgs');
     }
 
-    debugPrint('[ExtPlayer] 调用 launch: path="$playerPath", media="$mediaPath", extraArgs=$extraArgs');
+    debugPrint(
+        '[ExtPlayer] 调用 launch: path="$playerPath", media="$mediaPath", extraArgs=$extraArgs');
 
     // 如有已存在的外部播放器会话, 则先关闭它, 避免新播放器启动失败
-    if (Platform.isLinux && ExternalPlayerConsoleService.hasActiveSession) {
+    if (ExternalPlayerConsoleService.isSupportedPlatform &&
+        ExternalPlayerConsoleService.hasActiveSession) {
       ExternalPlayerConsoleService.closePlayerAndConsole();
     }
 
@@ -361,8 +411,8 @@ class ExternalPlayerService {
     final launched = session != null;
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
-    // Linux 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
-    if (session is LinuxSession) {
+    // Linux/macOS 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
+    if (session is MpvSession) {
       final episodeMetaData = EpisodeMetaData(
         animeTitle: history?.animeName ?? item.title,
         episodeTitle: history?.episodeTitle ?? item.subtitle,
@@ -387,8 +437,10 @@ class ExternalPlayerService {
       ExternalPlayerConsoleService.setState(consoleState);
 
       // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面
-      if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {
-        Provider.of<TabChangeNotifier>(context, listen: false).changePage(AppPageIds.externalPlayerConsole);
+      if (settings.externalPlayerAutoSwitchToDanmakuConsole &&
+          context.mounted) {
+        Provider.of<TabChangeNotifier>(context, listen: false)
+            .changePage(AppPageIds.externalPlayerConsole);
       }
     }
 
@@ -404,11 +456,9 @@ class ExternalPlayerService {
     return true;
   }
 
-
   // ===========================================================================
   // =============================== 内部方法 ==================================
   // ===========================================================================
-
 
   /// 按 [path] 最后一段文件名推断外部播放器类型.
   ///
@@ -799,5 +849,4 @@ end)
     }
     return path;
   }
-
 }

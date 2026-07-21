@@ -1,6 +1,6 @@
 
 // lib/pages/external_player_console_page.dart
-// 掌管 Linux 平台下外部播放器会话的控制台页面
+// 掌管 Linux/macOS 平台下外部播放器会话的控制台页面
 
 
 import 'package:flutter/material.dart';
