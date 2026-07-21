@@ -1,25 +1,170 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <cmath>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
-#include "desktop_multi_window/desktop_multi_window_plugin.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  GtkWindow* main_window;
+  FlMethodChannel* desktop_window_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static double fl_value_as_double(FlValue* value, double fallback = 0.0) {
+  if (value == nullptr) {
+    return fallback;
+  }
+  switch (fl_value_get_type(value)) {
+    case FL_VALUE_TYPE_FLOAT:
+      return fl_value_get_float(value);
+    case FL_VALUE_TYPE_INT:
+      return static_cast<double>(fl_value_get_int(value));
+    default:
+      return fallback;
+  }
+}
+
+static gboolean fl_value_as_bool(FlValue* value, gboolean fallback = FALSE) {
+  if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_BOOL) {
+    return fallback;
+  }
+  return fl_value_get_bool(value);
+}
+
+static GtkWindow* find_secondary_flutter_window(MyApplication* self) {
+  GList* windows = gtk_window_list_toplevels();
+  GtkWindow* result = nullptr;
+  for (GList* item = windows; item != nullptr; item = item->next) {
+    if (!GTK_IS_WINDOW(item->data)) {
+      continue;
+    }
+    GtkWindow* candidate = GTK_WINDOW(item->data);
+    if (candidate == self->main_window) {
+      continue;
+    }
+    // Same-engine regular Flutter windows are the only other normal
+    // application toplevels created by NipaPlay.
+    result = candidate;
+    break;
+  }
+  g_list_free(windows);
+  return result;
+}
+
+static void apply_linux_window_aspect_ratio(GtkWindow* window, double ratio) {
+  if (!std::isfinite(ratio) || ratio <= 0.0) {
+    return;
+  }
+  GdkGeometry geometry = {};
+  geometry.min_aspect = ratio;
+  geometry.max_aspect = ratio;
+  gtk_window_set_geometry_hints(window, nullptr, &geometry, GDK_HINT_ASPECT);
+}
+
+static void apply_linux_always_on_top(GtkWindow* window, gboolean enabled) {
+  gtk_window_set_keep_above(window, enabled);
+  if (enabled) {
+    // GTK maps this to the window manager's all-workspaces behavior.
+    gtk_window_stick(window);
+  } else {
+    gtk_window_unstick(window);
+  }
+}
+
+static void desktop_window_method_call_cb(FlMethodChannel* channel,
+                                          FlMethodCall* method_call,
+                                          gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  FlValue* args = fl_method_call_get_args(method_call);
+  GtkWindow* window = find_secondary_flutter_window(self);
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP ||
+      window == nullptr) {
+    fl_method_call_respond_error(
+        method_call, "WINDOW_NOT_FOUND",
+        "No same-engine Flutter secondary window is available", nullptr,
+        nullptr);
+    return;
+  }
+
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (strcmp(method, "configureWindow") == 0) {
+    if (fl_value_as_bool(fl_value_lookup_string(args, "frameless"))) {
+      gtk_window_set_decorated(window, FALSE);
+    }
+    apply_linux_window_aspect_ratio(
+        window,
+        fl_value_as_double(fl_value_lookup_string(args, "aspectRatio")));
+    const double width =
+        fl_value_as_double(fl_value_lookup_string(args, "width"));
+    const double height =
+        fl_value_as_double(fl_value_lookup_string(args, "height"));
+    if (width > 0.0 && height > 0.0) {
+      gtk_window_resize(window, static_cast<gint>(std::lround(width)),
+                        static_cast<gint>(std::lround(height)));
+    }
+    const gboolean always_on_top =
+        fl_value_as_bool(fl_value_lookup_string(args, "alwaysOnTop"));
+    apply_linux_always_on_top(window, always_on_top);
+    g_autoptr(FlValue) response = fl_value_new_bool(always_on_top);
+    fl_method_call_respond_success(method_call, response, nullptr);
+    return;
+  }
+  if (strcmp(method, "setAspectRatio") == 0) {
+    apply_linux_window_aspect_ratio(
+        window,
+        fl_value_as_double(fl_value_lookup_string(args, "aspectRatio")));
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  if (strcmp(method, "setAlwaysOnTop") == 0) {
+    const gboolean always_on_top =
+        fl_value_as_bool(fl_value_lookup_string(args, "alwaysOnTop"));
+    apply_linux_always_on_top(window, always_on_top);
+    g_autoptr(FlValue) response = fl_value_new_bool(always_on_top);
+    fl_method_call_respond_success(method_call, response, nullptr);
+    return;
+  }
+  if (strcmp(method, "startDragging") == 0) {
+    GdkEvent* event = gtk_get_current_event();
+    if (event != nullptr) {
+      gdouble root_x = 0.0;
+      gdouble root_y = 0.0;
+      gdk_event_get_root_coords(event, &root_x, &root_y);
+      guint button = 1;
+      if (event->type == GDK_BUTTON_PRESS ||
+          event->type == GDK_2BUTTON_PRESS ||
+          event->type == GDK_3BUTTON_PRESS) {
+        button = event->button.button;
+      }
+      gtk_window_begin_move_drag(
+          window, static_cast<gint>(button), static_cast<gint>(root_x),
+          static_cast<gint>(root_y), gdk_event_get_time(event));
+      gdk_event_free(event);
+    }
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  if (strcmp(method, "updateDragging") == 0 ||
+      strcmp(method, "endDragging") == 0) {
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  fl_method_call_respond_not_implemented(method_call, nullptr);
+}
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  self->main_window = window;
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -60,9 +205,15 @@ static void my_application_activate(GApplication* application) {
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
-  desktop_multi_window_plugin_set_window_created_callback(
-      [](FlPluginRegistry* registry) { fl_register_plugins(registry); });
-
+  g_autoptr(FlStandardMethodCodec) desktop_window_codec =
+      fl_standard_method_codec_new();
+  self->desktop_window_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "nipaplay/desktop_multi_window_host",
+      FL_METHOD_CODEC(desktop_window_codec));
+  fl_method_channel_set_method_call_handler(
+      self->desktop_window_channel, desktop_window_method_call_cb, self,
+      nullptr);
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -106,6 +257,8 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  g_clear_object(&self->desktop_window_channel);
+  self->main_window = nullptr;
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }

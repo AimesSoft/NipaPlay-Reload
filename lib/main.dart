@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
@@ -92,8 +93,7 @@ import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
-import 'package:nipaplay/pages/desktop_pip_window_app.dart';
-import 'package:nipaplay/services/desktop_pip_window_service.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'constants/settings_keys.dart';
 import 'player_abstraction/media_kit_player_adapter.dart';
 import 'utils/launch_file_handler.dart';
@@ -179,30 +179,6 @@ void main(List<String> args) async {
     debugPaintBaselinesEnabled = false;
     debugPaintSizeEnabled = false;
   });
-
-  final pipLaunchPayload = DesktopPipWindowService.tryParseLaunchPayload(args);
-  final bool isSubWindowProcess =
-      args.isNotEmpty && args.first == 'multi_window';
-  if (isSubWindowProcess) {
-    if (DesktopPipWindowService.isFeatureEnabled &&
-        pipLaunchPayload != null &&
-        pipLaunchPayload.isPipWindow) {
-      await runDesktopPipWindowApp(pipLaunchPayload);
-      return;
-    }
-    runApp(const SizedBox.shrink());
-    return;
-  }
-
-  if (globals.isDesktop) {
-    DesktopPipWindowService.instance.configureCurrentWindow(
-      windowId: 0,
-      isPipWindow: false,
-    );
-    if (DesktopPipWindowService.isFeatureEnabled) {
-      await DesktopPipWindowService.instance.installMainMethodHandler();
-    }
-  }
 
   String? launchFilePath;
   if (globals.isDesktop && args.isNotEmpty) {
@@ -586,7 +562,7 @@ void main(List<String> args) async {
       });
     }
 
-    runApp(
+    runDesktopMultiWindowApp(
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => BottomBarProvider()),
@@ -630,7 +606,9 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(
               value: ServiceProvider.dandanplayRemoteProvider),
         ],
-        child: NipaPlayApp(launchFilePath: launchFilePath),
+        child: DesktopMultiWindowHost(
+          child: NipaPlayApp(launchFilePath: launchFilePath),
+        ),
       ),
     );
   });
@@ -1168,8 +1146,9 @@ class MainPageState extends State<MainPage>
       return;
     }
 
-    final bool shouldBeRegistered =
-        _selectedPageId == AppPageIds.video && videoState.hasVideo;
+    final bool shouldBeRegistered = videoState.hasVideo &&
+        (_selectedPageId == AppPageIds.video ||
+            DesktopPlayerWindowService.instance.isPlayerDetached);
 
     //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
@@ -1202,6 +1181,7 @@ class MainPageState extends State<MainPage>
   @override
   void initState() {
     super.initState();
+    DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
     _initialize();
@@ -1475,6 +1455,7 @@ class MainPageState extends State<MainPage>
 
   @override
   void dispose() {
+    DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);

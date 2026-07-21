@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'video_player_state.dart';
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 
 /// 热键管理服务，用于替代Flutter内部的键盘事件处理
 class HotkeyService extends ChangeNotifier {
@@ -681,6 +682,11 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleFullscreen() {
+    final windowService = DesktopPlayerWindowService.instance;
+    if (windowService.isPlayerDetached) {
+      unawaited(windowService.toggleDetachedFullscreen());
+      return;
+    }
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       videoState.toggleFullscreen();
@@ -790,6 +796,11 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleResizeToVideo() {
+    final windowService = DesktopPlayerWindowService.instance;
+    if (windowService.isPlayerDetached) {
+      unawaited(windowService.resizeDetachedWindowToVideo());
+      return;
+    }
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       videoState.resizeWindowToVideoSize();
@@ -898,6 +909,14 @@ class HotkeyService extends ChangeNotifier {
 
   void _handleEscape() {
     if (_shouldBlockHotkeyInTextInput()) {
+      return;
+    }
+    final windowService = DesktopPlayerWindowService.instance;
+    final detachedWindow = windowService.activeWindow;
+    if (windowService.isPlayerDetached &&
+        detachedWindow != null &&
+        detachedWindow.isFullscreen) {
+      unawaited(detachedWindow.setFullscreen(false));
       return;
     }
     final videoState = _getVideoPlayerState();

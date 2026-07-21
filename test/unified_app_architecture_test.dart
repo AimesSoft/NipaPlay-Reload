@@ -28,7 +28,6 @@ import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
-import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
 import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
@@ -48,6 +47,7 @@ import 'package:nipaplay/themes/nipaplay/pages/account/material_account_page.dar
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/widgets/desktop_player_page_slot.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -253,7 +253,7 @@ void main() {
       );
       expect(
         controls.build(_FakeBuildContext(), components[1]),
-        isA<PlayVideoPage>(),
+        isA<DesktopPlayerPageSlot>(),
       );
       expect(
         controls.build(_FakeBuildContext(), components[2]),

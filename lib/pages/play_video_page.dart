@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/system_share_service.dart';
@@ -32,6 +33,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/mobile_playback_status.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_progress_bar.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -99,6 +101,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   // 处理系统返回键事件
   Future<bool> _handleWillPop() async {
+    if (DesktopMultiWindow.isSecondaryWindow(context)) {
+      await DesktopPlayerWindowService.instance.returnPlayerToMain();
+      return false;
+    }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     final shouldExit = await videoState.handleBackButton();
     if (shouldExit) {
@@ -108,6 +114,46 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       }));
     }
     return shouldExit;
+  }
+
+  Future<void> _handlePlayerBack(VideoPlayerState videoState) async {
+    if (DesktopMultiWindow.isSecondaryWindow(context)) {
+      await DesktopPlayerWindowService.instance.returnPlayerToMain();
+      return;
+    }
+    try {
+      final shouldExit = await videoState.handleBackButton();
+      if (!shouldExit) return;
+      await videoState.resetPlayer();
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '重置播放器时出错: $e');
+    }
+  }
+
+  Future<void> _resizeCurrentWindowToVideo(VideoPlayerState videoState) async {
+    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
+    if (detachedWindow != null) {
+      await DesktopPlayerWindowService.instance.resizeDetachedWindowToVideo();
+      return;
+    }
+    await videoState.resizeWindowToVideoSize();
+  }
+
+  Future<void> _toggleCurrentWindowFullscreen(
+    VideoPlayerState videoState,
+  ) async {
+    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
+    if (detachedWindow != null) {
+      await detachedWindow.setFullscreen(!detachedWindow.isFullscreen);
+      return;
+    }
+    await videoState.toggleFullscreen();
+  }
+
+  bool _isCurrentWindowFullscreen(VideoPlayerState videoState) {
+    return DesktopMultiWindow.maybeControllerOf(context)?.isFullscreen ??
+        videoState.isFullscreen;
   }
 
   void _handleSideSwipeDragStart(DragStartDetails details) {
@@ -531,14 +577,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }
 
   Future<void> _handleLargeScreenBack(VideoPlayerState videoState) async {
-    try {
-      final shouldExit = await videoState.handleBackButton();
-      if (!shouldExit) return;
-      await videoState.resetPlayer();
-    } catch (e) {
-      if (!mounted) return;
-      BlurSnackBar.show(context, '重置播放器时出错: $e');
-    }
+    await _handlePlayerBack(videoState);
   }
 
   Widget _buildLargeScreenMaterialControls(VideoPlayerState videoState) {
@@ -546,6 +585,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool showScreenshotButton = !kIsWeb;
     final bool showAirPlayButton =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
     final title = (videoState.animeTitle ?? '').trim().isNotEmpty
         ? videoState.animeTitle!.trim()
         : '正在播放';
@@ -639,7 +679,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                 .formatActionWithShortcut(
                                     'resize_to_video', '窗口适配视频'),
                             icon: Ionicons.resize_outline,
-                            onPressed: videoState.resizeWindowToVideoSize,
+                            onPressed: () =>
+                                _resizeCurrentWindowToVideo(videoState),
                           ),
                         if (videoState.playerTopFrameStepButtonsVisible) ...[
                           _LargeScreenPlayerBarButton(
@@ -653,6 +694,25 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             onPressed: videoState.stepForward,
                           ),
                         ],
+                        if (detachedWindow != null)
+                          ListenableBuilder(
+                            listenable: detachedWindow,
+                            builder: (context, _) =>
+                                _LargeScreenPlayerBarButton(
+                              tooltip: detachedWindow.isAlwaysOnTop
+                                  ? '取消窗口置顶'
+                                  : '窗口置顶并跟随桌面',
+                              icon: detachedWindow.isAlwaysOnTop
+                                  ? Icons.push_pin_rounded
+                                  : Icons.push_pin_outlined,
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                unawaited(
+                                  detachedWindow.toggleAlwaysOnTop(),
+                                );
+                              },
+                            ),
+                          ),
                         if (showAirPlayButton)
                           _LargeScreenPlayerBarButton(
                             tooltip: '投屏 (AirPlay)',
@@ -837,12 +897,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                 ? (videoState.isAppBarHidden
                                     ? '显示菜单栏'
                                     : '隐藏菜单栏')
-                                : (videoState.isFullscreen ? '退出全屏' : '全屏'),
+                                : (_isCurrentWindowFullscreen(videoState)
+                                    ? '退出全屏'
+                                    : '全屏'),
                             icon: globals.isTablet
                                 ? (videoState.isAppBarHidden
                                     ? Icons.fullscreen_exit_rounded
                                     : Icons.fullscreen_rounded)
-                                : (videoState.isFullscreen
+                                : (_isCurrentWindowFullscreen(videoState)
                                     ? Icons.fullscreen_exit_rounded
                                     : Icons.fullscreen_rounded),
                             onPressed: () {
@@ -850,7 +912,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               if (globals.isTablet) {
                                 videoState.toggleAppBarVisibility();
                               } else {
-                                unawaited(videoState.toggleFullscreen());
+                                unawaited(
+                                  _toggleCurrentWindowFullscreen(videoState),
+                                );
                               }
                             },
                           ),
@@ -882,10 +946,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool showScreenshotButton = !kIsWeb && globals.isMobilePlatform;
     final bool showAirPlayButton =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
     final double horizontalCutoutInset =
         globals.isPhone && portraitUiScale >= 0.999 ? 24.0 : 0.0;
 
-    final int rightButtonCount = (showAirPlayButton ? 1 : 0) +
+    final int rightButtonCount = (detachedWindow != null ? 1 : 0) +
+        (showAirPlayButton ? 1 : 0) +
         (showScreenshotButton ? 1 : 0) +
         (showShareButton ? 1 : 0);
     final double rightButtonsWidth = rightButtonCount > 0
@@ -939,7 +1005,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               setState(() => _isHoveringBackButton = true),
                           onExit: (_) =>
                               setState(() => _isHoveringBackButton = false),
-                          child: BackButtonWidget(videoState: videoState),
+                          child: BackButtonWidget(
+                            videoState: videoState,
+                            onExit:
+                                DesktopMultiWindow.isSecondaryWindow(context)
+                                    ? DesktopPlayerWindowService
+                                        .instance.returnPlayerToMain
+                                    : null,
+                          ),
                         ),
                         const SizedBox(width: 12.0),
                         if (videoState.playerTopSendDanmakuButtonVisible) ...[
@@ -964,7 +1037,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             iconSize: 28,
                             padding: EdgeInsets.zero,
                             onPressed: () =>
-                                videoState.resizeWindowToVideoSize(),
+                                _resizeCurrentWindowToVideo(videoState),
                           ),
                           const SizedBox(width: 8.0),
                         ],
@@ -1056,6 +1129,27 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     onExit: (_) => videoState.setControlsHovered(false),
                     child: Row(
                       children: [
+                        if (detachedWindow != null) ...[
+                          ListenableBuilder(
+                            listenable: detachedWindow,
+                            builder: (context, _) {
+                              final isPinned = detachedWindow.isAlwaysOnTop;
+                              return ShadowActionButton(
+                                tooltip: isPinned ? '取消窗口置顶' : '窗口置顶并跟随桌面',
+                                icon: isPinned
+                                    ? Icons.push_pin_rounded
+                                    : Icons.push_pin_outlined,
+                                onPressed: () {
+                                  videoState.resetHideControlsTimer();
+                                  unawaited(
+                                    detachedWindow.toggleAlwaysOnTop(),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         if (showAirPlayButton)
                           ShadowActionButton(
                             tooltip: '投屏 (AirPlay)',

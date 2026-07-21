@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -16,7 +17,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
-import 'package:nipaplay/services/desktop_pip_window_service.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'keyboard_activatable.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
@@ -313,13 +314,26 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     return rect.contains(globalPosition);
   }
 
-  Future<void> _handlePipButtonTap(VideoPlayerState videoState) async {
-    final pipService = DesktopPipWindowService.instance;
-    if (pipService.isCurrentWindowPip) {
-      await pipService.closeCurrentPipWindowAndRestore(videoState);
+  Future<void> _handleWindowModeButtonTap(
+    VideoPlayerState videoState,
+  ) async {
+    final windowService = DesktopPlayerWindowService.instance;
+    if (DesktopMultiWindow.isSecondaryWindow(context)) {
+      await windowService.returnPlayerToMain();
       return;
     }
-    await pipService.openPipWindow(videoState);
+    await windowService.detachPlayer(context, videoState);
+  }
+
+  Future<void> _toggleFullscreen(
+    VideoPlayerState videoState,
+    WindowController? detachedWindow,
+  ) async {
+    if (detachedWindow != null) {
+      await detachedWindow.setFullscreen(!detachedWindow.isFullscreen);
+      return;
+    }
+    await videoState.toggleFullscreen();
   }
 
   Widget _buildProgressBar(
@@ -435,11 +449,17 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   @override
   Widget build(BuildContext context) {
+    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
     return AnimatedBuilder(
-      animation: _tooltipManager,
+      animation: Listenable.merge(<Listenable>[
+        _tooltipManager,
+        if (detachedWindow != null) detachedWindow,
+      ]),
       builder: (context, child) {
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
+            final isFullscreen =
+                detachedWindow?.isFullscreen ?? videoState.isFullscreen;
             if (widget.compactPortrait) {
               return _buildCompactPortraitControls(videoState);
             }
@@ -676,26 +696,24 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
                                     const SizedBox(width: 12),
 
-                                    if (globals.isDesktop &&
-                                        DesktopPipWindowService
-                                            .isFeatureEnabled)
+                                    if (DesktopPlayerWindowService
+                                        .isFeatureEnabled)
                                       _buildControlButton(
                                         icon: Icon(
-                                          DesktopPipWindowService
-                                                  .instance.isCurrentWindowPip
-                                              ? Icons.picture_in_picture_rounded
-                                              : Icons
-                                                  .picture_in_picture_alt_rounded,
+                                          detachedWindow != null
+                                              ? Icons.call_merge_rounded
+                                              : Icons.open_in_new_rounded,
                                           key: ValueKey<bool>(
-                                            DesktopPipWindowService
-                                                .instance.isCurrentWindowPip,
+                                            detachedWindow != null,
                                           ),
                                           color: Colors.white,
                                           size: globals.isPhone ? 36 : 28,
                                         ),
                                         onTap: () {
                                           unawaited(
-                                            _handlePipButtonTap(videoState),
+                                            _handleWindowModeButtonTap(
+                                              videoState,
+                                            ),
                                           );
                                         },
                                         isPressed: _isPipPressed,
@@ -704,16 +722,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                             () => _isPipHovered = value),
                                         onPressed: (value) => setState(
                                             () => _isPipPressed = value),
-                                        tooltip: DesktopPipWindowService
-                                                .instance.isCurrentWindowPip
-                                            ? '关闭小窗并回到主播放'
-                                            : '小窗播放',
+                                        tooltip: detachedWindow != null
+                                            ? '移回主窗口'
+                                            : '移到独立窗口',
                                         useAnimatedSwitcher: true,
                                       ),
 
-                                    if (globals.isDesktop &&
-                                        DesktopPipWindowService
-                                            .isFeatureEnabled)
+                                    if (DesktopPlayerWindowService
+                                        .isFeatureEnabled)
                                       const SizedBox(width: 12),
 
                                     // 弹幕开关按钮
@@ -813,14 +829,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                   ? Icons
                                                       .fullscreen_exit_rounded
                                                   : Icons.fullscreen_rounded)
-                                              : (videoState.isFullscreen
+                                              : (isFullscreen
                                                   ? Icons
                                                       .fullscreen_exit_rounded
                                                   : Icons.fullscreen_rounded),
                                           key: ValueKey<bool>(
                                             globals.isTablet
                                                 ? videoState.isAppBarHidden
-                                                : videoState.isFullscreen,
+                                                : isFullscreen,
                                           ),
                                           color: Colors.white,
                                           size: globals.isPhone ? 36 : 32,
@@ -828,7 +844,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         onTap: () => globals.isTablet
                                             ? videoState
                                                 .toggleAppBarVisibility()
-                                            : videoState.toggleFullscreen(),
+                                            : _toggleFullscreen(
+                                                videoState,
+                                                detachedWindow,
+                                              ),
                                         isPressed: _isFullscreenPressed,
                                         isHovered: _isFullscreenHovered,
                                         onHover: (value) => setState(
@@ -840,13 +859,11 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                 ? '显示菜单栏'
                                                 : '隐藏菜单栏')
                                             : globals.isPhone
-                                                ? (videoState.isFullscreen
-                                                    ? '退出全屏'
-                                                    : '全屏')
+                                                ? (isFullscreen ? '退出全屏' : '全屏')
                                                 : _tooltipManager
                                                     .formatActionWithShortcut(
                                                     'fullscreen',
-                                                    videoState.isFullscreen
+                                                    isFullscreen
                                                         ? '退出全屏'
                                                         : '全屏',
                                                   ),
