@@ -8,7 +8,6 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 
 
@@ -18,29 +17,31 @@ class ExternalPlayerConsolePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = ExternalPlayerConsoleService.instance;
     return AnimatedBuilder(
-      animation: service,
+      animation: ExternalPlayerConsoleService.instance,
       builder: (context, _) {
-        final session = service.session;
         return SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1040),
-                child: session == null
+                child: !ExternalPlayerConsoleService.hasActiveSession
                     ? const _EmptyConsole()
                     : _ConsoleCard(
-                        session: session,
-                        mediaPath: session.mediaPath,
-                        animeTitle: service.animeTitle,
-                        episodeTitle: service.episodeTitle,
-                        episodeId: service.episodeId,
-                        danmakuList: service.displayDanmakuList,
-                        isPaused: session.isPaused ?? false,
-                        danmakuStyle: service.danmakuStyle,
-                        blockedItems: service.blockedItems,
+                        processId: ExternalPlayerConsoleService.processId,
+                        mediaPath: ExternalPlayerConsoleService.mediaPath,
+                        animeTitle: ExternalPlayerConsoleService.animeTitle,
+                        episodeTitle: ExternalPlayerConsoleService.episodeTitle,
+                        episodeId: ExternalPlayerConsoleService.episodeId,
+                        danmakuList: ExternalPlayerConsoleService.displayDanmakuList,
+                        isPaused: ExternalPlayerConsoleService.isPaused ?? false,
+                        supportsSessionControl: ExternalPlayerConsoleService.ipcPath != null,
+                        position: ExternalPlayerConsoleService.position,
+                        duration: ExternalPlayerConsoleService.duration,
+                        fraction: ExternalPlayerConsoleService.fraction,
+                        danmakuStyle: ExternalPlayerConsoleService.danmakuStyle,
+                        blockedItems: ExternalPlayerConsoleService.blockedItems,
                       ),
               ),
             ),
@@ -89,24 +90,32 @@ class _EmptyConsole extends StatelessWidget {
 
 class _ConsoleCard extends StatelessWidget {
   const _ConsoleCard({
-    required this.session,
+    required this.processId,
     required this.mediaPath,
     required this.animeTitle,
     required this.episodeTitle,
     required this.episodeId,
     required this.danmakuList,
     required this.isPaused,
+    required this.supportsSessionControl,
+    required this.position,
+    required this.duration,
+    required this.fraction,
     required this.danmakuStyle,
     required this.blockedItems,
   });
 
-  final ExternalPlayerLaunchSession session;
+  final int? processId;
   final String? mediaPath;
   final String? animeTitle;
   final String? episodeTitle;
   final int? episodeId;
   final List<DisplayDanmakuItem> danmakuList;
   final bool isPaused;
+  final bool supportsSessionControl;
+  final Duration? position;
+  final Duration duration;
+  final double? fraction;
   final DanmakuStyle danmakuStyle;
   final List<BlockedDanmakuItem> blockedItems;
 
@@ -163,7 +172,7 @@ class _ConsoleCard extends StatelessWidget {
             _detailRow(
               context,
               localizations.externalPlayerConsoleProcessId,
-              session.processId.toString(),
+              processId?.toString() ?? '-',
             ),
             _detailRow(
               context,
@@ -191,7 +200,7 @@ class _ConsoleCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   FilledButton.tonalIcon(
-                    onPressed: session.ipcPath == null
+                    onPressed: !supportsSessionControl
                         ? null
                         : ExternalPlayerConsoleService.togglePause,
                     icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
@@ -214,7 +223,7 @@ class _ConsoleCard extends StatelessWidget {
             Divider(color: theme.colorScheme.outlineVariant),
             const SizedBox(height: 16),
             _DanmakuList(
-              session: session,
+              sessionId: processId,
               items: danmakuList,
             ),
           ],
@@ -262,7 +271,13 @@ class _ConsoleCard extends StatelessWidget {
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 10),
-        _SeekProgress(session: session),
+        _SeekProgress(
+          sessionId: processId,
+          supportsProgress: supportsSessionControl,
+          position: position,
+          duration: duration,
+          fraction: fraction,
+        ),
       ],
     );
   }
@@ -297,7 +312,7 @@ class _ConsoleCard extends StatelessWidget {
           label: '${(danmakuStyle.opacity * 100).round()}%',
           onChanged: (value) {
             danmakuStyle.opacity = value;
-            ExternalPlayerConsoleService.instance.queueDanmakuRefresh();
+            ExternalPlayerConsoleService.queueDanmakuRefresh();
           },
         ),
       ],
@@ -337,7 +352,7 @@ class _ConsoleCard extends StatelessWidget {
           label: danmakuStyle.outlineWidth.toStringAsFixed(1),
           onChanged: (value) {
             danmakuStyle.outlineWidth = value;
-            ExternalPlayerConsoleService.instance.queueDanmakuRefresh();
+            ExternalPlayerConsoleService.queueDanmakuRefresh();
           },
         ),
       ],
@@ -378,7 +393,7 @@ class _ConsoleCard extends StatelessWidget {
           label: '${danmakuStyle.danmakuFontSize.toStringAsFixed(1)}px',
           onChanged: (value) {
             danmakuStyle.danmakuFontSize = value;
-            ExternalPlayerConsoleService.instance.queueDanmakuRefresh();
+            ExternalPlayerConsoleService.queueDanmakuRefresh();
           },
         ),
       ],
@@ -579,11 +594,11 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
 /// 显示当前外部播放会话构建的弹幕展示列表
 class _DanmakuList extends StatefulWidget {
   const _DanmakuList({
-    required this.session,
+    required this.sessionId,
     required this.items,
   });
 
-  final ExternalPlayerLaunchSession session;
+  final int? sessionId;
   final List<DisplayDanmakuItem> items;
 
   @override
@@ -611,7 +626,7 @@ class _DanmakuListState extends State<_DanmakuList> {
   @override
   void didUpdateWidget(_DanmakuList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.session, widget.session)) {
+    if (oldWidget.sessionId != widget.sessionId) {
       _followPlayback = true;
       _lastFirstActiveIndex = null;
       if (_scrollController.hasClients) _scrollController.jumpTo(0);
@@ -1040,9 +1055,19 @@ String _formatDanmakuTime(Duration value) {
 
 /// 显示外部播放器进度的滑块组件
 class _SeekProgress extends StatefulWidget {
-  const _SeekProgress({required this.session});
+  const _SeekProgress({
+    required this.sessionId,
+    required this.supportsProgress,
+    required this.position,
+    required this.duration,
+    required this.fraction,
+  });
 
-  final ExternalPlayerLaunchSession session;
+  final int? sessionId;
+  final bool supportsProgress;
+  final Duration? position;
+  final Duration duration;
+  final double? fraction;
 
   @override
   State<_SeekProgress> createState() => _SeekProgressState();
@@ -1064,7 +1089,7 @@ class _SeekProgressState extends State<_SeekProgress> {
   @override
   void didUpdateWidget(_SeekProgress oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.session, widget.session)) {
+    if (oldWidget.sessionId != widget.sessionId) {
       _dragFraction = null;
       _timestampController.clear();
       _timestampInvalid = false;
@@ -1076,19 +1101,18 @@ class _SeekProgressState extends State<_SeekProgress> {
   Widget build(BuildContext context) {
     final theme            = Theme.of(context);
     final localizations    = context.l10n;
-    final session          = widget.session;
-    final supportsProgress = session.ipcPath != null && session.ipcPath!.isNotEmpty;
-    final hasProgress      = session.position != null && session.duration > Duration.zero;
+    final supportsProgress = widget.supportsProgress;
+    final hasProgress      = widget.position != null && widget.duration > Duration.zero;
     final canSeek          = supportsProgress && hasProgress;
-    final fraction         = (_dragFraction ?? session.fraction ?? 0.0).clamp(0.0, 1.0).toDouble();
+    final fraction         = (_dragFraction ?? widget.fraction ?? 0.0).clamp(0.0, 1.0).toDouble();
     final displayPosition  = _dragFraction == null || !hasProgress
-        ? session.position
-        : Duration(milliseconds: (session.duration.inMilliseconds * fraction).round());
+        ? widget.position
+        : Duration(milliseconds: (widget.duration.inMilliseconds * fraction).round());
     final progressText = !supportsProgress
         ? localizations.externalPlayerConsoleProgressUnsupported
         : !hasProgress
             ? localizations.externalPlayerConsoleProgressLoading
-            : '${_formatDuration(displayPosition!)} / ${_formatDuration(session.duration)}';
+            : '${_formatDuration(displayPosition!)} / ${_formatDuration(widget.duration)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

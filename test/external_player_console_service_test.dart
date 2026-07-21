@@ -107,8 +107,8 @@ void _showSession(
   ExternalPlayerConsoleService.setState(consoleState);
 }
 
-List<int> _activeDisplayIndices(ExternalPlayerConsoleService service) {
-  return service.displayDanmakuList
+List<int> _activeDisplayIndices() {
+  return ExternalPlayerConsoleService.displayDanmakuList
       .where((item) => item.isActive)
       .map((item) => item.index)
       .toList(growable: false);
@@ -154,7 +154,7 @@ void main() {
     expect(session.type, ExternalPlayerType.generic);
     expect(session.mediaPath, '30');
     expect(session.ipcPath, isNull);
-    expect(ExternalPlayerConsoleService.instance.hasActiveSession, isFalse);
+    expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
   });
 
   group('LinuxSession progress', () {
@@ -213,7 +213,6 @@ void main() {
       test('only keeps the latest external player session', () async {
         final firstProcess = await _startPlayer();
         final secondProcess = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(firstProcess);
@@ -230,14 +229,13 @@ void main() {
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(firstTimestamp),
         );
-        expect(service.session?.processId, secondProcess.pid);
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.processId, secondProcess.pid);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
         expect(await firstProcess.exitCode, isNotNull);
       });
 
       test('keeps media path in the session and playable metadata in the console service', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -253,15 +251,14 @@ void main() {
           episodeMetaData: episodeMetaData,
         );
 
-        expect(service.session?.mediaPath, '/video/test.mkv');
-        expect(service.animeTitle, '测试番剧');
-        expect(service.episodeTitle, '第 1 话');
-        expect(service.episodeId, 200);
+        expect(ExternalPlayerConsoleService.mediaPath, '/video/test.mkv');
+        expect(ExternalPlayerConsoleService.animeTitle, '测试番剧');
+        expect(ExternalPlayerConsoleService.episodeTitle, '第 1 话');
+        expect(ExternalPlayerConsoleService.episodeId, 200);
       });
 
       test('calculates active danmaku in the console service', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -290,26 +287,25 @@ void main() {
         );
         _showSession(session);
 
-        expect(_activeDisplayIndices(service), [0, 1]);
-        final initialDisplayList = service.displayDanmakuList;
-        service.danmakuStyle.danmakuOffset = 1;
-        service.queueDanmakuRefresh();
-        expect(service.displayDanmakuList, isNot(same(initialDisplayList)));
+        expect(_activeDisplayIndices(), [0, 1]);
+        final initialDisplayList = ExternalPlayerConsoleService.displayDanmakuList;
+        ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 1;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
+        expect(ExternalPlayerConsoleService.displayDanmakuList, isNot(same(initialDisplayList)));
         expect(
-          service.displayDanmakuList.map((item) => item.startTime),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.startTime),
           [const Duration(seconds: 2), const Duration(seconds: 4)],
         );
-        service.danmakuStyle.danmakuOffset = 0;
-        service.queueDanmakuRefresh();
+        ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         session.position = const Duration(seconds: 6);
-        expect(_activeDisplayIndices(service), [1]);
+        expect(_activeDisplayIndices(), [1]);
         session.position = const Duration(seconds: 8);
-        expect(_activeDisplayIndices(service), isEmpty);
+        expect(_activeDisplayIndices(), isEmpty);
       });
 
       test('blocks danmaku by keyword, regex, and sender ID', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -358,12 +354,12 @@ void main() {
           isTrue,
         );
         expect(
-          service.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
           [true, true, true],
         );
-        expect(_activeDisplayIndices(service), isEmpty);
+        expect(_activeDisplayIndices(), isEmpty);
         expect(
-          service.blockedItems.map((item) => item.type),
+          ExternalPlayerConsoleService.blockedItems.map((item) => item.type),
           [ItemType.keyword, ItemType.regex, ItemType.userId],
         );
         expect(
@@ -374,18 +370,17 @@ void main() {
           isFalse,
         );
 
-        final regexItem = service.blockedItems[1];
+        final regexItem = ExternalPlayerConsoleService.blockedItems[1];
         ExternalPlayerConsoleService.removeBlockedItem(regexItem);
         expect(
-          service.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
           [true, false, true],
         );
-        expect(_activeDisplayIndices(service), [1]);
+        expect(_activeDisplayIndices(), [1]);
       });
 
       test('close hides the session and terminates the player', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -395,20 +390,19 @@ void main() {
         ExternalPlayerConsoleService.closePlayerAndConsole();
         ExternalPlayerConsoleService.closePlayerAndConsole();
 
-        expect(service.session, isNull);
+        expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
         expect(await process.exitCode, isNotNull);
       });
 
       test('automatically clears the session after the player exits', () async {
         final process = await _startPlayer(duration: '0.05');
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
         });
         _showSession(_session(process));
 
-        await _waitUntil(() => service.session == null);
+        await _waitUntil(() => !ExternalPlayerConsoleService.hasActiveSession);
       });
 
       testWidgets('does not expose per-item visibility controls', (tester) async {
@@ -435,7 +429,6 @@ void main() {
               ),
             ],
           ));
-          final service = ExternalPlayerConsoleService.instance;
           expect(
             ExternalPlayerConsoleService.addBlockedItem(
               'sender-hash',
@@ -458,8 +451,8 @@ void main() {
           expect(find.text('关键词'), findsOneWidget);
           expect(find.text('正则表达式'), findsOneWidget);
           expect(find.text('发送者 ID'), findsWidgets);
-          expect(service.blockedItems.single.type, ItemType.userId);
-          expect(service.blockedItems.single.value, 'sender-hash');
+          expect(ExternalPlayerConsoleService.blockedItems.single.type, ItemType.userId);
+          expect(ExternalPlayerConsoleService.blockedItems.single.value, 'sender-hash');
           expect(
             find.byKey(const ValueKey(
               'external-player-danmaku-block-item-userId-sender-hash',
@@ -537,7 +530,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -548,28 +540,28 @@ void main() {
           process,
           ipcPath: socketPath,
         ));
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
 
         await _waitUntil(
-          () => service.session?.duration == const Duration(minutes: 25),
+          () => ExternalPlayerConsoleService.duration == const Duration(minutes: 25),
         );
-        expect(service.session?.position, Duration.zero);
+        expect(ExternalPlayerConsoleService.position, Duration.zero);
 
         positionSeconds = 75.5;
         await _waitUntil(
-          () => service.session?.position != Duration.zero,
+          () => ExternalPlayerConsoleService.position != Duration.zero,
         );
 
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(seconds: 75, milliseconds: 500),
         );
         expect(
-          service.session?.duration,
+          ExternalPlayerConsoleService.duration,
           const Duration(minutes: 25),
         );
-        expect(service.session?.fraction, closeTo(0.0503, 0.0001));
-        expect(service.session?.isPaused, isFalse);
+        expect(ExternalPlayerConsoleService.fraction, closeTo(0.0503, 0.0001));
+        expect(ExternalPlayerConsoleService.isPaused, isFalse);
       });
 
       test('toggles mpv pause state through JSON IPC', () async {
@@ -600,7 +592,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -613,15 +604,15 @@ void main() {
 
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 1 && service.session?.isPaused == true,
+          () => commands.length == 1 && ExternalPlayerConsoleService.isPaused == true,
         );
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 2 && service.session?.isPaused == false,
+          () => commands.length == 2 && ExternalPlayerConsoleService.isPaused == false,
         );
 
         expect(commands, <bool>[true, false]);
-        expect(service.session?.isPaused, isFalse);
+        expect(ExternalPlayerConsoleService.isPaused, isFalse);
       });
 
       test('seeks mpv through JSON IPC', () async {
@@ -652,7 +643,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -683,13 +673,13 @@ void main() {
         await _waitUntil(() => commands.isNotEmpty);
 
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(minutes: 12, seconds: 30),
         );
         expect(commands, <List<dynamic>>[
           <dynamic>['seek', 750.0, 'absolute+exact'],
         ]);
-        expect(_activeDisplayIndices(service), [0]);
+        expect(_activeDisplayIndices(), [0]);
 
         expect(
           ExternalPlayerConsoleService.seekToTimestamp('12:34.567'),
@@ -697,7 +687,7 @@ void main() {
         );
         await _waitUntil(() => commands.length == 2);
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(minutes: 12, seconds: 34, milliseconds: 567),
         );
         expect(
@@ -742,7 +732,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -771,18 +760,18 @@ void main() {
         );
         _showSession(session);
 
-        expect(service.danmakuStyle.opacity, 0.8);
+        expect(ExternalPlayerConsoleService.danmakuStyle.opacity, 0.8);
 
         final initialTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         for (final opacity in <double>[0.1, 0.2, 0.3, 0.4, 0.5]) {
-          service.danmakuStyle.opacity = opacity;
-          service.queueDanmakuRefresh();
+          ExternalPlayerConsoleService.danmakuStyle.opacity = opacity;
+          ExternalPlayerConsoleService.queueDanmakuRefresh();
         }
         await _waitUntil(
           () => reloadCommands.isNotEmpty,
         );
 
-        expect(service.danmakuStyle.opacity, 0.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.opacity, 0.5);
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(initialTimestamp),
@@ -808,7 +797,7 @@ void main() {
           ],
         ]);
 
-        final secondItem = service.displayDanmakuList[1].item;
+        final secondItem = ExternalPlayerConsoleService.displayDanmakuList[1].item;
         final keywordTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
@@ -834,43 +823,43 @@ void main() {
         await _waitUntil(() => reloadCommands.length == 2);
 
         final filteredAss = await assFile.readAsString();
-        expect(service.blockedItems, hasLength(1));
-        expect(service.blockedItems.single.value, 'SECOND');
-        expect(service.blockedItems.single.type, ItemType.keyword);
+        expect(ExternalPlayerConsoleService.blockedItems, hasLength(1));
+        expect(ExternalPlayerConsoleService.blockedItems.single.value, 'SECOND');
+        expect(ExternalPlayerConsoleService.blockedItems.single.type, ItemType.keyword);
         expect(
-          service.displayDanmakuList.map((item) => item.item.content),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
         );
         expect(
-          service.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
           [false, true],
         );
         expect(
-          identical(service.displayDanmakuList[1].item, secondItem),
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
           isTrue,
         );
         expect(filteredAss, contains('first regenerated comment'));
         expect(filteredAss, isNot(contains('second regenerated comment')));
 
         ExternalPlayerConsoleService.removeBlockedItem(
-          service.blockedItems.single,
+          ExternalPlayerConsoleService.blockedItems.single,
         );
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(addedKeywordTimestamp),
         );
         await _waitUntil(() => reloadCommands.length == 3);
-        expect(service.blockedItems, isEmpty);
+        expect(ExternalPlayerConsoleService.blockedItems, isEmpty);
         expect(
-          service.displayDanmakuList.map((item) => item.item.content),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
         );
         expect(
-          service.displayDanmakuList.map((item) => item.isBlocked),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
           [false, false],
         );
         expect(
-          identical(service.displayDanmakuList[1].item, secondItem),
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
           isTrue,
         );
         expect(
@@ -911,7 +900,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -939,30 +927,30 @@ void main() {
         );
         _showSession(session);
 
-        expect(service.danmakuStyle.danmakuFontSize, 30.0);
-        expect(service.danmakuStyle.danmakuOffset, 1.5);
-        expect(service.danmakuStyle.outlineWidth, 2.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize, 30.0);
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 1.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 2.5);
 
-        service.danmakuStyle.danmakuFontSize = 42.0;
-        service.queueDanmakuRefresh();
+        ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize = 42.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 1);
-        expect(service.danmakuStyle.danmakuFontSize, 42.0);
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize, 42.0);
         expect(
           await assFile.readAsString(),
           contains('Style: Danmaku,Arial,67.2,'),
         );
         expect(await assFile.readAsString(), contains('0:00:02.50'));
 
-        service.danmakuStyle.outlineWidth = 4.0;
-        service.queueDanmakuRefresh();
+        ExternalPlayerConsoleService.danmakuStyle.outlineWidth = 4.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 2);
-        expect(service.danmakuStyle.outlineWidth, 4.0);
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 4.0);
         expect(await assFile.readAsString(), contains('4.0,0.0'));
 
-        service.danmakuStyle.outlineWidth = 0.0;
-        service.queueDanmakuRefresh();
+        ExternalPlayerConsoleService.danmakuStyle.outlineWidth = 0.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 3);
-        expect(service.danmakuStyle.outlineWidth, 0.0);
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 0.0);
         expect(await assFile.readAsString(), contains('0.0,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
       });
@@ -996,7 +984,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -1010,14 +997,14 @@ void main() {
           duration: const Duration(minutes: 20),
         ));
         await _waitUntil(
-          () => service.session?.position != Duration.zero,
+          () => ExternalPlayerConsoleService.position != Duration.zero,
         );
 
         _showSession(_session(secondProcess));
 
-        expect(service.session?.processId, secondProcess.pid);
-        expect(service.session?.position, Duration.zero);
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.processId, secondProcess.pid);
+        expect(ExternalPlayerConsoleService.position, Duration.zero);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
       });
     },
     skip: !Platform.isLinux,

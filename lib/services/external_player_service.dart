@@ -343,7 +343,7 @@ class ExternalPlayerService {
     debugPrint('[ExtPlayer] 调用 launch: path="$playerPath", media="$mediaPath", extraArgs=$extraArgs');
 
     // 如有已存在的外部播放器会话, 则先关闭它, 避免新播放器启动失败
-    if (Platform.isLinux && ExternalPlayerConsoleService.instance.hasActiveSession) {
+    if (Platform.isLinux && ExternalPlayerConsoleService.hasActiveSession) {
       ExternalPlayerConsoleService.closePlayerAndConsole();
     }
 
