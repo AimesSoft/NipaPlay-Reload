@@ -9,7 +9,7 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 
 
-/// 管理非 Linux mpv 外部播放器进程的轻量会话.
+/// 管理未启用 mpv JSON IPC 的外部播放器进程的轻量会话.
 class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   OtherSession.attach({

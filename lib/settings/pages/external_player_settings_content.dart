@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -15,30 +16,34 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
 
   /// 开启外部播放器后自动切换到弹幕控制台的开关
   static final Consumer<SettingsProvider> _autoSwitchToDanmakuConsoleTile =
-  Consumer<SettingsProvider>(builder: (context, settingsProvider, child) {
-
+      Consumer<SettingsProvider>(builder: (context, settingsProvider, child) {
     // 文字定义
-    const String titleSimplified                = '自动切换到弹幕控制台';
-    const String titleTraditional               = '自動切換到彈幕控制台';
-    const String titleEnglish                   = 'Open Danmaku Console Automatically';
-    const String subtitleSimplified             = '开始外部播放后，主程序自动切换到弹幕控制台页面';
-    const String subtitleTraditional            = '開始外部播放後，主程式自動切換到彈幕控制台頁面';
-    const String subtitleEnglish                = 'Switch to the Danmaku Console after external playback starts.';
-    const String subtitleUnsupportedSimplified  = '弹幕控制台目前仅支持 Linux';
-    const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 Linux';
-    const String subtitleUnsupportedEnglish     = 'The Danmaku Console is currently available on Linux only.';
+    const String titleSimplified = '自动切换到弹幕控制台';
+    const String titleTraditional = '自動切換到彈幕控制台';
+    const String titleEnglish = 'Open Danmaku Console Automatically';
+    const String subtitleSimplified = '开始外部播放后，主程序自动切换到弹幕控制台页面';
+    const String subtitleTraditional = '開始外部播放後，主程式自動切換到彈幕控制台頁面';
+    const String subtitleEnglish =
+        'Switch to the Danmaku Console after external playback starts.';
+    const String subtitleUnsupportedSimplified = '弹幕控制台目前仅支持 Linux 和 macOS';
+    const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 Linux 和 macOS';
+    const String subtitleUnsupportedEnglish =
+        'The Danmaku Console is currently available on Linux and macOS only.';
 
     final consoleSupported = ExternalPlayerConsoleService.isSupportedPlatform;
     return AdaptiveSettingsTile<bool>.toggle(
-      title    : _text(context, titleSimplified, titleTraditional, titleEnglish),
-      subtitle : consoleSupported ? 
-        _text(context, subtitleSimplified, subtitleTraditional, subtitleEnglish) :
-        _text(context, subtitleUnsupportedSimplified, subtitleUnsupportedTraditional, subtitleUnsupportedEnglish),
-      icon     : Ionicons.chatbox_ellipses_outline,
+      title: _text(context, titleSimplified, titleTraditional, titleEnglish),
+      subtitle: consoleSupported
+          ? _text(
+              context, subtitleSimplified, subtitleTraditional, subtitleEnglish)
+          : _text(context, subtitleUnsupportedSimplified,
+              subtitleUnsupportedTraditional, subtitleUnsupportedEnglish),
+      icon: Ionicons.chatbox_ellipses_outline,
       phoneIcon: cupertino.CupertinoIcons.captions_bubble,
-      enabled  : consoleSupported,
-      value    : settingsProvider.externalPlayerAutoSwitchToDanmakuConsole,
-      onChanged: (value) => settingsProvider.setExternalPlayerAutoSwitchToDanmakuConsole(value),
+      enabled: consoleSupported,
+      value: settingsProvider.externalPlayerAutoSwitchToDanmakuConsole,
+      onChanged: (value) =>
+          settingsProvider.setExternalPlayerAutoSwitchToDanmakuConsole(value),
     );
   });
 
@@ -118,7 +123,33 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                 );
               },
             ),
-            _autoSwitchToDanmakuConsoleTile
+            _autoSwitchToDanmakuConsoleTile,
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '外部播放时缩小主窗口',
+                    '外部播放時縮小主視窗',
+                    'Resize Main Window During External Playback',
+                  ),
+                  subtitle: externalSupported
+                      ? _text(
+                          context,
+                          '播放期间将 NipaPlay 缩至当前屏幕一半宽度，播放结束后自动恢复',
+                          '播放期間將 NipaPlay 縮至目前螢幕一半寬度，播放結束後自動恢復',
+                          'Resize NipaPlay to half of the current screen width during playback, then restore it automatically.',
+                        )
+                      : context.l10n.desktopOnlySupported,
+                  icon: Ionicons.resize_outline,
+                  phoneIcon:
+                      cupertino.CupertinoIcons.rectangle_compress_vertical,
+                  enabled: externalSupported,
+                  value: settingsProvider.externalPlayerShrinkWindow,
+                  onChanged: settingsProvider.setExternalPlayerShrinkWindow,
+                );
+              },
+            ),
           ],
         ),
       ],
@@ -136,7 +167,9 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
 
     if (value) {
       if (settingsProvider.externalPlayerPath.trim().isEmpty) {
-        final picked = await FilePickerService().pickExternalPlayerExecutable();
+        final detected = await ExternalPlayerService.detectInstalledMpv();
+        final picked = detected ??
+            await FilePickerService().pickExternalPlayerExecutable();
         if (picked == null || picked.trim().isEmpty) {
           if (!context.mounted) return;
           AdaptiveSnackBar.show(
