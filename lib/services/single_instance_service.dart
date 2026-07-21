@@ -256,6 +256,24 @@ class SingleInstanceService {
   static String _generateToken() {
     return '$pid-${DateTime.now().microsecondsSinceEpoch}';
   }
+
+  /// 关闭单实例服务，释放 ServerSocket 和文件锁。
+  /// 必须在应用退出时调用，否则进程会因残留的监听 socket 而无法及时终止。
+  static Future<void> dispose() async {
+    try {
+      await _server?.close();
+    } catch (_) {}
+    _server = null;
+
+    try {
+      await _lockFile?.close();
+    } catch (_) {}
+    _lockFile = null;
+
+    _token = null;
+    _handler = null;
+    _pendingMessages.clear();
+  }
 }
 
 class _InstanceInfo {
