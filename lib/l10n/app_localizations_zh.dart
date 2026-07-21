@@ -126,7 +126,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuKeywordAdd => '添加';
 
   @override
-  String get externalPlayerConsoleDanmakuBlocked => '已被关键词屏蔽';
+  String get externalPlayerConsoleDanmakuBlocked => '已被屏蔽';
 
   @override
   String get externalPlayerConsoleDanmakuBlockModeKeyword => '关键词';
@@ -150,7 +150,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalPlayerConsoleDanmakuHide => '隐藏弹幕';
 
   @override
+  String get externalPlayerConsoleDanmakuOffsetTitle => '弹幕时间偏移';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetAdvance(String seconds) {
+    return '提前 $seconds 秒';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetDelay(String seconds) {
+    return '延后 $seconds 秒';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetReset => '恢复初始';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomLabel => '自定义偏移秒数';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomHint => '负数提前，正数延后';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetInvalid => '请输入有效的秒数';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetApply => '应用';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentAdvance(String seconds) {
+    return '当前弹幕提前出现 $seconds 秒';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentDelay(String seconds) {
+    return '当前弹幕延后出现 $seconds 秒';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCurrentNone => '当前弹幕偏移量为 0 秒';
+
+  @override
   String get danmakuOpacityTitle => '弹幕不透明度';
+
+  @override
+  String get danmakuFontSizeTitle => '弹幕字体大小';
 
   @override
   String get danmakuOpacitySubtitle => '调整弹幕文字不透明度，新打开的视频将应用此设置。';
@@ -2020,7 +2064,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleDanmakuKeywordAdd => '新增';
 
   @override
-  String get externalPlayerConsoleDanmakuBlocked => '已被關鍵詞封鎖';
+  String get externalPlayerConsoleDanmakuBlocked => '已被封鎖';
 
   @override
   String get externalPlayerConsoleDanmakuBlockModeKeyword => '關鍵詞';
@@ -2044,7 +2088,51 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get externalPlayerConsoleDanmakuHide => '隱藏彈幕';
 
   @override
+  String get externalPlayerConsoleDanmakuOffsetTitle => '彈幕時間偏移';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetAdvance(String seconds) {
+    return '提前 $seconds 秒';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetDelay(String seconds) {
+    return '延後 $seconds 秒';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetReset => '恢復初始';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomLabel => '自訂偏移秒數';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCustomHint => '負數提前，正數延後';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetInvalid => '請輸入有效的秒數';
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetApply => '套用';
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentAdvance(String seconds) {
+    return '目前彈幕提前出現 $seconds 秒';
+  }
+
+  @override
+  String externalPlayerConsoleDanmakuOffsetCurrentDelay(String seconds) {
+    return '目前彈幕延後出現 $seconds 秒';
+  }
+
+  @override
+  String get externalPlayerConsoleDanmakuOffsetCurrentNone => '目前彈幕偏移量為 0 秒';
+
+  @override
   String get danmakuOpacityTitle => '彈幕不透明度';
+
+  @override
+  String get danmakuFontSizeTitle => '彈幕字體大小';
 
   @override
   String get danmakuOpacitySubtitle => '調整彈幕文字不透明度，新開啟的影片將套用此設定。';

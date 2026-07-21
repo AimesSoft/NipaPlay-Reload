@@ -330,7 +330,7 @@ abstract class AppLocalizations {
   /// No description provided for @externalPlayerConsoleDanmakuBlocked.
   ///
   /// In zh, this message translates to:
-  /// **'已被关键词屏蔽'**
+  /// **'已被屏蔽'**
   String get externalPlayerConsoleDanmakuBlocked;
 
   /// No description provided for @externalPlayerConsoleDanmakuBlockModeKeyword.
@@ -375,11 +375,83 @@ abstract class AppLocalizations {
   /// **'隐藏弹幕'**
   String get externalPlayerConsoleDanmakuHide;
 
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕时间偏移'**
+  String get externalPlayerConsoleDanmakuOffsetTitle;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetAdvance.
+  ///
+  /// In zh, this message translates to:
+  /// **'提前 {seconds} 秒'**
+  String externalPlayerConsoleDanmakuOffsetAdvance(String seconds);
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetDelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'延后 {seconds} 秒'**
+  String externalPlayerConsoleDanmakuOffsetDelay(String seconds);
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复初始'**
+  String get externalPlayerConsoleDanmakuOffsetReset;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetCustomLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义偏移秒数'**
+  String get externalPlayerConsoleDanmakuOffsetCustomLabel;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetCustomHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'负数提前，正数延后'**
+  String get externalPlayerConsoleDanmakuOffsetCustomHint;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的秒数'**
+  String get externalPlayerConsoleDanmakuOffsetInvalid;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用'**
+  String get externalPlayerConsoleDanmakuOffsetApply;
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetCurrentAdvance.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前弹幕提前出现 {seconds} 秒'**
+  String externalPlayerConsoleDanmakuOffsetCurrentAdvance(String seconds);
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetCurrentDelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前弹幕延后出现 {seconds} 秒'**
+  String externalPlayerConsoleDanmakuOffsetCurrentDelay(String seconds);
+
+  /// No description provided for @externalPlayerConsoleDanmakuOffsetCurrentNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前弹幕偏移量为 0 秒'**
+  String get externalPlayerConsoleDanmakuOffsetCurrentNone;
+
   /// No description provided for @danmakuOpacityTitle.
   ///
   /// In zh, this message translates to:
   /// **'弹幕不透明度'**
   String get danmakuOpacityTitle;
+
+  /// No description provided for @danmakuFontSizeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹幕字体大小'**
+  String get danmakuFontSizeTitle;
 
   /// No description provided for @danmakuOpacitySubtitle.
   ///

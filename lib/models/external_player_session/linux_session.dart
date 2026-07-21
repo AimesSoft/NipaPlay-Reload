@@ -9,25 +9,28 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay/utils/danmaku/assets.dart';
 
 
 /// 掌管外部播放器会话的神
 ///
 /// 管理一个 Linux mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
-/// 本类不保存番剧, 剧集或媒体展示信息; 这些信息由控制台服务管理.
+/// 本类保存当前媒体路径; 番剧和剧集展示信息由控制台服务管理.
 class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   /// 关联一个已经存在的外部播放器进程.
   LinuxSession.attach(
     {
       required this.playerPath,
+      required this.mediaPath,
       required this.processId,
       required this.ipcPath,
       required this.duration,
 
       this.position = Duration.zero,
       this.isPaused = false,
+      this.danmakuAssets,
       bool monitorProcess = true,
     }
   ) { if (monitorProcess) _startLifecycleMonitoring(); }
@@ -37,6 +40,7 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
     required String       playerPath,
     required String       mediaPath,
     required List<String> extraArgs,
+    DanmakuLaunchAssets? danmakuAssets,
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
   }) async {
@@ -52,10 +56,12 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
 
     return LinuxSession.attach(
       playerPath : playerPath,
+      mediaPath  : mediaPath,
       processId  : process.pid,
       ipcPath    : ipcPath,
       duration   : duration,
       position   : position,
+      danmakuAssets: danmakuAssets,
     );
   }
 
@@ -65,9 +71,12 @@ class LinuxSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   final String   playerPath;     // 外部播放器的路径
   @override
+  final String   mediaPath;      // 当前播放的媒体路径
+  @override
   final int      processId;      // 外部播放器进程 ID
   @override
   final String?  ipcPath;        // 外部播放器的 IPC 通道路径
+  DanmakuLaunchAssets? danmakuAssets; // 启动时加载的弹幕文件和导出设置
 
   // 播放相关
   @override

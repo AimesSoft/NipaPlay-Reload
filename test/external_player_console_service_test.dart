@@ -7,21 +7,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/linux_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
-import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 
-final Expando<DanmakuLaunchAssets> _danmakuAssets =
-    Expando<DanmakuLaunchAssets>();
-
 LinuxSession _session(
   Process process, {
+  String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
   String? danmakuAssPath,
   double danmakuOpacity = 1.0,
@@ -34,6 +33,7 @@ LinuxSession _session(
 }) {
   return _sessionFromProcessId(
     process.pid,
+    mediaPath: mediaPath,
     ipcPath: ipcPath,
     danmakuAssPath: danmakuAssPath,
     danmakuOpacity: danmakuOpacity,
@@ -49,6 +49,7 @@ LinuxSession _session(
 
 LinuxSession _sessionFromProcessId(
   int processId, {
+  String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
   String? danmakuAssPath,
   double danmakuOpacity = 1.0,
@@ -62,6 +63,7 @@ LinuxSession _sessionFromProcessId(
 }) {
   final session = LinuxSession.attach(
     playerPath: '/bin/mpv',
+    mediaPath: mediaPath,
     processId: processId,
     ipcPath: ipcPath,
     duration: duration,
@@ -71,7 +73,7 @@ LinuxSession _sessionFromProcessId(
   );
   if (danmakuAssSettings != null || danmakuList.isNotEmpty) {
     final assPath = danmakuAssPath ?? '/tmp/nipaplay_test_$processId.ass';
-    _danmakuAssets[session] = DanmakuLaunchAssets(
+    session.danmakuAssets = DanmakuLaunchAssets(
       assPath: assPath,
       luaPath: '$assPath.lua',
       opacity: danmakuOpacity,
@@ -86,13 +88,31 @@ LinuxSession _sessionFromProcessId(
 
 void _showSession(
   LinuxSession session, {
-  PlayableItem? playableItem,
+  EpisodeMetaData? episodeMetaData,
 }) {
-  ExternalPlayerConsoleService.showSession(
-    session,
-    playableItem: playableItem,
-    danmakuAssets: _danmakuAssets[session],
+  final assets = session.danmakuAssets;
+  final consoleState = ConsoleState(
+    session: session,
+    episodeMetaData: episodeMetaData,
+    danmakuList: assets?.danmakuList,
+    danmakuStyle: assets == null
+        ? null
+        : DanmakuStyle(
+            opacity: assets.opacity,
+            outlineWidth: assets.outlineWidth,
+            danmakuFontSize: assets.assSettings.fontSize,
+            danmakuOffset: assets.assSettings.timeOffsetSeconds,
+            danmakuAllowStacking: assets.allowStacking,
+          ),
   );
+  ExternalPlayerConsoleService.setState(consoleState);
+}
+
+List<int> _activeDisplayIndices() {
+  return ExternalPlayerConsoleService.displayDanmakuList
+      .where((item) => item.isActive)
+      .map((item) => item.index)
+      .toList(growable: false);
 }
 
 Future<Process> _startPlayer({String duration = '30'}) {
@@ -133,9 +153,9 @@ void main() {
 
     expect(session, isA<OtherSession>());
     expect(session.type, ExternalPlayerType.generic);
+    expect(session.mediaPath, '30');
     expect(session.ipcPath, isNull);
-    ExternalPlayerConsoleService.showSession(session);
-    expect(ExternalPlayerConsoleService.instance.hasActiveSession, isFalse);
+    expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
   });
 
   group('LinuxSession progress', () {
@@ -194,7 +214,6 @@ void main() {
       test('only keeps the latest external player session', () async {
         final firstProcess = await _startPlayer();
         final secondProcess = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(firstProcess);
@@ -211,40 +230,36 @@ void main() {
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(firstTimestamp),
         );
-        expect(service.session?.processId, secondProcess.pid);
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.processId, secondProcess.pid);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
         expect(await firstProcess.exitCode, isNotNull);
       });
 
-      test('keeps playable metadata in the console service', () async {
+      test('keeps media path in the session and playable metadata in the console service', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
         });
-        final playableItem = PlayableItem(
-          videoPath: '/video/test.mkv',
-          title: '测试番剧',
-          subtitle: '第 1 话',
-          animeId: 100,
+        const episodeMetaData = EpisodeMetaData(
+          animeTitle: '测试番剧',
+          episodeTitle: '第 1 话',
           episodeId: 200,
         );
 
         _showSession(
-          _session(process),
-          playableItem: playableItem,
+          _session(process, mediaPath: '/video/test.mkv'),
+          episodeMetaData: episodeMetaData,
         );
 
-        expect(service.mediaPath, '/video/test.mkv');
-        expect(service.animeTitle, '测试番剧');
-        expect(service.episodeTitle, '第 1 话');
-        expect(service.episodeId, 200);
+        expect(ExternalPlayerConsoleService.mediaPath, '/video/test.mkv');
+        expect(ExternalPlayerConsoleService.animeTitle, '测试番剧');
+        expect(ExternalPlayerConsoleService.episodeTitle, '第 1 话');
+        expect(ExternalPlayerConsoleService.episodeId, 200);
       });
 
       test('calculates active danmaku in the console service', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -273,22 +288,34 @@ void main() {
         );
         _showSession(session);
 
-        expect(service.activeDanmakuIndices, [0, 1]);
+        expect(_activeDisplayIndices(), [0, 1]);
+        final initialDisplayList = ExternalPlayerConsoleService.displayDanmakuList;
+        ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 1;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
+        expect(ExternalPlayerConsoleService.displayDanmakuList, isNot(same(initialDisplayList)));
+        expect(
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.startTime),
+          [const Duration(seconds: 2), const Duration(seconds: 4)],
+        );
+        ExternalPlayerConsoleService.danmakuStyle.danmakuOffset = 0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         session.position = const Duration(seconds: 6);
-        expect(service.activeDanmakuIndices, [1]);
+        session.notifyListeners();
+        expect(_activeDisplayIndices(), [1]);
         session.position = const Duration(seconds: 8);
-        expect(service.activeDanmakuIndices, isEmpty);
+        session.notifyListeners();
+        expect(_activeDisplayIndices(), isEmpty);
       });
 
       test('blocks danmaku by keyword, regex, and sender ID', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
         });
         _showSession(_session(
           process,
+          position: const Duration(seconds: 3),
           danmakuList: [
             DanmakuItem(
               content: 'Alpha comment',
@@ -311,51 +338,52 @@ void main() {
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'alpha',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isTrue,
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             r'\d{3}$',
-            ItemType.regex,
+            BlockedItemType.regex,
           ),
           isTrue,
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'sender-three',
-            ItemType.userId,
+            BlockedItemType.userId,
           ),
           isTrue,
         );
         expect(
-          service.danmakuList.map((item) => item.visible),
-          [false, false, false],
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          [true, true, true],
         );
+        expect(_activeDisplayIndices(), isEmpty);
         expect(
-          service.blockedItems.map((item) => item.type),
-          [ItemType.keyword, ItemType.regex, ItemType.userId],
+          ExternalPlayerConsoleService.blockedItems.map((item) => item.type),
+          [BlockedItemType.keyword, BlockedItemType.regex, BlockedItemType.userId],
         );
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             '[invalid',
-            ItemType.regex,
+            BlockedItemType.regex,
           ),
           isFalse,
         );
 
-        final regexItem = service.blockedItems[1];
+        final regexItem = ExternalPlayerConsoleService.blockedItems[1];
         ExternalPlayerConsoleService.removeBlockedItem(regexItem);
         expect(
-          service.danmakuList.map((item) => item.visible),
-          [false, true, false],
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          [true, false, true],
         );
+        expect(_activeDisplayIndices(), [1]);
       });
 
       test('close hides the session and terminates the player', () async {
         final process = await _startPlayer();
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
@@ -365,23 +393,22 @@ void main() {
         ExternalPlayerConsoleService.closePlayerAndConsole();
         ExternalPlayerConsoleService.closePlayerAndConsole();
 
-        expect(service.session, isNull);
+        expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
         expect(await process.exitCode, isNotNull);
       });
 
       test('automatically clears the session after the player exits', () async {
         final process = await _startPlayer(duration: '0.05');
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await _stopProcess(process);
         });
         _showSession(_session(process));
 
-        await _waitUntil(() => service.session == null);
+        await _waitUntil(() => !ExternalPlayerConsoleService.hasActiveSession);
       });
 
-      testWidgets('toggles one danmaku visibility from the list', (tester) async {
+      testWidgets('does not expose per-item visibility controls', (tester) async {
         final process = await tester.runAsync(_startPlayer);
         if (process == null) fail('Failed to start the test player process');
         try {
@@ -397,14 +424,18 @@ void main() {
                 'cid': 'comment-id',
                 'source': 'dandanplay',
               }),
+              DanmakuItem(
+                time: const Duration(seconds: 2),
+                content: 'unblocked comment',
+                danmakuId: 'unblocked-id',
+                senderId: 'other-sender',
+              ),
             ],
           ));
-          final service = ExternalPlayerConsoleService.instance;
-          final item = service.danmakuList.single;
           expect(
             ExternalPlayerConsoleService.addBlockedItem(
-              'another-sender',
-              ItemType.userId,
+              'sender-hash',
+              BlockedItemType.userId,
             ),
             isTrue,
           );
@@ -423,55 +454,73 @@ void main() {
           expect(find.text('关键词'), findsOneWidget);
           expect(find.text('正则表达式'), findsOneWidget);
           expect(find.text('发送者 ID'), findsWidgets);
-          expect(service.blockedItems.single.type, ItemType.userId);
-          expect(service.blockedItems.single.value, 'another-sender');
+          expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.userId);
+          expect(ExternalPlayerConsoleService.blockedItems.single.value, 'sender-hash');
           expect(
             find.byKey(const ValueKey(
-              'external-player-danmaku-block-item-userId-another-sender',
+              'external-player-danmaku-block-item-userId-sender-hash',
             )),
             findsOneWidget,
           );
 
-          expect(find.textContaining('sender-hash'), findsOneWidget);
+          expect(find.textContaining('sender-hash'), findsWidgets);
           expect(find.textContaining('dandanplay'), findsNothing);
-          final visibilityButton = find.byKey(const ValueKey(
-            'external-player-danmaku-visibility-0-comment-id',
-          ));
-          expect(visibilityButton, findsOneWidget);
           expect(
-            find.descendant(
-              of: visibilityButton,
-              matching: find.byIcon(Icons.visibility_rounded),
-            ),
+            find.byKey(const ValueKey(
+              'external-player-danmaku-visibility-0-comment-id',
+            )),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey(
+              'external-player-danmaku-blocked-0-comment-id',
+            )),
             findsOneWidget,
           );
-
-          final initialTimestamp =
-              ExternalPlayerConsoleService.stateTimestamp;
-          await tester.ensureVisible(visibilityButton);
-          await tester.pump();
-          await tester.tap(visibilityButton);
-          await tester.pump();
-          expect(item.visible, isFalse);
           expect(
-            ExternalPlayerConsoleService.stateTimestamp,
-            greaterThan(initialTimestamp),
+            find.byKey(const ValueKey(
+              'external-player-danmaku-blocked-1-unblocked-id',
+            )),
+            findsNothing,
           );
+          expect(find.text('弹幕字体大小'), findsOneWidget);
           expect(
-            find.descendant(
-              of: visibilityButton,
-              matching: find.byIcon(Icons.visibility_off_rounded),
-            ),
+            find.byKey(const Key('external-player-danmaku-font-size')),
             findsOneWidget,
           );
-
-          await tester.ensureVisible(visibilityButton);
-          await tester.pump();
-          await tester.tap(visibilityButton);
-          await tester.pump();
-          expect(item.visible, isTrue);
           expect(find.text('弹幕描边粗细'), findsOneWidget);
           expect(find.text('启用弹幕描边'), findsNothing);
+          expect(find.text('弹幕时间偏移'), findsOneWidget);
+          expect(find.text('当前弹幕偏移量为 0 秒'), findsOneWidget);
+          final advanceOffset = find.byKey(
+            const Key('external-player-danmaku-offset-advance'),
+          );
+          await tester.ensureVisible(advanceOffset);
+          await tester.tap(advanceOffset);
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, -0.5);
+          expect(find.text('当前弹幕提前出现 0.5 秒'), findsOneWidget);
+
+          final offsetInput = find.byKey(
+            const Key('external-player-danmaku-offset-input'),
+          );
+          await tester.ensureVisible(offsetInput);
+          await tester.enterText(offsetInput, '1.25');
+          await tester.tap(find.byKey(
+            const Key('external-player-danmaku-offset-apply'),
+          ));
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 1.25);
+          expect(find.text('当前弹幕延后出现 1.25 秒'), findsOneWidget);
+
+          final resetOffset = find.byKey(
+            const Key('external-player-danmaku-offset-reset'),
+          );
+          await tester.ensureVisible(resetOffset);
+          await tester.tap(resetOffset);
+          await tester.pump();
+          expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 0.0);
+          expect(find.text('当前弹幕偏移量为 0 秒'), findsOneWidget);
           expect(
             find.byKey(const Key('external-player-timestamp-input')),
             findsOneWidget,
@@ -515,7 +564,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -526,28 +574,28 @@ void main() {
           process,
           ipcPath: socketPath,
         ));
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
 
         await _waitUntil(
-          () => service.session?.duration == const Duration(minutes: 25),
+          () => ExternalPlayerConsoleService.duration == const Duration(minutes: 25),
         );
-        expect(service.session?.position, Duration.zero);
+        expect(ExternalPlayerConsoleService.position, Duration.zero);
 
         positionSeconds = 75.5;
         await _waitUntil(
-          () => service.session?.position != Duration.zero,
+          () => ExternalPlayerConsoleService.position != Duration.zero,
         );
 
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(seconds: 75, milliseconds: 500),
         );
         expect(
-          service.session?.duration,
+          ExternalPlayerConsoleService.duration,
           const Duration(minutes: 25),
         );
-        expect(service.session?.fraction, closeTo(0.0503, 0.0001));
-        expect(service.session?.isPaused, isFalse);
+        expect(ExternalPlayerConsoleService.fraction, closeTo(0.0503, 0.0001));
+        expect(ExternalPlayerConsoleService.isPaused, isFalse);
       });
 
       test('toggles mpv pause state through JSON IPC', () async {
@@ -578,7 +626,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -591,15 +638,15 @@ void main() {
 
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 1 && service.session?.isPaused == true,
+          () => commands.length == 1 && ExternalPlayerConsoleService.isPaused == true,
         );
         ExternalPlayerConsoleService.togglePause();
         await _waitUntil(
-          () => commands.length == 2 && service.session?.isPaused == false,
+          () => commands.length == 2 && ExternalPlayerConsoleService.isPaused == false,
         );
 
         expect(commands, <bool>[true, false]);
-        expect(service.session?.isPaused, isFalse);
+        expect(ExternalPlayerConsoleService.isPaused, isFalse);
       });
 
       test('seeks mpv through JSON IPC', () async {
@@ -630,7 +677,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -661,13 +707,13 @@ void main() {
         await _waitUntil(() => commands.isNotEmpty);
 
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(minutes: 12, seconds: 30),
         );
         expect(commands, <List<dynamic>>[
           <dynamic>['seek', 750.0, 'absolute+exact'],
         ]);
-        expect(service.activeDanmakuIndices, [0]);
+        expect(_activeDisplayIndices(), [0]);
 
         expect(
           ExternalPlayerConsoleService.seekToTimestamp('12:34.567'),
@@ -675,7 +721,7 @@ void main() {
         );
         await _waitUntil(() => commands.length == 2);
         expect(
-          service.session?.position,
+          ExternalPlayerConsoleService.position,
           const Duration(minutes: 12, seconds: 34, milliseconds: 567),
         );
         expect(
@@ -720,7 +766,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -749,25 +794,22 @@ void main() {
         );
         _showSession(session);
 
-        expect(service.danmakuOpacity, 0.8);
-        expect(service.supportsDanmakuOpacity, isTrue);
+        expect(ExternalPlayerConsoleService.danmakuStyle.opacity, 0.8);
 
         final initialTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         for (final opacity in <double>[0.1, 0.2, 0.3, 0.4, 0.5]) {
-          ExternalPlayerConsoleService.setDanmakuOpacity(opacity);
+          ExternalPlayerConsoleService.danmakuStyle.opacity = opacity;
+          ExternalPlayerConsoleService.queueDanmakuRefresh();
         }
         await _waitUntil(
           () => reloadCommands.isNotEmpty,
         );
 
-        expect(service.danmakuOpacity, 0.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.opacity, 0.5);
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(initialTimestamp),
         );
-        final styleTimestamp = ExternalPlayerConsoleService.stateTimestamp;
-        ExternalPlayerConsoleService.setDanmakuOpacity(0.5);
-        expect(ExternalPlayerConsoleService.stateTimestamp, styleTimestamp);
         final updatedAss = await assFile.readAsString();
         final opacityTags = RegExp(r'\\1a&H[0-9A-Fa-f]{2}&')
             .allMatches(updatedAss)
@@ -789,12 +831,12 @@ void main() {
           ],
         ]);
 
-        final secondItem = service.danmakuList[1];
+        final secondItem = ExternalPlayerConsoleService.displayDanmakuList[1].item;
         final keywordTimestamp = ExternalPlayerConsoleService.stateTimestamp;
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'SECOND',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isTrue,
         );
@@ -804,7 +846,7 @@ void main() {
         expect(
           ExternalPlayerConsoleService.addBlockedItem(
             'second',
-            ItemType.keyword,
+            BlockedItemType.keyword,
           ),
           isFalse,
         );
@@ -815,42 +857,52 @@ void main() {
         await _waitUntil(() => reloadCommands.length == 2);
 
         final filteredAss = await assFile.readAsString();
-        expect(service.blockedItems, hasLength(1));
-        expect(service.blockedItems.single.value, 'SECOND');
-        expect(service.blockedItems.single.type, ItemType.keyword);
+        expect(ExternalPlayerConsoleService.blockedItems, hasLength(1));
+        expect(ExternalPlayerConsoleService.blockedItems.single.value, 'SECOND');
+        expect(ExternalPlayerConsoleService.blockedItems.single.type, BlockedItemType.keyword);
         expect(
-          service.danmakuList.map((item) => item.content),
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
           ['first regenerated comment', 'second regenerated comment'],
         );
         expect(
-          service.danmakuList.map((item) => item.visible),
-          [true, false],
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          [false, true],
         );
-        expect(identical(service.danmakuList[1], secondItem), isTrue);
+        expect(
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
+          isTrue,
+        );
         expect(filteredAss, contains('first regenerated comment'));
         expect(filteredAss, isNot(contains('second regenerated comment')));
 
         ExternalPlayerConsoleService.removeBlockedItem(
-          service.blockedItems.single,
+          ExternalPlayerConsoleService.blockedItems.single,
         );
         expect(
           ExternalPlayerConsoleService.stateTimestamp,
           greaterThan(addedKeywordTimestamp),
         );
         await _waitUntil(() => reloadCommands.length == 3);
-        expect(service.blockedItems, isEmpty);
+        expect(ExternalPlayerConsoleService.blockedItems, isEmpty);
         expect(
-          service.danmakuList.map((item) => item.visible),
-          [true, true],
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.item.content),
+          ['first regenerated comment', 'second regenerated comment'],
         );
-        expect(identical(service.danmakuList[1], secondItem), isTrue);
+        expect(
+          ExternalPlayerConsoleService.displayDanmakuList.map((item) => item.isBlocked),
+          [false, false],
+        );
+        expect(
+          identical(ExternalPlayerConsoleService.displayDanmakuList[1].item, secondItem),
+          isTrue,
+        );
         expect(
           await assFile.readAsString(),
           contains('second regenerated comment'),
         );
       });
 
-      test('adjusts danmaku outline width and disables it at zero', () async {
+      test('adjusts danmaku font size and outline width', () async {
         final process = await _startPlayer();
         final tempDir =
             await Directory.systemTemp.createTemp('nipaplay_ipc_test_');
@@ -882,7 +934,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -905,22 +956,36 @@ void main() {
             fontFamily: 'Arial',
             outlineStyle: AssOutlineStyle.stroke,
             outlineWidth: 2.5,
+            timeOffsetSeconds: 1.5,
           ),
         );
         _showSession(session);
 
-        expect(service.supportsDanmakuOutline, isTrue);
-        expect(service.danmakuOutlineWidth, 2.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize, 30.0);
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuOffset, 1.5);
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 2.5);
 
-        ExternalPlayerConsoleService.setDanmakuOutlineWidth(4.0);
+        ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize = 42.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 1);
-        expect(service.danmakuOutlineWidth, 4.0);
-        expect(await assFile.readAsString(), contains('$stylePrefix' '4.0,0.0'));
+        expect(ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize, 42.0);
+        expect(
+          await assFile.readAsString(),
+          contains('Style: Danmaku,Arial,67.2,'),
+        );
+        expect(await assFile.readAsString(), contains('0:00:02.50'));
 
-        ExternalPlayerConsoleService.setDanmakuOutlineWidth(0.0);
+        ExternalPlayerConsoleService.danmakuStyle.outlineWidth = 4.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 2);
-        expect(service.danmakuOutlineWidth, 0.0);
-        expect(await assFile.readAsString(), contains('$stylePrefix' '0.0,0.0'));
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 4.0);
+        expect(await assFile.readAsString(), contains('4.0,0.0'));
+
+        ExternalPlayerConsoleService.danmakuStyle.outlineWidth = 0.0;
+        ExternalPlayerConsoleService.queueDanmakuRefresh();
+        await _waitUntil(() => reloadCommands.length == 3);
+        expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 0.0);
+        expect(await assFile.readAsString(), contains('0.0,0.0'));
         expect(File('${assFile.path}.nipaplay.tmp').existsSync(), isFalse);
       });
 
@@ -953,7 +1018,6 @@ void main() {
             }));
           });
         });
-        final service = ExternalPlayerConsoleService.instance;
         addTearDown(() async {
           ExternalPlayerConsoleService.closePlayerAndConsole();
           await server.close();
@@ -967,14 +1031,14 @@ void main() {
           duration: const Duration(minutes: 20),
         ));
         await _waitUntil(
-          () => service.session?.position != Duration.zero,
+          () => ExternalPlayerConsoleService.position != Duration.zero,
         );
 
         _showSession(_session(secondProcess));
 
-        expect(service.session?.processId, secondProcess.pid);
-        expect(service.session?.position, Duration.zero);
-        expect(service.session?.duration, Duration.zero);
+        expect(ExternalPlayerConsoleService.processId, secondProcess.pid);
+        expect(ExternalPlayerConsoleService.position, Duration.zero);
+        expect(ExternalPlayerConsoleService.duration, Duration.zero);
       });
     },
     skip: !Platform.isLinux,

@@ -2,6 +2,7 @@
 // 外部播放器启动会话的公共接口
 
 import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:flutter/foundation.dart';
 
 
 /// 外部播放器启动后返回给调用方的公共会话接口
@@ -10,6 +11,7 @@ abstract interface class ExternalPlayerLaunchSession {
   ExternalPlayerType get type;
 
   String    get playerPath; // 外部播放器的可执行文件路径
+  String    get mediaPath;  // 当前播放的媒体路径
   int       get processId;  // 外部播放器进程的 PID
   String?   get ipcPath;    // 外部播放器的 IPC 通信路径
   Duration  get duration;   // 外部播放器的总时长
@@ -27,5 +29,7 @@ abstract interface class ExternalPlayerLaunchSession {
   void seekToFraction(double fraction);
   bool seekToPosition(Duration target);
   Future<bool> refreshDanmaku(String assPath, String luaPath);
+  void addListener(VoidCallback listener);
+  void removeListener(VoidCallback listener);
   void dispose();
 }

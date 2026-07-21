@@ -31,7 +31,6 @@ class DanmakuItem {
     this.fontSize,
     this.pool,
     this.weight,
-    this.visible = true,
     Map<String, dynamic> extra = const {},
   }) :
     colorRgb = colorRgb & 0xFFFFFF,
@@ -55,8 +54,6 @@ class DanmakuItem {
   final  double?      fontSize;   // 数据源指定的原始字号
   final  int?         pool;       // 数据源中的弹幕池编号
   final  int?         weight;     // 数据源中的弹幕权重
-
-  bool                visible;    // 是否参与客户端渲染
 
   /// 尚未建模的插件或数据源扩展字段
   final Map<String, dynamic> extra;
@@ -142,7 +139,6 @@ class DanmakuItem {
       ),
       pool: _parseInt(raw['pool']),
       weight: _parseInt(raw['weight']),
-      visible: raw['visible'] == null ? true : _parseBool(raw['visible']),
       extra: extra,
     );
   }
@@ -165,7 +161,6 @@ class DanmakuItem {
       if (fontSize != null) 'fontSize': fontSize,
       if (pool != null) 'pool': pool,
       if (weight != null) 'weight': weight,
-      'visible': visible,
     };
   }
 
@@ -183,7 +178,6 @@ class DanmakuItem {
     Object? fontSize = _notProvided,
     Object? pool = _notProvided,
     Object? weight = _notProvided,
-    bool? visible,
     Map<String, dynamic>? extra,
   }) {
     return DanmakuItem(
@@ -211,7 +205,6 @@ class DanmakuItem {
       weight: identical(weight, _notProvided)
           ? this.weight
           : weight as int?,
-      visible: visible ?? this.visible,
       extra: extra ?? this.extra,
     );
   }
@@ -334,4 +327,26 @@ class DanmakuItem {
     }
     return DateTime.tryParse(value?.toString() ?? '');
   }
+}
+
+/// 用于显示的弹幕数据项,
+/// 定义一个在 UI 中渲染的弹幕实例, 包含弹幕元数据和渲染期状态.
+class DisplayDanmakuItem {
+
+  final int         index;     // 弹幕在列表中的索引
+  final DanmakuItem item;      // 弹幕元数据引用
+
+  final bool        isActive;  // 弹幕是否在当前播放位置显示
+  final Duration    startTime; // 弹幕实际显示的起始时间 (考虑了时间偏移)
+  final Duration    duration;  // 弹幕显示持续时间
+  final bool        isBlocked; // 弹幕是否被屏蔽
+
+  const DisplayDanmakuItem({
+    required this.item,
+    required this.index,
+    required this.startTime,
+    required this.duration,
+    required this.isBlocked,
+    required this.isActive,
+  });
 }
