@@ -141,11 +141,13 @@ Source GitHub release notes:
 
 def shorten_prompt(language: str, previous: str, current_count: int, max_characters: int) -> str:
     language_instruction = "继续使用简体中文。" if language == "zh" else "Continue in natural US English."
+    target_characters = min(max_characters, max(1, current_count // 2))
     return f"""
 The following App Store release notes are {current_count} characters long and exceed the {max_characters}-character limit.
 {language_instruction}
-Rewrite and shorten them to no more than {max_characters} characters; aim for no more than 3600.
-Preserve the most important user-visible features and fixes.
+Rewrite them as substantially shorter iOS “What's New” copy. Cut the current length by about half and aim for no more than {target_characters} characters; never exceed {max_characters} characters.
+Use your editorial judgment to decide what iOS users need to know. Merge related items, summarize verbose details, and omit lower-priority information.
+Preserve only the most important user-visible features, improvements, and fixes.
 Return only plain text, with no Markdown headings, links, URLs, code fences, emoji, contributor names, or internal maintenance details.
 
 Text to shorten:
