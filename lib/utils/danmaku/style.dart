@@ -16,11 +16,12 @@ enum DanmakuShadowStyle {
   strong, // 强烈阴影
 }
 
-/// 将描边宽度统一为播放器提供的三档设置：
-/// 0 = 无描边、1 = 细边、2 = 粗边。
+/// 将描边宽度统一为播放器提供的三档渲染 profile：
+/// 0 = 无描边、1 = 当前细边、2 = 旧版粗边。
 ///
 /// 旧版本曾允许保存 0–4 的连续值，因此这里也负责兼容迁移：任意正数
-/// 至少保留为细边，1.5 及以上归入粗边。
+/// 至少保留为细边，1.5 及以上归入粗边。这里的 2 只是档位标识，
+/// Next2/DFM+ 不会再把它当成 2 倍描边宽度直接传给 MSDF shader。
 double normalizeDanmakuOutlineWidthLevel(double? value) {
   if (value == null || !value.isFinite) {
     return 1.0;

@@ -466,7 +466,8 @@ impl Next2Renderer {
         // Vec plus every token's String on every frame.
         let frame_items = std::mem::take(&mut self.frame_items);
         for item in &frame_items {
-            let outline_px = resolve_outline_px(item.font_size, item.outline_width);
+            let outline_px =
+                super::resolve_danmaku_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
             let outline_color = stroke_color(fill_color);
@@ -774,17 +775,6 @@ fn to_ndc(x: f32, y: f32, width: f32, height: f32) -> [f32; 2] {
     let nx = (x / width) * 2.0 - 1.0;
     let ny = 1.0 - (y / height) * 2.0;
     [nx, ny]
-}
-
-fn resolve_outline_px(font_size: f32, width_multiplier: f32) -> f32 {
-    if !width_multiplier.is_finite() {
-        return 0.0;
-    }
-    let width_multiplier = width_multiplier.clamp(0.0, 4.0);
-    if width_multiplier <= 0.0 {
-        return 0.0;
-    }
-    (font_size * 0.06).clamp(1.0, 2.6) * width_multiplier
 }
 
 #[derive(Copy, Clone)]
