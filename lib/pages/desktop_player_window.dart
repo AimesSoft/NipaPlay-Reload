@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
@@ -47,74 +43,10 @@ class DesktopPlayerWindow extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
-      home: Builder(
-        builder: (context) {
-          final controller = DesktopMultiWindow.controllerOf(context);
-          return ColoredBox(
-            color: Colors.black,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PlayVideoPage(
-                  key: DesktopPlayerWindowService.instance.playerPageKey,
-                ),
-                // Keep native title chrome out of the player while retaining a
-                // generous draggable area between its left and right actions.
-                Positioned(
-                  top: 0,
-                  left: 72,
-                  right: 72,
-                  height: 38,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.move,
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (_) {
-                        unawaited(controller.startDragging());
-                      },
-                      onPointerMove: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.updateDragging());
-                        }
-                      },
-                      onPointerUp: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.endDragging());
-                        }
-                      },
-                      onPointerCancel: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.endDragging());
-                        }
-                      },
-                      child: const Center(child: _WindowDragHandle()),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _WindowDragHandle extends StatelessWidget {
-  const _WindowDragHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: 44,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(999),
-          boxShadow: const [
-            BoxShadow(color: Colors.black54, blurRadius: 4),
-          ],
+      home: ColoredBox(
+        color: Colors.black,
+        child: PlayVideoPage(
+          key: DesktopPlayerWindowService.instance.playerPageKey,
         ),
       ),
     );
