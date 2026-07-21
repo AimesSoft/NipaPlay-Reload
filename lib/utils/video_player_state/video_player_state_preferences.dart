@@ -1415,10 +1415,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   double _sanitizeNext2DanmakuOutlineWidth(double? value) {
-    if (value == null || !value.isFinite) {
-      return 1.0;
-    }
-    return value <= 0.0 ? 0.0 : 1.0;
+    return normalizeDanmakuOutlineWidthLevel(value);
   }
 
   bool _isSupportedDanmakuFontExtension(String path) {
@@ -1616,8 +1613,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   /// 设置弹幕描边样式和宽度
-  Future<void> _setDanmakuOutlineConfiguration(DanmakuOutlineStyle style, double outlineWidth) async {
-
+  Future<void> _setDanmakuOutlineConfiguration(
+    DanmakuOutlineStyle style,
+    double outlineWidth,
+  ) async {
     final sanitizedWidth = _sanitizeNext2DanmakuOutlineWidth(outlineWidth);
     if (_danmakuOutlineStyle == style &&
         (_next2DanmakuOutlineWidth - sanitizedWidth).abs() < 0.0001) {
@@ -1649,7 +1648,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setDanmakuOutlineStyle(DanmakuOutlineStyle style) async {
     await _setDanmakuOutlineConfiguration(
       style,
-      style == DanmakuOutlineStyle.none ? 0.0 : 1.0,
+      style == DanmakuOutlineStyle.none
+          ? 0.0
+          : (_next2DanmakuOutlineWidth > 0.0 ? _next2DanmakuOutlineWidth : 1.0),
     );
   }
 

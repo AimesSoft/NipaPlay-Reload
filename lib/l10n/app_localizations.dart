@@ -468,7 +468,7 @@ abstract class AppLocalizations {
   /// No description provided for @danmakuOutlineEnabledSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'控制是否显示弹幕文字描边，新打开的视频将应用此设置。'**
+  /// **'0 为无描边，1 为细边，2 为原来的粗边；新打开的视频将应用此设置。'**
   String get danmakuOutlineEnabledSubtitle;
 
   /// No description provided for @danmakuOutlineWidthTitle.

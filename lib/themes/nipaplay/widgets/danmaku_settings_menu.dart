@@ -347,6 +347,17 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     }
   }
 
+  String _outlineWidthLevelLabel(double value) {
+    switch (normalizeDanmakuOutlineWidthLevel(value).round()) {
+      case 0:
+        return '0 · 无描边';
+      case 2:
+        return '2 · 粗边（原版）';
+      default:
+        return '1 · 细边';
+    }
+  }
+
   double _snapDanmakuDisplayArea(double value) {
     double best = _danmakuDisplayAreaOptions.first;
     double bestDiff = (value - best).abs();
@@ -448,8 +459,6 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
-    final binaryDanmakuEffectKernelName =
-        isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
     final showMergeToggle = isErikaPlayerKernel ||
         DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas;
 
@@ -494,8 +503,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
           _buildFontSection(videoState),
           _buildOutlineSection(
             videoState,
-            useBinaryToggle: showBinaryDanmakuEffectToggles,
-            kernelName: binaryDanmakuEffectKernelName,
+            useDiscreteLevels: showBinaryDanmakuEffectToggles,
           ),
           if (!isErikaPlayerKernel) _buildShadowSection(videoState),
           _buildSliderSection(
@@ -646,17 +654,18 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
 
   Widget _buildOutlineSection(
     VideoPlayerState videoState, {
-    required bool useBinaryToggle,
-    required String kernelName,
+    required bool useDiscreteLevels,
   }) {
-    if (useBinaryToggle) {
-      return _buildSwitchSection(
+    if (useDiscreteLevels) {
+      return _buildSliderSection(
         label: '弹幕描边',
-        value: videoState.next2DanmakuOutlineWidth > 0.0,
-        onChanged: (value) {
-          videoState.setNext2DanmakuOutlineWidth(value ? 1.0 : 0.0);
-        },
-        hint: '开启后为 $kernelName 弹幕添加描边',
+        value: videoState.next2DanmakuOutlineWidth,
+        min: 0.0,
+        max: 2.0,
+        step: 1.0,
+        displayTextBuilder: _outlineWidthLevelLabel,
+        onChanged: videoState.setNext2DanmakuOutlineWidth,
+        hint: '0 无描边 · 1 细边 · 2 粗边（原版）',
       );
     }
 

@@ -61,7 +61,7 @@
   "danmakuFontSizeTitle": "彈幕字體大小",
   "danmakuOpacitySubtitle": "調整彈幕文字不透明度，新開啟的影片將套用此設定。",
   "danmakuOutlineEnabledTitle": "啟用彈幕描邊",
-  "danmakuOutlineEnabledSubtitle": "控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。",
+  "danmakuOutlineEnabledSubtitle": "0 為無描邊，1 為細邊，2 為原本的粗邊；新開啟的影片將套用此設定。",
   "danmakuOutlineWidthTitle": "彈幕描邊粗細",
   "externalPlayerConsoleResume": "繼續播放",
   "externalPlayerConsolePause": "暫停",
