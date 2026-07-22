@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
@@ -29,18 +30,34 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 Linux 和 macOS';
     const String subtitleUnsupportedEnglish =
         'The Danmaku Console is currently available on Linux and macOS only.';
+    const String subtitleWindowModeSimplified = '独立窗口模式下，外部播放开始后会直接打开控制台窗口';
+    const String subtitleWindowModeTraditional = '獨立視窗模式下，外部播放開始後會直接開啟控制台視窗';
+    const String subtitleWindowModeEnglish =
+        'Window mode opens the Danmaku Console window when external playback starts.';
 
     final consoleSupported = ExternalPlayerConsoleService.isSupportedPlatform;
+    final windowMode = settingsProvider.externalPlayerConsoleWindowMode;
     return AdaptiveSettingsTile<bool>.toggle(
       title: _text(context, titleSimplified, titleTraditional, titleEnglish),
-      subtitle: consoleSupported
-          ? _text(
-              context, subtitleSimplified, subtitleTraditional, subtitleEnglish)
-          : _text(context, subtitleUnsupportedSimplified,
-              subtitleUnsupportedTraditional, subtitleUnsupportedEnglish),
+      subtitle: !consoleSupported
+          ? _text(context, subtitleUnsupportedSimplified,
+              subtitleUnsupportedTraditional, subtitleUnsupportedEnglish)
+          : windowMode
+              ? _text(
+                  context,
+                  subtitleWindowModeSimplified,
+                  subtitleWindowModeTraditional,
+                  subtitleWindowModeEnglish,
+                )
+              : _text(
+                  context,
+                  subtitleSimplified,
+                  subtitleTraditional,
+                  subtitleEnglish,
+                ),
       icon: Ionicons.chatbox_ellipses_outline,
       phoneIcon: cupertino.CupertinoIcons.captions_bubble,
-      enabled: consoleSupported,
+      enabled: consoleSupported && !windowMode,
       value: settingsProvider.externalPlayerAutoSwitchToDanmakuConsole,
       onChanged: (value) =>
           settingsProvider.setExternalPlayerAutoSwitchToDanmakuConsole(value),
@@ -124,6 +141,49 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
               },
             ),
             _autoSwitchToDanmakuConsoleTile,
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                final consoleSupported =
+                    ExternalPlayerConsoleWindowService.isSupported;
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '弹幕控制台使用独立窗口',
+                    '彈幕控制台使用獨立視窗',
+                    'Open Danmaku Console in Windows',
+                  ),
+                  subtitle: consoleSupported
+                      ? _text(
+                          context,
+                          '不再显示控制台 Tab；左侧控制面板使用竖屏窗口，并可唤出单独的弹幕列表窗口',
+                          '不再顯示控制台分頁；左側控制面板使用直向視窗，並可叫出獨立的彈幕列表視窗',
+                          'Replace the console tab with a portrait controls window and an optional danmaku-list window.',
+                        )
+                      : _text(
+                          context,
+                          '独立控制台窗口目前仅支持 Linux 和 macOS',
+                          '獨立控制台視窗目前僅支援 Linux 和 macOS',
+                          'Console windows are currently available on Linux and macOS only.',
+                        ),
+                  icon: Ionicons.albums_outline,
+                  phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
+                  enabled: consoleSupported,
+                  value: settingsProvider.externalPlayerConsoleWindowMode,
+                  onChanged: (value) async {
+                    await settingsProvider
+                        .setExternalPlayerConsoleWindowMode(value);
+                    if (value &&
+                        ExternalPlayerConsoleService.hasActiveSession) {
+                      await ExternalPlayerConsoleWindowService.instance
+                          .showControlsWindow();
+                    } else if (!value) {
+                      await ExternalPlayerConsoleWindowService.instance
+                          .closeAll();
+                    }
+                  },
+                );
+              },
+            ),
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
                 return AdaptiveSettingsTile<bool>.toggle(

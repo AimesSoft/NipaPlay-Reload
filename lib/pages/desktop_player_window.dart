@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
@@ -7,6 +11,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:provider/provider.dart';
 
 /// The player surface rendered in the secondary FlutterView.
@@ -20,6 +25,7 @@ class DesktopPlayerWindow extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeNotifier>().themeMode;
     final locale = context.watch<AppLanguageProvider>().locale;
+    final windowController = DesktopMultiWindow.controllerOf(context);
 
     return MaterialApp(
       title: 'NipaPlay 独立播放器',
@@ -43,11 +49,86 @@ class DesktopPlayerWindow extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
-      home: ColoredBox(
-        color: Colors.black,
-        child: PlayVideoPage(
-          key: DesktopPlayerWindowService.instance.playerPageKey,
-        ),
+      home: ListenableBuilder(
+        listenable: DesktopPlayerWindowService.instance,
+        builder: (context, _) {
+          final isPictureInPicture =
+              DesktopPlayerWindowService.instance.isPictureInPicture;
+          return DesktopPictureInPictureScope(
+            enabled: isPictureInPicture,
+            child: ColoredBox(
+              color: Colors.black,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PlayVideoPage(
+                    key: DesktopPlayerWindowService.instance.playerPageKey,
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: isPictureInPicture ? 72 : 96,
+                    right: isPictureInPicture ? 72 : 128,
+                    height: 38,
+                    child: ListenableBuilder(
+                      listenable: windowController,
+                      builder: (context, _) => windowController.isFullscreen
+                          ? const SizedBox.shrink()
+                          : _DetachedWindowDragRegion(
+                              controller: windowController,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetachedWindowDragRegion extends StatefulWidget {
+  const _DetachedWindowDragRegion({required this.controller});
+
+  final WindowController controller;
+
+  @override
+  State<_DetachedWindowDragRegion> createState() =>
+      _DetachedWindowDragRegionState();
+}
+
+class _DetachedWindowDragRegionState extends State<_DetachedWindowDragRegion> {
+  bool _dragging = false;
+
+  void _start(PointerDownEvent event) {
+    if (event.buttons & kPrimaryMouseButton == 0) return;
+    _dragging = true;
+    unawaited(widget.controller.startDragging());
+  }
+
+  void _update(PointerMoveEvent event) {
+    if (!_dragging) return;
+    unawaited(widget.controller.updateDragging());
+  }
+
+  void _end(PointerEvent event) {
+    if (!_dragging) return;
+    _dragging = false;
+    unawaited(widget.controller.endDragging());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _start,
+        onPointerMove: _update,
+        onPointerUp: _end,
+        onPointerCancel: _end,
+        child: const SizedBox.expand(),
       ),
     );
   }

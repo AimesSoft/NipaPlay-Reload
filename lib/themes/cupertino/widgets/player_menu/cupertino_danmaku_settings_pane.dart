@@ -265,7 +265,7 @@ class _CupertinoDanmakuSettingsPaneState
       case 0:
         return '0 · 无描边';
       case 2:
-        return '2 · 粗边（原版）';
+        return '2 · 粗边';
       default:
         return '1 · 细边';
     }

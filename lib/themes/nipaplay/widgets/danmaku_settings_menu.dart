@@ -352,7 +352,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       case 0:
         return '0 · 无描边';
       case 2:
-        return '2 · 粗边（原版）';
+        return '2 · 粗边';
       default:
         return '1 · 细边';
     }
@@ -665,7 +665,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         step: 1.0,
         displayTextBuilder: _outlineWidthLevelLabel,
         onChanged: videoState.setNext2DanmakuOutlineWidth,
-        hint: '0 无描边 · 1 细边 · 2 粗边（原版）',
+        hint: '0 无描边 · 1 细边 · 2 粗边',
       );
     }
 
