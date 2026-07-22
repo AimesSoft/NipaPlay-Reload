@@ -3,13 +3,18 @@ pub mod ffi;
 
 mod present;
 
+/// fdsm stores distances in `[-range / 2, range / 2]`, so this provides a
+/// usable one-sided distance of 4px. The previous 6px range only provided 3px
+/// on each side, which cannot represent a visibly thicker outline safely.
+pub(crate) const DANMAKU_MSDF_RANGE: f64 = 8.0;
+
 /// Resolve the three user-facing outline levels to a safe MSDF width.
 ///
 /// The setting is a profile selector, not a numeric width multiplier:
 /// 0 = disabled, 1 = the current thin outline, 2 = the legacy thick outline.
-/// Keeping the legacy profile at 1.5x leaves enough of the 6px MSDF distance
-/// field around every glyph. Treating level 2 as a literal 2x multiplier can
-/// expand the outline to 5.2px and fill the glyph quad as a solid rectangle.
+/// fdsm's range is two-sided. Keep a full pixel between the thick outline and
+/// the one-sided distance limit so shader antialiasing cannot paint the outer
+/// border of the glyph quad as a solid rectangle.
 pub(crate) fn resolve_danmaku_outline_px(font_size: f32, width_level: f32) -> f32 {
     if !width_level.is_finite() || width_level <= 0.0 {
         return 0.0;
@@ -19,23 +24,24 @@ pub(crate) fn resolve_danmaku_outline_px(font_size: f32, width_level: f32) -> f3
     if width_level < 1.5 {
         thin_px
     } else {
-        thin_px * 1.5
+        let one_sided_range = DANMAKU_MSDF_RANGE as f32 * 0.5;
+        (thin_px * 1.2).min(one_sided_range - 1.0)
     }
 }
 
 #[cfg(test)]
 mod outline_profile_tests {
-    use super::resolve_danmaku_outline_px;
+    use super::{resolve_danmaku_outline_px, DANMAKU_MSDF_RANGE};
 
     #[test]
     fn outline_levels_use_safe_profiles_instead_of_literal_multipliers() {
         assert_eq!(resolve_danmaku_outline_px(40.0, 0.0), 0.0);
         assert!((resolve_danmaku_outline_px(40.0, 1.0) - 2.4).abs() < 0.0001);
-        assert!((resolve_danmaku_outline_px(40.0, 2.0) - 3.6).abs() < 0.0001);
+        assert!((resolve_danmaku_outline_px(40.0, 2.0) - 2.88).abs() < 0.0001);
 
         let largest_legacy_outline = resolve_danmaku_outline_px(256.0, 2.0);
-        assert!((largest_legacy_outline - 3.9).abs() < 0.0001);
-        assert!(largest_legacy_outline < 6.0);
+        assert!((largest_legacy_outline - 3.0).abs() < 0.0001);
+        assert!(largest_legacy_outline + 1.0 <= DANMAKU_MSDF_RANGE as f32 * 0.5);
     }
 
     #[test]
