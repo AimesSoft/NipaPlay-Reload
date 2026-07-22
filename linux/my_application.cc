@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <algorithm>
 #include <cmath>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -13,6 +14,11 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   GtkWindow* main_window;
   FlMethodChannel* desktop_window_channel;
+  gboolean picture_in_picture_has_restore_bounds;
+  gint picture_in_picture_restore_x;
+  gint picture_in_picture_restore_y;
+  gint picture_in_picture_restore_width;
+  gint picture_in_picture_restore_height;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -36,6 +42,14 @@ static gboolean fl_value_as_bool(FlValue* value, gboolean fallback = FALSE) {
     return fallback;
   }
   return fl_value_get_bool(value);
+}
+
+static const gchar* fl_value_as_string(FlValue* value,
+                                       const gchar* fallback = "") {
+  if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_STRING) {
+    return fallback;
+  }
+  return fl_value_get_string(value);
 }
 
 static GtkWindow* find_secondary_flutter_window(MyApplication* self) {
@@ -78,6 +92,83 @@ static void apply_linux_always_on_top(GtkWindow* window, gboolean enabled) {
   }
 }
 
+static void apply_linux_picture_in_picture(MyApplication* self,
+                                           GtkWindow* window,
+                                           FlValue* args) {
+  const gboolean enabled =
+      fl_value_as_bool(fl_value_lookup_string(args, "enabled"));
+  if (!enabled) {
+    if (!self->picture_in_picture_has_restore_bounds) {
+      return;
+    }
+    self->picture_in_picture_has_restore_bounds = FALSE;
+    gtk_window_resize(window, self->picture_in_picture_restore_width,
+                      self->picture_in_picture_restore_height);
+    gtk_window_move(window, self->picture_in_picture_restore_x,
+                    self->picture_in_picture_restore_y);
+    g_message("[DesktopMultiWindow][PiP] restored %dx%d at %d,%d",
+              self->picture_in_picture_restore_width,
+              self->picture_in_picture_restore_height,
+              self->picture_in_picture_restore_x,
+              self->picture_in_picture_restore_y);
+    return;
+  }
+
+  if (!self->picture_in_picture_has_restore_bounds) {
+    gtk_window_get_position(window, &self->picture_in_picture_restore_x,
+                            &self->picture_in_picture_restore_y);
+    gtk_window_get_size(window, &self->picture_in_picture_restore_width,
+                        &self->picture_in_picture_restore_height);
+    self->picture_in_picture_has_restore_bounds = TRUE;
+  }
+
+  GdkWindow* gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
+  GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(window));
+  GdkMonitor* monitor = gdk_window != nullptr
+                            ? gdk_display_get_monitor_at_window(display,
+                                                                gdk_window)
+                            : gdk_display_get_primary_monitor(display);
+  if (monitor == nullptr) {
+    return;
+  }
+  GdkRectangle work = {};
+  gdk_monitor_get_workarea(monitor, &work);
+  const double ratio = std::clamp(
+      fl_value_as_double(fl_value_lookup_string(args, "aspectRatio"),
+                         16.0 / 9.0),
+      0.5, 3.0);
+  const gint margin = static_cast<gint>(std::lround(std::max(
+      0.0, fl_value_as_double(fl_value_lookup_string(args, "margin"), 16.0))));
+  const gint available_width = std::max(1, work.width - margin * 2);
+  double height = std::min(
+      work.height / 3.0,
+      static_cast<double>(std::max(1, work.height - margin * 2)));
+  double width = height * ratio;
+  if (width > available_width) {
+    width = available_width;
+    height = width / ratio;
+  }
+  const gint target_width = static_cast<gint>(std::lround(width));
+  const gint target_height = static_cast<gint>(std::lround(height));
+  const gchar* placement = fl_value_as_string(
+      fl_value_lookup_string(args, "placement"), "topRight");
+  const gboolean place_left = g_strcmp0(placement, "topLeft") == 0 ||
+                               g_strcmp0(placement, "bottomLeft") == 0;
+  const gboolean place_bottom = g_strcmp0(placement, "bottomLeft") == 0 ||
+                                 g_strcmp0(placement, "bottomRight") == 0;
+  const gint x = place_left ? work.x + margin
+                            : work.x + work.width - target_width - margin;
+  const gint y = place_bottom ? work.y + work.height - target_height - margin
+                              : work.y + margin;
+  gtk_window_resize(window, target_width, target_height);
+  // Compositors using Wayland may choose to ignore absolute window placement.
+  gtk_window_move(window, x, y);
+  g_message(
+      "[DesktopMultiWindow][PiP] dock placement=%s work=%d,%d %dx%d size=%dx%d",
+      placement, work.x, work.y, work.width, work.height, target_width,
+      target_height);
+}
+
 static void desktop_window_method_call_cb(FlMethodChannel* channel,
                                           FlMethodCall* method_call,
                                           gpointer user_data) {
@@ -95,6 +186,7 @@ static void desktop_window_method_call_cb(FlMethodChannel* channel,
 
   const gchar* method = fl_method_call_get_name(method_call);
   if (strcmp(method, "configureWindow") == 0) {
+    self->picture_in_picture_has_restore_bounds = FALSE;
     if (fl_value_as_bool(fl_value_lookup_string(args, "frameless"))) {
       gtk_window_set_decorated(window, FALSE);
     }
@@ -129,6 +221,11 @@ static void desktop_window_method_call_cb(FlMethodChannel* channel,
     apply_linux_always_on_top(window, always_on_top);
     g_autoptr(FlValue) response = fl_value_new_bool(always_on_top);
     fl_method_call_respond_success(method_call, response, nullptr);
+    return;
+  }
+  if (strcmp(method, "setPictureInPictureMode") == 0) {
+    apply_linux_picture_in_picture(self, window, args);
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
     return;
   }
   if (strcmp(method, "startDragging") == 0) {

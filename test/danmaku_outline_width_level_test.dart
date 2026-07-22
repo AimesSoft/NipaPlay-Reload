@@ -5,10 +5,10 @@ import 'package:nipaplay/utils/danmaku/style.dart';
 
 void main() {
   group('normalizeDanmakuOutlineWidthLevel', () {
-    test('uses thin outline for missing or invalid settings', () {
-      expect(normalizeDanmakuOutlineWidthLevel(null), 1.0);
-      expect(normalizeDanmakuOutlineWidthLevel(double.nan), 1.0);
-      expect(normalizeDanmakuOutlineWidthLevel(double.infinity), 1.0);
+    test('uses thick outline for missing or invalid settings', () {
+      expect(normalizeDanmakuOutlineWidthLevel(null), 2.0);
+      expect(normalizeDanmakuOutlineWidthLevel(double.nan), 2.0);
+      expect(normalizeDanmakuOutlineWidthLevel(double.infinity), 2.0);
     });
 
     test('maps current values to off, thin, and thick levels', () {
@@ -40,7 +40,8 @@ void main() {
       expect(globalSettings, contains('divisions: 2'));
       expect(cupertinoMenu, contains('divisions: 2'));
       expect(nipaplayMenu, contains('step: 1.0'));
-      expect(nipaplayMenu, contains('0 无描边 · 1 细边 · 2 粗边（原版）'));
+      expect(nipaplayMenu, contains('0 无描边 · 1 细边 · 2 粗边'));
+      expect('$cupertinoMenu$nipaplayMenu', isNot(contains('原版')));
       expect(
         '$globalSettings$cupertinoMenu$nipaplayMenu',
         isNot(contains('setNext2DanmakuOutlineWidth(value ? 1.0 : 0.0)')),

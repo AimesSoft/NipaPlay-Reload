@@ -15,6 +15,7 @@ import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/macos_native_video_view.dart';
 import 'package:nipaplay/widgets/desktop_transient_overlay.dart';
+import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
@@ -971,6 +972,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   @override
   Widget build(BuildContext context) {
+    final isPictureInPicture =
+        DesktopPictureInPictureScope.isEnabledOf(context);
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         return ValueListenableBuilder<int?>(
@@ -1028,7 +1031,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _handleTap,
-                      onSecondaryTapDown: globals.isDesktop
+                      onSecondaryTapDown: globals.isDesktop &&
+                              !isPictureInPicture
                           ? (details) {
                               if (!videoState.hasVideo) return;
                               _hidePlaybackInfoOverlay();
@@ -1136,8 +1140,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       const BrightnessGestureArea(),
                                     if (videoState.hasVideo)
                                       const VolumeGestureArea(),
-                                    const MinimalProgressBar(),
-                                    const DanmakuDensityBar(),
+                                    if (!isPictureInPicture) ...[
+                                      const MinimalProgressBar(),
+                                      const DanmakuDensityBar(),
+                                    ],
                                   ],
                                 ),
                               )
@@ -1228,11 +1234,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                 _macosNativeVideoViewId!,
                                           ),
                                         ),
-                                      if (videoState
-                                          .desktopHoverSettingsMenuEnabled)
+                                      if (!isPictureInPicture &&
+                                          videoState
+                                              .desktopHoverSettingsMenuEnabled)
                                         const RightEdgeHoverMenu(),
-                                      const MinimalProgressBar(),
-                                      const DanmakuDensityBar(),
+                                      if (!isPictureInPicture) ...[
+                                        const MinimalProgressBar(),
+                                        const DanmakuDensityBar(),
+                                      ],
                                     ],
                                   ),
                                 ),
