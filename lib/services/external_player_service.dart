@@ -60,7 +60,7 @@ class ExternalPlayerConfig {
 /// 3. 按播放器类型生成命令行参数
 /// 4. 在需要时把当前弹幕导出为 ASS 文件
 ///
-/// Linux 和 macOS 上还会为 mpv 创建 IPC socket, 并把已启动进程注册到
+/// mpv 启动时还会创建 IPC 通道, 并把已启动进程注册到
 /// [ExternalPlayerConsoleService].
 ///
 /// 此服务只负责发起启动, 无法保证外部播放器最终成功解码或播放媒体.
@@ -78,12 +78,13 @@ class ExternalPlayerService {
   /// 查找当前系统中已安装的 mpv.
   ///
   /// macOS 优先使用应用包, 随后检查 Homebrew、Intel Homebrew 和 MacPorts
-  /// 的常见可执行文件位置；Linux 会检查常见系统路径。最后再搜索 PATH。
+  /// 的常见可执行文件位置；Linux 会检查常见系统路径；Windows 会检查常见安装
+  /// 路径和 PATH。最后再搜索 PATH。
   /// [candidatePaths] 仅用于测试或调用方需要限定搜索范围的场景。
   static Future<String?> detectInstalledMpv({
     Iterable<String>? candidatePaths,
   }) async {
-    if (kIsWeb || !(Platform.isMacOS || Platform.isLinux)) return null;
+    if (kIsWeb || !(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) return null;
 
     final candidates = candidatePaths ?? _defaultMpvCandidatePaths();
     for (final candidate in candidates) {
@@ -115,12 +116,44 @@ class ExternalPlayerService {
       yield '/usr/bin/mpv';
       yield '/usr/local/bin/mpv';
       yield '/snap/bin/mpv';
+    } else if (Platform.isWindows) {
+      // Windows 常见 mpv 安装位置
+      final localAppData = Platform.environment['LOCALAPPDATA'];
+      if (localAppData != null && localAppData.isNotEmpty) {
+        yield '$localAppData\\mpv\\mpv.exe';
+        yield '$localAppData\\mpv.net\\mpvnet.exe';
+      }
+      final programFiles = Platform.environment['ProgramFiles'];
+      if (programFiles != null && programFiles.isNotEmpty) {
+        yield '$programFiles\\mpv\\mpv.exe';
+        yield '$programFiles\\mpv.net\\mpvnet.exe';
+      }
+      final programFilesX86 = Platform.environment['ProgramFiles(x86)'];
+      if (programFilesX86 != null && programFilesX86.isNotEmpty) {
+        yield '$programFilesX86\\mpv\\mpv.exe';
+        yield '$programFilesX86\\mpv.net\\mpvnet.exe';
+      }
+      // scoop 安装路径
+      final home = Platform.environment['USERPROFILE'];
+      if (home != null && home.isNotEmpty) {
+        yield '$home\\scoop\\shims\\mpv.exe';
+        yield '$home\\scoop\\shims\\mpvnet.exe';
+        yield '$home\\scoop\\apps\\mpv\\current\\mpv.exe';
+        yield '$home\\scoop\\apps\\mpv.net\\current\\mpvnet.exe';
+      }
     }
 
     final path = Platform.environment['PATH'];
     if (path == null || path.isEmpty) return;
-    for (final directory in path.split(':')) {
-      if (directory.isNotEmpty) yield '$directory/mpv';
+    final separator = Platform.isWindows ? ';' : ':';
+    final executables = Platform.isWindows
+        ? ['mpv.exe', 'mpvnet.exe']
+        : ['mpv'];
+    for (final directory in path.split(separator)) {
+      if (directory.isEmpty) continue;
+      for (final executable in executables) {
+        yield '$directory${Platform.pathSeparator}$executable';
+      }
     }
   }
 
@@ -165,7 +198,7 @@ class ExternalPlayerService {
   /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
   /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
   /// 模式启动; macOS 的 mpv.app 直接执行包内主程序; Linux 播放器以 detached
-  /// 模式启动. Linux 和 macOS 的 mpv 会额外启用 JSON IPC 和弹幕控制台能力.
+  /// 模式启动. mpv 在所有桌面平台都会额外启用 JSON IPC 和弹幕控制台能力.
   ///
   /// 成功派生进程时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
   /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
@@ -202,8 +235,10 @@ class ExternalPlayerService {
 
     try {
       final type = _detectPlayer(resolvedPath);
-      if ((Platform.isLinux || Platform.isMacOS) &&
-          type == ExternalPlayerType.mpv) {
+      // mpv 和 mpv.net 都支持 --input-ipc-server, 走 MpvSession 路径以启用控制台
+      if ((type == ExternalPlayerType.mpv ||
+              type == ExternalPlayerType.mpvNet) &&
+          !kIsWeb) {
         return await MpvSession.launch(
           playerPath: resolvedPath,
           mediaPath: mediaPath,
@@ -228,7 +263,7 @@ class ExternalPlayerService {
     }
   }
 
-  /// 启动 Linux/macOS mpv 以外的播放器进程.
+  /// 启动 mpv 以外的播放器进程.
   static Future<OtherSession> _launchOtherSession({
     required ExternalPlayerType type,
     required String playerPath,
@@ -411,7 +446,7 @@ class ExternalPlayerService {
     final launched = session != null;
     debugPrint('[ExtPlayer] launch 返回: $launched');
 
-    // Linux/macOS 下, 若 mpv 会话启动成功, 则在控制台显示会话信息
+    // 若 mpv 会话启动成功, 则在控制台显示会话信息
     if (session is MpvSession) {
       final episodeMetaData = EpisodeMetaData(
         animeTitle: history?.animeName ?? item.title,

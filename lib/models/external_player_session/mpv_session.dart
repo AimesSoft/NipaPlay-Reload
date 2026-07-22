@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_ipc/dart_ipc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
@@ -12,7 +13,7 @@ import 'package:nipaplay/utils/danmaku/assets.dart';
 
 /// 掌管外部播放器会话的神
 ///
-/// 管理一个 Linux 或 macOS mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
+/// 管理一个 Linux, macOS 或 Windows mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类保存当前媒体路径; 番剧和剧集展示信息由控制台服务管理.
 class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
@@ -32,7 +33,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     if (monitorProcess) _startLifecycleMonitoring();
   }
 
-  /// 启动 Linux 或 macOS mpv, 并启用 IPC 和生命周期监控.
+  /// 启动 Linux, macOS 或 Windows mpv, 并启用 IPC 和生命周期监控.
   static Future<MpvSession> launch({
     required String playerPath,
     required String mediaPath,
@@ -57,6 +58,8 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     // 不通过 `open --args` 启动 mpv.app。沙盒应用交给 LaunchServices 后，
     // 参数可能不会转交给新实例，最终只会出现一个未加载媒体的空白 mpv 窗口。
     // 直接执行包内主程序也能让 processId 精确指向本次 mpv 会话。
+    //
+    // Windows 下使用 detached 模式启动 mpv, 进程存活检测通过 tasklist 实现。
     final monitorThroughProcessHandle = Platform.isMacOS;
     final process = await Process.start(
       executablePath,
@@ -139,9 +142,15 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     if (_closed) return;
 
     try {
-      final killed = Process.killPid(processId, ProcessSignal.sigterm);
-      if (!killed) {
-        debugPrint('[MpvSession] Failed to terminate player: pid=$processId');
+      if (Platform.isWindows) {
+        // Windows 没有 SIGTERM, detached 进程需要通过 taskkill 终止.
+        // /T 终止进程树, /F 强制终止.
+        Process.runSync('taskkill', ['/PID', '$processId', '/T', '/F']);
+      } else {
+        final killed = Process.killPid(processId, ProcessSignal.sigterm);
+        if (!killed) {
+          debugPrint('[MpvSession] Failed to terminate player: pid=$processId');
+        }
       }
     } catch (error) {
       debugPrint('[MpvSession] Failed to close player: $error');
@@ -201,11 +210,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
     Socket? socket;
     try {
-      socket = await Socket.connect(
-        InternetAddress(path, type: InternetAddressType.unix),
-        0,
-        timeout: const Duration(milliseconds: 500),
-      );
+      socket = await _connectToIpc(path);
       socket.write('${jsonEncode({
             'command': [
               'script-message-to',
@@ -271,6 +276,8 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   void _deleteIpcSocket() {
     final path = ipcPath;
     if (path == null || path.isEmpty) return;
+    // Windows 命名管道无需手动删除文件
+    if (Platform.isWindows) return;
     try {
       final socketFile = File(path);
       if (socketFile.existsSync()) socketFile.deleteSync();
@@ -281,6 +288,12 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   static String _createMpvIpcPath() {
     final timestamp = DateTime.now().microsecondsSinceEpoch;
+    if (Platform.isWindows) {
+      // Windows mpv 使用命名管道作为 IPC 通道.
+      // 格式: \\.\pipe\name, 名称需保持简洁.
+      final compactTimestamp = timestamp.toRadixString(36);
+      return r'\\.\pipe\' 'nipaplay_${pid}_$compactTimestamp';
+    }
     // macOS 的 sockaddr_un.sun_path 最多只能容纳 104 字节（含结尾的 NUL）。
     // 沙盒的 systemTemp 本身已经很长，因此文件名必须保持紧凑。
     final compactTimestamp = timestamp.toRadixString(36);
@@ -308,6 +321,17 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     );
   }
 
+  /// 连接到 mpv 的 IPC 端点.
+  ///
+  /// 使用 dart_ipc 实现跨平台 IPC 连接:
+  /// - Linux/macOS: Unix Domain Socket
+  /// - Windows: 命名管道 (Named Pipe)
+  ///
+  /// mpv 的 --input-ipc-server 在 Windows 上接受命名管道路径 (如 \\.\pipe\xxx).
+  static Future<Socket> _connectToIpc(String path) async {
+    return await connect(path).timeout(const Duration(milliseconds: 500));
+  }
+
   Future<void> _setMpvPaused(bool paused) async {
     final path = ipcPath;
     if (_closed || path == null) return;
@@ -315,16 +339,11 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     Socket? socket;
     var changed = false;
     try {
-      final host = InternetAddress(path, type: InternetAddressType.unix);
       final command = jsonEncode({
         'command': ['set_property', 'pause', paused],
         'request_id': 4,
       });
-      socket = await Socket.connect(
-        host,
-        0,
-        timeout: const Duration(milliseconds: 500),
-      );
+      socket = await _connectToIpc(path);
       socket.write('$command\n');
       await socket.flush();
 
@@ -362,12 +381,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
     Socket? socket;
     try {
-      final host = InternetAddress(path, type: InternetAddressType.unix);
-      socket = await Socket.connect(
-        host,
-        0,
-        timeout: const Duration(milliseconds: 500),
-      );
+      socket = await _connectToIpc(path);
       if (_closed) return;
 
       final command = jsonEncode({
@@ -489,6 +503,20 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
       }
     }
 
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run(
+          'tasklist',
+          ['/FI', 'PID eq $processId', '/NH'],
+        );
+        if (result.exitCode != 0) return false;
+        final output = (result.stdout as String).trim();
+        return output.contains('$processId');
+      } on ProcessException {
+        return false;
+      }
+    }
+
     return false;
   }
 
@@ -497,11 +525,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
     Socket? socket;
     try {
-      socket = await Socket.connect(
-        InternetAddress(ipcPath!, type: InternetAddressType.unix),
-        0,
-        timeout: const Duration(milliseconds: 500),
-      );
+      socket = await _connectToIpc(ipcPath!);
       socket.write('${jsonEncode({
             'command': ['get_property', 'time-pos'],
             'request_id': 1,
