@@ -4,9 +4,9 @@ pub mod ffi;
 mod present;
 
 /// fdsm stores distances in `[-range / 2, range / 2]`, so this provides a
-/// usable one-sided distance of 4px. The previous 6px range only provided 3px
-/// on each side, which cannot represent a visibly thicker outline safely.
-pub(crate) const DANMAKU_MSDF_RANGE: f64 = 8.0;
+/// usable one-sided distance of 5px. The original 6px range only provided 3px
+/// on each side, which cannot represent the 3.9px thick profile safely.
+pub(crate) const DANMAKU_MSDF_RANGE: f64 = 10.0;
 
 /// Resolve the three user-facing outline levels to a safe MSDF width.
 ///
@@ -25,7 +25,7 @@ pub(crate) fn resolve_danmaku_outline_px(font_size: f32, width_level: f32) -> f3
         thin_px
     } else {
         let one_sided_range = DANMAKU_MSDF_RANGE as f32 * 0.5;
-        (thin_px * 1.2).min(one_sided_range - 1.0)
+        (thin_px * 1.5).min(one_sided_range - 1.0)
     }
 }
 
@@ -37,11 +37,20 @@ mod outline_profile_tests {
     fn outline_levels_use_safe_profiles_instead_of_literal_multipliers() {
         assert_eq!(resolve_danmaku_outline_px(40.0, 0.0), 0.0);
         assert!((resolve_danmaku_outline_px(40.0, 1.0) - 2.4).abs() < 0.0001);
-        assert!((resolve_danmaku_outline_px(40.0, 2.0) - 2.88).abs() < 0.0001);
+        assert!((resolve_danmaku_outline_px(40.0, 2.0) - 3.6).abs() < 0.0001);
 
         let largest_legacy_outline = resolve_danmaku_outline_px(256.0, 2.0);
-        assert!((largest_legacy_outline - 3.0).abs() < 0.0001);
+        assert!((largest_legacy_outline - 3.9).abs() < 0.0001);
         assert!(largest_legacy_outline + 1.0 <= DANMAKU_MSDF_RANGE as f32 * 0.5);
+
+        for font_size in [8.0, 20.0, 40.0, 50.0, 256.0] {
+            let thin = resolve_danmaku_outline_px(font_size, 1.0);
+            let thick = resolve_danmaku_outline_px(font_size, 2.0);
+            assert!(
+                thick >= thin * 1.45,
+                "outline levels are not visually distinct at {font_size}px: thin={thin}, thick={thick}"
+            );
+        }
     }
 
     #[test]
