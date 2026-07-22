@@ -6,29 +6,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
-import 'package:nipaplay/pages/play_video_page.dart';
+import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
-import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:provider/provider.dart';
 
-/// The player surface rendered in the secondary FlutterView.
-///
-/// Providers live above DesktopMultiWindowHost, so this MaterialApp sees the
-/// same VideoPlayerState and Player instance as the main window.
-class DesktopPlayerWindow extends StatelessWidget {
-  const DesktopPlayerWindow({super.key});
+class ExternalPlayerConsoleWindow extends StatelessWidget {
+  const ExternalPlayerConsoleWindow({
+    super.key,
+    required this.controller,
+    required this.pane,
+    required this.onClose,
+    this.onShowDanmakuList,
+  });
+
+  final WindowController controller;
+  final ExternalPlayerConsolePane pane;
+  final VoidCallback onClose;
+  final VoidCallback? onShowDanmakuList;
 
   @override
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeNotifier>().themeMode;
     final locale = context.watch<AppLanguageProvider>().locale;
-    final windowController = DesktopMultiWindow.controllerOf(context);
 
     return MaterialApp(
-      title: 'NipaPlay 独立播放器',
+      title: pane == ExternalPlayerConsolePane.danmakuList
+          ? 'NipaPlay 弹幕列表'
+          : 'NipaPlay 弹幕控制台',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: ThemeData(
@@ -49,37 +55,26 @@ class DesktopPlayerWindow extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
-      home: ListenableBuilder(
-        listenable: DesktopPlayerWindowService.instance,
-        builder: (context, _) {
-          final isPictureInPicture =
-              DesktopPlayerWindowService.instance.isPictureInPicture;
-          return DesktopPictureInPictureScope(
-            enabled: isPictureInPicture,
-            child: ColoredBox(
-              color: Colors.black,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  PlayVideoPage(
-                    key: DesktopPlayerWindowService.instance.playerPageKey,
-                  ),
-                  Positioned(
-                    top: 0,
-                    left: isPictureInPicture ? 72 : 96,
-                    right: isPictureInPicture ? 72 : 128,
-                    height: 38,
-                    child: ListenableBuilder(
-                      listenable: windowController,
-                      builder: (context, _) => windowController.isFullscreen
-                          ? const SizedBox.shrink()
-                          : _DetachedWindowDragRegion(
-                              controller: windowController,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
+      home: Builder(
+        builder: (context) {
+          return ColoredBox(
+            color: Theme.of(context).colorScheme.surface,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ExternalPlayerConsolePage(
+                  pane: pane,
+                  onShowDanmakuList: onShowDanmakuList,
+                  onCloseWindow: onClose,
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: onShowDanmakuList == null ? 66 : 120,
+                  height: 48,
+                  child: _ConsoleWindowDragRegion(controller: controller),
+                ),
+              ],
             ),
           );
         },
@@ -88,17 +83,17 @@ class DesktopPlayerWindow extends StatelessWidget {
   }
 }
 
-class _DetachedWindowDragRegion extends StatefulWidget {
-  const _DetachedWindowDragRegion({required this.controller});
+class _ConsoleWindowDragRegion extends StatefulWidget {
+  const _ConsoleWindowDragRegion({required this.controller});
 
   final WindowController controller;
 
   @override
-  State<_DetachedWindowDragRegion> createState() =>
-      _DetachedWindowDragRegionState();
+  State<_ConsoleWindowDragRegion> createState() =>
+      _ConsoleWindowDragRegionState();
 }
 
-class _DetachedWindowDragRegionState extends State<_DetachedWindowDragRegion> {
+class _ConsoleWindowDragRegionState extends State<_ConsoleWindowDragRegion> {
   bool _dragging = false;
 
   void _start(PointerDownEvent event) {

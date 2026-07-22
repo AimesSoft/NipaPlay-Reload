@@ -748,6 +748,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           fontWeight: FontWeight.normal,
                                           height: 1.0,
                                           textBaseline: TextBaseline.alphabetic,
+                                          decoration: TextDecoration.none,
                                         ),
                                         textAlign: TextAlign.center,
                                         softWrap: false,
@@ -784,8 +785,16 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         onPressed: (value) => setState(
                                             () => _isPipPressed = value),
                                         tooltip: detachedWindow != null
-                                            ? '移回主窗口'
-                                            : '移到独立窗口',
+                                            ? _tooltipManager
+                                                .formatActionWithShortcut(
+                                                'toggle_detached_player',
+                                                '移回主窗口',
+                                              )
+                                            : _tooltipManager
+                                                .formatActionWithShortcut(
+                                                'toggle_detached_player',
+                                                '移到独立窗口',
+                                              ),
                                         useAnimatedSwitcher: true,
                                       ),
 

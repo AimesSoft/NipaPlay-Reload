@@ -1539,7 +1539,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _next2DanmakuOutlineWidth = loadedNext2OutlineWidth;
 
     if (loadedFontFilePath != effectiveFontPath) {
-      await prefs.setString(SettingsKeys.danmakuFontFilePath, effectiveFontPath);
+      await prefs.setString(
+          SettingsKeys.danmakuFontFilePath, effectiveFontPath);
     }
     if ((prefs.getString(SettingsKeys.danmakuFontFamily) ?? '').trim() !=
         loadedFontFamily) {
@@ -1641,7 +1642,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
             ? _defaultDanmakuOutlineStyle
             : _danmakuOutlineStyle)
         : DanmakuOutlineStyle.none;
-    await _setDanmakuOutlineConfiguration(style, enabled ? 1.0 : 0.0);
+    await _setDanmakuOutlineConfiguration(
+      style,
+      enabled ? defaultDanmakuOutlineWidthLevel : 0.0,
+    );
   }
 
   /// 设置弹幕描边样式
@@ -1650,7 +1654,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       style,
       style == DanmakuOutlineStyle.none
           ? 0.0
-          : (_next2DanmakuOutlineWidth > 0.0 ? _next2DanmakuOutlineWidth : 1.0),
+          : (_next2DanmakuOutlineWidth > 0.0
+              ? _next2DanmakuOutlineWidth
+              : defaultDanmakuOutlineWidthLevel),
     );
   }
 
@@ -2286,7 +2292,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 加载弹幕轨道显示区域
   Future<void> _loadDanmakuDisplayArea() async {
     final prefs = await SharedPreferences.getInstance();
-    _danmakuDisplayArea = prefs.getDouble(SettingsKeys.danmakuDisplayArea) ?? 1.0;
+    _danmakuDisplayArea =
+        prefs.getDouble(SettingsKeys.danmakuDisplayArea) ?? 1.0;
     _notifyListeners();
   }
 

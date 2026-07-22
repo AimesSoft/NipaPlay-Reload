@@ -195,27 +195,46 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       gap: widget.verticalOffset,
       onClosed: () {
         if (!identical(_tooltipWindowController, controller)) return;
+        DesktopMultiWindow.detachTransientView(controller);
         _tooltipWindowController = null;
-        _overlayEntry?.remove();
-        _overlayEntry = null;
       },
     );
     if (created == null) return false;
     controller = created;
     _tooltipWindowController = controller;
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned.fill(
-        child: ViewAnchor(
-          view: DesktopTooltipWindow(
-            controller: controller,
-            child: _buildBubble(width),
-          ),
-          child: const IgnorePointer(child: SizedBox.expand()),
+    unawaited(_mountDesktopTooltipWhenReady(controller, width, height));
+    return true;
+  }
+
+  Future<void> _mountDesktopTooltipWhenReady(
+    DesktopTooltipWindowController controller,
+    double width,
+    double height,
+  ) async {
+    await controller.ready;
+    if (!mounted ||
+        controller.isClosed ||
+        !identical(_tooltipWindowController, controller)) {
+      return;
+    }
+    debugPrint(
+      '[TooltipBubble] mount native tooltip text="${widget.text}" '
+      'view=${controller.flutterView.viewId} '
+      'size=${width.toStringAsFixed(1)}x${height.toStringAsFixed(1)} '
+      'physicalSize='
+      '${controller.flutterView.physicalSize.width.toStringAsFixed(1)}x'
+      '${controller.flutterView.physicalSize.height.toStringAsFixed(1)}',
+    );
+    DesktopMultiWindow.attachTransientView(
+      controller,
+      DesktopTooltipWindow(
+        controller: controller,
+        child: DesktopMultiWindow.inheritTransientViewContext(
+          context,
+          _buildBubble(width),
         ),
       ),
     );
-    Overlay.of(context).insert(_overlayEntry!);
-    return true;
   }
 
   Rect? _desktopTooltipAnchorRect() {
@@ -300,6 +319,9 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   void _hideOverlay() {
     final tooltipWindow = _tooltipWindowController;
     _tooltipWindowController = null;
+    if (tooltipWindow != null) {
+      DesktopMultiWindow.detachTransientView(tooltipWindow);
+    }
     _overlayEntry?.remove();
     _overlayEntry = null;
     tooltipWindow?.close();

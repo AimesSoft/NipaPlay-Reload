@@ -109,10 +109,12 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
       color: Colors.white,
       fontSize: 16,
       fontWeight: FontWeight.bold,
+      decoration: TextDecoration.none,
     );
     const episodeStyle = TextStyle(
       color: Colors.white,
       fontSize: 14,
+      decoration: TextDecoration.none,
     );
 
     const titleGap = 8.0;
