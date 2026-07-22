@@ -167,6 +167,20 @@ void main() {
       expect(macOSRunnerSource, contains('DesktopInteractivePopupPanel'));
       expect(macOSRunnerSource, contains('.nonactivatingPanel'));
       expect(macOSRunnerSource, contains('configureTransientWindow'));
+      final framelessImplementation = macOSRunnerSource.substring(
+        macOSRunnerSource.indexOf('private func makeFrameless'),
+        macOSRunnerSource.indexOf('private func makeInteractivePopup'),
+      );
+      expect(
+        framelessImplementation.indexOf('window.styleMask = styleMask'),
+        lessThan(
+          framelessImplementation.indexOf(
+            'object_setClass(window, DesktopDetachedPlayerPanel.self)',
+          ),
+        ),
+        reason: 'AppKit must tear down its titlebar before the NSPanel class '
+            'conversion to preserve private KVO registration ownership.',
+      );
       expect(playerPageSource, contains('Icons.push_pin_rounded'));
       expect(detachedPlayerSource, isNot(contains('_WindowDragHandle')));
       expect(mainPlayerSlotSource, contains('VideoUploadUI('));
