@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
@@ -11,6 +11,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:provider/provider.dart';
 
 /// The player surface rendered in the secondary FlutterView.
@@ -24,6 +25,7 @@ class DesktopPlayerWindow extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeNotifier>().themeMode;
     final locale = context.watch<AppLanguageProvider>().locale;
+    final windowController = DesktopMultiWindow.controllerOf(context);
 
     return MaterialApp(
       title: 'NipaPlay 独立播放器',
@@ -47,51 +49,37 @@ class DesktopPlayerWindow extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
-      home: Builder(
-        builder: (context) {
-          final controller = DesktopMultiWindow.controllerOf(context);
-          return ColoredBox(
-            color: Colors.black,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PlayVideoPage(
-                  key: DesktopPlayerWindowService.instance.playerPageKey,
-                ),
-                // Keep native title chrome out of the player while retaining a
-                // generous draggable area between its left and right actions.
-                Positioned(
-                  top: 0,
-                  left: 72,
-                  right: 72,
-                  height: 38,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.move,
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (_) {
-                        unawaited(controller.startDragging());
-                      },
-                      onPointerMove: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.updateDragging());
-                        }
-                      },
-                      onPointerUp: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.endDragging());
-                        }
-                      },
-                      onPointerCancel: (_) {
-                        if (defaultTargetPlatform == TargetPlatform.macOS) {
-                          unawaited(controller.endDragging());
-                        }
-                      },
-                      child: const Center(child: _WindowDragHandle()),
+      home: ListenableBuilder(
+        listenable: DesktopPlayerWindowService.instance,
+        builder: (context, _) {
+          final isPictureInPicture =
+              DesktopPlayerWindowService.instance.isPictureInPicture;
+          return DesktopPictureInPictureScope(
+            enabled: isPictureInPicture,
+            child: ColoredBox(
+              color: Colors.black,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PlayVideoPage(
+                    key: DesktopPlayerWindowService.instance.playerPageKey,
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: isPictureInPicture ? 72 : 96,
+                    right: isPictureInPicture ? 72 : 128,
+                    height: 38,
+                    child: ListenableBuilder(
+                      listenable: windowController,
+                      builder: (context, _) => windowController.isFullscreen
+                          ? const SizedBox.shrink()
+                          : _DetachedWindowDragRegion(
+                              controller: windowController,
+                            ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -100,22 +88,47 @@ class DesktopPlayerWindow extends StatelessWidget {
   }
 }
 
-class _WindowDragHandle extends StatelessWidget {
-  const _WindowDragHandle();
+class _DetachedWindowDragRegion extends StatefulWidget {
+  const _DetachedWindowDragRegion({required this.controller});
+
+  final WindowController controller;
+
+  @override
+  State<_DetachedWindowDragRegion> createState() =>
+      _DetachedWindowDragRegionState();
+}
+
+class _DetachedWindowDragRegionState extends State<_DetachedWindowDragRegion> {
+  bool _dragging = false;
+
+  void _start(PointerDownEvent event) {
+    if (event.buttons & kPrimaryMouseButton == 0) return;
+    _dragging = true;
+    unawaited(widget.controller.startDragging());
+  }
+
+  void _update(PointerMoveEvent event) {
+    if (!_dragging) return;
+    unawaited(widget.controller.updateDragging());
+  }
+
+  void _end(PointerEvent event) {
+    if (!_dragging) return;
+    _dragging = false;
+    unawaited(widget.controller.endDragging());
+  }
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: 44,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(999),
-          boxShadow: const [
-            BoxShadow(color: Colors.black54, blurRadius: 4),
-          ],
-        ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _start,
+        onPointerMove: _update,
+        onPointerUp: _end,
+        onPointerCancel: _end,
+        child: const SizedBox.expand(),
       ),
     );
   }

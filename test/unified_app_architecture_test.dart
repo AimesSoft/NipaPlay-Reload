@@ -1559,8 +1559,12 @@ void main() {
     final renderer = File(
       'lib/playback/adaptive_playback_entry_view.dart',
     ).readAsStringSync();
+    final desktopRendererStart = renderer.indexOf(
+      'class _NipaplayPlaybackEntryRendererState',
+    );
     final selectFileStart = renderer.indexOf(
-      'label: data.content.selectFileLabel',
+      'AdaptiveMediaActionButton(',
+      desktopRendererStart,
     );
     final selectFileEnd = renderer.indexOf(
       'const material.SizedBox(height: 8)',

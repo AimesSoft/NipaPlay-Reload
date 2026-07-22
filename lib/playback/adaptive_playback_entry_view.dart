@@ -16,6 +16,9 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
     required this.onMascotTap,
     required this.onSelectFile,
     required this.onOpenUrlInput,
+    this.detachedPlayer = false,
+    this.onLocateDetachedPlayer,
+    this.onReturnDetachedPlayer,
   });
 
   final UnifiedPlaybackEntryContent content;
@@ -23,6 +26,9 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
   final material.VoidCallback onMascotTap;
   final material.VoidCallback onSelectFile;
   final material.VoidCallback onOpenUrlInput;
+  final bool detachedPlayer;
+  final material.VoidCallback? onLocateDetachedPlayer;
+  final material.VoidCallback? onReturnDetachedPlayer;
 
   @override
   material.Widget build(material.BuildContext context) {
@@ -33,6 +39,9 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
       onMascotTap: onMascotTap,
       onSelectFile: onSelectFile,
       onOpenUrlInput: onOpenUrlInput,
+      detachedPlayer: detachedPlayer,
+      onLocateDetachedPlayer: onLocateDetachedPlayer,
+      onReturnDetachedPlayer: onReturnDetachedPlayer,
     );
 
     return switch (surface) {
@@ -51,6 +60,9 @@ class _PlaybackEntryRendererData {
     required this.onMascotTap,
     required this.onSelectFile,
     required this.onOpenUrlInput,
+    required this.detachedPlayer,
+    this.onLocateDetachedPlayer,
+    this.onReturnDetachedPlayer,
   });
 
   final UnifiedPlaybackEntryContent content;
@@ -58,6 +70,9 @@ class _PlaybackEntryRendererData {
   final material.VoidCallback onMascotTap;
   final material.VoidCallback onSelectFile;
   final material.VoidCallback onOpenUrlInput;
+  final bool detachedPlayer;
+  final material.VoidCallback? onLocateDetachedPlayer;
+  final material.VoidCallback? onReturnDetachedPlayer;
 }
 
 class _CupertinoPlaybackEntryRenderer extends material.StatelessWidget {
@@ -205,6 +220,14 @@ class _NipaplayPlaybackEntryRendererState
     final data = widget.data;
     final theme = material.Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
+    final detached = data.detachedPlayer;
+    final primaryLabel = detached ? '定位独立窗口' : data.content.selectFileLabel;
+    final primaryDescription = detached
+        ? '播放器正在独立窗口中继续播放，播放状态和控制设置保持不变'
+        : data.content.selectFileDescription;
+    final secondaryLabel = detached ? '移回主窗口' : data.content.enterUrlLabel;
+    final secondaryDescription =
+        detached ? '关闭独立窗口，并把同一个播放器移回这里' : data.content.enterUrlDescription;
 
     return material.Center(
       child: material.SingleChildScrollView(
@@ -226,7 +249,7 @@ class _NipaplayPlaybackEntryRendererState
                 crossAxisAlignment: material.CrossAxisAlignment.start,
                 children: [
                   material.Text(
-                    data.content.emptyTitle,
+                    detached ? '正在独立窗口播放' : data.content.emptyTitle,
                     style: material.TextStyle(
                       color: textColor,
                       fontSize: 18,
@@ -234,14 +257,18 @@ class _NipaplayPlaybackEntryRendererState
                   ),
                   const material.SizedBox(height: 18),
                   AdaptiveMediaActionButton(
-                    label: data.content.selectFileLabel,
-                    onPressed: data.onSelectFile,
-                    desktopIcon: material.Icons.folder_open_rounded,
+                    label: primaryLabel,
+                    onPressed: detached
+                        ? data.onLocateDetachedPlayer
+                        : data.onSelectFile,
+                    desktopIcon: detached
+                        ? material.Icons.filter_center_focus_rounded
+                        : material.Icons.folder_open_rounded,
                     phoneIcon: cupertino.CupertinoIcons.folder_open,
                   ),
                   const material.SizedBox(height: 8),
                   material.Text(
-                    data.content.selectFileDescription,
+                    primaryDescription,
                     style: material.TextStyle(
                       color: textColor.withValues(alpha: 0.68),
                       fontSize: 14,
@@ -251,14 +278,18 @@ class _NipaplayPlaybackEntryRendererState
                   _PlaybackChoiceDivider(textColor: textColor),
                   const material.SizedBox(height: 18),
                   AdaptiveMediaActionButton(
-                    label: data.content.enterUrlLabel,
-                    onPressed: data.onOpenUrlInput,
-                    desktopIcon: material.Icons.link_rounded,
+                    label: secondaryLabel,
+                    onPressed: detached
+                        ? data.onReturnDetachedPlayer
+                        : data.onOpenUrlInput,
+                    desktopIcon: detached
+                        ? material.Icons.call_merge_rounded
+                        : material.Icons.link_rounded,
                     phoneIcon: cupertino.CupertinoIcons.link,
                   ),
                   const material.SizedBox(height: 8),
                   material.Text(
-                    data.content.enterUrlDescription,
+                    secondaryDescription,
                     style: material.TextStyle(
                       color: textColor.withValues(alpha: 0.68),
                       fontSize: 14,

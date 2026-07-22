@@ -18,6 +18,7 @@ import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
+import 'package:nipaplay/widgets/desktop_transient_overlay.dart';
 import 'keyboard_activatable.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
@@ -56,6 +57,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _playStateChangedByDrag = false;
   OverlayEntry? _playlistOverlay;
   OverlayEntry? _settingsOverlay;
+  DesktopTransientOverlay? _playlistPopup;
+  DesktopTransientOverlay? _settingsPopup;
   Timer? _doubleTapTimer;
   int _tapCount = 0;
   static const _doubleTapTimeout = Duration(milliseconds: 360);
@@ -177,9 +180,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       }
       return;
     }
+    _playlistPopup?.close();
+    _playlistPopup = null;
+    _settingsPopup?.close();
+    _settingsPopup = null;
     _playlistOverlay?.remove();
     _playlistOverlay = null;
     _settingsOverlay?.remove();
+    _settingsOverlay = null;
     videoState.setControlsVisibilityLocked(true);
 
     Rect? anchorRect;
@@ -193,6 +201,28 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       if (keyRenderBox != null && keyRenderBox.hasSize) {
         final position = keyRenderBox.localToGlobal(Offset.zero);
         anchorRect = position & keyRenderBox.size;
+      }
+    }
+
+    if (anchorRect != null &&
+        DesktopMultiWindow.isSecondaryWindow(buttonContext)) {
+      final popup = DesktopTransientOverlay.showPopup(
+        context: buttonContext,
+        anchorRect: anchorRect,
+        size: const Size(320, 600),
+        placement: DesktopTransientWindowPlacement.above,
+        contentBuilder: (_, close) => VideoSettingsMenu(
+          standaloneWindow: true,
+          onClose: close,
+        ),
+        onClosed: () {
+          _settingsPopup = null;
+          videoState.setControlsVisibilityLocked(false);
+        },
+      );
+      if (popup != null) {
+        _settingsPopup = popup;
+        return;
       }
     }
 
@@ -216,9 +246,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       buttonContext,
       listen: false,
     );
+    _settingsPopup?.close();
+    _settingsPopup = null;
+    _playlistPopup?.close();
+    _playlistPopup = null;
     _settingsOverlay?.remove();
     _settingsOverlay = null;
     _playlistOverlay?.remove();
+    _playlistOverlay = null;
     videoState.setControlsVisibilityLocked(true);
 
     Rect? anchorRect;
@@ -232,6 +267,30 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       if (keyRenderBox != null && keyRenderBox.hasSize) {
         final position = keyRenderBox.localToGlobal(Offset.zero);
         anchorRect = position & keyRenderBox.size;
+      }
+    }
+
+    if (anchorRect != null &&
+        DesktopMultiWindow.isSecondaryWindow(buttonContext)) {
+      final popup = DesktopTransientOverlay.showPopup(
+        context: buttonContext,
+        anchorRect: anchorRect,
+        size: const Size(320, 600),
+        placement: DesktopTransientWindowPlacement.above,
+        contentBuilder: (_, close) => VideoSettingsMenu(
+          standaloneWindow: true,
+          initialPaneId: PlayerMenuPaneId.playlist,
+          hideBackButtonForInitialPane: true,
+          onClose: close,
+        ),
+        onClosed: () {
+          _playlistPopup = null;
+          videoState.setControlsVisibilityLocked(false);
+        },
+      );
+      if (popup != null) {
+        _playlistPopup = popup;
+        return;
       }
     }
 
@@ -254,6 +313,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   @override
   void dispose() {
+    _playlistPopup?.close();
+    _settingsPopup?.close();
     _playlistOverlay?.remove();
     _settingsOverlay?.remove();
     _doubleTapTimer?.cancel();
@@ -687,6 +748,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           fontWeight: FontWeight.normal,
                                           height: 1.0,
                                           textBaseline: TextBaseline.alphabetic,
+                                          decoration: TextDecoration.none,
                                         ),
                                         textAlign: TextAlign.center,
                                         softWrap: false,
@@ -723,8 +785,16 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         onPressed: (value) => setState(
                                             () => _isPipPressed = value),
                                         tooltip: detachedWindow != null
-                                            ? '移回主窗口'
-                                            : '移到独立窗口',
+                                            ? _tooltipManager
+                                                .formatActionWithShortcut(
+                                                'toggle_detached_player',
+                                                '移回主窗口',
+                                              )
+                                            : _tooltipManager
+                                                .formatActionWithShortcut(
+                                                'toggle_detached_player',
+                                                '移到独立窗口',
+                                              ),
                                         useAnimatedSwitcher: true,
                                       ),
 

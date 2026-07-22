@@ -28,6 +28,7 @@ class VideoSettingsMenu extends StatefulWidget {
   final GlobalKey? anchorKey;
   final PlayerMenuPaneId? initialPaneId;
   final bool hideBackButtonForInitialPane;
+  final bool standaloneWindow;
 
   const VideoSettingsMenu({
     super.key,
@@ -37,6 +38,7 @@ class VideoSettingsMenu extends StatefulWidget {
     this.anchorKey,
     this.initialPaneId,
     this.hideBackButtonForInitialPane = false,
+    this.standaloneWindow = false,
   });
 
   @override
@@ -290,6 +292,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
       showPointer: resolvedAnchorRect != null,
       height: height,
       requestClose: requestClose,
+      standaloneWindow: widget.standaloneWindow,
       child: child,
     );
   }
@@ -541,6 +544,15 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             ),
           ),
         );
+        if (widget.standaloneWindow) {
+          return Material(
+            type: MaterialType.transparency,
+            child: IgnorePointer(
+              ignoring: _isClosing,
+              child: animatedMenuContent,
+            ),
+          );
+        }
         return Material(
           type: MaterialType.transparency,
           child: SizedBox(

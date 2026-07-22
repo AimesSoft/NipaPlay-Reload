@@ -26,6 +26,8 @@ class SettingsKeys {
       'external_player_auto_switch_to_danmaku_console'; // 启动外部播放器后自动切换到弹幕控制台
   static const String externalPlayerShrinkWindow =
       'external_player_shrink_window'; // 外部播放期间将主窗口缩至屏幕半宽
+  static const String externalPlayerConsoleWindowMode =
+      'external_player_console_window_mode'; // 使用独立窗口显示外部播放器弹幕控制台
 
   /// 自定义播放器请求视频的 User-Agent（空字符串 = 用内核默认 UA）。
   static const String customPlayerUA = 'custom_player_ua';

@@ -203,7 +203,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get danmakuOutlineEnabledTitle => '启用弹幕描边';
 
   @override
-  String get danmakuOutlineEnabledSubtitle => '控制是否显示弹幕文字描边，新打开的视频将应用此设置。';
+  String get danmakuOutlineEnabledSubtitle =>
+      '0 为无描边，1 为细边，2 为原来的粗边；新打开的视频将应用此设置。';
 
   @override
   String get danmakuOutlineWidthTitle => '弹幕描边粗细';
@@ -2141,7 +2142,8 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get danmakuOutlineEnabledTitle => '啟用彈幕描邊';
 
   @override
-  String get danmakuOutlineEnabledSubtitle => '控制是否顯示彈幕文字描邊，新開啟的影片將套用此設定。';
+  String get danmakuOutlineEnabledSubtitle =>
+      '0 為無描邊，1 為細邊，2 為原本的粗邊；新開啟的影片將套用此設定。';
 
   @override
   String get danmakuOutlineWidthTitle => '彈幕描邊粗細';

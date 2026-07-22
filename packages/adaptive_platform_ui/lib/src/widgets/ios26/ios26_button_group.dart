@@ -44,6 +44,11 @@ class IOS26ButtonGroup extends StatefulWidget {
 }
 
 class _IOS26ButtonGroupState extends State<IOS26ButtonGroup> {
+  // UIToolbar's shared Liquid Glass background paints beyond the platform
+  // view's item bounds on iOS 26. Keep that native chrome inside the Flutter
+  // layout box so right-aligned groups cannot be clipped by the screen edge.
+  static const double _nativeChromeHorizontalOutset = 12;
+
   static int _nextId = 0;
 
   late final int _id = _nextId++;
@@ -59,19 +64,31 @@ class _IOS26ButtonGroupState extends State<IOS26ButtonGroup> {
 
   @override
   Widget build(BuildContext context) {
-    final size = Size(widget.itemWidth * widget.items.length, widget.height);
     if (widget.items.isEmpty) return const SizedBox.shrink();
+    final contentSize = Size(
+      widget.itemWidth * widget.items.length,
+      widget.height,
+    );
+    final layoutSize = Size(
+      contentSize.width + (_nativeChromeHorizontalOutset * 2),
+      contentSize.height,
+    );
     if (kIsWeb || !Platform.isIOS || !ios26NativeViewRouteIsCurrent(context)) {
-      return SizedBox.fromSize(size: size);
+      return SizedBox.fromSize(size: layoutSize);
     }
 
-    return SizedBox.fromSize(
-      size: size,
-      child: UiKitView(
-        viewType: 'adaptive_platform_ui/ios26_button_group',
-        creationParams: <String, Object>{'id': _id, 'items': _itemsParams()},
-        creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: _onPlatformViewCreated,
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: _nativeChromeHorizontalOutset,
+      ),
+      child: SizedBox.fromSize(
+        size: contentSize,
+        child: UiKitView(
+          viewType: 'adaptive_platform_ui/ios26_button_group',
+          creationParams: <String, Object>{'id': _id, 'items': _itemsParams()},
+          creationParamsCodec: const StandardMessageCodec(),
+          onPlatformViewCreated: _onPlatformViewCreated,
+        ),
       ),
     );
   }

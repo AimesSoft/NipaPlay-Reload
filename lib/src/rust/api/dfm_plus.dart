@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `fxhash_str`, `lower_bound`, `resolve_outline_px`, `upper_bound`, `with_handle`, `with_layout_store`
+// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `fxhash_str`, `lower_bound`, `upper_bound`, `with_handle`, `with_layout_store`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One-time layout preparation.
@@ -146,7 +146,7 @@ class DfmPlusFontMetrics {
   /// Total line height = ascent + descent.
   final double lineHeight;
 
-  /// Effective outline width in pixels, matching GPU's `resolve_outline_px()`.
+  /// Effective outline width in pixels, matching the GPU outline profile.
   final double outlinePx;
 
   const DfmPlusFontMetrics({

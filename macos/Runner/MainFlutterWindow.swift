@@ -309,10 +309,46 @@ extension NSWindow {
             )
         }
     }
+
+    var nipaplayIsDetachedPlayerWindow: Bool {
+        get {
+            (objc_getAssociatedObject(
+                self,
+                &AssociatedObjectKeys.detachedPlayerWindow
+            ) as? NSNumber)?.boolValue ?? false
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &AssociatedObjectKeys.detachedPlayerWindow,
+                NSNumber(value: newValue),
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+
+    var nipaplayPictureInPictureRestoreFrame: NSRect? {
+        get {
+            (objc_getAssociatedObject(
+                self,
+                &AssociatedObjectKeys.pictureInPictureRestoreFrame
+            ) as? NSValue)?.rectValue
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &AssociatedObjectKeys.pictureInPictureRestoreFrame,
+                newValue.map { NSValue(rect: $0) },
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
 }
 
 private enum AssociatedObjectKeys {
     static var nativeVideoOverlayHost: UInt8 = 0
+    static var detachedPlayerWindow: UInt8 = 0
+    static var pictureInPictureRestoreFrame: UInt8 = 0
 }
 
 private extension NSView {
@@ -1007,12 +1043,6 @@ private final class MultiviewPluginRegistrarCompatibility {
   }
 }
 
-/// Native chrome controls for the same-engine Flutter window fork.
-///
-/// Flutter 3.44 can create regular secondary windows, but its public Dart
-/// wrapper deliberately throws for undecorated windows on macOS. This plugin
-/// changes only the NSWindow that owns the requested FlutterView; it never
-/// creates an engine, isolate, player, or replacement Flutter view.
 private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   private static let channelName = "nipaplay/desktop_multi_window_host"
   private struct WindowDragState {
@@ -1021,6 +1051,8 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   }
 
   private var dragStates: [Int: WindowDragState] = [:]
+  private var detachedPlayerClasses: Set<ObjectIdentifier> = []
+  private var interactivePopupClasses: Set<ObjectIdentifier> = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -1034,8 +1066,24 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard let arguments = call.arguments as? [String: Any],
-          let window = resolveWindow(arguments) else {
+    guard let arguments = call.arguments as? [String: Any] else {
+      NSLog(
+        "[DesktopMultiWindow][Host] invalid arguments method=%@",
+        call.method
+      )
+      result(FlutterError(
+        code: "INVALID_ARGUMENTS",
+        message: "Desktop window host arguments are missing",
+        details: nil
+      ))
+      return
+    }
+    guard let window = resolveWindow(arguments) else {
+      NSLog(
+        "[DesktopMultiWindow][Host] window not found method=%@ viewId=%@",
+        call.method,
+        String(describing: arguments["viewId"])
+      )
       result(FlutterError(
         code: "WINDOW_NOT_FOUND",
         message: "No macOS window owns the requested FlutterView",
@@ -1061,6 +1109,40 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       let alwaysOnTop = boolValue(arguments["alwaysOnTop"]) ?? false
       applyAlwaysOnTop(alwaysOnTop, to: window)
       result(alwaysOnTop)
+    case "setPictureInPictureMode":
+      applyPictureInPictureMode(arguments, to: window)
+      result(nil)
+    case "configureTransientWindow":
+      // Flutter 3.44 initially creates popup views at 0x0. Supplying tight
+      // Dart constraints alone does not produce valid view metrics on macOS,
+      // so seed the native content size before the first rendered frame.
+      let viewIdentifier = int64Value(arguments["viewId"]) ?? -1
+      let requestedWidth = doubleValue(arguments["width"]) ?? -1
+      let requestedHeight = doubleValue(arguments["height"]) ?? -1
+      let interactive = boolValue(arguments["interactive"]) ?? false
+      NSLog(
+        "[DesktopMultiWindow][Transient] configure viewId=%lld interactive=%@ requested=%.1fx%.1f beforeContent=%@ beforeFrame=%@ class=%@",
+        viewIdentifier,
+        interactive.description,
+        requestedWidth,
+        requestedHeight,
+        NSStringFromSize(window.contentView?.bounds.size ?? .zero),
+        NSStringFromRect(window.frame),
+        NSStringFromClass(type(of: window))
+      )
+      applyPreferredContentSize(arguments, to: window)
+      if interactive {
+        makeInteractivePopup(window)
+      }
+      NSLog(
+        "[DesktopMultiWindow][Transient] configured viewId=%lld afterContent=%@ afterFrame=%@ visible=%@ level=%ld",
+        viewIdentifier,
+        NSStringFromSize(window.contentView?.bounds.size ?? .zero),
+        NSStringFromRect(window.frame),
+        window.isVisible.description,
+        window.level.rawValue
+      )
+      result(nil)
     case "startDragging":
       dragStates[window.windowNumber] = WindowDragState(
         mouseLocation: NSEvent.mouseLocation,
@@ -1099,14 +1181,129 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   }
 
   private func makeFrameless(_ window: NSWindow) {
-    var styleMask = window.styleMask
-    styleMask.remove([.titled, .fullSizeContentView])
-    styleMask.insert([.closable, .miniaturizable, .resizable])
-    window.styleMask = styleMask
+    if !window.nipaplayIsDetachedPlayerWindow {
+      // Never change the runtime class of an AppKit window. NSWindow owns
+      // private KVO registrations for its titlebar and layer context; replacing
+      // its class makes those observers crash either immediately or at deinit.
+      installDetachedPlayerBehavior(on: window)
+      window.nipaplayIsDetachedPlayerWindow = true
+      var styleMask = window.styleMask
+      styleMask.remove([.titled, .fullSizeContentView])
+      styleMask.insert([
+        .closable,
+        .miniaturizable,
+        .resizable,
+        .nonactivatingPanel,
+      ])
+      window.styleMask = styleMask
+    }
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
-    window.isMovableByWindowBackground = false
+    window.isMovableByWindowBackground = true
     window.hasShadow = true
+  }
+
+  private func installDetachedPlayerBehavior(on window: NSWindow) {
+    guard let targetClass = object_getClass(window) else {
+      return
+    }
+    let classIdentifier = ObjectIdentifier(targetClass)
+    guard detachedPlayerClasses.insert(classIdentifier).inserted else {
+      return
+    }
+
+    // A non-activating frameless NSWindow does not accept Flutter pointer
+    // input unless it can become key. Patch the existing Flutter window class
+    // conditionally, keeping the original behavior for the main window and all
+    // other instances of that class.
+    replaceDetachedWindowBoolGetter(
+      on: targetClass,
+      named: "canBecomeKeyWindow",
+      detachedValue: true
+    )
+    replaceDetachedWindowBoolGetter(
+      on: targetClass,
+      named: "canBecomeMainWindow",
+      detachedValue: false
+    )
+    replaceDetachedWindowBoolGetter(
+      on: targetClass,
+      named: "acceptsFirstResponder",
+      detachedValue: true
+    )
+  }
+
+  private func replaceDetachedWindowBoolGetter(
+    on targetClass: AnyClass,
+    named name: String,
+    detachedValue: Bool
+  ) {
+    let selector = NSSelectorFromString(name)
+    guard let method = class_getInstanceMethod(targetClass, selector),
+          let typeEncoding = method_getTypeEncoding(method) else {
+      return
+    }
+    typealias OriginalBoolGetter = @convention(c) (
+      AnyObject,
+      Selector
+    ) -> Bool
+    let originalGetter = unsafeBitCast(
+      method_getImplementation(method),
+      to: OriginalBoolGetter.self
+    )
+    let getter = { (object: AnyObject) -> Bool in
+      if let candidate = object as? NSWindow,
+         candidate.nipaplayIsDetachedPlayerWindow {
+        return detachedValue
+      }
+      return originalGetter(object, selector)
+    } as @convention(block) (AnyObject) -> Bool
+    class_replaceMethod(
+      targetClass,
+      selector,
+      imp_implementationWithBlock(getter),
+      typeEncoding
+    )
+  }
+
+  private func makeInteractivePopup(_ window: NSWindow) {
+    guard let panel = window as? NSPanel,
+          let popupClass = object_getClass(window) else {
+      return
+    }
+    let classIdentifier = ObjectIdentifier(popupClass)
+    if interactivePopupClasses.insert(classIdentifier).inserted {
+      // FlutterPopupWindow deliberately rejects focus. Override its getters on
+      // the existing class instead of replacing an individual panel's class;
+      // the latter corrupts AppKit's private KVO bookkeeping at deallocation.
+      replaceBoolGetter(on: popupClass, named: "canBecomeKeyWindow", value: true)
+      replaceBoolGetter(on: popupClass, named: "canBecomeMainWindow", value: false)
+      replaceBoolGetter(on: popupClass, named: "acceptsFirstResponder", value: true)
+    }
+    window.hidesOnDeactivate = false
+    window.isExcludedFromWindowsMenu = true
+    panel.becomesKeyOnlyIfNeeded = false
+    panel.isFloatingPanel = true
+  }
+
+  private func replaceBoolGetter(
+    on targetClass: AnyClass,
+    named name: String,
+    value: Bool
+  ) {
+    let selector = NSSelectorFromString(name)
+    guard let method = class_getInstanceMethod(targetClass, selector),
+          let typeEncoding = method_getTypeEncoding(method) else {
+      return
+    }
+    let getter = { (_: AnyObject) -> Bool in value }
+      as @convention(block) (AnyObject) -> Bool
+    class_replaceMethod(
+      targetClass,
+      selector,
+      imp_implementationWithBlock(getter),
+      typeEncoding
+    )
   }
 
   private func applyAspectRatio(_ value: Any?, to window: NSWindow) {
@@ -1134,13 +1331,90 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   private func applyAlwaysOnTop(_ alwaysOnTop: Bool, to window: NSWindow) {
     window.level = alwaysOnTop ? .floating : .normal
     window.hidesOnDeactivate = false
+    window.isExcludedFromWindowsMenu = true
     var collectionBehavior = window.collectionBehavior
     if alwaysOnTop {
-      collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
+      collectionBehavior.insert([
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+      ])
     } else {
-      collectionBehavior.remove([.canJoinAllSpaces, .fullScreenAuxiliary])
+      collectionBehavior.remove([
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+      ])
     }
     window.collectionBehavior = collectionBehavior
+  }
+
+  private func applyPictureInPictureMode(
+    _ arguments: [String: Any],
+    to window: NSWindow
+  ) {
+    let enabled = boolValue(arguments["enabled"]) ?? false
+    if !enabled {
+      guard let restoreFrame = window.nipaplayPictureInPictureRestoreFrame else {
+        return
+      }
+      window.nipaplayPictureInPictureRestoreFrame = nil
+      NSLog(
+        "[DesktopMultiWindow][PiP] restore frame=%@",
+        NSStringFromRect(restoreFrame)
+      )
+      window.setFrame(restoreFrame, display: true, animate: true)
+      return
+    }
+
+    if window.nipaplayPictureInPictureRestoreFrame == nil {
+      window.nipaplayPictureInPictureRestoreFrame = window.frame
+    }
+    guard let screen = window.screen ?? NSScreen.main else {
+      return
+    }
+    let visibleFrame = screen.visibleFrame
+    let aspectRatio = max(
+      0.5,
+      min(3.0, doubleValue(arguments["aspectRatio"]) ?? (16.0 / 9.0))
+    )
+    let margin = max(0, doubleValue(arguments["margin"]) ?? 16)
+    let availableWidth = max(1, visibleFrame.width - margin * 2)
+    let availableHeight = max(1, visibleFrame.height - margin * 2)
+    var contentHeight = min(visibleFrame.height / 3, availableHeight)
+    var contentWidth = contentHeight * aspectRatio
+    if contentWidth > availableWidth {
+      contentWidth = availableWidth
+      contentHeight = contentWidth / aspectRatio
+    }
+    window.setContentSize(NSSize(width: contentWidth, height: contentHeight))
+
+    let frameSize = window.frame.size
+    let placement = stringValue(arguments["placement"]) ?? "topRight"
+    let left = visibleFrame.minX + margin
+    let right = visibleFrame.maxX - frameSize.width - margin
+    let bottom = visibleFrame.minY + margin
+    let top = visibleFrame.maxY - frameSize.height - margin
+    let origin: NSPoint
+    switch placement {
+    case "topLeft":
+      origin = NSPoint(x: left, y: top)
+    case "bottomLeft":
+      origin = NSPoint(x: left, y: bottom)
+    case "bottomRight":
+      origin = NSPoint(x: right, y: bottom)
+    case "topRight":
+      fallthrough
+    default:
+      origin = NSPoint(x: right, y: top)
+    }
+    NSLog(
+      "[DesktopMultiWindow][PiP] dock placement=%@ screen=%@ content=%.1fx%.1f origin=%@",
+      placement,
+      NSStringFromRect(visibleFrame),
+      contentWidth,
+      contentHeight,
+      NSStringFromPoint(origin)
+    )
+    window.setFrameOrigin(origin)
   }
 
   private func int64Value(_ value: Any?) -> Int64? {
@@ -1171,6 +1445,10 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       return value.boolValue
     }
     return nil
+  }
+
+  private func stringValue(_ value: Any?) -> String? {
+    value as? String
   }
 }
 
