@@ -11,7 +11,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
-/// Linux/macOS mpv 外部播放会话的桌面控制台。
+/// 桌面端 mpv 外部播放会话控制台。
 enum ExternalPlayerConsolePane {
   all,
   controls,
