@@ -26,10 +26,10 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     const String subtitleTraditional = '開始外部播放後，主程式自動切換到彈幕控制台頁面';
     const String subtitleEnglish =
         'Switch to the Danmaku Console after external playback starts.';
-    const String subtitleUnsupportedSimplified = '弹幕控制台目前仅支持 Linux 和 macOS';
-    const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 Linux 和 macOS';
+    const String subtitleUnsupportedSimplified = '弹幕控制台目前仅支持 mpv 播放器';
+    const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 mpv 播放器';
     const String subtitleUnsupportedEnglish =
-        'The Danmaku Console is currently available on Linux and macOS only.';
+        'The Danmaku Console is currently available for mpv only.';
     const String subtitleWindowModeSimplified = '独立窗口模式下，外部播放开始后会直接打开控制台窗口';
     const String subtitleWindowModeTraditional = '獨立視窗模式下，外部播放開始後會直接開啟控制台視窗';
     const String subtitleWindowModeEnglish =
