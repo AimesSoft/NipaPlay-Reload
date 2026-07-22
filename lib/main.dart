@@ -803,6 +803,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       navigationItemsBuilder: (ctx) {
         final webdav = ctx.watch<WebDAVQuickAccessProvider>();
         final downloader = ctx.watch<DownloaderSettingsProvider>();
+        final settings = ctx.watch<SettingsProvider>();
         final localizations = lookupAppLocalizations(
           ctx.watch<AppLanguageProvider>().locale,
         );
@@ -813,7 +814,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                 globals.isDownloaderSupportedPlatform && downloader.enabled,
             showExternalPlayerConsole:
                 ExternalPlayerConsoleService.isSupportedPlatform &&
-                    ExternalPlayerConsoleService.hasActiveSession,
+                    ExternalPlayerConsoleService.hasActiveSession &&
+                    !settings.externalPlayerConsoleWindowMode,
           ),
         );
         return pages
@@ -1082,6 +1084,7 @@ class MainPageState extends State<MainPage>
   bool _useLargeScreenLayout = false;
   StreamSubscription<String>? _androidFileAssociationSubscription;
   DownloaderSettingsProvider? _downloaderSettingsProvider;
+  SettingsProvider? _settingsProvider;
 
   List<UnifiedAppPage> _pageDefinitions = const <UnifiedAppPage>[];
   List<Widget> _pages = [];
@@ -1214,11 +1217,18 @@ class MainPageState extends State<MainPage>
       _pluginService?.addListener(_onDownloaderSettingsChanged);
       PluginService.setBuildContext(context);
     } catch (_) {}
+    try {
+      _settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+      _settingsProvider?.addListener(
+        _onExternalPlayerConsoleAvailabilityChanged,
+      );
+    } catch (_) {}
 
     // 构建初始页面列表
     _showExternalPlayerConsoleTab =
         ExternalPlayerConsoleService.isSupportedPlatform &&
-            ExternalPlayerConsoleService.hasActiveSession;
+            ExternalPlayerConsoleService.hasActiveSession &&
+            !(_settingsProvider?.externalPlayerConsoleWindowMode ?? false);
     _rebuildPages();
 
     await _initializeController();
@@ -1270,7 +1280,8 @@ class MainPageState extends State<MainPage>
   void _onExternalPlayerConsoleAvailabilityChanged() {
     if (!mounted) return;
     final shouldShow = ExternalPlayerConsoleService.isSupportedPlatform &&
-        ExternalPlayerConsoleService.hasActiveSession;
+        ExternalPlayerConsoleService.hasActiveSession &&
+        !(_settingsProvider?.externalPlayerConsoleWindowMode ?? false);
     if (shouldShow == _showExternalPlayerConsoleTab) return;
 
     final currentPageId = _selectedPageId;
@@ -1461,6 +1472,9 @@ class MainPageState extends State<MainPage>
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
     _downloaderSettingsProvider?.removeListener(_onDownloaderSettingsChanged);
     _pluginService?.removeListener(_onDownloaderSettingsChanged);
+    _settingsProvider?.removeListener(
+      _onExternalPlayerConsoleAvailabilityChanged,
+    );
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
     _androidFileAssociationSubscription?.cancel();

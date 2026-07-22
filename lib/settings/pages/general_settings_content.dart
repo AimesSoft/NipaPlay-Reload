@@ -6,6 +6,8 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
+import 'package:nipaplay/services/desktop_picture_in_picture_preferences.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/common_setting_tiles.dart';
@@ -44,6 +46,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
   final GlobalKey _startupWindowStateDropdownKey = GlobalKey();
   final GlobalKey _startupWindowPositionDropdownKey = GlobalKey();
   final GlobalKey _startupWindowSizeDropdownKey = GlobalKey();
+  final GlobalKey _pictureInPicturePositionDropdownKey = GlobalKey();
 
   int _defaultPageIndex = 0;
   DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
@@ -52,6 +55,8 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
   DesktopStartupWindowPosition _startupWindowPosition =
       DesktopStartupWindowPreferences.defaultPosition;
   Size _startupWindowSize = DesktopStartupWindowPreferences.defaultWindowSize;
+  DesktopPictureInPicturePosition _pictureInPicturePosition =
+      DesktopPictureInPicturePreferences.defaultPosition;
 
   static const List<_WindowSizePreset> _windowSizePresets = [
     _WindowSizePreset('compact', '紧凑 (960 × 600)', Size(960, 600)),
@@ -223,6 +228,34 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
                 onTap: _resetStartupWindowSize,
               ),
             ],
+            AdaptiveSettingsTile<DesktopPictureInPicturePosition>.dropdown(
+              title: _text(
+                context,
+                '画中画停靠位置',
+                '畫中畫停靠位置',
+                'Picture-in-Picture Position',
+              ),
+              subtitle: _text(
+                context,
+                '进入画中画时停靠到当前屏幕的位置',
+                '進入畫中畫時停靠到目前螢幕的位置',
+                'Where the picture-in-picture window docks on its screen.',
+              ),
+              icon: Icons.picture_in_picture_alt_outlined,
+              phoneIcon: cupertino.CupertinoIcons.rectangle_on_rectangle,
+              items: _pictureInPicturePositionItems(context),
+              onChanged: (position) async {
+                setState(() {
+                  _pictureInPicturePosition = position;
+                });
+                await DesktopPictureInPicturePreferences.savePosition(
+                  position,
+                );
+                await DesktopPlayerWindowService.instance
+                    .updatePictureInPicturePlacement(position);
+              },
+              dropdownKey: _pictureInPicturePositionDropdownKey,
+            ),
           ],
         ),
       );
@@ -305,6 +338,8 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
     final startupPosition =
         await DesktopStartupWindowPreferences.loadPosition();
     final startupSize = await DesktopStartupWindowPreferences.loadSize();
+    final pictureInPicturePosition =
+        await DesktopPictureInPicturePreferences.loadPosition();
     final storedHomeTab = prefs.getString(_defaultHomeTabKey);
     final storedTabIndex = _defaultPageIndexForTab(storedHomeTab);
     var resolvedIndex =
@@ -324,6 +359,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
       _startupWindowState = startupState;
       _startupWindowPosition = startupPosition;
       _startupWindowSize = startupSize;
+      _pictureInPicturePosition = pictureInPicturePosition;
       _defaultPageIndex = resolvedIndex;
     });
   }
@@ -469,6 +505,36 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
       ),
     );
     return items;
+  }
+
+  List<DropdownMenuItemData<DesktopPictureInPicturePosition>>
+      _pictureInPicturePositionItems(BuildContext context) {
+    return [
+      DropdownMenuItemData(
+        title: _text(context, '左上角', '左上角', 'Top Left'),
+        value: DesktopPictureInPicturePosition.topLeft,
+        isSelected: _pictureInPicturePosition ==
+            DesktopPictureInPicturePosition.topLeft,
+      ),
+      DropdownMenuItemData(
+        title: _text(context, '右上角', '右上角', 'Top Right'),
+        value: DesktopPictureInPicturePosition.topRight,
+        isSelected: _pictureInPicturePosition ==
+            DesktopPictureInPicturePosition.topRight,
+      ),
+      DropdownMenuItemData(
+        title: _text(context, '左下角', '左下角', 'Bottom Left'),
+        value: DesktopPictureInPicturePosition.bottomLeft,
+        isSelected: _pictureInPicturePosition ==
+            DesktopPictureInPicturePosition.bottomLeft,
+      ),
+      DropdownMenuItemData(
+        title: _text(context, '右下角', '右下角', 'Bottom Right'),
+        value: DesktopPictureInPicturePosition.bottomRight,
+        isSelected: _pictureInPicturePosition ==
+            DesktopPictureInPicturePosition.bottomRight,
+      ),
+    ];
   }
 
   Future<void> _saveDefaultPagePreference(int index) async {
