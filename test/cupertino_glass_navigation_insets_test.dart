@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/cupertino/utils/cupertino_glass_navigation_insets.dart';
 
 void main() {
+  test('fallback glass tab bar keeps its designed content height', () {
+    expect(cupertinoGlassTabBarHeight, 64);
+  });
+
   group('resolveGlassTabBarBottomOffset', () {
     test('fully clears Android three-button navigation', () {
       expect(

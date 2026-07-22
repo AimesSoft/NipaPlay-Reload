@@ -380,7 +380,7 @@ class CupertinoBottomSheet extends StatelessWidget {
 
     if (PlatformInfo.isIOS26OrHigher()) {
       return SizedBox.square(
-        dimension: _closeButtonSize,
+        dimension: _nativeHeaderButtonSize,
         child: AdaptiveButton.sfSymbol(
           useSmoothRectangleBorder: false,
           onPressed: onPressed,
@@ -396,7 +396,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     }
 
     return SizedBox.square(
-      dimension: _closeButtonSize,
+      dimension: _fallbackHeaderButtonSize,
       child: _buildFallbackHeaderButton(
         context,
         label: '返回',
@@ -417,8 +417,8 @@ class CupertinoBottomSheet extends StatelessWidget {
 
     if (PlatformInfo.isIOS26OrHigher()) {
       return SizedBox(
-        width: _closeButtonSize,
-        height: _closeButtonSize,
+        width: _nativeHeaderButtonSize,
+        height: _nativeHeaderButtonSize,
         child: AdaptiveButton.sfSymbol(
           useSmoothRectangleBorder: false,
           onPressed: onPressedCallback,
@@ -430,8 +430,8 @@ class CupertinoBottomSheet extends StatelessWidget {
     }
 
     return SizedBox(
-      width: _closeButtonSize,
-      height: _closeButtonSize,
+      width: _fallbackHeaderButtonSize,
+      height: _fallbackHeaderButtonSize,
       child: _buildFallbackHeaderButton(
         context,
         label: '关闭',
@@ -458,8 +458,8 @@ class CupertinoBottomSheet extends StatelessWidget {
       label: label,
       icon: Icon(icon, size: iconSize, color: iconColor),
       onTap: onPressed,
-      width: _closeButtonSize,
-      height: _closeButtonSize,
+      width: _fallbackHeaderButtonSize,
+      height: _fallbackHeaderButtonSize,
       iconSize: iconSize,
       useOwnLayer: true,
       quality: GlassQuality.standard,
@@ -491,7 +491,10 @@ class CupertinoBottomSheet extends StatelessWidget {
   );
 
   static const double _closeButtonPadding = 12;
-  static const double _closeButtonSize = 40;
+  static const double _nativeHeaderButtonSize = 40;
+  // Native Liquid Glass paints outside its 40pt layout box. The fallback
+  // does not, so its visible circle needs the standard 44pt tap diameter.
+  static const double _fallbackHeaderButtonSize = 44;
   static const double _floatingContentTopInsetWithClose = 44;
   static const double _floatingContentTopInset = 28;
   static const double _contentTopInsetWithClose = 28;
