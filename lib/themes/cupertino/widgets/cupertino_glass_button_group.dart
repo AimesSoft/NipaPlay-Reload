@@ -24,6 +24,14 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
   final List<CupertinoGlassButtonGroupItem> items;
   final double buttonSize;
 
+  // UIKit's iOS 26 glass chrome paints a few points beyond the platform
+  // view's logical bounds. The Flutter fallback stays strictly inside its
+  // bounds, so give its shell a little more room to preserve the same visual
+  // size while keeping the icon size unchanged.
+  static const double _fallbackHeightExpansion = 4;
+  static const double _fallbackItemWidthExpansion = 6;
+  static const double _iconSize = 19;
+
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
@@ -49,6 +57,9 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
       );
     }
 
+    final fallbackHeight = buttonSize + _fallbackHeightExpansion;
+    final fallbackItemWidth = buttonSize + _fallbackItemWidthExpansion;
+
     return GlassButtonGroup.icons(
       useOwnLayer: true,
       quality: GlassQuality.standard,
@@ -66,9 +77,12 @@ class CupertinoGlassButtonGroup extends StatelessWidget {
               backerColor: Color(0x14FFFFFF),
             )
           : null,
-      borderRadius: buttonSize / 2,
-      iconSize: 19,
-      itemPadding: EdgeInsets.all((buttonSize - 19) / 2),
+      borderRadius: fallbackHeight / 2,
+      iconSize: _iconSize,
+      itemPadding: EdgeInsets.symmetric(
+        horizontal: (fallbackItemWidth - _iconSize) / 2,
+        vertical: (fallbackHeight - _iconSize) / 2,
+      ),
       items: [
         for (final item in items)
           GlassButtonGroupItem(
