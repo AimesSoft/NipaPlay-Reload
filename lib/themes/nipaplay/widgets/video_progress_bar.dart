@@ -18,6 +18,7 @@ class VideoProgressBar extends StatefulWidget {
   final Function(bool) onDraggingStateChange;
   final String Function(Duration) formatDuration;
   final bool compact;
+  final bool showHoverPreview;
 
   /// MKV 章节列表（用于在轨道上画章节起点竖线标记 + 当前章节高亮段）。
   /// 参考 REFERENCE/mpv/player/lua/osc.lua:2512 markers。
@@ -41,6 +42,7 @@ class VideoProgressBar extends StatefulWidget {
     this.durationMs = 0,
     this.currentChapter = -1,
     this.compact = false,
+    this.showHoverPreview = true,
   });
 
   @override
@@ -112,6 +114,7 @@ class _VideoProgressBarState extends State<VideoProgressBar>
 
   void _showOverlay(BuildContext context, double progress,
       {Duration? displayTime, String? thumbnailPath}) {
+    if (!widget.showHoverPreview) return;
     _removeOverlay();
 
     final RenderBox? sliderBox =
@@ -270,7 +273,9 @@ class _VideoProgressBarState extends State<VideoProgressBar>
                 _localHoverTime = time;
               });
             }
-            _handleHoverPreview(time, progress);
+            if (widget.showHoverPreview) {
+              _handleHoverPreview(time, progress);
+            }
           } else {
             if (_localHoverTime != null) {
               setState(() {

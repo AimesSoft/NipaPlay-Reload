@@ -466,7 +466,8 @@ impl Next2Renderer {
         // Vec plus every token's String on every frame.
         let frame_items = std::mem::take(&mut self.frame_items);
         for item in &frame_items {
-            let outline_px = resolve_outline_px(item.font_size, item.outline_width);
+            let outline_px =
+                super::resolve_danmaku_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
             let outline_color = stroke_color(fill_color);
@@ -776,17 +777,6 @@ fn to_ndc(x: f32, y: f32, width: f32, height: f32) -> [f32; 2] {
     [nx, ny]
 }
 
-fn resolve_outline_px(font_size: f32, width_multiplier: f32) -> f32 {
-    if !width_multiplier.is_finite() {
-        return 0.0;
-    }
-    let width_multiplier = width_multiplier.clamp(0.0, 4.0);
-    if width_multiplier <= 0.0 {
-        return 0.0;
-    }
-    (font_size * 0.06).clamp(1.0, 2.6) * width_multiplier
-}
-
 #[derive(Copy, Clone)]
 struct ShadowStyle {
     offset_x: f32,
@@ -978,6 +968,67 @@ fn intersection_1d(f: &[f32], i: usize, j: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parallel_msdf_generation_matches_serial_generation() {
+        let fonts = std::sync::Arc::new(load_font_chain(None).expect("load test fonts"));
+        let cases = [('医', 50.0_f32), ('院', 50.0_f32), ('弹', 36.0_f32), ('幕', 36.0_f32)];
+
+        let serial: Vec<_> = cases
+            .iter()
+            .map(|&(ch, px)| rasterize_glyph_on_face(fonts.as_slice(), ch, px).unwrap())
+            .collect();
+        let workers: Vec<_> = cases
+            .iter()
+            .map(|&(ch, px)| {
+                let fonts = std::sync::Arc::clone(&fonts);
+                std::thread::spawn(move || {
+                    rasterize_glyph_on_face(fonts.as_slice(), ch, px).unwrap()
+                })
+            })
+            .collect();
+        let parallel: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("MSDF worker panicked"))
+            .collect();
+
+        for (serial, parallel) in serial.iter().zip(parallel.iter()) {
+            assert_eq!(parallel.width, serial.width);
+            assert_eq!(parallel.height, serial.height);
+            assert_eq!(parallel.pixels, serial.pixels);
+        }
+    }
+
+    #[test]
+    fn thick_outline_keeps_the_mtsdf_quad_border_transparent() {
+        let fonts = load_font_chain(None).expect("load test fonts");
+        let glyph = rasterize_glyph_on_face(fonts.as_slice(), '医', 50.0)
+            .expect("rasterize test glyph");
+        let outline_px = crate::next2_engine::resolve_danmaku_outline_px(256.0, 2.0);
+        let antialias_px = 1.0_f32;
+
+        let border_alpha = (0..glyph.width)
+            .flat_map(|x| [(x, 0), (x, glyph.height - 1)])
+            .chain((0..glyph.height).flat_map(|y| [(0, y), (glyph.width - 1, y)]));
+        for (x, y) in border_alpha {
+            let alpha = glyph.pixels[((y * glyph.width + x) * 4 + 3) as usize] as f32 / 255.0;
+            let distance = (alpha - 0.5) * glyph.spread;
+            let coverage = smoothstep_for_test(
+                -outline_px - antialias_px,
+                -outline_px + antialias_px,
+                distance,
+            );
+            assert!(
+                coverage <= 0.0001,
+                "quad border became visible at ({x}, {y}): distance={distance}, coverage={coverage}"
+            );
+        }
+    }
+
+    fn smoothstep_for_test(edge0: f32, edge1: f32, value: f32) -> f32 {
+        let t = ((value - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
 
     #[test]
     fn emoji_sdf_mask_keeps_inside_above_midpoint() {

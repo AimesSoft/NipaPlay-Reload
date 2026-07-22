@@ -260,6 +260,17 @@ class _CupertinoDanmakuSettingsPaneState
     }
   }
 
+  String _outlineWidthLevelLabel(double value) {
+    switch (normalizeDanmakuOutlineWidthLevel(value).round()) {
+      case 0:
+        return '0 · 无描边';
+      case 2:
+        return '2 · 粗边';
+      default:
+        return '1 · 细边';
+    }
+  }
+
   bool get _isNext2Kernel =>
       DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.next2;
 
@@ -268,9 +279,6 @@ class _CupertinoDanmakuSettingsPaneState
 
   bool get _usesBinaryDanmakuEffectToggles =>
       _isNext2Kernel || _isDfmPlusKernel;
-
-  String get _binaryDanmakuEffectKernelName =>
-      _isDfmPlusKernel ? 'DFM+' : 'Next2';
 
   double _snapDanmakuDisplayArea(double value) {
     double best = _danmakuDisplayAreaOptions.first;
@@ -296,9 +304,6 @@ class _CupertinoDanmakuSettingsPaneState
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
-    final binaryDanmakuEffectKernelName =
-        isErikaPlayerKernel ? 'Erika' : _binaryDanmakuEffectKernelName;
-
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
         SliverPadding(
@@ -415,15 +420,17 @@ class _CupertinoDanmakuSettingsPaneState
                   onChanged: widget.videoState.setDanmakuSpeedMultiplier,
                 ),
                 if (showBinaryDanmakuEffectToggles)
-                  _buildSwitchTile(
+                  _buildSliderTile(
                     context,
                     title: '弹幕描边',
-                    subtitle: '开启后为 $binaryDanmakuEffectKernelName 弹幕添加描边',
-                    value: widget.videoState.next2DanmakuOutlineWidth > 0.0,
-                    onChanged: (value) {
-                      widget.videoState
-                          .setNext2DanmakuOutlineWidth(value ? 1.0 : 0.0);
-                    },
+                    description: _outlineWidthLevelLabel(
+                      widget.videoState.next2DanmakuOutlineWidth,
+                    ),
+                    value: widget.videoState.next2DanmakuOutlineWidth,
+                    min: 0.0,
+                    max: 2.0,
+                    divisions: 2,
+                    onChanged: widget.videoState.setNext2DanmakuOutlineWidth,
                   )
                 else
                   _buildOptionButtonsTile<DanmakuOutlineStyle>(

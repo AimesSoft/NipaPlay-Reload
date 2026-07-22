@@ -145,6 +145,8 @@ class HotkeyService extends ChangeNotifier {
       'step_forward': 'E', // 逐帧前进
       'step_backward': 'Q', // 逐帧后退
       'resize_to_video': 'R', // 窗口适配视频
+      'toggle_picture_in_picture': 'P', // 切换画中画
+      'toggle_detached_player': 'W', // 移入/移回独立窗口
     });
 
     if (savedShortcutsString != null) {
@@ -234,6 +236,20 @@ class HotkeyService extends ChangeNotifier {
 
     // 注册窗口适配视频热键
     await _registerHotkey('resize_to_video', '窗口适配视频', _handleResizeToVideo);
+
+    // 注册画中画热键
+    await _registerHotkey(
+      'toggle_picture_in_picture',
+      '切换画中画',
+      _handleTogglePictureInPicture,
+    );
+
+    // 注册独立窗口热键
+    await _registerHotkey(
+      'toggle_detached_player',
+      '切换独立窗口',
+      _handleToggleDetachedPlayer,
+    );
 
     // 注册ESC键退出全屏
     await _registerEscapeKey();
@@ -805,6 +821,42 @@ class HotkeyService extends ChangeNotifier {
     if (videoState != null) {
       videoState.resizeWindowToVideoSize();
     }
+  }
+
+  void _handleTogglePictureInPicture() {
+    final windowService = DesktopPlayerWindowService.instance;
+    if (!DesktopPlayerWindowService.isFeatureEnabled) return;
+
+    if (windowService.isPlayerDetached) {
+      debugPrint('[HotkeyService] 切换画中画: 当前播放器已在独立窗口');
+      unawaited(windowService.togglePictureInPicture());
+      return;
+    }
+
+    final context = _context;
+    final videoState = _getVideoPlayerState();
+    if (context == null || videoState == null || !videoState.hasVideo) return;
+    debugPrint('[HotkeyService] 切换画中画: 从主窗口拆离并进入画中画');
+    unawaited(
+      windowService.detachAndEnterPictureInPicture(context, videoState),
+    );
+  }
+
+  void _handleToggleDetachedPlayer() {
+    final windowService = DesktopPlayerWindowService.instance;
+    if (!DesktopPlayerWindowService.isFeatureEnabled) return;
+
+    if (windowService.isPlayerDetached) {
+      debugPrint('[HotkeyService] 切换独立窗口: 将播放器移回主窗口');
+      unawaited(windowService.returnPlayerToMain());
+      return;
+    }
+
+    final context = _context;
+    final videoState = _getVideoPlayerState();
+    if (context == null || videoState == null || !videoState.hasVideo) return;
+    debugPrint('[HotkeyService] 切换独立窗口: 将播放器移入独立窗口');
+    unawaited(windowService.detachPlayer(context, videoState));
   }
 
   // 注册快进热键，支持长按倍速

@@ -845,16 +845,19 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
 
-            // 弹幕描边开关
+            // 弹幕描边粗细
             Consumer<VideoPlayerState>(
               builder: (context, videoState, child) {
-                return AdaptiveSettingsTile.toggle(
-                  title: context.l10n.danmakuOutlineEnabledTitle,
+                return AdaptiveSettingsTile.slider(
+                  title: context.l10n.danmakuOutlineWidthTitle,
                   subtitle: context.l10n.danmakuOutlineEnabledSubtitle,
                   icon: Icons.border_color,
-                  value: videoState.danmakuOutlineEnabled,
-                  onChanged: videoState.setDanmakuOutlineEnabled,
-                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                  value: videoState.next2DanmakuOutlineWidth,
+                  min: 0.0,
+                  max: 2.0,
+                  divisions: 2,
+                  onChanged: videoState.setNext2DanmakuOutlineWidth,
+                  labelFormatter: (value) => value.round().toString(),
                 );
               },
             ),

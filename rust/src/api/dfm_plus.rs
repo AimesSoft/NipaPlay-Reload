@@ -166,8 +166,8 @@ pub fn dfm_plus_prepare_layout(
 
     // Build danmaku items
     let outline_width = request.outline_width.max(0.0) as f32;
-    // Compute effective outline pixels matching GPU renderer's resolve_outline_px()
-    let outline_px = resolve_outline_px(font_size, outline_width);
+    // Compute effective outline pixels using the same profile as the GPU renderer.
+    let outline_px = crate::next2_engine::resolve_danmaku_outline_px(font_size, outline_width);
     let mut items: Vec<DanmakuItem> = request
         .items
         .into_iter()
@@ -463,17 +463,6 @@ fn upper_bound(times: &[f64], target: f64) -> usize {
     times.partition_point(|&t| t <= target)
 }
 
-/// Compute the effective outline width in pixels, matching the GPU renderer's
-/// `resolve_outline_px(font_size, outline_width)` exactly:
-/// `(font_size * 0.06).clamp(1.0, 2.6) * outline_width.clamp(0.0, 4.0)`
-fn resolve_outline_px(font_size: f32, outline_width: f32) -> f32 {
-    let multiplier = outline_width.clamp(0.0, 4.0);
-    if multiplier <= 0.0 || !multiplier.is_finite() {
-        return 0.0;
-    }
-    (font_size * 0.06).clamp(1.0, 2.6) * multiplier
-}
-
 /// Font metrics matching the GPU renderer's layout parameters.
 #[derive(Debug, Clone)]
 pub struct DfmPlusFontMetrics {
@@ -483,7 +472,7 @@ pub struct DfmPlusFontMetrics {
     pub descent: f64,
     /// Total line height = ascent + descent.
     pub line_height: f64,
-    /// Effective outline width in pixels, matching GPU's `resolve_outline_px()`.
+    /// Effective outline width in pixels, matching the GPU outline profile.
     pub outline_px: f64,
 }
 
@@ -500,7 +489,7 @@ pub fn dfm_plus_font_metrics(
         ascent: (fs * 0.9) as f64,
         descent: (fs * 0.3) as f64,
         line_height: crate::dfm_core::measure::measure_line_height_heuristic(fs) as f64,
-        outline_px: resolve_outline_px(fs, ow) as f64,
+        outline_px: crate::next2_engine::resolve_danmaku_outline_px(fs, ow) as f64,
     })
 }
 
@@ -548,7 +537,7 @@ pub fn dfm_plus_prepare_layout_full(
 ) -> Result<DfmPlusPreparedLayout, String> {
     let fs = font_size as f32;
     let ow = outline_width as f32;
-    let _outline_px = resolve_outline_px(fs, ow);
+    let _outline_px = crate::next2_engine::resolve_danmaku_outline_px(fs, ow);
 
     let paint_height = crate::dfm_core::measure::measure_line_height_heuristic(fs) as f64;
     let widths: Vec<f64> = raw_items
@@ -1044,7 +1033,7 @@ mod tests {
         let scroll_dur_ms = (scroll_dur_secs * 1000.0) as i64;
         let global_flags = crate::dfm_core::model::GlobalFlags::default();
         let outline_width = 0.0_f64.max(0.0) as f32;
-        let outline_px = resolve_outline_px(font_size, outline_width);
+        let outline_px = crate::next2_engine::resolve_danmaku_outline_px(font_size, outline_width);
 
         let mut danmaku_items: Vec<crate::dfm_core::model::DanmakuItem> = items
             .iter()

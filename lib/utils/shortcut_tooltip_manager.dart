@@ -5,61 +5,63 @@ import 'dart:async';
 
 /// 快捷键提示管理器，用于统一管理和更新所有快捷键提示
 class ShortcutTooltipManager extends ChangeNotifier {
-  static final ShortcutTooltipManager _instance = ShortcutTooltipManager._internal();
-  
+  static final ShortcutTooltipManager _instance =
+      ShortcutTooltipManager._internal();
+
   // 单例模式
   factory ShortcutTooltipManager() {
     return _instance;
   }
-  
+
   ShortcutTooltipManager._internal() {
     _initialize();
   }
-  
+
   // 快捷键映射
   final Map<String, String> _shortcutTooltips = {};
-  
+
   // 热键服务
   final HotkeyService _hotkeyService = HotkeyService();
-  
+
   // 是否已初始化
   bool _isInitialized = false;
-  
+
   // 初始化
   Future<void> _initialize() async {
     if (_isInitialized) return;
-    
+
     // 确保快捷键配置已加载
     if (_hotkeyService.allShortcuts.isEmpty) {
       await _hotkeyService.loadShortcuts();
     }
-    
+
     // 从HotkeyService加载快捷键
     _updateShortcuts();
-    
+
     // 监听快捷键变化
     _hotkeyService.addListener(_updateShortcuts);
-    
+
     _isInitialized = true;
   }
-  
+
   // 更新快捷键
   void _updateShortcuts() {
     final shortcuts = _hotkeyService.allShortcuts;
-    
+
     _shortcutTooltips.clear();
-    
+
     shortcuts.forEach((action, shortcut) {
       final actionLabel = _getActionLabel(action);
       if (actionLabel != null) {
-        _shortcutTooltips[action] = shortcut.isEmpty ? actionLabel : '$actionLabel ($shortcut)';
+        _shortcutTooltips[action] =
+            shortcut.isEmpty ? actionLabel : '$actionLabel ($shortcut)';
       }
     });
-    
+
     // 通知所有监听者
     notifyListeners();
   }
-  
+
   // 获取动作标签
   String? _getActionLabel(String action) {
     final Map<String, String> actionLabels = {
@@ -77,34 +79,36 @@ class ShortcutTooltipManager extends ChangeNotifier {
       'step_forward': '逐帧前进',
       'step_backward': '逐帧后退',
       'resize_to_video': '窗口适配视频',
+      'toggle_picture_in_picture': '画中画模式',
+      'toggle_detached_player': '独立窗口模式',
     };
-    
+
     return actionLabels[action];
   }
-  
+
   // 获取动作的提示文本
   String getTooltip(String action) {
     return _shortcutTooltips[action] ?? _getActionLabel(action) ?? action;
   }
-  
+
   // 获取动作的快捷键文本
   String getShortcutText(String action) {
     final shortcut = _hotkeyService.getShortcutText(action);
     return shortcut;
   }
-  
+
   // 格式化动作和快捷键
   String formatActionWithShortcut(String action, String? customLabel) {
     final label = customLabel ?? _getActionLabel(action) ?? action;
     final shortcut = getShortcutText(action);
-    
+
     final result = shortcut.isEmpty ? label : '$label ($shortcut)';
     return result;
   }
-  
+
   @override
   void dispose() {
     _hotkeyService.removeListener(_updateShortcuts);
     super.dispose();
   }
-} 
+}

@@ -11,9 +11,24 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
-/// mpv 外部播放会话的桌面控制台。
+/// 桌面端 mpv 外部播放会话控制台。
+enum ExternalPlayerConsolePane {
+  all,
+  controls,
+  danmakuList,
+}
+
 class ExternalPlayerConsolePage extends StatelessWidget {
-  const ExternalPlayerConsolePage({super.key});
+  const ExternalPlayerConsolePage({
+    super.key,
+    this.pane = ExternalPlayerConsolePane.all,
+    this.onShowDanmakuList,
+    this.onCloseWindow,
+  });
+
+  final ExternalPlayerConsolePane pane;
+  final VoidCallback? onShowDanmakuList;
+  final VoidCallback? onCloseWindow;
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +56,27 @@ class ExternalPlayerConsolePage extends StatelessWidget {
             type: MaterialType.transparency,
             child: SafeArea(
               child: NipaplayLargeScreenPageScaffold(
-                title: context.l10n.externalPlayerConsoleTitle,
+                title: pane == ExternalPlayerConsolePane.danmakuList
+                    ? context.l10n.externalPlayerConsoleDanmakuList
+                    : context.l10n.externalPlayerConsoleTitle,
                 subtitle: hasSession && subtitle.isNotEmpty ? subtitle : null,
-                padding: const EdgeInsets.fromLTRB(34, 24, 34, 28),
+                actions: [
+                  if (onShowDanmakuList != null)
+                    NipaplayLargeScreenIconButton(
+                      icon: Icons.format_list_bulleted_rounded,
+                      tooltip: context.l10n.externalPlayerConsoleDanmakuList,
+                      onPressed: onShowDanmakuList,
+                    ),
+                  if (onCloseWindow != null)
+                    NipaplayLargeScreenIconButton(
+                      icon: Icons.close_rounded,
+                      tooltip: context.l10n.externalPlayerConsoleClose,
+                      onPressed: onCloseWindow,
+                    ),
+                ],
+                padding: pane == ExternalPlayerConsolePane.all
+                    ? const EdgeInsets.fromLTRB(34, 24, 34, 28)
+                    : const EdgeInsets.fromLTRB(18, 20, 18, 20),
                 headerBottomSpacing: 18,
                 showBackgroundEffects: false,
                 child: hasSession
@@ -64,6 +97,7 @@ class ExternalPlayerConsolePage extends StatelessWidget {
                         fraction: ExternalPlayerConsoleService.fraction,
                         danmakuStyle: ExternalPlayerConsoleService.danmakuStyle,
                         blockedItems: ExternalPlayerConsoleService.blockedItems,
+                        pane: pane,
                       )
                     : NipaplayLargeScreenEmptyState(
                         icon: Icons.subtitles_outlined,
@@ -95,6 +129,7 @@ class _ConsoleWorkspace extends StatelessWidget {
     required this.fraction,
     required this.danmakuStyle,
     required this.blockedItems,
+    required this.pane,
   });
 
   final int? processId;
@@ -110,12 +145,14 @@ class _ConsoleWorkspace extends StatelessWidget {
   final double? fraction;
   final DanmakuStyle danmakuStyle;
   final List<BlockedDanmakuItem> blockedItems;
+  final ExternalPlayerConsolePane pane;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final useTwoColumns = constraints.maxWidth >= 980;
+        final useTwoColumns = pane == ExternalPlayerConsolePane.all &&
+            constraints.maxWidth >= 980;
         final controlPanels = <Widget>[
           _buildSessionPanel(context),
           const SizedBox(height: 14),
@@ -128,9 +165,25 @@ class _ConsoleWorkspace extends StatelessWidget {
           child: _DanmakuList(
             sessionId: processId,
             items: danmakuList,
-            fillAvailableHeight: useTwoColumns,
+            fillAvailableHeight:
+                useTwoColumns || pane == ExternalPlayerConsolePane.danmakuList,
           ),
         );
+
+        if (pane == ExternalPlayerConsolePane.controls) {
+          return ListView(
+            key: const Key('external-player-console-controls-pane'),
+            padding: const EdgeInsets.only(right: 4),
+            children: controlPanels,
+          );
+        }
+
+        if (pane == ExternalPlayerConsolePane.danmakuList) {
+          return KeyedSubtree(
+            key: const Key('external-player-console-danmaku-list-pane'),
+            child: listPanel,
+          );
+        }
 
         if (!useTwoColumns) {
           return SingleChildScrollView(

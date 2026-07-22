@@ -19,6 +19,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
@@ -472,9 +473,11 @@ class ExternalPlayerService {
       );
       ExternalPlayerConsoleService.setState(consoleState);
 
-      // 如果设置了启动外部播放器后自动切换到弹幕控制台, 则切换页面
-      if (settings.externalPlayerAutoSwitchToDanmakuConsole &&
+      if (settings.externalPlayerConsoleWindowMode) {
+        await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
+      } else if (settings.externalPlayerAutoSwitchToDanmakuConsole &&
           context.mounted) {
+        // Tab 模式保留原有的自动切换行为。
         Provider.of<TabChangeNotifier>(context, listen: false)
             .changePage(AppPageIds.externalPlayerConsole);
       }

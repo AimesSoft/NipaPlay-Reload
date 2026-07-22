@@ -10,10 +10,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/src/foundation/_features.dart' as flutter_features;
 import 'package:flutter/src/widgets/_window.dart' as flutter_windowing;
+import 'package:flutter/src/widgets/_window_positioner.dart'
+    as flutter_window_positioning;
 import 'package:flutter/widgets.dart';
 
 typedef DesktopWindowBuilder = Widget Function(
     BuildContext context, WindowController controller);
+
+enum DesktopTransientWindowPlacement {
+  above,
+  below,
+  right,
+  pointer,
+}
 
 /// Boots the application into the real desktop FlutterView.
 ///
@@ -26,7 +35,12 @@ void runDesktopMultiWindowApp(Widget app) {
     return;
   }
 
+  // WindowScope, PopupWindow, and TooltipWindow check this flag again when
+  // their widgets build, not only when their native controllers are created.
+  // Keep it enabled for the lifetime of this deliberately multi-view app.
+  flutter_features.isWindowingEnabled = true;
   final binding = WidgetsFlutterBinding.ensureInitialized();
+  binding.windowingOwner = flutter_windowing.createDefaultWindowingOwner();
   final dispatcher = binding.platformDispatcher;
   final views = dispatcher.views.toList(growable: false);
   if (views.isEmpty) {
@@ -77,26 +91,28 @@ class DesktopMultiWindowHost extends StatelessWidget {
       child: child,
       builder: (context, mainView) {
         final windows = DesktopMultiWindow._registry.windows;
+        final transientViews = DesktopMultiWindow._registry.transientViews;
         return ViewAnchor(
-          view: windows.isEmpty
+          view: windows.isEmpty && transientViews.isEmpty
               ? null
               : ViewCollection(
-                  views: windows
-                      .map(
-                        (entry) => _SecondaryWindowScope(
-                          controller: entry.controller,
-                          child: View(
-                            view: entry.controller.flutterView,
-                            child: _PositiveViewSizeGate(
-                              child: Builder(
-                                builder: (context) =>
-                                    entry.builder(context, entry.controller),
-                              ),
+                  views: <Widget>[
+                    ...windows.map(
+                      (entry) => _SecondaryWindowScope(
+                        controller: entry.controller,
+                        child: View(
+                          view: entry.controller.flutterView,
+                          child: _PositiveViewSizeGate(
+                            child: Builder(
+                              builder: (context) =>
+                                  entry.builder(context, entry.controller),
                             ),
                           ),
                         ),
-                      )
-                      .toList(growable: false),
+                      ),
+                    ),
+                    ...transientViews,
+                  ],
                 ),
           child: _PositiveViewSizeGate(child: mainView!),
         );
@@ -147,6 +163,16 @@ class DesktopMultiWindow {
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.linux;
   }
+
+  /// Disabled for NipaPlay's detached player.
+  ///
+  /// Flutter 3.44 creates the native popup/tooltip window, but its FlutterView
+  /// remains at 0x0 even after AppKit applies a positive content size. Rendering
+  /// therefore never starts. Callers deliberately fall back to their existing
+  /// in-window Overlay implementations until Flutter's windowing API is stable.
+  static bool get supportsInteractivePopupWindows => false;
+
+  static bool get supportsTooltipWindows => false;
 
   /// Creates a regular native window backed by a new [FlutterView] in the
   /// current engine and isolate.
@@ -251,6 +277,195 @@ class DesktopMultiWindow {
         .toList(growable: false);
   }
 
+  /// Mounts a popup or tooltip View beside regular secondary windows.
+  ///
+  /// Flutter Views must be siblings in the root [ViewCollection]. Nesting a
+  /// popup View inside the detached player's View prevents it from rendering,
+  /// while mounting it in an Overlay causes the Overlay slot-type crash.
+  static void attachTransientView(Object owner, Widget view) {
+    _registry.attachTransientView(owner, view);
+  }
+
+  static void detachTransientView(Object owner) {
+    _registry.detachTransientView(owner);
+  }
+
+  /// Copies the app-level inherited presentation context into a root-level
+  /// transient View.
+  ///
+  /// The root [ViewCollection] sits above MaterialApp, so popup children do not
+  /// otherwise inherit Directionality, MediaQuery, Localizations, or themes
+  /// from the detached player's route.
+  static Widget inheritTransientViewContext(
+    BuildContext sourceContext,
+    Widget child,
+  ) {
+    Widget result = InheritedTheme.captureAll(sourceContext, child);
+    result = Localizations.override(
+      context: sourceContext,
+      child: result,
+    );
+    result = Directionality(
+      textDirection: Directionality.of(sourceContext),
+      child: result,
+    );
+    final mediaQuery = MediaQuery.maybeOf(sourceContext);
+    if (mediaQuery != null) {
+      result = MediaQuery(data: mediaQuery, child: result);
+    }
+    return result;
+  }
+
+  static DesktopPopupWindowController? createPopupWindow({
+    required BuildContext context,
+    required Rect anchorRect,
+    required Size size,
+    DesktopTransientWindowPlacement placement =
+        DesktopTransientWindowPlacement.above,
+    double gap = 8.0,
+    VoidCallback? onClosed,
+  }) {
+    if (!supportsInteractivePopupWindows) return null;
+    final parent = maybeControllerOf(context);
+    if (parent == null || parent.isClosed) return null;
+
+    debugPrint(
+      '[DesktopMultiWindow][Popup] create '
+      'parentView=${parent.flutterView.viewId} '
+      'anchor=${_describeRect(anchorRect)} size=${_describeSize(size)} '
+      'placement=$placement gap=$gap',
+    );
+
+    final delegate = _SameEnginePopupWindowDelegate();
+    try {
+      final nativeController = _withWindowingEnabled(
+        () => flutter_windowing.PopupWindowController(
+          parent: parent._nativeController,
+          anchorRect: anchorRect,
+          positioner: _positionerFor(placement, gap),
+          preferredConstraints: BoxConstraints.tight(size),
+          delegate: delegate,
+        ),
+      );
+      final controller = DesktopPopupWindowController._(
+        nativeController: nativeController,
+        onClosed: onClosed,
+      );
+      delegate.attach(controller);
+      debugPrint(
+        '[DesktopMultiWindow][Popup] native-created '
+        'view=${controller.flutterView.viewId} '
+        'physicalSize=${_describeSize(controller.flutterView.physicalSize)}',
+      );
+      unawaited(
+        () async {
+          await _invokeHostForViewId<void>(
+            'configureTransientWindow',
+            controller.flutterView.viewId,
+            <String, Object?>{
+              'interactive': true,
+              'width': size.width,
+              'height': size.height,
+            },
+          );
+          await _waitForPositiveViewMetrics(
+            kind: 'Popup',
+            view: controller.flutterView,
+          );
+          debugPrint(
+            '[DesktopMultiWindow][Popup] native-configured '
+            'view=${controller.flutterView.viewId} closed=${controller.isClosed} '
+            'physicalSize=${_describeSize(controller.flutterView.physicalSize)}',
+          );
+          if (!controller.isClosed) controller.updatePosition();
+          controller._markReady();
+        }(),
+      );
+      return controller;
+    } on UnimplementedError catch (error) {
+      debugPrint('[DesktopMultiWindow] popup windows unimplemented: $error');
+      return null;
+    } on UnsupportedError catch (error) {
+      debugPrint('[DesktopMultiWindow] popup windows unsupported: $error');
+      return null;
+    }
+  }
+
+  static DesktopTooltipWindowController? createTooltipWindow({
+    required BuildContext context,
+    required Rect anchorRect,
+    required Size size,
+    DesktopTransientWindowPlacement placement =
+        DesktopTransientWindowPlacement.above,
+    double gap = 8.0,
+    VoidCallback? onClosed,
+  }) {
+    if (!supportsTooltipWindows) return null;
+    final parent = maybeControllerOf(context);
+    if (parent == null || parent.isClosed) return null;
+
+    debugPrint(
+      '[DesktopMultiWindow][Tooltip] create '
+      'parentView=${parent.flutterView.viewId} '
+      'anchor=${_describeRect(anchorRect)} size=${_describeSize(size)} '
+      'placement=$placement gap=$gap',
+    );
+
+    final delegate = _SameEngineTooltipWindowDelegate();
+    try {
+      final nativeController = _withWindowingEnabled(
+        () => flutter_windowing.TooltipWindowController(
+          parent: parent._nativeController,
+          anchorRect: anchorRect,
+          positioner: _positionerFor(placement, gap),
+          preferredConstraints: BoxConstraints.tight(size),
+          delegate: delegate,
+        ),
+      );
+      final controller = DesktopTooltipWindowController._(
+        nativeController: nativeController,
+        onClosed: onClosed,
+      );
+      delegate.attach(controller);
+      debugPrint(
+        '[DesktopMultiWindow][Tooltip] native-created '
+        'view=${controller.flutterView.viewId} '
+        'physicalSize=${_describeSize(controller.flutterView.physicalSize)}',
+      );
+      unawaited(
+        () async {
+          await _invokeHostForViewId<void>(
+            'configureTransientWindow',
+            controller.flutterView.viewId,
+            <String, Object?>{
+              'interactive': false,
+              'width': size.width,
+              'height': size.height,
+            },
+          );
+          await _waitForPositiveViewMetrics(
+            kind: 'Tooltip',
+            view: controller.flutterView,
+          );
+          debugPrint(
+            '[DesktopMultiWindow][Tooltip] native-configured '
+            'view=${controller.flutterView.viewId} closed=${controller.isClosed} '
+            'physicalSize=${_describeSize(controller.flutterView.physicalSize)}',
+          );
+          if (!controller.isClosed) controller.updatePosition();
+          controller._markReady();
+        }(),
+      );
+      return controller;
+    } on UnimplementedError catch (error) {
+      debugPrint('[DesktopMultiWindow] tooltip windows unimplemented: $error');
+      return null;
+    } on UnsupportedError catch (error) {
+      debugPrint('[DesktopMultiWindow] tooltip windows unsupported: $error');
+      return null;
+    }
+  }
+
   static BoxConstraints? _constraintsFor({
     Size? minimumSize,
     Size? maximumSize,
@@ -264,6 +479,35 @@ class DesktopMultiWindow {
     );
   }
 
+  static Future<void> _waitForPositiveViewMetrics({
+    required String kind,
+    required FlutterView view,
+  }) async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final size = view.physicalSize;
+      if (size.width > 0 && size.height > 0) {
+        debugPrint(
+          '[DesktopMultiWindow][$kind] metrics-ready '
+          'view=${view.viewId} physicalSize=${_describeSize(size)} '
+          'attempt=$attempt',
+        );
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    debugPrint(
+      '[DesktopMultiWindow][$kind] metrics-timeout '
+      'view=${view.viewId} physicalSize=${_describeSize(view.physicalSize)}',
+    );
+  }
+
+  static String _describeSize(Size size) =>
+      '${size.width.toStringAsFixed(1)}x${size.height.toStringAsFixed(1)}';
+
+  static String _describeRect(Rect rect) =>
+      '(${rect.left.toStringAsFixed(1)},${rect.top.toStringAsFixed(1)},'
+      '${rect.width.toStringAsFixed(1)}x${rect.height.toStringAsFixed(1)})';
+
   static void _remove(WindowController controller) {
     _registry.remove(controller.windowId);
   }
@@ -273,9 +517,21 @@ class DesktopMultiWindow {
     WindowController controller, [
     Map<String, Object?> arguments = const <String, Object?>{},
   ]) async {
+    return _invokeHostForViewId<T>(
+      method,
+      controller.flutterView.viewId,
+      arguments,
+    );
+  }
+
+  static Future<T?> _invokeHostForViewId<T>(
+    String method,
+    int viewId, [
+    Map<String, Object?> arguments = const <String, Object?>{},
+  ]) async {
     try {
       return await _hostChannel.invokeMethod<T>(method, <String, Object?>{
-        'viewId': controller.flutterView.viewId,
+        'viewId': viewId,
         ...arguments,
       });
     } on MissingPluginException catch (error) {
@@ -288,6 +544,198 @@ class DesktopMultiWindow {
       );
       return null;
     }
+  }
+
+  static T _withWindowingEnabled<T>(T Function() action) {
+    final previousFeatureState = flutter_features.isWindowingEnabled;
+    flutter_features.isWindowingEnabled = true;
+    try {
+      return action();
+    } finally {
+      flutter_features.isWindowingEnabled = previousFeatureState;
+    }
+  }
+
+  static flutter_window_positioning.WindowPositioner _positionerFor(
+    DesktopTransientWindowPlacement placement,
+    double gap,
+  ) {
+    final adjustment =
+        flutter_window_positioning.WindowPositionerConstraintAdjustment(
+      flipX: placement != DesktopTransientWindowPlacement.pointer,
+      flipY: placement != DesktopTransientWindowPlacement.pointer,
+      slideX: true,
+      slideY: true,
+      resizeX: true,
+      resizeY: true,
+    );
+    return switch (placement) {
+      DesktopTransientWindowPlacement.above =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor: flutter_window_positioning.WindowPositionerAnchor.top,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.bottom,
+          offset: Offset(0, -gap),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.below =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.bottom,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.top,
+          offset: Offset(0, gap),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.right =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor: flutter_window_positioning.WindowPositionerAnchor.right,
+          childAnchor: flutter_window_positioning.WindowPositionerAnchor.left,
+          offset: Offset(gap, 0),
+          constraintAdjustment: adjustment,
+        ),
+      DesktopTransientWindowPlacement.pointer =>
+        flutter_window_positioning.WindowPositioner(
+          parentAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.topLeft,
+          childAnchor:
+              flutter_window_positioning.WindowPositionerAnchor.topLeft,
+          offset: Offset(gap, gap),
+          constraintAdjustment: adjustment,
+        ),
+    };
+  }
+}
+
+class DesktopPopupWindowController {
+  DesktopPopupWindowController._({
+    required flutter_windowing.PopupWindowController nativeController,
+    VoidCallback? onClosed,
+  })  : _nativeController = nativeController,
+        _onClosed = onClosed;
+
+  final flutter_windowing.PopupWindowController _nativeController;
+  final VoidCallback? _onClosed;
+  final Completer<void> _readyCompleter = Completer<void>();
+  bool _isClosed = false;
+
+  FlutterView get flutterView => _nativeController.rootView;
+  bool get isClosed => _isClosed;
+  Future<void> get ready => _readyCompleter.future;
+
+  void _markReady() {
+    if (!_readyCompleter.isCompleted) _readyCompleter.complete();
+  }
+
+  void close() {
+    if (_isClosed) return;
+    _nativeController.destroy();
+  }
+
+  void updatePosition({
+    Rect? anchorRect,
+    DesktopTransientWindowPlacement? placement,
+    double gap = 8.0,
+  }) {
+    if (_isClosed) return;
+    _nativeController.updatePosition(
+      anchorRect: anchorRect,
+      positioner: placement == null
+          ? null
+          : DesktopMultiWindow._positionerFor(placement, gap),
+    );
+  }
+
+  void _handleNativeDestroyed() {
+    if (_isClosed) return;
+    _isClosed = true;
+    _onClosed?.call();
+  }
+}
+
+class DesktopTooltipWindowController {
+  DesktopTooltipWindowController._({
+    required flutter_windowing.TooltipWindowController nativeController,
+    VoidCallback? onClosed,
+  })  : _nativeController = nativeController,
+        _onClosed = onClosed;
+
+  final flutter_windowing.TooltipWindowController _nativeController;
+  final VoidCallback? _onClosed;
+  final Completer<void> _readyCompleter = Completer<void>();
+  bool _isClosed = false;
+
+  FlutterView get flutterView => _nativeController.rootView;
+  bool get isClosed => _isClosed;
+  Future<void> get ready => _readyCompleter.future;
+
+  void _markReady() {
+    if (!_readyCompleter.isCompleted) _readyCompleter.complete();
+  }
+
+  void close() {
+    if (_isClosed) return;
+    _nativeController.destroy();
+  }
+
+  void updatePosition({
+    Rect? anchorRect,
+    DesktopTransientWindowPlacement? placement,
+    double gap = 8.0,
+  }) {
+    if (_isClosed) return;
+    _nativeController.updatePosition(
+      anchorRect: anchorRect,
+      positioner: placement == null
+          ? null
+          : DesktopMultiWindow._positionerFor(placement, gap),
+    );
+  }
+
+  void _handleNativeDestroyed() {
+    if (_isClosed) return;
+    _isClosed = true;
+    _onClosed?.call();
+  }
+}
+
+class DesktopPopupWindow extends StatelessWidget {
+  const DesktopPopupWindow({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  final DesktopPopupWindowController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopMultiWindow._withWindowingEnabled(
+      () => flutter_windowing.PopupWindow(
+        controller: controller._nativeController,
+        child: _PositiveViewSizeGate(child: child),
+      ),
+    );
+  }
+}
+
+class DesktopTooltipWindow extends StatelessWidget {
+  const DesktopTooltipWindow({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  final DesktopTooltipWindowController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopMultiWindow._withWindowingEnabled(
+      () => flutter_windowing.TooltipWindow(
+        controller: controller._nativeController,
+        child: _PositiveViewSizeGate(child: child),
+      ),
+    );
   }
 }
 
@@ -414,6 +862,27 @@ class WindowController extends ChangeNotifier {
 
   Future<void> toggleAlwaysOnTop() => setAlwaysOnTop(!isAlwaysOnTop);
 
+  /// Lets the platform resize and dock this secondary window against the
+  /// visible work area of the screen that currently contains it.
+  Future<void> setPictureInPictureMode({
+    required bool enabled,
+    required double aspectRatio,
+    required String placement,
+    double margin = 16,
+  }) async {
+    if (_isClosed) return;
+    await DesktopMultiWindow._invokeHost<void>(
+      'setPictureInPictureMode',
+      this,
+      <String, Object?>{
+        'enabled': enabled,
+        'aspectRatio': aspectRatio,
+        'placement': placement,
+        'margin': margin,
+      },
+    );
+  }
+
   Future<void> _configureHostWindow({
     required bool frameless,
     required double? aspectRatio,
@@ -481,6 +950,34 @@ class _SameEngineWindowDelegate
   }
 }
 
+class _SameEnginePopupWindowDelegate
+    with flutter_windowing.PopupWindowControllerDelegate {
+  DesktopPopupWindowController? _controller;
+
+  void attach(DesktopPopupWindowController controller) {
+    _controller = controller;
+  }
+
+  @override
+  void onWindowDestroyed() {
+    _controller?._handleNativeDestroyed();
+  }
+}
+
+class _SameEngineTooltipWindowDelegate
+    with flutter_windowing.TooltipWindowControllerDelegate {
+  DesktopTooltipWindowController? _controller;
+
+  void attach(DesktopTooltipWindowController controller) {
+    _controller = controller;
+  }
+
+  @override
+  void onWindowDestroyed() {
+    _controller?._handleNativeDestroyed();
+  }
+}
+
 class _DesktopWindowEntry {
   const _DesktopWindowEntry({required this.controller, required this.builder});
 
@@ -490,9 +987,19 @@ class _DesktopWindowEntry {
 
 class _DesktopWindowRegistry extends ChangeNotifier {
   final List<_DesktopWindowEntry> _windows = <_DesktopWindowEntry>[];
+  final Map<Object, Widget> _transientViews = <Object, Widget>{};
 
   List<_DesktopWindowEntry> get windows =>
       List<_DesktopWindowEntry>.unmodifiable(_windows);
+
+  List<Widget> get transientViews => _transientViews.entries
+      .map(
+        (entry) => KeyedSubtree(
+          key: ObjectKey(entry.key),
+          child: entry.value,
+        ),
+      )
+      .toList(growable: false);
 
   void add(_DesktopWindowEntry entry) {
     _windows.add(entry);
@@ -503,6 +1010,26 @@ class _DesktopWindowRegistry extends ChangeNotifier {
     final oldLength = _windows.length;
     _windows.removeWhere((entry) => entry.controller.windowId == windowId);
     if (_windows.length != oldLength) notifyListeners();
+  }
+
+  void attachTransientView(Object owner, Widget view) {
+    _transientViews[owner] = view;
+    debugPrint(
+      '[DesktopMultiWindow][Transient] attach '
+      'owner=${owner.runtimeType} view=${view.runtimeType} '
+      'count=${_transientViews.length}',
+    );
+    notifyListeners();
+  }
+
+  void detachTransientView(Object owner) {
+    if (_transientViews.remove(owner) != null) {
+      debugPrint(
+        '[DesktopMultiWindow][Transient] detach '
+        'owner=${owner.runtimeType} count=${_transientViews.length}',
+      );
+      notifyListeners();
+    }
   }
 
   _DesktopWindowEntry? byId(int windowId) {

@@ -1,3 +1,4 @@
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
@@ -36,6 +37,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   bool _isHovered = false;
   final GlobalKey _childKey = GlobalKey();
   OverlayEntry? _overlayEntry;
+  DesktopTooltipWindowController? _tooltipWindowController;
   Offset? _mousePosition;
 
   // Cached overlay position for in-place updates
@@ -132,6 +134,10 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       return;
     }
 
+    if (_updateDesktopTooltipWindow()) {
+      return;
+    }
+
     if (!_recalculatePosition()) {
       _hideOverlay();
       return;
@@ -155,6 +161,107 @@ class _TooltipBubbleState extends State<TooltipBubble> {
     }
   }
 
+  bool _updateDesktopTooltipWindow() {
+    if (!DesktopMultiWindow.isSecondaryWindow(context) ||
+        !DesktopMultiWindow.supportsTooltipWindows) {
+      return false;
+    }
+    final anchorRect = _desktopTooltipAnchorRect();
+    if (anchorRect == null) return false;
+
+    final placement = widget.showOnRight
+        ? DesktopTransientWindowPlacement.right
+        : widget.showOnTop
+            ? DesktopTransientWindowPlacement.above
+            : DesktopTransientWindowPlacement.below;
+    final existing = _tooltipWindowController;
+    if (existing != null && !existing.isClosed) {
+      existing.updatePosition(
+        anchorRect: anchorRect,
+        placement: placement,
+        gap: widget.verticalOffset,
+      );
+      return true;
+    }
+
+    final width = _getBubbleWidth();
+    final height = _getBubbleHeight();
+    late DesktopTooltipWindowController controller;
+    final created = DesktopMultiWindow.createTooltipWindow(
+      context: context,
+      anchorRect: anchorRect,
+      size: Size(width, height),
+      placement: placement,
+      gap: widget.verticalOffset,
+      onClosed: () {
+        if (!identical(_tooltipWindowController, controller)) return;
+        DesktopMultiWindow.detachTransientView(controller);
+        _tooltipWindowController = null;
+      },
+    );
+    if (created == null) return false;
+    controller = created;
+    _tooltipWindowController = controller;
+    unawaited(_mountDesktopTooltipWhenReady(controller, width, height));
+    return true;
+  }
+
+  Future<void> _mountDesktopTooltipWhenReady(
+    DesktopTooltipWindowController controller,
+    double width,
+    double height,
+  ) async {
+    await controller.ready;
+    if (!mounted ||
+        controller.isClosed ||
+        !identical(_tooltipWindowController, controller)) {
+      return;
+    }
+    debugPrint(
+      '[TooltipBubble] mount native tooltip text="${widget.text}" '
+      'view=${controller.flutterView.viewId} '
+      'size=${width.toStringAsFixed(1)}x${height.toStringAsFixed(1)} '
+      'physicalSize='
+      '${controller.flutterView.physicalSize.width.toStringAsFixed(1)}x'
+      '${controller.flutterView.physicalSize.height.toStringAsFixed(1)}',
+    );
+    DesktopMultiWindow.attachTransientView(
+      controller,
+      DesktopTooltipWindow(
+        controller: controller,
+        child: DesktopMultiWindow.inheritTransientViewContext(
+          context,
+          _buildBubble(width),
+        ),
+      ),
+    );
+  }
+
+  Rect? _desktopTooltipAnchorRect() {
+    if (widget.followMouse && _mousePosition != null) {
+      return Rect.fromLTWH(
+        _mousePosition!.dx,
+        _mousePosition!.dy,
+        1,
+        1,
+      );
+    }
+    final renderObject = _childKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    final position = renderObject.localToGlobal(Offset.zero);
+    if (widget.position != null) {
+      return Rect.fromLTWH(
+        widget.position!,
+        position.dy,
+        1,
+        renderObject.size.height,
+      );
+    }
+    return position & renderObject.size;
+  }
+
   double _getBubbleWidth() {
     const textStyle = TextStyle(
       fontSize: 12,
@@ -162,7 +269,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
     );
     final screenWidth = MediaQuery.of(context).size.width;
     final maxWidth = (screenWidth - 20).clamp(80.0, 320.0);
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final textScaler = MediaQuery.textScalerOf(context);
     final textPainter = TextPainter(
       text: TextSpan(
         text: widget.text,
@@ -170,7 +277,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,
-      textScaleFactor: textScaleFactor,
+      textScaler: textScaler,
     )..layout(minWidth: 0, maxWidth: maxWidth - widget.padding * 2);
 
     // 增加额外的宽度，确保组合键能够完整显示
@@ -199,19 +306,25 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final textScaler = MediaQuery.textScalerOf(context);
     final textPainter = TextPainter(
       text: TextSpan(text: widget.text, style: textStyle),
       textDirection: TextDirection.ltr,
       maxLines: 2,
-      textScaleFactor: textScaleFactor,
+      textScaler: textScaler,
     )..layout(maxWidth: _getBubbleWidth() - widget.padding * 2);
     return (textPainter.height + 12).clamp(30.0, 48.0);
   }
 
   void _hideOverlay() {
+    final tooltipWindow = _tooltipWindowController;
+    _tooltipWindowController = null;
+    if (tooltipWindow != null) {
+      DesktopMultiWindow.detachTransientView(tooltipWindow);
+    }
     _overlayEntry?.remove();
     _overlayEntry = null;
+    tooltipWindow?.close();
   }
 
   @override
@@ -226,6 +339,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   void didUpdateWidget(covariant TooltipBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.text != oldWidget.text && _isHovered) {
+      _hideOverlay();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _updateOverlay(context);

@@ -30,6 +30,7 @@ class SettingsProvider with ChangeNotifier {
   bool _externalPlayerDanmakuOverlay = true; // 弹幕外挂默认开启
   bool _externalPlayerAutoSwitchToDanmakuConsole = true;
   bool _externalPlayerShrinkWindow = false;
+  bool _externalPlayerConsoleWindowMode = false;
 
   // GitHub 代理设置
   String _githubProxyUrl = '';
@@ -53,6 +54,7 @@ class SettingsProvider with ChangeNotifier {
   bool get externalPlayerAutoSwitchToDanmakuConsole =>
       _externalPlayerAutoSwitchToDanmakuConsole;
   bool get externalPlayerShrinkWindow => _externalPlayerShrinkWindow;
+  bool get externalPlayerConsoleWindowMode => _externalPlayerConsoleWindowMode;
   String get githubProxyUrl => _githubProxyUrl;
   double get danmakuSupersample => _danmakuSupersample;
 
@@ -109,6 +111,8 @@ class SettingsProvider with ChangeNotifier {
             true;
     _externalPlayerShrinkWindow =
         _prefs.getBool(SettingsKeys.externalPlayerShrinkWindow) ?? false;
+    _externalPlayerConsoleWindowMode =
+        _prefs.getBool(SettingsKeys.externalPlayerConsoleWindowMode) ?? false;
     _githubProxyUrl = _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
     // 弹幕超采样：默认对平板和低 DPR 桌面设备开启 2x
     final defaultSupersample =
@@ -254,6 +258,16 @@ class SettingsProvider with ChangeNotifier {
     await _prefs.setBool(
       SettingsKeys.externalPlayerShrinkWindow,
       _externalPlayerShrinkWindow,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setExternalPlayerConsoleWindowMode(bool enable) async {
+    if (_externalPlayerConsoleWindowMode == enable) return;
+    _externalPlayerConsoleWindowMode = enable;
+    await _prefs.setBool(
+      SettingsKeys.externalPlayerConsoleWindowMode,
+      _externalPlayerConsoleWindowMode,
     );
     notifyListeners();
   }

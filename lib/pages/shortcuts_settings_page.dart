@@ -40,6 +40,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'step_forward': '逐帧前进',
     'step_backward': '逐帧后退',
     'resize_to_video': '窗口适配视频',
+    'toggle_picture_in_picture': '画中画模式',
+    'toggle_detached_player': '独立窗口模式',
   };
 
   // 动作描述
@@ -58,6 +60,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'step_forward': '暂停后前进一帧',
     'step_backward': '暂停后后退一帧',
     'resize_to_video': '将窗口大小调整为视频原始分辨率',
+    'toggle_picture_in_picture': '进入画中画，或从画中画恢复为普通独立窗口',
+    'toggle_detached_player': '在主窗口与独立播放窗口之间移动播放器',
   };
 
   // 动作图标映射
@@ -76,6 +80,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'step_forward': Ionicons.chevron_forward_circle_outline,
     'step_backward': Ionicons.chevron_back_circle_outline,
     'resize_to_video': Ionicons.resize_outline,
+    'toggle_picture_in_picture': Icons.picture_in_picture_alt_rounded,
+    'toggle_detached_player': Icons.open_in_new_rounded,
   };
 
   @override
@@ -133,6 +139,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       'step_forward': 'E',
       'step_backward': 'Q',
       'resize_to_video': 'R',
+      'toggle_picture_in_picture': 'P',
+      'toggle_detached_player': 'W',
     };
 
     for (final entry in defaultShortcuts.entries) {

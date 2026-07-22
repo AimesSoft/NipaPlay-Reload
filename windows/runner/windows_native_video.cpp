@@ -72,6 +72,7 @@ HWND ResolveFlutterRegularHostWindow() {
 
 constexpr UINT_PTR kDetachedWindowSubclassId = 706;
 std::unordered_map<HWND, double> g_detached_window_aspect_ratios;
+std::unordered_map<HWND, RECT> g_picture_in_picture_restore_bounds;
 
 LRESULT CALLBACK DetachedWindowSubclassProc(HWND window,
                                             UINT message,
@@ -81,6 +82,7 @@ LRESULT CALLBACK DetachedWindowSubclassProc(HWND window,
                                             DWORD_PTR) {
   if (message == WM_NCDESTROY) {
     g_detached_window_aspect_ratios.erase(window);
+    g_picture_in_picture_restore_bounds.erase(window);
     ::RemoveWindowSubclass(window, DetachedWindowSubclassProc,
                            kDetachedWindowSubclassId);
     return ::DefSubclassProc(window, message, wparam, lparam);
@@ -167,6 +169,98 @@ void SetDetachedWindowClientSize(HWND window, double logical_width,
   ::SetWindowPos(window, nullptr, 0, 0, bounds.right - bounds.left,
                  bounds.bottom - bounds.top,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+double ReadDouble(const flutter::EncodableMap& args,
+                  const char* key,
+                  double fallback);
+bool ReadBool(const flutter::EncodableMap& args,
+              const char* key,
+              bool fallback);
+
+std::string ReadString(const flutter::EncodableMap& args,
+                       const char* key,
+                       const std::string& fallback = "") {
+  const auto it = args.find(flutter::EncodableValue(key));
+  if (it == args.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<std::string>(&it->second)) {
+    return *value;
+  }
+  return fallback;
+}
+
+void SetDetachedWindowPictureInPicture(
+    HWND window,
+    const flutter::EncodableMap& args) {
+  const bool enabled = ReadBool(args, "enabled", false);
+  if (!enabled) {
+    const auto restore_it = g_picture_in_picture_restore_bounds.find(window);
+    if (restore_it == g_picture_in_picture_restore_bounds.end()) {
+      return;
+    }
+    const RECT restore = restore_it->second;
+    g_picture_in_picture_restore_bounds.erase(restore_it);
+    ::SetWindowPos(window, nullptr, restore.left, restore.top,
+                   restore.right - restore.left, restore.bottom - restore.top,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
+    return;
+  }
+
+  if (g_picture_in_picture_restore_bounds.find(window) ==
+      g_picture_in_picture_restore_bounds.end()) {
+    RECT current = {};
+    if (::GetWindowRect(window, &current)) {
+      g_picture_in_picture_restore_bounds[window] = current;
+    }
+  }
+
+  const HMONITOR monitor = ::MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  if (monitor == nullptr || !::GetMonitorInfoW(monitor, &monitor_info)) {
+    return;
+  }
+  const RECT work = monitor_info.rcWork;
+  const double work_width = static_cast<double>(work.right - work.left);
+  const double work_height = static_cast<double>(work.bottom - work.top);
+  const double ratio = std::clamp(ReadDouble(args, "aspectRatio", 16.0 / 9.0),
+                                  0.5, 3.0);
+  const UINT dpi = ::GetDpiForWindow(window);
+  const double scale = dpi > 0 ? static_cast<double>(dpi) / 96.0 : 1.0;
+  const double margin = std::max(0.0, ReadDouble(args, "margin", 16.0) * scale);
+  const double available_width = std::max(1.0, work_width - margin * 2.0);
+  double client_height = std::min(work_height / 3.0,
+                                  std::max(1.0, work_height - margin * 2.0));
+  double client_width = client_height * ratio;
+  if (client_width > available_width) {
+    client_width = available_width;
+    client_height = client_width / ratio;
+  }
+  SetDetachedWindowClientSize(window, client_width / scale,
+                              client_height / scale);
+
+  RECT resized = {};
+  if (!::GetWindowRect(window, &resized)) {
+    return;
+  }
+  const int window_width = resized.right - resized.left;
+  const int window_height = resized.bottom - resized.top;
+  const std::string placement = ReadString(args, "placement", "topRight");
+  const int left = work.left + static_cast<int>(std::lround(margin));
+  const int right =
+      work.right - window_width - static_cast<int>(std::lround(margin));
+  const int top = work.top + static_cast<int>(std::lround(margin));
+  const int bottom =
+      work.bottom - window_height - static_cast<int>(std::lround(margin));
+  const bool place_left =
+      placement == "topLeft" || placement == "bottomLeft";
+  const bool place_bottom =
+      placement == "bottomLeft" || placement == "bottomRight";
+  ::SetWindowPos(window, nullptr, place_left ? left : right,
+                 place_bottom ? bottom : top, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 constexpr UINT kRenderMessage = WM_APP + 0x4E56;
 
@@ -1133,6 +1227,18 @@ void WindowsNativeVideoPlugin::HandleDesktopWindowMethodCall(
     ::SetWindowPos(window, always_on_top ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0,
                    0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     result->Success(flutter::EncodableValue(always_on_top));
+    return;
+  }
+  if (method == "setPictureInPictureMode") {
+    const bool enabled = ReadBool(*args, "enabled");
+    const std::string placement =
+        ReadString(*args, "placement", "topRight");
+    SetDetachedWindowPictureInPicture(window, *args);
+    LogNativeVideo(
+        "picture-in-picture enabled=" + std::to_string(enabled ? 1 : 0) +
+        " placement=" + placement +
+        " aspect=" + std::to_string(ReadDouble(*args, "aspectRatio")));
+    result->Success();
     return;
   }
   if (method == "startDragging") {
