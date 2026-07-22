@@ -254,7 +254,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       context,
     );
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
+    final nativeTabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
     final glassTabBarBottom = resolveGlassTabBarBottomOffset(
       viewPaddingBottom: bottomInset,
     );
@@ -313,7 +313,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           onTap: _selectIndex,
           activeColor: activeColor,
           inactiveColor: inactiveColor,
-          height: tabBarHeight,
+          height: nativeTabBarHeight,
           items: _buildCupertinoItems(context, pages),
         );
 
@@ -355,7 +355,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     onTabSelected: _selectIndex,
                     horizontalPadding: 12,
                     verticalPadding: 0,
-                    barHeight: tabBarHeight,
+                    barHeight: cupertinoGlassTabBarHeight,
                     settings: glassTabBarSettings,
                     selectedIconColor: activeColor,
                     selectedLabelColor: activeColor,
