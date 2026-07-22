@@ -1,5 +1,5 @@
 // lib/services/external_player_console_service.dart
-// Linux/macOS 外部播放器控制台服务
+// Linux/macOS/Windows 外部播放器控制台服务
 
 import 'dart:async';
 import 'dart:convert';
@@ -58,7 +58,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
   // 平台支持
   static bool get isSupportedPlatform =>
-      !kIsWeb && (Platform.isLinux || Platform.isMacOS);
+      !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
 
   // ======================================================================== //
   // =========================== 内部状态字段 =============================== //

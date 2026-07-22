@@ -71,8 +71,12 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   void terminate() {
     if (_closed) return;
     try {
-      final killed = Process.killPid(processId, ProcessSignal.sigterm);
-      if (!killed) debugPrint('[OtherSession] Failed to terminate player: pid=$processId');
+      if (Platform.isWindows) {
+        Process.runSync('taskkill', ['/PID', '$processId', '/T', '/F']);
+      } else {
+        final killed = Process.killPid(processId, ProcessSignal.sigterm);
+        if (!killed) debugPrint('[OtherSession] Failed to terminate player: pid=$processId');
+      }
     }
     catch (error) { debugPrint('[OtherSession] Failed to close player: $error'); }
     _close();
@@ -116,6 +120,20 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
 
   Future<bool> _isProcessRunning() async {
     if (processId <= 0) return false;
+
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run(
+          'tasklist',
+          ['/FI', 'PID eq $processId', '/NH'],
+        );
+        if (result.exitCode != 0) return false;
+        final output = (result.stdout as String).trim();
+        return output.contains('$processId');
+      } on ProcessException {
+        return false;
+      }
+    }
 
     try {
       final value = await File('/proc/$processId/stat').readAsString();

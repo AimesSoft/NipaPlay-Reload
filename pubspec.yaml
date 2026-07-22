@@ -33,6 +33,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # Cross-platform IPC (Windows named pipe / Unix domain socket)
+  dart_ipc: ^1.0.1
+
   # Shelf for web server
   shelf: ^1.4.1
   shelf_static: ^1.1.2
