@@ -1132,18 +1132,23 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   }
 
   private func makeFrameless(_ window: NSWindow) {
-    if !(window is NSPanel) {
+    if !(window is DesktopDetachedPlayerPanel) {
+      // Removing `.titled` tears down AppKit's NSTitlebarView and its private
+      // KVO registrations. Do that while the object is still the original
+      // Flutter-created NSWindow. Changing its runtime class first makes
+      // NSTitlebarView attempt to unregister from a different window class and
+      // raises an uncaught NSRangeException on macOS 26.
+      var styleMask = window.styleMask
+      styleMask.remove([.titled, .fullSizeContentView])
+      styleMask.insert([
+        .closable,
+        .miniaturizable,
+        .resizable,
+        .nonactivatingPanel,
+      ])
+      window.styleMask = styleMask
       object_setClass(window, DesktopDetachedPlayerPanel.self)
     }
-    var styleMask = window.styleMask
-    styleMask.remove([.titled, .fullSizeContentView])
-    styleMask.insert([
-      .closable,
-      .miniaturizable,
-      .resizable,
-      .nonactivatingPanel,
-    ])
-    window.styleMask = styleMask
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.isMovableByWindowBackground = true
@@ -1155,8 +1160,14 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
     guard window is NSPanel else {
       return
     }
-    object_setClass(window, DesktopInteractivePopupPanel.self)
-    window.styleMask.insert(.nonactivatingPanel)
+    if !(window is DesktopInteractivePopupPanel) {
+      // Keep style-driven AppKit view updates on the original panel class for
+      // the same reason as makeFrameless(_:).
+      if !window.styleMask.contains(.nonactivatingPanel) {
+        window.styleMask.insert(.nonactivatingPanel)
+      }
+      object_setClass(window, DesktopInteractivePopupPanel.self)
+    }
     window.hidesOnDeactivate = false
     window.isExcludedFromWindowsMenu = true
     if let panel = window as? NSPanel {
@@ -1210,9 +1221,11 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       panel.isFloatingPanel = alwaysOnTop
       panel.becomesKeyOnlyIfNeeded = false
     }
-    if window is DesktopDetachedPlayerPanel {
+    if window is DesktopDetachedPlayerPanel,
+       !window.styleMask.contains(.nonactivatingPanel) {
       window.styleMask.insert(.nonactivatingPanel)
-    } else if !alwaysOnTop {
+    } else if !alwaysOnTop,
+              window.styleMask.contains(.nonactivatingPanel) {
       window.styleMask.remove(.nonactivatingPanel)
     }
     var collectionBehavior = window.collectionBehavior
