@@ -595,8 +595,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: <Widget>[
             HoverScaleTextButton(
               child: const Text("知道了",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
+                  locale: Locale("zh-Hans", "zh")),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -726,8 +725,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
@@ -1389,8 +1387,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消',
-                locale: Locale("zh-Hans", "zh"),
-                style: TextStyle(color: Colors.white54)),
+                locale: Locale("zh-Hans", "zh")),
           ),
         ],
       ),
@@ -1554,8 +1551,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
@@ -1625,8 +1621,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: <Widget>[
             HoverScaleTextButton(
               child: const Text('关闭',
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
+                  locale: Locale("zh-Hans", "zh")),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -4206,8 +4201,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
@@ -4237,8 +4231,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
@@ -4703,8 +4696,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },

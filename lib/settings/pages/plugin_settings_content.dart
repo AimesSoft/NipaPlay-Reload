@@ -414,7 +414,6 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
         HoverScaleTextButton(
           child: Text(
             context.l10n.cancel,
-            style: const TextStyle(color: Colors.white70),
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
