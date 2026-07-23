@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart'
+    show CupertinoApp, CupertinoPageScaffold;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
@@ -371,6 +373,38 @@ void main() {
   });
 
   group('AdaptiveScaffold', () {
+    testWidgets('forwards a transparent Cupertino scaffold background', (
+      WidgetTester tester,
+    ) async {
+      PlatformInfo.setPlatformOverride(PlatformOverride.ios, iosVersion: 18);
+      addTearDown(PlatformInfo.clearPlatformOverride);
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: AdaptiveScaffold(
+            backgroundColor: const Color(0x00000000),
+            body: const Text('Transparent body'),
+            bottomNavigationBar: AdaptiveBottomNavigationBar(
+              items: const [
+                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
+                AdaptiveNavigationDestination(
+                  icon: Icons.search,
+                  label: 'Search',
+                ),
+              ],
+              selectedIndex: 0,
+              onTap: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      final scaffold = tester.widget<CupertinoPageScaffold>(
+        find.byType(CupertinoPageScaffold),
+      );
+      expect(scaffold.backgroundColor, const Color(0x00000000));
+    });
+
     testWidgets('creates scaffold with body', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: AdaptiveScaffold(body: Text('Scaffold Body'))),
