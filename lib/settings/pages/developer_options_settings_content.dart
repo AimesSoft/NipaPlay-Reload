@@ -634,7 +634,6 @@ XDG缓存目录: $cacheDir
           child: const Text(
             '取消',
             locale: Locale('zh-Hans', 'zh'),
-            style: TextStyle(color: Colors.white70),
           ),
           onPressed: () => Navigator.of(context).pop(false),
         ),
@@ -792,7 +791,6 @@ XDG_CACHE_HOME: $xdgCacheHome
           child: const Text(
             '取消',
             locale: Locale('zh-Hans', 'zh'),
-            style: TextStyle(color: Colors.white70),
           ),
           onPressed: () => Navigator.of(context).pop(false),
         ),
