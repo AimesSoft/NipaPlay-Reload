@@ -14,6 +14,21 @@ typedef EmbyMediaSourceChanged = Future<void> Function(
   String selectedSourceId,
 );
 
+String embyItemIdFromVideoPath(String videoPath) {
+  final path = videoPath.replaceFirst('emby://', '');
+  return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ??
+      path;
+}
+
+Future<void> clearEmbySelectionsForSourceChange({
+  required String itemId,
+  required void Function(String itemId) clearAudio,
+  required void Function(String itemId) clearSubtitle,
+}) async {
+  clearAudio(itemId);
+  clearSubtitle(itemId);
+}
+
 /// Selects an Emby media version, resolves its playback session, and only then
 /// starts playback. A cancelled chooser never starts playback.
 Future<bool> selectAndPlayEmbySource({

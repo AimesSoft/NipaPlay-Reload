@@ -1878,7 +1878,8 @@ class EmbyService extends MediaServerServiceBase
 
   /// 下载Emby外挂字幕文件
   Future<String?> downloadSubtitleFile(
-      String itemId, int subtitleIndex, String format) async {
+      String itemId, int subtitleIndex, String format,
+      {String? mediaSourceId}) async {
     if (kIsWeb) return null;
     if (!_isConnected || _accessToken == null) {
       throw Exception('未连接到Emby服务器');
@@ -1897,10 +1898,19 @@ class EmbyService extends MediaServerServiceBase
         debugPrint('EmbyService: 未找到媒体源信息');
         return null;
       }
-      final mediaSourceId = mediaSources[0]['Id'];
+      dynamic mediaSource = mediaSources[0];
+      if (mediaSourceId != null && mediaSourceId.isNotEmpty) {
+        for (final source in mediaSources) {
+          if (source is Map && source['Id']?.toString() == mediaSourceId) {
+            mediaSource = source;
+            break;
+          }
+        }
+      }
+      final resolvedMediaSourceId = mediaSource['Id'];
       // 构建字幕下载URL
       final subtitleUrl =
-          '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
+          '$_serverUrl/emby/Videos/$itemId/$resolvedMediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
       debugPrint(
         'EmbyService: 下载字幕文件: ${Uri.parse(subtitleUrl).replace(queryParameters: const <String, String>{})}',
       );

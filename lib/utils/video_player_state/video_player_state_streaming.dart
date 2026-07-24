@@ -211,10 +211,11 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   /// 加载Emby外挂字幕
   Future<void> _loadEmbyExternalSubtitles(String videoPath) async {
     try {
-      final itemId = videoPath.replaceFirst('emby://', '');
+      final itemId = embyItemIdFromVideoPath(videoPath);
+      final mediaSourceId = _currentPlaybackSession?.mediaSourceId;
       debugPrint('[Emby字幕] 开始加载外挂字幕，itemId: $itemId');
-      final subtitleTracks =
-          await EmbyService.instance.getSubtitleTracks(itemId);
+      final subtitleTracks = await EmbyService.instance
+          .getSubtitleTracks(itemId, mediaSourceId: mediaSourceId);
       if (subtitleTracks.isEmpty) {
         debugPrint('[Emby字幕] 未找到字幕轨道');
         return;
@@ -234,7 +235,8 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         externalSubtitles: externalSubtitles,
         subtitleDownloader: (subtitleIndex, subtitleCodec) => EmbyService
             .instance
-            .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec),
+            .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec,
+                mediaSourceId: mediaSourceId),
       );
     } catch (e) {
       debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
