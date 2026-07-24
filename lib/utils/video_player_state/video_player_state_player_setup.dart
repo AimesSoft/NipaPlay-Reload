@@ -237,37 +237,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
     }
 
-    // 对网络URL和Jellyfin流媒体进行特殊处理
+    // 网络可达性由播放器判断，确保与实际播放共用 UA、代理和重定向策略。
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
-      // 添加网络错误处理的尝试/捕获块
-      try {
-        // 测试网络连接
-        await http.head(WebRemoteAccessService.proxyUri(Uri.parse(videoPath)));
-      } catch (e) {
-        // 如果网络请求失败，使用专门的错误处理逻辑
-        await _handleStreamUrlLoadingError(
-          videoPath,
-          e is Exception ? e : Exception(e.toString()),
-        );
-        return; // 避免继续处理
-      }
     } else if ((isJellyfinStream || isEmbyStream) &&
         resolvedActualPlayUrl != null) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $resolvedActualPlayUrl');
-      // 对Jellyfin流媒体测试实际播放URL的连接
-      try {
-        await http.head(
-          WebRemoteAccessService.proxyUri(Uri.parse(resolvedActualPlayUrl)),
-        );
-      } catch (e) {
-        // 如果网络请求失败，使用专门的错误处理逻辑
-        await _handleStreamUrlLoadingError(
-          resolvedActualPlayUrl,
-          e is Exception ? e : Exception(e.toString()),
-        );
-        return; // 避免继续处理
-      }
     }
 
     // 更新字幕管理器的视频路径
@@ -392,11 +367,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 应用自定义 User-Agent（须在打开媒体前设置；空字符串 = 用内核默认 UA）。
       // 优先用一次性 UA（串流菜单设置，仅本次有效，用后即清），否则用持久 UA。
-      final customUA =
-          PlayerFactory.consumeOneTimeUA() ?? PlayerFactory.getCustomPlayerUA();
-      if (customUA.isNotEmpty) {
-        player.setUserAgent(customUA);
-      }
+      PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
       await applyErikaUpscalerModeToCurrentPlayer();

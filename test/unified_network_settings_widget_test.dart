@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
-import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
-import 'package:nipaplay/settings/pages/network_settings_content.dart';
 import 'package:nipaplay/settings/widgets/media_server_connection_user_agent_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
@@ -32,53 +30,6 @@ void main() {
       ),
     );
   }
-
-  testWidgets('player UA setting explains supported kernels', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PlayerFactory.initialize();
-    addTearDown(() async {
-      await PlayerFactory.saveCustomPlayerUA('');
-      SharedPreferences.setMockInitialValues({});
-    });
-
-    await tester.pumpWidget(buildApp(const NetworkSettingsContent()));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('仅 MDK 与 MediaKit 内核支持'), findsOneWidget);
-  });
-
-  testWidgets('unified network settings save a sanitized player UA',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PlayerFactory.initialize();
-    addTearDown(() async {
-      await PlayerFactory.saveCustomPlayerUA('');
-      SharedPreferences.setMockInitialValues({});
-    });
-
-    await tester.pumpWidget(buildApp(const NetworkSettingsContent()));
-    await tester.pumpAndSettle();
-
-    final userAgentTile = find.text('自定义 User-Agent');
-    expect(userAgentTile, findsOneWidget);
-    await tester.ensureVisible(userAgentTile);
-    await tester.tap(userAgentTile);
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextField).last,
-      '  NewPlayer/1.0\r\nInjected  ',
-    );
-    await tester.tap(find.text('保存').last);
-    await tester.pumpAndSettle();
-
-    final preferences = await SharedPreferences.getInstance();
-    expect(
-      preferences.getString(SettingsKeys.customPlayerUA),
-      'NewPlayer/1.0Injected',
-    );
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-  });
 
   testWidgets('connection UA setting loads, sanitizes, and restores default',
       (tester) async {

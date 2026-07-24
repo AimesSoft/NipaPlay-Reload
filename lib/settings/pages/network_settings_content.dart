@@ -393,22 +393,15 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   String _persistentUASubtitle(BuildContext context) {
     final ua = PlayerFactory.getCustomPlayerUA();
-    final supportedKernels = _text(
-      context,
-      '仅 MDK 与 MediaKit 内核支持。',
-      '僅 MDK 與 MediaKit 核心支援。',
-      'Supported by the MDK and MediaKit kernels only.',
-    );
     if (ua.isEmpty) {
       return _text(
         context,
-        '未设置（使用内核默认 UA）。$supportedKernels',
-        '未設定（使用核心預設 UA）。$supportedKernels',
-        'Not set (using the player kernel default UA). $supportedKernels',
+        '未设置（使用内核默认 UA）',
+        '未設定（使用核心預設 UA）',
+        'Not set (using the player kernel default UA).',
       );
     }
-    final displayedUa = ua.length > 60 ? '${ua.substring(0, 60)}...' : ua;
-    return '$displayedUa\n$supportedKernels';
+    return ua.length > 60 ? '${ua.substring(0, 60)}...' : ua;
   }
 
   bool _persistentUAHasValue() => PlayerFactory.getCustomPlayerUA().isNotEmpty;
@@ -494,8 +487,10 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   Future<String?> _showUserAgentInputDialog() async {
     final colorScheme = Theme.of(context).colorScheme;
-    var inputValue = PlayerFactory.getCustomPlayerUA();
-    return BlurDialog.show<String>(
+    final controller = TextEditingController(
+      text: PlayerFactory.getCustomPlayerUA(),
+    );
+    final result = await BlurDialog.show<String>(
       context: context,
       title: _text(
         context,
@@ -520,9 +515,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
             ),
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            initialValue: inputValue,
-            onChanged: (value) => inputValue = value,
+          TextField(
+            controller: controller,
             keyboardType: TextInputType.multiline,
             minLines: 2,
             maxLines: 4,
@@ -548,10 +542,12 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
         HoverScaleTextButton(
           text: _text(context, '保存', '儲存', 'Save'),
           idleColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(inputValue.trim()),
+          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
         ),
       ],
     );
+    controller.dispose();
+    return result;
   }
 
   List<DropdownMenuItemData<String>> _serverDropdownItems(

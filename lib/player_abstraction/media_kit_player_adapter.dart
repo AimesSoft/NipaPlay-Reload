@@ -15,13 +15,11 @@ import './player_enums.dart';
 import './player_data_models.dart';
 
 @visibleForTesting
-void applyMediaKitNetworkOptions(
-  void Function(String key, String value) setter, {
-  required String userAgent,
-}) {
-  if (userAgent.isNotEmpty) {
-    setter('user-agent', userAgent);
-  }
+void applyMediaKitUserAgentProperty(
+  void Function(String key, String value) setter,
+  String userAgent,
+) {
+  setter('user-agent', userAgent);
 }
 
 /// MediaKit播放器适配器
@@ -30,8 +28,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
   final String? _androidAudioOutput;
-  // 网络流自定义 User-Agent（留空表示不覆盖 libmpv 默认行为）。
-  final String _userAgent;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
   static const String _windowsHdrValidationFlag =
@@ -296,15 +292,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Media? _pendingPlatformMedia;
   bool _platformVideoSurfaceAvailable = true;
 
-  MediaKitPlayerAdapter({
-    int? bufferSize,
-    String? androidAudioOutput,
-    String? userAgent,
-  })  : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
+  MediaKitPlayerAdapter({int? bufferSize, String? androidAudioOutput})
+      : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
         _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
         _prefersPlatformVideoSurface = _shouldUsePlatformNativeVideoSurface(),
         _androidAudioOutput = androidAudioOutput,
-        _userAgent = (userAgent ?? '').trim(),
         _player = Player(
           configuration: PlayerConfiguration(
             libass: true,
@@ -324,7 +316,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _applyPlatformHdrOutputOptions();
     _applyMpvDiagnosticOptions();
     _applyAndroidAudioOutput();
-    _applyNetworkOptions();
     _bootstrapPlatformVideoSurface();
     if (!_prefersPlatformVideoSurface) {
       _controller = VideoController(
@@ -373,19 +364,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
     _setMpvPropertyOption('ao', audioOutput);
     debugPrint('MediaKit: Android 音频后端设置为 $audioOutput');
-  }
-
-  /// 将自定义 User-Agent 注入 libmpv（media_kit 内核）。
-  /// 通过 mpv 的 user-agent 选项设置，跨重定向后仍会携带。
-  /// 默认 UA 为 `libmpv`，部分 WAF/CDN 会因此拦截，可在播放器设置中覆盖。
-  void _applyNetworkOptions() {
-    applyMediaKitNetworkOptions(
-      _setMpvPropertyOption,
-      userAgent: _userAgent,
-    );
-    if (_userAgent.isNotEmpty) {
-      debugPrint('MediaKit: 网络流 User-Agent = $_userAgent');
-    }
   }
 
   void _applyMpvDiagnosticOptions() {
@@ -2462,12 +2440,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void setUserAgent(String ua) {
-    if (ua.isEmpty) return;
     try {
       // mpv 的 user-agent 属性，对所有 HTTP 请求生效。须在打开媒体前设置。
-      unawaited((_player.platform as dynamic).setProperty('user-agent', ua));
+      applyMediaKitUserAgentProperty(
+        (key, value) => unawaited(
+          (_player.platform as dynamic).setProperty(key, value),
+        ),
+        ua,
+      );
       _properties['user-agent'] = ua;
-      debugPrint('MediaKit: 已设置自定义 user-agent: $ua');
+      debugPrint('MediaKit: 已设置 user-agent: ${ua.isEmpty ? "(默认)" : ua}');
     } catch (e) {
       debugPrint('MediaKit: 设置 user-agent 失败: $e');
     }
