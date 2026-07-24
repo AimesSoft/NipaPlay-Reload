@@ -175,14 +175,13 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   }
 
   void _setSectionOrder(List<String> sectionIds) {
-    final persistence = _persistSectionOrder(sectionIds);
-    setState(() {});
-    unawaited(persistence);
+    unawaited(_persistSectionOrder(sectionIds));
   }
 
   Future<void> _persistSectionOrder(List<String> sectionIds) async {
     try {
-      await _sectionOrderStore.update(sectionIds);
+      await _sectionOrderStore.updateVisible(sectionIds);
+      if (mounted) setState(() {});
     } catch (error) {
       debugPrint('保存媒体库排序失败: $error');
     }
