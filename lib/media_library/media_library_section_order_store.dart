@@ -19,10 +19,25 @@ class MediaLibrarySectionOrderStore {
   List<String> _sectionIds = const <String>[];
   int _revision = 0;
   Future<void> _saveQueue = Future<void>.value();
+  Future<bool>? _pendingRestore;
 
   List<String> get sectionIds => List<String>.unmodifiable(_sectionIds);
 
-  Future<bool> restore() async {
+  Future<bool> restore() {
+    final pending = _pendingRestore;
+    if (pending != null) return pending;
+
+    late final Future<bool> restoreFuture;
+    restoreFuture = _restore().whenComplete(() {
+      if (identical(_pendingRestore, restoreFuture)) {
+        _pendingRestore = null;
+      }
+    });
+    _pendingRestore = restoreFuture;
+    return restoreFuture;
+  }
+
+  Future<bool> _restore() async {
     final revisionAtStart = _revision;
     final saved = await _load();
     if (_revision != revisionAtStart) return false;
@@ -41,6 +56,25 @@ class MediaLibrarySectionOrderStore {
       onError: (Object _, StackTrace __) {},
     );
     return persistence;
+  }
+
+  Future<void> updateVisible(List<String> visibleSectionIds) async {
+    await _pendingRestore;
+    final visible = _normalize(visibleSectionIds);
+    final visibleSet = visible.toSet();
+    final orderedVisible = visible.iterator;
+    final merged = <String>[];
+    for (final id in _sectionIds) {
+      if (!visibleSet.contains(id)) {
+        merged.add(id);
+      } else if (orderedVisible.moveNext()) {
+        merged.add(orderedVisible.current);
+      }
+    }
+    while (orderedVisible.moveNext()) {
+      merged.add(orderedVisible.current);
+    }
+    await update(merged);
   }
 
   static List<String> _normalize(Iterable<String> sectionIds) {
