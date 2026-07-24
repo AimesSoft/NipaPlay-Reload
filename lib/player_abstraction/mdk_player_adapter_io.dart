@@ -8,19 +8,12 @@ import 'dart:async';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
 @visibleForTesting
-const List<String> mdkUserAgentPropertyKeys = [
-  'avformat.user_agent',
-  'avio.user_agent',
-];
-
-@visibleForTesting
 void applyMdkUserAgentProperties(
   void Function(String key, String value) setter,
   String userAgent,
 ) {
-  for (final key in mdkUserAgentPropertyKeys) {
-    setter(key, userAgent);
-  }
+  setter('avformat.user_agent', userAgent);
+  setter('avio.user_agent', userAgent);
 }
 
 // Enum Converters
@@ -195,11 +188,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String? _activeAudioDecoder;
   int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
 
-  // 网络流自定义 User-Agent（留空表示不覆盖 FFmpeg 默认行为）。
-  final String _userAgent;
-
-  MdkPlayerAdapter({String? userAgent})
-      : _userAgent = (userAgent ?? '').trim() {
+  MdkPlayerAdapter() {
     _mdkPlayer = mdk.Player();
     _attachMdkEventListeners();
     _applyInitialSettings();
@@ -239,7 +228,6 @@ class MdkPlayerAdapter implements AbstractPlayer {
     try {
       _setStickyProperty('auto_load', '0');
       _setStickyProperty('subtitle', '1');
-      _applyNetworkOptions();
       // 重新应用播放速度设置
       if (_playbackRate != 1.0) {
         _mdkPlayer.playbackRate = _playbackRate;
@@ -250,16 +238,6 @@ class MdkPlayerAdapter implements AbstractPlayer {
     }
 
     _configureSubtitleFonts();
-  }
-
-  /// 将自定义 User-Agent 注入 FFmpeg（MDK 内核）。
-  /// 这些选项通过 sticky 属性保存，切集重建播放器时会自动重新应用。
-  /// 默认 UA 为 `Lavf/...`，部分 WAF/CDN 会因此拦截，可在播放器设置中覆盖。
-  void _applyNetworkOptions() {
-    if (_userAgent.isNotEmpty) {
-      applyMdkUserAgentProperties(_setStickyProperty, _userAgent);
-      debugPrint('MDK: 网络流 User-Agent = $_userAgent');
-    }
   }
 
   void _configureSubtitleFonts() {
@@ -542,9 +520,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setUserAgent(String ua) {
-    if (ua.isEmpty) return;
     applyMdkUserAgentProperties(setProperty, ua);
-    debugPrint('MDK: 已设置自定义 user-agent: $ua');
+    debugPrint('MDK: 已设置 user-agent: ${ua.isEmpty ? "(默认)" : ua}');
   }
 
   @override
