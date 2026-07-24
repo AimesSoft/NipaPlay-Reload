@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/emby_media_source_selection.dart';
+import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/widgets/emby_media_source_selector.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 PlaybackMediaSource _source(String id, String path) {
   return PlaybackMediaSource(
@@ -206,6 +209,99 @@ void main() {
     expect(embyMediaSourceLabel(source, index: 1), '版本 2 · MKV');
   });
 
+  test('source-change cleanup clears both preferences exactly once', () async {
+    final clearedAudioItems = <String>[];
+    final clearedSubtitleItems = <String>[];
+
+    await clearEmbySelectionsForSourceChange(
+      itemId: 'episode-1',
+      clearAudio: clearedAudioItems.add,
+      clearSubtitle: clearedSubtitleItems.add,
+    );
+
+    expect(clearedAudioItems, <String>['episode-1']);
+    expect(clearedSubtitleItems, <String>['episode-1']);
+  });
+
+  test('nested Emby playback paths resolve to the episode item id', () {
+    expect(
+      embyItemIdFromVideoPath('emby://series/season/episode-1'),
+      'episode-1',
+    );
+    expect(embyItemIdFromVideoPath('emby://episode-2'), 'episode-2');
+  });
+
+  test('subtitle download uses the selected Emby media source', () async {
+    final previousPathProvider = PathProviderPlatform.instance;
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'nipaplay-selected-subtitle-source-test-',
+    );
+    PathProviderPlatform.instance =
+        _TemporaryPathProvider(temporaryDirectory.path);
+    addTearDown(() async {
+      PathProviderPlatform.instance = previousPathProvider;
+      await temporaryDirectory.delete(recursive: true);
+    });
+    final requestedPaths = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      requestedPaths.add(request.uri.path);
+      if (request.uri.path.endsWith('/PlaybackInfo')) {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'MediaSources': [
+              {'Id': 'source-a'},
+              {'Id': 'source-b'},
+            ],
+          }));
+      } else {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('1\n00:00:00,000 --> 00:00:01,000\nSubtitle');
+      }
+      await request.response.close();
+    });
+    final emby = EmbyService.instance;
+    final previousServerUrl = emby.serverUrl;
+    final previousAccessToken = emby.accessToken;
+    final previousUserId = emby.userId;
+    final previousProfile = emby.currentProfile;
+    final previousIsConnected = emby.isConnected;
+    emby
+      ..serverUrl = 'http://${server.address.address}:${server.port}'
+      ..accessToken = 'emby-token'
+      ..userId = 'emby-user'
+      ..currentProfile = null
+      ..isConnected = true;
+    addTearDown(() {
+      emby
+        ..isConnected = previousIsConnected
+        ..serverUrl = previousServerUrl
+        ..accessToken = previousAccessToken
+        ..userId = previousUserId
+        ..currentProfile = previousProfile;
+    });
+
+    final file = await HttpOverrides.runWithHttpOverrides(
+      () => emby.downloadSubtitleFile(
+        'episode-1',
+        4,
+        'srt',
+        mediaSourceId: 'source-b',
+      ),
+      _RealHttpOverrides(),
+    );
+
+    expect(file, isNotNull);
+    expect(
+      requestedPaths,
+      contains('/emby/Videos/episode-1/source-b/Subtitles/4/Stream.srt'),
+    );
+  });
+
   test('real Emby playback entries wire the shared source selection flow', () {
     String source(String path) =>
         File(path).readAsStringSync().replaceAll('\r\n', '\n');
@@ -280,5 +376,59 @@ void main() {
     );
     expect(embyService, contains('{String? mediaSourceId}'));
     expect(embyService, contains("source['Id']?.toString() == mediaSourceId"));
+    expect(detailPage, contains('clearEmbySelectionsForSourceChange('));
+    final sourceChanged = detailPage.substring(
+      detailPage.indexOf('onSourceChanged: (previousId, selectedId) async'),
+      detailPage.indexOf(
+        'startPlayback:',
+        detailPage.indexOf('onSourceChanged:'),
+      ),
+    );
+    expect(
+      sourceChanged.indexOf('if (!mounted) return;'),
+      lessThan(sourceChanged.indexOf('Provider.of<VideoPlayerState>')),
+    );
+    final compactStreaming = streaming.replaceAll(RegExp(r'\s+'), ' ');
+    expect(
+      compactStreaming,
+      contains('final itemId = embyItemIdFromVideoPath(videoPath);'),
+    );
+    expect(
+      compactStreaming,
+      contains('final mediaSourceId = _currentPlaybackSession?.mediaSourceId;'),
+    );
+    expect(
+      compactStreaming,
+      contains(
+        'getSubtitleTracks(itemId, mediaSourceId: mediaSourceId)',
+      ),
+    );
+    expect(
+      compactStreaming,
+      contains(
+        'downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec, '
+        'mediaSourceId: mediaSourceId)',
+      ),
+    );
+    final embySubtitleLoader = streaming.substring(
+      streaming.indexOf('Future<void> _loadEmbyExternalSubtitles'),
+      streaming.indexOf('Future<void> _loadStreamingExternalSubtitles'),
+    );
+    expect(
+      RegExp(r'_currentPlaybackSession\?\.mediaSourceId')
+          .allMatches(embySubtitleLoader),
+      hasLength(1),
+    );
   });
 }
+
+class _TemporaryPathProvider extends PathProviderPlatform {
+  _TemporaryPathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getTemporaryPath() async => path;
+}
+
+class _RealHttpOverrides extends HttpOverrides {}

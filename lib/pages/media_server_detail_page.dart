@@ -1679,10 +1679,25 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             playSessionId: initialSession.playSessionId,
             mediaSourceId: mediaSourceId,
           ),
+          onSourceChanged: (previousId, selectedId) async {
+            if (!mounted) return;
+            final videoState =
+                Provider.of<VideoPlayerState>(context, listen: false);
+            await clearEmbySelectionsForSourceChange(
+              itemId: embyId,
+              clearAudio: (itemId) =>
+                  videoState.setEmbyServerAudioSelection(itemId, null),
+              clearSubtitle: (itemId) =>
+                  videoState.setEmbyServerSubtitleSelection(
+                itemId,
+                null,
+                burnIn: false,
+              ),
+            );
+          },
           startPlayback: (session) => _startSelectedEmbyEpisode(
             playableHistoryItem,
             session,
-            embyId,
           ),
         );
         return;
@@ -1724,12 +1739,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
   Future<void> _startSelectedEmbyEpisode(
     WatchHistoryItem historyItem,
     PlaybackSession playbackSession,
-    String itemId,
   ) async {
     if (!mounted) return;
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.setEmbyServerAudioSelection(itemId, null);
-    videoState.setEmbyServerSubtitleSelection(itemId, null, burnIn: false);
     await _startEpisodePlayback(historyItem, playbackSession);
   }
 
