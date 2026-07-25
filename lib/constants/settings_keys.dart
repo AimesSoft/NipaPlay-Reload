@@ -63,6 +63,8 @@ class SettingsKeys {
   static const String mediaLibrarySelectedSection =
       'media_library_selected_section';
 
+  static const String mediaLibrarySectionOrder = 'media_library_section_order';
+
   static const String downloaderEnabled = 'downloader_enabled';
 
   static const String downloaderCreateFolderForTask =
