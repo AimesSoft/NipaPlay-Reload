@@ -274,11 +274,11 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消'),
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('确认', style: TextStyle(color: Colors.white)),
+          child: const Text('确认'),
         ),
       ],
     );
@@ -399,11 +399,11 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         actions: [
           HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+            child: const Text('取消'),
           ),
           HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认', style: TextStyle(color: Colors.white)),
+            child: const Text('确认'),
           ),
         ],
       );
@@ -708,7 +708,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child:
-                      const Text('取消', style: TextStyle(color: Colors.white70)),
+                      const Text('取消'),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -722,7 +722,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                         }
                       : null,
                   child:
-                      const Text('确定', style: TextStyle(color: Colors.white)),
+                      const Text('确定'),
                 ),
               ],
             ),
@@ -1005,7 +1005,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child:
-                      const Text('取消', style: TextStyle(color: Colors.white70)),
+                      const Text('取消'),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -1019,7 +1019,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                         }
                       : null,
                   child:
-                      const Text('确定', style: TextStyle(color: Colors.white)),
+                      const Text('确定'),
                 ),
               ],
             ),
