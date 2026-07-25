@@ -15,6 +15,7 @@ class IOS26Scaffold extends StatefulWidget {
     this.leading,
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.enableBlur = true,
+    this.backgroundColor,
     required this.children,
   });
 
@@ -24,6 +25,7 @@ class IOS26Scaffold extends StatefulWidget {
   final Widget? leading;
   final TabBarMinimizeBehavior minimizeBehavior;
   final bool enableBlur;
+  final Color? backgroundColor;
   final List<Widget> children;
 
   @override
@@ -212,6 +214,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold>
         widget.bottomNavigationBar!.items!.isNotEmpty;
 
     return CupertinoPageScaffold(
+      backgroundColor: widget.backgroundColor,
       child: hasBottomNav
           ? NotificationListener<ScrollNotification>(
               onNotification: _handleScrollNotification,

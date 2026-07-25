@@ -218,7 +218,12 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.embedded) return widget.child;
+    if (widget.embedded) {
+      return Material(
+        type: MaterialType.transparency,
+        child: widget.child,
+      );
+    }
 
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final bool useFilledScreenLayout = appearanceSettings.windowDisplayMode ==
