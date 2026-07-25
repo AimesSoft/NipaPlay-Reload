@@ -11,6 +11,8 @@ import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/widgets/emby_media_source_selector.dart';
 
 class JellyfinQualityMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -32,6 +34,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
   List<Map<String, dynamic>> _serverSubtitles = [];
   int? _selectedServerSubtitleIndex; // null 表示不指定
   bool _burnIn = false; // 转码时是否烧录字幕
+  List<PlaybackMediaSource> _mediaSources = const [];
+  String? _selectedMediaSourceId;
 
   @override
   void initState() {
@@ -45,6 +49,9 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       if (videoState.currentVideoPath != null &&
           videoState.currentVideoPath!.startsWith('emby://')) {
+        final session = videoState.currentPlaybackSession;
+        _mediaSources = session?.mediaSources ?? const [];
+        _selectedMediaSourceId = session?.mediaSourceId;
         final embyProv =
             Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await embyProv.initialize();
@@ -95,8 +102,11 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
           _burnIn = resolvedBurnIn;
         });
       } else if (path != null && path.startsWith('emby://')) {
-        final itemId = path.replaceFirst('emby://', '');
-        final tracks = await EmbyService.instance.getSubtitleTracks(itemId);
+        final itemId = path.replaceFirst('emby://', '').split('/').last;
+        final tracks = await EmbyService.instance.getSubtitleTracks(
+          itemId,
+          mediaSourceId: _selectedMediaSourceId,
+        );
         final bool hasSavedSelection =
             vp.hasEmbyServerSubtitleSelection(itemId);
         int? resolvedSelection = hasSavedSelection
@@ -141,6 +151,43 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
     });
   }
 
+  Future<void> _selectMediaSource(PlaybackMediaSource source) async {
+    if (_selectedMediaSourceId == source.id) return;
+    setState(() {
+      _selectedMediaSourceId = source.id;
+      _selectedServerSubtitleIndex = null;
+      _burnIn = false;
+      _serverSubtitles = [];
+      _isLoading = true;
+    });
+
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    final path = videoState.currentVideoPath;
+    if (path != null && path.startsWith('emby://')) {
+      final itemId = path.replaceFirst('emby://', '').split('/').last;
+      try {
+        final tracks = await EmbyService.instance
+            .getSubtitleTracks(itemId, mediaSourceId: source.id);
+        if (!mounted || _selectedMediaSourceId != source.id) return;
+        final defaultTrack = tracks.firstWhere(
+          (track) => track['isDefault'] == true,
+          orElse: () => <String, dynamic>{},
+        );
+        setState(() {
+          _serverSubtitles = tracks;
+          _selectedServerSubtitleIndex =
+              defaultTrack.isEmpty ? null : defaultTrack['index'] as int?;
+          _isLoading = false;
+        });
+      } catch (_) {
+        if (!mounted || _selectedMediaSourceId != source.id) return;
+        setState(() => _isLoading = false);
+      }
+    } else if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _applySelection() async {
     if (_currentQuality == null) return;
 
@@ -177,6 +224,7 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       }
 
       // 然后重载播放器
+      if (!mounted) return;
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
       final path = vp.currentVideoPath;
       if (path != null && path.startsWith('jellyfin://')) {
@@ -192,17 +240,26 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
           burnInSubtitle: _burnIn,
         );
       } else if (path != null && path.startsWith('emby://')) {
-        final itemId = path.replaceFirst('emby://', '');
+        final itemId = path.replaceFirst('emby://', '').split('/').last;
+        final sourceChanged =
+            vp.currentPlaybackSession?.mediaSourceId != _selectedMediaSourceId;
+        final audioStreamIndex =
+            sourceChanged ? null : vp.getEmbyServerAudioSelection(itemId);
+        await vp.reloadCurrentEmbyStream(
+          quality: _currentQuality!,
+          serverSubtitleIndex: _selectedServerSubtitleIndex,
+          burnInSubtitle: _burnIn,
+          mediaSourceId: _selectedMediaSourceId,
+          audioStreamIndex: audioStreamIndex,
+        );
         vp.setEmbyServerSubtitleSelection(
           itemId,
           _selectedServerSubtitleIndex,
           burnIn: _burnIn,
         );
-        await vp.reloadCurrentEmbyStream(
-          quality: _currentQuality!,
-          serverSubtitleIndex: _selectedServerSubtitleIndex,
-          burnInSubtitle: _burnIn,
-        );
+        if (sourceChanged) {
+          vp.setEmbyServerAudioSelection(itemId, null);
+        }
       }
 
       if (mounted) {
@@ -299,7 +356,7 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       onClose: widget.onClose,
       onHoverChanged: widget.onHoverChanged,
       extraButton: TextButton(
-        onPressed: _applySelection,
+        onPressed: _isLoading ? null : _applySelection,
         child: Text(
           '应用',
           locale: Locale("zh-Hans", "zh"),
@@ -322,6 +379,16 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_mediaSources.length > 1) ...[
+                    const SettingsHintText('媒体源'),
+                    const SizedBox(height: 8),
+                    EmbyMediaSourceSelector(
+                      sources: _mediaSources,
+                      selectedSourceId: _selectedMediaSourceId,
+                      onSelected: _selectMediaSource,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   const SettingsHintText('选择视频播放质量'),
                   const SizedBox(height: 16),
                   ...JellyfinVideoQuality.values.map((quality) {

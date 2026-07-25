@@ -5,6 +5,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/emby_media_source_selection.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -29,6 +30,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/widgets/emby_media_source_selector.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -1652,120 +1654,147 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         videoHash: historyItem.videoHash,
       );
 
-      final settingsProvider =
-          Provider.of<SettingsProvider>(context, listen: false);
-      if (settingsProvider.useExternalPlayer) {
-        PlaybackSession? playbackSession;
-        if (playableHistoryItem.filePath.startsWith('jellyfin://')) {
-          final jellyfinId =
-              playableHistoryItem.filePath.replaceFirst('jellyfin://', '');
-          playbackSession =
-              await JellyfinService.instance.createPlaybackSession(
-            itemId: jellyfinId,
-            startPositionMs: playableHistoryItem.lastPosition > 0
-                ? playableHistoryItem.lastPosition
-                : null,
-          );
-        } else if (playableHistoryItem.filePath.startsWith('emby://')) {
-          final embyPath =
-              playableHistoryItem.filePath.replaceFirst('emby://', '');
-          final parts = embyPath.split('/');
-          final embyId = parts.isNotEmpty ? parts.last : embyPath;
-          playbackSession = await EmbyService.instance.createPlaybackSession(
-            itemId: embyId,
-            startPositionMs: playableHistoryItem.lastPosition > 0
-                ? playableHistoryItem.lastPosition
-                : null,
-          );
-        }
+      final startPositionMs = playableHistoryItem.lastPosition > 0
+          ? playableHistoryItem.lastPosition
+          : null;
 
-        final playableItem = PlayableItem(
-          videoPath: playableHistoryItem.filePath,
-          title: playableHistoryItem.animeName,
-          subtitle: playableHistoryItem.episodeTitle,
-          animeId: playableHistoryItem.animeId,
-          episodeId: playableHistoryItem.episodeId,
-          historyItem: playableHistoryItem,
-          playbackSession: playbackSession,
+      if (playableHistoryItem.filePath.startsWith('emby://')) {
+        final embyPath =
+            playableHistoryItem.filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final embyId = parts.isNotEmpty ? parts.last : embyPath;
+        final initialSession = await EmbyService.instance.createPlaybackSession(
+          itemId: embyId,
+          startPositionMs: startPositionMs,
         );
-        if (await ExternalPlayerService.tryHandlePlayback(
-            context, playableItem)) {
-          Navigator.of(context).pop();
-          return;
-        }
-      }
+        if (!mounted) return;
 
-      final videoPlayerState =
-          Provider.of<VideoPlayerState>(context, listen: false);
-
-      TabChangeNotifier? tabChangeNotifier;
-      try {
-        tabChangeNotifier =
-            Provider.of<TabChangeNotifier>(context, listen: false);
-      } catch (e) {
-        debugPrint('无法获取TabChangeNotifier: $e');
-      }
-
-      if (tabChangeNotifier != null) {
-        debugPrint('立即切换到播放页面');
-        tabChangeNotifier.changePage(AppPageIds.video);
-      }
-
-      Navigator.of(context).pop();
-      debugPrint('详情页面已立即关闭');
-
-      if (mounted) {
-        BlurSnackBar.show(context, '开始播放: ${historyItem.episodeTitle}');
-      }
-
-      debugPrint('开始异步初始化播放器...');
-
-      Future.delayed(const Duration(milliseconds: 100), () async {
-        try {
-          debugPrint('异步初始化播放器 - 开始');
-          PlaybackSession? playbackSession;
-          if (playableHistoryItem.filePath.startsWith('jellyfin://')) {
-            final jellyfinId =
-                playableHistoryItem.filePath.replaceFirst('jellyfin://', '');
-            playbackSession =
-                await JellyfinService.instance.createPlaybackSession(
-              itemId: jellyfinId,
-              startPositionMs: playableHistoryItem.lastPosition > 0
-                  ? playableHistoryItem.lastPosition
-                  : null,
-            );
-          } else if (playableHistoryItem.filePath.startsWith('emby://')) {
-            final embyPath =
-                playableHistoryItem.filePath.replaceFirst('emby://', '');
-            final parts = embyPath.split('/');
-            final embyId = parts.isNotEmpty ? parts.last : embyPath;
-            playbackSession = await EmbyService.instance.createPlaybackSession(
+        await selectAndPlayEmbySource(
+          initialSession: initialSession,
+          chooseSource: _chooseEmbyMediaSource,
+          reloadSession: (mediaSourceId) =>
+              EmbyService.instance.createPlaybackSession(
+            itemId: embyId,
+            startPositionMs: startPositionMs,
+            playSessionId: initialSession.playSessionId,
+            mediaSourceId: mediaSourceId,
+          ),
+          onSourceChanged: (previousId, selectedId) async {
+            if (!mounted) return;
+            final videoState =
+                Provider.of<VideoPlayerState>(context, listen: false);
+            await clearEmbySelectionsForSourceChange(
               itemId: embyId,
-              startPositionMs: playableHistoryItem.lastPosition > 0
-                  ? playableHistoryItem.lastPosition
-                  : null,
+              clearAudio: (itemId) =>
+                  videoState.setEmbyServerAudioSelection(itemId, null),
+              clearSubtitle: (itemId) =>
+                  videoState.setEmbyServerSubtitleSelection(
+                itemId,
+                null,
+                burnIn: false,
+              ),
             );
-          }
+          },
+          startPlayback: (session) => _startSelectedEmbyEpisode(
+            playableHistoryItem,
+            session,
+          ),
+        );
+        return;
+      }
 
-          await videoPlayerState.initializePlayer(
-            historyItem.filePath,
-            historyItem: playableHistoryItem,
-            playbackSession: playbackSession,
-          );
-          debugPrint('异步初始化播放器 - 完成');
-
-          debugPrint('异步播放 - 开始播放视频');
-          videoPlayerState.play();
-          debugPrint(
-              '异步播放 - 成功开始播放: ${playableHistoryItem.animeName} - ${playableHistoryItem.episodeTitle}');
-        } catch (playError) {
-          debugPrint('异步播放流媒体时出错: $playError');
-        }
-      });
+      PlaybackSession? playbackSession;
+      if (playableHistoryItem.filePath.startsWith('jellyfin://')) {
+        final jellyfinId =
+            playableHistoryItem.filePath.replaceFirst('jellyfin://', '');
+        playbackSession = await JellyfinService.instance.createPlaybackSession(
+          itemId: jellyfinId,
+          startPositionMs: startPositionMs,
+        );
+      }
+      await _startEpisodePlayback(playableHistoryItem, playbackSession);
     } catch (e) {
-      BlurSnackBar.show(context, '播放出错: $e');
+      if (mounted) BlurSnackBar.show(context, '播放出错: $e');
       debugPrint('播放Jellyfin媒体出错: $e');
     }
+  }
+
+  Future<PlaybackMediaSource?> _chooseEmbyMediaSource(
+    List<PlaybackMediaSource> sources,
+    String? selectedSourceId,
+  ) {
+    return BlurDialog.show<PlaybackMediaSource>(
+      context: context,
+      title: '选择媒体源',
+      contentWidget: Builder(
+        builder: (dialogContext) => EmbyMediaSourceSelector(
+          sources: sources,
+          selectedSourceId: selectedSourceId,
+          onSelected: (source) => Navigator.of(dialogContext).pop(source),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startSelectedEmbyEpisode(
+    WatchHistoryItem historyItem,
+    PlaybackSession playbackSession,
+  ) async {
+    if (!mounted) return;
+    await _startEpisodePlayback(historyItem, playbackSession);
+  }
+
+  Future<void> _startEpisodePlayback(
+    WatchHistoryItem historyItem,
+    PlaybackSession? playbackSession,
+  ) async {
+    if (!mounted) return;
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    if (settingsProvider.useExternalPlayer) {
+      final playableItem = PlayableItem(
+        videoPath: historyItem.filePath,
+        title: historyItem.animeName,
+        subtitle: historyItem.episodeTitle,
+        animeId: historyItem.animeId,
+        episodeId: historyItem.episodeId,
+        historyItem: historyItem,
+        playbackSession: playbackSession,
+      );
+      final handled =
+          await ExternalPlayerService.tryHandlePlayback(context, playableItem);
+      if (!mounted) return;
+      if (handled) {
+        Navigator.of(context).pop();
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    final videoPlayerState =
+        Provider.of<VideoPlayerState>(context, listen: false);
+    TabChangeNotifier? tabChangeNotifier;
+    try {
+      tabChangeNotifier =
+          Provider.of<TabChangeNotifier>(context, listen: false);
+    } catch (e) {
+      debugPrint('无法获取TabChangeNotifier: $e');
+    }
+    tabChangeNotifier?.changePage(AppPageIds.video);
+
+    Navigator.of(context).pop();
+    Future.delayed(const Duration(milliseconds: 100), () async {
+      try {
+        await videoPlayerState.initializePlayer(
+          historyItem.filePath,
+          historyItem: historyItem,
+          playbackSession: playbackSession,
+        );
+        videoPlayerState.play();
+      } catch (playError) {
+        debugPrint('异步播放流媒体时出错: $playError');
+      }
+    });
   }
 
   Widget _buildEpisodesListForSelectedSeason() {
