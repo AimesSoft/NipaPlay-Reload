@@ -270,7 +270,14 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             videoState.isFullscreen;
         final isBottomNavigationVisible =
             bottomBar.isBottomBarVisible && !isFullscreenPlayback;
+        final useWindowHostedVideoUnderlay =
+            selectedPage.id == AppPageIds.video &&
+                videoState.hasVideo &&
+                videoState.player.usesWindowOverlayVideoSurface;
         final body = BackgroundWithBlur(
+          transparentCutout: useWindowHostedVideoUnderlay
+              ? videoState.windowHostedVideoRect
+              : null,
           child: CupertinoPageActionsScope(
             controller: _pageActionsController,
             child: AppNavigationScope(
@@ -321,6 +328,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           return AdaptiveScaffold(
             minimizeBehavior: TabBarMinimizeBehavior.never,
             enableBlur: true,
+            backgroundColor:
+                useWindowHostedVideoUnderlay ? const Color(0x00000000) : null,
             body: body,
             bottomNavigationBar: isBottomNavigationVisible
                 ? AdaptiveBottomNavigationBar(

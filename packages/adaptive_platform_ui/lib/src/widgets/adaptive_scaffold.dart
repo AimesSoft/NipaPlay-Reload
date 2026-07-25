@@ -69,6 +69,7 @@ class AdaptiveScaffold extends StatefulWidget {
     this.floatingActionButton,
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.enableBlur = true,
+    this.backgroundColor,
   });
 
   /// App bar configuration
@@ -92,6 +93,12 @@ class AdaptiveScaffold extends StatefulWidget {
   /// Enable Liquid Glass blur effect behind tab bar (iOS 26+ only)
   /// When enabled, content behind the tab bar will be blurred
   final bool enableBlur;
+
+  /// Background color used by the platform scaffold.
+  ///
+  /// Leave null to use the platform theme default. A transparent color is
+  /// useful when the body exposes a window-hosted native underlay.
+  final Color? backgroundColor;
 
   @override
   State<AdaptiveScaffold> createState() => _AdaptiveScaffoldState();
@@ -163,6 +170,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         leading: widget.appBar?.leading,
         minimizeBehavior: widget.minimizeBehavior,
         enableBlur: widget.enableBlur,
+        backgroundColor: widget.backgroundColor,
         children: childrenList,
       );
     }
@@ -373,6 +381,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         }
 
         return CupertinoPageScaffold(
+          backgroundColor: widget.backgroundColor,
           navigationBar: navigationBar,
           child: bodyWidget,
         );
@@ -448,7 +457,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         );
       }
 
-      return CupertinoPageScaffold(navigationBar: navigationBar, child: body);
+      return CupertinoPageScaffold(
+        backgroundColor: widget.backgroundColor,
+        navigationBar: navigationBar,
+        child: body,
+      );
     }
 
     // Android - Use NavigationBar if destinations provided
@@ -541,6 +554,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       }
 
       return Scaffold(
+        backgroundColor: widget.backgroundColor,
         appBar: appBar,
         body: widget.body ?? const SizedBox.shrink(),
         bottomNavigationBar: bottomNavBar,
@@ -591,6 +605,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     }
 
     return Scaffold(
+      backgroundColor: widget.backgroundColor,
       appBar: appBar,
       body: widget.body ?? const SizedBox.shrink(),
       floatingActionButton: widget.floatingActionButton,
