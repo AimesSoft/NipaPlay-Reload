@@ -19,18 +19,23 @@ class BatchDanmakuMatchDialog extends StatefulWidget {
   final List<String> filePaths;
   final String? initialSearchKeyword;
   final bool embedded;
+  /// 当用户切换"包括子文件夹"勾选项时调用，返回新的文件列表。
+  /// 为 null 时表示不支持切换（如远程媒体库）。
+  final Future<List<String>> Function(bool includeSubfolders)? onIncludeSubfoldersChanged;
 
   const BatchDanmakuMatchDialog({
     super.key,
     required this.filePaths,
     this.initialSearchKeyword,
     this.embedded = false,
+    this.onIncludeSubfoldersChanged,
   });
 
   static Future<Map<String, dynamic>?> show(
     BuildContext context, {
     required List<String> filePaths,
     String? initialSearchKeyword,
+    Future<List<String>> Function(bool includeSubfolders)? onIncludeSubfoldersChanged,
   }) {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
@@ -45,6 +50,7 @@ class BatchDanmakuMatchDialog extends StatefulWidget {
         child: BatchDanmakuMatchDialog(
           filePaths: filePaths,
           initialSearchKeyword: initialSearchKeyword,
+          onIncludeSubfoldersChanged: onIncludeSubfoldersChanged,
           embedded: true,
         ),
       );
@@ -57,6 +63,7 @@ class BatchDanmakuMatchDialog extends StatefulWidget {
       child: BatchDanmakuMatchDialog(
         filePaths: filePaths,
         initialSearchKeyword: initialSearchKeyword,
+        onIncludeSubfoldersChanged: onIncludeSubfoldersChanged,
       ),
     );
   }
@@ -86,6 +93,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
   final Set<int> _selectedEpisodeIds = {};
 
   late final List<_FileItem> _files;
+  bool _includeSubfolders = false;
+  bool _isReloadingFiles = false;
 
   @override
   String get hotkeyDisableReason => 'batch_danmaku_dialog';
@@ -329,6 +338,35 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         return a.displayName.compareTo(b.displayName);
       });
     });
+  }
+
+  Future<void> _onIncludeSubfoldersChanged(bool value) async {
+    if (widget.onIncludeSubfoldersChanged == null) return;
+    setState(() {
+      _includeSubfolders = value;
+      _isReloadingFiles = true;
+    });
+    try {
+      final newPaths = await widget.onIncludeSubfoldersChanged!(value);
+      if (!mounted) return;
+      setState(() {
+        _files
+          ..clear()
+          ..addAll(
+            newPaths.map(
+              (path) => _FileItem(path: path, displayName: _displayNameFromPath(path)),
+            ),
+          );
+        _sortFilesByEpisodeNumber();
+        _isReloadingFiles = false;
+      });
+      _autoSelectEpisodesToMatchFileCount();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isReloadingFiles = false;
+      });
+    }
   }
 
   void _confirmAndClose() {
@@ -751,21 +789,63 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final windowHeight = MediaQuery.of(context).size.height;
     final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
 
+    // 构建"包括子文件夹"勾选项
+    Widget? subfolderCheckbox;
+    if (widget.onIncludeSubfoldersChanged != null) {
+      subfolderCheckbox = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: AdaptiveMediaCheckbox(
+              value: _includeSubfolders,
+              onChanged: _isReloadingFiles ? null : _onIncludeSubfoldersChanged,
+            ),
+          ),
+          SizedBox(width: 4),
+          GestureDetector(
+            onTap: _isReloadingFiles ? null : () => _onIncludeSubfoldersChanged(!_includeSubfolders),
+            child: Text(
+              '包括子文件夹',
+              style: TextStyle(color: _subTextColor, fontSize: 12),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle(
           '待匹配文件',
-          trailing: Text(
-            '已选 $_selectedFileCount/${_files.length}',
-            style: TextStyle(color: _subTextColor, fontSize: 12),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (subfolderCheckbox != null) ...[
+                subfolderCheckbox,
+                SizedBox(width: 12),
+              ],
+              Text(
+                '已选 $_selectedFileCount/${_files.length}',
+                style: TextStyle(color: _subTextColor, fontSize: 12),
+              ),
+            ],
           ),
         ),
         SizedBox(height: 8),
         Container(
           height: panelHeight,
           decoration: _panelDecoration(),
-          child: ReorderableListView.builder(
+          child: _isReloadingFiles
+              ? Center(
+                  child: AdaptiveMediaActivityIndicator(
+                    size: 18,
+                    color: _accentColor,
+                  ),
+                )
+              : ReorderableListView.builder(
             shrinkWrap: true,
             padding: const EdgeInsets.all(12),
             itemCount: _files.length,
