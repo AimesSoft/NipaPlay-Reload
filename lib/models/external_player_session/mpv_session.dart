@@ -323,13 +323,18 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   /// 连接到 mpv 的 IPC 端点.
   ///
-  /// 使用 dart_ipc 实现跨平台 IPC 连接:
-  /// - Linux/macOS: Unix Domain Socket
-  /// - Windows: 命名管道 (Named Pipe)
+  /// - Linux/macOS: 直接使用 Dart 的 Unix Domain Socket
+  /// - Windows: 使用 dart_ipc 的命名管道 (Named Pipe)
   ///
   /// mpv 的 --input-ipc-server 在 Windows 上接受命名管道路径 (如 \\.\pipe\xxx).
   static Future<Socket> _connectToIpc(String path) async {
-    return await connect(path).timeout(const Duration(milliseconds: 500));
+    final connection = Platform.isWindows
+        ? connect(path)
+        : Socket.connect(
+            InternetAddress(path, type: InternetAddressType.unix),
+            0,
+          );
+    return await connection.timeout(const Duration(milliseconds: 500));
   }
 
   Future<void> _setMpvPaused(bool paused) async {
