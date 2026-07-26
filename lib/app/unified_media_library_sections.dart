@@ -156,6 +156,45 @@ List<UnifiedMediaLibrarySection> buildUnifiedMediaLibrarySections(
   ];
 }
 
+List<UnifiedMediaLibrarySection> applyMediaLibrarySectionOrder(
+  List<UnifiedMediaLibrarySection> sections,
+  List<String> savedOrder,
+) {
+  final sectionsById = <String, UnifiedMediaLibrarySection>{
+    for (final section in sections) section.id: section,
+  };
+  final seenIds = <String>{};
+  final orderedSections = <UnifiedMediaLibrarySection>[];
+
+  for (final id in savedOrder) {
+    final section = sectionsById[id];
+    if (section != null && seenIds.add(id)) {
+      orderedSections.add(section);
+    }
+  }
+  for (final section in sections) {
+    if (seenIds.add(section.id)) {
+      orderedSections.add(section);
+    }
+  }
+
+  return orderedSections;
+}
+
+List<String> reorderMediaLibrarySectionIds(
+  List<String> sectionIds,
+  int oldIndex,
+  int newIndex,
+) {
+  RangeError.checkValidIndex(oldIndex, sectionIds, 'oldIndex');
+  RangeError.checkValidIndex(newIndex, sectionIds, 'newIndex');
+
+  final reorderedIds = List<String>.of(sectionIds);
+  final movedId = reorderedIds.removeAt(oldIndex);
+  reorderedIds.insert(newIndex, movedId);
+  return reorderedIds;
+}
+
 bool mediaLibraryItemMatchesSource(
   WatchHistoryItem item,
   UnifiedMediaLibrarySource source,

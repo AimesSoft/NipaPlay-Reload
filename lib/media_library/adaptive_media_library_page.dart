@@ -12,6 +12,7 @@ import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
+import 'package:nipaplay/media_library/media_library_section_order_store.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -50,7 +51,12 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 
 class AdaptiveMediaLibraryPage extends StatefulWidget {
-  const AdaptiveMediaLibraryPage({super.key});
+  const AdaptiveMediaLibraryPage({
+    super.key,
+    this.sectionOrderStore,
+  });
+
+  final MediaLibrarySectionOrderStore? sectionOrderStore;
 
   @override
   State<AdaptiveMediaLibraryPage> createState() =>
@@ -65,11 +71,15 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   CupertinoPageActionsController? _pageActionsController;
   bool _connectionsInitialized = false;
   int _selectionRevision = 0;
+  late final MediaLibrarySectionOrderStore _sectionOrderStore;
 
   @override
   void initState() {
     super.initState();
+    _sectionOrderStore =
+        widget.sectionOrderStore ?? MediaLibrarySectionOrderStore();
     unawaited(_restoreSelectedSection());
+    unawaited(_restoreSectionOrder());
     if (!kIsWeb) {
       unawaited(_initializeConnections());
     }
@@ -155,6 +165,28 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
     }
   }
 
+  Future<void> _restoreSectionOrder() async {
+    try {
+      final restored = await _sectionOrderStore.restore();
+      if (mounted && restored) setState(() {});
+    } catch (error) {
+      debugPrint('恢复媒体库排序失败: $error');
+    }
+  }
+
+  void _setSectionOrder(List<String> sectionIds) {
+    unawaited(_persistSectionOrder(sectionIds));
+  }
+
+  Future<void> _persistSectionOrder(List<String> sectionIds) async {
+    try {
+      await _sectionOrderStore.updateVisible(sectionIds);
+      if (mounted) setState(() {});
+    } catch (error) {
+      debugPrint('保存媒体库排序失败: $error');
+    }
+  }
+
   void _selectMountedMediaLibrarySection(String sectionId) {
     if (!mounted ||
         AppDisplaySurfaceScope.of(context) != AppDisplaySurface.phone) {
@@ -197,32 +229,35 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
           });
         }
 
-        final sections = buildUnifiedMediaLibrarySections(
-          MediaLibraryAvailability(
-            showLocal: !kIsWeb,
-            showWebDAVLibrary: watchHistoryProvider.isLoaded &&
-                mediaLibraryHasItemsForSource(
-                  watchHistoryProvider.history,
-                  UnifiedMediaLibrarySource.webdav,
-                ),
-            showWebDAVManagement: kIsWeb
-                ? sharedProvider.webdavConnections.isNotEmpty
-                : _connectionsInitialized &&
-                    WebDAVService.instance.connections.isNotEmpty,
-            showSMBLibrary: watchHistoryProvider.isLoaded &&
-                mediaLibraryHasItemsForSource(
-                  watchHistoryProvider.history,
-                  UnifiedMediaLibrarySource.smb,
-                ),
-            showSMBManagement: kIsWeb
-                ? sharedProvider.smbConnections.isNotEmpty
-                : _connectionsInitialized &&
-                    SMBService.instance.connections.isNotEmpty,
-            showShared: sharedProvider.hasReachableActiveHost || kIsWeb,
-            showDandanplay: dandanProvider.isConnected,
-            showJellyfin: jellyfinProvider.isConnected,
-            showEmby: embyProvider.isConnected,
+        final sections = applyMediaLibrarySectionOrder(
+          buildUnifiedMediaLibrarySections(
+            MediaLibraryAvailability(
+              showLocal: !kIsWeb,
+              showWebDAVLibrary: watchHistoryProvider.isLoaded &&
+                  mediaLibraryHasItemsForSource(
+                    watchHistoryProvider.history,
+                    UnifiedMediaLibrarySource.webdav,
+                  ),
+              showWebDAVManagement: kIsWeb
+                  ? sharedProvider.webdavConnections.isNotEmpty
+                  : _connectionsInitialized &&
+                      WebDAVService.instance.connections.isNotEmpty,
+              showSMBLibrary: watchHistoryProvider.isLoaded &&
+                  mediaLibraryHasItemsForSource(
+                    watchHistoryProvider.history,
+                    UnifiedMediaLibrarySource.smb,
+                  ),
+              showSMBManagement: kIsWeb
+                  ? sharedProvider.smbConnections.isNotEmpty
+                  : _connectionsInitialized &&
+                      SMBService.instance.connections.isNotEmpty,
+              showShared: sharedProvider.hasReachableActiveHost || kIsWeb,
+              showDandanplay: dandanProvider.isConnected,
+              showJellyfin: jellyfinProvider.isConnected,
+              showEmby: embyProvider.isConnected,
+            ),
           ),
+          _sectionOrderStore.sectionIds,
         );
 
         if (sections.isEmpty) {
@@ -239,6 +274,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
           sections: sections,
           selectedSection: selectedSection,
           onSectionSelected: _selectSection,
+          onSectionOrderChanged: _setSectionOrder,
           onRemoteAccess: _openRemoteAccessSettings,
           onAddMedia: _showAddMedia,
           child: AdaptiveMediaLibrarySectionContent(

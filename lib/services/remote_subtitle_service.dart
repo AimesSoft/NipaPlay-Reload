@@ -1286,7 +1286,8 @@ class RemoteSubtitleService {
     if (uri == null) return videoPath;
     final lowerPath = uri.path.toLowerCase();
     if (lowerPath.contains('/api/media/local/manage/stream') ||
-        lowerPath.contains('/api/media/local/share/stream')) {
+        lowerPath.contains('/api/media/local/share/stream') ||
+        lowerPath.startsWith('/smb/stream')) {
       final pathParam = uri.queryParameters['path'];
       if (pathParam != null && pathParam.trim().isNotEmpty) {
         return pathParam.trim();

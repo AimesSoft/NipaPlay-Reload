@@ -225,6 +225,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   bool _isMountedDirectoryLoading = false;
   String? _mountedDirectoryError;
   int _mountedDirectoryLoadGeneration = 0;
+  /// 缓存子文件夹下一层的视频文件数量（仅本地目录，key 为文件夹路径）
+  final Map<String, int> _childVideoCountCache = {};
   bool get _isRemoteMode =>
       kIsWeb &&
       (widget.section == LibraryManagementSection.webdav ||
@@ -593,8 +595,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: <Widget>[
             HoverScaleTextButton(
               child: const Text("知道了",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
+                  locale: Locale("zh-Hans", "zh")),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -724,8 +725,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
@@ -1387,8 +1387,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消',
-                locale: Locale("zh-Hans", "zh"),
-                style: TextStyle(color: Colors.white54)),
+                locale: Locale("zh-Hans", "zh")),
           ),
         ],
       ),
@@ -1552,8 +1551,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
@@ -1623,8 +1621,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           actions: <Widget>[
             HoverScaleTextButton(
               child: const Text('关闭',
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
+                  locale: Locale("zh-Hans", "zh")),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -2836,34 +2833,44 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     ScanService? scanService,
   ) {
     if (entry.isDirectory) {
-      return [
+      final actions = [
         UnifiedLibraryManagementAction(
           label: '打开文件夹',
           icon: LibraryManagementIcon.browse,
           onPressed: () => _openMountedDirectory(entry),
         ),
-        UnifiedLibraryManagementAction(
-          label: '自定义媒体信息',
-          icon: LibraryManagementIcon.info,
-          onPressed: () => unawaited(
-            _showMountedCustomMediaInfo(location, entry),
-          ),
-        ),
-        UnifiedLibraryManagementAction(
-          label: '批量匹配弹幕',
-          icon: LibraryManagementIcon.subtitles,
-          onPressed: () => unawaited(
-            _showMountedBatchMatch(location, entry),
-          ),
-        ),
-        UnifiedLibraryManagementAction(
-          label: location.type == _MountedLibraryType.local ? '扫描文件夹' : '刮削文件夹',
-          icon: LibraryManagementIcon.scan,
-          onPressed: () => unawaited(
-            _scanMountedDirectory(location, entry, scanService),
-          ),
-        ),
       ];
+
+      // 仅当下一层有2+视频文件时才显示"自定义媒体信息"和"批量匹配弹幕"
+      final childVideoCount = _countChildVideoFiles(entry);
+      if (childVideoCount >= 2) {
+        actions.addAll([
+          UnifiedLibraryManagementAction(
+            label: '自定义媒体信息',
+            icon: LibraryManagementIcon.info,
+            onPressed: () => unawaited(
+              _showMountedCustomMediaInfo(location, entry),
+            ),
+          ),
+          UnifiedLibraryManagementAction(
+            label: '批量匹配弹幕',
+            icon: LibraryManagementIcon.subtitles,
+            onPressed: () => unawaited(
+              _showMountedBatchMatch(location, entry),
+            ),
+          ),
+        ]);
+      }
+
+      actions.add(UnifiedLibraryManagementAction(
+        label: location.type == _MountedLibraryType.local ? '扫描文件夹' : '刮削文件夹',
+        icon: LibraryManagementIcon.scan,
+        onPressed: () => unawaited(
+          _scanMountedDirectory(location, entry, scanService),
+        ),
+      ));
+
+      return actions;
     }
 
     return [
@@ -2882,6 +2889,80 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ),
       ),
     ];
+  }
+
+  /// 统计文件夹下一层（不含子文件夹）的视频文件数量。
+  int _countChildVideoFiles(_MountedLibraryEntry dirEntry) {
+    return _childVideoCountCache[dirEntry.path] ?? 0;
+  }
+
+  /// 统计子文件夹下一层的视频文件数量并填充缓存（本地同步，远程异步）。
+  Future<void> _fillChildVideoCounts(
+      _MountedLibraryLocation location, List<_MountedLibraryEntry> entries) async {
+    final dirEntries = entries.where((e) => e.isDirectory).toList();
+    if (dirEntries.isEmpty) return;
+
+    switch (location.type) {
+      case _MountedLibraryType.local:
+        // 本地目录同步扫描
+        for (final dirEntry in dirEntries) {
+          try {
+            final directory = io.Directory(dirEntry.path);
+            if (!directory.existsSync()) continue;
+            int count = 0;
+            for (final entity
+                in directory.listSync(recursive: false, followLinks: false)) {
+              if (entity is io.File) {
+                final ext = p.extension(entity.path).toLowerCase();
+                if (_batchMatchVideoExtensions.contains(ext)) {
+                  count++;
+                }
+              }
+            }
+            _childVideoCountCache[dirEntry.path] = count;
+          } catch (_) {
+            _childVideoCountCache[dirEntry.path] = 0;
+          }
+        }
+      case _MountedLibraryType.webdav:
+        // WebDAV 异步扫描（并行）
+        final results = await Future.wait(
+          dirEntries.map((dirEntry) async {
+            try {
+              final files = await WebDAVService.instance
+                  .listDirectory(location.webdavConnection!, dirEntry.path);
+              final count = files
+                  .where((f) => !f.isDirectory && WebDAVService.instance.isVideoFile(f.name))
+                  .length;
+              return (dirEntry.path, count);
+            } catch (_) {
+              return (dirEntry.path, 0);
+            }
+          }),
+        );
+        for (final (path, count) in results) {
+          _childVideoCountCache[path] = count;
+        }
+      case _MountedLibraryType.smb:
+        // SMB 异步扫描（并行）
+        final results = await Future.wait(
+          dirEntries.map((dirEntry) async {
+            try {
+              final files = await SMBService.instance
+                  .listDirectory(location.smbConnection!, dirEntry.path);
+              final count = files
+                  .where((f) => !f.isDirectory && SMBService.instance.isVideoFile(f.name))
+                  .length;
+              return (dirEntry.path, count);
+            } catch (_) {
+              return (dirEntry.path, 0);
+            }
+          }),
+        );
+        for (final (path, count) in results) {
+          _childVideoCountCache[path] = count;
+        }
+    }
   }
 
   void _mountLibrary(_MountedLibraryLocation location) {
@@ -2976,6 +3057,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
         return _sortOption == 1 ? -comparison : comparison;
       });
+      if (!mounted ||
+          generation != _mountedDirectoryLoadGeneration ||
+          _mountedLocation != location ||
+          _currentMountedPath != path) {
+        return;
+      }
+      // 统计子文件夹下一层的视频数量
+      await _fillChildVideoCounts(location, entries);
+
       if (!mounted ||
           generation != _mountedDirectoryLoadGeneration ||
           _mountedLocation != location ||
@@ -3081,27 +3171,36 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     _MountedLibraryLocation location,
     _MountedLibraryEntry entry,
   ) async {
-    final filePaths = await _collectMountedVideoPaths(location, entry.path);
+    // 默认只收集下一级目录的视频
+    final filePaths = await _collectMountedVideoPaths(
+      location, entry.path, recursive: false,
+    );
     if (!mounted) return;
     await _showBatchDanmakuMatchDialog(
       entry.path,
       filePaths,
       initialSearchKeyword: entry.name,
       onSuccessRefresh: () => setState(() {}),
+      onIncludeSubfoldersChanged: (includeSubfolders) async {
+        return _collectMountedVideoPaths(
+          location, entry.path, recursive: includeSubfolders,
+        );
+      },
     );
   }
 
   Future<List<String>> _collectMountedVideoPaths(
     _MountedLibraryLocation location,
-    String path,
-  ) async {
+    String path, {
+    bool recursive = true,
+  }) async {
     switch (location.type) {
       case _MountedLibraryType.local:
         final result = <String>[];
         final directory = io.Directory(path);
         if (!await directory.exists()) return result;
         await for (final entity
-            in directory.list(recursive: true, followLinks: false)) {
+            in directory.list(recursive: recursive, followLinks: false)) {
           if (entity is io.File &&
               _batchMatchVideoExtensions
                   .contains(p.extension(entity.path).toLowerCase())) {
@@ -3113,6 +3212,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final files = await _getWebDAVVideoFiles(
           location.webdavConnection!,
           path,
+          recursive: recursive,
         );
         return files
             .map((file) => WebDAVService.instance.getFileUrl(
@@ -3121,7 +3221,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 ))
             .toList();
       case _MountedLibraryType.smb:
-        final files = await _getSMBVideoFiles(location.smbConnection!, path);
+        final files = await _getSMBVideoFiles(
+          location.smbConnection!, path,
+          recursive: recursive,
+        );
         return files
             .map((file) => SMBProxyService.instance.buildStreamUrl(
                   location.smbConnection!,
@@ -4098,8 +4201,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
@@ -4129,8 +4231,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
@@ -4180,6 +4281,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     List<String> filePaths, {
     String? initialSearchKeyword,
     void Function()? onSuccessRefresh,
+    Future<List<String>> Function(bool includeSubfolders)? onIncludeSubfoldersChanged,
   }) async {
     if (filePaths.isEmpty) {
       BlurSnackBar.show(context, '未找到可匹配的视频文件');
@@ -4190,6 +4292,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context,
       filePaths: filePaths,
       initialSearchKeyword: initialSearchKeyword ?? p.basename(folderPath),
+      onIncludeSubfoldersChanged: onIncludeSubfoldersChanged,
     );
 
     if (!mounted || result == null) return;
@@ -4593,8 +4696,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+              locale: Locale("zh-Hans", "zh")),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
@@ -5877,9 +5979,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  // 递归获取WebDAV文件夹中的视频文件
+  // 获取WebDAV文件夹中的视频文件
   Future<List<WebDAVFile>> _getWebDAVVideoFiles(
-      WebDAVConnection connection, String folderPath) async {
+      WebDAVConnection connection, String folderPath, {bool recursive = true}) async {
     final List<WebDAVFile> videoFiles = [];
 
     try {
@@ -5889,8 +5991,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       for (final file in files) {
         if (file.isDirectory) {
           // 递归获取子文件夹中的视频文件
-          final subFiles = await _getWebDAVVideoFiles(connection, file.path);
-          videoFiles.addAll(subFiles);
+          if (recursive) {
+            final subFiles = await _getWebDAVVideoFiles(connection, file.path, recursive: true);
+            videoFiles.addAll(subFiles);
+          }
         } else {
           // 检查是否为视频文件
           if (WebDAVService.instance.isVideoFile(file.name)) {
@@ -6093,15 +6197,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   Future<List<SMBFileEntry>> _getSMBVideoFiles(
-      SMBConnection connection, String folderPath) async {
+      SMBConnection connection, String folderPath, {bool recursive = true}) async {
     final List<SMBFileEntry> videoFiles = [];
     try {
       final files =
           await SMBService.instance.listDirectory(connection, folderPath);
       for (final file in files) {
         if (file.isDirectory) {
-          final nested = await _getSMBVideoFiles(connection, file.path);
-          videoFiles.addAll(nested);
+          if (recursive) {
+            final nested = await _getSMBVideoFiles(connection, file.path, recursive: true);
+            videoFiles.addAll(nested);
+          }
         } else if (SMBService.instance.isVideoFile(file.name)) {
           videoFiles.add(file);
         }

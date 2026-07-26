@@ -1141,23 +1141,26 @@ class AdaptiveSettingsPage extends material.StatelessWidget {
         cupertino.CupertinoColors.systemGroupedBackground,
         context,
       );
-      return material.ColoredBox(
-        color: backgroundColor,
-        child: material.SafeArea(
-          top: false,
-          bottom: false,
-          child: material.ListView(
-            physics: const cupertino.BouncingScrollPhysics(
-              parent: material.AlwaysScrollableScrollPhysics(),
+      return material.Material(
+        type: material.MaterialType.transparency,
+        child: material.ColoredBox(
+          color: backgroundColor,
+          child: material.SafeArea(
+            top: false,
+            bottom: false,
+            child: material.ListView(
+              physics: const cupertino.BouncingScrollPhysics(
+                parent: material.AlwaysScrollableScrollPhysics(),
+              ),
+              padding: material.EdgeInsets.fromLTRB(
+                cupertinoHorizontalPadding,
+                64,
+                cupertinoHorizontalPadding,
+                cupertinoBottomPadding +
+                    material.MediaQuery.viewPaddingOf(context).bottom,
+              ),
+              children: children,
             ),
-            padding: material.EdgeInsets.fromLTRB(
-              cupertinoHorizontalPadding,
-              64,
-              cupertinoHorizontalPadding,
-              cupertinoBottomPadding +
-                  material.MediaQuery.viewPaddingOf(context).bottom,
-            ),
-            children: children,
           ),
         ),
       );

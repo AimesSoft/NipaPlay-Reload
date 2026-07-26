@@ -16,6 +16,16 @@ void applyMdkUserAgentProperties(
   setter('avio.user_agent', userAgent);
 }
 
+@visibleForTesting
+void applyMdkHttpProxyProperties(
+  void Function(String key, String value) setter,
+  String httpProxy,
+) {
+  if (httpProxy.isEmpty) return;
+  setter('avformat.http_proxy', httpProxy);
+  setter('avio.http_proxy', httpProxy);
+}
+
 // Enum Converters
 PlayerPlaybackState _toPlayerPlaybackState(mdk.PlaybackState state) {
   if (state == mdk.PlaybackState.stopped) return PlayerPlaybackState.stopped;
@@ -187,8 +197,10 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String? _activeVideoDecoder;
   String? _activeAudioDecoder;
   int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
+  final String _httpProxy;
 
-  MdkPlayerAdapter() {
+  MdkPlayerAdapter({String? httpProxy})
+      : _httpProxy = (httpProxy ?? '').trim() {
     _mdkPlayer = mdk.Player();
     _attachMdkEventListeners();
     _applyInitialSettings();
@@ -226,6 +238,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   void _applyInitialSettings() {
     try {
+      applyMdkHttpProxyProperties(_setStickyProperty, _httpProxy);
       _setStickyProperty('auto_load', '0');
       _setStickyProperty('subtitle', '1');
       // 重新应用播放速度设置
