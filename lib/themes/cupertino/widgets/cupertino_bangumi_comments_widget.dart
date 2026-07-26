@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart'
     show BangumiMyCommentData;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class CupertinoBangumiCommentsWidget extends StatefulWidget {
   final int? subjectId;
@@ -108,7 +109,11 @@ class CupertinoBangumiCommentsWidgetState
       final bangumiUnavailable = connectivity.bangumiAvailable == false;
       final dandanplayAvailable = connectivity.dandanplayAvailable == true;
 
-      if (!_usingFallback && requestedSubjectId != 0 && !(bangumiUnavailable && dandanplayAvailable && widget.dandanplayId != 0)) {
+      if (!_usingFallback &&
+          requestedSubjectId != 0 &&
+          !(bangumiUnavailable &&
+              dandanplayAvailable &&
+              widget.dandanplayId != 0)) {
         debugPrint(
             '[Cupertino Comments] 尝试Bangumi主接口, subjectId=$requestedSubjectId, offset=$_currentOffset');
         result = await BangumiApiService.getSubjectComments(
@@ -135,7 +140,9 @@ class CupertinoBangumiCommentsWidgetState
           }
         }
 
-        if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable != false) {
+        if (shouldFallback &&
+            widget.dandanplayId != 0 &&
+            dandanplayAvailable != false) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，回退到Dandanplay, dandanplayId=${widget.dandanplayId}');
           _usingFallback = true;
@@ -146,7 +153,9 @@ class CupertinoBangumiCommentsWidgetState
           );
           debugPrint(
               '[Cupertino Comments] Dandanplay回退结果: success=${result['success']}');
-        } else if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable == false) {
+        } else if (shouldFallback &&
+            widget.dandanplayId != 0 &&
+            dandanplayAvailable == false) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，且Dandanplay不可用，跳过回退');
         } else if (shouldFallback && widget.dandanplayId == 0) {
@@ -155,7 +164,8 @@ class CupertinoBangumiCommentsWidgetState
         }
       } else if (widget.dandanplayId != 0) {
         if (bangumiUnavailable && dandanplayAvailable) {
-          debugPrint('[Cupertino Comments] Bangumi不可用但Dandanplay可用，跳过Bangumi直接回退, dandanplayId=${widget.dandanplayId}');
+          debugPrint(
+              '[Cupertino Comments] Bangumi不可用但Dandanplay可用，跳过Bangumi直接回退, dandanplayId=${widget.dandanplayId}');
         }
         _usingFallback = true;
         debugPrint(
@@ -296,7 +306,7 @@ class CupertinoBangumiCommentsWidgetState
         child: avatarUrl.isNotEmpty
             ? (avatarUrl.startsWith('assets/')
                 ? Image.asset(avatarUrl, fit: BoxFit.cover)
-                : Image.network(
+                : MediaServerAwareNetworkImage(
                     _proxiedImageUrl(avatarUrl),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
@@ -401,8 +411,10 @@ class CupertinoBangumiCommentsWidgetState
     // 最后: 底部加载/错误
     const int headerCount = 2;
     final int myCommentCount = hasMyComment ? 1 : 0;
-    final bool hasFooter = _isLoading || (_error != null && _comments.isNotEmpty);
-    final int totalItems = headerCount + myCommentCount + _comments.length + (hasFooter ? 1 : 0);
+    final bool hasFooter =
+        _isLoading || (_error != null && _comments.isNotEmpty);
+    final int totalItems =
+        headerCount + myCommentCount + _comments.length + (hasFooter ? 1 : 0);
 
     return ListView.builder(
       controller: _scrollController,
@@ -422,7 +434,8 @@ class CupertinoBangumiCommentsWidgetState
                       height: 1.5)),
               if (widget.onEditRating != null)
                 CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minSize: 0,
                   onPressed: widget.onEditRating,
                   child: Row(
@@ -461,8 +474,8 @@ class CupertinoBangumiCommentsWidgetState
               decoration: BoxDecoration(
                 color: accentColor.withOpacity(isDark ? 0.12 : 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: accentColor.withOpacity(0.3), width: 0.8),
+                border:
+                    Border.all(color: accentColor.withOpacity(0.3), width: 0.8),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -531,8 +544,8 @@ class CupertinoBangumiCommentsWidgetState
             child: Center(
               child: CupertinoButton(
                 onPressed: _loadComments,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text('加载失败，点击重试',
                     style: TextStyle(color: accentColor, fontSize: 12)),
               ),
@@ -543,7 +556,8 @@ class CupertinoBangumiCommentsWidgetState
         // 评论列表项
         final int commentIndex = index - headerCount - myCommentCount;
         final comment = _comments[commentIndex];
-        final bool isLast = commentIndex == _comments.length - 1 && !_hasMore && _error == null;
+        final bool isLast =
+            commentIndex == _comments.length - 1 && !_hasMore && _error == null;
         return Padding(
           padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
           child: Container(
@@ -551,14 +565,14 @@ class CupertinoBangumiCommentsWidgetState
             decoration: BoxDecoration(
               color: textColor.withOpacity(isDark ? 0.08 : 0.06),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: textColor.withOpacity(0.12), width: 0.8),
+              border:
+                  Border.all(color: textColor.withOpacity(0.12), width: 0.8),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildAvatar(comment.avatarUrl, systemFillColor,
-                    secondaryTextColor),
+                _buildAvatar(
+                    comment.avatarUrl, systemFillColor, secondaryTextColor),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -589,8 +603,7 @@ class CupertinoBangumiCommentsWidgetState
                       ),
                       if (comment.rate > 0) ...[
                         const SizedBox(height: 3),
-                        _buildMiniStars(
-                            comment.rate, accentColor, mutedColor),
+                        _buildMiniStars(comment.rate, accentColor, mutedColor),
                       ],
                       if (comment.comment.isNotEmpty) ...[
                         const SizedBox(height: 4),

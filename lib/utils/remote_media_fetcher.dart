@@ -8,9 +8,11 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:xml/xml.dart';
 import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
 import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay/utils/http_user_agent.dart';
 
 /// 获取远程媒体文件的基础信息，并计算前16MB内容的 MD5。
 ///
@@ -28,8 +30,17 @@ class RemoteMediaFetcher {
   static const Duration defaultTimeout = Duration(seconds: 20);
 
   /// 获取远程媒体元信息并计算首段哈希；原生路径不把媒体字节传回 Dart。
-  static Future<RemoteMediaHead> fetchHead(Uri originalUri) async {
-    if (!kIsWeb) {
+  static Future<RemoteMediaHead> fetchHead(
+    Uri originalUri, {
+    String? userAgent,
+  }) async {
+    final configuredUserAgent = sanitizeHttpUserAgent(
+      userAgent ?? PlayerFactory.getCustomPlayerUA(),
+    );
+    final effectiveUserAgent = configuredUserAgent.isEmpty
+        ? defaultNipaPlayUserAgent
+        : configuredUserAgent;
+    if (!kIsWeb && effectiveUserAgent == defaultNipaPlayUserAgent) {
       try {
         await ensureRustInitialized();
         final result = await rust_media.probeRemoteMedia(
@@ -48,13 +59,19 @@ class RemoteMediaFetcher {
         debugPrint('RemoteMediaFetcher: Rust 路径失败，回退 Dart: $error');
       }
     }
-    return _fetchHeadWithDart(originalUri);
+    return _fetchHeadWithDart(
+      originalUri,
+      userAgent: effectiveUserAgent,
+    );
   }
 
-  static Future<RemoteMediaHead> _fetchHeadWithDart(Uri originalUri) async {
+  static Future<RemoteMediaHead> _fetchHeadWithDart(
+    Uri originalUri, {
+    required String userAgent,
+  }) async {
     final sanitizedUri = _buildSanitizedUri(originalUri);
     final headers = <String, String>{
-      'User-Agent': 'NipaPlay/1.0',
+      'User-Agent': userAgent,
       'Accept': '*/*',
       'Accept-Encoding': 'identity',
     };

@@ -1,9 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
-import 'package:http/http.dart' as http;
-import 'package:nipaplay/services/web_remote_access_service.dart';
 
 // 图片加载模式
 enum CachedImageLoadMode {
@@ -137,20 +136,17 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     }
     
     try {
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(widget.imageUrl)),
+      final imageBytes = await loadNetworkImageBytes(
+        Uri.parse(widget.imageUrl),
       );
-      
-      if (response.statusCode == 200) {
-        final codec = await ui.instantiateImageCodec(response.bodyBytes);
-        final frame = await codec.getNextFrame();
-        
-        // 如果组件还在使用，更新基础图片
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _basicImage = frame.image;
-          });
-        }
+      final codec = await ui.instantiateImageCodec(imageBytes);
+      final frame = await codec.getNextFrame();
+
+      // 如果组件还在使用，更新基础图片
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _basicImage = frame.image;
+        });
       }
     } catch (e) {
       debugPrint('加载基础图片失败: $e');
@@ -159,13 +155,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 
   // 新增方法：直接加载原始图片，不进行压缩
   Future<ui.Image> _loadOriginalImage(String imageUrl) async {
-    final response = await http.get(
-      WebRemoteAccessService.proxyUri(Uri.parse(imageUrl)),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load image');
-    }
-    final codec = await ui.instantiateImageCodec(response.bodyBytes);
+    final imageBytes = await loadNetworkImageBytes(Uri.parse(imageUrl));
+    final codec = await ui.instantiateImageCodec(imageBytes);
     final frame = await codec.getNextFrame();
     return frame.image;
   }

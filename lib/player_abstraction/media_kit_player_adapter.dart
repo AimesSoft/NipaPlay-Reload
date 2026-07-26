@@ -15,6 +15,14 @@ import './player_enums.dart';
 import './player_data_models.dart';
 
 @visibleForTesting
+void applyMediaKitUserAgentProperty(
+  void Function(String key, String value) setter,
+  String userAgent,
+) {
+  setter('user-agent', userAgent);
+}
+
+@visibleForTesting
 void applyMediaKitNetworkOptions(
   void Function(String key, String value) setter, {
   required String userAgent,
@@ -2452,12 +2460,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void setUserAgent(String ua) {
-    if (ua.isEmpty) return;
     try {
       // mpv 的 user-agent 属性，对所有 HTTP 请求生效。须在打开媒体前设置。
-      unawaited((_player.platform as dynamic).setProperty('user-agent', ua));
+      applyMediaKitUserAgentProperty(
+        (key, value) => unawaited(
+          (_player.platform as dynamic).setProperty(key, value),
+        ),
+        ua,
+      );
       _properties['user-agent'] = ua;
-      debugPrint('MediaKit: 已设置自定义 user-agent: $ua');
+      debugPrint('MediaKit: 已设置 user-agent: ${ua.isEmpty ? "(默认)" : ua}');
     } catch (e) {
       debugPrint('MediaKit: 设置 user-agent 失败: $e');
     }

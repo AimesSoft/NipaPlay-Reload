@@ -556,11 +556,13 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
         errorBuilder: (_, __, ___) => ColoredBox(color: placeholderColor),
       );
     }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: fit,
-      placeholder: (_, __) => ColoredBox(color: placeholderColor),
-      errorWidget: (_, __, ___) => ColoredBox(color: placeholderColor),
+    return ColoredBox(
+      color: placeholderColor,
+      child: MediaServerAwareCachedNetworkImage(
+        imageUrl: url,
+        fit: fit,
+        errorWidget: (_, __, ___) => ColoredBox(color: placeholderColor),
+      ),
     );
   }
 

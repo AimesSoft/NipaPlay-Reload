@@ -17,6 +17,7 @@ import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/settings/widgets/media_server_connection_user_agent_setting.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_server_connection_dialog.dart';
@@ -154,6 +155,8 @@ class _RemoteMediaLibrarySettingsContentState
             _buildSharedRemoteSection(context),
             const SizedBox(height: 16),
             _buildDeviceIdSection(context),
+            const SizedBox(height: 16),
+            const MediaServerConnectionUserAgentSetting(),
             const SizedBox(height: 16),
             AdaptiveSettingsSection(
               children: [

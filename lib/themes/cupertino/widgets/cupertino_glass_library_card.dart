@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 /// 液态玻璃风格的媒体库卡片，用于展示远程服务器中的分类库。
 enum MediaServerBrand { jellyfin, emby }
@@ -99,7 +100,7 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
 
   Widget _buildBackground() {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return Image.network(
+      return MediaServerAwareNetworkImage(
         imageUrl!,
         fit: BoxFit.cover,
         filterQuality: FilterQuality.high,
@@ -151,7 +152,8 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
                 : 'assets/emby.svg',
             width: 14,
             height: 14,
-            colorFilter: const ColorFilter.mode(CupertinoColors.white, BlendMode.srcIn),
+            colorFilter:
+                const ColorFilter.mode(CupertinoColors.white, BlendMode.srcIn),
           ),
           if (itemCount != null) ...[
             const SizedBox(width: 6),

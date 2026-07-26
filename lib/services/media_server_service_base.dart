@@ -10,6 +10,7 @@ import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
 import 'debug_log_service.dart';
 import 'media_server_device_id_service.dart';
+import 'media_server_transport.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 
 abstract class MediaServerServiceBase {
@@ -658,6 +659,19 @@ abstract class MediaServerServiceBase {
     }
   }
 
+  static const String defaultConnectionUserAgent =
+      MediaServerTransport.defaultConnectionUserAgent;
+
+  /// 持久化全局连接 UA（留空表示使用默认 NipaPlay/1.0），立即刷新缓存，返回清洗后的值。
+  static Future<String> saveConnectionUserAgent(String userAgent) async {
+    return MediaServerTransport.saveConnectionUserAgent(userAgent);
+  }
+
+  /// 读取已保存的全局连接 UA 原始值（空字符串=用默认值，供设置页回显）。
+  static Future<String> getStoredConnectionUserAgent() async {
+    return MediaServerTransport.getStoredConnectionUserAgent();
+  }
+
   Future<http.Response> _sendSingleRequest(
     Uri uri, {
     required String method,
@@ -683,8 +697,12 @@ abstract class MediaServerServiceBase {
         throw Exception('不支持的 HTTP 方法: $method');
     }
 
-    final streamedResponse = await request.send().timeout(timeout);
-    return http.Response.fromStream(streamedResponse).timeout(timeout);
+    final transport = await MediaServerTransport.fromStoredSettings();
+    try {
+      return await transport.send(request, timeout: timeout);
+    } finally {
+      transport.close();
+    }
   }
 
   bool _isRedirectStatus(int statusCode) {
