@@ -1,7 +1,12 @@
 import 'dart:async';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
-    show PlatformInfo;
+    show
+        AdaptivePopupMenuButton,
+        AdaptivePopupMenuEntry,
+        AdaptivePopupMenuItem,
+        PlatformInfo,
+        PopupButtonStyle;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -33,6 +38,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     this.dropdownItems,
     this.onDropdownChanged,
     this.dropdownKey,
+    this.useNativeIOS26Dropdown = false,
     this.switchValue,
     this.onSwitchChanged,
     this.hideNativeIOS26Switch = false,
@@ -61,6 +67,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required List<DropdownMenuItemData<T>> items,
     required FutureOr<void> Function(T value) onChanged,
     material.GlobalKey? dropdownKey,
+    bool useNativeIOS26Dropdown = false,
   }) {
     return AdaptiveSettingsTile<T>._(
       key: key,
@@ -73,6 +80,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       dropdownItems: items,
       onDropdownChanged: onChanged,
       dropdownKey: dropdownKey,
+      useNativeIOS26Dropdown: useNativeIOS26Dropdown,
     );
   }
 
@@ -219,6 +227,11 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   final List<DropdownMenuItemData<T>>? dropdownItems;
   final FutureOr<void> Function(T value)? onDropdownChanged;
   final material.GlobalKey? dropdownKey;
+
+  /// Uses the native UIKit popup menu on iOS 26 and later.
+  ///
+  /// Other platforms and earlier iOS versions keep the shared bottom sheet.
+  final bool useNativeIOS26Dropdown;
   final bool? switchValue;
   final material.ValueChanged<bool>? onSwitchChanged;
 
@@ -393,6 +406,28 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
     final label =
         selected?.title ?? (items.isNotEmpty ? items.first.title : '');
+    if (useNativeIOS26Dropdown && usesNativeIOS26SettingsControls) {
+      return AdaptivePopupMenuButton.text<T>(
+        label: label,
+        items: <AdaptivePopupMenuEntry>[
+          for (final item in items)
+            AdaptivePopupMenuItem<T>(
+              label: item.title,
+              value: item.value,
+              enabled: item.enabled,
+              icon: item.isSelected ? 'checkmark' : null,
+            ),
+        ],
+        onSelected: (index, _) {
+          if (index < 0 || index >= items.length || !items[index].enabled) {
+            return;
+          }
+          onDropdownChanged?.call(items[index].value);
+        },
+        shrinkWrap: true,
+        buttonStyle: PopupButtonStyle.plain,
+      );
+    }
     return cupertino.CupertinoButton(
       padding: material.EdgeInsets.zero,
       minimumSize: material.Size.zero,
