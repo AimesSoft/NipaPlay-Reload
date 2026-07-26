@@ -525,16 +525,20 @@ void main() {
     expect(notification, isNot(contains('AppAccentColors.current')));
   });
 
-  test('phone modal choices all use the shared Cupertino bottom sheet', () {
+  test('phone modal choices use shared adapters instead of direct popups', () {
     final dartFiles = Directory('lib')
         .listSync(recursive: true)
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'))
         .where(
-          (file) => !_portablePath(file.path).endsWith(
-            'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
-          ),
-        );
+      (file) {
+        final path = _portablePath(file.path);
+        return !path.endsWith(
+              'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
+            ) &&
+            !path.endsWith('settings/adaptive_settings_widgets.dart');
+      },
+    );
     final directPopupUsers = <String>[];
     for (final file in dartFiles) {
       final source = file.readAsStringSync();
@@ -551,6 +555,34 @@ void main() {
         'lib/themes/cupertino/widgets/cupertino_modal_popup.dart',
       ).existsSync(),
       isFalse,
+    );
+  });
+
+  test('iOS 26 kernel selectors opt into native dropdown menus', () {
+    final player = File(
+      'lib/settings/pages/player_settings_content.dart',
+    ).readAsStringSync();
+    final danmaku = File(
+      'lib/settings/pages/danmaku_settings_content.dart',
+    ).readAsStringSync();
+
+    expect(
+      player,
+      matches(
+        RegExp(
+          r'title: "播放器内核",[\s\S]*?'
+          r'useNativeIOS26Dropdown: true,',
+        ),
+      ),
+    );
+    expect(
+      danmaku,
+      matches(
+        RegExp(
+          r"title: '弹幕渲染引擎',[\s\S]*?"
+          r'useNativeIOS26Dropdown: true,',
+        ),
+      ),
     );
   });
 
