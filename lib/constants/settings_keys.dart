@@ -32,6 +32,10 @@ class SettingsKeys {
   /// 自定义播放器请求视频的 User-Agent（空字符串 = 用内核默认 UA）。
   static const String customPlayerUA = 'custom_player_ua';
 
+  /// Emby/Jellyfin API、图片和播放同步请求共用的 User-Agent。
+  static const String mediaServerConnectionUserAgent =
+      'media_server_connection_user_agent_v1';
+
   /// HTTP forward proxy endpoint shared by Dart requests and native players.
   static const String playerHttpProxy = 'player_http_proxy';
 

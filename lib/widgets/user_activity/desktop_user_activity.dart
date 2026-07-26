@@ -7,6 +7,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
 
 /// NipaPlay/Fluent renderer for shared user activity data.
@@ -401,7 +402,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(coverRadius),
                       child: imageUrl != null
-                          ? Image.network(
+                          ? MediaServerAwareNetworkImage(
                               imageUrl,
                               width: coverWidth,
                               height: coverHeight,

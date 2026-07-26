@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:intl/intl.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 /// Cupertino风格的番剧卡片控件
 /// 专门用于显示共享媒体库中的番剧信息
@@ -136,7 +137,8 @@ class CupertinoAnimeCard extends StatelessWidget {
                                   color: secondaryLabelColor,
                                 ),
                               ),
-                              if (rating != null && rating! > 0) const SizedBox(width: 12),
+                              if (rating != null && rating! > 0)
+                                const SizedBox(width: 12),
                             ],
                             if (rating != null && rating! > 0) ...[
                               Icon(
@@ -209,21 +211,25 @@ class CupertinoAnimeCard extends StatelessWidget {
                               ],
                             ),
                             // 简介预览 - 占用剩余空间
-                            if (summary != null && summary!.trim().isNotEmpty) ...[
+                            if (summary != null &&
+                                summary!.trim().isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Expanded(
                                 child: LayoutBuilder(
                                   builder: (context, constraints) {
                                     // 根据可用高度计算最大行数
                                     const lineHeight = 12; // fontSize * height
-                                    final maxLines = (constraints.maxHeight / lineHeight).floor();
+                                    final maxLines =
+                                        (constraints.maxHeight / lineHeight)
+                                            .floor();
                                     return Text(
                                       _cleanSummary(summary!),
                                       maxLines: maxLines > 0 ? maxLines : 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: secondaryLabelColor.withOpacity(0.9),
+                                        color: secondaryLabelColor
+                                            .withOpacity(0.9),
                                         height: 1.4,
                                       ),
                                     );
@@ -269,7 +275,7 @@ class CupertinoAnimeCard extends StatelessWidget {
       );
     }
 
-    return Image.network(
+    return MediaServerAwareNetworkImage(
       imageUrl!,
       fit: BoxFit.cover,
       width: double.infinity,

@@ -8,6 +8,15 @@ import 'dart:async';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
 @visibleForTesting
+void applyMdkUserAgentProperties(
+  void Function(String key, String value) setter,
+  String userAgent,
+) {
+  setter('avformat.user_agent', userAgent);
+  setter('avio.user_agent', userAgent);
+}
+
+@visibleForTesting
 void applyMdkHttpProxyProperties(
   void Function(String key, String value) setter,
   String httpProxy,
@@ -524,11 +533,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setUserAgent(String ua) {
-    if (ua.isEmpty) return;
-    // mdk-sdk: avio.user_agent 是 AVIOContext/URLProtocol 选项，对 HTTP 请求生效。
-    // setProperty 内部用 sticky property，对后续所有媒体生效。
-    setProperty('avio.user_agent', ua);
-    debugPrint('MDK: 已设置自定义 user-agent: $ua');
+    applyMdkUserAgentProperties(setProperty, ua);
+    debugPrint('MDK: 已设置 user-agent: ${ua.isEmpty ? "(默认)" : ua}');
   }
 
   @override

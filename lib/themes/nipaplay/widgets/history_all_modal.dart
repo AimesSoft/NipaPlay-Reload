@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class HistoryAllModal extends StatefulWidget {
   final List<WatchHistoryItem> history;
@@ -14,7 +15,7 @@ class HistoryAllModal extends StatefulWidget {
 
   const HistoryAllModal({
     super.key,
-    required this.history, 
+    required this.history,
     required this.onItemTap,
   });
 
@@ -31,52 +32,53 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
   bool _hasMoreData = true;
   late List<WatchHistoryItem> _validHistory;
   final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // 过滤出有效的观看记录（持续时间大于0）
     _validHistory = widget.history.where((item) => item.duration > 0).toList();
-    
+
     // 初始加载第一页
     _loadMoreItems();
-    
+
     // 添加滚动监听器，实现触底加载更多
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= 
-          _scrollController.position.maxScrollExtent - 300 && // 预加载，滚动到距离底部300像素时
-          !_isLoading && 
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent -
+                  300 && // 预加载，滚动到距离底部300像素时
+          !_isLoading &&
           _hasMoreData) {
         _loadMoreItems();
       }
     });
   }
-  
+
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
   }
-  
+
   // 加载更多数据
   void _loadMoreItems() {
     if (_isLoading || !_hasMoreData) return;
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     // 模拟异步加载，防止UI阻塞
     Future.delayed(const Duration(milliseconds: 100), () {
       if (!mounted) return;
-      
+
       final startIndex = _displayedHistory.length;
       final endIndex = startIndex + _pageSize;
       final itemsToAdd = _validHistory.length > endIndex
           ? _validHistory.sublist(startIndex, endIndex)
           : _validHistory.sublist(startIndex);
-      
+
       setState(() {
         _displayedHistory.addAll(itemsToAdd);
         _isLoading = false;
@@ -100,7 +102,9 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
         width: double.infinity,
         height: double.infinity,
         borderRadius: 20,
-        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect
+            ? 25
+            : 0,
         alignment: Alignment.center,
         border: 1,
         linearGradient: LinearGradient(
@@ -146,45 +150,19 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
             ),
             Expanded(
               child: Platform.isAndroid || Platform.isIOS
-                ? ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _displayedHistory.length + (_hasMoreData ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      // 判断是否是加载更多项
-                      if (index == _displayedHistory.length) {
-                        return _buildLoadingIndicator();
-                      }
-                      
-                      final item = _displayedHistory[index];
-                      
-                      return HistoryListItem(
-                        key: ValueKey('history_${item.filePath}'),
-                        item: item,
-                        thumbnailLoader: _loadThumbnail,
-                        onTap: () {
-                          Navigator.pop(context);
-                          widget.onItemTap(item);
-                        },
-                      );
-                    },
-                  )
-                : Scrollbar(
-                    controller: _scrollController,
-                    radius: const Radius.circular(2),
-                    thickness: 4,
-                    child: ListView.builder(
+                  ? ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.all(16),
-                      itemCount: _displayedHistory.length + (_hasMoreData ? 1 : 0),
+                      itemCount:
+                          _displayedHistory.length + (_hasMoreData ? 1 : 0),
                       itemBuilder: (context, index) {
                         // 判断是否是加载更多项
                         if (index == _displayedHistory.length) {
                           return _buildLoadingIndicator();
                         }
-                        
+
                         final item = _displayedHistory[index];
-                        
+
                         return HistoryListItem(
                           key: ValueKey('history_${item.filePath}'),
                           item: item,
@@ -195,15 +173,43 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
                           },
                         );
                       },
+                    )
+                  : Scrollbar(
+                      controller: _scrollController,
+                      radius: const Radius.circular(2),
+                      thickness: 4,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount:
+                            _displayedHistory.length + (_hasMoreData ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          // 判断是否是加载更多项
+                          if (index == _displayedHistory.length) {
+                            return _buildLoadingIndicator();
+                          }
+
+                          final item = _displayedHistory[index];
+
+                          return HistoryListItem(
+                            key: ValueKey('history_${item.filePath}'),
+                            item: item,
+                            thumbnailLoader: _loadThumbnail,
+                            onTap: () {
+                              Navigator.pop(context);
+                              widget.onItemTap(item);
+                            },
+                          );
+                        },
+                      ),
                     ),
-                  ),
             ),
           ],
         ),
       ),
     );
   }
-  
+
   // 加载更多指示器
   Widget _buildLoadingIndicator() {
     return Container(
@@ -300,7 +306,7 @@ class HistoryListItem extends StatelessWidget {
                       height: 48,
                       child: _buildThumbnail(item),
                     ),
-                        ),
+                  ),
                   const SizedBox(width: 12),
                   // 标题和副标题
                   Expanded(
@@ -335,7 +341,8 @@ class HistoryListItem extends StatelessWidget {
                   ),
                   // 进度
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: item.watchProgress > 0.9
                           ? Colors.greenAccent.withOpacity(0.3)
@@ -344,8 +351,8 @@ class HistoryListItem extends StatelessWidget {
                     ),
                     child: Text(
                       "${(item.watchProgress * 100).toInt()}%",
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
                         color: item.watchProgress > 0.9
                             ? Colors.greenAccent
                             : Colors.orangeAccent,
@@ -368,7 +375,7 @@ style: TextStyle(
     if (path != null) {
       final lowerPath = path.toLowerCase();
       if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
-        return Image.network(
+        return MediaServerAwareNetworkImage(
           path,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
@@ -402,4 +409,4 @@ style: TextStyle(
       ),
     );
   }
-} 
+}

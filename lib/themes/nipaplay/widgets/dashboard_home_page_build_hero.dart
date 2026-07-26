@@ -286,7 +286,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     maxWidth: compact ? 120 : 200, // 手机端更小
                     maxHeight: compact ? 50 : 80, // 手机端更小
                   ),
-                  child: Image.network(
+                  child: MediaServerAwareNetworkImage(
                     item.logoImageUrl!,
                     fit: BoxFit.contain,
                     loadingBuilder: (context, child, loadingProgress) {
@@ -551,7 +551,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   maxWidth: 120,
                   maxHeight: 45,
                 ),
-                child: Image.network(
+                child: MediaServerAwareNetworkImage(
                   item.logoImageUrl!,
                   fit: BoxFit.contain,
                   loadingBuilder: (context, child, loadingProgress) {

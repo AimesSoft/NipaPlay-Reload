@@ -3,15 +3,18 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class EmbyLibraryCard extends StatelessWidget {
   final EmbyLibrary library;
   final VoidCallback onTap;
+  final MediaServerImageLoader? imageLoader;
 
   const EmbyLibraryCard({
     super.key,
     required this.library,
     required this.onTap,
+    this.imageLoader,
   });
 
   @override
@@ -34,9 +37,10 @@ class EmbyLibraryCard extends StatelessWidget {
                 gradient: _getRandomGradient(),
               ),
               child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
+                  ? MediaServerNetworkImage(
+                      Uri.parse(imageUrl),
                       fit: BoxFit.cover,
+                      loader: imageLoader,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           decoration: BoxDecoration(
