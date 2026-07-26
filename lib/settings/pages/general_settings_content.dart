@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:nipaplay/services/desktop_picture_in_picture_preferences.dart';
@@ -18,7 +17,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String defaultPageIndexKey = 'default_page_index';
@@ -73,7 +71,6 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
 
   @override
   Widget build(BuildContext context) {
-    final homeSections = context.watch<HomeSectionsSettingsProvider>();
     final children = <Widget>[];
 
     if (globals.isDesktop) {
@@ -285,43 +282,6 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
             dropdownKey: _defaultPageDropdownKey,
           ),
           const AutoUpdateSettingTile(),
-        ],
-      ),
-    );
-
-    children.add(const SizedBox(height: 16));
-    children.add(
-      AdaptiveSettingsDragList<HomeSectionType>(
-        items: [
-          for (final section in homeSections.orderedSections)
-            AdaptiveSettingsDragListItem<HomeSectionType>(
-              value: section,
-              title: section.title,
-              subtitle: homeSections.isSectionEnabled(section)
-                  ? _text(context, '显示在首页', '顯示在首頁', 'Shown on Home')
-                  : _text(context, '已隐藏', '已隱藏', 'Hidden'),
-              icon: Ionicons.home_outline,
-              phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
-              enabled: homeSections.isSectionEnabled(section),
-            ),
-        ],
-        onReorder: homeSections.reorderSections,
-        onEnabledChanged: (section, value) {
-          homeSections.setSectionEnabled(section, value);
-        },
-      ),
-    );
-    children.add(const SizedBox(height: 8));
-    children.add(
-      AdaptiveSettingsSection(
-        children: [
-          AdaptiveSettingsTile<void>.card(
-            title: context.l10n.restoreDefaults,
-            subtitle: context.l10n.restoreDefaultsSubtitle,
-            icon: Ionicons.refresh_outline,
-            phoneIcon: cupertino.CupertinoIcons.refresh,
-            onTap: homeSections.restoreDefaults,
-          ),
         ],
       ),
     );

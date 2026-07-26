@@ -621,6 +621,9 @@ void main() {
     final appearance = File(
       'lib/settings/pages/appearance_settings_content.dart',
     ).readAsStringSync();
+    final general = File(
+      'lib/settings/pages/general_settings_content.dart',
+    ).readAsStringSync();
 
     expect(appearance, isNot(contains('AnimeDetailDisplayMode')));
     expect(appearance, isNot(contains('RecentWatchingStyle')));
@@ -628,6 +631,10 @@ void main() {
     expect(appearance, isNot(contains('_recentStyleDropdownKey')));
     expect(appearance, contains('AdaptiveSettingsDragList<HomeSectionType>'));
     expect(appearance, contains('onReorder: homeSections.reorderSections'));
+    expect(general, isNot(contains('HomeSectionsSettingsProvider')));
+    expect(
+        general, isNot(contains('AdaptiveSettingsDragList<HomeSectionType>')));
+    expect(general, isNot(contains('homeSections.restoreDefaults')));
   });
 
   test('danmaku workflows share one data service and adaptive presentation',
