@@ -168,6 +168,27 @@ jobs:
           export LIBMPV_DARWIN_LIBPLACEBO_SRC="$GITHUB_WORKSPACE/third_party/libplacebo"
           export LIBMPV_DARWIN_XCODE_APP="${XCODE_APP_PATH}"
 
+          # Some legacy helpers in libmpv-darwin-build still use
+          # `import <nixpkgs>`. Determinate Nix maps that lookup to the moving
+          # nixpkgs-weekly registry by default, so keep it on the same revision
+          # as the submodule's flake input (which still supports x86_64-darwin).
+          FLAKE_LOCK="$GITHUB_WORKSPACE/third_party/libmpv-darwin-build/flake.lock"
+          NIXPKGS_OWNER="$(jq -r '.nodes.nixpkgs.locked.owner // empty' "$FLAKE_LOCK")"
+          NIXPKGS_REPO="$(jq -r '.nodes.nixpkgs.locked.repo // empty' "$FLAKE_LOCK")"
+          NIXPKGS_REV="$(jq -r '.nodes.nixpkgs.locked.rev // empty' "$FLAKE_LOCK")"
+          if [[ -z "$NIXPKGS_OWNER" || -z "$NIXPKGS_REPO" || ! "$NIXPKGS_REV" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Failed to read a pinned nixpkgs revision from $FLAKE_LOCK" >&2
+            exit 1
+          fi
+          NIXPKGS_FLAKE="github:${NIXPKGS_OWNER}/${NIXPKGS_REPO}/${NIXPKGS_REV}"
+          PINNED_NIXPKGS_PATH="$(nix flake archive --json "$NIXPKGS_FLAKE" | jq -r '.path // empty')"
+          if [[ -z "$PINNED_NIXPKGS_PATH" || ! -d "$PINNED_NIXPKGS_PATH" ]]; then
+            echo "Failed to resolve pinned nixpkgs source: $NIXPKGS_FLAKE" >&2
+            exit 1
+          fi
+          export NIX_PATH="nixpkgs=${PINNED_NIXPKGS_PATH}"
+          echo "Using pinned legacy nixpkgs path at ${PINNED_NIXPKGS_PATH}"
+
           pushd third_party/libmpv-darwin-build
           nix build --impure -L .#mk-out-archive-xcframeworks-macos-universal-video-full
 
