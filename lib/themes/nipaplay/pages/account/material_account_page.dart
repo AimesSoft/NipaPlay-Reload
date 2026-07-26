@@ -525,8 +525,11 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
       showMessage('授权链接为空');
       return;
     }
-    await _openExternalUrl(url, cannotOpenMessage: '无法打开Bangumi授权页面');
-    if (!mounted) return;
+    final opened = await _openExternalUrl(
+      url,
+      cannotOpenMessage: '无法打开Bangumi授权页面',
+    );
+    if (!opened || !mounted) return;
     showMessage('已在浏览器打开授权页，完成后点击“我已完成网页操作，刷新状态”。');
     unawaited(_tryAutoRefreshDandanBangumiStatus());
   }
@@ -543,8 +546,11 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
       showMessage('同步设置页面链接为空');
       return;
     }
-    await _openExternalUrl(url, cannotOpenMessage: '无法打开Bangumi同步设置页面');
-    if (!mounted) return;
+    final opened = await _openExternalUrl(
+      url,
+      cannotOpenMessage: '无法打开Bangumi同步设置页面',
+    );
+    if (!opened || !mounted) return;
     showMessage('已在浏览器打开同步设置页，网页内操作后请刷新状态或重新登录。');
     unawaited(_tryAutoRefreshDandanBangumiStatus());
   }
@@ -585,27 +591,31 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
     }
   }
 
-  Future<void> _openExternalUrl(
+  Future<bool> _openExternalUrl(
     String url, {
     String cannotOpenMessage = '无法打开链接',
   }) async {
     try {
       if (kIsWeb) {
         showMessage('请复制以下链接到浏览器中打开：$url');
-        return;
+        return false;
       }
       final uri = Uri.tryParse(url);
       if (uri == null) {
         showMessage('链接无效');
-        return;
+        return false;
       }
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
         showMessage(cannotOpenMessage);
       }
+      return opened;
     } catch (error) {
       showMessage('打开链接失败：$error');
+      return false;
     }
   }
 
