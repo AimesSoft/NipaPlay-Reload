@@ -547,19 +547,22 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               (constraints.maxWidth / _phonePortraitUiDesignWidth)
                   .clamp(0.35, 0.72)
                   .toDouble();
+          final playerStage = _buildPlayerStage(
+            videoState,
+            portraitUiScale: portraitUiScale,
+          );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
                 height: stageHeight,
                 child: ClipRect(
-                  child: ColoredBox(
-                    color: Colors.black,
-                    child: _buildPlayerStage(
-                      videoState,
-                      portraitUiScale: portraitUiScale,
-                    ),
-                  ),
+                  child: videoState.player.usesWindowOverlayVideoSurface
+                      ? playerStage
+                      : ColoredBox(
+                          color: Colors.black,
+                          child: playerStage,
+                        ),
                 ),
               ),
               Expanded(

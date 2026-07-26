@@ -36,6 +36,9 @@ class SettingsKeys {
   static const String mediaServerConnectionUserAgent =
       'media_server_connection_user_agent_v1';
 
+  /// HTTP forward proxy endpoint shared by Dart requests and native players.
+  static const String playerHttpProxy = 'player_http_proxy';
+
   static const String autoCheckUpdatesInBackground =
       'auto_check_updates_in_background';
 
@@ -66,6 +69,8 @@ class SettingsKeys {
 
   static const String mediaLibrarySelectedSection =
       'media_library_selected_section';
+
+  static const String mediaLibrarySectionOrder = 'media_library_section_order';
 
   static const String downloaderEnabled = 'downloader_enabled';
 

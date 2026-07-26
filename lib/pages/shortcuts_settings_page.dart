@@ -376,8 +376,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
               _stopRecording();
             },
             child: const Text('取消',
-                locale: Locale("zh", "CN"),
-                style: TextStyle(color: Colors.white70)),
+                locale: Locale("zh", "CN")),
           ),
           HoverScaleTextButton(
             onPressed: () {
@@ -386,8 +385,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
               _stopRecording();
             },
             child: const Text('替换',
-                locale: Locale("zh", "CN"),
-                style: TextStyle(color: Colors.white)),
+                locale: Locale("zh", "CN")),
           ),
         ],
       );

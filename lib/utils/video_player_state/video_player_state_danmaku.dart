@@ -540,6 +540,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       };
       _danmakuTrackEnabled[finalTrackName] = true;
 
+      // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
+      if (!canContinue()) return;
+      _notifyPluginDanmakuLoaded(parsedDanmaku);
+
+      // 检查插件是否修改了弹幕数据
+      final pluginModified = _pluginService?.pendingDanmakuData;
+      if (pluginModified != null && pluginModified.isNotEmpty) {
+        _danmakuTracks[finalTrackName]!['danmakuList'] = pluginModified;
+        _danmakuTracks[finalTrackName]!['count'] = pluginModified.length;
+        _pluginService?.updateDanmakuData(null);
+      }
+
       // 重新计算合并后的弹幕列表
       if (!canContinue()) return;
       _updateMergedDanmakuList();
