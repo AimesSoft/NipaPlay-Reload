@@ -21,26 +21,24 @@ on:
     outputs:
       version:
         description: '应用版本号'
-        value: ${{ jobs.build.outputs.version }}
+        value: ${{ jobs.prepare.outputs.version }}
       artifact-name:
-        description: '构建产物名称'
-        value: ${{ jobs.build.outputs.artifact-name }}
+        description: '构建产物名称模式'
+        value: ${{ jobs.prepare.outputs.artifact-name }}
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  build:
-    name: Build macOS Packages
+  prepare:
+    name: Prepare macOS Dependencies
     runs-on: macos-26
     outputs:
-      version: ${{ steps.setup.outputs.version }}
-      artifact-name: release-macOS
-    env:
-      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
-      FVP_DEPS_LATEST: 1
-      ERIKA_PREBUILT: "1"
+      version: ${{ steps.metadata.outputs.version }}
+      artifact-name: ${{ steps.metadata.outputs.artifact-name }}
+      libmpv-cache-key: ${{ steps.libmpv-key.outputs.cache-key }}
+      libmpv-sha256: ${{ steps.libmpv-metadata.outputs.archive-sha256 }}
     steps:
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -52,10 +50,49 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Read build metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "version=$(awk '/^version:/ { print $2; exit }' pubspec.yaml)" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=release-macOS-*" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate libmpv cache key
+        id: libmpv-key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "profile=macos-hdr"
+            echo "mpv=$(git -C third_party/mpv rev-parse HEAD)"
+            echo "libplacebo=$(git -C third_party/libplacebo rev-parse HEAD)"
+            echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
+            echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
+            echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
+            echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
+          } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
+
+          CACHE_FINGERPRINT="$(shasum -a 256 "$RUNNER_TEMP/libmpv-cache-inputs.txt" | awk '{print $1}')"
+          CACHE_KEY="macos-libmpv-${RUNNER_ARCH}-${CACHE_FINGERPRINT}"
+          echo "libmpv cache inputs:"
+          cat "$RUNNER_TEMP/libmpv-cache-inputs.txt"
+          echo "cache-key=${CACHE_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore macOS libmpv xcframework cache
+        id: libmpv-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-cache/libmpv/macos-hdr.tar.gz
+          key: ${{ steps.libmpv-key.outputs.cache-key }}
+
       - name: Install Nix
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
         uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Pre-fetch uchardet source (fallback mirror)
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -63,7 +100,7 @@ jobs:
           echo "LIBMPV_DARWIN_FETCH_CACHE_DIR=${FETCH_CACHE}" >> "$GITHUB_ENV"
           # The Nix fetch-file helper resolves the URL basename for the cache.
           # packages.lock.nix now points to the Debian mirror, so the expected
-          # cache filename is uchardet_0.0.8.orig.tar.xz
+          # cache filename is uchardet_0.0.8.orig.tar.xz.
           TARGET="${FETCH_CACHE}/uchardet_0.0.8.orig.tar.xz"
           MIRRORS=(
             "https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz"
@@ -73,22 +110,21 @@ jobs:
             echo "Trying ${url} ..."
             if curl -fSL --retry 3 --retry-delay 5 -o "$TARGET" "$url" 2>/dev/null; then
               echo "Downloaded uchardet from ${url}"
-              # Verify sha256 matches packages.lock.nix
               EXPECTED="e97a60cfc00a1c147a674b097bb1422abd9fa78a2d9ce3f3fdcc2e78a34ac5f0"
               ACTUAL="$(shasum -a 256 "$TARGET" | cut -d' ' -f1)"
               if [ "$ACTUAL" = "$EXPECTED" ]; then
                 echo "SHA256 verified OK"
                 exit 0
-              else
-                echo "SHA256 mismatch! Expected $EXPECTED, got $ACTUAL"
-                rm -f "$TARGET"
               fi
+              echo "SHA256 mismatch! Expected $EXPECTED, got $ACTUAL"
+              rm -f "$TARGET"
             fi
             echo "Failed to download from ${url}, trying next mirror..."
           done
           echo "WARNING: Could not pre-fetch uchardet; Nix build will attempt direct download."
 
       - name: Patch libmpv-darwin-build for target-arch HDR deps
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -103,17 +139,16 @@ jobs:
           fi
 
       - name: Patch uchardet download URL (Debian mirror)
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
           # freedesktop.org returns HTTP 418 (Anubis anti-bot) from CI.
-          # Replace with Debian mirror that hosts the same tarball (identical sha256).
+          # Replace it with the Debian mirror hosting the same tarball.
           LOCK_FILE="third_party/libmpv-darwin-build/packages.lock.nix"
           OLD_URL='https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz'
           NEW_URL='https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz'
           if grep -qF "$OLD_URL" "$LOCK_FILE"; then
-            # BSD sed (macOS) requires an argument for -i; `sed -i.bak` is
-            # portable across BSD and GNU sed. Remove the backup afterwards.
             sed -i.bak "s|${OLD_URL}|${NEW_URL}|" "$LOCK_FILE"
             rm -f "$LOCK_FILE.bak"
             echo "Patched uchardet URL to Debian mirror."
@@ -122,14 +157,12 @@ jobs:
           fi
 
       - name: Build macOS libmpv xcframeworks from source
-        id: build-libmpv
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
 
           XCODE_APP_PATH="$(dirname "$(dirname "$(xcode-select -p)")")"
-          echo "Using Xcode at: ${XCODE_APP_PATH}"
-
           export LIBMPV_DARWIN_BUILD_PROFILE=macos-hdr
           export LIBMPV_DARWIN_MPV_SRC="$GITHUB_WORKSPACE/third_party/mpv"
           export LIBMPV_DARWIN_LIBPLACEBO_SRC="$GITHUB_WORKSPACE/third_party/libplacebo"
@@ -151,9 +184,79 @@ jobs:
           fi
 
           popd
+          mkdir -p .ci-cache/libmpv
+          cp "${ARCHIVE_PATH}" .ci-cache/libmpv/macos-hdr.tar.gz
 
-          ARCHIVE_SHA256="$(shasum -a 256 "${ARCHIVE_PATH}" | awk '{print $1}')"
+      - name: Verify macOS libmpv xcframework archive
+        id: libmpv-metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="$GITHUB_WORKSPACE/.ci-cache/libmpv/macos-hdr.tar.gz"
+          if [ ! -s "$ARCHIVE_PATH" ]; then
+            echo "Missing cached libmpv archive: $ARCHIVE_PATH" >&2
+            exit 1
+          fi
+          ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
+          echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
+          echo "libmpv archive SHA256: ${ARCHIVE_SHA256}"
 
+      - name: Save macOS libmpv xcframework cache
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci-cache/libmpv/macos-hdr.tar.gz
+          key: ${{ steps.libmpv-key.outputs.cache-key }}
+
+  build:
+    name: Build macOS Packages (${{ matrix.label }})
+    needs: prepare
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - architecture: universal
+            label: Universal
+          - architecture: arm64
+            label: Apple Silicon
+          - architecture: x86_64
+            label: Intel
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+      ERIKA_PREBUILT: "1"
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Restore shared macOS libmpv xcframework cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-cache/libmpv/macos-hdr.tar.gz
+          key: ${{ needs.prepare.outputs.libmpv-cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Configure macOS libmpv environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="$GITHUB_WORKSPACE/.ci-cache/libmpv/macos-hdr.tar.gz"
+          ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
+          if [ "$ARCHIVE_SHA256" != "${{ needs.prepare.outputs.libmpv-sha256 }}" ]; then
+            echo "libmpv archive checksum mismatch." >&2
+            exit 1
+          fi
+
+          XCODE_APP_PATH="$(dirname "$(dirname "$(xcode-select -p)")")"
           {
             echo "LIBMPV_DARWIN_BUILD_PROFILE=macos-hdr"
             echo "LIBMPV_DARWIN_MPV_SRC=$GITHUB_WORKSPACE/third_party/mpv"
@@ -162,14 +265,10 @@ jobs:
             echo "LIBMPV_DARWIN_XCFRAMEWORKS_ARCHIVE=${ARCHIVE_PATH}"
           } >> "$GITHUB_ENV"
 
-          echo "archive-path=${ARCHIVE_PATH}" >> "$GITHUB_OUTPUT"
-          echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
-
       - name: Reset vendored media-kit macOS frameworks
         shell: bash
         run: |
           set -euo pipefail
-
           MACOS_LIBS_DIR="third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video/macos"
           mkdir -p "${MACOS_LIBS_DIR}/Frameworks"
           find "${MACOS_LIBS_DIR}/Frameworks" -maxdepth 1 -type d -name '*.xcframework' -exec rm -rf {} +
@@ -177,53 +276,55 @@ jobs:
           rm -rf "${MACOS_LIBS_DIR}/.cache"
 
       - name: Cache macOS Pods
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: macos/Pods
-          key: macos-pods-${{ hashFiles('macos/Podfile.lock') }}-${{ steps.build-libmpv.outputs.archive-sha256 }}
+          key: macos-pods-${{ hashFiles('macos/Podfile.lock') }}-${{ needs.prepare.outputs.libmpv-sha256 }}
           restore-keys: |
             macos-pods-${{ hashFiles('macos/Podfile.lock') }}-
-      
+
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
 
+      - name: Verify build version
+        shell: bash
+        run: |
+          if [ "${{ steps.setup.outputs.version }}" != "${{ needs.prepare.outputs.version }}" ]; then
+            echo "Version changed between prepare and build jobs." >&2
+            exit 1
+          fi
+
       - name: Generate build info json
         shell: bash
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
-      
+
       - name: Build macOS Packages
         uses: ./.github/actions/build-macos
         with:
-          app-version: ${{ steps.setup.outputs.version }}
-          build-architectures: universal arm64 x86_64
+          app-version: ${{ needs.prepare.outputs.version }}
+          build-architectures: ${{ matrix.architecture }}
           macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
           apple-id: ${{ secrets.APPLE_ID }}
           apple-app-password: ${{ secrets.APPLE_APP_PASSWORD }}
-      
-      - name: Clean CocoaPods Pods (optional)
-        run: |
-          pod cache clean mdk || true
-          rm -rf macos/Pods ios/Pods
-      
-      - name: Clean flutter pub cache
-        run: flutter pub cache clean
-      
+
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-macOS
+          name: release-macOS-${{ matrix.architecture }}
           path: |
             NipaPlay_*_macOS_*.dmg
             NipaPlay_*_macOS_*.zip
             NipaPlay_*_macOS_*.pkg
+          if-no-files-found: error
+          compression-level: 0
 
-      - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
+      - name: Upload Dart debug symbols
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dart-symbols-macOS
-          path: build/symbols-macos/
+          name: dart-symbols-macOS-${{ matrix.architecture }}
+          path: build/symbols-macos/${{ matrix.architecture }}/
           if-no-files-found: warn
