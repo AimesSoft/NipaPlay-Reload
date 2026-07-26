@@ -69,15 +69,17 @@ runs:
     - name: Prepare macOS build environment
       shell: bash
       run: |
+        set -euo pipefail
         cd macos
         export LANG=zh_CN.UTF-8
         export LC_ALL=zh_CN.UTF-8
         mkdir -p ~/.cocoapods
         echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
-        echo "Cleaning existing Pods (keep Podfile.lock for reproducible builds)..."
-        rm -rf Pods
-        echo "Running pod install (allowing lockfile updates to fix CocoaPods version checksum mismatch)..."
-        pod install --repo-update
+        echo "Installing Pods from Podfile.lock (reusing a restored Pods cache when available)..."
+        if ! pod install --deployment; then
+          echo "Initial pod install failed; refreshing the specs repository and retrying..."
+          pod install --deployment --repo-update
+        fi
         cd ..
 
     - name: Setup Code Signing
@@ -463,14 +465,17 @@ runs:
             # 清理临时文件
             rm -f "$NOTARIZATION_ZIP"
 
-            # 等待公证票据在 Apple 服务器上准备就绪
-            echo "等待公证票据准备就绪..."
-            sleep 60
-
-            # 尝试附加票据，最多重试5次，每次间隔更长
-            echo "🎫 附加公证票据..."
+            # Apple 已接受公证后立即尝试附加票据；仅在票据尚未传播时退避重试。
+            echo "🎫 附加公证票据（立即尝试，失败后退避重试）..."
             STAPLE_SUCCESS=false
-            for attempt in 1 2 3 4 5; do
+            STAPLE_DELAYS=(0 10 20 40 60)
+            for index in "${!STAPLE_DELAYS[@]}"; do
+              attempt=$((index + 1))
+              wait_time="${STAPLE_DELAYS[$index]}"
+              if [ "$wait_time" -gt 0 ]; then
+                echo "等待 $wait_time 秒后重试..."
+                sleep "$wait_time"
+              fi
               echo "尝试附加票据 (第 $attempt 次)..."
               if xcrun stapler staple "$APP_PATH" 2>&1; then
                 echo "✅ 公证票据附加成功"
@@ -478,11 +483,6 @@ runs:
                 break
               else
                 echo "⚠️ 第 $attempt 次附加失败"
-                if [ $attempt -lt 5 ]; then
-                  wait_time=$((attempt * 30))
-                  echo "等待 $wait_time 秒后重试..."
-                  sleep $wait_time
-                fi
               fi
             done
 
