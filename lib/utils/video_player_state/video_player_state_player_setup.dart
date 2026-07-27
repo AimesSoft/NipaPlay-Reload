@@ -68,9 +68,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('VideoPlayerState: 没有 historyItem，重置弹幕 ID');
     }
 
-    // 检查是否为网络URL (HTTP或HTTPS)
+    // 检查是否为网络URL (HTTP或HTTPS) 或新格式远程路径
     bool isNetworkUrl =
         videoPath.startsWith('http://') || videoPath.startsWith('https://');
+    bool isNewRemotePath = MediaSourceUtils.isNewWebDavPath(videoPath) ||
+        MediaSourceUtils.isNewSmbPath(videoPath);
     final bool isAndroidContentUri = !kIsWeb &&
         Platform.isAndroid &&
         MediaSourceUtils.isContentUri(videoPath);
@@ -83,6 +85,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
     bool fileExists = isNetworkUrl ||
+        isNewRemotePath ||
         isJellyfinStream ||
         isEmbyStream ||
         isAndroidContentUri ||
@@ -92,6 +95,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
       _statusMessages.add('正在准备流媒体播放...');
+      _notifyListeners();
+    } else if (isNewRemotePath) {
+      debugPrint('检测到远程媒体库路径: $videoPath');
+      _statusMessages.add('正在准备远程媒体播放...');
       _notifyListeners();
     } else if (isJellyfinStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
@@ -107,7 +114,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _notifyListeners();
     }
 
-    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (!kIsWeb && !isNetworkUrl && !isNewRemotePath && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
       if (isAndroidContentUri) {
         // Erika resolves SAF sources through Android's ContentResolver and
@@ -158,7 +165,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('检测到网络URL或流媒体: $videoPath');
     }
 
-    if (kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (kIsWeb && !isNetworkUrl && !isNewRemotePath && !isJellyfinStream && !isEmbyStream) {
       final filePickerService = FilePickerService();
       if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
         if (videoPath.startsWith('blob:')) {
@@ -237,6 +244,28 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
     }
 
+    // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL
+    if (isNewRemotePath && (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
+      try {
+        if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
+          resolvedActualPlayUrl = MediaSourceUtils.resolveWebDavPathToUrl(videoPath);
+        } else if (MediaSourceUtils.isNewSmbPath(videoPath)) {
+          resolvedActualPlayUrl = MediaSourceUtils.resolveSmbPathToUrl(videoPath);
+        }
+        if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
+          _setStatus(PlayerStatus.error, message: '无法解析远程媒体路径，请检查连接配置');
+          _error = '无法解析远程媒体路径';
+          return;
+        }
+        debugPrint('VideoPlayerState: 远程路径解析成功: $videoPath -> $resolvedActualPlayUrl');
+      } catch (e) {
+        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $e');
+        _setStatus(PlayerStatus.error, message: '解析远程媒体路径失败: $e');
+        _error = '解析远程媒体路径失败';
+        return;
+      }
+    }
+
     // 网络可达性由播放器判断，确保与实际播放共用 UA、代理和重定向策略。
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
@@ -267,6 +296,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // 检测本地 fonts 文件夹
     if (!kIsWeb &&
         !isNetworkUrl &&
+        !isNewRemotePath &&
         !isJellyfinStream &&
         !isEmbyStream &&
         !isAndroidContentUri) {
