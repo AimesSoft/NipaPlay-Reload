@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -1459,10 +1460,10 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 CustomMediaInfoDialog._extractEpisodeNumber(fileName);
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
-            final fileUrl =
-                WebDAVService.instance.getFileUrl(connection, file.path);
+            final filePath =
+                MediaSourceUtils.buildWebDavPath(connection.name, file.path);
             videoFiles.add(_VideoFileItem(
-              path: fileUrl,
+              path: filePath,
               displayName: fileName,
               episodeNumber: episodeNumber,
               sortKey: sortKey,
@@ -1498,10 +1499,10 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 CustomMediaInfoDialog._extractEpisodeNumber(fileName);
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
-            final fileUrl =
-                SMBProxyService.instance.buildStreamUrl(connection, file.path);
+            final filePath =
+                MediaSourceUtils.buildSmbPath(connection.name, file.path);
             videoFiles.add(_VideoFileItem(
-              path: fileUrl,
+              path: filePath,
               displayName: fileName,
               episodeNumber: episodeNumber,
               sortKey: sortKey,

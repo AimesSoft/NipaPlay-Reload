@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'watch_history_model.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'dart:io' as io;
 
 class WatchHistoryDatabase {
@@ -245,32 +246,58 @@ class WatchHistoryDatabase {
       final raw = prefs.getString(_webStoreKey);
       if (raw != null && raw.isNotEmpty) {
         final decoded = json.decode(raw);
+        bool hasMigrated = false;
         if (decoded is List) {
           for (final entry in decoded) {
-            if (entry is Map<String, dynamic>) {
-              try {
-                final item = WatchHistoryItem.fromJson(entry);
-                _webStore[item.filePath] = item;
-              } catch (_) {}
-            } else if (entry is Map) {
-              try {
-                final map = Map<String, dynamic>.from(entry);
-                final item = WatchHistoryItem.fromJson(map);
-                _webStore[item.filePath] = item;
-              } catch (_) {}
-            }
+            try {
+              WatchHistoryItem item;
+              if (entry is Map<String, dynamic>) {
+                item = WatchHistoryItem.fromJson(entry);
+              } else if (entry is Map) {
+                item = WatchHistoryItem.fromJson(Map<String, dynamic>.from(entry));
+              } else {
+                continue;
+              }
+              // 如果路径不是新格式，尝试迁移
+              if (item.filePath.isNotEmpty &&
+                  !MediaSourceUtils.isNewWebDavPath(item.filePath) &&
+                  !MediaSourceUtils.isNewSmbPath(item.filePath)) {
+                final migratedPath = MediaSourceUtils.migratePath(item.filePath);
+                if (migratedPath != item.filePath) {
+                  item = item.copyWith(filePath: migratedPath);
+                  hasMigrated = true;
+                }
+              }
+              _webStore[item.filePath] = item;
+            } catch (_) {}
           }
         } else if (decoded is Map) {
           decoded.forEach((key, value) {
             try {
+              WatchHistoryItem item;
               if (value is Map<String, dynamic>) {
-                _webStore[key.toString()] = WatchHistoryItem.fromJson(value);
+                item = WatchHistoryItem.fromJson(value);
               } else if (value is Map) {
-                _webStore[key.toString()] =
-                    WatchHistoryItem.fromJson(Map<String, dynamic>.from(value));
+                item = WatchHistoryItem.fromJson(Map<String, dynamic>.from(value));
+              } else {
+                return;
               }
+              // 如果路径不是新格式，尝试迁移
+              if (item.filePath.isNotEmpty &&
+                  !MediaSourceUtils.isNewWebDavPath(item.filePath) &&
+                  !MediaSourceUtils.isNewSmbPath(item.filePath)) {
+                final migratedPath = MediaSourceUtils.migratePath(item.filePath);
+                if (migratedPath != item.filePath) {
+                  item = item.copyWith(filePath: migratedPath);
+                  hasMigrated = true;
+                }
+              }
+              _webStore[item.filePath] = item;
             } catch (_) {}
           });
+        }
+        if (hasMigrated) {
+          _scheduleWebStorePersist();
         }
       }
     } catch (e) {
@@ -681,8 +708,9 @@ class WatchHistoryDatabase {
 
   // 将数据库行映射为WatchHistoryItem对象
   WatchHistoryItem _mapToWatchHistoryItem(Map<String, dynamic> map) {
+    final originalPath = map['file_path'] as String? ?? '';
     final item = WatchHistoryItem(
-      filePath: map['file_path'],
+      filePath: originalPath,
       animeName: map['anime_name'],
       episodeTitle: map['episode_title'],
       episodeId: map['episode_id'],
@@ -694,10 +722,32 @@ class WatchHistoryDatabase {
       thumbnailPath: map['thumbnail_path'],
       isFromScan: map['is_from_scan'] == 1,
     );
-    
-    // 添加调试日志
-    //debugPrint('数据库读取历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
-    
+
+    // 如果路径不是新格式，尝试迁移
+    if (originalPath.isNotEmpty &&
+        !MediaSourceUtils.isNewWebDavPath(originalPath) &&
+        !MediaSourceUtils.isNewSmbPath(originalPath)) {
+      final migratedPath = MediaSourceUtils.migratePath(originalPath);
+      if (migratedPath != originalPath) {
+        final migratedItem = item.copyWith(filePath: migratedPath);
+        // 异步写回数据库，不阻塞当前读取
+        _migratePathInBackground(originalPath, migratedItem);
+        return migratedItem;
+      }
+    }
+
     return item;
   }
-} 
+
+  void _migratePathInBackground(String oldPath, WatchHistoryItem migratedItem) {
+    Future.microtask(() async {
+      try {
+        await insertOrUpdateWatchHistory(migratedItem);
+        await deleteHistory(oldPath);
+        debugPrint('[路径迁移] ${migratedItem.animeName}: $oldPath -> ${migratedItem.filePath}');
+      } catch (e) {
+        debugPrint('[路径迁移] 写回失败: $e');
+      }
+    });
+  }
+}
