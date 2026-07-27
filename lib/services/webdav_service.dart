@@ -502,6 +502,28 @@ class WebDAVService {
     }
   }
 
+  /// 通过连接名称和相对路径解析文件信息
+  /// 输入格式: webdav://connectionName/relativePath
+  /// 返回解析后的连接和相对路径，如果找不到连接则返回 null
+  WebDAVResolvedFile? resolveConnectionByNamePath(String namePath) {
+    if (!namePath.toLowerCase().startsWith('webdav://')) return null;
+
+    final pathWithoutScheme = namePath.substring(9);
+    final firstSlashIndex = pathWithoutScheme.indexOf('/');
+    if (firstSlashIndex == -1) return null;
+
+    final connectionName = pathWithoutScheme.substring(0, firstSlashIndex);
+    final relativePath = pathWithoutScheme.substring(firstSlashIndex);
+
+    final connection = getConnection(connectionName);
+    if (connection == null) return null;
+
+    return WebDAVResolvedFile(
+      connection: _normalizeConnection(connection),
+      relativePath: relativePath,
+    );
+  }
+
   webdav.Client _createClient(WebDAVConnection connection) {
     final client = webdav.newClient(
       connection.url,

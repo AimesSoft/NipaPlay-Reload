@@ -197,9 +197,14 @@ List<String> reorderMediaLibrarySectionIds(
 
 bool mediaLibraryItemMatchesSource(
   WatchHistoryItem item,
-  UnifiedMediaLibrarySource source,
-) {
+  UnifiedMediaLibrarySource source, {
+  bool includeClearedMatchInfo = false,
+}) {
   if (item.animeId == null || item.isDandanplayRemote) return false;
+
+  // 已清除匹配信息的记录（animeName 被清空）不应显示为番剧卡片，
+  // 但统计观看进度时仍需包含（includeClearedMatchInfo = true）
+  if (!includeClearedMatchInfo && item.animeName.isEmpty) return false;
 
   final path = item.filePath;
   final isWebDAV = MediaSourceUtils.isWebDavPath(path);
