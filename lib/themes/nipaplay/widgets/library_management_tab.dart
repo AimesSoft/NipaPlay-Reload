@@ -4330,26 +4330,52 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       try {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(filePath);
+
+        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景
+        WatchHistoryItem? migratedHistory;
+        if (existingHistory == null && animeId > 0 && episodeId > 0) {
+          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+            animeId,
+            episodeId,
+          );
+        }
+
+        final sourceForProgress = existingHistory ?? migratedHistory;
+        final preserveProgress = sourceForProgress != null &&
+            sourceForProgress.watchProgress > 0.01 &&
+            !sourceForProgress.isFromScan;
+
         final updatedHistory = WatchHistoryItem(
           filePath: filePath,
           animeName: animeTitle.isNotEmpty
               ? animeTitle
-              : (existingHistory?.animeName ??
+              : (sourceForProgress?.animeName ??
                   p.basenameWithoutExtension(fileName)),
           episodeTitle: episodeTitle.isNotEmpty
               ? episodeTitle
-              : existingHistory?.episodeTitle,
+              : sourceForProgress?.episodeTitle,
           episodeId: episodeId,
           animeId: animeId,
-          watchProgress: existingHistory?.watchProgress ?? 0.0,
-          lastPosition: existingHistory?.lastPosition ?? 0,
-          duration: existingHistory?.duration ?? 0,
+          watchProgress: preserveProgress
+              ? sourceForProgress.watchProgress
+              : (sourceForProgress?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? sourceForProgress.lastPosition
+              : (sourceForProgress?.lastPosition ?? 0),
+          duration: sourceForProgress?.duration ?? 0,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory?.thumbnailPath,
-          isFromScan: existingHistory?.isFromScan ?? false,
-          videoHash: existingHistory?.videoHash,
+          thumbnailPath: sourceForProgress?.thumbnailPath,
+          isFromScan: sourceForProgress?.isFromScan ?? false,
+          videoHash: sourceForProgress?.videoHash,
         );
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+
+        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        if (migratedHistory != null && migratedHistory.filePath != filePath) {
+          await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
+        }
+
         successCount++;
       } catch (e) {
         debugPrint('批量更新匹配失败: $filePath -> $episodeId ($e)');
@@ -4693,7 +4719,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: '移除扫描结果',
       content:
-          '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
+          '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称和集数标题，但保留观看进度。重新匹配同一番剧时可自动迁移进度。',
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
@@ -4720,8 +4746,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           filePath: filePath,
           animeName: p.basenameWithoutExtension(fileName), // 恢复为文件名
           episodeTitle: null, // 清除集数标题
-          episodeId: null, // 清除集数ID
-          animeId: null, // 清除动画ID
+          episodeId: historyItem.episodeId, // 保留集数ID，用于重新匹配时迁移进度
+          animeId: historyItem.animeId, // 保留动画ID，用于重新匹配时迁移进度
           watchProgress: historyItem.watchProgress, // 保留观看进度
           lastPosition: historyItem.lastPosition, // 保留观看位置
           duration: historyItem.duration, // 保留时长
@@ -5780,6 +5806,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(candidate.filePath);
+
+        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        WatchHistoryItem? migratedHistory;
+        if (existingHistory == null && animeId > 0 && episodeId > 0) {
+          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+            animeId,
+            episodeId,
+          );
+        }
+
+        final sourceForProgress = existingHistory ?? migratedHistory;
         final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
         final rawEpisodeTitle =
             videoInfo['episodeTitle'] ?? match['episodeTitle'];
@@ -5789,37 +5826,43 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final hashString = rawHash?.toString();
         final durationFromMatch = (videoInfo['duration'] is int)
             ? videoInfo['duration'] as int
-            : (existingHistory?.duration ?? 0);
-        final preserveProgress = existingHistory != null &&
-            existingHistory.watchProgress > 0.01 &&
-            !existingHistory.isFromScan;
+            : (sourceForProgress?.duration ?? 0);
+        final preserveProgress = sourceForProgress != null &&
+            sourceForProgress.watchProgress > 0.01 &&
+            !sourceForProgress.isFromScan;
 
         final historyItem = WatchHistoryItem(
           filePath: candidate.filePath,
           animeName: animeTitle?.isNotEmpty == true
               ? animeTitle!
-              : (existingHistory?.animeName ??
+              : (sourceForProgress?.animeName ??
                   p.basenameWithoutExtension(candidate.fileName)),
           episodeTitle: episodeTitle?.isNotEmpty == true
               ? episodeTitle
-              : existingHistory?.episodeTitle,
+              : sourceForProgress?.episodeTitle,
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: preserveProgress
-              ? existingHistory.watchProgress
-              : (existingHistory?.watchProgress ?? 0.0),
+              ? sourceForProgress.watchProgress
+              : (sourceForProgress?.watchProgress ?? 0.0),
           lastPosition: preserveProgress
-              ? existingHistory.lastPosition
-              : (existingHistory?.lastPosition ?? 0),
+              ? sourceForProgress.lastPosition
+              : (sourceForProgress?.lastPosition ?? 0),
           duration: durationFromMatch,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory?.thumbnailPath,
+          thumbnailPath: sourceForProgress?.thumbnailPath,
           isFromScan: !preserveProgress,
           videoHash: hashString?.isNotEmpty == true
               ? hashString
-              : existingHistory?.videoHash,
+              : sourceForProgress?.videoHash,
         );
         await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        if (migratedHistory != null && migratedHistory.filePath != candidate.filePath) {
+          await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
+        }
+
         matched++;
       } catch (e) {
         failed++;
