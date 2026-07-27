@@ -871,10 +871,30 @@ class WatchHistoryManager {
     return _cachedItems.where((item) => item.animeId == animeId).toList();
   }
 
-  // 清除指定 animeId 下的所有匹配信息，同时保留播放历史记录。
-  // 无论匹配信息来自扫描还是手动匹配，都会被完全清空：
-  // animeName 置空串、episodeTitle/episodeId/animeId 置 null、isFromScan 置 false。
-  // 仅保留文件路径、观看进度、观看位置、时长、缩略图、视频哈希等播放历史字段。
+  /// 按 filePath 删除单条历史记录（用于进度迁移后清理旧记录）
+  static Future<void> removeHistoryItem(String filePath) async {
+    if (!_initialized) await initialize();
+
+    if (_migratedToDatabase) {
+      try {
+        final db = WatchHistoryDatabase.instance;
+        await db.deleteHistory(filePath);
+        _cachedItems.removeWhere((item) => item.filePath == filePath);
+        return;
+      } catch (e) {
+        debugPrint('从数据库删除历史记录失败: $e');
+      }
+    }
+
+    _cachedItems.removeWhere((item) => item.filePath == filePath);
+  }
+
+  // 清除指定 animeId 下的所有匹配信息，但保留播放进度和关联 ID。
+  // 清空的内容：animeName 置空串、episodeTitle 置 null、isFromScan 置 false。
+  // 保留的内容：animeId、episodeId、watchProgress、lastPosition、duration 等。
+  // 保留 animeId/episodeId 的原因：当用户更换文件路径重新匹配同一部番时，
+  // concurrent_video_processor 可通过 getHistoryByEpisode(animeId, episodeId)
+  // 找到旧记录并迁移观看进度到新文件，避免进度丢失。
   // 注意：animeName 不再用文件名覆盖——在线媒体的 filePath 是 URL，
   // 取 basename 会得到 URL 转义片段，并非"清空"。空串与未匹配状态一致，
   // UI 显示时按既有逻辑自行 fallback。
@@ -887,15 +907,15 @@ class WatchHistoryManager {
     int updatedCount = 0;
     for (final item in items) {
       // 直接构造新记录而非 copyWith：copyWith 中 `null` 表示"保持原值"，
-      // 传 null 无法清空 episodeTitle/episodeId/animeId 这些可空字段。
+      // 传 null 无法清空 episodeTitle 这些可空字段。
       final clearedHistory = WatchHistoryItem(
         filePath: item.filePath,
         animeName: '',
         episodeTitle: null,
-        episodeId: null,
-        animeId: null,
-        watchProgress: item.watchProgress,
-        lastPosition: item.lastPosition,
+        episodeId: item.episodeId, // 保留 episodeId，用于重新匹配时迁移进度
+        animeId: item.animeId, // 保留 animeId，用于重新匹配时迁移进度
+        watchProgress: item.watchProgress, // 保留观看进度
+        lastPosition: item.lastPosition, // 保留观看位置
         duration: item.duration,
         lastWatchTime: DateTime.now(),
         thumbnailPath: item.thumbnailPath,
