@@ -1,0 +1,276 @@
+{
+  "@@locale": "he",
+  "backButtonTooltip": "הקודם",
+  "@backButtonTooltip": {
+    "description": "The tooltip for the back button on [NavigationAppBar]."
+  },
+  "closeButtonLabel": "סגור",
+  "@closeButtonLabel": {
+    "description": "Label for \"close\" buttons and menu items."
+  },
+  "searchLabel": "חיפוש",
+  "@searchLabel": {
+    "description": "Label for \"search\" text fields."
+  },
+  "closeNavigationTooltip": "סגור ניווט",
+  "@closeNavigationTooltip": {
+    "description": "The tooltip for the toggle navigation button."
+  },
+  "openNavigationTooltip": "פתח ניווט",
+  "@openNavigationTooltip": {
+    "description": "The tooltip for the toogle navigation button."
+  },
+  "clickToSearch": "חיפוש",
+  "@clickToSearch": {
+    "description": "The tooltip for the \"Click to Search\" button."
+  },
+  "modalBarrierDismissLabel": "הסתר",
+  "@modalBarrierDismissLabel": {
+    "description": "Label read out by accessibility tools (TalkBack or VoiceOver) for a modal barrier to indicate that a tap dismisses the barrier. A modal barrier can for example be found behind an alert or popup to block user interaction with elements behind it."
+  },
+  "minimizeWindowTooltip": "מזער",
+  "@minimizeWindowTooltip": {
+    "description": "The tooltip used by the \"Minimize\" button on desktop windows."
+  },
+  "restoreWindowTooltip": "שחזור",
+  "@restoreWindowTooltip": {
+    "description": "The tooltip used by the \"Restore\" button on desktop windows."
+  },
+  "closeWindowTooltip": "סגור",
+  "@closeWindowTooltip": {
+    "description": "The tooltip used by the \"Close\" button on desktop windows."
+  },
+  "dialogLabel": "דיאלוג",
+  "@dialogLabel": {
+    "description": "The dialog label."
+  },
+  "cutActionLabel": "גזור",
+  "@cutActionLabel": {
+    "description": "The label for the cut action on the text selection controls."
+  },
+  "copyActionLabel": "העתק",
+  "@copyActionLabel": {
+    "description": "The label for the copy action on the text selection controls."
+  },
+  "pasteActionLabel": "הדבק",
+  "@pasteActionLabel": {
+    "description": "The label for the paste button on the text selection controls."
+  },
+  "selectAllActionLabel": "בחר הכל",
+  "@selectAllActionLabel": {
+    "description": "The label for the select all button on the text selection controls."
+  },
+  "newTabLabel": "כרטיסייה חדשה",
+  "@newTabLabel": {
+    "description": "The label used by [TabView]'s new button."
+  },
+  "closeTabLabelSuffix": "סגור כרטיסייה",
+  "@closeTabLabelSuffix": {
+    "description": "The label used by [TabView]'s close button."
+  },
+  "scrollTabBackwardLabel": "גלול רשימת כרטיסיות אחורה",
+  "@scrollTabBackwardLabel": {
+    "description": "The label used by [TabView]'s scroll backward button."
+  },
+  "scrollTabForwardLabel": "גלול רשימת כרטיסיות קדימה",
+  "@scrollTabForwardLabel": {
+    "description": "The label used by [TabView]'s scroll forward button."
+  },
+  "noResultsFoundLabel": "לא נמצאו תוצאות",
+  "@noResultsFoundLabel": {
+    "description": "The label used by [AutoSuggestBox] when the results can't be found."
+  },
+  "copyActionTooltip": "העתק את התוכן שנבחר",
+  "@copyActionTooltip": {
+    "description": "The tooltip for the copy action on the text selection controls."
+  },
+  "cutActionTooltip": "גזור את התוכן שנבחר",
+  "@cutActionTooltip": {
+    "description": "The tooltip for the cut action on the text selection controls."
+  },
+  "pasteActionTooltip": "הדבק את התוכן שנבחר למיקום הנוכחי",
+  "@pasteActionTooltip": {
+    "description": "The tooltip for the paste action on the text selection controls."
+  },
+  "selectAllActionTooltip": "בחר הכל",
+  "@selectAllActionTooltip": {
+    "description": "The tooltip for the select all action on the text selection controls."
+  },
+  "hour": "שעה",
+  "@hour": {
+    "description": "The text used by [TimePicker] for the hour field."
+  },
+  "minute": "דקה",
+  "@minute": {
+    "description": "The text used by [TimePicker] for the minute field."
+  },
+  "am": "AM",
+  "@am": {
+    "description": "The text used by [TimePicker] for the AM field."
+  },
+  "pm": "PM",
+  "@pm": {
+    "description": "The text used by [TimePicker] for the PM field."
+  },
+  "month": "חודש",
+  "@month": {
+    "description": "The text used by [DatePicker] for the month field"
+  },
+  "day": "יום",
+  "@day": {
+    "description": "The text used by [DatePicker] for the day field"
+  },
+  "year": "שנה",
+  "@year": {
+    "description": "The text used by [DatePicker] for the year field"
+  },
+  "redLabel": "אדום",
+  "greenLabel": "ירוק",
+  "blueLabel": "כחול",
+  "opacityLabel": "שקיפות",
+  "hueLabel": "גוון",
+  "saturationLabel": "רוויה",
+  "valueLabel": "ערך",
+  "moreText": "עוד",
+  "lessText": "פחות",
+  "valueSliderTooltip": "({colorName}) {value} ערך",
+  "alphaSliderTooltip": "%{value} אטימות",
+  "colorBlack": "שחור",
+  "colorNavy": "כחול כהה",
+  "colorDarkBlue": "כחול כהה",
+  "colorMediumBlue": "כחול",
+  "colorBlue": "כחול",
+  "colorDarkGreen": "ירוק כהה",
+  "colorGreen": "ירוק כהה",
+  "colorTeal": "כחול-ירקרק כהה",
+  "colorDarkCyan": "כחול-ירקרק כהה",
+  "colorDeepSkyBlue": "טורקיז",
+  "colorDarkTurquoise": "תכלת",
+  "colorMediumSpringGreen": "ירוק",
+  "colorLime": "ירוק",
+  "colorSpringGreen": "ירוק",
+  "colorCyan": "תכלת",
+  "colorMidnightBlue": "כחול כהה",
+  "colorDodgerBlue": "כחול",
+  "colorLightSeaGreen": "כחול-ירקרק",
+  "colorForestGreen": "ירוק כהה",
+  "colorSeaGreen": "ירוק כהה",
+  "colorDarkSlateGray": "כחול-ירקרק כהה",
+  "colorLimeGreen": "ירוק",
+  "colorMediumSeaGreen": "ירוק",
+  "colorTurquoise": "כחול-ירקרק",
+  "colorRoyalBlue": "כחול",
+  "colorSteelBlue": "כחול-אפור",
+  "colorDarkSlateBlue": "סגול",
+  "colorMediumTurquoise": "כחול-ירקרק",
+  "colorIndigo": "סגול כהה",
+  "colorDarkOliveGreen": "ירוק כהה",
+  "colorCadetBlue": "כחול-ירקרק",
+  "colorCornflowerBlue": "כחול",
+  "colorMediumAquamarine": "ירוק",
+  "colorDimGray": "אפור",
+  "colorSlateBlue": "סגול-אינדיגו",
+  "colorOliveDrab": "ירוק כהה",
+  "colorSlateGray": "כחול-אפור",
+  "colorLightSlateGray": "כחול-אפור",
+  "colorMediumSlateBlue": "כחול בהיר",
+  "colorLawnGreen": "ירוק",
+  "colorChartreuse": "ירוק",
+  "colorAquamarine": "ירוק בהיר",
+  "colorMaroon": "אדום כהה",
+  "colorPurple": "סגול כהה",
+  "colorOlive": "צהוב כהה",
+  "colorGray": "אפור",
+  "colorSkyBlue": "טורקיז בהיר",
+  "colorLightSkyBlue": "כחול בהיר",
+  "colorBlueViolet": "סגול",
+  "colorDarkRed": "אדום כהה",
+  "colorDarkMagenta": "סגול כהה",
+  "colorSaddleBrown": "חום",
+  "colorDarkSeaGreen": "ירוק",
+  "colorLightGreen": "ירוק בהיר",
+  "colorMediumPurple": "סגול-לבנדר",
+  "colorDarkViolet": "סגול",
+  "colorPaleGreen": "ירוק בהיר",
+  "colorDarkOrchid": "סגול",
+  "colorYellowGreen": "ירוק",
+  "colorSienna": "חום-צהבהב",
+  "colorBrown": "אדום",
+  "colorDarkGray": "אפור",
+  "colorLightBlue": "כחול-שמים",
+  "colorGreenYellow": "ירוק",
+  "colorPaleTurquoise": "תכלת",
+  "colorLightSteelBlue": "כחול-קרח",
+  "colorPowderBlue": "כחול-שמים",
+  "colorFirebrick": "אדום",
+  "colorDarkGoldenrod": "צהוב כהה",
+  "colorMediumOrchid": "סגול",
+  "colorRosyBrown": "אלמוג",
+  "colorDarkKhaki": "חום-צהבהב",
+  "colorSilver": "אפור בהיר",
+  "colorMediumVioletRed": "ורוד",
+  "colorIndianRed": "אדום",
+  "colorPeru": "חום-צהבהב",
+  "colorChocolate": "כתום",
+  "colorTan": "חום-צהבהב",
+  "colorLightGray": "אפור בהיר",
+  "colorThistle": "סגול-לבנדר",
+  "colorOrchid": "סגול-לבנדר",
+  "colorGoldenrod": "זהב",
+  "colorPaleVioletRed": "שושנה",
+  "colorCrimson": "אדום",
+  "colorGainsboro": "אפור בהיר",
+  "colorPlum": "ורוד",
+  "colorBurlyWood": "חום-צהבהב",
+  "colorLightCyan": "כחול-שמים",
+  "colorLavender": "כחול בהיר",
+  "colorDarkSalmon": "שושנה",
+  "colorViolet": "סגול-לבנדר",
+  "colorPaleGoldenrod": "צהוב בהיר",
+  "colorLightCoral": "שושנה",
+  "colorKhaki": "צהוב בהיר",
+  "colorAliceBlue": "לבן",
+  "colorHoneydew": "לבן",
+  "colorAzure": "לבן",
+  "colorSandyBrown": "כתום בהיר",
+  "colorWheat": "צהוב בהיר",
+  "colorBeige": "צהוב בהיר",
+  "colorWhiteSmoke": "לבן",
+  "colorMintCream": "לבן",
+  "colorGhostWhite": "לבן",
+  "colorSalmon": "שושנה",
+  "colorAntiqueWhite": "כתום בהיר",
+  "colorLinen": "כתום בהיר",
+  "colorLightGoldenrodYellow": "צהוב בהיר",
+  "colorOldLace": "לבן",
+  "colorRed": "אדום",
+  "colorMagenta": "סגול",
+  "colorDeepPink": "ורוד",
+  "colorOrangeRed": "אדום",
+  "colorTomato": "אדום",
+  "colorHotPink": "ורוד",
+  "colorCoral": "אדום",
+  "colorDarkOrange": "כתום",
+  "colorLightSalmon": "שושנה",
+  "colorOrange": "זהב",
+  "colorLightPink": "שושנה",
+  "colorPink": "שושנה",
+  "colorGold": "זהב",
+  "colorPeachPuff": "כתום בהיר",
+  "colorNavajoWhite": "כתום בהיר",
+  "colorMoccasin": "כתום בהיר",
+  "colorBisque": "כתום בהיר",
+  "colorMistyRose": "שושנה",
+  "colorBlanchedAlmond": "כתום בהיר",
+  "colorPapayaWhip": "כתום בהיר",
+  "colorLavenderBlush": "לבן",
+  "colorSeaShell": "לבן",
+  "colorCornsilk": "צהוב בהיר",
+  "colorLemonChiffon": "צהוב בהיר",
+  "colorFloralWhite": "לבן",
+  "colorSnow": "לבן",
+  "colorYellow": "צהוב",
+  "colorLightYellow": "צהוב בהיר",
+  "colorIvory": "לבן",
+  "colorWhite": "לבן"
+}

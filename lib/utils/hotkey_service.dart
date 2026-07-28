@@ -27,6 +27,8 @@ class HotkeyService extends ChangeNotifier {
       case TargetPlatform.iOS:
       case TargetPlatform.fuchsia:
         return false;
+      default:
+        return false;
     }
   }
 

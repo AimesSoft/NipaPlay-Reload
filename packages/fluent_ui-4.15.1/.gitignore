@@ -1,0 +1,5 @@
+.dart_tool/
+coverage/
+pubspec.lock
+example/
+test/

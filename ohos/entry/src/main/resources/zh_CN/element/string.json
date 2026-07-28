@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "NipaPlay 媒体播放器"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "NipaPlay 媒体播放器"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NipaPlay"
+    }
+  ]
+}

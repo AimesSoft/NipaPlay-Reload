@@ -46,11 +46,15 @@ void DanmakuLayoutEngine::configure(
     base_danmaku_height_ = base_danmaku_height;
     base_track_height_ = base_track_height;
 
-    // 构建时间索引 — C++20 ranges::transform 替代手动循环
+    // 构建时间索引。使用经典 STL 算法以兼容 OpenHarmony NDK 的
+    // libc++（其 C++20 ranges algorithms 尚不完整）。
     item_times_.clear();
     item_times_.reserve(items_.size());
-    std::ranges::transform(items_, std::back_inserter(item_times_),
-                           &LayoutItem::time_seconds);
+    std::transform(items_.begin(), items_.end(),
+                   std::back_inserter(item_times_),
+                   [](const LayoutItem& item) {
+                       return item.time_seconds;
+                   });
 
     rebuildLayout();
 }
@@ -347,11 +351,12 @@ int32_t DanmakuLayoutEngine::frame(
 
     const double maxDuration = std::max(scroll_duration_, static_duration_);
     const double windowStart = current_time - maxDuration;
-    // C++20 ranges::lower_bound / upper_bound 直接作用于 vector<double>
     const int32_t left = static_cast<int32_t>(
-        std::ranges::lower_bound(item_times_, windowStart) - item_times_.begin());
+        std::lower_bound(item_times_.begin(), item_times_.end(), windowStart) -
+        item_times_.begin());
     const int32_t right = static_cast<int32_t>(
-        std::ranges::upper_bound(item_times_, current_time) - item_times_.begin());
+        std::upper_bound(item_times_.begin(), item_times_.end(), current_time) -
+        item_times_.begin());
 
     int32_t outCount = 0;
 
@@ -401,9 +406,11 @@ int32_t DanmakuLayoutEngine::frameRaw(
     const double maxDuration = std::max(scroll_duration_, static_duration_);
     const double windowStart = current_time - maxDuration;
     const int32_t left = static_cast<int32_t>(
-        std::ranges::lower_bound(item_times_, windowStart) - item_times_.begin());
+        std::lower_bound(item_times_.begin(), item_times_.end(), windowStart) -
+        item_times_.begin());
     const int32_t right = static_cast<int32_t>(
-        std::ranges::upper_bound(item_times_, current_time) - item_times_.begin());
+        std::upper_bound(item_times_.begin(), item_times_.end(), current_time) -
+        item_times_.begin());
 
     // 微优化：预计算常用子表达式
     const double halfWidth = width_ * 0.5;

@@ -34,7 +34,7 @@ class _CupertinoTorrentDownloadViewState
   void _syncPageAction() {
     final controller = CupertinoPageActionsScope.maybeOf(context);
     if (controller != _pageActionsController) {
-      _pageActionsController?.clear(this);
+      _clearPageActionsAfterFrame(_pageActionsController);
       _pageActionsController = controller;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -57,9 +57,20 @@ class _CupertinoTorrentDownloadViewState
     });
   }
 
+  void _clearPageActionsAfterFrame(
+    CupertinoPageActionsController? controller,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller?.clear(this);
+    });
+  }
+
   @override
   void dispose() {
-    _pageActionsController?.clear(this);
+    // ChangeNotifier listeners include widgets above this view. Notifying them
+    // synchronously while Flutter is unmounting the subtree can attempt to
+    // rebuild a locked widget tree.
+    _clearPageActionsAfterFrame(_pageActionsController);
     super.dispose();
   }
 

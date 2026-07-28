@@ -539,7 +539,7 @@ class _MediaLibrarySectionOrderEditorState
           child: material.ReorderableListView.builder(
             buildDefaultDragHandles: false,
             itemCount: _sections.length,
-            onReorderItem: _reorder,
+            onReorder: _reorder,
             itemBuilder: (context, index) {
               final section = _sections[index];
               return material.Padding(

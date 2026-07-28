@@ -9,6 +9,7 @@ add_library(nipaplay_quickjs_c_bridge SHARED
   "${QUICKJS_DIR}/libunicode.c"
   "${QUICKJS_DIR}/quickjs.c"
   "${CMAKE_CURRENT_SOURCE_DIR}/libfastdev_quickjs_runtime.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/nipaplay_quickjs_api.cpp"
 )
 
 set_target_properties(nipaplay_quickjs_c_bridge PROPERTIES
@@ -28,9 +29,11 @@ target_compile_options(nipaplay_quickjs_c_bridge PRIVATE
   $<$<COMPILE_LANGUAGE:C>:-Wno-unused-but-set-variable>
   $<$<COMPILE_LANGUAGE:C>:-Wno-unused-variable>
 )
-target_link_options(nipaplay_quickjs_c_bridge PRIVATE
-  "-Wl,-Bsymbolic-functions"
-)
+if(UNIX AND NOT APPLE)
+  target_link_options(nipaplay_quickjs_c_bridge PRIVATE
+    "-Wl,-Bsymbolic-functions"
+  )
+endif()
 
 # flutter_js ships an x64-only Linux bridge. Install the matching local build
 # after plugin install scripts so Linux ARM64 gains JS support as well.
