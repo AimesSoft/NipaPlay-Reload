@@ -507,17 +507,23 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     };
   }
 
+  static bool get _isHarmonyOS =>
+      !kIsWeb && defaultTargetPlatform.name == 'ohos';
+
   static bool get _isSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.android);
+          defaultTargetPlatform == TargetPlatform.android ||
+          _isHarmonyOS);
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
   bool get usesWindowOverlayVideoSurface =>
-      _isSupported && defaultTargetPlatform != TargetPlatform.android;
+      _isSupported &&
+      defaultTargetPlatform != TargetPlatform.android &&
+      !_isHarmonyOS;
 
   @override
   double get volume => _volume;
@@ -1020,7 +1026,7 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (defaultTargetPlatform == TargetPlatform.android || _isHarmonyOS) {
       return ErikaVideoView(
         player: _player,
         debugLabel: debugLabel,
@@ -1614,7 +1620,7 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-        'Erika is currently only wired on Android/iOS/macOS/Windows.',
+        'Erika is currently only wired on Android/iOS/macOS/Windows/HarmonyOS.',
       );
     }
   }

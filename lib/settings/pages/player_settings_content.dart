@@ -166,7 +166,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）\niOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu（Vulkan/GLES 回退）；播放、渲染和音频由 Rust 内核负责';
+        return 'Erika Rust 播放器（实验性）\niOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu；HarmonyOS 使用 OHNativeWindow、OpenGL ES 和 OHAudio';
     }
   }
 
@@ -298,7 +298,8 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final showErikaKernel = PlayerFactory.isErikaKernelSupported &&
-        context.watch<LabsSettingsProvider>().enableErikaPlayerKernel;
+        (PlayerFactory.isHarmonyOS ||
+            context.watch<LabsSettingsProvider>().enableErikaPlayerKernel);
     final visibleKernelType =
         _selectedKernelType == PlayerKernelType.erika && !showErikaKernel
             ? PlayerKernelType.mdk
@@ -347,21 +348,24 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     description:
                         _getPlayerKernelDescription(PlayerKernelType.mdk),
                   ),
-                  DropdownMenuItemData(
-                    title: "Video Player",
-                    value: PlayerKernelType.videoPlayer,
-                    isSelected:
-                        visibleKernelType == PlayerKernelType.videoPlayer,
-                    description: _getPlayerKernelDescription(
-                        PlayerKernelType.videoPlayer),
-                  ),
-                  DropdownMenuItemData(
-                    title: "Libmpv",
-                    value: PlayerKernelType.mediaKit,
-                    isSelected: visibleKernelType == PlayerKernelType.mediaKit,
-                    description:
-                        _getPlayerKernelDescription(PlayerKernelType.mediaKit),
-                  ),
+                  if (!PlayerFactory.isHarmonyOS) ...[
+                    DropdownMenuItemData(
+                      title: "Video Player",
+                      value: PlayerKernelType.videoPlayer,
+                      isSelected:
+                          visibleKernelType == PlayerKernelType.videoPlayer,
+                      description: _getPlayerKernelDescription(
+                          PlayerKernelType.videoPlayer),
+                    ),
+                    DropdownMenuItemData(
+                      title: "Libmpv",
+                      value: PlayerKernelType.mediaKit,
+                      isSelected:
+                          visibleKernelType == PlayerKernelType.mediaKit,
+                      description: _getPlayerKernelDescription(
+                          PlayerKernelType.mediaKit),
+                    ),
+                  ],
                   if (showErikaKernel)
                     DropdownMenuItemData(
                       title: "Erika",
