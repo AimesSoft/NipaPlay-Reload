@@ -19,6 +19,9 @@ class _ErikaOhosSmokeApp extends StatefulWidget {
 
 class _ErikaOhosSmokeAppState extends State<_ErikaOhosSmokeApp> {
   final ErikaPlayer _player = ErikaPlayer();
+  StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
+  String _activeVideoBackend = 'unknown';
+  int _videoDecoderFallbacks = 0;
   String _status = 'waiting for surface';
 
   @override
@@ -35,19 +38,42 @@ class _ErikaOhosSmokeAppState extends State<_ErikaOhosSmokeApp> {
       return;
     }
     try {
+      _eventSubscription ??= _player.events.listen((event) {
+        final decoder = event.decoder;
+        if (decoder == null) {
+          return;
+        }
+        _activeVideoBackend = decoder.activeBackend;
+        _videoDecoderFallbacks = decoder.fallbackCount;
+        debugPrint(
+          '[ErikaOHOSSmoke] decoder stage=${decoder.stage} '
+          'requested=${decoder.requestedBackend} '
+          'active=${decoder.activeBackend} '
+          'fallbacks=${decoder.fallbackCount} '
+          'reason=${decoder.reason}',
+        );
+      });
       _setStatus('opening media');
       await Future<void>.delayed(const Duration(milliseconds: 800));
       await _player.open(_mediaUri);
       await _player.play();
       _setStatus('playing');
-      await Future<void>.delayed(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 2));
+      _setStatus('seeking');
+      await _player.seek(const Duration(seconds: 1));
+      _setStatus('playing after seek');
+      await Future<void>.delayed(const Duration(seconds: 3));
       final stats = await _player.getPresenterStats();
       final passed = stats.renderedVideoFrames > 0 &&
           stats.pushedAudioFrames > 0 &&
           stats.audioClockReadFrames > 0 &&
           stats.renderFailures == 0 &&
-          stats.audioFailures == 0;
-      final result = 'video=${stats.renderedVideoFrames} '
+          stats.audioFailures == 0 &&
+          _activeVideoBackend == 'avcodec' &&
+          _videoDecoderFallbacks == 0;
+      final result = 'backend=$_activeVideoBackend '
+          'fallbacks=$_videoDecoderFallbacks '
+          'video=${stats.renderedVideoFrames} '
           'audioPush=${stats.pushedAudioFrames} '
           'audioRead=${stats.audioClockReadFrames} '
           'renderFailures=${stats.renderFailures} '
@@ -71,6 +97,7 @@ class _ErikaOhosSmokeAppState extends State<_ErikaOhosSmokeApp> {
 
   @override
   void dispose() {
+    unawaited(_eventSubscription?.cancel());
     unawaited(_player.dispose());
     super.dispose();
   }
