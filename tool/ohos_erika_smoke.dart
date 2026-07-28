@@ -1,9 +1,39 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/material.dart';
 
 const String _mediaUri = String.fromEnvironment('ERIKA_SMOKE_URI');
+const bool _requireZeroCopy = bool.fromEnvironment(
+  'ERIKA_REQUIRE_ZERO_COPY',
+);
+const bool _denseDanmaku = bool.fromEnvironment('ERIKA_DENSE_DANMAKU');
+const bool _loopPreview = bool.fromEnvironment('ERIKA_LOOP_PREVIEW');
+
+String _denseDanmakuJson() {
+  return jsonEncode(
+    List<Map<String, Object>>.generate(1200, (index) {
+      final mode = switch (index % 10) {
+        0 => 'top',
+        1 => 'bottom',
+        _ => 'scroll',
+      };
+      return <String, Object>{
+        'time': index / 150.0,
+        'content': '鸿蒙 4K HDR 弹幕压力测试 ${index + 1}',
+        'type': mode,
+        'color': switch (index % 4) {
+          0 => '#ffffff',
+          1 => '#ffeb3b',
+          2 => '#4fc3f7',
+          _ => '#ff80ab',
+        },
+        'fontSize': 30,
+      };
+    }),
+  );
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +86,17 @@ class _ErikaOhosSmokeAppState extends State<_ErikaOhosSmokeApp> {
       _setStatus('opening media');
       await Future<void>.delayed(const Duration(milliseconds: 800));
       await _player.open(_mediaUri);
+      if (_denseDanmaku) {
+        await _player.setDanmakuConfig(
+          enabled: true,
+          displayArea: 1,
+          allowStacking: true,
+          allowScrollOverwrite: true,
+          maxQuantity: 1200,
+          maxLinesPerMode: 30,
+        );
+        await _player.loadDanmakuJson(_denseDanmakuJson());
+      }
       await _player.play();
       _setStatus('playing');
       await Future<void>.delayed(const Duration(seconds: 2));
@@ -70,16 +111,36 @@ class _ErikaOhosSmokeAppState extends State<_ErikaOhosSmokeApp> {
           stats.renderFailures == 0 &&
           stats.audioFailures == 0 &&
           _activeVideoBackend == 'avcodec' &&
-          _videoDecoderFallbacks == 0;
+          _videoDecoderFallbacks == 0 &&
+          (!_denseDanmaku ||
+              (stats.danmakuFrames > 0 &&
+                  stats.danmakuItems > 0 &&
+                  stats.videoFrameBackpressureDrops == 0)) &&
+          (!_requireZeroCopy ||
+              (stats.zeroCopyVideoFrames > 0 &&
+                  stats.sharedHandleVideoFrames > 0 &&
+                  stats.cpuVideoFrameFallbacks == 0));
       final result = 'backend=$_activeVideoBackend '
           'fallbacks=$_videoDecoderFallbacks '
           'video=${stats.renderedVideoFrames} '
           'audioPush=${stats.pushedAudioFrames} '
           'audioRead=${stats.audioClockReadFrames} '
+          'zeroCopy=${stats.zeroCopyVideoFrames} '
+          'shared=${stats.sharedHandleVideoFrames} '
+          'cpuFallback=${stats.cpuVideoFrameFallbacks} '
+          'danmakuFrames=${stats.danmakuFrames} '
+          'danmakuItems=${stats.danmakuItems} '
+          'backpressure=${stats.videoFrameBackpressureDrops} '
           'renderFailures=${stats.renderFailures} '
           'audioFailures=${stats.audioFailures}';
       _setStatus('${passed ? "PASS" : "FAIL"}: $result');
       debugPrint('[ErikaOHOSSmoke] ${passed ? "PASS" : "FAIL"} $result');
+      if (passed && _loopPreview) {
+        while (mounted) {
+          await _player.seek(Duration.zero);
+          await Future<void>.delayed(const Duration(seconds: 7));
+        }
+      }
     } catch (error, stackTrace) {
       _setStatus('FAIL: $error');
       debugPrint('[ErikaOHOSSmoke] FAIL: $error\n$stackTrace');

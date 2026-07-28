@@ -1,0 +1,8 @@
+.dart_tool/
+build/
+coverage/
+pubspec.lock
+example/
+ohos/.cxx/
+ohos/build/
+ohos/oh_modules/

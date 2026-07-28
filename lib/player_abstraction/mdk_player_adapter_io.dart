@@ -208,7 +208,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   void _attachMdkEventListeners() {
     try {
-      _mdkPlayer.onEvent((e) {
+      _mdkPlayer.onEvent.listen((e) {
         switch (e.category) {
           case 'decoder.video':
             _activeVideoDecoder = e.detail;
@@ -255,7 +255,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   void _configureSubtitleFonts() {
     if (!(defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS)) {
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform.name == 'ohos')) {
       return;
     }
 

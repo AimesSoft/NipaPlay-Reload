@@ -52,6 +52,7 @@ docs/error.txt
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
 /rust/target
 /node_modules/
+**/oh_modules/
 /data/
 /web-remote/.vite/deps/
 /image_response.json
