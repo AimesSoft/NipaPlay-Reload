@@ -122,6 +122,11 @@ class AndroidVideoController extends PlatformVideoController {
           height.toDouble(),
         );
 
+        await setProperty(
+          'android-surface-size',
+          [width, height].join('x'),
+        );
+
         if (!waitUntilFirstFrameRenderedCompleter.isCompleted) {
           waitUntilFirstFrameRenderedCompleter.complete();
         }

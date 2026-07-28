@@ -292,7 +292,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (textureId == null || textureId < 0) {
       return const SizedBox.shrink();
     }
-    return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
+    return Texture(textureId: textureId, filterQuality: FilterQuality.low);
   }
 
   void _updateMacOSNativeVideoViewId(int? viewId) {
