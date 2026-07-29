@@ -231,6 +231,14 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  dart_ipc:
+    dependency: "direct main"
+    description:
+      name: dart_ipc
+      sha256: "6cad558cda5304017c1f581df4c96fd4f8e4ee212aae7bfa4357716236faa9ba"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   dbus:
     dependency: transitive
     description:

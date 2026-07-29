@@ -1,7 +1,8 @@
 // Export all necessary enums, data models, and the abstract interface
 export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
 export './player_data_models.dart';
-export './abstract_player.dart' show AbstractPlayer, AsyncDisposablePlayer;
+export './abstract_player.dart'
+    show AbstractPlayer, AsyncDisposablePlayer, AsyncSeekPlayer;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 
@@ -134,6 +135,16 @@ class Player {
   Future<void> prepare() => _delegate.prepare();
 
   void seek({required int position}) => _delegate.seek(position: position);
+
+  Future<void> seekAndWait({required int position}) {
+    final delegate = _delegate;
+    if (delegate is core_player.AsyncSeekPlayer) {
+      return (delegate as core_player.AsyncSeekPlayer)
+          .seekAndWait(position: position);
+    }
+    delegate.seek(position: position);
+    return Future<void>.value();
+  }
 
   void dispose() {
     final future = _startDispose();
@@ -458,6 +469,7 @@ class Player {
     double? scrollDurationSeconds,
     double? trackGapRatio,
     double? outlineWidth,
+    int? shadowStyle,
     String? customFontFamily,
     String? customFontFilePath,
   }) async {
@@ -472,6 +484,7 @@ class Player {
         scrollDurationSeconds: scrollDurationSeconds,
         trackGapRatio: trackGapRatio,
         outlineWidth: outlineWidth,
+        shadowStyle: shadowStyle,
         customFontFamily: customFontFamily,
         customFontFilePath: customFontFilePath,
       );

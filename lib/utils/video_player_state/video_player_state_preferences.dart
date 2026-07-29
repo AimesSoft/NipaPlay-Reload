@@ -1667,6 +1667,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuShadowStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(SettingsKeys.danmakuShadowStyle, style.index);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 

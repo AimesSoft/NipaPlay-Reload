@@ -336,65 +336,13 @@ class _WindowHostedVideoBackground extends StatelessWidget {
     return Selector<VideoPlayerState, Rect?>(
       selector: (_, videoState) => videoState.windowHostedVideoRect,
       builder: (context, videoUnderlayRect, child) {
-        return _WindowHostedVideoBlackBackground(
+        return BackgroundWithBlur(
           transparentCutout: videoUnderlayRect,
           child: child!,
         );
       },
       child: child,
     );
-  }
-}
-
-class _WindowHostedVideoBlackBackground extends StatelessWidget {
-  const _WindowHostedVideoBlackBackground({
-    required this.child,
-    required this.transparentCutout,
-  });
-
-  final Widget child;
-  final Rect? transparentCutout;
-
-  @override
-  Widget build(BuildContext context) {
-    final cutout = transparentCutout;
-    final background = cutout == null
-        ? const ColoredBox(color: Colors.black)
-        : ClipPath(
-            clipper: _RectCutoutClipper(cutout: cutout),
-            child: const ColoredBox(color: Colors.black),
-          );
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Positioned.fill(child: background),
-        child,
-      ],
-    );
-  }
-}
-
-class _RectCutoutClipper extends CustomClipper<Path> {
-  const _RectCutoutClipper({required this.cutout});
-
-  final Rect cutout;
-
-  @override
-  Path getClip(Size size) {
-    final bounds = Offset.zero & size;
-    final effectiveCutout = cutout.intersect(bounds);
-    final path = Path()..fillType = PathFillType.evenOdd;
-    path.addRect(bounds);
-    if (!effectiveCutout.isEmpty) {
-      path.addRect(effectiveCutout);
-    }
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant _RectCutoutClipper oldClipper) {
-    return oldClipper.cutout != cutout;
   }
 }
 

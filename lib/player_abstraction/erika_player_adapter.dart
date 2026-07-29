@@ -424,7 +424,8 @@ class _NipaplayErikaWindowOverlayVideoViewState
   }
 }
 
-class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
+class ErikaPlayerAdapter
+    implements AbstractPlayer, AsyncDisposablePlayer, AsyncSeekPlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
@@ -703,12 +704,24 @@ class ErikaPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
 
   @override
   void seek({required int position}) {
+    unawaited(
+      seekAndWait(position: position).catchError(
+        (Object error, StackTrace stackTrace) {
+          _lastNativeError = 'seek failed: $error';
+          debugPrint('[Erika] seek failed: $error');
+        },
+      ),
+    );
+  }
+
+  @override
+  Future<void> seekAndWait({required int position}) async {
     final clamped = position < 0 ? 0 : position;
     _lastPositionMs = clamped;
     _lastPositionUpdate = DateTime.now();
     _pendingSeekTargetMs = clamped;
     _seekFenceUntil = DateTime.now().add(const Duration(milliseconds: 1500));
-    unawaited(_player.seek(Duration(milliseconds: clamped)));
+    await _player.seek(Duration(milliseconds: clamped));
   }
 
   @override

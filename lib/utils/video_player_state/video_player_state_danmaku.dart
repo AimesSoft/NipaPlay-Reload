@@ -69,6 +69,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       scrollDurationSeconds: danmakuScrollDurationSeconds,
       trackGapRatio: _danmakuDfmPlusTrackGap,
       outlineWidth: _next2DanmakuOutlineWidth,
+      shadowStyle: _danmakuShadowStyle.index,
       customFontFamily: fontFamily,
       customFontFilePath: fontPath,
     ));
