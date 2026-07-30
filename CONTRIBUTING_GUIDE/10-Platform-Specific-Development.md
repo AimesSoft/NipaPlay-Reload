@@ -1,6 +1,10 @@
 # 10. (进阶) 如何进行平台特定开发
 
-NipaPlay-Reload 是一个跨平台应用，这意味着我们的代码需要能够优雅地处理不同操作系统（Windows, macOS, Linux, Android, iOS, Web）的特性和差异。本章将指导你如何编写平台特定的代码，以及如何只在特定设备上测试这些功能。
+NipaPlay-Reload 是一个跨平台应用，这意味着我们的代码需要能够优雅地处理不同操作系统（Windows, macOS, Linux, Android, iOS, HarmonyOS, Web）的特性和差异。本章将指导你如何编写平台特定的代码，以及如何只在特定设备上测试这些功能。
+
+> HarmonyOS 使用独立的 OpenHarmony Flutter SDK 和依赖覆盖文件。开始开发或
+> 切换依赖模式前，请先阅读
+> [HarmonyOS 依赖与构建说明](../docs/HARMONYOS_MIGRATION_STATUS.md#harmonyos-依赖启用与恢复)。
 
 ## 平台特定代码的核心技术
 
