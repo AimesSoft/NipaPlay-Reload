@@ -717,7 +717,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _position = Duration.zero;
         _progress = 0.0;
         _bufferedPositionMs = 0;
-        player.seek(position: 0);
+        // Erika has already opened at the beginning of the stream. Seeking to
+        // zero here needlessly tears down and recreates its hardware decoder
+        // (notably HarmonyOS AVCodec Surface output) before first playback.
+        if (player.getPlayerKernelName() != 'Erika') {
+          player.seek(position: 0);
+        }
       }
 
       // debugPrint('9. 检查播放器实际状态...');

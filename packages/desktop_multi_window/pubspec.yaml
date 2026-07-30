@@ -5,10 +5,7 @@ publish_to: none
 
 environment:
   sdk: ^3.5.3
-  # The HarmonyOS Flutter fork is currently based on Flutter 3.35. The public
-  # facade remains available there, while the 3.44 windowing implementation is
-  # selected only by builds that opt into it.
-  flutter: ">=3.35.0"
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:

@@ -16,6 +16,13 @@ void main() {
         MediaFilenameParser.extractAnimeTitleKeyword('【字幕组】【压制】番名 - 01.mkv'),
         '番名',
       );
+      expect(
+        MediaFilenameParser.extractAnimeSearchKeyword(
+          'Medalist_22_1080p_JPTC.mp4',
+          episodeNumber: 22,
+        ),
+        'Medalist',
+      );
     });
 
     test('scores matching subtitles and filters noise tokens', () {

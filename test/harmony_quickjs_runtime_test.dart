@@ -1,8 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/plugins/js_runtime_ohos.dart';
 
 void main() {
-  group('HarmonyQuickJsRuntimeAdapter', () {
+  final quickJsLibraryPath = Platform.environment['NIPAPLAY_QUICKJS_LIBRARY'];
+  final quickJsBridgeAvailable =
+      quickJsLibraryPath != null && File(quickJsLibraryPath).existsSync();
+
+  group('HarmonyQuickJsRuntimeAdapter',
+      skip: quickJsBridgeAvailable
+          ? false
+          : 'Set NIPAPLAY_QUICKJS_LIBRARY to a host QuickJS bridge library.',
+      () {
     test('evaluates JavaScript and reports exceptions', () {
       final runtime = HarmonyQuickJsRuntimeAdapter();
       addTearDown(runtime.dispose);

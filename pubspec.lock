@@ -100,10 +100,10 @@ packages:
     dependency: transitive
     description:
       name: characters
-      sha256: f71061c654a3380576a52b451dd5532377954cf9dbd272a78fc8479606670803
+      sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.0"
+    version: "1.4.1"
   charcode:
     dependency: transitive
     description:
@@ -298,9 +298,9 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/erika_flutter"
-      ref: "v0.1.3"
-      resolved-ref: "9ddd8a46eb69ce6d6405da91fac99aa3b19238f6"
-      url: "https://github.com/AimesSoft/Erika.git"
+      ref: "068a5748687711301ec76d9da9b3e7dfd1baaf6f"
+      resolved-ref: "068a5748687711301ec76d9da9b3e7dfd1baaf6f"
+      url: "https://github.com/aozaoz112233/Erika.git"
     source: git
     version: "0.1.3"
   fake_async:
@@ -330,11 +330,10 @@ packages:
   file_selector:
     dependency: "direct main"
     description:
-      path: "packages/file_selector/file_selector"
-      ref: "br_file_selector-v1.1.0_ohos"
-      resolved-ref: ff0290eed7f2c4c326b9aaf053aa354d49e2a73a
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
+      name: file_selector
+      sha256: bd15e43e9268db636b53eeaca9f56324d1622af30e5c34d6e267649758c84d9a
+      url: "https://pub.dev"
+    source: hosted
     version: "1.1.0"
   file_selector_android:
     dependency: transitive
@@ -368,15 +367,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.9.5"
-  file_selector_ohos:
-    dependency: transitive
-    description:
-      path: "packages/file_selector/file_selector_ohos"
-      ref: "br_file_selector-v1.1.0_ohos"
-      resolved-ref: ff0290eed7f2c4c326b9aaf053aa354d49e2a73a
-      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
-    source: git
-    version: "0.5.0+2"
   file_selector_platform_interface:
     dependency: transitive
     description:
@@ -420,10 +410,11 @@ packages:
   fluent_ui:
     dependency: "direct main"
     description:
-      path: "packages/fluent_ui-4.15.1"
-      relative: true
-    source: path
-    version: "4.15.1"
+      name: fluent_ui
+      sha256: "79baa6b22876b0881d556e5b87ddb23fa7dad9f010c77638f3d4099f26cc6a8d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.16.0"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -519,10 +510,11 @@ packages:
   fvp:
     dependency: "direct main"
     description:
-      path: "packages/fvp-0.37.3"
-      relative: true
-    source: path
-    version: "0.37.3"
+      name: fvp
+      sha256: cb867b293ee684fbc5de188040f88bae8603d967d825b9407ecb96e191dcadc9
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.33.1"
   get_it:
     dependency: transitive
     description:
@@ -638,12 +630,11 @@ packages:
   image_picker:
     dependency: "direct main"
     description:
-      path: "packages/image_picker/image_picker"
-      ref: "br_image_picker-v1.2.1_ohos"
-      resolved-ref: "0a35ee2e5f710e6abb2ed521d558c0776213dd71"
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "1.2.1"
+      name: image_picker
+      sha256: d8402284df184bc05f4a2210c6c23983b0720f4cd87cbd05c5390a78af602667
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.3"
   image_picker_android:
     dependency: transitive
     description:
@@ -684,15 +675,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2+1"
-  image_picker_ohos:
-    dependency: transitive
-    description:
-      path: "packages/image_picker/image_picker_ohos"
-      ref: "br_image_picker-v1.2.1_ohos"
-      resolved-ref: "0a35ee2e5f710e6abb2ed521d558c0776213dd71"
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "0.8.13+7"
   image_picker_platform_interface:
     dependency: transitive
     description:
@@ -815,18 +797,18 @@ packages:
     dependency: transitive
     description:
       name: matcher
-      sha256: dc58c723c3c24bf8d3e2d3ad3f2f9d7bd9cf43ec6feaa64181775e60190153f2
+      sha256: dc0b7dc7651697ea4ff3e69ef44b0407ea32c487a39fff6a4004fa585e901861
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.17"
+    version: "0.12.19"
   material_color_utilities:
     dependency: transitive
     description:
       name: material_color_utilities
-      sha256: f7142bb1154231d7ea5f96bc7bde4bda2a0945d2806bb11670e30b850d56bdec
+      sha256: "9c337007e82b1889149c82ed242ed1cb24a66044e30979c44912381e9be4c48b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.11.1"
+    version: "0.13.0"
   math_expressions:
     dependency: transitive
     description:
@@ -903,10 +885,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: e3641ec5d63ebf0d9b41bd43201a66e3fc79a65db5f61fc181f04cd27aab950c
+      sha256: "1741988757a65eb6b36abe716829688cf01910bbf91c34354ff7ec1c3de2b349"
       url: "https://pub.dev"
     source: hosted
-    version: "1.16.0"
+    version: "1.18.0"
   mime:
     dependency: transitive
     description:
@@ -918,12 +900,11 @@ packages:
   mobile_scanner:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "br_v7.1.4_ohos"
-      resolved-ref: f5a4ff52f003e1645db1d4de743a2db0313665a8
-      url: "https://gitcode.com/openharmony-sig/fluttertpc_mobile_scanner.git"
-    source: git
-    version: "7.1.4"
+      name: mobile_scanner
+      sha256: ce3f059ebd6dbfab7292bba0e893e354b46730636820d3c9ef69005ce2d55bce
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.4.0"
   msix:
     dependency: "direct dev"
     description:
@@ -974,12 +955,11 @@ packages:
   package_info_plus:
     dependency: "direct main"
     description:
-      path: "packages/package_info_plus/package_info_plus"
-      ref: "br_package_info_plus-v8.1.0_ohos"
-      resolved-ref: "6b197418f17417200c808c5478aa24c13f984e67"
-      url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
-    source: git
-    version: "8.1.0"
+      name: package_info_plus
+      sha256: "16eee997588c60225bda0488b6dcfac69280a6b7a3cf02c741895dd370a02968"
+      url: "https://pub.dev"
+    source: hosted
+    version: "8.3.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
@@ -1007,12 +987,11 @@ packages:
   path_provider:
     dependency: "direct main"
     description:
-      path: "packages/path_provider/path_provider"
-      ref: "br_path_provider-v2.1.5_ohos"
-      resolved-ref: "6d8bb79a3afae2fe5ccb7e90483fe8e4f9658e7c"
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "2.1.5"
+      name: path_provider
+      sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.6"
   path_provider_android:
     dependency: transitive
     description:
@@ -1037,15 +1016,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.1"
-  path_provider_ohos:
-    dependency: transitive
-    description:
-      path: "packages/path_provider/path_provider_ohos"
-      ref: "br_path_provider-v2.1.5_ohos"
-      resolved-ref: "6d8bb79a3afae2fe5ccb7e90483fe8e4f9658e7c"
-      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
-    source: git
-    version: "2.2.17"
   path_provider_platform_interface:
     dependency: "direct dev"
     description:
@@ -1335,12 +1305,11 @@ packages:
   shared_preferences:
     dependency: "direct main"
     description:
-      path: "packages/shared_preferences/shared_preferences"
-      ref: "br_shared_preferences-v2.5.4_ohos"
-      resolved-ref: a671ca01767309608b643587746e486c176107e3
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "2.5.4"
+      name: shared_preferences
+      sha256: c3025c5534b01739267eb7d76959bbc25a6d10f6988e1c2a3036940133dd10bf
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.5"
   shared_preferences_android:
     dependency: transitive
     description:
@@ -1365,15 +1334,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
-  shared_preferences_ohos:
-    dependency: transitive
-    description:
-      path: "packages/shared_preferences/shared_preferences_ohos"
-      ref: "br_shared_preferences-v2.5.4_ohos"
-      resolved-ref: a671ca01767309608b643587746e486c176107e3
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "2.5.4"
   shared_preferences_platform_interface:
     dependency: transitive
     description:
@@ -1461,11 +1421,10 @@ packages:
   sqflite:
     dependency: "direct main"
     description:
-      path: sqflite
-      ref: "br_v2.4.2_ohos"
-      resolved-ref: "1eefac74916ee14cab6b58da4d60a84153bcb758"
-      url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
-    source: git
+      name: sqflite
+      sha256: e2297b1da52f127bc7a3da11439985d9b536f75070f3325e62ada69a5c585d03
+      url: "https://pub.dev"
+    source: hosted
     version: "2.4.2"
   sqflite_android:
     dependency: transitive
@@ -1498,15 +1457,6 @@ packages:
       sha256: "279832e5cde3fe99e8571879498c9211f3ca6391b0d818df4e17d9fff5c6ccb3"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.2"
-  sqflite_ohos:
-    dependency: transitive
-    description:
-      path: sqflite_ohos
-      ref: "1eefac74916ee14cab6b58da4d60a84153bcb758"
-      resolved-ref: "1eefac74916ee14cab6b58da4d60a84153bcb758"
-      url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
-    source: git
     version: "2.4.2"
   sqflite_platform_interface:
     dependency: transitive
@@ -1584,10 +1534,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "522f00f556e73044315fa4585ec3270f1808a4b186c936e612cab0b565ff1e00"
+      sha256: "949a932224383300f01be9221c39180316445ecb8e7547f70a41a35bf421fb9e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.6"
+    version: "0.7.11"
   transparent_image:
     dependency: "direct main"
     description:
@@ -1663,11 +1613,10 @@ packages:
   url_launcher:
     dependency: "direct main"
     description:
-      path: "packages/url_launcher/url_launcher"
-      ref: "br_url_launcher-v6.3.2_ohos"
-      resolved-ref: e27add0738061a32af1b9274c0ba020dea371dfb
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
+      name: url_launcher
+      sha256: f6a7e5c4835bb4e3026a04793a4199ca2d14c739ec378fdfe23fc8075d0439f8
+      url: "https://pub.dev"
+    source: hosted
     version: "6.3.2"
   url_launcher_android:
     dependency: transitive
@@ -1701,15 +1650,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.2.5"
-  url_launcher_ohos:
-    dependency: transitive
-    description:
-      path: "packages/url_launcher/url_launcher_ohos"
-      ref: "br_url_launcher-v6.3.2_ohos"
-      resolved-ref: e27add0738061a32af1b9274c0ba020dea371dfb
-      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
-    source: git
-    version: "6.3.2"
   url_launcher_platform_interface:
     dependency: transitive
     description:
@@ -1832,12 +1772,11 @@ packages:
   wakelock_plus:
     dependency: "direct main"
     description:
-      path: wakelock_plus
-      ref: "br_wakelock_plus_1.2.8_ohos"
-      resolved-ref: a944d451112f7569bcffb282eafaf08f37857f1c
-      url: "https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git"
-    source: git
-    version: "1.2.8"
+      name: wakelock_plus
+      sha256: "61713aa82b7f85c21c9f4cd0a148abd75f38a74ec645fcb1e446f882c82fd09b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.3"
   wakelock_plus_ohos:
     dependency: "direct main"
     description:
@@ -1910,5 +1849,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.9.0 <4.0.0"
-  flutter: ">=3.35.6"
+  dart: ">=3.10.0 <4.0.0"
+  flutter: ">=3.44.0"

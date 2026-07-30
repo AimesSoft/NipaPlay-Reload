@@ -6,7 +6,7 @@ import 'package:nipaplay/plugins/js_runtime_types.dart';
 
 class FlutterJsRuntimeAdapter implements PluginJsRuntime {
   FlutterJsRuntimeAdapter()
-      : _delegate = Platform.isOhos
+      : _delegate = Platform.operatingSystem == 'ohos'
             ? HarmonyQuickJsRuntimeAdapter()
             : _FlutterJsDelegate();
 

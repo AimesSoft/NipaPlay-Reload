@@ -5,6 +5,8 @@
 .dart-tool/
 .packages
 build/
+# Generated locally from pubspec_overrides.ohos.yaml when building HarmonyOS.
+/pubspec_overrides.yaml
 # If you're building an application, you may want to check-in your pubspec.lock
 # pubspec.lock
 
@@ -44,7 +46,6 @@ docs/error.txt
 .vscode/settings.json
 .idea/
 .claude/settings.local.json
-*.xcscheme
 /.tmp_home
 /.tmp_test_io.dart
 /packages/nipaplay_smb2/android/.cxx

@@ -23,7 +23,7 @@ ExternalLibrary openRustExternalLibrary() {
     return ExternalLibrary.open('lib$_stem.so');
   }
 
-  if (Platform.isOhos) {
+  if (Platform.operatingSystem == 'ohos') {
     return ExternalLibrary.open('lib$_stem.so');
   }
 

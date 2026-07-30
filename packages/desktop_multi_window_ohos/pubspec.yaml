@@ -1,0 +1,17 @@
+name: desktop_multi_window
+description: HarmonyOS compatibility facade for NipaPlay desktop window APIs.
+version: 0.3.0-nipaplay.1
+publish_to: none
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
