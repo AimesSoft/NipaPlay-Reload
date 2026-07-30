@@ -459,6 +459,13 @@ class Player {
     } catch (_) {}
   }
 
+  Future<void> setNativeDanmakuEnabled(bool enabled) async {
+    try {
+      final r = (_delegate as dynamic).setDanmakuEnabled(enabled);
+      if (r is Future) await r;
+    } catch (_) {}
+  }
+
   Future<void> setNativeDanmakuConfig({
     bool? enabled,
     double? opacity,
