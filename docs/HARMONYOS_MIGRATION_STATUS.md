@@ -13,35 +13,84 @@ build/ohos/hap/entry-default-signed.hap
 签名配置由 DevEco Studio 写入本机工程，证书和密钥路径与开发机绑定，不应作为
 可复用的仓库凭据提交。
 
-## 主线与 HarmonyOS 依赖模式
+## HarmonyOS 依赖启用与恢复
 
-仓库默认使用标准 Flutter 的跨平台依赖图。HarmonyOS 插件 fork 不再放在根
-`pubspec.yaml` 的全局 override 中，避免 Android、iOS、桌面和 Web 构建被迫
-解析鸿蒙版本。
+HarmonyOS 插件 fork 和本地适配库集中在 `pubspec_overrides.ohos.yaml`，不会
+长期写入根 `pubspec.yaml` 的共享依赖配置。使用 OpenHarmony Flutter SDK 前，
+需要先生成本机专用的 `pubspec_overrides.yaml`。
 
-两种模式使用不同的 Flutter SDK：主线版本以根目录 `.fvmrc` 为准，HarmonyOS
-版本使用 OpenHarmony Flutter SDK。不要用鸿蒙 SDK 替代主线 SDK 跑桌面或移动端
-发布构建。
+切换脚本只负责启用或移除依赖覆盖文件，不会自动执行 `pub get`。
 
-使用 OpenHarmony Flutter SDK 前先启用鸿蒙依赖：
+### 启用 HarmonyOS 依赖
+
+先设置本机 OpenHarmony Flutter SDK 路径。以下命令适用于 bash 和 zsh：
 
 ```bash
-dart run tool/configure_flutter_dependencies.dart ohos
-flutter pub get
-flutter build hap --debug
+export NIPAPLAY_OHOS_FLUTTER=/path/to/flutter-ohos/bin/flutter
+export NIPAPLAY_OHOS_DART=/path/to/flutter-ohos/bin/dart
+
+"$NIPAPLAY_OHOS_FLUTTER" --version
+"$NIPAPLAY_OHOS_DART" run tool/configure_flutter_dependencies.dart ohos
+"$NIPAPLAY_OHOS_FLUTTER" pub get
 ```
 
-切回标准 Flutter 进行主线开发或验证：
+启用成功后，根目录会生成被 Git 忽略的 `pubspec_overrides.yaml`。它应与
+`pubspec_overrides.ohos.yaml` 内容一致，其中包含 HarmonyOS 插件 fork、本地
+FVP 0.37.3 适配版以及 Flutter 3.35 可用的 `desktop_multi_window` 占位实现。
+
+### 构建和调试 HAP
+
+构建 Release HAP：
 
 ```bash
+RUSTUP_TOOLCHAIN=1.93.0 \
+  "$NIPAPLAY_OHOS_FLUTTER" build hap --release --no-pub
+```
+
+签名产物位于：
+
+```text
+build/ohos/hap/entry-default-signed.hap
+```
+
+需要真机调试时：
+
+```bash
+"$NIPAPLAY_OHOS_FLUTTER" devices
+"$NIPAPLAY_OHOS_FLUTTER" run -d <device-id> --debug
+```
+
+### 提交前恢复默认依赖
+
+完成 HarmonyOS 开发或构建后，使用仓库 `.fvmrc` 指定的标准 Flutter 恢复默认
+依赖，并重新生成 `pubspec.lock`：
+
+```bash
+fvm install
+fvm use --force
 dart run tool/configure_flutter_dependencies.dart mainline
-flutter pub get
-flutter analyze lib test
+fvm flutter --version
+fvm flutter pub get
+test ! -e pubspec_overrides.yaml
+git status --short
 ```
 
-脚本生成的 `pubspec_overrides.yaml` 不纳入版本控制；提交前应保留标准 Flutter
-生成的 `pubspec.lock`。根 `.metadata` 也保持主线 stable Flutter 元数据，现有
-`ohos/` 工程不依赖其中的迁移记录参与构建。
+检查要求：
+
+- `pubspec_overrides.yaml` 不存在；该文件只用于本机切换，且已加入 `.gitignore`。
+- `pubspec.lock` 由标准 Flutter 3.44.6 生成，不包含
+  `pubspec_overrides.ohos.yaml` 对共享依赖的覆盖解析结果。
+- 不提交由 HAP 构建临时改写的插件注册文件或 Hvigor 绝对路径。
+- 根 `.metadata` 保持标准 stable Flutter 元数据；现有 `ohos/` 工程不依赖其中的
+  HarmonyOS 迁移记录参与构建。
+
+### 常见问题
+
+- 标准 Flutter 无法识别 `flutter build hap` 属于正常现象；HAP 必须使用
+  OpenHarmony Flutter SDK。
+- 启用或恢复依赖后若未重新执行 `pub get`，`.dart_tool/package_config.json`
+  仍可能指向旧依赖，导致看似无关的导入或编译错误。
+- 完成 HAP 构建后，提交前应恢复默认依赖和 `pubspec.lock`。
 
 ## 已接入的 HarmonyOS 能力
 
@@ -111,7 +160,7 @@ rustup target add aarch64-unknown-linux-ohos --toolchain 1.93.0-aarch64-apple-da
 | `battery_plus` | 暂不读取电量，播放器状态栏仍显示时间 |
 | `nipaplay_smb2` | 原生 SMB2 加速不可用，继续使用纯 Dart `smb_connect` |
 | `SystemShareService` | 暂不显示系统分享入口 |
-| 文件关联 / 系统“打开方式” | 目前只有 Android、桌面端原生实现 |
+| 文件关联 / 系统“打开方式” | HarmonyOS 原生入口尚未实现 |
 | Next2/DFM+ 原生纹理渲染 | Rust 布局库已存在，但还缺 HarmonyOS TextureRegistry/Surface bridge，UI 继续隐藏这两个内核 |
 
 ### 可选播放器能力
@@ -138,10 +187,6 @@ FFmpeg 软件解码回退。
 - QuickJS bridge 宿主机 FFI 单测：2 项通过；
 - `cargo check --target aarch64-unknown-linux-ohos --lib`：通过；
 - `cargo build --target aarch64-unknown-linux-ohos --lib`：通过；
-- 标准 Flutter 3.44.6 `flutter build apk --release`：通过，三种 ABI 均包含
-  Erika、FVP/MDK 和 NipaPlay Rust 原生库；
-- 标准 Flutter 3.44.6 `flutter build ios --release --no-codesign`：通过，
-  arm64 `Runner.app` 最低系统版本为 iOS 13；
 - OpenHarmony Flutter 3.35.8 `flutter build hap --release`：签名 HAP 编译、
   组包和 SHA-256 摘要验证通过；
 - 真机环境：arm64、OpenHarmony `6.1.0.115`、API 23；
