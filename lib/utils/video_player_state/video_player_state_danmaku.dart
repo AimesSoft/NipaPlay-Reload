@@ -54,8 +54,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     final fontFamily = danmakuFontFamily.isNotEmpty ? danmakuFontFamily : null;
     final fontPath =
         danmakuFontFilePath.isNotEmpty ? danmakuFontFilePath : null;
+    // Keep visibility out of the coalesced style patch. A queued, older
+    // visibility value could otherwise overwrite a newer direct toggle.
+    unawaited(player.setNativeDanmakuEnabled(_danmakuVisible));
     unawaited(player.setNativeDanmakuConfig(
-      enabled: _danmakuVisible,
       opacity: _danmakuOpacity,
       // actualDanmakuFontSize resolves the "0 = default" sentinel to the same
       // logical font size used by NipaPlay's DFM+ path; Erika uses the same
@@ -69,10 +71,26 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       scrollDurationSeconds: danmakuScrollDurationSeconds,
       trackGapRatio: _danmakuDfmPlusTrackGap,
       outlineWidth: _next2DanmakuOutlineWidth,
+      shadowStyle: _danmakuShadowStyle.index,
       customFontFamily: fontFamily,
       customFontFilePath: fontPath,
     ));
     _syncNativeDanmakuGlobalOffset();
+  }
+
+  // Slider changes should not resend unrelated layout fields. Besides reducing
+  // native work, this prevents a first opacity update from accidentally
+  // becoming a full layout revision when the adapter has no applied snapshot.
+  void _syncErikaDanmakuOpacity() {
+    if (!_erikaNativeDanmaku) return;
+    unawaited(player.setNativeDanmakuConfig(opacity: _danmakuOpacity));
+  }
+
+  void _syncErikaDanmakuFontSize() {
+    if (!_erikaNativeDanmaku) return;
+    unawaited(
+      player.setNativeDanmakuConfig(fontSize: actualDanmakuFontSize),
+    );
   }
 
   Future<DanmakuAutoLoadStrategy> _resolveDanmakuAutoLoadStrategy() async {
