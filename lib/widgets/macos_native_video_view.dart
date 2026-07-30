@@ -295,6 +295,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       'dispose state=${identityHashCode(this)} label=${widget.debugLabel}',
     );
     widget.onPlatformViewIdChanged?.call(null);
+    widget.onFrameRectChanged?.call(null);
     unawaited(_hideOverlayFrame());
     super.dispose();
   }
@@ -387,6 +388,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
 
     final Rect platformRect;
     final Rect? cutoutRect;
+    int? flutterViewId;
     if (visible) {
       if (!mounted) {
         return;
@@ -402,6 +404,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       final origin = box.localToGlobal(Offset.zero);
       platformRect = _transformedGlobalRectOf(box);
       cutoutRect = origin & box.size;
+      flutterViewId = View.of(context).viewId;
     } else {
       platformRect = Rect.zero;
       cutoutRect = null;
@@ -413,8 +416,9 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       platformRect.top.toStringAsFixed(2),
       platformRect.width.toStringAsFixed(2),
       platformRect.height.toStringAsFixed(2),
+      flutterViewId ?? -1,
     ].join('|');
-    if (signature == _lastFrameSignature) {
+    if (!force && signature == _lastFrameSignature) {
       return;
     }
     if (visible && _frameUpdateInFlight) {
@@ -423,7 +427,6 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       return;
     }
     _lastFrameSignature = signature;
-    widget.onFrameRectChanged?.call(cutoutRect);
     if (!visible || force) {
       _logMacOSHdrExitTrace(
         'setOverlayFrame state=${identityHashCode(this)} visible=$visible force=$force rect=$platformRect label=${widget.debugLabel}',
@@ -436,7 +439,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
-          'flutterViewId': View.of(context).viewId,
+          if (flutterViewId != null) 'flutterViewId': flutterViewId,
           'generation': _surfaceGeneration,
           'x': platformRect.left,
           'y': platformRect.top,
@@ -446,7 +449,14 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
           if (widget.debugLabel != null) 'debugLabel': widget.debugLabel,
         },
       );
+      if (!mounted ||
+          (flutterViewId != null &&
+              View.maybeOf(context)?.viewId != flutterViewId)) {
+        return;
+      }
+      widget.onFrameRectChanged?.call(cutoutRect);
     } catch (error) {
+      _lastFrameSignature = null;
       debugPrint(
         'MacOSWindowNativeVideoOverlaySurface: frame update failed: $error',
       );

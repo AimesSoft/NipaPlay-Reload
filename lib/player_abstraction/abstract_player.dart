@@ -8,6 +8,12 @@ abstract interface class AsyncDisposablePlayer {
   Future<void> disposeAsync();
 }
 
+/// Optional capability for backends whose native seek completes
+/// asynchronously across a platform bridge.
+abstract interface class AsyncSeekPlayer {
+  Future<void> seekAndWait({required int position});
+}
+
 abstract class AbstractPlayer {
   // Properties
   double get volume;
@@ -66,11 +72,11 @@ abstract class AbstractPlayer {
   /// 参考 REFERENCE/mpv/player/command.c:996 (queue_seek MPSEEK_CHAPTER)。
   /// 不支持章节的内核（mdk/erika）为空实现。
   Future<void> setChapter(int index);
-  
+
   // NEW DIRECT PLAYBACK METHODS
   /// 直接开始播放，绕过状态设置
   Future<void> playDirectly();
-  
+
   /// 直接暂停播放，绕过状态设置
   Future<void> pauseDirectly();
 
