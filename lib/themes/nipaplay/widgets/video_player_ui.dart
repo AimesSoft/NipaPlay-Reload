@@ -313,7 +313,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!mounted) {
       return;
     }
-    _videoPlayerStateInstance?.setWindowHostedVideoRect(rect);
+    // Rects are local to their FlutterView. The global VideoPlayerState value
+    // is consumed only by the main window background, so publishing a
+    // detached-window rect would punch a same-sized hole in the main window.
+    final isDetachedView = DesktopMultiWindow.isSecondaryWindow(context);
+    _videoPlayerStateInstance?.setWindowHostedVideoRect(
+      isDetachedView ? null : rect,
+    );
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
@@ -709,6 +715,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // The window-hosted video surface punches a transparent hole through the
+    // Flutter background. Always restore it before this route is removed, even
+    // if the native overlay's asynchronous detach races with player disposal.
+    _videoPlayerStateInstance?.setWindowHostedVideoRect(null);
     // <<< ADDED: Clear the callback to prevent memory leaks
     _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = null;
     _contextMenuController.dispose();
