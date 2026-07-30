@@ -1,9 +1,9 @@
 # NipaPlay HarmonyOS 迁移状态
 
-更新日期：2026-07-28
+更新日期：2026-07-30
 
 当前基线使用 Flutter `3.35.8-ohos-1.0.1`、HarmonyOS SDK API 24，
-应用 `compatibleSdkVersion` 为 18。工程可以完成 Debug HAP 的编译、签名、
+应用 `compatibleSdkVersion` 为 18。工程可以完成 Release HAP 的编译、签名、
 安装和启动。配置 DevEco Studio 自动签名后，产物位于：
 
 ```text
@@ -13,12 +13,42 @@ build/ohos/hap/entry-default-signed.hap
 签名配置由 DevEco Studio 写入本机工程，证书和密钥路径与开发机绑定，不应作为
 可复用的仓库凭据提交。
 
+## 主线与 HarmonyOS 依赖模式
+
+仓库默认使用标准 Flutter 的跨平台依赖图。HarmonyOS 插件 fork 不再放在根
+`pubspec.yaml` 的全局 override 中，避免 Android、iOS、桌面和 Web 构建被迫
+解析鸿蒙版本。
+
+两种模式使用不同的 Flutter SDK：主线版本以根目录 `.fvmrc` 为准，HarmonyOS
+版本使用 OpenHarmony Flutter SDK。不要用鸿蒙 SDK 替代主线 SDK 跑桌面或移动端
+发布构建。
+
+使用 OpenHarmony Flutter SDK 前先启用鸿蒙依赖：
+
+```bash
+dart run tool/configure_flutter_dependencies.dart ohos
+flutter pub get
+flutter build hap --debug
+```
+
+切回标准 Flutter 进行主线开发或验证：
+
+```bash
+dart run tool/configure_flutter_dependencies.dart mainline
+flutter pub get
+flutter analyze lib test
+```
+
+脚本生成的 `pubspec_overrides.yaml` 不纳入版本控制；提交前应保留标准 Flutter
+生成的 `pubspec.lock`。根 `.metadata` 也保持主线 stable Flutter 元数据，现有
+`ohos/` 工程不依赖其中的迁移记录参与构建。
+
 ## 已接入的 HarmonyOS 能力
 
 | 能力 | 库或模块 | 当前处理 |
 | --- | --- | --- |
 | 播放器 | `fvp` | 使用 0.37.3 本地 fork，并兼容 API 18 的 `resourceManager` |
-| 播放器 | `erika_flutter` | Erika Rust 内核使用 OHNativeWindow/wgpu、Flutter Texture 和 OHAudio |
+| 播放器 | `erika_flutter` | 锁定远程集成提交；Erika Rust 内核使用 OHNativeWindow/wgpu、AVCodec 和 OHAudio |
 | 本地设置 | `shared_preferences` | 使用 OpenHarmony 实现 |
 | 应用目录 | `path_provider` | 使用 OpenHarmony 实现 |
 | SQLite | `sqflite` | 使用 OpenHarmony 实现 |
@@ -67,7 +97,7 @@ rustup target add aarch64-unknown-linux-ohos --toolchain 1.93.0-aarch64-apple-da
 | 能力 | 当前状态 |
 | --- | --- |
 | FVP/MDK 播放 | 播放器创建和 FFmpeg 解码器初始化通过；仍需验证本地文件、网络流、横竖屏和硬解 |
-| Erika 播放 | Presenter、Flutter Texture/Surface、FFmpeg 音视频解码和 OHAudio 真机 smoke 通过；仍需覆盖更多视频格式、横竖屏和长时间播放 |
+| Erika 播放 | Presenter、零拷贝 Surface、AVCodec/FFmpeg 解码和 OHAudio 真机 smoke 通过；仍需覆盖更多视频格式、横竖屏和长时间播放 |
 | Rust FRB | 真机初始化、媒体文件名函数和 Torrent 会话通过；仍需验证文件扫描、实际种子下载和媒体探测 |
 | QuickJS | 真机动态库加载、JavaScript 执行和 `sendMessage` 回调通过 |
 | 文件/图片选择、扫码、权限 | 权限状态查询通过；仍需验证系统选择器、相机 UI 和授权回调 |
@@ -87,8 +117,8 @@ rustup target add aarch64-unknown-linux-ohos --toolchain 1.93.0-aarch64-apple-da
 ### 可选播放器能力
 
 `media_kit`、`media_kit_video` 及 libmpv 尚未迁移；当前多内核选择为 FVP 和
-Erika。Erika 的第一阶段使用 FFmpeg 软件解码，硬件解码仍需单独接入鸿蒙
-AVCodec。
+Erika。Erika 已接入 HarmonyOS AVCodec 硬解与 Surface 零拷贝渲染，并保留
+FFmpeg 软件解码回退。
 
 ## 不需要迁移
 
@@ -108,7 +138,12 @@ AVCodec。
 - QuickJS bridge 宿主机 FFI 单测：2 项通过；
 - `cargo check --target aarch64-unknown-linux-ohos --lib`：通过；
 - `cargo build --target aarch64-unknown-linux-ohos --lib`：通过；
-- `flutter build hap --debug`：签名 HAP 编译和组包通过；
+- 标准 Flutter 3.44.6 `flutter build apk --release`：通过，三种 ABI 均包含
+  Erika、FVP/MDK 和 NipaPlay Rust 原生库；
+- 标准 Flutter 3.44.6 `flutter build ios --release --no-codesign`：通过，
+  arm64 `Runner.app` 最低系统版本为 iOS 13；
+- OpenHarmony Flutter 3.35.8 `flutter build hap --release`：签名 HAP 编译、
+  组包和 SHA-256 摘要验证通过；
 - 真机环境：arm64、OpenHarmony `6.1.0.115`、API 23；
 - 签名 HAP：安装、正式入口启动及前台驻留通过；
 - Erika 纯音频真机 smoke：OHNativeWindow Surface 绑定成功；OHAudio 推入 47 个 PCM

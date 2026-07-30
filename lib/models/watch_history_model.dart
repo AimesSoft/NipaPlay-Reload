@@ -63,11 +63,11 @@ class WatchHistoryItem {
       filePath: json['filePath'],
       animeName: json['animeName'] ?? path.basename(json['filePath']),
       episodeTitle: json['episodeTitle'],
-      episodeId: json['episodeId'],
-      animeId: json['animeId'],
-      watchProgress: json['watchProgress'] ?? 0.0,
-      lastPosition: json['lastPosition'] ?? 0,
-      duration: json['duration'] ?? 0,
+      episodeId: (json['episodeId'] as num?)?.toInt(),
+      animeId: (json['animeId'] as num?)?.toInt(),
+      watchProgress: (json['watchProgress'] as num?)?.toDouble() ?? 0.0,
+      lastPosition: (json['lastPosition'] as num?)?.toInt() ?? 0,
+      duration: (json['duration'] as num?)?.toInt() ?? 0,
       lastWatchTime: json['lastWatchTime'] != null
           ? DateTime.parse(json['lastWatchTime'])
           : DateTime.now(),

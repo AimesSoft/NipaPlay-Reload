@@ -59,8 +59,9 @@ dependencies:
   permission_handler_ohos:
     path: packages/permission_handler_ohos
   glassmorphism: ^3.0.0
-  # HarmonyOS support was added in FVP 0.36.0.
-  fvp: ^0.37.3
+  # Keep the mainline-compatible release here. HarmonyOS selects the adapted
+  # 0.37.3 package through pubspec_overrides.ohos.yaml.
+  fvp: ^0.33.1
   http: ^1.3.0
   dio: ^5.1.0
   xml: ^6.5.0
@@ -93,9 +94,10 @@ dependencies:
     path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
   erika_flutter:
     git:
-      url: https://github.com/AimesSoft/Erika.git
-      # Consume the versioned source and matching native prebuilt artifacts.
-      ref: v0.1.3
+      # Based on current AimesSoft/Erika main, plus Android NDK host detection
+      # and the overlay arguments required by NipaPlay's desktop adapter.
+      url: https://github.com/aozaoz112233/Erika.git
+      ref: 068a5748687711301ec76d9da9b3e7dfd1baaf6f
       path: packages/erika_flutter
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0
@@ -258,59 +260,9 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
-  # OpenHarmony plugin forks. Keep each package on its matching adaptation
-  # branch because the monorepo branches advance independently.
-  shared_preferences:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_shared_preferences-v2.5.4_ohos
-      path: packages/shared_preferences/shared_preferences
-  path_provider:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_path_provider-v2.1.5_ohos
-      path: packages/path_provider/path_provider
-  file_selector:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_file_selector-v1.1.0_ohos
-      path: packages/file_selector/file_selector
-  image_picker:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_image_picker-v1.2.1_ohos
-      path: packages/image_picker/image_picker
-  url_launcher:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_url_launcher-v6.3.2_ohos
-      path: packages/url_launcher/url_launcher
-  package_info_plus:
-    git:
-      url: https://gitee.com/openharmony-sig/flutter_plus_plugins.git
-      ref: br_package_info_plus-v8.1.0_ohos
-      path: packages/package_info_plus/package_info_plus
-  sqflite:
-    git:
-      url: https://gitcode.com/openharmony-sig/flutter_sqflite.git
-      ref: br_v2.4.2_ohos
-      path: sqflite
-  mobile_scanner:
-    git:
-      url: https://gitcode.com/openharmony-sig/fluttertpc_mobile_scanner.git
-      ref: br_v7.1.4_ohos
-  wakelock_plus:
-    git:
-      url: https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git
-      ref: br_wakelock_plus_1.2.8_ohos
-      path: wakelock_plus
-  # FVP 0.37.3 calls ResourceManager as a function; API 18 exposes it as a
-  # property. Keep the fix local until it is released upstream.
-  fvp:
-    path: packages/fvp-0.37.3
-  # Adds a fallback branch for TargetPlatform.ohos.
-  fluent_ui:
-    path: packages/fluent_ui-4.15.1
+  # HarmonyOS-only dependency forks live in pubspec_overrides.ohos.yaml and
+  # are activated locally. Keeping them out of this shared graph lets upstream
+  # Flutter resolve its normal packages on Android, iOS, desktop and web.
   # Forked from 0.21.3 to fix obfuscated shape geometry and retain Android blur layers.
   liquid_glass_widgets:
     path: packages/liquid_glass_widgets

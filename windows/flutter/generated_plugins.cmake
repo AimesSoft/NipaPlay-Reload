@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
-  charset_converter
   dart_ipc
   desktop_drop
   dynamic_color

@@ -1,11 +1,11 @@
 name: desktop_multi_window
-description: NipaPlay fork that creates same-engine desktop Flutter views.
+description: HarmonyOS compatibility facade for NipaPlay desktop window APIs.
 version: 0.3.0-nipaplay.1
 publish_to: none
 
 environment:
   sdk: ^3.5.3
-  flutter: ">=3.44.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
