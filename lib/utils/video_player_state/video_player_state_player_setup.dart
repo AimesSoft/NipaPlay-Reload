@@ -680,7 +680,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '← player.seek() does NOT update ptm/anchor fields');
         }
         // 先设置播放位置
-        player.seek(position: lastPosition);
+        // Erika's native seek crosses an asynchronous platform bridge and
+        // performs a frame-output barrier. Wait for that transition to finish
+        // before startup can issue play; otherwise a slow resume seek can race
+        // the first play command and leave the surface without a current frame
+        // until the user seeks again.
+        await player.seekAndWait(position: lastPosition);
         // ✅ Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
         // 导致 Ticker 首帧锚定到 playbackTimeMs=0 → 弹幕从头播放 + 回弹。
         // 手动更新所有锚点字段，与 seekTo() 保持一致。
@@ -690,8 +695,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _seekTargetMs = lastPosition.toDouble();
         _anchorSetBySeek = true;
         _lastRawPlayerMs = -1; // 保持 -1，让 Ticker 进入 seek 保护分支
-        // 等待一小段时间确保位置设置完成
-        await Future.delayed(const Duration(milliseconds: 100));
         // 更新状态
         _position = Duration(milliseconds: lastPosition);
         // duration 为 0 时避免除零产生 Infinity/NaN 落库
