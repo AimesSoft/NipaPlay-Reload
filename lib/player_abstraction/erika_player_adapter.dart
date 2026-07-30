@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:erika_flutter/erika_flutter.dart';
 
 import './abstract_player.dart';
 import './player_data_models.dart';
@@ -158,6 +159,15 @@ class _ErikaDanmakuConfigPatch {
       value != null && !listEquals(value, previous);
 }
 
+bool get _erikaWindowOverlayTraceEnabled =>
+    !kIsWeb && Platform.environment['ERIKA_WINDOW_OVERLAY_TRACE'] == '1';
+
+void _traceErikaWindowOverlay(String message) {
+  if (_erikaWindowOverlayTraceEnabled) {
+    debugPrint('[NipaPlayErikaWindowOverlay] $message');
+  }
+}
+
 Rect _transformedGlobalRectOf(RenderBox box) {
   final topLeft = box.localToGlobal(Offset.zero);
   final topRight = box.localToGlobal(Offset(box.size.width, 0));
@@ -234,8 +244,12 @@ class _NipaplayErikaWindowOverlayVideoViewState
   Timer? _frameTimer;
   int _bindAttempts = 0;
   bool _isBound = false;
+  bool _bindInFlight = false;
   late final int _surfaceGeneration;
   String? _lastFrameSignature;
+  int? _flutterViewId;
+  bool _secondaryWindow = false;
+  int _targetRevision = 0;
 
   @override
   void initState() {
@@ -245,6 +259,14 @@ class _NipaplayErikaWindowOverlayVideoViewState
     widget.onPlatformViewIdChanged?.call(ErikaPlayer.windowOverlayViewId);
     _startFrameTimer();
     _scheduleAttach();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_captureWindowTarget()) {
+      _handleWindowTargetChanged();
+    }
   }
 
   @override
@@ -275,6 +297,7 @@ class _NipaplayErikaWindowOverlayVideoViewState
     _retryTimer?.cancel();
     _frameTimer?.cancel();
     widget.onPlatformViewIdChanged?.call(null);
+    widget.onFrameRectChanged?.call(null);
     unawaited(_hideOverlayFrame());
     unawaited(
       widget.player.detachWindowOverlay(generation: _surfaceGeneration),
@@ -304,17 +327,57 @@ class _NipaplayErikaWindowOverlayVideoViewState
   }
 
   Future<void> _attachOverlaySurface() async {
-    if (!mounted || _isBound || kIsWeb) {
+    if (!mounted || _isBound || _bindInFlight || kIsWeb) {
       return;
     }
 
+    final targetChanged = _captureWindowTarget();
+    if (targetChanged) {
+      _handleWindowTargetChanged();
+    }
+    final player = widget.player;
+    final targetRevision = _targetRevision;
+    final flutterViewId = _flutterViewId;
+    final secondaryWindow = _secondaryWindow;
+    var attachCurrentTargetAgain = false;
+    _bindInFlight = true;
     try {
-      await widget.player.attachWindowOverlay();
+      _traceErikaWindowOverlay(
+        'attach generation=$_surfaceGeneration revision=$targetRevision '
+        'flutterView=$flutterViewId secondary=$secondaryWindow',
+      );
+      await player.attachWindowOverlay(
+        flutterViewId: flutterViewId,
+        secondaryWindow: secondaryWindow,
+      );
+      if (!mounted ||
+          widget.player != player ||
+          _targetRevision != targetRevision ||
+          _flutterViewId != flutterViewId ||
+          _secondaryWindow != secondaryWindow) {
+        attachCurrentTargetAgain = mounted;
+        return;
+      }
+      _bindAttempts = 0;
       _isBound = true;
-      _scheduleFrameUpdate(force: true);
+      _traceErikaWindowOverlay(
+        'attached generation=$_surfaceGeneration revision=$targetRevision '
+        'flutterView=$flutterViewId secondary=$secondaryWindow',
+      );
     } catch (error) {
       debugPrint('NipaplayErikaWindowOverlayVideoView: bind failed: $error');
-      _scheduleRetry();
+      if (mounted && _targetRevision == targetRevision) {
+        _scheduleRetry();
+      } else {
+        attachCurrentTargetAgain = mounted;
+      }
+    } finally {
+      _bindInFlight = false;
+      if (attachCurrentTargetAgain) {
+        _scheduleAttach();
+      } else if (_isBound) {
+        _scheduleFrameUpdate(force: true);
+      }
     }
   }
 
@@ -366,6 +429,9 @@ class _NipaplayErikaWindowOverlayVideoViewState
       if (!box.hasSize || box.size.isEmpty) {
         return;
       }
+      if (_captureWindowTarget()) {
+        _handleWindowTargetChanged();
+      }
       nativeFrame = _transformedGlobalRectOf(box);
       flutterCutout = _screenRectToScaledFlutterRect(context, nativeFrame);
     } else {
@@ -378,21 +444,39 @@ class _NipaplayErikaWindowOverlayVideoViewState
       nativeFrame.top.toStringAsFixed(2),
       nativeFrame.width.toStringAsFixed(2),
       nativeFrame.height.toStringAsFixed(2),
+      _flutterViewId ?? -1,
+      _secondaryWindow,
     ].join('|');
     if (!force && signature == _lastFrameSignature) {
       return;
     }
     _lastFrameSignature = signature;
-    widget.onFrameRectChanged?.call(visible ? flutterCutout : null);
+    final flutterViewId = _flutterViewId;
+    final secondaryWindow = _secondaryWindow;
+    final targetRevision = _targetRevision;
+    _traceErikaWindowOverlay(
+      'frame generation=$_surfaceGeneration flutterView=$flutterViewId '
+      'secondary=$secondaryWindow visible=$visible rect=$nativeFrame',
+    );
 
     try {
       await widget.player.setWindowOverlayFrame(
         frame: nativeFrame,
         visible: visible,
         generation: _surfaceGeneration,
+        flutterViewId: flutterViewId,
+        secondaryWindow: secondaryWindow,
         debugLabel: widget.debugLabel,
       );
+      if (!mounted ||
+          _targetRevision != targetRevision ||
+          _flutterViewId != flutterViewId ||
+          _secondaryWindow != secondaryWindow) {
+        return;
+      }
+      widget.onFrameRectChanged?.call(visible ? flutterCutout : null);
     } catch (error) {
+      _lastFrameSignature = null;
       debugPrint(
         'NipaplayErikaWindowOverlayVideoView: frame update failed: $error',
       );
@@ -405,6 +489,8 @@ class _NipaplayErikaWindowOverlayVideoViewState
         frame: Rect.zero,
         visible: false,
         generation: _surfaceGeneration,
+        flutterViewId: _flutterViewId,
+        secondaryWindow: _secondaryWindow,
         debugLabel: widget.debugLabel,
       );
     } catch (error) {
@@ -412,6 +498,32 @@ class _NipaplayErikaWindowOverlayVideoViewState
         'NipaplayErikaWindowOverlayVideoView: hide overlay failed: $error',
       );
     }
+  }
+
+  bool _captureWindowTarget() {
+    final flutterViewId = View.maybeOf(context)?.viewId;
+    final secondaryWindow = DesktopMultiWindow.isSecondaryWindow(context);
+    if (_flutterViewId == flutterViewId &&
+        _secondaryWindow == secondaryWindow) {
+      return false;
+    }
+    _flutterViewId = flutterViewId;
+    _secondaryWindow = secondaryWindow;
+    _targetRevision += 1;
+    _traceErikaWindowOverlay(
+      'target generation=$_surfaceGeneration revision=$_targetRevision '
+      'flutterView=$_flutterViewId secondary=$_secondaryWindow',
+    );
+    return true;
+  }
+
+  void _handleWindowTargetChanged() {
+    _retryTimer?.cancel();
+    _bindAttempts = 0;
+    _isBound = false;
+    _lastFrameSignature = null;
+    _scheduleAttach();
+    _scheduleFrameUpdate(force: true);
   }
 
   @override

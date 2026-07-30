@@ -313,7 +313,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!mounted) {
       return;
     }
-    _videoPlayerStateInstance?.setWindowHostedVideoRect(rect);
+    // Rects are local to their FlutterView. The global VideoPlayerState value
+    // is consumed only by the main window background, so publishing a
+    // detached-window rect would punch a same-sized hole in the main window.
+    final isDetachedView = DesktopMultiWindow.isSecondaryWindow(context);
+    _videoPlayerStateInstance?.setWindowHostedVideoRect(
+      isDetachedView ? null : rect,
+    );
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
