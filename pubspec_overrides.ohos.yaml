@@ -27,6 +27,10 @@ dependency_overrides:
       url: https://gitcode.com/openharmony-tpc/flutter_packages.git
       ref: br_file_selector-v1.1.0_ohos
       path: packages/file_selector/file_selector
+  # The upstream OHOS implementation never completes the platform call when
+  # DocumentViewPicker returns an empty list after cancellation.
+  file_selector_ohos:
+    path: packages/file_selector_ohos
   image_picker:
     git:
       url: https://gitcode.com/openharmony-tpc/flutter_packages.git

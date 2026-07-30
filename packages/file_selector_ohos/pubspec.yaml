@@ -1,0 +1,31 @@
+name: file_selector_ohos
+description: ohos implementation of the file_selector package.
+repository: https://gitcode.com/openharmony-tpc/flutter_packages/tree/master/packages/file_selector/file_selector_ohos
+issue_tracker: https://gitcode.com/openharmony-tpc/flutter_packages/issues
+version: 0.5.0+2
+
+environment:
+  sdk: ">=2.19.0 <4.0.0"
+  flutter: ">=3.7.0"
+
+flutter:
+  plugin:
+    implements: file_selector
+    platforms:
+      ohos:
+        dartPluginClass: FileSelectorOhos
+        package: dev.flutter.packages.file_selector_ohos
+        pluginClass: FileSelectorOhosPlugin
+
+dependencies:
+  file_selector_platform_interface: ^2.5.0
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  build_runner: ^2.1.4
+  flutter_test:
+    sdk: flutter
+  mockito: ^5.4.4
+  pigeon: ^9.2.4

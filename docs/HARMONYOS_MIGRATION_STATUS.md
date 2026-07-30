@@ -102,7 +102,7 @@ git status --short
 | 应用目录 | `path_provider` | 使用 OpenHarmony 实现 |
 | SQLite | `sqflite` | 使用 OpenHarmony 实现 |
 | 权限 | `permission_handler_ohos` | 本地接入并注册 |
-| 文件选择 | `file_selector` | 使用 OpenHarmony 实现，替代应用内 `file_picker` 调用 |
+| 文件选择 | `file_selector` | 使用仓库内 OpenHarmony fork；文件选择可用，并修复取消选择后 Future 不返回的问题 |
 | 图片选择 | `image_picker` | 使用 OpenHarmony 实现 |
 | 打开 URL | `url_launcher` | 使用 OpenHarmony 实现 |
 | 应用信息 | `package_info_plus` | 使用 OpenHarmony 实现 |
@@ -114,6 +114,16 @@ git status --short
 | JS 插件运行时 | QuickJS C bridge | HarmonyOS 绕过 `flutter_js`，使用仓库内 FFI bridge |
 | 旧字幕编码 | `charset`、`enough_convert`、`cp949_codec` | 纯 Dart 替代 `charset_converter` |
 | Rust 核心 | `rust_lib_nipaplay` | Rust 1.93 的 OHOS arm64 target，经 CMake/Hvigor 自动构建并打入 HAP |
+
+### 文件选择能力边界
+
+- 鸿蒙手机上的单文件和多文件选择可用；用户取消选择时返回空结果，
+  不再让 Flutter Future 一直等待。
+- 当前 `file_selector_ohos` 没有实现 `getDirectoryPath`。API 23 SDK 的
+  `DocumentSelectMode.FOLDER` 仅声明支持 2-in-1 设备，当前手机不具备
+  `SystemCapability.FileManagement.UserFileService.FolderSelection`。
+- 因此手机端不能把“选择任意文件夹并长期递归访问”作为稳定能力。
+  依赖目录的功能应优先采用多文件导入、应用固定目录或远程媒体库。
 
 播放器在 HarmonyOS 上可选择 FVP/MDK 或 Erika。`media_kit` 仍不进入 HarmonyOS
 运行路径；Erika 由本地 OHOS 插件接入，不依赖 libmpv。
