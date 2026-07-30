@@ -64,6 +64,7 @@ class DesktopPlayerWindowService extends ChangeNotifier {
     _transitionInProgress = true;
     _tabChangeNotifier = context.read<TabChangeNotifier>();
     _attachVideoState(videoState);
+    _clearWindowHostedVideoCutout();
 
     // Register the destination FlutterView in the same frame. The GlobalKey
     // reparents the existing page instead of disposing it and rebuilding a
@@ -107,6 +108,10 @@ class DesktopPlayerWindowService extends ChangeNotifier {
   }
 
   Future<void> returnPlayerToMain() async {
+    // The detached FlutterView reports coordinates relative to its own
+    // window. Never let that rect become the main window's transparent cutout
+    // while the shared player subtree is being reparented.
+    _clearWindowHostedVideoCutout();
     final window = _activeWindow;
     if (window == null || window.isClosed) {
       _handleWindowClosed();
@@ -282,6 +287,9 @@ class DesktopPlayerWindowService extends ChangeNotifier {
 
   void _handleWindowClosed() {
     if (!_playerDetached && _activeWindow == null) return;
+    final videoState = _videoState;
+    _detachVideoState();
+    videoState?.setWindowHostedVideoRect(null);
     _activeWindow = null;
     _playerDetached = false;
     _transitionInProgress = false;
@@ -290,9 +298,12 @@ class DesktopPlayerWindowService extends ChangeNotifier {
     _alwaysOnTopBeforePictureInPicture = false;
     _lastWindowTitle = null;
     _lastAspectRatio = null;
-    _detachVideoState();
     _tabChangeNotifier?.changePage(AppPageIds.video);
     notifyListeners();
+  }
+
+  void _clearWindowHostedVideoCutout() {
+    _videoState?.setWindowHostedVideoRect(null);
   }
 
   void _attachVideoState(VideoPlayerState videoState) {
