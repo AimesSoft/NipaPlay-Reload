@@ -8,6 +8,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/src/rust/api/performance.dart' as rust_perf;
 import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay/utils/platform_identity.dart';
 
 /// 系统资源监控类
 /// 提供真实的 CPU / 内存 / GPU / FPS 指标。
@@ -58,16 +59,22 @@ class SystemResourceMonitor {
   String get danmakuKernelType => _danmakuKernelType;
 
   static Future<void> initialize() async {
-    if (!kIsWeb) {
+    if (!kIsWeb && !isTvOS) {
       _instance._initMdkVersion();
       _instance._updatePlayerKernelType();
       _instance._updateDanmakuKernelType();
       await _instance._initRustProbe();
-    } else {
+    } else if (kIsWeb) {
       _instance._playerKernelType = 'Video Player';
       _instance._danmakuKernelType = 'CPU';
       _instance._mdkVersion = 'N/A';
       _instance._activeDecoder = '浏览器解码';
+      _instance._gpuUsage = null;
+    } else {
+      _instance._playerKernelType = 'Video Player';
+      _instance._danmakuKernelType = 'Canvas';
+      _instance._mdkVersion = 'N/A';
+      _instance._activeDecoder = 'AVFoundation';
       _instance._gpuUsage = null;
     }
   }
