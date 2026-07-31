@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "NipaPlay media player"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "NipaPlay media player"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NipaPlay"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "用于扫描二维码以连接媒体服务"
+    }
+  ]
+}

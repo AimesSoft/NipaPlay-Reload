@@ -319,11 +319,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   // 保存弹幕不透明度
   Future<void> setDanmakuOpacity(double opacity) async {
+    if (_danmakuOpacity == opacity) {
+      return;
+    }
     _danmakuOpacity = opacity;
+    _syncErikaDanmakuOpacity();
+    _notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(SettingsKeys.danmakuOpacity, opacity);
-    _syncErikaDanmakuConfig();
-    _notifyListeners();
   }
 
   // 获取映射后的弹幕不透明度
@@ -342,10 +345,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   void setDanmakuVisible(bool visible) async {
     if (_danmakuVisible != visible) {
       _danmakuVisible = visible;
+      // Visibility is latency-sensitive and Erika exposes a dedicated toggle.
+      // Start it before persistence, and bypass the coalesced full-config path
+      // so hiding cannot arrive together with a layout change and reset motion.
+      if (_erikaNativeDanmaku) {
+        unawaited(player.setNativeDanmakuEnabled(visible));
+      }
+      _notifyListeners();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(SettingsKeys.danmakuVisible, visible);
-      _syncErikaDanmakuConfig();
-      _notifyListeners();
     }
   }
 
@@ -1380,11 +1388,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_danmakuFontSize != fontSize) {
       _danmakuFontSize = fontSize;
       _scheduleDanmakuFontSizePersistence(immediate: commit);
-      _syncErikaDanmakuConfig();
+      _syncErikaDanmakuFontSize();
       _notifyListeners();
     } else if (commit) {
       _scheduleDanmakuFontSizePersistence(immediate: true);
-      _syncErikaDanmakuConfig();
     }
   }
 
@@ -1667,6 +1674,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuShadowStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(SettingsKeys.danmakuShadowStyle, style.index);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 

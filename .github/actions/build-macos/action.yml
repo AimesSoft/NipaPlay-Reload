@@ -75,10 +75,10 @@ runs:
         export LC_ALL=zh_CN.UTF-8
         mkdir -p ~/.cocoapods
         echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
-        echo "Installing Pods from Podfile.lock (reusing a restored Pods cache when available)..."
-        if ! pod install --deployment; then
+        echo "Installing Pods (reusing a restored Pods cache when available)..."
+        if ! pod install; then
           echo "Initial pod install failed; refreshing the specs repository and retrying..."
-          pod install --deployment --repo-update
+          pod install --repo-update
         fi
         cd ..
 

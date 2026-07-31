@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -88,6 +89,9 @@ class PluginService extends ChangeNotifier {
   final Map<String, String> _pluginStorageValues = <String, String>{};
   final PluginStorage _pluginStorage = createPluginStorage();
   final PluginEventBus _eventBus;
+
+  /// 插件启动的外部进程，key 为 pluginId，value 为 Process。
+  final Map<String, Process> _managedProcesses = {};
 
   bool _isLoaded = false;
   Map<String, PluginIndexEntry> _pluginIndex = {};
@@ -575,6 +579,14 @@ class PluginService extends ChangeNotifier {
         }
         return null;
 
+      // ---- 外部进程管理 ----
+      case 'processStart':
+        return _handleProcessStart(pluginId, callArgs);
+      case 'processStop':
+        return _handleProcessStop(pluginId);
+      case 'processIsRunning':
+        return _isProcessRunning(pluginId);
+
       // ---- 插件设置 ----
       case 'pluginGetTextSetting':
         if (callArgs.isNotEmpty) {
@@ -660,6 +672,104 @@ class PluginService extends ChangeNotifier {
         debugPrint('[Plugin:${pluginId}] 未处理的桥接方法: $method');
         return null;
     }
+  }
+
+  // ---- 外部进程管理 ----
+
+  bool _handleProcessStart(String pluginId, List<dynamic> callArgs) {
+    if (kIsWeb) return false;
+
+    // 如果已有进程在运行，先停止
+    if (_isProcessRunning(pluginId)) {
+      _handleProcessStop(pluginId);
+    }
+
+    if (callArgs.isEmpty) return false;
+    final executable = callArgs[0]?.toString().trim() ?? '';
+    if (executable.isEmpty) return false;
+
+    List<String> arguments = const [];
+    if (callArgs.length >= 2 && callArgs[1] is List) {
+      arguments = (callArgs[1] as List)
+          .map((e) => e?.toString() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
+    // 支持通过环境变量传递配置：callArgs[2] 为 Map<String, String>
+    // 在当前环境变量基础上追加
+    Map<String, String> environment = Map<String, String>.from(Platform.environment);
+    if (callArgs.length >= 3 && callArgs[2] is Map) {
+      final envMap = callArgs[2] as Map;
+      for (final key in envMap.keys) {
+        final k = key?.toString();
+        final v = envMap[key]?.toString();
+        if (k != null && v != null) {
+          environment[k] = v;
+        }
+      }
+    }
+
+    // 工作目录默认为可执行文件所在目录
+    String? workingDirectory;
+    try {
+      final file = File(executable);
+      if (file.path.contains('/')) {
+        workingDirectory = file.parent.path;
+      }
+    } catch (_) {}
+
+    try {
+      final process = Process.start(
+        executable,
+        arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+      );
+      process.then((p) {
+        _managedProcesses[pluginId] = p;
+        debugPrint('[Plugin:$pluginId] 进程已启动: $executable');
+
+        // 捕获 stdout/stderr 用于调试
+        p.stdout.transform(utf8.decoder).listen((data) {
+          debugPrint('[Plugin:$pluginId] stdout: ${data.trim()}');
+        });
+        p.stderr.transform(utf8.decoder).listen((data) {
+          debugPrint('[Plugin:$pluginId] stderr: ${data.trim()}');
+        });
+
+        // 监听退出
+        p.exitCode.then((code) {
+          debugPrint('[Plugin:$pluginId] 进程已退出 (code=$code)');
+          _managedProcesses.remove(pluginId);
+        });
+      }).catchError((e) {
+        debugPrint('[Plugin:$pluginId] 进程启动失败: $e');
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[Plugin:$pluginId] 进程启动异常: $e');
+      return false;
+    }
+  }
+
+  bool _handleProcessStop(String pluginId) {
+    final process = _managedProcesses.remove(pluginId);
+    if (process == null) return false;
+    try {
+      process.kill();
+      debugPrint('[Plugin:$pluginId] 进程已终止');
+      return true;
+    } catch (e) {
+      debugPrint('[Plugin:$pluginId] 进程终止失败: $e');
+      return false;
+    }
+  }
+
+  bool _isProcessRunning(String pluginId) {
+    final process = _managedProcesses[pluginId];
+    if (process == null) return false;
+    return true;
   }
 
   void _handleDanmakuLoadedEvent(PluginEvent event) {
@@ -1102,6 +1212,20 @@ class PluginService extends ChangeNotifier {
         },
       };
 
+      const process = {
+        start: function(executable, args, env) {
+          if (!plugin.hasPermission('system.override')) return false;
+          return !!flutter_invokeMethod('processStart', executable, args || [], env || {});
+        },
+        stop: function() {
+          if (!plugin.hasPermission('system.override')) return false;
+          return !!flutter_invokeMethod('processStop');
+        },
+        isRunning: function() {
+          return !!flutter_invokeMethod('processIsRunning');
+        },
+      };
+
       const settings = {
         getText: function(entryId) {
           return flutter_invokeMethod('pluginGetTextSetting', entryId) || '';
@@ -1124,6 +1248,7 @@ class PluginService extends ChangeNotifier {
         storage,
         dev,
         system,
+        process,
         settings,
       };
     ''';
@@ -1132,6 +1257,9 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<void> _unloadPluginRuntime(String pluginId) async {
+    // 停止该插件管理的外部进程
+    _handleProcessStop(pluginId);
+
     final runtime = _runtimeByPluginId.remove(pluginId);
     if (runtime != null) {
       try {

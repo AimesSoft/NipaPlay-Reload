@@ -51,26 +51,29 @@ class NipaplayMainTabBar extends StatelessWidget
     );
   }
 
-  TabBar _buildTabBar(BuildContext context) {
+  Widget _buildTabBar(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return TabBar(
-      controller: controller,
-      isScrollable: true,
-      tabs: tabs,
-      labelColor: AppAccentColors.current,
-      unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
-      labelPadding: labelPadding,
-      tabAlignment: TabAlignment.start,
-      splashFactory: NoSplash.splashFactory,
-      overlayColor: WidgetStateProperty.all(Colors.transparent),
-      dividerColor: showDivider ? dividerColor : Colors.transparent,
-      dividerHeight: 3.0,
-      indicator: NipaplayMainTabIndicator(
-        indicatorHeight: 3.0,
-        indicatorColor: AppAccentColors.current,
-        radius: 30.0,
+    return Material(
+      type: MaterialType.transparency,
+      child: TabBar(
+        controller: controller,
+        isScrollable: true,
+        tabs: tabs,
+        labelColor: AppAccentColors.current,
+        unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
+        labelPadding: labelPadding,
+        tabAlignment: TabAlignment.start,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        dividerColor: showDivider ? dividerColor : Colors.transparent,
+        dividerHeight: 3.0,
+        indicator: NipaplayMainTabIndicator(
+          indicatorHeight: 3.0,
+          indicatorColor: AppAccentColors.current,
+          radius: 30.0,
+        ),
+        indicatorSize: TabBarIndicatorSize.label,
       ),
-      indicatorSize: TabBarIndicatorSize.label,
     );
   }
 }

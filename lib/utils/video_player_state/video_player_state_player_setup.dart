@@ -68,9 +68,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('VideoPlayerState: 没有 historyItem，重置弹幕 ID');
     }
 
-    // 检查是否为网络URL (HTTP或HTTPS)
+    // 检查是否为网络URL (HTTP或HTTPS) 或新格式远程路径
     bool isNetworkUrl =
         videoPath.startsWith('http://') || videoPath.startsWith('https://');
+    bool isNewRemotePath = MediaSourceUtils.isNewWebDavPath(videoPath) ||
+        MediaSourceUtils.isNewSmbPath(videoPath);
     final bool isAndroidContentUri = !kIsWeb &&
         Platform.isAndroid &&
         MediaSourceUtils.isContentUri(videoPath);
@@ -83,6 +85,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
     bool fileExists = isNetworkUrl ||
+        isNewRemotePath ||
         isJellyfinStream ||
         isEmbyStream ||
         isAndroidContentUri ||
@@ -92,6 +95,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
       _statusMessages.add('正在准备流媒体播放...');
+      _notifyListeners();
+    } else if (isNewRemotePath) {
+      debugPrint('检测到远程媒体库路径: $videoPath');
+      _statusMessages.add('正在准备远程媒体播放...');
       _notifyListeners();
     } else if (isJellyfinStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
@@ -107,7 +114,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _notifyListeners();
     }
 
-    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (!kIsWeb && !isNetworkUrl && !isNewRemotePath && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
       if (isAndroidContentUri) {
         // Erika resolves SAF sources through Android's ContentResolver and
@@ -158,7 +165,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('检测到网络URL或流媒体: $videoPath');
     }
 
-    if (kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (kIsWeb && !isNetworkUrl && !isNewRemotePath && !isJellyfinStream && !isEmbyStream) {
       final filePickerService = FilePickerService();
       if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
         if (videoPath.startsWith('blob:')) {
@@ -237,6 +244,28 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
     }
 
+    // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL
+    if (isNewRemotePath && (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
+      try {
+        if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
+          resolvedActualPlayUrl = MediaSourceUtils.resolveWebDavPathToUrl(videoPath);
+        } else if (MediaSourceUtils.isNewSmbPath(videoPath)) {
+          resolvedActualPlayUrl = MediaSourceUtils.resolveSmbPathToUrl(videoPath);
+        }
+        if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
+          _setStatus(PlayerStatus.error, message: '无法解析远程媒体路径，请检查连接配置');
+          _error = '无法解析远程媒体路径';
+          return;
+        }
+        debugPrint('VideoPlayerState: 远程路径解析成功: $videoPath -> $resolvedActualPlayUrl');
+      } catch (e) {
+        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $e');
+        _setStatus(PlayerStatus.error, message: '解析远程媒体路径失败: $e');
+        _error = '解析远程媒体路径失败';
+        return;
+      }
+    }
+
     // 网络可达性由播放器判断，确保与实际播放共用 UA、代理和重定向策略。
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
@@ -267,6 +296,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // 检测本地 fonts 文件夹
     if (!kIsWeb &&
         !isNetworkUrl &&
+        !isNewRemotePath &&
         !isJellyfinStream &&
         !isEmbyStream &&
         !isAndroidContentUri) {
@@ -650,7 +680,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '← player.seek() does NOT update ptm/anchor fields');
         }
         // 先设置播放位置
-        player.seek(position: lastPosition);
+        // Erika's native seek crosses an asynchronous platform bridge and
+        // performs a frame-output barrier. Wait for that transition to finish
+        // before startup can issue play; otherwise a slow resume seek can race
+        // the first play command and leave the surface without a current frame
+        // until the user seeks again.
+        await player.seekAndWait(position: lastPosition);
         // ✅ Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
         // 导致 Ticker 首帧锚定到 playbackTimeMs=0 → 弹幕从头播放 + 回弹。
         // 手动更新所有锚点字段，与 seekTo() 保持一致。
@@ -660,8 +695,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _seekTargetMs = lastPosition.toDouble();
         _anchorSetBySeek = true;
         _lastRawPlayerMs = -1; // 保持 -1，让 Ticker 进入 seek 保护分支
-        // 等待一小段时间确保位置设置完成
-        await Future.delayed(const Duration(milliseconds: 100));
         // 更新状态
         _position = Duration(milliseconds: lastPosition);
         // duration 为 0 时避免除零产生 Infinity/NaN 落库
@@ -684,7 +717,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _position = Duration.zero;
         _progress = 0.0;
         _bufferedPositionMs = 0;
-        player.seek(position: 0);
+        // Erika has already opened at the beginning of the stream. Seeking to
+        // zero here needlessly tears down and recreates its hardware decoder
+        // (notably HarmonyOS AVCodec Surface output) before first playback.
+        if (player.getPlayerKernelName() != 'Erika') {
+          player.seek(position: 0);
+        }
       }
 
       // debugPrint('9. 检查播放器实际状态...');

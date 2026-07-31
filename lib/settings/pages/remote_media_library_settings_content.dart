@@ -1562,6 +1562,8 @@ class _RemoteMediaLibrarySettingsContentState
         return 'Linux';
       case TargetPlatform.fuchsia:
         return 'Fuchsia';
+      default:
+        return 'HarmonyOS';
     }
   }
 

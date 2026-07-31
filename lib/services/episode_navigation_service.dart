@@ -15,6 +15,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 /// 剧集导航结果
 class EpisodeNavigationResult {
 
@@ -1038,6 +1039,9 @@ class EpisodeNavigationService {
   }
 
   bool _isSmbProxyStreamUrl(String filePath) {
+    // 支持新格式: smb://connectionName/path
+    if (MediaSourceUtils.isNewSmbPath(filePath)) return true;
+    // 支持旧格式: http://127.0.0.1:33221/smb/stream?conn=...&path=...
     final uri = Uri.tryParse(filePath);
     if (uri == null) return false;
     if (uri.path != '/smb/stream') return false;
@@ -1046,6 +1050,13 @@ class EpisodeNavigationService {
   }
 
   ({String connName, String smbPath})? _parseSmbProxyStreamUrl(String filePath) {
+    // 支持新格式: smb://connectionName/path
+    if (MediaSourceUtils.isNewSmbPath(filePath)) {
+      final parsed = MediaSourceUtils.parseSmbPath(filePath);
+      if (parsed == null) return null;
+      return (connName: parsed.connectionName, smbPath: _normalizeSmbPath(parsed.relativePath));
+    }
+    // 支持旧格式: http://127.0.0.1:33221/smb/stream?conn=...&path=...
     final uri = Uri.tryParse(filePath);
     if (uri == null) return null;
     if (uri.path != '/smb/stream') return null;
@@ -1136,10 +1147,10 @@ class EpisodeNavigationService {
       }
 
       final nextFile = videoFiles[currentIndex + 1];
-      final nextUrl =
-          SMBProxyService.instance.buildStreamUrl(connection, nextFile.path);
+      final nextPath =
+          MediaSourceUtils.buildSmbPath(connection.name, nextFile.path);
       return EpisodeNavigationResult.success(
-        filePath: nextUrl,
+        filePath: nextPath,
         message: '从文件列表找到下一个视频：${nextFile.name}',
       );
     } catch (e) {
@@ -1193,10 +1204,10 @@ class EpisodeNavigationService {
       }
 
       final previousFile = videoFiles[currentIndex - 1];
-      final previousUrl = SMBProxyService.instance
-          .buildStreamUrl(connection, previousFile.path);
+      final previousPath =
+          MediaSourceUtils.buildSmbPath(connection.name, previousFile.path);
       return EpisodeNavigationResult.success(
-        filePath: previousUrl,
+        filePath: previousPath,
         message: '从文件列表找到上一个视频：${previousFile.name}',
       );
     } catch (e) {
@@ -1642,7 +1653,7 @@ class EpisodeNavigationService {
 
   /// 检查是否可以使用文件系统导航
   bool canUseFileSystemNavigation(String filePath) {
-    return !_isStreamingUrl(filePath) || _isSmbProxyStreamUrl(filePath);
+    return !_isStreamingUrl(filePath) || _isSmbProxyStreamUrl(filePath) || MediaSourceUtils.isNewSmbPath(filePath);
   }
 
   /// 检查是否可以使用流媒体简单导航（Jellyfin/Emby的adjacentTo API）

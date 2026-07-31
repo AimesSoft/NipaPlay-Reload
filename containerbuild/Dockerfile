@@ -19,8 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
 ENV PATH=/root/.cargo/bin:$PATH
 
-# Flutter SDK pinned to the version in .fvmrc
-ARG FLUTTER_VERSION=3.44.6
+# Linux uses a newer Flutter compositor than the shared mainline toolchain.
+# containerbuild/run.sh passes the value from .flutter-version-linux.
+ARG FLUTTER_VERSION=3.47.0-0.3.pre
 RUN git clone --depth 1 -b ${FLUTTER_VERSION} https://github.com/flutter/flutter /opt/flutter
 ENV PATH=/opt/flutter/bin:$PATH
 RUN git config --global --add safe.directory '*' \

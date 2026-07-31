@@ -1,9 +1,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
-import 'dart:io' show File, Platform;
-import 'package:flutter/foundation.dart';
+
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
+import 'package:nipaplay/utils/linux_nvidia_gpu.dart';
 
 /// 弹幕渲染引擎枚举
 enum DanmakuRenderEngine {
@@ -35,21 +36,11 @@ class DanmakuKernelFactory {
   /// Next++ 激进优化引擎开关
   static bool _enableNextPlusPlus = false;
 
-  // Linux + NVIDIA 上 Next2 的 Rust GL 纹理渲染会在驱动内段错误（#639），
-  // 默认回退到 NipaPlay Next；用户仍可在设置中手动选择 Next2。
-  static bool get _isLinuxNvidiaDriverLoaded {
-    if (kIsWeb || !Platform.isLinux) return false;
-    try {
-      return File('/proc/driver/nvidia/version').existsSync();
-    } catch (_) {
-      return false;
-    }
-  }
-
   static DanmakuRenderEngine get _defaultEngine =>
-      Next2PlatformSupport.isKernelSupported && !_isLinuxNvidiaDriverLoaded
-          ? DanmakuRenderEngine.next2
-          : DanmakuRenderEngine.nipaplayNext;
+      Next2PlatformSupport.isKernelSupported &&
+          !isLinuxNvidiaGraphicsStackActive()
+      ? DanmakuRenderEngine.next2
+      : DanmakuRenderEngine.nipaplayNext;
 
   static bool get isNextPlusPlusEnabled => _enableNextPlusPlus;
 
@@ -106,8 +97,9 @@ class DanmakuKernelFactory {
       if (engineIndex != null &&
           engineIndex >= 0 &&
           engineIndex < DanmakuRenderEngine.values.length) {
-        _cachedEngine =
-            _sanitizeEngine(DanmakuRenderEngine.values[engineIndex]);
+        _cachedEngine = _sanitizeEngine(
+          DanmakuRenderEngine.values[engineIndex],
+        );
       } else {
         _cachedEngine = _defaultEngine;
       }
@@ -128,7 +120,10 @@ class DanmakuKernelFactory {
     try {
       final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(SettingsKeys.danmakuRenderEngine, sanitizedEngine.index);
+      await prefs.setInt(
+        SettingsKeys.danmakuRenderEngine,
+        sanitizedEngine.index,
+      );
       final oldEngine = _cachedEngine;
       _cachedEngine = sanitizedEngine;
 

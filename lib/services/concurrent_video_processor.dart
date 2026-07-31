@@ -136,9 +136,21 @@ class ConcurrentVideoProcessor {
         if (animeIdFromMatch != null && episodeIdFromMatch != null) {
           WatchHistoryItem? existingItem =
               await WatchHistoryManager.getHistoryItem(videoPath);
+
+          // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+          // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景：
+          // 旧记录保留 animeId/episodeId 但 filePath 不同，此处迁移进度到新文件
+          WatchHistoryItem? migratedItem;
+          if (existingItem == null) {
+            migratedItem = await WatchHistoryManager.getHistoryItemByEpisode(
+              animeIdFromMatch,
+              episodeIdFromMatch,
+            );
+          }
+
           final int durationFromMatch = (videoInfo['duration'] is int)
               ? videoInfo['duration'] as int
-              : (existingItem?.duration ?? 0);
+              : (existingItem?.duration ?? migratedItem?.duration ?? 0);
 
           WatchHistoryItem itemToSave;
           if (existingItem != null) {
@@ -171,6 +183,23 @@ class ConcurrentVideoProcessor {
                   thumbnailPath: existingItem.thumbnailPath,
                   isFromScan: true);
             }
+          } else if (migratedItem != null) {
+            // 从旧文件路径迁移进度到新文件路径
+            itemToSave = WatchHistoryItem(
+                filePath: videoPath,
+                animeName: animeTitleFromMatch,
+                episodeTitle: episodeTitleFromMatch,
+                episodeId: episodeIdFromMatch,
+                animeId: animeIdFromMatch,
+                watchProgress: migratedItem.watchProgress,
+                lastPosition: migratedItem.lastPosition,
+                duration: durationFromMatch,
+                lastWatchTime: DateTime.now(),
+                thumbnailPath: migratedItem.thumbnailPath,
+                isFromScan: true);
+
+            // 删除旧路径的记录，避免同一 animeId+episodeId 出现重复条目
+            await WatchHistoryManager.removeHistoryItem(migratedItem.filePath);
           } else {
             // 新扫描项目
             itemToSave = WatchHistoryItem(

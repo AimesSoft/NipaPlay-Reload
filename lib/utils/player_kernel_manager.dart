@@ -214,6 +214,8 @@ class PlayerKernelManager {
     if (kIsWeb) {
       // Web平台只支持特定内核
       return ['Video Player'];
+    } else if (PlayerFactory.isHarmonyOS) {
+      return ['FVP', 'Erika'];
     } else if (Platform.isIOS) {
       // iOS平台支持的内核
       return ['FVP', 'Video Player', 'Erika'];

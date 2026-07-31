@@ -15,8 +15,17 @@ if [ -z "${RUNTIME}" ]; then
 fi
 
 IMAGE=nipaplay-linux-build
+LINUX_FLUTTER_VERSION="$(tr -d '[:space:]' < .flutter-version-linux)"
+if [ -z "${LINUX_FLUTTER_VERSION}" ]; then
+  echo ".flutter-version-linux is empty." >&2
+  exit 1
+fi
 
-"${RUNTIME}" build -t "${IMAGE}" -f containerbuild/Dockerfile containerbuild
+"${RUNTIME}" build \
+  --build-arg "FLUTTER_VERSION=${LINUX_FLUTTER_VERSION}" \
+  -t "${IMAGE}" \
+  -f containerbuild/Dockerfile \
+  containerbuild
 
 # Under rootless podman, root-in-container == host user, so ownership is fine.
 # Under docker, the container runs as real root: hand it the host uid/gid so the

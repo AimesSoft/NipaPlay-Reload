@@ -2709,7 +2709,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       context: context,
       title: '清理本地记录',
       content:
-          '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除所有匹配信息（含扫描与手动匹配），保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
+          '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除匹配显示信息（含扫描与手动匹配），保留观看进度。重新匹配同一番剧时可自动迁移进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
       actions: [
         HoverScaleTextButton(
           child: const Text('清除所有匹配信息', locale: Locale('zh-Hans', 'zh')),

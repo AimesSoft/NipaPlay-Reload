@@ -188,14 +188,13 @@ if(NOT MSVC AND NOT ANDROID)
             $<$<CONFIG:Release>:-mtune=generic>
         )
         set(_NP_CPP_ISA_INFO "x86-64-v3 (AVX2+FMA+BMI2+POPCNT)")
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+           CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
         # Linux aarch64 (Docker arm64 构建、Asahi Linux 等)
-        if(NOT APPLE AND NOT ANDROID)
-            target_compile_options(nipaplay_native PRIVATE
-                $<$<CONFIG:Release>:-march=armv8.2-a>
-            )
-            set(_NP_CPP_ISA_INFO "armv8.2-a (+LSE+FP16)")
-        endif()
+        target_compile_options(nipaplay_native PRIVATE
+            $<$<CONFIG:Release>:-march=armv8.2-a>
+        )
+        set(_NP_CPP_ISA_INFO "armv8.2-a (+LSE+FP16)")
     endif()
 
     # ──── 编译诊断输出（需 flutter build -v 才可见）────
@@ -207,7 +206,8 @@ if(NOT MSVC AND NOT ANDROID)
     # Rust 侧的 target-cpu 由 .cargo/config.toml 控制，此处显示期望值
     if(_NP_TARGET_X86_64)
         message(STATUS "  Rust (cargo):    x86-64-v3 (via .cargo/config.toml)")
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64" AND NOT APPLE AND NOT ANDROID)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+           CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
         message(STATUS "  Rust (cargo):    neoverse-n1 (via .cargo/config.toml)")
     elseif(APPLE)
         message(STATUS "  Rust (cargo):    Apple default (-arch arm64 / x86-64-v3 for Intel)")
@@ -241,15 +241,19 @@ if(MSVC)
 endif()
 
 # ──── 安全启用 LTO/IPO ────
-# CMake 自动匹配编译器 flag: MSVC → /GL+/LTCG, GCC/Clang → -flto
-include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error LANGUAGES CXX)
-if(ipo_supported)
-    set_target_properties(nipaplay_native PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
-    )
-else()
-    message(WARNING "IPO/LTO not supported: ${ipo_error}")
+# CMake 自动匹配编译器 flag: MSVC → /GL+/LTCG, GCC/Clang → -flto。
+# HarmonyOS 的 HMS toolchain wrapper 无法把 SDK 根路径传入 try_compile
+# 子工程，因此跳过 CheckIPOSupported；这不影响常规编译与链接。
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error LANGUAGES CXX)
+    if(ipo_supported)
+        set_target_properties(nipaplay_native PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+        )
+    else()
+        message(WARNING "IPO/LTO not supported: ${ipo_error}")
+    endif()
 endif()
 
 # Android: 使用 c++_shared STL（与 Flutter 引擎一致）

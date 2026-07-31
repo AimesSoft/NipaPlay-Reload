@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -326,13 +326,12 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     PluginService pluginService,
   ) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['js'],
+      final XFile? file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'JavaScript 插件', extensions: ['js']),
+        ],
       );
-      if (result == null ||
-          result.files.isEmpty ||
-          result.files.single.path == null) {
+      if (file == null) {
         if (!context.mounted) return;
         AdaptiveSnackBar.show(
           context,
@@ -342,7 +341,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
         return;
       }
 
-      final path = result.files.single.path!;
+      final path = file.path;
       final importedId = await pluginService.importPluginScript(
         sourceFilePath: path,
       );

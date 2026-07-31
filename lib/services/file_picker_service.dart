@@ -1,5 +1,4 @@
 import 'package:file_selector/file_selector.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:crypto/crypto.dart';
 
@@ -341,16 +340,20 @@ class FilePickerService {
 
   Future<String?> _pickVideoFileWeb() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
-        withData: true,
+      final XFile? file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: '视频文件',
+            extensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov', 'webm'],
+            mimeTypes: ['video/*'],
+          ),
+        ],
       );
-      if (result == null || result.files.isEmpty) {
+      if (file == null) {
         return null;
       }
-      final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
         return null;
       }
       final hashBytes = bytes.length > _webHashMaxBytes

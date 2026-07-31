@@ -1,9 +1,7 @@
 PODS:
   - adaptive_platform_ui (0.1.1):
     - Flutter
-  - charset_converter (0.0.1):
-    - Flutter
-  - erika_flutter (0.0.1):
+  - erika_flutter (0.1.3):
     - Flutter
   - Flutter (1.0.0)
   - flutter_js (0.1.0):
@@ -24,7 +22,6 @@ PODS:
 
 DEPENDENCIES:
   - adaptive_platform_ui (from `.symlinks/plugins/adaptive_platform_ui/ios`)
-  - charset_converter (from `.symlinks/plugins/charset_converter/ios`)
   - erika_flutter (from `.symlinks/plugins/erika_flutter/ios`)
   - Flutter (from `Flutter`)
   - flutter_js (from `.symlinks/plugins/flutter_js/ios`)
@@ -38,8 +35,6 @@ DEPENDENCIES:
 EXTERNAL SOURCES:
   adaptive_platform_ui:
     :path: ".symlinks/plugins/adaptive_platform_ui/ios"
-  charset_converter:
-    :path: ".symlinks/plugins/charset_converter/ios"
   erika_flutter:
     :path: ".symlinks/plugins/erika_flutter/ios"
   Flutter:
@@ -61,8 +56,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   adaptive_platform_ui: b3303b57b350e6b7d48f86eef86f044da7eda88f
-  charset_converter: 82bc1d2e3c70dcb51bf769e9772e3ae5b2571695
-  erika_flutter: d06851b1ab2694767b0f479fba59c77442397389
+  erika_flutter: b6950cd47c690ead2a1dcc96fefbbd43c6427f32
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_js: 867813c1830e1d9b2c5d547cdb6f61801e2f2145
   fvp: ed100b827d10aff53789fb9cb9dfdd85a87d037d

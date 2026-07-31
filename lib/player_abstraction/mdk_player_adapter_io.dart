@@ -208,7 +208,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   void _attachMdkEventListeners() {
     try {
-      _mdkPlayer.onEvent((e) {
+      void handleEvent(mdk.MediaEvent e) {
         switch (e.category) {
           case 'decoder.video':
             _activeVideoDecoder = e.detail;
@@ -217,7 +217,18 @@ class MdkPlayerAdapter implements AbstractPlayer {
             _activeAudioDecoder = e.detail;
             break;
         }
-      });
+      }
+
+      // FVP 0.33 exposes onEvent as a callback registrar, while 0.37 exposes
+      // it as a Stream. Keep both forms working so the shared dependency graph
+      // can stay on the mainline version and HarmonyOS can use its newer fork.
+      final dynamic eventSource = _mdkPlayer.onEvent;
+      if (eventSource is Stream<mdk.MediaEvent>) {
+        eventSource.listen(handleEvent);
+      } else {
+        (eventSource as void Function(void Function(mdk.MediaEvent)))
+            .call(handleEvent);
+      }
     } catch (e) {
       debugPrint('MDK: 注册事件监听失败: $e');
     }
@@ -255,7 +266,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   void _configureSubtitleFonts() {
     if (!(defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS)) {
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform.name == 'ohos')) {
       return;
     }
 
