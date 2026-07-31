@@ -11,6 +11,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:provider/provider.dart';
 
@@ -26,6 +27,9 @@ class DesktopPlayerWindow extends StatelessWidget {
     final themeMode = context.watch<ThemeNotifier>().themeMode;
     final locale = context.watch<AppLanguageProvider>().locale;
     final windowController = DesktopMultiWindow.controllerOf(context);
+    final usesWindowHostedVideoSurface = context.select<VideoPlayerState, bool>(
+      (videoState) => videoState.player.usesWindowOverlayVideoSurface,
+    );
 
     return MaterialApp(
       title: 'NipaPlay 独立播放器',
@@ -57,7 +61,12 @@ class DesktopPlayerWindow extends StatelessWidget {
           return DesktopPictureInPictureScope(
             enabled: isPictureInPicture,
             child: ColoredBox(
-              color: Colors.black,
+              // Erika and the desktop HDR path render into a native surface
+              // hosted below Flutter. Keep this view transparent so the
+              // surface remains visible while Flutter controls stay above it.
+              color: usesWindowHostedVideoSurface
+                  ? Colors.transparent
+                  : Colors.black,
               child: Stack(
                 fit: StackFit.expand,
                 children: [

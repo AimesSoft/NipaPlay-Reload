@@ -160,6 +160,12 @@ void main() {
           File('windows/runner/windows_native_video.cpp').readAsStringSync();
       final nativeSurfaceSource =
           File('lib/widgets/macos_native_video_view.dart').readAsStringSync();
+      final videoPlayerUiSource = File(
+        'lib/themes/nipaplay/widgets/video_player_ui.dart',
+      ).readAsStringSync();
+      final erikaSurfaceSource = File(
+        'lib/player_abstraction/erika_player_adapter.dart',
+      ).readAsStringSync();
       final playerPageSource =
           File('lib/pages/play_video_page.dart').readAsStringSync();
       final detachedPlayerSource =
@@ -232,6 +238,11 @@ void main() {
       expect(playerPageSource, contains('Icons.push_pin_rounded'));
       expect(detachedPlayerSource, contains('_DetachedWindowDragRegion'));
       expect(detachedPlayerSource, contains('controller.startDragging()'));
+      expect(
+        detachedPlayerSource,
+        contains('usesWindowHostedVideoSurface'),
+      );
+      expect(detachedPlayerSource, contains('Colors.transparent'));
       expect(mainPlayerSlotSource, contains('VideoUploadUI('));
       expect(mainPlayerSlotSource, isNot(contains('FilledButton')));
       expect(tooltipSource, contains('createTooltipWindow'));
@@ -245,8 +256,32 @@ void main() {
       expect(contextMenuSource, contains('DesktopTransientOverlay.showPopup'));
       expect(windowsVideoSource, contains('flutterViewId'));
       expect(windowsVideoSource, contains('FLUTTER_HOST_WINDOW'));
-      expect(nativeSurfaceSource,
-          contains("'flutterViewId': View.of(context).viewId"));
+      expect(
+        nativeSurfaceSource,
+        contains("'flutterViewId': flutterViewId"),
+      );
+      expect(
+        nativeSurfaceSource,
+        contains('flutterViewId ?? -1'),
+      );
+      expect(
+        videoPlayerUiSource,
+        contains('DesktopMultiWindow.isSecondaryWindow(context)'),
+      );
+      expect(
+        videoPlayerUiSource,
+        contains('isDetachedView ? null : rect'),
+      );
+      expect(
+        serviceSource,
+        contains('_clearWindowHostedVideoCutout();'),
+      );
+      expect(
+        erikaSurfaceSource,
+        contains('DesktopMultiWindow.isSecondaryWindow(context)'),
+      );
+      expect(erikaSurfaceSource, contains('flutterViewId: flutterViewId'));
+      expect(erikaSurfaceSource, contains('secondaryWindow: secondaryWindow'));
       expect(
           File('lib/pages/desktop_pip_window_app.dart').existsSync(), isFalse);
     });

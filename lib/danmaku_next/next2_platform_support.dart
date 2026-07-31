@@ -17,6 +17,10 @@ class Next2PlatformSupport {
         return true;
       case TargetPlatform.fuchsia:
         return false;
+      default:
+        // HarmonyOS packages the Rust layout APIs, but Next2/DFM+ currently
+        // require the native texture renderer as well.
+        return false;
     }
   }
 
@@ -31,6 +35,10 @@ class Next2PlatformSupport {
       case TargetPlatform.linux:
         return true;
       case TargetPlatform.fuchsia:
+        return false;
+      default:
+        // HarmonyOS still needs a TextureRegistry + native surface bridge for
+        // the Rust/wgpu renderer.
         return false;
     }
   }

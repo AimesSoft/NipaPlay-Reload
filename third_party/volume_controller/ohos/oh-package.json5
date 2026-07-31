@@ -1,0 +1,12 @@
+{
+  "name": "volume_controller",
+  "version": "3.4.2+ohos.1",
+  "description": "A Flutter volume plugin for multiple platform to control system volume.",
+  "main": "Index.ets",
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter_ohos.har"
+  }
+}

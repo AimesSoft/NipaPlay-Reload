@@ -1,0 +1,52 @@
+name: fluent_ui
+description: Implements Microsoft's Windows User Interface in Flutter.
+version: 4.15.1
+homepage: https://bdlukaa.github.io/fluent_ui/#/
+repository: https://github.com/bdlukaa/fluent_ui
+issue_tracker: https://github.com/bdlukaa/fluent_ui/issues
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.32.0"
+
+topics:
+  - windows
+  - desktop
+  - ui
+  - widgets
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Used on date and time pickers
+  intl: '>=0.20.2 <= 1.0.0'
+
+  # Used on TabView
+  scroll_pos: '>=0.5.0 < 1.0.0'
+
+  # Used on icon generator
+  recase: ^4.1.0
+
+  # Used on NumberBox
+  math_expressions: ^3.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  intl_utils: ^2.8.11
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/AcrylicNoise.png
+  fonts:
+    - family: FluentIcons
+      fonts:
+        - asset: fonts/FluentIcons.ttf
+    - family: SegoeIcons
+      fonts:
+        - asset: fonts/SegoeIcons.ttf

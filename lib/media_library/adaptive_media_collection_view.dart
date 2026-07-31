@@ -531,7 +531,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final count = allHistory
         .where((item) =>
             item.animeId == animeId &&
-            mediaLibraryItemMatchesSource(item, source))
+            mediaLibraryItemMatchesSource(item, source, includeClearedMatchInfo: true))
         .length;
     return '共$count集';
   }
@@ -540,7 +540,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final episodes = allHistory
         .where((item) =>
             item.animeId == animeId &&
-            mediaLibraryItemMatchesSource(item, source))
+            mediaLibraryItemMatchesSource(item, source, includeClearedMatchInfo: true))
         .toList();
     final watchedIds = episodes
         .where((item) => item.watchProgress > 0.01 || item.lastPosition > 0)

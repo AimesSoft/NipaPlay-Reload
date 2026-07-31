@@ -51,7 +51,7 @@ jobs:
   build:
     name: Build iOS IPA
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 150
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-iOS
@@ -61,7 +61,8 @@ jobs:
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
-      ERIKA_PREBUILT: "1"
+      # The integration commit is newer than the v0.1.3 native bundle.
+      ERIKA_PREBUILT: "0"
     steps:
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -115,6 +116,29 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+
+      - name: Setup Rust for Erika
+        if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Install Erika iOS source-build dependencies
+        if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
+        shell: bash
+        run: brew install nasm meson ninja pkg-config
+
+      - name: Cache Erika iOS native dependencies
+        if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.pub-cache/git/Erika-*/third_party/cache
+            ~/.pub-cache/git/Erika-*/third_party/build
+            ~/.pub-cache/git/Erika-*/third_party/dist
+          key: ios-erika-native-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}-v1
 
       - name: Generate build info json
         shell: bash

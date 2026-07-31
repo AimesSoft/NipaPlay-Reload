@@ -81,6 +81,52 @@ class MediaFilenameParser {
     return name;
   }
 
+  /// 在常规标题提取结果上进一步去掉集数、分辨率、编码和字幕语言标签。
+  ///
+  /// 该关键词用于文件哈希匹配失败后的动画搜索。调用方仍应保留
+  /// [extractAnimeTitleKeyword] 作为更保守的候选，避免数字属于作品名时丢失信息。
+  static String extractAnimeSearchKeyword(
+    String pathOrName, {
+    int? episodeNumber,
+  }) {
+    final title = extractAnimeTitleKeyword(pathOrName);
+    if (title.isEmpty) return '';
+
+    final technicalToken = RegExp(
+      r'^(?:'
+      r'\d{3,4}p|[248]k|'
+      r'x26[45]|h26[45]|hevc|avc|av1|'
+      r'aac|flac|opus|ac3|eac3|dts|'
+      r'web-?dl|webrip|bluray|bdrip|brrip|hdtv|'
+      r'hdr10\+?|hdr|dolby|vision|dv|'
+      r'jptc|jpchs|jpcht|chs|cht|gb|big5|'
+      r'mp4|mkv'
+      r')$',
+      caseSensitive: false,
+    );
+    var removedEpisode = false;
+    final kept = <String>[];
+
+    for (final token in title.split(RegExp(r'\s+'))) {
+      final normalized =
+          token.replaceAll(RegExp(r'^[\[\]【】()（）{}]+|[\[\]【】()（）{}]+$'), '');
+      if (normalized.isEmpty || technicalToken.hasMatch(normalized)) {
+        continue;
+      }
+
+      if (!removedEpisode && episodeNumber != null) {
+        final numericToken = int.tryParse(normalized);
+        if (numericToken == episodeNumber) {
+          removedEpisode = true;
+          continue;
+        }
+      }
+      kept.add(normalized);
+    }
+
+    return kept.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   static String _stripLeadingGroupTags(String name) {
     var result = name.trimLeft();
     while (true) {

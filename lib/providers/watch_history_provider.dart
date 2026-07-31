@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {

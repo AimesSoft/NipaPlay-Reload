@@ -26,6 +26,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
@@ -3120,12 +3121,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   ) {
     return switch (location.type) {
       _MountedLibraryType.local => entry.path,
-      _MountedLibraryType.webdav => WebDAVService.instance.getFileUrl(
-          location.webdavConnection!,
+      _MountedLibraryType.webdav => MediaSourceUtils.buildWebDavPath(
+          location.webdavConnection!.name,
           entry.path,
         ),
-      _MountedLibraryType.smb => SMBProxyService.instance.buildStreamUrl(
-          location.smbConnection!,
+      _MountedLibraryType.smb => MediaSourceUtils.buildSmbPath(
+          location.smbConnection!.name,
           entry.path,
         ),
     };
@@ -3215,8 +3216,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           recursive: recursive,
         );
         return files
-            .map((file) => WebDAVService.instance.getFileUrl(
-                  location.webdavConnection!,
+            .map((file) => MediaSourceUtils.buildWebDavPath(
+                  location.webdavConnection!.name,
                   file.path,
                 ))
             .toList();
@@ -3226,8 +3227,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           recursive: recursive,
         );
         return files
-            .map((file) => SMBProxyService.instance.buildStreamUrl(
-                  location.smbConnection!,
+            .map((file) => MediaSourceUtils.buildSmbPath(
+                  location.smbConnection!.name,
                   file.path,
                 ))
             .toList();
@@ -4329,26 +4330,52 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       try {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(filePath);
+
+        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景
+        WatchHistoryItem? migratedHistory;
+        if (existingHistory == null && animeId > 0 && episodeId > 0) {
+          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+            animeId,
+            episodeId,
+          );
+        }
+
+        final sourceForProgress = existingHistory ?? migratedHistory;
+        final preserveProgress = sourceForProgress != null &&
+            sourceForProgress.watchProgress > 0.01 &&
+            !sourceForProgress.isFromScan;
+
         final updatedHistory = WatchHistoryItem(
           filePath: filePath,
           animeName: animeTitle.isNotEmpty
               ? animeTitle
-              : (existingHistory?.animeName ??
+              : (sourceForProgress?.animeName ??
                   p.basenameWithoutExtension(fileName)),
           episodeTitle: episodeTitle.isNotEmpty
               ? episodeTitle
-              : existingHistory?.episodeTitle,
+              : sourceForProgress?.episodeTitle,
           episodeId: episodeId,
           animeId: animeId,
-          watchProgress: existingHistory?.watchProgress ?? 0.0,
-          lastPosition: existingHistory?.lastPosition ?? 0,
-          duration: existingHistory?.duration ?? 0,
+          watchProgress: preserveProgress
+              ? sourceForProgress.watchProgress
+              : (sourceForProgress?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? sourceForProgress.lastPosition
+              : (sourceForProgress?.lastPosition ?? 0),
+          duration: sourceForProgress?.duration ?? 0,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory?.thumbnailPath,
-          isFromScan: existingHistory?.isFromScan ?? false,
-          videoHash: existingHistory?.videoHash,
+          thumbnailPath: sourceForProgress?.thumbnailPath,
+          isFromScan: sourceForProgress?.isFromScan ?? false,
+          videoHash: sourceForProgress?.videoHash,
         );
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+
+        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        if (migratedHistory != null && migratedHistory.filePath != filePath) {
+          await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
+        }
+
         successCount++;
       } catch (e) {
         debugPrint('批量更新匹配失败: $filePath -> $episodeId ($e)');
@@ -4483,10 +4510,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     required Color subtitleColor,
     required Color iconColor,
   }) {
-    // SMB 文件以代理流 URL 作为唯一标识（与 _playSMBFile 写入历史记录时一致），
+    // SMB 文件以连接名称路径作为唯一标识（与 _playSMBFile 写入历史记录时一致），
     // 这样后续手动/批量匹配写入的 WatchHistoryItem 才能被播放路径命中。
     final fileUrls = videoFiles
-        .map((f) => SMBProxyService.instance.buildStreamUrl(connection, f.path))
+        .map((f) => MediaSourceUtils.buildSmbPath(connection.name, f.path))
         .toList();
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
@@ -4692,7 +4719,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: '移除扫描结果',
       content:
-          '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
+          '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称和集数标题，但保留观看进度。重新匹配同一番剧时可自动迁移进度。',
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text('取消',
@@ -4719,8 +4746,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           filePath: filePath,
           animeName: p.basenameWithoutExtension(fileName), // 恢复为文件名
           episodeTitle: null, // 清除集数标题
-          episodeId: null, // 清除集数ID
-          animeId: null, // 清除动画ID
+          episodeId: historyItem.episodeId, // 保留集数ID，用于重新匹配时迁移进度
+          animeId: historyItem.animeId, // 保留动画ID，用于重新匹配时迁移进度
           watchProgress: historyItem.watchProgress, // 保留观看进度
           lastPosition: historyItem.lastPosition, // 保留观看位置
           duration: historyItem.duration, // 保留时长
@@ -5622,13 +5649,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
       } else {
         final canPlay = SMBService.instance.isVideoFile(file.name);
-        final fileUrl = canPlay
-            ? SMBProxyService.instance.buildStreamUrl(connection, file.path)
+        final filePath = canPlay
+            ? MediaSourceUtils.buildSmbPath(connection.name, file.path)
             : null;
         return FutureBuilder<WatchHistoryItem?>(
-          future: fileUrl == null
+          future: filePath == null
               ? Future<WatchHistoryItem?>.value(null)
-              : WatchHistoryManager.getHistoryItem(fileUrl),
+              : WatchHistoryManager.getHistoryItem(filePath),
           builder: (context, snapshot) {
             final subtitleText = canPlay
                 ? _buildScanSubtitleText(
@@ -5669,14 +5696,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           color: iconColor,
                           tooltip: '自定义媒体信息',
                           onPressed: () async {
-                            // 构建SMB文件URL
-                            final fileUrl = SMBProxyService.instance
-                                .buildStreamUrl(connection, file.path);
                             // 显示自定义媒体信息对话框
                             await CustomMediaInfoDialog.show(
                               context,
                               p.dirname(file.path),
-                              initialVideoPath: fileUrl,
+                              initialVideoPath: filePath,
                             );
                           },
                         ),
@@ -5686,7 +5710,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           color: iconColor,
                           tooltip: '手动匹配弹幕',
                           onPressed: () => _showManualDanmakuMatchDialog(
-                            fileUrl!,
+                            filePath!,
                             file.name,
                             snapshot.data,
                             onSuccessRefresh: () => setState(() {}),
@@ -5782,6 +5806,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(candidate.filePath);
+
+        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        WatchHistoryItem? migratedHistory;
+        if (existingHistory == null && animeId > 0 && episodeId > 0) {
+          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+            animeId,
+            episodeId,
+          );
+        }
+
+        final sourceForProgress = existingHistory ?? migratedHistory;
         final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
         final rawEpisodeTitle =
             videoInfo['episodeTitle'] ?? match['episodeTitle'];
@@ -5791,37 +5826,43 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final hashString = rawHash?.toString();
         final durationFromMatch = (videoInfo['duration'] is int)
             ? videoInfo['duration'] as int
-            : (existingHistory?.duration ?? 0);
-        final preserveProgress = existingHistory != null &&
-            existingHistory.watchProgress > 0.01 &&
-            !existingHistory.isFromScan;
+            : (sourceForProgress?.duration ?? 0);
+        final preserveProgress = sourceForProgress != null &&
+            sourceForProgress.watchProgress > 0.01 &&
+            !sourceForProgress.isFromScan;
 
         final historyItem = WatchHistoryItem(
           filePath: candidate.filePath,
           animeName: animeTitle?.isNotEmpty == true
               ? animeTitle!
-              : (existingHistory?.animeName ??
+              : (sourceForProgress?.animeName ??
                   p.basenameWithoutExtension(candidate.fileName)),
           episodeTitle: episodeTitle?.isNotEmpty == true
               ? episodeTitle
-              : existingHistory?.episodeTitle,
+              : sourceForProgress?.episodeTitle,
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: preserveProgress
-              ? existingHistory.watchProgress
-              : (existingHistory?.watchProgress ?? 0.0),
+              ? sourceForProgress.watchProgress
+              : (sourceForProgress?.watchProgress ?? 0.0),
           lastPosition: preserveProgress
-              ? existingHistory.lastPosition
-              : (existingHistory?.lastPosition ?? 0),
+              ? sourceForProgress.lastPosition
+              : (sourceForProgress?.lastPosition ?? 0),
           duration: durationFromMatch,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory?.thumbnailPath,
+          thumbnailPath: sourceForProgress?.thumbnailPath,
           isFromScan: !preserveProgress,
           videoHash: hashString?.isNotEmpty == true
               ? hashString
-              : existingHistory?.videoHash,
+              : sourceForProgress?.videoHash,
         );
         await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        if (migratedHistory != null && migratedHistory.filePath != candidate.filePath) {
+          await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
+        }
+
         matched++;
       } catch (e) {
         failed++;
@@ -6011,9 +6052,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 播放WebDAV文件
   void _playWebDAVFile(WebDAVConnection connection, WebDAVFile file) {
-    final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
     final historyItem = WatchHistoryItem(
-      filePath: fileUrl,
+      filePath: MediaSourceUtils.buildWebDavPath(connection.name, file.path),
       animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''), // 移除扩展名
       episodeTitle: '',
       duration: 0,
@@ -6219,10 +6259,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   void _playSMBFile(SMBConnection connection, SMBFileEntry file) {
-    final fileUrl =
-        SMBProxyService.instance.buildStreamUrl(connection, file.path);
     final historyItem = WatchHistoryItem(
-      filePath: fileUrl,
+      filePath: MediaSourceUtils.buildSmbPath(connection.name, file.path),
       animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: '',
       duration: 0,

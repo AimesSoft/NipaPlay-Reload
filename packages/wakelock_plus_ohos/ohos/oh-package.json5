@@ -1,0 +1,10 @@
+{
+  "name": "wakelock_plus_ohos",
+  "version": "1.0.1",
+  "description": "HarmonyOS wakelock implementation for NipaPlay.",
+  "main": "index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har"
+  }
+}

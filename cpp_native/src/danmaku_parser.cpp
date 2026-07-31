@@ -443,13 +443,14 @@ static std::string standardizeType(const rapidjson::Value& obj) {
     return "scroll";
 }
 
-// 标准化的 8 个字段名（不透传到输出）— C++20 constexpr array + ranges
+// 标准化的 8 个字段名（不透传到输出）
 static constexpr std::array<std::string_view, 8> kStandardFields = {
     "t", "c", "y", "r", "time", "content", "type", "color"
 };
 
 static bool isStandardField(std::string_view key) noexcept {
-    return std::ranges::find(kStandardFields, key) != kStandardFields.end();
+    return std::find(kStandardFields.begin(), kStandardFields.end(), key) !=
+           kStandardFields.end();
 }
 
 // 辅助：将 rapidjson Value 写入 Writer（递归）

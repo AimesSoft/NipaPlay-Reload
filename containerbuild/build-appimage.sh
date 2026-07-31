@@ -19,6 +19,26 @@ ICON_NAME="io.github.MCDFsteve.NipaPlay-Reload.png"
 # libmdk is fetched by the vendored fvp's cmake (third_party/fvp/cmake/deps.cmake)
 export FVP_DEPS_URL="${FVP_DEPS_URL:-https://github.com/wang-bin/mdk-sdk/releases/latest/download}"
 
+# The Linux 3.47 dependency graph has different SDK-pinned packages from the
+# shared Flutter 3.44 graph. Preserve the developer's mainline dependency files
+# while the bind-mounted checkout is configured for this container build.
+DEPENDENCY_STATE_DIR="$(mktemp -d)"
+cp pubspec.lock "${DEPENDENCY_STATE_DIR}/pubspec.lock"
+HAD_PUBSPEC_OVERRIDES=0
+if [ -f pubspec_overrides.yaml ]; then
+  HAD_PUBSPEC_OVERRIDES=1
+  cp pubspec_overrides.yaml "${DEPENDENCY_STATE_DIR}/pubspec_overrides.yaml"
+fi
+
+restore_dependency_files() {
+  cp "${DEPENDENCY_STATE_DIR}/pubspec.lock" pubspec.lock
+  if [ "${HAD_PUBSPEC_OVERRIDES}" = "1" ]; then
+    cp "${DEPENDENCY_STATE_DIR}/pubspec_overrides.yaml" pubspec_overrides.yaml
+  else
+    rm -f pubspec_overrides.yaml
+  fi
+}
+
 # Docker runs us as real root on a bind mount; give files back to the host user
 # even when the build fails partway.
 fixup_ownership() {
@@ -26,9 +46,18 @@ fixup_ownership() {
     chown -R "${HOST_UID}:${HOST_GID:-${HOST_UID}}" /work || true
   fi
 }
-trap fixup_ownership EXIT
+
+cleanup() {
+  restore_dependency_files
+  fixup_ownership
+  rm -rf "${DEPENDENCY_STATE_DIR}"
+}
+trap cleanup EXIT
 
 git config --global --add safe.directory '*'
+
+echo "--- configure Linux Flutter 3.47 dependencies ---"
+dart run tool/configure_flutter_dependencies.dart linux
 
 echo "--- flutter pub get ---"
 flutter pub get

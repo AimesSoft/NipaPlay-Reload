@@ -84,6 +84,9 @@ class PlaybackSourceService {
       if (_isSmbProxyStreamUrl(path)) {
         return await _resolveSmb(item);
       }
+      if (MediaSourceUtils.isNewSmbPath(path)) {
+        return await _resolveSmb(item);
+      }
       if (MediaSourceUtils.isWebDavPath(path)) {
         return await _resolveWebDav(item);
       }
@@ -151,7 +154,9 @@ class PlaybackSourceService {
     }
     if (path.startsWith('jellyfin://')) return PlaybackSourceKind.jellyfin;
     if (path.startsWith('emby://')) return PlaybackSourceKind.emby;
-    if (_isSmbProxyStreamUrl(path)) return PlaybackSourceKind.smb;
+    if (MediaSourceUtils.isNewSmbPath(path) || _isSmbProxyStreamUrl(path)) {
+      return PlaybackSourceKind.smb;
+    }
     if (MediaSourceUtils.isWebDavPath(path)) return PlaybackSourceKind.webDav;
     if (_isNetworkPath(path)) return PlaybackSourceKind.networkStream;
     return animeId != null && animeId > 0
@@ -570,8 +575,21 @@ class PlaybackSourceService {
     PlayableItem item,
   ) async {
     await WebDAVService.instance.initialize();
-    final resolved = WebDAVService.instance.resolveFileUrl(item.videoPath);
-    if (resolved == null) throw Exception('无法识别 WebDAV 连接');
+    final path = item.videoPath;
+
+    WebDAVResolvedFile resolved;
+    if (MediaSourceUtils.isNewWebDavPath(path)) {
+      // 新格式: webdav://connectionName/path
+      final byName = WebDAVService.instance.resolveConnectionByNamePath(path);
+      if (byName == null) throw Exception('无法识别 WebDAV 连接: $path');
+      resolved = byName;
+    } else {
+      // 旧格式: http://user:pass@host:port/path
+      final byUrl = WebDAVService.instance.resolveFileUrl(path);
+      if (byUrl == null) throw Exception('无法识别 WebDAV 连接');
+      resolved = byUrl;
+    }
+
     final animeId = item.animeId ?? item.historyItem?.animeId;
 
     return PlaybackDetailContext(
@@ -645,15 +663,26 @@ class PlaybackSourceService {
   }
 
   static Future<PlaybackDetailContext> _resolveSmb(PlayableItem item) async {
-    final uri = Uri.parse(item.videoPath);
-    final connectionName = uri.queryParameters['conn']?.trim();
-    final smbPath = uri.queryParameters['path']?.trim();
-    if (connectionName == null ||
-        connectionName.isEmpty ||
-        smbPath == null ||
-        smbPath.isEmpty) {
-      throw Exception('SMB 地址缺少必要参数');
+    final path = item.videoPath;
+    String connectionName;
+    String smbPath;
+
+    if (MediaSourceUtils.isNewSmbPath(path)) {
+      // 新格式: smb://connectionName/path
+      final parsed = MediaSourceUtils.parseSmbPath(path);
+      if (parsed == null) throw Exception('SMB 地址格式无效');
+      connectionName = parsed.connectionName;
+      smbPath = parsed.relativePath;
+    } else {
+      // 旧格式: http://127.0.0.1:33221/smb/stream?conn=...&path=...
+      final uri = Uri.parse(path);
+      connectionName = uri.queryParameters['conn']?.trim() ?? '';
+      smbPath = uri.queryParameters['path']?.trim() ?? '';
+      if (connectionName.isEmpty || smbPath.isEmpty) {
+        throw Exception('SMB 地址缺少必要参数');
+      }
     }
+
     await SMBService.instance.initialize();
     await SMBProxyService.instance.initialize();
     final connection = _findSmbConnection(connectionName);
@@ -919,10 +948,18 @@ class PlaybackSourceService {
         final remotePath = uri?.queryParameters['path'];
         return 'shared-directory:${uri?.host}:${p.posix.dirname(remotePath ?? uri?.path ?? path)}';
       case PlaybackSourceKind.smb:
+        if (MediaSourceUtils.isNewSmbPath(path)) {
+          final parsed = MediaSourceUtils.parseSmbPath(path);
+          return 'smb:${parsed?.connectionName}:${_smbParent(parsed?.relativePath ?? '')}';
+        }
         return 'smb:${uri?.queryParameters['conn']}:${_smbParent(uri?.queryParameters['path'] ?? '')}';
       case PlaybackSourceKind.dandanplayRemote:
         return 'dandanplay:${uri?.host}';
       case PlaybackSourceKind.webDav:
+        if (MediaSourceUtils.isNewWebDavPath(path)) {
+          final parsed = MediaSourceUtils.parseWebDavPath(path);
+          return 'webdav:${parsed?.connectionName}:${p.posix.dirname(parsed?.relativePath ?? '')}';
+        }
         return 'webdav:${uri?.host}:${p.posix.dirname(uri?.path ?? path)}';
       case PlaybackSourceKind.jellyfin:
         return 'jellyfin';

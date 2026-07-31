@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -342,7 +343,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       animeName:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
-      filePath: videoUrl,
+      filePath: MediaSourceUtils.buildWebDavPath(_currentConnection!.name, file.path),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -2030,7 +2031,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final historyItem = WatchHistoryItem(
       animeName: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: result.file.name,
-      filePath: videoUrl,
+      filePath: MediaSourceUtils.buildWebDavPath(_currentConnection!.name, result.file.path),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
