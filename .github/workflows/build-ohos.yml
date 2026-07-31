@@ -1,0 +1,357 @@
+name: Build HarmonyOS
+
+# This workflow is intentionally manual/reusable. Fork pull requests do not
+# receive repository signing secrets, and untrusted code must never be allowed
+# to read them. The workflow always builds an unsigned HAP first, then signs a
+# copy only when sign_hap=true and all OHOS_SIGNING_* secrets are available.
+on:
+  workflow_dispatch:
+    inputs:
+      sign_hap:
+        description: 'Sign the HAP for device sideloading'
+        required: true
+        default: true
+        type: boolean
+  workflow_call:
+    inputs:
+      sign_hap:
+        description: 'Sign the HAP for device sideloading'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      OHOS_SIGNING_CERT_BASE64:
+        description: 'Base64 encoded HarmonyOS application certificate'
+        required: false
+      OHOS_SIGNING_PROFILE_BASE64:
+        description: 'Base64 encoded HarmonyOS debug or release profile'
+        required: false
+      OHOS_SIGNING_KEYSTORE_BASE64:
+        description: 'Base64 encoded HarmonyOS P12 keystore'
+        required: false
+      OHOS_SIGNING_KEY_ALIAS:
+        description: 'Alias of the signing key in the P12 keystore'
+        required: false
+      OHOS_SIGNING_KEYSTORE_PASSWORD:
+        description: 'Password of the P12 keystore'
+        required: false
+      OHOS_SIGNING_KEY_PASSWORD:
+        description: 'Password of the signing key'
+        required: false
+    outputs:
+      artifact-name:
+        description: 'Uploaded HarmonyOS artifact name'
+        value: ${{ jobs.build.outputs.artifact-name }}
+      version:
+        description: 'Application version from pubspec.yaml'
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ohos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # This is the OpenHarmony Flutter revision used for the device-tested
+  # 3.35.8-ohos-1.0.1 toolchain.
+  OHOS_FLUTTER_COMMIT: 6f4181db61f0db87339edca1fb0e5108c3740e11
+  OHOS_FLUTTER_REPOSITORY: https://atomgit.com/openharmony-tpc/flutter_flutter.git
+  OHOS_FLUTTER_ROOT: /opt/flutter-ohos
+  HARMONY_COMMANDLINE_ROOT: /opt/harmonyos-tools/command-line-tools
+  DEVECO_SDK_HOME: /opt/harmonyos-tools/command-line-tools/sdk
+  OHOS_BASE_SDK_HOME: /opt/harmonyos-tools/command-line-tools/sdk/default/openharmony
+  OHOS_SDK_NATIVE: /opt/harmonyos-tools/command-line-tools/sdk/default/openharmony/native
+  RUSTUP_TOOLCHAIN: 1.93.0
+  FVP_DEPS_LATEST: "0"
+
+jobs:
+  build:
+    name: Build HarmonyOS HAP (arm64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    outputs:
+      artifact-name: ${{ steps.artifact_meta.outputs.name }}
+      version: ${{ steps.project.outputs.version }}
+    # The image source is public at:
+    # https://github.com/sanchuanhehe/harmony-next-pipeline-docker
+    # GitHub-hosted runners do not include the HarmonyOS command-line SDK,
+    # Hvigor and ohpm. Keep the image digest pinned so a mutable tag cannot
+    # silently change the build environment.
+    container:
+      image: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image@sha256:2836142b7b6ae8837ad0e36cacc650f00e8c88f55b4e9f34be66cc98a731c5da
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Validate requested signing credentials
+        if: inputs.sign_hap
+        shell: bash
+        env:
+          SIGNING_CERT: ${{ secrets.OHOS_SIGNING_CERT_BASE64 }}
+          SIGNING_PROFILE: ${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}
+          SIGNING_KEYSTORE: ${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.OHOS_SIGNING_KEY_ALIAS }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.OHOS_SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.OHOS_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in \
+            SIGNING_CERT \
+            SIGNING_PROFILE \
+            SIGNING_KEYSTORE \
+            SIGNING_KEY_ALIAS \
+            SIGNING_KEYSTORE_PASSWORD \
+            SIGNING_KEY_PASSWORD
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing HarmonyOS signing secrets: ${missing[*]}"
+            echo "Configure the OHOS_SIGNING_* Actions secrets or run with sign_hap=false."
+            exit 1
+          fi
+
+      - name: Install host build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            ca-certificates \
+            cmake \
+            curl \
+            git \
+            make \
+            nasm \
+            ninja-build \
+            pkg-config \
+            unzip \
+            xz-utils \
+            zstd
+
+      - name: Restore OpenHarmony Flutter and Pub caches
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            /opt/flutter-ohos
+            ${{ github.workspace }}/.pub-cache
+            ~/.cargo/git
+            ~/.cargo/registry
+          key: ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-${{ hashFiles('pubspec.lock', 'pubspec_overrides.ohos.yaml', 'rust/Cargo.lock') }}-v1
+          restore-keys: |
+            ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-
+
+      - name: Setup OpenHarmony Flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$OHOS_FLUTTER_ROOT/.git" ]]; then
+            mkdir -p "$OHOS_FLUTTER_ROOT"
+            git -C "$OHOS_FLUTTER_ROOT" init
+            git -C "$OHOS_FLUTTER_ROOT" remote add origin "$OHOS_FLUTTER_REPOSITORY"
+          else
+            git -C "$OHOS_FLUTTER_ROOT" remote set-url origin "$OHOS_FLUTTER_REPOSITORY"
+          fi
+          git -C "$OHOS_FLUTTER_ROOT" fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"
+          git -C "$OHOS_FLUTTER_ROOT" checkout --detach --force FETCH_HEAD
+          test "$(git -C "$OHOS_FLUTTER_ROOT" rev-parse HEAD)" = "$OHOS_FLUTTER_COMMIT"
+
+          {
+            echo "$OHOS_FLUTTER_ROOT/bin"
+            echo "$HARMONY_COMMANDLINE_ROOT/bin"
+            echo "$HARMONY_COMMANDLINE_ROOT/tool/node/bin"
+          } >> "$GITHUB_PATH"
+          {
+            echo "FLUTTER_ROOT=$OHOS_FLUTTER_ROOT"
+            echo "PUB_CACHE=$GITHUB_WORKSPACE/.pub-cache"
+            echo "NODE_HOME=$HARMONY_COMMANDLINE_ROOT/tool/node"
+          } >> "$GITHUB_ENV"
+
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$OHOS_FLUTTER_ROOT"
+          "$OHOS_FLUTTER_ROOT/bin/flutter" config --no-analytics
+          "$OHOS_FLUTTER_ROOT/bin/flutter" precache --ohos
+          "$OHOS_FLUTTER_ROOT/bin/flutter" --version
+
+      - name: Setup Rust 1.93 for OpenHarmony
+        uses: dtolnay/rust-toolchain@d0befba8b9ddf874327619e84c39b094edd58b66 # 1.93.0
+        with:
+          toolchain: 1.93.0
+          targets: aarch64-unknown-linux-ohos
+
+      - name: Configure OpenHarmony dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter_dart="$OHOS_FLUTTER_ROOT/bin/dart"
+          flutter_bin="$OHOS_FLUTTER_ROOT/bin/flutter"
+          "$flutter_dart" run tool/configure_flutter_dependencies.dart ohos
+          "$flutter_bin" pub get
+          python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Read project version
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          if [[ -z "$version" ]]; then
+            echo "Unable to read version from pubspec.yaml."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned HarmonyOS HAP
+        id: build_hap
+        shell: bash
+        env:
+          VERSION: ${{ steps.project.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$OHOS_FLUTTER_ROOT/bin/flutter" build hap \
+            --release \
+            --no-pub \
+            --no-codesign \
+            --target-platform ohos-arm64
+
+          source_hap="ohos/entry/build/default/outputs/default/entry-default-unsigned.hap"
+          if [[ ! -s "$source_hap" ]]; then
+            echo "HarmonyOS build did not produce $source_hap."
+            find ohos/entry/build -type f -name '*.hap' -print || true
+            exit 1
+          fi
+
+          artifact_hap="dist/NipaPlay-${VERSION}-HarmonyOS-arm64-unsigned.hap"
+          cp "$source_hap" "$artifact_hap"
+          echo "path=$artifact_hap" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and verify HarmonyOS HAP
+        id: sign_hap
+        if: inputs.sign_hap
+        shell: bash
+        env:
+          VERSION: ${{ steps.project.outputs.version }}
+          SIGNING_CERT: ${{ secrets.OHOS_SIGNING_CERT_BASE64 }}
+          SIGNING_PROFILE: ${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}
+          SIGNING_KEYSTORE: ${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.OHOS_SIGNING_KEY_ALIAS }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.OHOS_SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.OHOS_SIGNING_KEY_PASSWORD }}
+          UNSIGNED_HAP: ${{ steps.build_hap.outputs.path }}
+        run: |
+          set -euo pipefail
+          umask 077
+          signing_dir="$RUNNER_TEMP/nipaplay-ohos-signing"
+          mkdir -p "$signing_dir"
+
+          printf '%s' "$SIGNING_CERT" | base64 --decode > "$signing_dir/application.cer"
+          printf '%s' "$SIGNING_PROFILE" | base64 --decode > "$signing_dir/profile.p7b"
+          printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > "$signing_dir/application.p12"
+
+          sign_tool="$OHOS_BASE_SDK_HOME/toolchains/lib/hap-sign-tool.jar"
+          if [[ ! -f "$sign_tool" ]]; then
+            echo "HarmonyOS hap-sign-tool.jar was not found at $sign_tool."
+            exit 1
+          fi
+
+          signed_hap="dist/NipaPlay-${VERSION}-HarmonyOS-arm64-signed.hap"
+          printf '%s\n%s\n' "$SIGNING_KEYSTORE_PASSWORD" "$SIGNING_KEY_PASSWORD" |
+            java -jar "$sign_tool" sign-app \
+              -mode localSign \
+              -keyAlias "$SIGNING_KEY_ALIAS" \
+              -appCertFile "$signing_dir/application.cer" \
+              -profileFile "$signing_dir/profile.p7b" \
+              -inFile "$UNSIGNED_HAP" \
+              -signAlg SHA256withECDSA \
+              -keystoreFile "$signing_dir/application.p12" \
+              -outFile "$signed_hap" \
+              -compatibleVersion 18 \
+              -signCode 1 \
+              -pwdInputMode 1
+
+          java -jar "$sign_tool" verify-app \
+            -inFile "$signed_hap" \
+            -outCertChain "$signing_dir/verified.cer" \
+            -outProfile "$signing_dir/verified.p7b"
+
+          test -s "$signed_hap"
+          echo "path=$signed_hap" >> "$GITHUB_OUTPUT"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate checksums
+        shell: bash
+        env:
+          UNSIGNED_HAP: ${{ steps.build_hap.outputs.path }}
+          SIGNED_HAP: ${{ steps.sign_hap.outputs.path }}
+        run: |
+          set -euo pipefail
+          sha256sum "$UNSIGNED_HAP" > dist/SHA256SUMS-unsigned
+          cat dist/SHA256SUMS-unsigned
+          if [[ -n "${SIGNED_HAP:-}" ]]; then
+            sha256sum "$SIGNED_HAP" > dist/SHA256SUMS-signed
+            cat dist/SHA256SUMS-signed
+          fi
+
+      - name: Select artifact name
+        id: artifact_meta
+        shell: bash
+        run: |
+          if [[ "${{ inputs.sign_hap }}" == "true" ]]; then
+            echo "name=release-HarmonyOS-signed" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=release-HarmonyOS-unsigned" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload unsigned HarmonyOS HAP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-HarmonyOS-unsigned
+          path: |
+            ${{ steps.build_hap.outputs.path }}
+            dist/SHA256SUMS-unsigned
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload sideloadable signed HarmonyOS HAP
+        if: inputs.sign_hap
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-HarmonyOS-signed
+          path: |
+            ${{ steps.sign_hap.outputs.path }}
+            dist/SHA256SUMS-signed
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing materials
+        if: always() && inputs.sign_hap
+        shell: bash
+        run: |
+          signing_dir="$RUNNER_TEMP/nipaplay-ohos-signing"
+          if [[ -d "$signing_dir" ]]; then
+            find "$signing_dir" -type f -delete
+            rmdir "$signing_dir"
+          fi
+
+      - name: Upload HarmonyOS build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: HarmonyOS-build-diagnostics
+          path: |
+            ohos/.hvigor/
+            ohos/entry/build/default/outputs/
+            ohos/entry/build/default/logs/
+          if-no-files-found: ignore
+          retention-days: 7

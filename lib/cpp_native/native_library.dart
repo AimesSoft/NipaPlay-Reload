@@ -21,6 +21,10 @@ class NativeLibrary {
       return DynamicLibrary.open('lib$_libName.so');
     }
 
+    if (Platform.operatingSystem == 'ohos') {
+      return DynamicLibrary.open('lib$_libName.so');
+    }
+
     // Windows: 在 exe 同目录查找
     if (Platform.isWindows) {
       final exeDir = p.dirname(Platform.resolvedExecutable);

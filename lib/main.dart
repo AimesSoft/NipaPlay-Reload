@@ -294,18 +294,23 @@ void main(List<String> args) async {
     }
   }
 
-  // 初始化MediaKit - 添加错误处理防止重复初始化
-  try {
-    MediaKit.ensureInitialized();
-  } catch (e) {
-    debugPrint('MediaKit初始化警告: $e');
-    // 如果是重复初始化错误，可以安全忽略
-    if (!e.toString().contains('invalid reuse after initialization failure')) {
-      rethrow;
+  // MediaKit/libmpv still has no HarmonyOS backend. FVP and Erika initialize
+  // independently and do not require MediaKit's native runtime.
+  if (!globals.isHarmonyOS) {
+    try {
+      MediaKit.ensureInitialized();
+    } catch (e) {
+      debugPrint('MediaKit初始化警告: $e');
+      // 如果是重复初始化错误，可以安全忽略
+      if (!e
+          .toString()
+          .contains('invalid reuse after initialization failure')) {
+        rethrow;
+      }
     }
-  }
-  if (MediaKitPlayerAdapter.shouldUseDefaultQuietMpvLogs()) {
-    MediaKitPlayerAdapter.setMpvLogLevelNone();
+    if (MediaKitPlayerAdapter.shouldUseDefaultQuietMpvLogs()) {
+      MediaKitPlayerAdapter.setMpvLogLevelNone();
+    }
   }
 
   // 添加全局异常捕获

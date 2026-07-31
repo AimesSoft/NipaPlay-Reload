@@ -17,7 +17,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class BackupRestorePage extends StatefulWidget {
@@ -83,8 +83,9 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   }
 
   Future<void> _selectAutoSyncPath() async {
-    final String? selectedDirectory =
-        await FilePicker.platform.getDirectoryPath();
+    final String? selectedDirectory = await getDirectoryPath(
+      confirmButtonText: '选择同步目录',
+    );
 
     if (selectedDirectory == null) {
       _showMessage('未选择同步路径');
@@ -190,8 +191,9 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     if (result == null || result.isEmpty) return;
 
     // 选择保存位置
-    final String? selectedDirectory =
-        await FilePicker.platform.getDirectoryPath();
+    final String? selectedDirectory = await getDirectoryPath(
+      confirmButtonText: '选择保存位置',
+    );
 
     if (selectedDirectory == null) {
       _showMessage('未选择保存位置');
@@ -234,17 +236,18 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
   Future<void> _showFullRestoreDialog() async {
     // 选择备份文件
-    final FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['npb'],
+    final XFile? file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'NipaPlay 完整备份', extensions: ['npb']),
+      ],
     );
 
-    if (result == null || result.files.single.path == null) {
+    if (file == null) {
       _showMessage('未选择文件');
       return;
     }
 
-    final filePath = result.files.single.path!;
+    final filePath = file.path;
 
     // 预览备份内容
     final backupService = FullBackupService();
@@ -348,8 +351,9 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     });
 
     try {
-      final String? selectedDirectory =
-          await FilePicker.platform.getDirectoryPath();
+      final String? selectedDirectory = await getDirectoryPath(
+        confirmButtonText: '选择保存位置',
+      );
 
       if (selectedDirectory == null) {
         _showMessage('未选择保存位置');
@@ -379,17 +383,18 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     });
 
     try {
-      final FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['nph'],
+      final XFile? file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'NipaPlay 历史备份', extensions: ['nph']),
+        ],
       );
 
-      if (result == null || result.files.single.path == null) {
+      if (file == null) {
         _showMessage('未选择文件');
         return;
       }
 
-      final filePath = result.files.single.path!;
+      final filePath = file.path;
 
       if (!mounted) return;
       final confirmed = await BlurDialog.show<bool>(

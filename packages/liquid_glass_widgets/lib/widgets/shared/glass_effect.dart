@@ -998,11 +998,7 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
     // 3. Set Sampler
     final imageToBind = _backgroundImage ?? GlassEffect._dummyImage;
     if (imageToBind != null) {
-      _shader.setImageSampler(
-        0,
-        imageToBind,
-        filterQuality: FilterQuality.medium,
-      );
+      _shader.setImageSampler(0, imageToBind);
     }
 
     // 4. Paint shader overlay — inflate the draw rect by the clip expansion budget.

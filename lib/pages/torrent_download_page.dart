@@ -132,7 +132,8 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       });
       unawaited(_loadScanSummariesForTasks(tasks));
       unawaited(_handleAutoScanCompletedTasks(tasks, silent: true));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('初始化种子下载失败: $e\n$stackTrace');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
