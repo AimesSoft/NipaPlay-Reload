@@ -5,6 +5,8 @@
 .dart-tool/
 .packages
 build/
+# Generated locally from pubspec_overrides.ohos.yaml when building HarmonyOS.
+/pubspec_overrides.yaml
 # If you're building an application, you may want to check-in your pubspec.lock
 # pubspec.lock
 
@@ -44,7 +46,6 @@ docs/error.txt
 .vscode/settings.json
 .idea/
 .claude/settings.local.json
-*.xcscheme
 /.tmp_home
 /.tmp_test_io.dart
 /packages/nipaplay_smb2/android/.cxx
@@ -52,6 +53,12 @@ docs/error.txt
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
 /rust/target
 /node_modules/
+**/oh_modules/
+# HarmonyOS signing materials are developer- and device-specific.
+/ohos/**/*.cer
+/ohos/**/*.csr
+/ohos/**/*.p12
+/ohos/**/*.p7b
 /data/
 /web-remote/.vite/deps/
 /image_response.json

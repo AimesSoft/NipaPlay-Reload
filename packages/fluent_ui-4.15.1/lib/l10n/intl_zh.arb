@@ -1,0 +1,754 @@
+{
+  "@@locale": "zh",
+  "backButtonTooltip": "返回",
+  "@backButtonTooltip": {
+    "description": "[NavigationAppBar]上返回按钮的工具提示。"
+  },
+  "closeButtonLabel": "关闭",
+  "@closeButtonLabel": {
+    "description": "关闭按钮和菜单项的标签。"
+  },
+  "searchLabel": "搜索",
+  "@searchLabel": {
+    "description": "搜索文本字段的标签。"
+  },
+  "closeNavigationTooltip": "关闭导航",
+  "@closeNavigationTooltip": {
+    "description": "切换导航按钮的工具提示。"
+  },
+  "openNavigationTooltip": "打开导航",
+  "@openNavigationTooltip": {
+    "description": "切换导航按钮的工具提示。"
+  },
+  "clickToSearch": "点击搜索",
+  "@clickToSearch": {
+    "description": "点击搜索按钮的工具提示。"
+  },
+  "modalBarrierDismissLabel": "取消",
+  "@modalBarrierDismissLabel": {
+    "description": "辅助工具（TalkBack或VoiceOver）为模态屏障读出的标签，指示点击可以取消屏障。例如，模态屏障可以在警报或弹出窗口后面找到，以阻止用户与后面的元素交互。"
+  },
+  "minimizeWindowTooltip": "最小化",
+  "@minimizeWindowTooltip": {
+    "description": "桌面窗口上最小化按钮使用的工具提示。"
+  },
+  "restoreWindowTooltip": "恢复",
+  "@restoreWindowTooltip": {
+    "description": "桌面窗口上恢复按钮使用的工具提示。"
+  },
+  "closeWindowTooltip": "关闭",
+  "@closeWindowTooltip": {
+    "description": "桌面窗口上关闭按钮使用的工具提示。"
+  },
+  "dialogLabel": "对话",
+  "@dialogLabel": {
+    "description": "对话框标签。"
+  },
+  "cutActionLabel": "剪切",
+  "@cutActionLabel": {
+    "description": "文本选择控件上剪切操作的标签。"
+  },
+  "copyActionLabel": "复制",
+  "@copyActionLabel": {
+    "description": "文本选择控件上复制操作的标签。"
+  },
+  "pasteActionLabel": "粘贴",
+  "@pasteActionLabel": {
+    "description": "文本选择控件上粘贴按钮的标签。"
+  },
+  "selectAllActionLabel": "全选",
+  "@selectAllActionLabel": {
+    "description": "文本选择控件上全选按钮的标签。"
+  },
+  "undoActionLabel": "撤销",
+  "@undoActionLabel": {
+    "description": "文本选择控件上撤销按钮的标签。"
+  },
+  "newTabLabel": "添加新标签",
+  "@newTabLabel": {
+    "description": "[TabView]的新建按钮使用的标签。"
+  },
+  "closeTabLabelSuffix": "关闭标签",
+  "@closeTabLabelSuffix": {
+    "description": "[TabView]的关闭按钮使用的标签。"
+  },
+  "scrollTabBackwardLabel": "向后滚动标签列表",
+  "@scrollTabBackwardLabel": {
+    "description": "[TabView]的向后滚动按钮使用的标签。"
+  },
+  "scrollTabForwardLabel": "向前滚动标签列表",
+  "@scrollTabForwardLabel": {
+    "description": "[TabView]的向前滚动按钮使用的标签。"
+  },
+  "noResultsFoundLabel": "没有找到结果",
+  "@noResultsFoundLabel": {
+    "description": "[AutoSuggestBox]在找不到结果时使用的标签。"
+  },
+  "copyActionTooltip": "将选中的内容复制到剪贴板",
+  "@copyActionTooltip": {
+    "description": "文本选择控件上复制操作的工具提示。"
+  },
+  "cutActionTooltip": "将选中的内容剪切到剪贴板",
+  "@cutActionTooltip": {
+    "description": "文本选择控件上剪切操作的工具提示。"
+  },
+  "pasteActionTooltip": "在当前位置插入剪贴板的内容",
+  "@pasteActionTooltip": {
+    "description": "文本选择控件上粘贴操作的工具提示。"
+  },
+  "selectAllActionTooltip": "选择所有内容",
+  "@selectAllActionTooltip": {
+    "description": "文本选择控件上全选操作的工具提示。"
+  },
+  "undoActionTooltip": "撤销上一个操作",
+  "@undoActionTooltip": {
+    "description": "文本选择控件上撤销操作的工具提示。"
+  },
+  "hour": "时",
+  "@hour": {
+    "description": "[TimePicker]用于小时字段的文本。"
+  },
+  "minute": "分",
+  "@minute": {
+    "description": "[TimePicker]用于分钟字段的文本。"
+  },
+  "am": "上午",
+  "@am": {
+    "description": "[TimePicker]用于上午字段的文本。"
+  },
+  "pm": "下午",
+  "@pm": {
+    "description": "[TimePicker]用于下午字段的文本。"
+  },
+  "month": "月",
+  "@month": {
+    "description": "[DatePicker]用于月份字段的文本"
+  },
+  "day": "日",
+  "@day": {
+    "description": "[DatePicker]用于日期字段的文本"
+  },
+  "year": "年",
+  "@year": {
+    "description": "[DatePicker]用于年份字段的文本"
+  },
+  "pickADate": "选择日期",
+  "@pickADate": {
+    "description": "[CalendarDatePicker]用于提示用户选择日期的文本。"
+  },
+  "seeMore": "查看更多",
+  "@seeMore": {
+    "description": "[CommandBar]用于显示更多项目的文本。"
+  },
+  "seeLess": "查看更少",
+  "@seeLess": {
+    "description": "[CommandBar]用于显示更少项目的文本。"
+  },
+  "redLabel": "红色",
+  "@redLabel": {
+    "description": "颜色选择器中红色组件的标签"
+  },
+  "greenLabel": "绿色",
+  "@greenLabel": {
+    "description": "颜色选择器中绿色组件的标签"
+  },
+  "blueLabel": "蓝色",
+  "@blueLabel": {
+    "description": "颜色选择器中蓝色组件的标签"
+  },
+  "opacityLabel": "不透明度",
+  "@opacityLabel": {
+    "description": "颜色选择器中不透明度组件的标签"
+  },
+  "hueLabel": "色调",
+  "@hueLabel": {
+    "description": "颜色选择器中色调组件的标签"
+  },
+  "saturationLabel": "饱和度",
+  "@saturationLabel": {
+    "description": "颜色选择器中饱和度组件的标签"
+  },
+  "valueLabel": "值",
+  "@valueLabel": {
+    "description": "颜色选择器中值组件的标签"
+  },
+  "moreText": "更多",
+  "@moreText": {
+    "description": "用于展开颜色选择器选项的文本"
+  },
+  "lessText": "更少",
+  "@lessText": {
+    "description": "用于折叠颜色选择器选项的文本"
+  },
+  "valueSliderTooltip": "值 {value} ({colorName})",
+  "@valueSliderTooltip": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      },
+      "colorName": {
+        "type": "String"
+      }
+    }
+  },
+  "alphaSliderTooltip": "{value}% 不透明度",
+  "@alphaSliderTooltip": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "colorBlack": "黑色",
+  "@colorBlack": {
+    "description": "颜色的名称，黑色。"
+  },
+  "colorNavy": "藏青色",
+  "@colorNavy": {
+    "description": "颜色的名称，藏青色。"
+  },
+  "colorDarkBlue": "深蓝色",
+  "@colorDarkBlue": {
+    "description": "颜色的名称，深蓝色。"
+  },
+  "colorMediumBlue": "中蓝色",
+  "@colorMediumBlue": {
+    "description": "颜色的名称，中蓝色。"
+  },
+  "colorBlue": "蓝色",
+  "@colorBlue": {
+    "description": "颜色的名称，蓝色。"
+  },
+  "colorDarkGreen": "深绿色",
+  "@colorDarkGreen": {
+    "description": "颜色的名称，深绿色。"
+  },
+  "colorGreen": "绿色",
+  "@colorGreen": {
+    "description": "颜色的名称，绿色。"
+  },
+  "colorTeal": "蓝绿色",
+  "@colorTeal": {
+    "description": "颜色的名称，蓝绿色。"
+  },
+  "colorDarkCyan": "深青色",
+  "@colorDarkCyan": {
+    "description": "颜色的名称，深青色。"
+  },
+  "colorDeepSkyBlue": "深天蓝色",
+  "@colorDeepSkyBlue": {
+    "description": "颜色的名称，深天蓝色。"
+  },
+  "colorDarkTurquoise": "深绿松石色",
+  "@colorDarkTurquoise": {
+    "description": "颜色的名称，深绿松石色。"
+  },
+  "colorMediumSpringGreen": "中春绿",
+  "@colorMediumSpringGreen": {
+    "description": "颜色的名称，中春绿。"
+  },
+  "colorLime": "酸橙色",
+  "@colorLime": {
+    "description": "颜色的名称，酸橙色。"
+  },
+  "colorSpringGreen": "春绿",
+  "@colorSpringGreen": {
+    "description": "颜色的名称，春绿。"
+  },
+  "colorCyan": "青色",
+  "@colorCyan": {
+    "description": "颜色的名称，青色。"
+  },
+  "colorMidnightBlue": "午夜蓝",
+  "@colorMidnightBlue": {
+    "description": "颜色的名称，午夜蓝。"
+  },
+  "colorDodgerBlue": "道奇蓝",
+  "@colorDodgerBlue": {
+    "description": "颜色的名称，道奇蓝。"
+  },
+  "colorLightSeaGreen": "浅海绿",
+  "@colorLightSeaGreen": {
+    "description": "颜色的名称，浅海绿。"
+  },
+  "colorForestGreen": "森林绿",
+  "@colorForestGreen": {
+    "description": "颜色的名称，森林绿。"
+  },
+  "colorSeaGreen": "海绿色",
+  "@colorSeaGreen": {
+    "description": "颜色的名称，海绿色。"
+  },
+  "colorDarkSlateGray": "深板岩灰",
+  "@colorDarkSlateGray": {
+    "description": "颜色的名称，深板岩灰。"
+  },
+  "colorLimeGreen": "酸橙绿",
+  "@colorLimeGreen": {
+    "description": "颜色的名称，酸橙绿。"
+  },
+  "colorMediumSeaGreen": "中海绿",
+  "@colorMediumSeaGreen": {
+    "description": "颜色的名称，中海绿。"
+  },
+  "colorTurquoise": "绿松石色",
+  "@colorTurquoise": {
+    "description": "颜色的名称，绿松石色。"
+  },
+  "colorRoyalBlue": "皇家蓝",
+  "@colorRoyalBlue": {
+    "description": "颜色的名称，皇家蓝。"
+  },
+  "colorSteelBlue": "钢蓝色",
+  "@colorSteelBlue": {
+    "description": "颜色的名称，钢蓝色。"
+  },
+  "colorDarkSlateBlue": "深板岩蓝",
+  "@colorDarkSlateBlue": {
+    "description": "颜色的名称，深板岩蓝。"
+  },
+  "colorMediumTurquoise": "中绿松石色",
+  "@colorMediumTurquoise": {
+    "description": "颜色的名称，中绿松石色。"
+  },
+  "colorIndigo": "靛蓝色",
+  "@colorIndigo": {
+    "description": "颜色的名称，靛蓝色。"
+  },
+  "colorDarkOliveGreen": "深橄榄绿",
+  "@colorDarkOliveGreen": {
+    "description": "颜色的名称，深橄榄绿。"
+  },
+  "colorCadetBlue": "军校蓝",
+  "@colorCadetBlue": {
+    "description": "颜色的名称，军校蓝。"
+  },
+  "colorCornflowerBlue": "矢车菊蓝",
+  "@colorCornflowerBlue": {
+    "description": "颜色的名称，矢车菊蓝。"
+  },
+  "colorMediumAquamarine": "时尚蓝绿色",
+  "@colorMediumAquamarine": {
+    "description": "颜色的名称，时尚蓝绿色。"
+  },
+  "colorDimGray": "暗灰色",
+  "@colorDimGray": {
+    "description": "颜色的名称，暗灰色。"
+  },
+  "colorSlateBlue": "板岩蓝",
+  "@colorSlateBlue": {
+    "description": "颜色的名称，板岩蓝。"
+  },
+  "colorOliveDrab": "橄榄褐色",
+  "@colorOliveDrab": {
+    "description": "颜色的名称，橄榄褐色。"
+  },
+  "colorSlateGray": "板岩灰",
+  "@colorSlateGray": {
+    "description": "颜色的名称，板岩灰。"
+  },
+  "colorLightSlateGray": "浅板岩灰",
+  "@colorLightSlateGray": {
+    "description": "颜色的名称，浅板岩灰。"
+  },
+  "colorMediumSlateBlue": "中板岩蓝",
+  "@colorMediumSlateBlue": {
+    "description": "颜色的名称，中板岩蓝。"
+  },
+  "colorLawnGreen": "草坪绿",
+  "@colorLawnGreen": {
+    "description": "颜色的名称，草坪绿。"
+  },
+  "colorChartreuse": "黄绿色",
+  "@colorChartreuse": {
+    "description": "颜色的名称，黄绿色。"
+  },
+  "colorAquamarine": "时尚蓝绿色",
+  "@colorAquamarine": {
+    "description": "颜色的名称，时尚蓝绿色。"
+  },
+  "colorMaroon": "栗色",
+  "@colorMaroon": {
+    "description": "颜色的名称，栗色。"
+  },
+  "colorPurple": "紫色",
+  "@colorPurple": {
+    "description": "颜色的名称，紫色。"
+  },
+  "colorOlive": "橄榄色",
+  "@colorOlive": {
+    "description": "颜色的名称，橄榄色。"
+  },
+  "colorGray": "灰色",
+  "@colorGray": {
+    "description": "颜色的名称，灰色。"
+  },
+  "colorSkyBlue": "天蓝",
+  "@colorSkyBlue": {
+    "description": "颜色的名称，天蓝。"
+  },
+  "colorLightSkyBlue": "浅蓝",
+  "@colorLightSkyBlue": {
+    "description": "颜色的名称，浅天蓝。"
+  },
+  "colorBlueViolet": "蓝紫色",
+  "@colorBlueViolet": {
+    "description": "颜色的名称，蓝紫色。"
+  },
+  "colorDarkRed": "深红色",
+  "@colorDarkRed": {
+    "description": "颜色的名称，深红色。"
+  },
+  "colorDarkMagenta": "深洋红",
+  "@colorDarkMagenta": {
+    "description": "颜色的名称，深洋红。"
+  },
+  "colorSaddleBrown": "马鞍棕",
+  "@colorSaddleBrown": {
+    "description": "颜色的名称，马鞍棕。"
+  },
+  "colorDarkSeaGreen": "深海绿",
+  "@colorDarkSeaGreen": {
+    "description": "颜色的名称，深海绿。"
+  },
+  "colorLightGreen": "浅绿",
+  "@colorLightGreen": {
+    "description": "颜色的名称，浅绿。"
+  },
+  "colorMediumPurple": "中紫色",
+  "@colorMediumPurple": {
+    "description": "颜色的名称，中紫色。"
+  },
+  "colorDarkViolet": "深紫色",
+  "@colorDarkViolet": {
+    "description": "颜色的名称，深紫色。"
+  },
+  "colorPaleGreen": "淡绿",
+  "@colorPaleGreen": {
+    "description": "颜色的名称，淡绿。"
+  },
+  "colorDarkOrchid": "深兰花色",
+  "@colorDarkOrchid": {
+    "description": "颜色的名称，深兰花色。"
+  },
+  "colorYellowGreen": "黄绿色",
+  "@colorYellowGreen": {
+    "description": "颜色的名称，黄绿色。"
+  },
+  "colorSienna": "赭石色",
+  "@colorSienna": {
+    "description": "颜色的名称，赭石色。"
+  },
+  "colorBrown": "棕色",
+  "@colorBrown": {
+    "description": "颜色的名称，棕色。"
+  },
+  "colorDarkGray": "深灰色",
+  "@colorDarkGray": {
+    "description": "颜色的名称，深灰色。"
+  },
+  "colorLightBlue": "浅蓝色",
+  "@colorLightBlue": {
+    "description": "颜色的名称，浅蓝色。"
+  },
+  "colorGreenYellow": "绿黄色",
+  "@colorGreenYellow": {
+    "description": "颜色的名称，绿黄色。"
+  },
+  "colorPaleTurquoise": "淡绿松石色",
+  "@colorPaleTurquoise": {
+    "description": "颜色的名称，淡绿松石色。"
+  },
+  "colorLightSteelBlue": "轻钢蓝色",
+  "@colorLightSteelBlue": {
+    "description": "颜色的名称，轻钢蓝色。"
+  },
+  "colorPowderBlue": "粉末蓝",
+  "@colorPowderBlue": {
+    "description": "颜色的名称，粉末蓝。"
+  },
+  "colorFirebrick": "火砖红",
+  "@colorFirebrick": {
+    "description": "颜色的名称，火砖红。"
+  },
+  "colorDarkGoldenrod": "深金黄色",
+  "@colorDarkGoldenrod": {
+    "description": "颜色的名称，深金黄色。"
+  },
+  "colorMediumOrchid": "中兰花色",
+  "@colorMediumOrchid": {
+    "description": "颜色的名称，中兰花色。"
+  },
+  "colorRosyBrown": "玫瑰棕",
+  "@colorRosyBrown": {
+    "description": "颜色的名称，玫瑰棕。"
+  },
+  "colorDarkKhaki": "深卡其色",
+  "@colorDarkKhaki": {
+    "description": "颜色的名称，深卡其色。"
+  },
+  "colorSilver": "银色",
+  "@colorSilver": {
+    "description": "颜色的名称，银色。"
+  },
+  "colorMediumVioletRed": "中紫红色",
+  "@colorMediumVioletRed": {
+    "description": "颜色的名称，中紫红色。"
+  },
+  "colorIndianRed": "印度红",
+  "@colorIndianRed": {
+    "description": "颜色的名称，印度红。"
+  },
+  "colorPeru": "秘鲁色",
+  "@colorPeru": {
+    "description": "颜色的名称，秘鲁色。"
+  },
+  "colorChocolate": "巧克力色",
+  "@colorChocolate": {
+    "description": "颜色的名称，巧克力色。"
+  },
+  "colorTan": "棕褐色",
+  "@colorTan": {
+    "description": "颜色的名称，棕褐色。"
+  },
+  "colorLightGray": "浅灰色",
+  "@colorLightGray": {
+    "description": "颜色的名称，浅灰色。"
+  },
+  "colorThistle": "蓟色",
+  "@colorThistle": {
+    "description": "颜色的名称，蓟色。"
+  },
+  "colorOrchid": "兰花色",
+  "@colorOrchid": {
+    "description": "颜色的名称，兰花色。"
+  },
+  "colorGoldenrod": "金黄色",
+  "@colorGoldenrod": {
+    "description": "颜色的名称，金黄色。"
+  },
+  "colorPaleVioletRed": "淡紫红色",
+  "@colorPaleVioletRed": {
+    "description": "颜色的名称，淡紫红色。"
+  },
+  "colorCrimson": "深红色",
+  "@colorCrimson": {
+    "description": "颜色的名称，深红色。"
+  },
+  "colorGainsboro": "庚斯博罗灰",
+  "@colorGainsboro": {
+    "description": "颜色的名称，庚斯博罗灰。"
+  },
+  "colorPlum": "李子色",
+  "@colorPlum": {
+    "description": "颜色的名称，李子色。"
+  },
+  "colorBurlyWood": "结实木色",
+  "@colorBurlyWood": {
+    "description": "颜色的名称，结实木色。"
+  },
+  "colorLightCyan": "浅青色",
+  "@colorLightCyan": {
+    "description": "颜色的名称，浅青色。"
+  },
+  "colorLavender": "薰衣草色",
+  "@colorLavender": {
+    "description": "颜色的名称，薰衣草色。"
+  },
+  "colorDarkSalmon": "深橙红色",
+  "@colorDarkSalmon": {
+    "description": "颜色的名称，深橙红色。"
+  },
+  "colorViolet": "紫色",
+  "@colorViolet": {
+    "description": "颜色的名称，紫色。"
+  },
+  "colorPaleGoldenrod": "淡金黄色",
+  "@colorPaleGoldenrod": {
+    "description": "颜色的名称，淡金黄色。"
+  },
+  "colorLightCoral": "浅珊瑚色",
+  "@colorLightCoral": {
+    "description": "颜色的名称，浅珊瑚色。"
+  },
+  "colorKhaki": "卡其色",
+  "@colorKhaki": {
+    "description": "颜色的名称，卡其色。"
+  },
+  "colorAliceBlue": "爱丽丝蓝",
+  "@colorAliceBlue": {
+    "description": "颜色的名称，爱丽丝蓝。"
+  },
+  "colorHoneydew": "蜜瓜色",
+  "@colorHoneydew": {
+    "description": "颜色的名称，蜜瓜色。"
+  },
+  "colorAzure": "天蓝色",
+  "@colorAzure": {
+    "description": "颜色的名称，天蓝色。"
+  },
+  "colorSandyBrown": "沙棕色",
+  "@colorSandyBrown": {
+    "description": "颜色的名称，沙棕色。"
+  },
+  "colorWheat": "小麦色",
+  "@colorWheat": {
+    "description": "颜色的名称，小麦色。"
+  },
+  "colorBeige": "米色",
+  "@colorBeige": {
+    "description": "颜色的名称，米色。"
+  },
+  "colorWhiteSmoke": "白烟色",
+  "@colorWhiteSmoke": {
+    "description": "颜色的名称，白烟色。"
+  },
+  "colorMintCream": "薄荷奶油色",
+  "@colorMintCream": {
+    "description": "颜色的名称，薄荷奶油色。"
+  },
+  "colorGhostWhite": "幽灵白",
+  "@colorGhostWhite": {
+    "description": "颜色的名称，幽灵白。"
+  },
+  "colorSalmon": "橙红色",
+  "@colorSalmon": {
+    "description": "颜色的名称，橙红色。"
+  },
+  "colorAntiqueWhite": "古董白",
+  "@colorAntiqueWhite": {
+    "description": "颜色的名称，古董白。"
+  },
+  "colorLinen": "亚麻色",
+  "@colorLinen": {
+    "description": "颜色的名称，亚麻色。"
+  },
+  "colorLightGoldenrodYellow": "浅金黄",
+  "@colorLightGoldenrodYellow": {
+    "description": "颜色的名称，浅金黄。"
+  },
+  "colorOldLace": "老蕾丝色",
+  "@colorOldLace": {
+    "description": "颜色的名称，旧蕾丝色。"
+  },
+  "colorRed": "红色",
+  "@colorRed": {
+    "description": "颜色的名称，红色。"
+  },
+  "colorMagenta": "洋红色",
+  "@colorMagenta": {
+    "description": "颜色的名称，洋红色。"
+  },
+  "colorDeepPink": "深粉色",
+  "@colorDeepPink": {
+    "description": "颜色的名称，深粉色。"
+  },
+  "colorOrangeRed": "橙红",
+  "@colorOrangeRed": {
+    "description": "颜色的名称，橙红。"
+  },
+  "colorTomato": "番茄红",
+  "@colorTomato": {
+    "description": "颜色的名称，番茄红。"
+  },
+  "colorHotPink": "热粉色",
+  "@colorHotPink": {
+    "description": "颜色的名称，热粉色。"
+  },
+  "colorCoral": "珊瑚色",
+  "@colorCoral": {
+    "description": "颜色的名称，珊瑚色。"
+  },
+  "colorDarkOrange": "深橙色",
+  "@colorDarkOrange": {
+    "description": "颜色的名称，深橙色。"
+  },
+  "colorLightSalmon": "浅橙色",
+  "@colorLightSalmon": {
+    "description": "颜色的名称，浅橙红色。"
+  },
+  "colorOrange": "橙色",
+  "@colorOrange": {
+    "description": "颜色的名称，橙色。"
+  },
+  "colorLightPink": "浅粉色",
+  "@colorLightPink": {
+    "description": "颜色的名称，浅粉色。"
+  },
+  "colorPink": "粉色",
+  "@colorPink": {
+    "description": "颜色的名称，粉色。"
+  },
+  "colorGold": "金色",
+  "@colorGold": {
+    "description": "颜色的名称，金色。"
+  },
+  "colorPeachPuff": "桃色粉扑",
+  "@colorPeachPuff": {
+    "description": "颜色的名称，桃色粉扑。"
+  },
+  "colorNavajoWhite": "纳瓦霍白",
+  "@colorNavajoWhite": {
+    "description": "颜色的名称，纳瓦霍白。"
+  },
+  "colorMoccasin": "鹿皮鞋色",
+  "@colorMoccasin": {
+    "description": "颜色的名称，鹿皮鞋色。"
+  },
+  "colorBisque": "浓汤色",
+  "@colorBisque": {
+    "description": "颜色的名称，浓汤色。"
+  },
+  "colorMistyRose": "迷雾玫瑰色",
+  "@colorMistyRose": {
+    "description": "颜色的名称，迷雾玫瑰色。"
+  },
+  "colorBlanchedAlmond": "漂白杏仁色",
+  "@colorBlanchedAlmond": {
+    "description": "颜色的名称，漂白杏仁色。"
+  },
+  "colorPapayaWhip": "番木瓜鞭色",
+  "@colorPapayaWhip": {
+    "description": "颜色的名称，番木瓜鞭色。"
+  },
+  "colorLavenderBlush": "薰衣草腮红",
+  "@colorLavenderBlush": {
+    "description": "颜色的名称，薰衣草腮红。"
+  },
+  "colorSeaShell": "海贝壳色",
+  "@colorSeaShell": {
+    "description": "颜色的名称，海贝壳色。"
+  },
+  "colorCornsilk": "玉米丝色",
+  "@colorCornsilk": {
+    "description": "颜色的名称，玉米丝色。"
+  },
+  "colorLemonChiffon": "柠檬雪纺色",
+  "@colorLemonChiffon": {
+    "description": "颜色的名称，柠檬雪纺色。"
+  },
+  "colorFloralWhite": "花白色",
+  "@colorFloralWhite": {
+    "description": "颜色的名称，花白色。"
+  },
+  "colorSnow": "雪白色",
+  "@colorSnow": {
+    "description": "颜色的名称，雪白色。"
+  },
+  "colorYellow": "黄色",
+  "@colorYellow": {
+    "description": "颜色的名称，黄色。"
+  },
+  "colorLightYellow": "浅黄色",
+  "@colorLightYellow": {
+    "description": "颜色的名称，浅黄色。"
+  },
+  "colorIvory": "象牙色",
+  "@colorIvory": {
+    "description": "颜色的名称，象牙色。"
+  },
+  "colorWhite": "白色",
+  "@colorWhite": {
+    "description": "颜色的名称，白色。"
+  }
+}

@@ -12,10 +12,12 @@ class VolumeController {
   static VolumeController get instance => _instance;
 
   /// Method channel for communicating with platform methods.
-  final MethodChannel _methodChannel = MethodChannel(ChannelName.methodChannel);
+  final MethodChannel _methodChannel =
+      const MethodChannel(ChannelName.methodChannel);
 
   /// Event channel for communicating with platform events.
-  final EventChannel _eventChannel = EventChannel(ChannelName.eventChannel);
+  final EventChannel _eventChannel =
+      const EventChannel(ChannelName.eventChannel);
 
   /// Volume listener subscription
   StreamSubscription<double>? _volumeListener;
@@ -42,7 +44,7 @@ class VolumeController {
         .receiveBroadcastStream({
           EventArgument.fetchInitialVolume: fetchInitialVolume,
         })
-        .map((d) => d as double)
+        .map((value) => (value as num).toDouble())
         .listen(onData);
 
     return _volumeListener!;
@@ -60,9 +62,8 @@ class VolumeController {
   ///
   /// This method retrieves the current volume level of the system.
   Future<double> getVolume() async {
-    return await _methodChannel
-        .invokeMethod<double>(MethodName.getVolume)
-        .then<double>((double? value) => value ?? 0);
+    final value = await _methodChannel.invokeMethod<num>(MethodName.getVolume);
+    return value?.toDouble() ?? 0;
   }
 
   /// Sets the system volume to the specified level.

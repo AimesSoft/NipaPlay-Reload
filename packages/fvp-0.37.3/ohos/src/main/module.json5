@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "fvp",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

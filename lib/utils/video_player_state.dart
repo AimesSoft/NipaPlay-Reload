@@ -1563,7 +1563,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     WakelockPlus.disable();
     //debugPrint("Wakelock disabled on dispose.");
-    if (!kIsWeb) {
+    if (globals.isDesktop) {
       windowManager.removeListener(this);
     }
     _playerKernelChangeSubscription?.cancel(); // 取消播放器内核切换事件订阅

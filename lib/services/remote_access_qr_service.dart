@@ -233,7 +233,8 @@ class RemoteAccessQrCameraScanner {
     if (kIsWeb) return true;
     return defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform.name == 'ohos';
   }
 
   static Future<RemoteAccessQrPayload?> scan(BuildContext context) async {

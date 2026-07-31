@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:charset_converter/charset_converter.dart';
 import 'package:nipaplay/cpp_native/nipaplay_native.dart';
+import 'package:nipaplay/utils/legacy_charset_decoder.dart';
 
 // [FIX-SUBTITLE-ISO] 顶层函数供 compute() 在 worker isolate 执行 C++ 字幕解析，
 // 避免在主线程同步解析大字幕文件（如 412KB/2431 条目 ASS）阻塞 53ms 导致掉帧。
@@ -14,7 +14,8 @@ import 'package:nipaplay/cpp_native/nipaplay_native.dart';
 // 共享，FFI 调用安全；返回的 Map 只含 Dart 基础类型，可跨 isolate 传递。
 typedef _SubtitleIsolateInput = ({Uint8List bytes, String? hintPath});
 
-Map<String, dynamic>? _parseSubtitleBytesInIsolate(_SubtitleIsolateInput input) {
+Map<String, dynamic>? _parseSubtitleBytesInIsolate(
+    _SubtitleIsolateInput input) {
   return NativeSubtitleParser.parseBytes(input.bytes, hintPath: input.hintPath);
 }
 
@@ -75,7 +76,7 @@ class SubtitleEntry {
     final minutes = (seconds / 60).floor();
     final hours = (minutes / 60).floor();
     final milliseconds = timeMs % 1000;
-    
+
     return '${hours.toString().padLeft(2, '0')}:'
         '${(minutes % 60).toString().padLeft(2, '0')}:'
         '${(seconds % 60).toString().padLeft(2, '0')}.'
@@ -131,8 +132,8 @@ class SubtitleParser {
     'UTF-16BE',
   ];
 
-  static Future<SubtitleDecodeResult?> decodeSubtitleFile(
-      String filePath, {bool allowUnknownFormat = false}) async {
+  static Future<SubtitleDecodeResult?> decodeSubtitleFile(String filePath,
+      {bool allowUnknownFormat = false}) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
@@ -146,8 +147,8 @@ class SubtitleParser {
 
       final bomEncoding = _detectBomEncoding(bytes);
       if (bomEncoding != null) {
-        final decoded = await _decodeWithEncoding(bytes, bomEncoding,
-            stripBom: true);
+        final decoded =
+            await _decodeWithEncoding(bytes, bomEncoding, stripBom: true);
         if (decoded != null) {
           return SubtitleDecodeResult(text: decoded, encoding: bomEncoding);
         }
@@ -203,8 +204,7 @@ class SubtitleParser {
 
       final looksUtf16 = _looksLikeUtf16(bytes);
       final encodingCandidates = _buildEncodingCandidates(filePath)
-        ..removeWhere(
-            (encoding) => _isUtf16Encoding(encoding) && !looksUtf16);
+        ..removeWhere((encoding) => _isUtf16Encoding(encoding) && !looksUtf16);
       for (final encoding in encodingCandidates) {
         final decoded = await _decodeWithEncoding(bytes, encoding);
         if (decoded == null) continue;
@@ -213,8 +213,8 @@ class SubtitleParser {
 
       if (Platform.isMacOS || Platform.isLinux) {
         final iconvCandidates = _buildIconvCandidates(filePath)
-          ..removeWhere((encoding) =>
-              _isUtf16Encoding(encoding) && !looksUtf16);
+          ..removeWhere(
+              (encoding) => _isUtf16Encoding(encoding) && !looksUtf16);
         for (final encoding in iconvCandidates) {
           final decoded = await _decodeWithIconv(filePath, encoding);
           if (decoded == null) continue;
@@ -238,52 +238,52 @@ class SubtitleParser {
   static List<SubtitleEntry> parseAss(String content) {
     List<SubtitleEntry> entries = [];
     List<String> lines = LineSplitter.split(content).toList();
-    
+
     bool isEventsSection = false;
     List<String> formatFields = [];
-    
+
     for (String line in lines) {
       line = line.trim();
-      
+
       // 检查是否进入Events部分
       if (line == '[Events]') {
         isEventsSection = true;
         continue;
       }
-      
+
       // 如果不在Events部分，继续下一行
       if (!isEventsSection) continue;
-      
+
       // 解析Format行
       if (line.startsWith('Format:')) {
         String formatLine = line.substring('Format:'.length).trim();
         formatFields = formatLine.split(',').map((e) => e.trim()).toList();
         continue;
       }
-      
+
       // 解析Dialogue行
       if (line.startsWith('Dialogue:')) {
         String dialogueLine = line.substring('Dialogue:'.length).trim();
-        
+
         // 先处理逗号内的引号问题，避免错误分割
         List<String> parts = _splitDialogueLine(dialogueLine);
-        
+
         if (parts.length < formatFields.length) continue;
-        
+
         // 将对话内容映射到format字段
         Map<String, String> dialogueMap = {};
         for (int i = 0; i < formatFields.length; i++) {
           dialogueMap[formatFields[i]] = parts[i];
         }
-        
+
         // 解析开始和结束时间
         int startTimeMs = _parseTimeToMs(dialogueMap['Start'] ?? '0:00:00.00');
         int endTimeMs = _parseTimeToMs(dialogueMap['End'] ?? '0:00:00.00');
-        
+
         // 提取文本内容（去除ASS标记）
         String content = dialogueMap['Text'] ?? '';
         content = _cleanAssText(content);
-        
+
         // 创建字幕条目
         entries.add(SubtitleEntry(
           startTimeMs: startTimeMs,
@@ -296,10 +296,10 @@ class SubtitleParser {
         ));
       }
     }
-    
+
     // 按开始时间排序
     entries.sort((a, b) => a.startTimeMs.compareTo(b.startTimeMs));
-    
+
     return entries;
   }
 
@@ -391,8 +391,7 @@ class SubtitleParser {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
 
-      final match =
-          RegExp(r'^\{(\d+)\}\{(\d+)\}(.*)$').firstMatch(line);
+      final match = RegExp(r'^\{(\d+)\}\{(\d+)\}(.*)$').firstMatch(line);
       if (match == null) continue;
 
       final startFrame = int.tryParse(match.group(1) ?? '') ?? 0;
@@ -401,8 +400,7 @@ class SubtitleParser {
 
       if ((startFrame == 0 && endFrame == 0) ||
           (startFrame == 1 && endFrame == 1)) {
-        final parsedFps =
-            double.tryParse(payload.replaceAll(',', '.'));
+        final parsedFps = double.tryParse(payload.replaceAll(',', '.'));
         if (parsedFps != null && parsedFps > 1) {
           fps = parsedFps;
           continue;
@@ -432,55 +430,56 @@ class SubtitleParser {
     entries.sort((a, b) => a.startTimeMs.compareTo(b.startTimeMs));
     return entries;
   }
-  
+
   // 特殊处理Dialogue行的分割，考虑文本中可能包含逗号的情况
   static List<String> _splitDialogueLine(String line) {
     List<String> result = [];
-    
+
     // 前面的9个字段通常是固定的格式 (Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect)
     // 我们可以按逗号分割，但最后一个字段(Text)可能包含逗号和各种特殊字符
-    
+
     int commaCount = 0;
     int lastCommaIndex = -1;
-    
+
     for (int i = 0; i < line.length; i++) {
-      if (line[i] == ',' && commaCount < 8) { // 前8个逗号
+      if (line[i] == ',' && commaCount < 8) {
+        // 前8个逗号
         commaCount++;
         result.add(line.substring(lastCommaIndex + 1, i).trim());
         lastCommaIndex = i;
       }
     }
-    
+
     // 添加第9个字段 (Effect)
     int nextCommaIndex = line.indexOf(',', lastCommaIndex + 1);
     if (nextCommaIndex != -1) {
       result.add(line.substring(lastCommaIndex + 1, nextCommaIndex).trim());
-      
+
       // 添加最后一个字段 (Text)
       result.add(line.substring(nextCommaIndex + 1).trim());
     } else {
       // 如果没有找到第9个逗号，说明格式可能有问题
       result.add(line.substring(lastCommaIndex + 1).trim());
     }
-    
+
     return result;
   }
-  
+
   // 将时间字符串解析为毫秒数
   static int _parseTimeToMs(String timeStr) {
     // 格式: h:mm:ss.cs 或 h:mm:ss.ms
     final normalized = timeStr.replaceAll(',', '.');
     List<String> parts = normalized.split(':');
-    
+
     if (parts.length != 3) return 0;
-    
+
     int hours = int.tryParse(parts[0]) ?? 0;
     int minutes = int.tryParse(parts[1]) ?? 0;
-    
+
     // 处理秒和毫秒
     List<String> secondsParts = parts[2].split('.');
     int seconds = int.tryParse(secondsParts[0]) ?? 0;
-    
+
     int milliseconds = 0;
     if (secondsParts.length > 1) {
       String msStr = secondsParts[1];
@@ -493,21 +492,21 @@ class SubtitleParser {
         milliseconds = int.tryParse(msStr) ?? 0;
       }
     }
-    
+
     return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds;
   }
-  
+
   // 清理ASS文本中的样式标记
   static String _cleanAssText(String text) {
     // 移除 {\xxx} 格式的样式标记
     String result = text.replaceAll(RegExp(r'\{\\[^}]*\}'), '');
-    
+
     // 根据需要添加更多清理，例如处理\N表示的换行
     result = result.replaceAll('\\N', '\n');
-    
+
     return result;
   }
-  
+
   static SubtitleFormat _detectFormat(String content, String filePath) {
     if (_assEventHeaderPattern.hasMatch(content) ||
         _assDialoguePattern.hasMatch(content)) {
@@ -782,8 +781,8 @@ class SubtitleParser {
             const int isolateThresholdBytes = 50 * 1024;
             Map<String, dynamic>? nativeResult;
             if (bytes.length < isolateThresholdBytes) {
-              nativeResult = NativeSubtitleParser.parseBytes(bytes,
-                  hintPath: filePath);
+              nativeResult =
+                  NativeSubtitleParser.parseBytes(bytes, hintPath: filePath);
             } else {
               nativeResult = await compute(
                 _parseSubtitleBytesInIsolate,
@@ -793,7 +792,8 @@ class SubtitleParser {
             if (nativeResult != null) {
               final result = _fromNativeResult(nativeResult);
               // 防御性检查: C++ 返回 0 条目但文件非空 → 可能编码转换失败
-              if (result.entries.isNotEmpty || result.format != SubtitleFormat.unknown) {
+              if (result.entries.isNotEmpty ||
+                  result.format != SubtitleFormat.unknown) {
                 _log('[SubtitleParser] C++ 路径成功: '
                     '${result.entries.length} 条目, '
                     '格式=${result.format.name}, '
@@ -803,7 +803,8 @@ class SubtitleParser {
               }
               _log('[SubtitleParser] C++ 返回空结果, fallback 到 Dart: 文件=$filePath');
             } else {
-              _log('[SubtitleParser] C++ parseBytes 返回 null, fallback 到 Dart: 文件=$filePath');
+              _log(
+                  '[SubtitleParser] C++ parseBytes 返回 null, fallback 到 Dart: 文件=$filePath');
             }
           }
         } catch (e) {
@@ -883,8 +884,7 @@ class SubtitleParser {
     return null;
   }
 
-  static Future<String?> _detectEncodingWithUchardet(
-      String filePath) async {
+  static Future<String?> _detectEncodingWithUchardet(String filePath) async {
     if (!(Platform.isMacOS || Platform.isLinux)) {
       return null;
     }
@@ -948,9 +948,7 @@ class SubtitleParser {
     }
     if (lower == 'euc-kr' || lower == 'euckr') return 'euc-kr';
 
-    if (lower == 'iso-8859-1' ||
-        lower == 'iso_8859-1' ||
-        lower == 'latin1') {
+    if (lower == 'iso-8859-1' || lower == 'iso_8859-1' || lower == 'latin1') {
       return 'iso-8859-1';
     }
     if (lower == 'windows-1252' || lower == 'cp1252') {
@@ -1019,13 +1017,11 @@ class SubtitleParser {
     return SubtitleDecodeResult(text: decoded, encoding: normalized);
   }
 
-  static Future<String?> _decodeWithEncoding(
-      Uint8List bytes, String encoding,
+  static Future<String?> _decodeWithEncoding(Uint8List bytes, String encoding,
       {bool stripBom = false}) async {
     try {
       final lower = encoding.toLowerCase();
-      final data =
-          stripBom ? bytes.sublist(lower == 'utf-8' ? 3 : 2) : bytes;
+      final data = stripBom ? bytes.sublist(lower == 'utf-8' ? 3 : 2) : bytes;
       if (lower == 'utf-8') {
         return utf8.decode(data, allowMalformed: false);
       }
@@ -1035,7 +1031,7 @@ class SubtitleParser {
       if (lower == 'utf-16be' || lower == 'utf16be') {
         return _decodeUtf16(data, littleEndian: false);
       }
-      return await CharsetConverter.decode(encoding, data);
+      return LegacyCharsetDecoder.decode(data, encoding);
     } catch (_) {
       return null;
     }

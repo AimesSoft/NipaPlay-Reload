@@ -34,6 +34,7 @@ class DandanplayService {
   static const Duration _authorizedBangumiDetailsCacheDuration =
       Duration(minutes: 15);
   static const Duration _unmatchedVideoCacheDuration = Duration(days: 3);
+  static const int _filenameFallbackVersion = 2;
   static const int _animeSearchCacheMaxEntries = 300;
   static const String _lastTokenRenewKey = 'last_token_renew_time';
   static const int _tokenRenewInterval = 21 * 24 * 60 * 60 * 1000; // 21天（毫秒）
@@ -367,6 +368,13 @@ class DandanplayService {
         if (rawVideoInfo is! Map) return null;
         final videoInfo = Map<String, dynamic>.from(rawVideoInfo);
         if (videoInfo['isMatched'] == false) {
+          final fallbackVersion =
+              _tryParsePositiveInt(videoInfo['filenameFallbackVersion']) ?? 0;
+          if (fallbackVersion < _filenameFallbackVersion) {
+            cacheMap.remove(fileHash);
+            await prefs.setString(_videoCacheKey, json.encode(cacheMap));
+            return null;
+          }
           final cachedAt = _tryParsePositiveInt(videoInfo['cachedAt']);
           if (cachedAt != null) {
             final age = DateTime.now().difference(
@@ -1287,6 +1295,7 @@ class DandanplayService {
           'fileHash': fileHash,
           'fileSize': fileSize,
           'cachedAt': DateTime.now().millisecondsSinceEpoch,
+          'filenameFallbackVersion': _filenameFallbackVersion,
           'matches': [],
         };
         if (fileHash.isNotEmpty) {
@@ -1438,8 +1447,14 @@ class DandanplayService {
     required String fileHash,
     required int fileSize,
   }) async {
+    final episodeNumber = _tryExtractEpisodeNumberFromFileName(fileName);
+    final extractedTitle = _extractAnimeTitleKeywordFromFileName(fileName);
     final keywordCandidates = <String>[
-      _extractAnimeTitleKeywordFromFileName(fileName),
+      MediaFilenameParser.extractAnimeSearchKeyword(
+        fileName,
+        episodeNumber: episodeNumber,
+      ),
+      extractedTitle,
       _extractRawBaseNameFromFileName(fileName),
     ].where((e) => e.trim().isNotEmpty).toSet().toList();
 
@@ -1453,30 +1468,61 @@ class DandanplayService {
     }
     if (animes.isEmpty) return null;
 
-    final firstAnime = animes.first;
-    final animeId = _tryParsePositiveInt(firstAnime['animeId']);
-    final animeTitle = firstAnime['animeTitle']?.toString() ?? '';
-    if (animeId == null || animeTitle.trim().isEmpty) return null;
-
-    final episodes = await _getBangumiEpisodes(animeId);
-    if (episodes.isEmpty) return null;
-
-    final episodeNumber = _tryExtractEpisodeNumberFromFileName(fileName);
+    Map<String, dynamic>? selectedAnime;
     Map<String, dynamic>? selectedEpisode;
-    if (episodeNumber != null) {
-      selectedEpisode = episodes.cast<Map<String, dynamic>>().firstWhere(
-            (ep) => _tryParsePositiveInt(ep['episodeNumber']) == episodeNumber,
-            orElse: () => <String, dynamic>{},
-          );
-      if (selectedEpisode.isEmpty) {
-        selectedEpisode = null;
+    if (episodeNumber == null) {
+      final firstAnime = animes.first;
+      final animeId = _tryParsePositiveInt(firstAnime['animeId']);
+      if (animeId == null) return null;
+      final episodes = await _getBangumiEpisodes(animeId);
+      final numberedEpisodes = episodes
+          .where((ep) => _tryParsePositiveInt(ep['episodeNumber']) != null)
+          .toList();
+      if (numberedEpisodes.isEmpty) return null;
+      selectedAnime = firstAnime;
+      selectedEpisode = numberedEpisodes.first;
+    } else {
+      // 发布组常用跨季度连续编号（如 Medalist 22 = 第二季第 9 话）。
+      // 按搜索结果的季度顺序累计扣除正片集数，避免错误回退到第一季第 1 话。
+      var remainingEpisode = episodeNumber;
+      for (final anime in animes) {
+        final candidateAnimeId = _tryParsePositiveInt(anime['animeId']);
+        if (candidateAnimeId == null) continue;
+        final episodes = await _getBangumiEpisodes(candidateAnimeId);
+        final numberedEpisodes = episodes
+            .where((ep) => _tryParsePositiveInt(ep['episodeNumber']) != null)
+            .toList();
+        if (numberedEpisodes.isEmpty) continue;
+
+        final match = numberedEpisodes.cast<Map<String, dynamic>>().firstWhere(
+              (ep) =>
+                  _tryParsePositiveInt(ep['episodeNumber']) == remainingEpisode,
+              orElse: () => <String, dynamic>{},
+            );
+        if (match.isNotEmpty) {
+          selectedAnime = anime;
+          selectedEpisode = match;
+          break;
+        }
+
+        final seasonEpisodeCount = numberedEpisodes
+            .map((ep) => _tryParsePositiveInt(ep['episodeNumber']) ?? 0)
+            .fold<int>(0, (max, value) => value > max ? value : max);
+        if (seasonEpisodeCount <= 0 || remainingEpisode <= seasonEpisodeCount) {
+          break;
+        }
+        remainingEpisode -= seasonEpisodeCount;
       }
     }
-    selectedEpisode ??= episodes.first;
+    if (selectedAnime == null || selectedEpisode == null) return null;
 
+    final animeId = _tryParsePositiveInt(selectedAnime['animeId']);
+    final animeTitle = selectedAnime['animeTitle']?.toString() ?? '';
     final episodeId = _tryParsePositiveInt(selectedEpisode['episodeId']);
     final episodeTitle = selectedEpisode['episodeTitle']?.toString() ?? '';
-    if (episodeId == null) return null;
+    if (animeId == null || animeTitle.trim().isEmpty || episodeId == null) {
+      return null;
+    }
 
     final match = <String, dynamic>{
       'animeId': animeId,
@@ -1586,7 +1632,8 @@ class DandanplayService {
 
   static Future<int> _getDanmakuChConvertFlag() async {
     final prefs = await SharedPreferences.getInstance();
-    final convert = prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ?? true;
+    final convert =
+        prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ?? true;
     return convert ? 1 : 0;
   }
 

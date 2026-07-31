@@ -55,7 +55,12 @@ dependencies:
   package_info_plus: ^8.3.0
   image_picker: ^1.1.2
   permission_handler: ^12.0.0+1
+  # Federated HarmonyOS implementation for permission_handler.
+  permission_handler_ohos:
+    path: packages/permission_handler_ohos
   glassmorphism: ^3.0.0
+  # Keep the mainline-compatible release here. HarmonyOS selects the adapted
+  # 0.37.3 package through pubspec_overrides.ohos.yaml.
   fvp: ^0.33.1
   http: ^1.3.0
   dio: ^5.1.0
@@ -64,7 +69,6 @@ dependencies:
   webdav_client: ^1.2.2
   crypto: ^3.0.3
   cached_network_image: ^3.4.1
-  file_picker: ^8.0.6
   hugeicons: ^0.0.10
   url_launcher: ^6.3.1
   universal_html: ^2.2.4
@@ -74,6 +78,9 @@ dependencies:
   uuid: ^4.5.1
   transparent_image: ^2.0.1
   wakelock_plus: ^1.3.2
+  # Local fork aligns the OHOS Pigeon codec with platform_interface 1.3.x.
+  wakelock_plus_ohos:
+    path: packages/wakelock_plus_ohos
   screen_brightness: ^2.1.3
   volume_controller: ^3.4.0
   sqflite: ^2.3.2
@@ -88,8 +95,7 @@ dependencies:
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/Erika.git
-      # Consume the versioned source and matching native prebuilt artifacts.
-      ref: v0.1.3
+      ref: v0.1.4
       path: packages/erika_flutter
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0
@@ -101,7 +107,11 @@ dependencies:
   desktop_multi_window:
     path: packages/desktop_multi_window
   cupertino_icons: ^1.0.8
-  charset_converter: ^2.1.1
+  # Pure Dart subtitle decoding keeps HarmonyOS independent from platform
+  # channels while preserving CJK legacy encoding fallbacks.
+  charset: ^2.0.1
+  cp949_codec: ^1.0.2
+  enough_convert: ^1.6.0
   system_info2: ^3.0.1
   hotkey_manager: ^0.2.3
   adaptive_platform_ui: ^0.1.98
@@ -119,6 +129,8 @@ dependencies:
   rust_lib_nipaplay:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
+  # Used on existing platforms. HarmonyOS uses the repository-owned QuickJS
+  # FFI bridge because flutter_js has no OHOS implementation.
   flutter_js: ^0.8.0
 
 dev_dependencies:
@@ -246,6 +258,9 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
+  # HarmonyOS-only dependency forks live in pubspec_overrides.ohos.yaml and
+  # are activated locally. Keeping them out of this shared graph lets upstream
+  # Flutter resolve its normal packages on Android, iOS, desktop and web.
   # Forked from 0.21.3 to fix obfuscated shape geometry and retain Android blur layers.
   liquid_glass_widgets:
     path: packages/liquid_glass_widgets

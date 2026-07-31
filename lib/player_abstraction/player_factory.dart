@@ -52,12 +52,16 @@ class PlayerFactory {
   static Stream<PlayerKernelType> get onKernelChanged =>
       _kernelChangeController.stream;
 
+  static bool get isHarmonyOS =>
+      !kIsWeb && defaultTargetPlatform.name == 'ohos';
+
   static bool get isErikaKernelSupported {
     if (kIsWeb) return false;
     return defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.android;
+        defaultTargetPlatform == TargetPlatform.android ||
+        isHarmonyOS;
   }
 
   // 初始化方法，在应用启动时调用
@@ -87,7 +91,6 @@ class PlayerFactory {
         _cachedKernelType = PlayerKernelType.mdk;
         debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
       }
-
       _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
         bufferSizeMb ?? defaultPrecacheBufferSizeMb,
       );
@@ -364,7 +367,6 @@ class PlayerFactory {
 
     // 如果没有指定内核类型，从缓存或设置中读取
     kernelType ??= getKernelType();
-
     switch (kernelType) {
       case PlayerKernelType.mdk:
         debugPrint('[PlayerFactory] 创建 MDK 播放器');
