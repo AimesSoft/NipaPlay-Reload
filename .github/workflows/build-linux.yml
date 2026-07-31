@@ -27,10 +27,18 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
           submodules: recursive
+
+      - name: Read Linux Flutter version
+        id: linux-flutter
+        shell: bash
+        run: echo "version=$(tr -d '[:space:]' < .flutter-version-linux)" >> "$GITHUB_OUTPUT"
       
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ steps.linux-flutter.outputs.version }}
+          dependency-profile: linux
 
       - name: Generate build info json
         shell: bash
@@ -72,10 +80,18 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
           submodules: recursive
+
+      - name: Read Linux Flutter version
+        id: linux-flutter
+        shell: bash
+        run: echo "version=$(tr -d '[:space:]' < .flutter-version-linux)" >> "$GITHUB_OUTPUT"
       
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ steps.linux-flutter.outputs.version }}
+          dependency-profile: linux
 
       - name: Generate build info json
         shell: bash

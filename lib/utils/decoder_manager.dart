@@ -1,9 +1,36 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 // import 'package:fvp/mdk.dart'; // Commented out old import
 import '../../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
+import 'linux_nvidia_gpu.dart';
 import 'system_resource_monitor.dart'; // 导入系统资源监视器
+
+const List<String> _linuxDefaultDecoderOrder = [
+  "VAAPI",
+  "VDPAU",
+  "CUDA",
+  "NVDEC",
+  "rkmpp",
+  "V4L2M2M",
+  "hap",
+  "dav1d",
+  "FFmpeg",
+];
+
+const List<String> _linuxNvidiaDecoderOrder = [
+  "CUDA",
+  "NVDEC",
+  "VAAPI",
+  "VDPAU",
+  "rkmpp",
+  "V4L2M2M",
+  "hap",
+  "dav1d",
+  "FFmpeg",
+];
 
 const Map<String, List<String>> _supportedDecodersByPlatform = {
   'macos': ["VT", "hap", "dav1d", "FFmpeg"],
@@ -21,28 +48,34 @@ const Map<String, List<String>> _supportedDecodersByPlatform = {
     "dav1d",
     "FFmpeg",
   ],
-  'linux': [
-    "VAAPI",
-    "VDPAU",
-    "CUDA",
-    "NVDEC",
-    "rkmpp",
-    "V4L2M2M",
-    "hap",
-    "dav1d",
-    "FFmpeg",
-  ],
+  'linux': _linuxDefaultDecoderOrder,
   'android': ["AMediaCodec", "MediaCodec", "dav1d", "FFmpeg"],
   'ohos': ["OH", "FFmpeg", "dav1d"],
 };
 
 @visibleForTesting
 List<String> platformDefaultDecodersForOperatingSystem(
-  String operatingSystem,
-) {
+  String operatingSystem, {
+  bool preferNvidia = false,
+}) {
+  if (operatingSystem == 'linux' && preferNvidia) {
+    return List<String>.from(_linuxNvidiaDecoderOrder);
+  }
   return List<String>.from(
     _supportedDecodersByPlatform[operatingSystem] ?? const ["FFmpeg"],
   );
+}
+
+@visibleForTesting
+List<String> migrateLegacyLinuxDecoderOrderForNvidia({
+  required List<String> savedDecoders,
+  required bool nvidiaGraphicsStackActive,
+}) {
+  if (!nvidiaGraphicsStackActive ||
+      !listEquals(savedDecoders, _linuxDefaultDecoderOrder)) {
+    return List<String>.from(savedDecoders);
+  }
+  return List<String>.from(_linuxNvidiaDecoderOrder);
 }
 
 bool _isSoftwareDecoderName(String decoder) {
@@ -112,17 +145,30 @@ class DecoderManager {
     final savedDecoders = prefs.getStringList(_selectedDecodersKey);
     List<String> decoders = [];
     if (savedDecoders != null && savedDecoders.isNotEmpty) {
-      decoders = List<String>.from(savedDecoders);
+      // Only migrate the exact legacy Linux default. A user-customized order
+      // must remain authoritative across player reinitialization.
+      decoders = migrateLegacyLinuxDecoderOrderForNvidia(
+        savedDecoders: savedDecoders,
+        nvidiaGraphicsStackActive: isLinuxNvidiaGraphicsStackActive(),
+      );
+      if (!listEquals(decoders, savedDecoders)) {
+        debugPrint('检测到活动的 NVIDIA EGL，已迁移默认解码器顺序: $decoders');
+      }
     } else {
       decoders = _getPlatformDefaultDecoders();
       debugPrint('使用平台默认解码器设置: $decoders');
     }
 
-    final adjustedDecoders =
-        _applyHardwarePreference(decoders, useHardwareDecoder);
+    final adjustedDecoders = _applyHardwarePreference(
+      decoders,
+      useHardwareDecoder,
+    );
 
     if (adjustedDecoders.isNotEmpty) {
-      player.setDecoders(MediaType.video, adjustedDecoders); // Use our MediaType
+      player.setDecoders(
+        MediaType.video,
+        adjustedDecoders,
+      ); // Use our MediaType
       _updateActiveDecoderInfo(adjustedDecoders);
 
       if (savedDecoders == null ||
@@ -147,7 +193,10 @@ class DecoderManager {
 
   List<String> _getPlatformDefaultDecoders() {
     if (kIsWeb) return [];
-    return platformDefaultDecodersForOperatingSystem(Platform.operatingSystem);
+    return platformDefaultDecodersForOperatingSystem(
+      Platform.operatingSystem,
+      preferNvidia: isLinuxNvidiaGraphicsStackActive(),
+    );
   }
 
   bool _isSoftwareDecoder(String decoder) {
@@ -155,7 +204,9 @@ class DecoderManager {
   }
 
   List<String> _applyHardwarePreference(
-      List<String> decoders, bool preferHardware) {
+    List<String> decoders,
+    bool preferHardware,
+  ) {
     return applyDecoderPreferenceForOperatingSystem(
       operatingSystem: Platform.operatingSystem,
       decoders: decoders,
@@ -189,9 +240,14 @@ class DecoderManager {
     if (decoders.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
       final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
-      final adjustedDecoders =
-          _applyHardwarePreference(decoders, useHardwareDecoder);
-      player.setDecoders(MediaType.video, adjustedDecoders); // Use our MediaType
+      final adjustedDecoders = _applyHardwarePreference(
+        decoders,
+        useHardwareDecoder,
+      );
+      player.setDecoders(
+        MediaType.video,
+        adjustedDecoders,
+      ); // Use our MediaType
       _updateActiveDecoderInfo(adjustedDecoders);
 
       await prefs.setStringList(_selectedDecodersKey, adjustedDecoders);
@@ -225,11 +281,14 @@ class DecoderManager {
           primaryDecoder.contains("VDPAU") ||
           primaryDecoder.contains("AMediaCodec") ||
           primaryDecoder == "OH" ||
-          primaryDecoder.toLowerCase().contains("hap")) { // hap is often hardware accelerated
+          primaryDecoder.toLowerCase().contains("hap")) {
+        // hap is often hardware accelerated
         isHardwareDecoding = true;
       }
 
-      decoderInfo = isHardwareDecoding ? "硬解 - $primaryDecoder (首选)" : "软解 - $primaryDecoder (首选)";
+      decoderInfo = isHardwareDecoding
+          ? "硬解 - $primaryDecoder (首选)"
+          : "软解 - $primaryDecoder (首选)";
     }
 
     // 更新系统资源监视器中的解码器信息
@@ -257,21 +316,6 @@ class DecoderManager {
     player.setProperty("video.decode.thread", "4"); // 使用4个解码线程
   }
 
-  /// 检查是否有NVIDIA GPU（Windows平台）
-  bool _checkForNvidiaGpu() {
-    if (kIsWeb) return false;
-    if (Platform.isWindows) {
-      try {
-        final result = Process.runSync('wmic', ['path', 'win32_VideoController', 'get', 'name']);
-        final output = result.stdout.toString().toLowerCase();
-        return output.contains('nvidia');
-      } catch (e) {
-        debugPrint('检查NVIDIA GPU时出错: $e');
-      }
-    }
-    return false;
-  }
-
   /// 获取当前活跃解码器 (This method primarily reflects the *intended* or *configured* state)
   Future<String> getActiveDecoder() async {
     if (kIsWeb) return "浏览器解码";
@@ -285,8 +329,9 @@ class DecoderManager {
     if (decoders.isEmpty) {
       // If no decoders are saved, it means we're using platform defaults, which prioritize hardware.
       // Determine default for current platform to make an educated guess.
-      final platformDefaultDecoders =
-          platformDefaultDecodersForOperatingSystem(Platform.operatingSystem);
+      final platformDefaultDecoders = platformDefaultDecodersForOperatingSystem(
+        Platform.operatingSystem,
+      );
 
       if (platformDefaultDecoders.isNotEmpty) {
         final primaryDecoder = platformDefaultDecoders[0];
@@ -326,31 +371,47 @@ class DecoderManager {
       // 尝试从播放器获取当前正在使用的解码器名称
       // MDK: 通过 MediaEvent("decoder.video") 缓存到 "decoder.video"
       // Libmpv: 通常使用 hwdec/hwdec-current 进行判断
-      final activeDecoderName =
-          player.getProperty("decoder.video") ?? player.getProperty("video.decoder");
+      final activeDecoderName = player.getProperty("decoder.video") ??
+          player.getProperty("video.decoder");
 
       if (activeDecoderName != null && activeDecoderName.isNotEmpty) {
         // 判断是硬解还是软解
         final lower = activeDecoderName.toLowerCase();
         // 一般来说，FFmpeg/auto/dav1d 属于软件解码；其余多数为硬件或平台解码器
-        if (lower.contains("ffmpeg") || lower == "auto" || lower.contains("dav1d")) {
+        if (lower.contains("ffmpeg") ||
+            lower == "auto" ||
+            lower.contains("dav1d")) {
           _currentDecoder = "软解 - $activeDecoderName";
         } else {
           _currentDecoder = "硬解 - $activeDecoderName";
         }
       } else {
         // 如果无法直接获取，则根据已设置的解码器列表判断
-        final setDecoders = player.getDecoders(MediaType.video); // Use our MediaType
+        final setDecoders = player.getDecoders(
+          MediaType.video,
+        ); // Use our MediaType
         if (setDecoders.isNotEmpty) {
-          if (setDecoders.length == 1 && setDecoders[0].toLowerCase().contains("ffmpeg")) {
+          if (setDecoders.length == 1 &&
+              setDecoders[0].toLowerCase().contains("ffmpeg")) {
             _currentDecoder = "软解 - FFmpeg";
           } else {
             // Check if the first decoder in the list is a known hardware decoder type
             final primaryConfigured = setDecoders[0];
             final primaryConfiguredLower = primaryConfigured.toLowerCase();
-            bool isLikelyHardware = primaryConfiguredLower == "oh" || [
-              "vt", "d3d11", "dxva", "mft", "cuda", "vaapi", "vdpau", "amediadcodec", "hap"
-            ].any((hwKeyword) => primaryConfiguredLower.contains(hwKeyword));
+            bool isLikelyHardware = primaryConfiguredLower == "oh" ||
+                [
+                  "vt",
+                  "d3d11",
+                  "dxva",
+                  "mft",
+                  "cuda",
+                  "vaapi",
+                  "vdpau",
+                  "amediadcodec",
+                  "hap",
+                ].any(
+                  (hwKeyword) => primaryConfiguredLower.contains(hwKeyword),
+                );
 
             if (isLikelyHardware) {
               _currentDecoder = "硬解 - $primaryConfigured (尝试)";
@@ -364,7 +425,6 @@ class DecoderManager {
       }
       SystemResourceMonitor().setActiveDecoder(_currentDecoder!);
       debugPrint("更新活跃解码器: $_currentDecoder");
-
     } catch (e) {
       debugPrint('更新当前活跃解码器失败: $e');
       _currentDecoder = "未知 (错误)";
@@ -386,7 +446,8 @@ class DecoderManager {
     debugPrint('尝试重新应用硬件优先的解码器设置...');
     await initialize(); // Initialize will set hardware-first decoders if no specific user choice is saved
     // or if saved choices are already hardware-first.
-    final newActiveDecoder = await getActiveDecoder(); // Reflects configured state
+    final newActiveDecoder =
+        await getActiveDecoder(); // Reflects configured state
     debugPrint('重新应用解码器设置后，配置的解码器: $newActiveDecoder');
     await updateCurrentActiveDecoder(); // Gets actual current decoder from player
     debugPrint('重新应用解码器设置后，播放器实际解码器: $_currentDecoder');
@@ -400,7 +461,6 @@ class DecoderManager {
       if (player.mediaInfo.video != null &&
           player.mediaInfo.video!.isNotEmpty &&
           player.state == PlaybackState.playing) {
-
         // 获取视频编码格式
         final videoTrack = player.mediaInfo.video![0];
         final codecString = videoTrack.toString().toLowerCase();
@@ -435,7 +495,12 @@ class DecoderManager {
                   player.setProperty("vt.hardware", "1");
                   player.setProperty("hwdec", "videotoolbox");
 
-                  List<String> decoders = ["VT", "hap", "dav1d", "FFmpeg"]; // Default hardware-first for macOS
+                  List<String> decoders = [
+                    "VT",
+                    "hap",
+                    "dav1d",
+                    "FFmpeg",
+                  ]; // Default hardware-first for macOS
                   player.setDecoders(MediaType.video, decoders);
                   debugPrint('截图后重新应用解码器设置: $decoders');
                 }

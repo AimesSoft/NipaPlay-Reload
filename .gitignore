@@ -5,7 +5,7 @@
 .dart-tool/
 .packages
 build/
-# Generated locally from pubspec_overrides.ohos.yaml when building HarmonyOS.
+# Generated locally from a platform dependency profile (HarmonyOS or Linux).
 /pubspec_overrides.yaml
 # If you're building an application, you may want to check-in your pubspec.lock
 # pubspec.lock
