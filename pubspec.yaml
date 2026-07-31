@@ -246,6 +246,10 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
+  # Vendored from pub.dev 0.33.1 + Linux GL state isolation patch in linux/fvp_plugin.cc,
+  # fixes normal/inverted color flicker on Linux (#639, upstream wang-bin/fvp#258).
+  fvp:
+    path: third_party/fvp
   # Forked from 0.21.3 to fix obfuscated shape geometry and retain Android blur layers.
   liquid_glass_widgets:
     path: packages/liquid_glass_widgets
