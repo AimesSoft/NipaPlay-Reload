@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platform_identity;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 double get strokeWidth => isPhone ? 0.7 : 1.0;
@@ -77,7 +78,8 @@ Future<void> initializeStartupDeviceProfile() async {
 
   var isIPad = false;
 
-  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+  if (!kIsWeb &&
+      (Platform.isAndroid || (Platform.isIOS && !platform_identity.isTvOS))) {
     try {
       final profile = await _deviceProfileChannel
           .invokeMapMethod<String, dynamic>('getStartupDeviceProfile');
@@ -109,7 +111,11 @@ Future<void> initializeStartupDeviceProfile() async {
     isAndroidTv: isAndroidTv,
     metrics: startupMetrics,
   );
-  _startupIPad = isIPad || (!kIsWeb && Platform.isIOS && _startupTabletLike);
+  _startupIPad = isIPad ||
+      (!kIsWeb &&
+          Platform.isIOS &&
+          !platform_identity.isTvOS &&
+          _startupTabletLike);
   _startupDeviceProfileInitialized = true;
 }
 
@@ -118,12 +124,16 @@ bool get isMobilePlatform {
     return defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android;
   }
-  return Platform.isIOS || Platform.isAndroid || isHarmonyOS;
+  return (Platform.isIOS && !isTvOS) || Platform.isAndroid || isHarmonyOS;
 }
 
 /// Uses the operating-system string so this source remains analyzable with
 /// both upstream Flutter and the OpenHarmony Flutter fork.
-bool get isHarmonyOS => !kIsWeb && Platform.operatingSystem == 'ohos';
+bool get isHarmonyOS => !kIsWeb && platform_identity.isHarmonyOS;
+
+/// tvOS reports itself as iOS for plugin compatibility. Keep this separate
+/// from [isMobilePlatform] because Apple TV has no touch interface.
+bool get isTvOS => !kIsWeb && platform_identity.isTvOS;
 
 bool get isMobile {
   // 获取屏幕宽度
@@ -152,17 +162,19 @@ bool get isTablet {
 
 bool get isTabletLikeMobile => isMobilePlatform && isTablet;
 bool get isAndroidTv => _startupAndroidTv;
+bool get isTelevision => isAndroidTv || isTvOS;
 
 bool get isIPad {
   if (kIsWeb) {
     return defaultTargetPlatform == TargetPlatform.iOS && isTablet;
   }
-  if (!Platform.isIOS) return false;
+  if (!Platform.isIOS || isTvOS) return false;
   if (_startupDeviceProfileInitialized) return _startupIPad;
   return isTablet;
 }
 
 bool get isDownloaderSupportedPlatform {
+  if (isTvOS) return false;
   if (!kIsWeb && Platform.isIOS) {
     return PluginService.forceEnableDownloader;
   }
@@ -175,7 +187,7 @@ bool get isTouch {
     return defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android;
   } else {
-    return isMobilePlatform && !isAndroidTv;
+    return isMobilePlatform && !isTelevision;
   }
 }
 
@@ -199,8 +211,8 @@ bool get isDesktop {
 }
 
 bool get isDesktopOrTablet {
-  //桌面平台或平板设备
-  return isDesktop || isTablet;
+  //桌面、平板或电视大屏设备
+  return isDesktop || isTablet || isTelevision;
 }
 
 //////设备类型判断/////

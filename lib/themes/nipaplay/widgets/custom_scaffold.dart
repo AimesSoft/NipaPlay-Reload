@@ -139,7 +139,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
 
     final bool isDesktop = globals.isDesktop;
     final bool isTablet = globals.isTablet;
-    final bool isDesktopOrTablet = isDesktop || isTablet;
+    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
     final bool useLargeScreenLayout = widget.useLargeScreenLayout &&
         widget.pageIsHome &&
         isDesktopOrTablet &&

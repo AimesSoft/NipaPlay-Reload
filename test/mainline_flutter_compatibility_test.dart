@@ -29,6 +29,20 @@ void main() {
     );
 
     expect(harmonyKeys, containsAll(sharedKeys));
+    final harmonyOverrides =
+        File('pubspec_overrides.ohos.yaml').readAsStringSync();
+    expect(
+      harmonyOverrides,
+      contains('package_info_plus_platform_interface: 3.2.1'),
+      reason: 'tvOS native registrants must not raise the HarmonyOS 3.35 '
+          'Dart/Flutter floor.',
+    );
+    expect(
+      harmonyOverrides,
+      contains('wakelock_plus_platform_interface: 1.3.0'),
+      reason: 'tvOS native registrants must not raise the HarmonyOS 3.35 '
+          'Dart/Flutter floor.',
+    );
   });
 
   test('Linux mode retains every shared dependency override', () {

@@ -48,11 +48,28 @@ dependencies:
   screen_retriever: ^0.2.0
   tray_manager: ^0.5.2
   shared_preferences: ^2.2.2
+  # Flutter's tvOS fork only registers plugins that explicitly expose a tvOS
+  # implementation. Pin the official fluttertv ports for reproducible builds.
+  shared_preferences_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/shared_preferences_tvos
   provider: ^6.1.2
   file_selector: ^1.0.3
   path_provider: ^2.1.2
+  path_provider_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/path_provider_tvos
   path: ^1.9.1
-  package_info_plus: ^8.3.0
+  package_info_plus: ^10.2.1
+  package_info_plus_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/package_info_plus_tvos
   image_picker: ^1.1.2
   permission_handler: ^12.0.0+1
   # Federated HarmonyOS implementation for permission_handler.
@@ -77,15 +94,30 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.5.1
   transparent_image: ^2.0.1
-  wakelock_plus: ^1.3.2
+  wakelock_plus: ^1.7.0
+  wakelock_plus_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/wakelock_plus_tvos
   # Local fork aligns the OHOS Pigeon codec with platform_interface 1.3.x.
   wakelock_plus_ohos:
     path: packages/wakelock_plus_ohos
   screen_brightness: ^2.1.3
   volume_controller: ^3.4.0
   sqflite: ^2.3.2
+  sqflite_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/sqflite_tvos
   sqflite_common_ffi: ^2.3.3  # 用于桌面平台
   video_player: 2.9.5
+  video_player_tvos:
+    git:
+      url: https://github.com/fluttertv/plugins.git
+      ref: 79dc1ac13b94d593e2361bf10b5ed8bdd225d3db
+      path: packages/video_player_tvos
   media_kit:
     path: packages/media_kit
   media_kit_video:

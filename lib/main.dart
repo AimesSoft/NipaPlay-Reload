@@ -160,7 +160,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb) {
+  if (!kIsWeb && !globals.isTvOS) {
     try {
       await ensureRustInitialized();
     } catch (error) {
@@ -294,9 +294,9 @@ void main(List<String> args) async {
     }
   }
 
-  // MediaKit/libmpv still has no HarmonyOS backend. FVP and Erika initialize
-  // independently and do not require MediaKit's native runtime.
-  if (!globals.isHarmonyOS) {
+  // MediaKit/libmpv has no HarmonyOS or tvOS backend. Those targets select a
+  // platform-supported player without initializing MediaKit's native runtime.
+  if (!globals.isHarmonyOS && !globals.isTvOS) {
     try {
       MediaKit.ensureInitialized();
     } catch (e) {
@@ -957,7 +957,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
               isWeb: kIsWeb,
               isIOS: !kIsWeb && Platform.isIOS,
               isTablet: globals.isTablet,
-              isTelevision: globals.isAndroidTv,
+              isTelevision: globals.isTelevision,
             );
             Widget overlayBuilder(Widget child) {
               return _buildGlobalAppOverlay(child, isDragging: _isDragging);

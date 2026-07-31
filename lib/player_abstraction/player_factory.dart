@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
+import 'package:nipaplay/utils/platform_identity.dart';
 import 'dart:async'; // 导入dart:async库
 
 // Define available player types if you plan to support more than one.
@@ -56,7 +57,7 @@ class PlayerFactory {
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
 
   static bool get isErikaKernelSupported {
-    if (kIsWeb) return false;
+    if (kIsWeb || isTvOS) return false;
     return defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
@@ -84,7 +85,10 @@ class PlayerFactory {
       final erikaAndroidOutputModeIndex =
           prefs.getInt(_erikaAndroidOutputModeKey);
 
-      if (kernelTypeIndex != null &&
+      if (isTvOS) {
+        _cachedKernelType = PlayerKernelType.videoPlayer;
+        debugPrint('[PlayerFactory] tvOS 强制使用 Video Player 内核');
+      } else if (kernelTypeIndex != null &&
           kernelTypeIndex < PlayerKernelType.values.length) {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
       } else {
@@ -110,7 +114,8 @@ class PlayerFactory {
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType =
+          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
@@ -127,7 +132,8 @@ class PlayerFactory {
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType =
+          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
@@ -148,7 +154,8 @@ class PlayerFactory {
             prefs.getString(_androidAudioOutputKey) ?? 'opensles';
         final erikaAndroidOutputModeIndex =
             prefs.getInt(_erikaAndroidOutputModeKey);
-        if (kernelTypeIndex != null &&
+        if (!isTvOS &&
+            kernelTypeIndex != null &&
             kernelTypeIndex < PlayerKernelType.values.length) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
           debugPrint(
@@ -172,10 +179,14 @@ class PlayerFactory {
         AppHttpProxy.set(_cachedHttpProxy);
       });
 
-      debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
+      debugPrint(
+        '[PlayerFactory] 同步设置临时默认值: '
+        '${isTvOS ? "Video Player" : "MDK"}',
+      );
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType =
+          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedAndroidAudioOutput = 'opensles';
       _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
@@ -184,6 +195,7 @@ class PlayerFactory {
 
   // 获取当前内核设置
   static PlayerKernelType getKernelType() {
+    if (isTvOS) return PlayerKernelType.videoPlayer;
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
@@ -360,8 +372,11 @@ class PlayerFactory {
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
     // 如果是Web平台，强制使用VideoPlayer
-    if (kIsWeb) {
-      debugPrint('[PlayerFactory] Web平台，强制创建 Video Player 播放器');
+    if (kIsWeb || isTvOS) {
+      debugPrint(
+        '[PlayerFactory] ${isTvOS ? "tvOS" : "Web"} 强制创建 '
+        'Video Player 播放器',
+      );
       return VideoPlayerAdapter();
     }
 
@@ -393,8 +408,11 @@ class PlayerFactory {
 
   // 保存内核设置
   static Future<void> saveKernelType(PlayerKernelType type) async {
-    if (kIsWeb) {
-      debugPrint('[PlayerFactory] Web平台不支持更改播放器内核');
+    if (kIsWeb || isTvOS) {
+      debugPrint(
+        '[PlayerFactory] ${isTvOS ? "tvOS" : "Web"} 不支持更改'
+        '播放器内核',
+      );
       return;
     }
     try {

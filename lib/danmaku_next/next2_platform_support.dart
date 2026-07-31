@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/utils/platform_identity.dart';
 
 class Next2PlatformSupport {
   const Next2PlatformSupport._();
@@ -7,7 +8,7 @@ class Next2PlatformSupport {
   /// Web is intentionally excluded because the current Rust runtime is not
   /// packaged as a wasm module for the Flutter web target.
   static bool get isKernelSupported {
-    if (kIsWeb) return false;
+    if (kIsWeb || isTvOS) return false;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
       case TargetPlatform.iOS:
@@ -26,7 +27,7 @@ class Next2PlatformSupport {
 
   /// Native texture rendering is required on every non-web platform.
   static bool get isNativeTextureSupported {
-    if (kIsWeb) return false;
+    if (kIsWeb || isTvOS) return false;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
       case TargetPlatform.iOS:
