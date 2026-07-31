@@ -86,6 +86,99 @@ build/ohos/hap/entry-default-signed.hap
 "$NIPAPLAY_OHOS_FLUTTER" run -d <device-id> --debug
 ```
 
+### GitHub Actions 构建
+
+`.github/workflows/build-ohos.yml` 提供手动触发和 `workflow_call` 两种入口。
+工作流在 GitHub 托管的 Ubuntu runner 上完成以下步骤：
+
+1. 准备固定版本的 HarmonyOS Command Line Tools 和 OpenHarmony Flutter；
+2. 启用 `pubspec_overrides.ohos.yaml`；
+3. 使用 Rust 1.93.0 构建 OHOS arm64 原生库；
+4. 链接 MDK 官方提供的 OHOS 预编译 SDK；
+5. 使用 `flutter build hap --no-codesign` 生成 unsigned HAP；
+6. 可选地从 GitHub Actions Secrets 读取签名材料，生成并校验 signed HAP；
+7. 上传 HAP 和对应的 `SHA256SUMS-*`。
+
+#### 运行环境和安全边界
+
+GitHub 托管 runner 默认不包含 HarmonyOS Command Line Tools、Hvigor 和 ohpm。
+因此工作流使用公开的
+[`harmony-next-pipeline-docker`](https://github.com/sanchuanhehe/harmony-next-pipeline-docker)
+镜像，并固定到完整 SHA-256 digest，避免上游修改同名 tag 后无提示地改变构建
+环境。OpenHarmony Flutter 同样固定到已经过真机验证的 commit，而不是跟随浮动
+分支。
+
+这个容器用于提供构建工具，不包含 NipaPlay 的签名凭据。工作流的权限限制为
+只读仓库内容，签名文件只在 runner 临时目录中从 Secrets 解码，签名完成后立即
+删除；密码通过标准输入交给 `hap-sign-tool.jar`，不会作为命令行参数写入日志。
+
+`workflow_dispatch` 只在该工作流已经存在于仓库默认分支时显示。合并后可进入
+**Actions > Build HarmonyOS > Run workflow** 手动运行，也可以由其他工作流通过
+`workflow_call` 复用。该工作流不会在外部 Pull Request 上自动使用签名 Secrets：
+GitHub 不会向 fork PR 提供仓库 Secrets，也不应把签名凭据暴露给不受信任的 PR
+代码。
+
+#### 配置签名
+
+在仓库的 **Settings > Secrets and variables > Actions** 中配置以下 Secrets：
+
+| Secret | 内容 |
+| --- | --- |
+| `OHOS_SIGNING_CERT_BASE64` | Base64 编码的应用签名 `.cer` |
+| `OHOS_SIGNING_PROFILE_BASE64` | Base64 编码的调试或发布 `.p7b` |
+| `OHOS_SIGNING_KEYSTORE_BASE64` | Base64 编码的 `.p12` |
+| `OHOS_SIGNING_KEY_ALIAS` | P12 中的密钥别名 |
+| `OHOS_SIGNING_KEYSTORE_PASSWORD` | P12 密码 |
+| `OHOS_SIGNING_KEY_PASSWORD` | 密钥密码 |
+
+可使用以下命令生成单行 Base64 内容：
+
+```bash
+base64 < application.cer | tr -d '\n'
+base64 < profile.p7b | tr -d '\n'
+base64 < application.p12 | tr -d '\n'
+```
+
+进入仓库的 **Actions > Build HarmonyOS > Run workflow**，保持
+`sign_hap=true` 即可构建签名包。可侧载产物位于：
+
+```text
+release-HarmonyOS-signed/
+└── NipaPlay-<version>-HarmonyOS-arm64-signed.hap
+```
+
+工作流每次都会保留 unsigned 构建结果，签名开启时会再额外上传 signed 结果：
+
+| Artifact | 用途 | 能否直接侧载 |
+| --- | --- | --- |
+| `release-HarmonyOS-signed` | 真机安装和测试 | 可以，但 Profile 必须包含目标设备 |
+| `release-HarmonyOS-unsigned` | 检查 CI 是否可以完成编译 | 不可以 |
+
+调试 Profile 必须包含目标设备 UDID，并且证书、Profile、P12 和密钥别名必须
+属于同一套签名。否则即使 CI 签名成功，设备也会拒绝安装。使用不同证书签名的
+同包名应用不能直接覆盖安装，需要先卸载旧版本。
+
+若未配置签名 Secrets，可以将 `sign_hap` 设为 `false`，工作流会上传
+`release-HarmonyOS-unsigned`。Unsigned HAP 仅用于验证构建，不能直接侧载到
+正式 HarmonyOS 设备。
+
+工作流不会把解码器 SDK 从源码重新编译：MDK 使用官方 OHOS 预编译库，Erika
+则按其开源构建流程编译 OHOS arm64 运行库。
+
+#### 当前验证结果
+
+提交工作流前已经完成以下等价流程验证：
+
+- 使用固定的 OpenHarmony Flutter commit 完成 OHOS arm64 Release unsigned
+  HAP 构建；
+- 使用 HarmonyOS `hap-sign-tool.jar` 完成签名和 `verify-app` 校验；
+- 将生成的 signed HAP 侧载到 HarmonyOS 6.1 真机并成功启动应用；
+- `actionlint`、YAML 解析及主线 Flutter 兼容性测试通过。
+
+本地验证可以确认构建命令、签名参数和最终 HAP 可安装。GitHub runner 的完整
+远端执行仍应在工作流进入默认分支并配置 Secrets 后，以一次实际 Action 运行
+结果为准。
+
 ### 提交前恢复默认依赖
 
 完成 HarmonyOS 开发或构建后，使用仓库 `.fvmrc` 指定的标准 Flutter 恢复默认
