@@ -1,6 +1,6 @@
 # NipaPlay HarmonyOS 迁移状态
 
-更新日期：2026-07-30
+更新日期：2026-07-31
 
 当前基线使用 Flutter `3.35.8-ohos-1.0.1`、HarmonyOS SDK API 24，
 应用 `compatibleSdkVersion` 为 18。工程可以完成 Release HAP 的编译、签名、
@@ -12,6 +12,32 @@ build/ohos/hap/entry-default-signed.hap
 
 签名配置由 DevEco Studio 写入本机工程，证书和密钥路径与开发机绑定，不应作为
 可复用的仓库凭据提交。
+
+### 本地签名配置
+
+仓库中的 `ohos/build-profile.json5` 只保留可复用的产品、SDK、构建模式和模块
+配置，不包含 `signingConfigs`。从开源仓库拉取代码后，每位开发者都需要在
+DevEco Studio 中登录自己的华为开发者账号，并为自己的设备配置自动签名；也可
+使用自己申请的证书、Profile 和 P12 手动签名。
+
+签名材料不能在开发者之间共用：Profile 与应用、开发者账号和调试设备绑定，
+P12 还包含私钥。不要提交以下内容：
+
+- DevEco Studio 写入 `ohos/build-profile.json5` 的 `signingConfigs`；
+- `keyPassword`、`storePassword` 等密码字段；
+- 指向个人目录或 `.ohos/config` 的绝对路径；
+- `.p12`、`.p7b`、`.cer`、`.csr` 等本地签名材料。
+
+DevEco Studio 完成自动签名后，可能会在工作区内修改
+`ohos/build-profile.json5`。这些修改只供本机使用，提交代码前应恢复该文件，
+并运行兼容性测试：
+
+```bash
+git restore ohos/build-profile.json5
+fvm flutter test test/mainline_flutter_compatibility_test.dart
+```
+
+CI 或正式发布应从私有 Secret 临时注入签名材料，不应把凭据固化到公开分支。
 
 ## HarmonyOS 依赖启用与恢复
 

@@ -50,6 +50,42 @@ void main() {
     expect(harmonyFacade, contains('static bool get isSupported => false'));
   });
 
+  test('HarmonyOS project does not commit local signing material', () {
+    final buildProfile = File(
+      'ohos/build-profile.json5',
+    ).readAsStringSync();
+    const forbiddenSigningFields = <String>[
+      '"signingConfigs"',
+      '"signingConfig"',
+      '"certpath"',
+      '"keyAlias"',
+      '"keyPassword"',
+      '"storeFile"',
+      '"storePassword"',
+    ];
+    const forbiddenLocalPaths = <String>[
+      '/Users/',
+      '/home/',
+      '.ohos/config',
+      r':\Users\',
+    ];
+
+    for (final field in forbiddenSigningFields) {
+      expect(
+        buildProfile,
+        isNot(contains(field)),
+        reason: '$field belongs in a developer-local signing configuration.',
+      );
+    }
+    for (final path in forbiddenLocalPaths) {
+      expect(
+        buildProfile,
+        isNot(contains(path)),
+        reason: 'HarmonyOS build configuration must not contain $path.',
+      );
+    }
+  });
+
   test('application source does not require custom Platform APIs', () {
     final incompatibleFiles = Directory('lib')
         .listSync(recursive: true)

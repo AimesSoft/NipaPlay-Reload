@@ -54,6 +54,11 @@ docs/error.txt
 /rust/target
 /node_modules/
 **/oh_modules/
+# HarmonyOS signing materials are developer- and device-specific.
+/ohos/**/*.cer
+/ohos/**/*.csr
+/ohos/**/*.p12
+/ohos/**/*.p7b
 /data/
 /web-remote/.vite/deps/
 /image_response.json
