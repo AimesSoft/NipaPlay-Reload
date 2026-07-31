@@ -86,6 +86,33 @@ void main() {
     }
   });
 
+  test('HarmonyOS CI builds and signs without committed credentials', () {
+    final workflow = File(
+      '.github/workflows/build-ohos.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains('workflow_dispatch:'));
+    expect(workflow, contains('workflow_call:'));
+    expect(workflow, contains('--no-codesign'));
+    expect(workflow, contains('hap-sign-tool.jar'));
+    expect(workflow, contains('verify-app'));
+    expect(workflow, contains('release-HarmonyOS-signed'));
+    expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_CERT_BASE64 }}'));
+    expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}'));
+    expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}'));
+    expect(
+      workflow,
+      matches(
+        RegExp(
+          r'container:\s+image:\s+\S+@sha256:[0-9a-f]{64}',
+          multiLine: true,
+        ),
+      ),
+    );
+    expect(workflow, isNot(contains('/Users/')));
+    expect(workflow, isNot(contains('.ohos/config')));
+  });
+
   test('application source does not require custom Platform APIs', () {
     final incompatibleFiles = Directory('lib')
         .listSync(recursive: true)
