@@ -206,17 +206,18 @@ class DesktopMultiWindow {
       // feature flag reserved for the main channel. Reinstall the real owner
       // while the flag is enabled, then keep window creation contained here.
       binding.windowingOwner = flutter_windowing.createDefaultWindowingOwner();
+      // Flutter 3.47 renamed preferredSize/preferredConstraints to
+      // size/constraints and dropped `decorated` (framing is configured via
+      // the vendored native host afterwards, as before).
       nativeController = flutter_windowing.RegularWindowController(
-        preferredSize: size,
-        preferredConstraints: _constraintsFor(
+        // 3.47 requires a non-null size; 1280x720 matches the detached
+        // player's default content size when callers pass none.
+        size: size ?? const Size(1280, 720),
+        constraints: _constraintsFor(
           minimumSize: minimumSize,
           maximumSize: maximumSize,
         ),
         title: title,
-        // Flutter 3.44 throws for `decorated: false` on macOS and Windows.
-        // Create a normal host first, then let the vendored native host turn
-        // only this secondary window into a resizable frameless window.
-        decorated: frameless ? true : decorated,
         delegate: delegate,
       );
     } finally {
@@ -343,7 +344,7 @@ class DesktopMultiWindow {
           parent: parent._nativeController,
           anchorRect: anchorRect,
           positioner: _positionerFor(placement, gap),
-          preferredConstraints: BoxConstraints.tight(size),
+          constraints: BoxConstraints.tight(size),
           delegate: delegate,
         ),
       );
@@ -418,7 +419,7 @@ class DesktopMultiWindow {
           parent: parent._nativeController,
           anchorRect: anchorRect,
           positioner: _positionerFor(placement, gap),
-          preferredConstraints: BoxConstraints.tight(size),
+          constraints: BoxConstraints.tight(size),
           delegate: delegate,
         ),
       );
