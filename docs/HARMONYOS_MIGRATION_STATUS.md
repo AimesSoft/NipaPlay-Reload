@@ -97,7 +97,7 @@ git status --short
 | 能力 | 库或模块 | 当前处理 |
 | --- | --- | --- |
 | 播放器 | `fvp` | 使用 0.37.3 本地 fork，并兼容 API 18 的 `resourceManager` |
-| 播放器 | `erika_flutter` | 锁定远程集成提交；Erika Rust 内核使用 OHNativeWindow/wgpu、AVCodec 和 OHAudio |
+| 播放器 | `erika_flutter` | 使用官方 `AimesSoft/Erika` v0.1.4；Erika Rust 内核使用 OHNativeWindow/wgpu、AVCodec 和 OHAudio |
 | 本地设置 | `shared_preferences` | 使用 OpenHarmony 实现 |
 | 应用目录 | `path_provider` | 使用 OpenHarmony 实现 |
 | SQLite | `sqflite` | 使用 OpenHarmony 实现 |
