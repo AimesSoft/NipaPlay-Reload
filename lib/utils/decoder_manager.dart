@@ -36,7 +36,12 @@ class DecoderManager {
     final savedDecoders = prefs.getStringList(_selectedDecodersKey);
     List<String> decoders = [];
     if (savedDecoders != null && savedDecoders.isNotEmpty) {
-      decoders = List<String>.from(savedDecoders);
+      // 迁移旧版保存的解码器顺序：NVIDIA 上 VAAPI/VDPAU 解码帧导入 EGL 会崩溃（#639），
+      // 必须让 CUDA/NVDEC 优先。
+      decoders = _reorderForNvidia(List<String>.from(savedDecoders));
+      if (!listEquals(decoders, savedDecoders)) {
+        debugPrint('检测到 NVIDIA，已调整解码器顺序: $decoders');
+      }
     } else {
       decoders = _getPlatformDefaultDecoders();
       debugPrint('使用平台默认解码器设置: $decoders');
@@ -58,6 +63,34 @@ class DecoderManager {
     
     // 输出解码器相关属性
     _setGlobalDecodingProperties(); // Ensure global properties are set
+  }
+
+  // Linux 下 NVIDIA 内核驱动是否已加载（缓存，避免每次读文件）
+  static bool? _nvidiaDriverLoadedCache;
+
+  static bool _isLinuxNvidiaDriverLoaded() {
+    if (kIsWeb || !Platform.isLinux) return false;
+    return _nvidiaDriverLoadedCache ??= () {
+      try {
+        return File('/proc/driver/nvidia/version').existsSync();
+      } catch (_) {
+        return false;
+      }
+    }();
+  }
+
+  /// NVIDIA 驱动在用时把 CUDA/NVDEC 移到 VAAPI/VDPAU 之前，其余顺序不变
+  static List<String> _reorderForNvidia(List<String> decoders) {
+    if (!_isLinuxNvidiaDriverLoaded()) return decoders;
+    bool isNvidiaDecoder(String d) {
+      final upper = d.toUpperCase();
+      return upper.startsWith('CUDA') || upper.startsWith('NVDEC');
+    }
+
+    final nvidia = decoders.where(isNvidiaDecoder).toList();
+    if (nvidia.isEmpty) return decoders;
+    final others = decoders.where((d) => !isNvidiaDecoder(d)).toList();
+    return <String>[...nvidia, ...others];
   }
 
   /// 配置所有支持的解码器，按平台组织
@@ -97,17 +130,31 @@ class DecoderManager {
       ],
       
       // Linux解码器
-      'linux': [
-        "VAAPI", // Intel/AMD GPU
-        "VDPAU", // NVIDIA
-        "CUDA",
-        "NVDEC",
-        "rkmpp", // RockChip
-        "V4L2M2M", // 视频硬件解码API
-        "hap",
-        "dav1d",
-        "FFmpeg"
-      ],
+      // NVIDIA 驱动在用时必须让 CUDA/NVDEC 排在 VAAPI 之前：混合显卡（NVIDIA + AMD/Intel）
+      // 上 VAAPI 由核显解码，帧导入 NVIDIA EGL 上下文时会在 libnvidia-eglcore 中段错误（#639）
+      'linux': _isLinuxNvidiaDriverLoaded()
+          ? [
+              "CUDA", // NVIDIA GPU
+              "NVDEC", // NVIDIA专用
+              "VAAPI", // Intel/AMD GPU
+              "VDPAU",
+              "rkmpp", // RockChip
+              "V4L2M2M", // 视频硬件解码API
+              "hap",
+              "dav1d",
+              "FFmpeg"
+            ]
+          : [
+              "VAAPI", // Intel/AMD GPU
+              "VDPAU", // NVIDIA
+              "CUDA",
+              "NVDEC",
+              "rkmpp", // RockChip
+              "V4L2M2M", // 视频硬件解码API
+              "hap",
+              "dav1d",
+              "FFmpeg"
+            ],
       
       // Android解码器
       'android': [
