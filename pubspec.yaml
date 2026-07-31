@@ -259,8 +259,8 @@ flutter:
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
   # HarmonyOS-only dependency forks live in pubspec_overrides.ohos.yaml and
-  # are activated locally. Keeping them out of this shared graph lets upstream
-  # Flutter resolve its normal packages on Android, iOS, desktop and web.
+  # Linux 3.47-only forks live in pubspec_overrides.linux.yaml. Keeping both
+  # profiles out of this shared graph lets every platform use its pinned SDK.
   # Forked from 0.21.3 to fix obfuscated shape geometry and retain Android blur layers.
   liquid_glass_widgets:
     path: packages/liquid_glass_widgets

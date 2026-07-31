@@ -6,6 +6,11 @@ NipaPlay-Reload 是一个跨平台应用，这意味着我们的代码需要能�
 > 切换依赖模式前，请先阅读
 > [HarmonyOS 依赖与构建说明](../docs/HARMONYOS_MIGRATION_STATUS.md#harmonyos-依赖启用与恢复)。
 
+> Linux 构建固定使用 `.flutter-version-linux` 中的 Flutter 版本，并通过
+> `dart run tool/configure_flutter_dependencies.dart linux` 启用
+> `pubspec_overrides.linux.yaml`。其他平台继续使用 `.fvmrc`；切回其他平台前运行
+> `dart run tool/configure_flutter_dependencies.dart mainline` 清除生成的覆盖文件。
+
 ## 平台特定代码的核心技术
 
 在 Flutter 中，我们有多种方法来处理平台差异。以下是项目中最常用的几种技术，从简单到复杂排序。
@@ -163,7 +168,7 @@ Widget buildPlatformSpecificWidget() {
 现在我们来实现 `_showNvidiaGpuStatus` 方法。下面给出一个可以直接工作的、自包含的示例；这样你照着写时不会因为调用项目中的私有方法而编译失败。
 
 1.  在你的 `player_settings_page.dart` 中，实现 `_showNvidiaGpuStatus` 方法。
-2.  如果你后续想复用 `DecoderManager` 里的检测逻辑，可以先把当前的私有方法 `_checkForNvidiaGpu()` 提炼成一个公共 helper，再由 UI 层调用。
+2.  如果你后续想复用显卡检测逻辑，请先提炼一个公共 helper，再由 UI 层调用，不要让 UI 直接依赖播放器内部实现。
 
     ```dart
     // (接上文)

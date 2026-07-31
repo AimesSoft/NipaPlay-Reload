@@ -1,0 +1,17 @@
+name: desktop_multi_window
+description: NipaPlay Linux fork for Flutter 3.47 same-engine desktop views.
+version: 0.3.0-nipaplay.347.1
+publish_to: none
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=3.47.0-0.3.pre"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,40 @@
+# Linux-only dependency graph for Flutter 3.47.
+#
+# Activate before a Linux build:
+#   dart run tool/configure_flutter_dependencies.dart linux
+#
+# pub treats this section as a replacement rather than a per-package merge, so
+# the shared overrides from pubspec.yaml are repeated below.
+dependency_overrides:
+  # Flutter 3.47 renamed the private same-engine windowing constructor fields.
+  desktop_multi_window:
+    path: packages/desktop_multi_window_linux_347
+  # Vendored from fvp 0.33.1 with Linux GL state isolation around renderVideo.
+  fvp:
+    path: third_party/fvp
+  liquid_glass_widgets:
+    path: packages/liquid_glass_widgets
+  media_kit:
+    path: packages/media_kit
+  media_kit_video:
+    path: packages/media_kit_video
+  media_kit_libs_video:
+    path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
+  adaptive_platform_ui:
+    path: packages/adaptive_platform_ui
+  media_kit_libs_linux:
+    path: third_party/media-kit-upstream/libs/linux/media_kit_libs_linux
+  media_kit_libs_ios_video:
+    path: third_party/media-kit-upstream/libs/ios/media_kit_libs_ios_video
+  media_kit_libs_android_video:
+    path: third_party/media-kit-upstream/libs/android/media_kit_libs_android_video
+  media_kit_libs_windows_video:
+    path: third_party/media-kit-upstream/libs/windows/media_kit_libs_windows_video
+  media_kit_libs_macos_video:
+    path: third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video
+  smb_connect:
+    path: third_party/smb_connect
+  kmbal_ionicons:
+    path: third_party/kmbal_ionicons
+  volume_controller:
+    path: third_party/volume_controller

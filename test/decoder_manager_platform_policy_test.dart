@@ -4,28 +4,95 @@ import 'package:nipaplay/utils/decoder_manager.dart';
 void main() {
   group('platform decoder defaults', () {
     test('HarmonyOS prefers the native OH decoder', () {
-      expect(
-        platformDefaultDecodersForOperatingSystem('ohos'),
-        ['OH', 'FFmpeg', 'dav1d'],
-      );
+      expect(platformDefaultDecodersForOperatingSystem('ohos'), [
+        'OH',
+        'FFmpeg',
+        'dav1d',
+      ]);
     });
 
     test('mainline platform defaults remain unchanged', () {
+      expect(platformDefaultDecodersForOperatingSystem('android'), [
+        'AMediaCodec',
+        'MediaCodec',
+        'dav1d',
+        'FFmpeg',
+      ]);
+      expect(platformDefaultDecodersForOperatingSystem('ios'), [
+        'VT',
+        'hap',
+        'dav1d',
+        'FFmpeg',
+      ]);
+      expect(platformDefaultDecodersForOperatingSystem('macos'), [
+        'VT',
+        'hap',
+        'dav1d',
+        'FFmpeg',
+      ]);
+      expect(platformDefaultDecodersForOperatingSystem('unsupported'), [
+        'FFmpeg',
+      ]);
+    });
+
+    test('Linux prefers CUDA only when NVIDIA owns the graphics stack', () {
       expect(
-        platformDefaultDecodersForOperatingSystem('android'),
-        ['AMediaCodec', 'MediaCodec', 'dav1d', 'FFmpeg'],
+        platformDefaultDecodersForOperatingSystem(
+          'linux',
+          preferNvidia: true,
+        ).take(4),
+        ['CUDA', 'NVDEC', 'VAAPI', 'VDPAU'],
       );
+      expect(platformDefaultDecodersForOperatingSystem('linux').take(4), [
+        'VAAPI',
+        'VDPAU',
+        'CUDA',
+        'NVDEC',
+      ]);
+    });
+  });
+
+  group('Linux NVIDIA saved decoder migration', () {
+    const legacyDefault = [
+      'VAAPI',
+      'VDPAU',
+      'CUDA',
+      'NVDEC',
+      'rkmpp',
+      'V4L2M2M',
+      'hap',
+      'dav1d',
+      'FFmpeg',
+    ];
+
+    test('migrates only the exact legacy default', () {
       expect(
-        platformDefaultDecodersForOperatingSystem('ios'),
-        ['VT', 'hap', 'dav1d', 'FFmpeg'],
+        migrateLegacyLinuxDecoderOrderForNvidia(
+          savedDecoders: legacyDefault,
+          nvidiaGraphicsStackActive: true,
+        ).take(4),
+        ['CUDA', 'NVDEC', 'VAAPI', 'VDPAU'],
       );
+    });
+
+    test('preserves a user-customized order', () {
+      const custom = ['VAAPI', 'FFmpeg', 'CUDA'];
       expect(
-        platformDefaultDecodersForOperatingSystem('macos'),
-        ['VT', 'hap', 'dav1d', 'FFmpeg'],
+        migrateLegacyLinuxDecoderOrderForNvidia(
+          savedDecoders: custom,
+          nvidiaGraphicsStackActive: true,
+        ),
+        custom,
       );
+    });
+
+    test('does not migrate when NVIDIA is not the active graphics stack', () {
       expect(
-        platformDefaultDecodersForOperatingSystem('unsupported'),
-        ['FFmpeg'],
+        migrateLegacyLinuxDecoderOrderForNvidia(
+          savedDecoders: legacyDefault,
+          nvidiaGraphicsStackActive: false,
+        ),
+        legacyDefault,
       );
     });
   });

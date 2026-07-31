@@ -1,7 +1,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
+
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
+import 'package:nipaplay/utils/linux_nvidia_gpu.dart';
 
 /// 弹幕渲染引擎枚举
 enum DanmakuRenderEngine {
@@ -34,9 +37,10 @@ class DanmakuKernelFactory {
   static bool _enableNextPlusPlus = false;
 
   static DanmakuRenderEngine get _defaultEngine =>
-      Next2PlatformSupport.isKernelSupported
-          ? DanmakuRenderEngine.next2
-          : DanmakuRenderEngine.nipaplayNext;
+      Next2PlatformSupport.isKernelSupported &&
+          !isLinuxNvidiaGraphicsStackActive()
+      ? DanmakuRenderEngine.next2
+      : DanmakuRenderEngine.nipaplayNext;
 
   static bool get isNextPlusPlusEnabled => _enableNextPlusPlus;
 
@@ -93,8 +97,9 @@ class DanmakuKernelFactory {
       if (engineIndex != null &&
           engineIndex >= 0 &&
           engineIndex < DanmakuRenderEngine.values.length) {
-        _cachedEngine =
-            _sanitizeEngine(DanmakuRenderEngine.values[engineIndex]);
+        _cachedEngine = _sanitizeEngine(
+          DanmakuRenderEngine.values[engineIndex],
+        );
       } else {
         _cachedEngine = _defaultEngine;
       }
@@ -115,7 +120,10 @@ class DanmakuKernelFactory {
     try {
       final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(SettingsKeys.danmakuRenderEngine, sanitizedEngine.index);
+      await prefs.setInt(
+        SettingsKeys.danmakuRenderEngine,
+        sanitizedEngine.index,
+      );
       final oldEngine = _cachedEngine;
       _cachedEngine = sanitizedEngine;
 
