@@ -19,6 +19,7 @@ void applyMediaKitUserAgentProperty(
   void Function(String key, String value) setter,
   String userAgent,
 ) {
+  if (userAgent.isEmpty) return;
   setter('user-agent', userAgent);
 }
 

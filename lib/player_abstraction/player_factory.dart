@@ -25,6 +25,11 @@ bool supportsPlayerHttpProxy(PlayerKernelType type) {
   return type == PlayerKernelType.mdk || type == PlayerKernelType.mediaKit;
 }
 
+/// Whether [type] exposes a native HTTP User-Agent option.
+bool supportsNativePlayerUserAgent(PlayerKernelType type) {
+  return type == PlayerKernelType.mdk || type == PlayerKernelType.mediaKit;
+}
+
 class PlayerFactory {
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _precacheBufferSizeKey = 'player_precache_buffer_size_mb';
@@ -322,17 +327,35 @@ class PlayerFactory {
   }
 
   /// 保存自定义播放器 User-Agent。空字符串表示用内核默认 UA。
-  /// 即时生效于"下一次打开视频"（当前正在播放的视频不会重新请求）。
+  ///
+  /// 新值用于下一次打开视频；从自定义值恢复默认值时，会重建当前原生
+  /// 播放器内核，以移除已写入该内核实例的 UA 覆盖。
   static Future<void> saveCustomPlayerUA(String ua) async {
     final resolved = ua.trim();
     try {
+      if (!_hasLoadedSettings) {
+        await initialize();
+      }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(SettingsKeys.customPlayerUA, resolved);
+      final previous = _cachedCustomPlayerUA;
+      final saved =
+          await prefs.setString(SettingsKeys.customPlayerUA, resolved);
+      if (!saved) {
+        throw StateError('Failed to persist custom player User-Agent');
+      }
       _cachedCustomPlayerUA = resolved;
+      final kernelType = _cachedKernelType ?? PlayerKernelType.mdk;
+      if (previous.isNotEmpty &&
+          resolved.isEmpty &&
+          !kIsWeb &&
+          supportsNativePlayerUserAgent(kernelType)) {
+        _kernelChangeController.add(kernelType);
+      }
       debugPrint('[PlayerFactory] 已保存自定义播放器 UA: '
           '${resolved.isEmpty ? "(空=默认)" : resolved}');
     } catch (e) {
       debugPrint('[PlayerFactory] 保存自定义播放器 UA 出错: $e');
+      rethrow;
     }
   }
 

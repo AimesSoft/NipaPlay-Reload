@@ -12,6 +12,7 @@ void applyMdkUserAgentProperties(
   void Function(String key, String value) setter,
   String userAgent,
 ) {
+  if (userAgent.isEmpty) return;
   setter('avformat.user_agent', userAgent);
   setter('avio.user_agent', userAgent);
 }
