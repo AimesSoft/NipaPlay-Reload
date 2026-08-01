@@ -552,35 +552,39 @@ class _MediaLibrarySectionOrderEditorState
                     color: background,
                     borderRadius: material.BorderRadius.circular(10),
                   ),
-                  child: material.ReorderableDragStartListener(
-                    key: material.ValueKey<String>(
-                      'media-library-order-drag-${section.id}',
-                    ),
-                    index: index,
-                    child: material.SizedBox(
-                      height: 52,
-                      child: material.Padding(
-                        padding: const material.EdgeInsets.symmetric(
-                          horizontal: 14,
-                        ),
-                        child: material.Row(
-                          children: [
-                            material.Expanded(
-                              child: material.Text(
-                                section.label,
-                                style: material.TextStyle(
-                                  color: foreground,
-                                  fontSize: 16,
-                                  fontWeight: material.FontWeight.w600,
-                                ),
+                  child: material.SizedBox(
+                    height: 52,
+                    child: material.Padding(
+                      padding: const material.EdgeInsets.symmetric(
+                        horizontal: 14,
+                      ),
+                      child: material.Row(
+                        children: [
+                          material.Expanded(
+                            child: material.Text(
+                              section.label,
+                              style: material.TextStyle(
+                                color: foreground,
+                                fontSize: 16,
+                                fontWeight: material.FontWeight.w600,
                               ),
                             ),
-                            material.Icon(
-                              material.Icons.drag_handle,
-                              color: foreground.withValues(alpha: 0.55),
+                          ),
+                          material.ReorderableDragStartListener(
+                            key: material.ValueKey<String>(
+                              'media-library-order-drag-${section.id}',
                             ),
-                          ],
-                        ),
+                            index: index,
+                            child: material.SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: material.Icon(
+                                material.Icons.drag_handle,
+                                color: foreground.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

@@ -56,28 +56,24 @@ const _sections = <UnifiedMediaLibrarySection>[
 ];
 
 void main() {
-  test('saved section order ignores stale ids and appends new media sources',
-      () {
-    final ordered = applyMediaLibrarySectionOrder(
-      _sections,
-      const <String>[
+  test(
+    'saved section order ignores stale ids and appends new media sources',
+    () {
+      final ordered = applyMediaLibrarySectionOrder(_sections, const <String>[
         MediaLibrarySectionIds.emby,
         'removed-media-source',
         MediaLibrarySectionIds.local,
         MediaLibrarySectionIds.emby,
-      ],
-    );
+      ]);
 
-    expect(
-      ordered.map((section) => section.id),
-      <String>[
+      expect(ordered.map((section) => section.id), <String>[
         MediaLibrarySectionIds.emby,
         MediaLibrarySectionIds.local,
         MediaLibrarySectionIds.localManagement,
         _dynamicSection.id,
-      ],
-    );
-  });
+      ]);
+    },
+  );
 
   test('section reorder uses the adjusted onReorderItem destination index', () {
     expect(
@@ -119,13 +115,10 @@ void main() {
     final store = MediaLibrarySectionOrderStore();
 
     expect(await store.restore(), isTrue);
-    expect(
-      store.sectionIds,
-      <String>[
-        MediaLibrarySectionIds.emby,
-        MediaLibrarySectionIds.local,
-      ],
-    );
+    expect(store.sectionIds, <String>[
+      MediaLibrarySectionIds.emby,
+      MediaLibrarySectionIds.local,
+    ]);
 
     await store.update(<String>[
       MediaLibrarySectionIds.localManagement,
@@ -133,13 +126,10 @@ void main() {
     ]);
     final restoredStore = MediaLibrarySectionOrderStore();
     expect(await restoredStore.restore(), isTrue);
-    expect(
-      restoredStore.sectionIds,
-      <String>[
-        MediaLibrarySectionIds.localManagement,
-        MediaLibrarySectionIds.emby,
-      ],
-    );
+    expect(restoredStore.sectionIds, <String>[
+      MediaLibrarySectionIds.localManagement,
+      MediaLibrarySectionIds.emby,
+    ]);
   });
 
   test('the latest concurrent update is the last order persisted', () async {
@@ -169,47 +159,43 @@ void main() {
     releaseFirstSave.complete();
     await Future.wait<void>(<Future<void>>[firstUpdate, secondUpdate]);
 
-    expect(
-      persistedOrder,
-      <String>[
-        MediaLibrarySectionIds.localManagement,
-        MediaLibrarySectionIds.local,
-      ],
-    );
-    expect(persistedOrder, store.sectionIds);
-  });
-
-  test('reordering visible sections preserves unavailable section positions',
-      () async {
-    List<String>? persistedOrder;
-    final store = MediaLibrarySectionOrderStore(
-      load: () async => <String>[
-        MediaLibrarySectionIds.local,
-        MediaLibrarySectionIds.emby,
-        MediaLibrarySectionIds.localManagement,
-        _dynamicSection.id,
-      ],
-      save: (ids) async => persistedOrder = List<String>.of(ids),
-    );
-    await store.restore();
-
-    await store.updateVisible(<String>[
+    expect(persistedOrder, <String>[
       MediaLibrarySectionIds.localManagement,
       MediaLibrarySectionIds.local,
-      _dynamicSection.id,
     ]);
+    expect(persistedOrder, store.sectionIds);
+  });
 
-    expect(
-      store.sectionIds,
-      <String>[
+  test(
+    'reordering visible sections preserves unavailable section positions',
+    () async {
+      List<String>? persistedOrder;
+      final store = MediaLibrarySectionOrderStore(
+        load: () async => <String>[
+          MediaLibrarySectionIds.local,
+          MediaLibrarySectionIds.emby,
+          MediaLibrarySectionIds.localManagement,
+          _dynamicSection.id,
+        ],
+        save: (ids) async => persistedOrder = List<String>.of(ids),
+      );
+      await store.restore();
+
+      await store.updateVisible(<String>[
+        MediaLibrarySectionIds.localManagement,
+        MediaLibrarySectionIds.local,
+        _dynamicSection.id,
+      ]);
+
+      expect(store.sectionIds, <String>[
         MediaLibrarySectionIds.localManagement,
         MediaLibrarySectionIds.emby,
         MediaLibrarySectionIds.local,
         _dynamicSection.id,
-      ],
-    );
-    expect(persistedOrder, store.sectionIds);
-  });
+      ]);
+      expect(persistedOrder, store.sectionIds);
+    },
+  );
 
   test('a failed save does not block the next section order update', () async {
     var saveCount = 0;
@@ -235,17 +221,15 @@ void main() {
     ]);
 
     expect(saveCount, 2);
-    expect(
-      persistedOrder,
-      <String>[
-        MediaLibrarySectionIds.localManagement,
-        MediaLibrarySectionIds.local,
-      ],
-    );
+    expect(persistedOrder, <String>[
+      MediaLibrarySectionIds.localManagement,
+      MediaLibrarySectionIds.local,
+    ]);
   });
 
-  testWidgets('page restores, renders, and saves the media section order',
-      (tester) async {
+  testWidgets('page restores, renders, and saves the media section order', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     addTearDown(() => SharedPreferences.setMockInitialValues({}));
     final savedOrders = <List<String>>[];
@@ -263,9 +247,7 @@ void main() {
         providers: [
           ChangeNotifierProvider(create: (_) => JellyfinProvider()),
           ChangeNotifierProvider(create: (_) => EmbyProvider()),
-          ChangeNotifierProvider(
-            create: (_) => SharedRemoteLibraryProvider(),
-          ),
+          ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
           ChangeNotifierProvider(create: (_) => DandanplayRemoteProvider()),
           ChangeNotifierProvider<WatchHistoryProvider>(
             create: (_) => _LoadedWatchHistoryProvider(),
@@ -316,91 +298,150 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(savedOrders, isNotEmpty);
-    expect(
-      savedOrders.last,
-      <String>[
-        MediaLibrarySectionIds.local,
-        MediaLibrarySectionIds.emby,
-        MediaLibrarySectionIds.localManagement,
-      ],
-    );
+    expect(savedOrders.last, <String>[
+      MediaLibrarySectionIds.local,
+      MediaLibrarySectionIds.emby,
+      MediaLibrarySectionIds.localManagement,
+    ]);
     expect(
       tester.getTopLeft(find.text('本地媒体库').first).dx,
       lessThan(tester.getTopLeft(find.text('本地库管理').first).dx),
     );
   });
 
-  test('delayed restore cannot overwrite a newly saved section order',
-      () async {
-    final delayedLoad = Completer<List<String>>();
-    final savedOrders = <List<String>>[];
-    final store = MediaLibrarySectionOrderStore(
-      load: () => delayedLoad.future,
-      save: (ids) async => savedOrders.add(List<String>.of(ids)),
-    );
+  test(
+    'delayed restore cannot overwrite a newly saved section order',
+    () async {
+      final delayedLoad = Completer<List<String>>();
+      final savedOrders = <List<String>>[];
+      final store = MediaLibrarySectionOrderStore(
+        load: () => delayedLoad.future,
+        save: (ids) async => savedOrders.add(List<String>.of(ids)),
+      );
 
-    final pendingRestore = store.restore();
-    await store.update(<String>[
-      MediaLibrarySectionIds.localManagement,
-      MediaLibrarySectionIds.emby,
-    ]);
-    delayedLoad.complete(<String>[
-      MediaLibrarySectionIds.emby,
-      MediaLibrarySectionIds.local,
-    ]);
-
-    expect(await pendingRestore, isFalse);
-    expect(
-      store.sectionIds,
-      <String>[
+      final pendingRestore = store.restore();
+      await store.update(<String>[
         MediaLibrarySectionIds.localManagement,
         MediaLibrarySectionIds.emby,
-      ],
-    );
-    expect(
-      savedOrders.single,
-      <String>[
+      ]);
+      delayedLoad.complete(<String>[
+        MediaLibrarySectionIds.emby,
+        MediaLibrarySectionIds.local,
+      ]);
+
+      expect(await pendingRestore, isFalse);
+      expect(store.sectionIds, <String>[
         MediaLibrarySectionIds.localManagement,
         MediaLibrarySectionIds.emby,
-      ],
-    );
-  });
+      ]);
+      expect(savedOrders.single, <String>[
+        MediaLibrarySectionIds.localManagement,
+        MediaLibrarySectionIds.emby,
+      ]);
+    },
+  );
 
-  test('visible update waits for restore before preserving hidden sections',
-      () async {
-    final delayedLoad = Completer<List<String>>();
-    List<String>? persistedOrder;
-    final store = MediaLibrarySectionOrderStore(
-      load: () => delayedLoad.future,
-      save: (ids) async => persistedOrder = List<String>.of(ids),
-    );
+  test(
+    'visible update waits for restore before preserving hidden sections',
+    () async {
+      final delayedLoad = Completer<List<String>>();
+      List<String>? persistedOrder;
+      final store = MediaLibrarySectionOrderStore(
+        load: () => delayedLoad.future,
+        save: (ids) async => persistedOrder = List<String>.of(ids),
+      );
 
-    final pendingRestore = store.restore();
-    final pendingUpdate = store.updateVisible(<String>[
-      MediaLibrarySectionIds.localManagement,
-      MediaLibrarySectionIds.local,
-    ]);
-    delayedLoad.complete(<String>[
-      MediaLibrarySectionIds.local,
-      MediaLibrarySectionIds.emby,
-      MediaLibrarySectionIds.localManagement,
-    ]);
+      final pendingRestore = store.restore();
+      final pendingUpdate = store.updateVisible(<String>[
+        MediaLibrarySectionIds.localManagement,
+        MediaLibrarySectionIds.local,
+      ]);
+      delayedLoad.complete(<String>[
+        MediaLibrarySectionIds.local,
+        MediaLibrarySectionIds.emby,
+        MediaLibrarySectionIds.localManagement,
+      ]);
 
-    await pendingRestore;
-    await pendingUpdate;
-    expect(
-      persistedOrder,
-      <String>[
+      await pendingRestore;
+      await pendingUpdate;
+      expect(persistedOrder, <String>[
         MediaLibrarySectionIds.localManagement,
         MediaLibrarySectionIds.emby,
         MediaLibrarySectionIds.local,
-      ],
-    );
-    expect(store.sectionIds, persistedOrder);
-  });
+      ]);
+      expect(store.sectionIds, persistedOrder);
+    },
+  );
 
-  testWidgets('desktop media library exposes every dynamic section to sorting',
-      (tester) async {
+  testWidgets(
+    'desktop media library exposes every dynamic section to sorting',
+    (tester) async {
+      List<String>? savedOrder;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppDisplaySurfaceScope(
+            surface: AppDisplaySurface.desktopTablet,
+            child: SizedBox(
+              width: 1000,
+              height: 700,
+              child: AdaptiveMediaLibraryScaffold(
+                sections: _sections,
+                selectedSection: _sections.first,
+                onSectionSelected: (_) {},
+                onSectionOrderChanged: (value) => savedOrder = value,
+                onRemoteAccess: () {},
+                onAddMedia: () {},
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('排序'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('媒体库排序'), findsOneWidget);
+      for (final section in _sections) {
+        expect(find.text(section.label), findsWidgets);
+      }
+
+      final embyHandle = find.byKey(
+        const ValueKey<String>('media-library-order-drag-emby'),
+      );
+      expect(tester.getSize(embyHandle), const Size(48, 48));
+      final firstRow = find.byKey(
+        const ValueKey<String>('media-library-order-row-local_library'),
+      );
+      final dragStart = tester.getCenter(embyHandle);
+      final gesture = await tester.startGesture(dragStart);
+      await gesture.moveBy(const Offset(0, -10));
+      await tester.pump();
+      await gesture.moveTo(
+        Offset(dragStart.dx, tester.getTopLeft(firstRow).dy - 20),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.moveBy(const Offset(0, -40));
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(savedOrder, <String>[
+        MediaLibrarySectionIds.emby,
+        MediaLibrarySectionIds.local,
+        MediaLibrarySectionIds.localManagement,
+        _dynamicSection.id,
+      ]);
+    },
+  );
+
+  testWidgets('desktop section labels do not start a reorder gesture', (
+    tester,
+  ) async {
     List<String>? savedOrder;
 
     await tester.pumpWidget(
@@ -427,18 +468,14 @@ void main() {
     await tester.tap(find.text('排序'));
     await tester.pumpAndSettle();
 
-    expect(find.text('媒体库排序'), findsOneWidget);
-    for (final section in _sections) {
-      expect(find.text(section.label), findsWidgets);
-    }
-
-    final embyHandle = find.byKey(
-      const ValueKey<String>('media-library-order-drag-emby'),
+    final embyRow = find.byKey(
+      const ValueKey<String>('media-library-order-row-emby'),
     );
+    final embyLabel = find.descendant(of: embyRow, matching: find.text('Emby'));
     final firstRow = find.byKey(
       const ValueKey<String>('media-library-order-row-local_library'),
     );
-    final dragStart = tester.getCenter(embyHandle);
+    final dragStart = tester.getCenter(embyLabel);
     final gesture = await tester.startGesture(dragStart);
     await gesture.moveBy(const Offset(0, -10));
     await tester.pump();
@@ -454,85 +491,80 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    expect(
-      savedOrder,
-      <String>[
-        MediaLibrarySectionIds.emby,
-        MediaLibrarySectionIds.local,
-        MediaLibrarySectionIds.localManagement,
-        _dynamicSection.id,
-      ],
-    );
+    expect(savedOrder, _sections.map((section) => section.id).toList());
   });
 
-  testWidgets('desktop order dialog grows with section count and caps its size',
-      (tester) async {
-    tester.view.physicalSize = const Size(1200, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'desktop order dialog grows with section count and caps its size',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    Future<Size> openDialogWith(int sectionCount) async {
-      final sections = List<UnifiedMediaLibrarySection>.generate(
-        sectionCount,
-        (index) => UnifiedMediaLibrarySection(
-          id: 'dynamic-$index',
-          label: '动态媒体库 $index',
-          phoneSymbol: 'rectangle.stack',
-          contentType: UnifiedMediaLibraryContentType.dandanplay,
-        ),
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AppDisplaySurfaceScope(
-            surface: AppDisplaySurface.desktopTablet,
-            child: Builder(
-              builder: (context) => TextButton(
-                onPressed: () async {
-                  await showAdaptiveMediaLibrarySectionOrder(
-                    context,
-                    sections,
-                  );
-                },
-                child: const Text('打开排序'),
+      Future<Size> openDialogWith(int sectionCount) async {
+        final sections = List<UnifiedMediaLibrarySection>.generate(
+          sectionCount,
+          (index) => UnifiedMediaLibrarySection(
+            id: 'dynamic-$index',
+            label: '动态媒体库 $index',
+            phoneSymbol: 'rectangle.stack',
+            contentType: UnifiedMediaLibraryContentType.dandanplay,
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AppDisplaySurfaceScope(
+              surface: AppDisplaySurface.desktopTablet,
+              child: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async {
+                    await showAdaptiveMediaLibrarySectionOrder(
+                      context,
+                      sections,
+                    );
+                  },
+                  child: const Text('打开排序'),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.tap(find.text('打开排序'));
-      await tester.pumpAndSettle();
-      final size = tester.getSize(
-        find.byKey(
-          const ValueKey<String>('media-library-order-dialog-content'),
-        ),
-      );
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-      return size;
-    }
+        );
+        await tester.tap(find.text('打开排序'));
+        await tester.pumpAndSettle();
+        final size = tester.getSize(
+          find.byKey(
+            const ValueKey<String>('media-library-order-dialog-content'),
+          ),
+        );
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+        return size;
+      }
 
-    final twoSections = await openDialogWith(2);
-    final sixSections = await openDialogWith(6);
-    final manySections = await openDialogWith(20);
+      final twoSections = await openDialogWith(2);
+      final sixSections = await openDialogWith(6);
+      final manySections = await openDialogWith(20);
 
-    for (final size in <Size>[twoSections, sixSections, manySections]) {
-      expect(size.width, greaterThanOrEqualTo(640));
-      expect(size.width, lessThanOrEqualTo(720));
-    }
-    expect(twoSections.height, greaterThanOrEqualTo(240));
-    expect(sixSections.height, greaterThan(twoSections.height));
-    expect(manySections.height, greaterThan(sixSections.height));
-    expect(manySections.height, lessThanOrEqualTo(576));
+      for (final size in <Size>[twoSections, sixSections, manySections]) {
+        expect(size.width, greaterThanOrEqualTo(640));
+        expect(size.width, lessThanOrEqualTo(720));
+      }
+      expect(twoSections.height, greaterThanOrEqualTo(240));
+      expect(sixSections.height, greaterThan(twoSections.height));
+      expect(manySections.height, greaterThan(sixSections.height));
+      expect(manySections.height, lessThanOrEqualTo(576));
 
-    tester.view.physicalSize = const Size(520, 360);
-    final constrainedViewport = await openDialogWith(20);
-    expect(constrainedViewport.width, lessThanOrEqualTo(424));
-    expect(constrainedViewport.height, lessThanOrEqualTo(259.2));
-  });
+      tester.view.physicalSize = const Size(520, 360);
+      final constrainedViewport = await openDialogWith(20);
+      expect(constrainedViewport.width, lessThanOrEqualTo(424));
+      expect(constrainedViewport.height, lessThanOrEqualTo(259.2));
+    },
+  );
 
-  testWidgets('phone media library can open and save dynamic section sorting',
-      (tester) async {
+  testWidgets('phone media library can open and save dynamic section sorting', (
+    tester,
+  ) async {
     List<String>? savedOrder;
 
     await tester.pumpWidget(
@@ -563,10 +595,35 @@ void main() {
       expect(find.text(section.label), findsWidgets);
     }
 
+    final embyHandle = find.byKey(
+      const ValueKey<String>('media-library-order-drag-emby'),
+    );
+    expect(tester.getSize(embyHandle), const Size(48, 48));
+    final firstRow = find.byKey(
+      const ValueKey<String>('media-library-order-row-local_library'),
+    );
+    final dragStart = tester.getCenter(embyHandle);
+    final gesture = await tester.startGesture(dragStart);
+    await gesture.moveBy(const Offset(0, -10));
+    await tester.pump();
+    await gesture.moveTo(
+      Offset(dragStart.dx, tester.getTopLeft(firstRow).dy - 20),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    expect(savedOrder, _sections.map((section) => section.id).toList());
+    expect(savedOrder, <String>[
+      MediaLibrarySectionIds.emby,
+      MediaLibrarySectionIds.local,
+      MediaLibrarySectionIds.localManagement,
+      _dynamicSection.id,
+    ]);
   });
 }
 
@@ -582,10 +639,7 @@ class _LoadedWatchHistoryProvider extends WatchHistoryProvider {
 }
 
 class _DelayedVisibleUpdateStore extends MediaLibrarySectionOrderStore {
-  _DelayedVisibleUpdateStore({
-    required super.load,
-    required super.save,
-  });
+  _DelayedVisibleUpdateStore({required super.load, required super.save});
 
   final Completer<void> updateStarted = Completer<void>();
   final Completer<void> releaseUpdate = Completer<void>();
