@@ -44,6 +44,7 @@ class PlayerFactory {
   static String _cachedCustomPlayerUA = ''; // 自定义播放器 UA，空=用内核默认
   static String _cachedHttpProxy = '';
   static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
+  static int _oneTimeUAGeneration = 0;
   static bool _hasLoadedSettings = false;
 
   // 添加一个StreamController来广播内核切换事件
@@ -199,6 +200,7 @@ class PlayerFactory {
   /// 优先级高于 [getCustomPlayerUA] 的持久 UA。空字符串清除一次性 UA。
   static void setOneTimeUA(String ua) {
     final resolved = ua.trim();
+    _oneTimeUAGeneration++;
     _oneTimeUA = resolved.isEmpty ? null : resolved;
   }
 
@@ -212,8 +214,35 @@ class PlayerFactory {
   /// 获取一次性 UA（不消费，供 UI 预填）。未设置返回 null。
   static String? getOneTimeUA() => _oneTimeUA;
 
-  static void applyUserAgentForNextOpen(void Function(String) setUserAgent) {
-    setUserAgent(consumeOneTimeUA() ?? getCustomPlayerUA());
+  static Future<void> applyUserAgentForNextOpen(
+    Future<void> Function(String) setUserAgent,
+  ) async {
+    await runWithUserAgentForNextOpen(
+      setUserAgent: setUserAgent,
+      openMedia: () async {},
+    );
+  }
+
+  static Future<void> runWithUserAgentForNextOpen({
+    required Future<void> Function(String) setUserAgent,
+    required Future<void> Function() openMedia,
+  }) async {
+    final reservedUserAgent = _oneTimeUA;
+    final reservationGeneration = _oneTimeUAGeneration;
+    if (reservedUserAgent != null) {
+      _oneTimeUA = null;
+    }
+    try {
+      await setUserAgent(reservedUserAgent ?? getCustomPlayerUA());
+      await openMedia();
+    } catch (_) {
+      if (reservedUserAgent != null &&
+          _oneTimeUAGeneration == reservationGeneration &&
+          _oneTimeUA == null) {
+        _oneTimeUA = reservedUserAgent;
+      }
+      rethrow;
+    }
   }
 
   static int _clampPrecacheBufferSizeMb(int value) {

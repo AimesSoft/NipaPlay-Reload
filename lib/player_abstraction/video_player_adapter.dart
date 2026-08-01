@@ -208,6 +208,11 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     _createOrRebuildController();
   }
 
+  @override
+  Future<void> openMedia(String value) async {
+    media = value;
+  }
+
   void _disposeController() {
     try {
       if (_controller != null) {
@@ -821,7 +826,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
-  void setUserAgent(String ua) {
+  Future<void> setUserAgent(String ua) async {
     // video_player 插件无设置 HTTP User-Agent 的能力，留空实现。
   }
 

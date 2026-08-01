@@ -31,6 +31,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
   set media(String value) {}
 
   @override
+  Future<void> openMedia(String value) async {
+    media = value;
+  }
+
+  @override
   PlayerMediaInfo get mediaInfo => PlayerMediaInfo(duration: 0);
 
   @override
@@ -86,7 +91,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
   void setProperty(String key, String value) {}
 
   @override
-  void setUserAgent(String ua) {}
+  Future<void> setUserAgent(String ua) async {}
 
   @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {}

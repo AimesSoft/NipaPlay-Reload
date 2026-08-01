@@ -36,6 +36,7 @@ enum MediaType { unknown, video, audio, subtitle }
 class Player {
   final core_player.AbstractPlayer _delegate;
   Future<void>? _disposeFuture;
+  Future<void>? _openQueueTail;
   bool _disposeErrorHandlerAttached = false;
 
   /// Factory constructor that allows `Player()` to be called.
@@ -93,6 +94,27 @@ class Player {
 
   String get media => _delegate.media;
   set media(String value) => _delegate.media = value;
+
+  Future<void> openMedia(String value) async {
+    final previousOpen = _openQueueTail;
+    final currentOpen = Completer<void>();
+    final currentOpenFuture = currentOpen.future;
+    _openQueueTail = currentOpenFuture;
+    try {
+      if (previousOpen != null) {
+        await previousOpen;
+      }
+      await PlayerFactory.runWithUserAgentForNextOpen(
+        setUserAgent: _delegate.setUserAgent,
+        openMedia: () => _delegate.openMedia(value),
+      );
+    } finally {
+      currentOpen.complete();
+      if (identical(_openQueueTail, currentOpenFuture)) {
+        _openQueueTail = null;
+      }
+    }
+  }
 
   PlayerMediaInfo get mediaInfo => _delegate.mediaInfo;
 
@@ -243,7 +265,7 @@ class Player {
       _delegate.setProperty(key, value);
 
   /// 设置 HTTP User-Agent（播放器请求视频时）。空字符串 = 用内核默认 UA。
-  void setUserAgent(String ua) => _delegate.setUserAgent(ua);
+  Future<void> setUserAgent(String ua) => _delegate.setUserAgent(ua);
 
   Future<void> setVideoSurfaceSize({int? width, int? height}) =>
       _delegate.setVideoSurfaceSize(width: width, height: height);

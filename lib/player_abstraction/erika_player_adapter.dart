@@ -713,6 +713,11 @@ class ErikaPlayerAdapter
   }
 
   @override
+  Future<void> openMedia(String value) async {
+    media = value;
+  }
+
+  @override
   PlayerMediaInfo get mediaInfo => _mediaInfo;
 
   @override
@@ -962,7 +967,7 @@ class ErikaPlayerAdapter
   }
 
   @override
-  void setUserAgent(String ua) {
+  Future<void> setUserAgent(String ua) async {
     // erika_flutter 暂未暴露设置 HTTP User-Agent 的接口，留空实现。
   }
 

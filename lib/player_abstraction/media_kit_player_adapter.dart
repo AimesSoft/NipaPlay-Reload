@@ -1838,6 +1838,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
+  Future<void> openMedia(String value) async {
+    media = value;
+  }
+
+  @override
   PlayerMediaInfo get mediaInfo => _mediaInfo;
 
   @override
@@ -2459,19 +2464,26 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
-  void setUserAgent(String ua) {
+  Future<void> setUserAgent(String ua) async {
     try {
       // mpv 的 user-agent 属性，对所有 HTTP 请求生效。须在打开媒体前设置。
+      dynamic pendingUpdate;
       applyMediaKitUserAgentProperty(
-        (key, value) => unawaited(
-          (_player.platform as dynamic).setProperty(key, value),
+        (key, value) =>
+            pendingUpdate = (_player.platform as dynamic).setProperty(
+          key,
+          value,
         ),
         ua,
       );
+      if (pendingUpdate != null) {
+        await pendingUpdate;
+      }
       _properties['user-agent'] = ua;
       debugPrint('MediaKit: 已设置 user-agent: ${ua.isEmpty ? "(默认)" : ua}');
     } catch (e) {
       debugPrint('MediaKit: 设置 user-agent 失败: $e');
+      rethrow;
     }
   }
 
