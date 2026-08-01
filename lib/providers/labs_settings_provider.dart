@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class LabsSettingsProvider extends ChangeNotifier {
   LabsSettingsProvider() {
@@ -11,7 +12,10 @@ class LabsSettingsProvider extends ChangeNotifier {
   bool _enableErikaPlayerKernel = false;
   bool _isLoaded = false;
 
-  bool get enableLargeScreenMode => _enableLargeScreenMode;
+  // The television layout is a first-class mode on Apple TV rather than an
+  // experimental feature. The separate layout preference can still be used
+  // to leave large-screen mode for the current device.
+  bool get enableLargeScreenMode => globals.isTvOS || _enableLargeScreenMode;
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get isLoaded => _isLoaded;
 
@@ -29,6 +33,7 @@ class LabsSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setEnableLargeScreenMode(bool enabled) async {
+    if (globals.isTvOS) return;
     if (_enableLargeScreenMode == enabled) return;
     _enableLargeScreenMode = enabled;
     notifyListeners();

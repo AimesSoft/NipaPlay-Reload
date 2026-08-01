@@ -1346,7 +1346,9 @@ class MainPageState extends State<MainPage>
   }
 
   Future<void> _initializeController() async {
-    _useLargeScreenLayout = await LargeScreenModePreferences.load();
+    _useLargeScreenLayout = await LargeScreenModePreferences.load(
+      defaultValue: globals.isTvOS,
+    );
     final initialIndex = _getInitialTabIndex();
 
     if (mounted) {
