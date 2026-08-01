@@ -520,11 +520,12 @@ class EmbyService extends MediaServerServiceBase
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (!_isConnected) {
+    if (!_isConnected || limit <= 0) {
       return [];
     }
 
     try {
+      const maxPageSize = 200;
       // 默认排序参数
       final defaultSortBy = sortBy ?? 'DateCreated,SortName';
       final defaultSortOrder = sortOrder ?? 'Descending';
@@ -551,15 +552,48 @@ class EmbyService extends MediaServerServiceBase
         includeItemTypes = 'Movie,Episode,Video';
       }
 
-      final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
+      final items = <EmbyMediaItem>[];
+      var startIndex = 0;
 
-      if (response.statusCode == 200) {
+      while (items.length < limit) {
+        final remaining = limit - items.length;
+        final pageSize = remaining < maxPageSize ? remaining : maxPageSize;
+        final response = await _makeAuthenticatedRequest(
+            '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&StartIndex=$startIndex&Limit=$pageSize&Fields=Overview,CommunityRating');
+
+        if (response.statusCode != 200) {
+          throw Exception(
+            '服务器返回错误: ${response.statusCode} ${response.reasonPhrase}',
+          );
+        }
+
         final data = json.decode(response.body);
-        final List<dynamic> items = data['Items'];
+        final rawPageItems = data['Items'];
+        if (rawPageItems is! List<dynamic>) {
+          throw const FormatException('Emby Items must be a list');
+        }
+        final pageItems = rawPageItems;
+        if (pageItems.isEmpty) {
+          break;
+        }
 
-        return items.map((item) => EmbyMediaItem.fromJson(item)).toList();
+        items.addAll(
+          pageItems.map(
+            (item) => EmbyMediaItem.fromJson(item as Map<String, dynamic>),
+          ),
+        );
+        startIndex += pageItems.length;
+
+        final totalRecordCount = data['TotalRecordCount'];
+        if (totalRecordCount is num && startIndex >= totalRecordCount.toInt()) {
+          break;
+        }
+        if (totalRecordCount == null && pageItems.length < pageSize) {
+          break;
+        }
       }
+
+      return items;
     } catch (e) {
       print('Error fetching media items for library $libraryId: $e');
     }
