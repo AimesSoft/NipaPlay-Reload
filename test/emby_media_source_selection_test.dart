@@ -67,8 +67,10 @@ void main() {
       final playedSessions = <PlaybackSession>[];
       final sourceChanges = <(String?, String)>[];
       final events = <String>[];
-      final selectedSession =
-          _session(selectedId: second.id, sources: [first, second]);
+      final selectedSession = _session(
+        selectedId: second.id,
+        sources: [first, second],
+      );
 
       final result = await selectAndPlayEmbySource(
         initialSession: initial,
@@ -95,36 +97,44 @@ void main() {
       expect(requestedSourceIds, [second.id]);
       expect(playedSessions, [same(selectedSession)]);
       expect(sourceChanges, [(first.id, second.id)]);
-      expect(events,
-          ['reload:source-b', 'change:source-a:source-b', 'play:source-b']);
+      expect(events, [
+        'reload:source-b',
+        'change:source-a:source-b',
+        'play:source-b',
+      ]);
       expect(result, isTrue);
     });
 
-    test('does not reload or start playback when selection is cancelled',
-        () async {
-      final first = _source('source-a', '/media/Version A.mkv');
-      final second = _source('source-b', '/media/Version B.mp4');
-      final initial = _session(selectedId: first.id, sources: [first, second]);
-      var reloaded = false;
-      var playbackStarts = 0;
-      var sourceChanges = 0;
+    test(
+      'does not reload or start playback when selection is cancelled',
+      () async {
+        final first = _source('source-a', '/media/Version A.mkv');
+        final second = _source('source-b', '/media/Version B.mp4');
+        final initial = _session(
+          selectedId: first.id,
+          sources: [first, second],
+        );
+        var reloaded = false;
+        var playbackStarts = 0;
+        var sourceChanges = 0;
 
-      final result = await selectAndPlayEmbySource(
-        initialSession: initial,
-        chooseSource: (sources, selectedId) async => null,
-        reloadSession: (mediaSourceId) async {
-          reloaded = true;
-          return initial;
-        },
-        onSourceChanged: (previousId, selectedId) async => sourceChanges++,
-        startPlayback: (session) async => playbackStarts++,
-      );
+        final result = await selectAndPlayEmbySource(
+          initialSession: initial,
+          chooseSource: (sources, selectedId) async => null,
+          reloadSession: (mediaSourceId) async {
+            reloaded = true;
+            return initial;
+          },
+          onSourceChanged: (previousId, selectedId) async => sourceChanges++,
+          startPlayback: (session) async => playbackStarts++,
+        );
 
-      expect(result, isFalse);
-      expect(reloaded, isFalse);
-      expect(playbackStarts, 0);
-      expect(sourceChanges, 0);
-    });
+        expect(result, isFalse);
+        expect(reloaded, isFalse);
+        expect(playbackStarts, 0);
+        expect(sourceChanges, 0);
+      },
+    );
 
     test('propagates reload failures without starting playback', () async {
       final first = _source('source-a', '/media/Version A.mkv');
@@ -147,35 +157,40 @@ void main() {
     });
 
     test(
-        'plays the initial session without reload when current source is chosen',
-        () async {
-      final first = _source('source-a', '/media/Version A.mkv');
-      final second = _source('source-b', '/media/Version B.mp4');
-      final initial = _session(selectedId: first.id, sources: [first, second]);
-      var reloads = 0;
-      var sourceChanges = 0;
-      final played = <PlaybackSession>[];
+      'plays the initial session without reload when current source is chosen',
+      () async {
+        final first = _source('source-a', '/media/Version A.mkv');
+        final second = _source('source-b', '/media/Version B.mp4');
+        final initial = _session(
+          selectedId: first.id,
+          sources: [first, second],
+        );
+        var reloads = 0;
+        var sourceChanges = 0;
+        final played = <PlaybackSession>[];
 
-      final result = await selectAndPlayEmbySource(
-        initialSession: initial,
-        chooseSource: (sources, selectedId) async => first,
-        reloadSession: (mediaSourceId) async {
-          reloads++;
-          return initial;
-        },
-        onSourceChanged: (previousId, selectedId) async => sourceChanges++,
-        startPlayback: (session) async => played.add(session),
-      );
+        final result = await selectAndPlayEmbySource(
+          initialSession: initial,
+          chooseSource: (sources, selectedId) async => first,
+          reloadSession: (mediaSourceId) async {
+            reloads++;
+            return initial;
+          },
+          onSourceChanged: (previousId, selectedId) async => sourceChanges++,
+          startPlayback: (session) async => played.add(session),
+        );
 
-      expect(result, isTrue);
-      expect(reloads, 0);
-      expect(sourceChanges, 0);
-      expect(played, [same(initial)]);
-    });
+        expect(result, isTrue);
+        expect(reloads, 0);
+        expect(sourceChanges, 0);
+        expect(played, [same(initial)]);
+      },
+    );
   });
 
-  testWidgets('selector shows every source and returns the tapped source',
-      (tester) async {
+  testWidgets('selector shows every source and returns the tapped source', (
+    tester,
+  ) async {
     final first = _source('source-a', '/media/Version A.mkv');
     final second = _source(
       'source-b',
@@ -223,6 +238,71 @@ void main() {
     expect(clearedSubtitleItems, <String>['episode-1']);
   });
 
+  test(
+    'explicit media source selection fails when Emby omits the requested source',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'PlaySessionId': 'play-session',
+              'MediaSources': [
+                {
+                  'Id': 'source-a',
+                  'Container': 'mkv',
+                  'DirectStreamUrl': '/Videos/episode-1/source-a/stream.mkv',
+                  'SupportsDirectPlay': true,
+                },
+              ],
+            }),
+          );
+        await request.response.close();
+      });
+
+      final emby = EmbyService.instance;
+      final previousServerUrl = emby.serverUrl;
+      final previousAccessToken = emby.accessToken;
+      final previousUserId = emby.userId;
+      final previousProfile = emby.currentProfile;
+      final previousIsConnected = emby.isConnected;
+      emby
+        ..serverUrl = 'http://${server.address.address}:${server.port}'
+        ..accessToken = 'emby-token'
+        ..userId = 'emby-user'
+        ..currentProfile = null
+        ..isConnected = true;
+      addTearDown(() {
+        emby
+          ..isConnected = previousIsConnected
+          ..serverUrl = previousServerUrl
+          ..accessToken = previousAccessToken
+          ..userId = previousUserId
+          ..currentProfile = previousProfile;
+      });
+
+      await expectLater(
+        HttpOverrides.runWithHttpOverrides(
+          () => emby.createPlaybackSession(
+            itemId: 'episode-1',
+            mediaSourceId: 'source-b',
+          ),
+          _RealHttpOverrides(),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('source-b'),
+          ),
+        ),
+      );
+    },
+  );
+
   test('nested Emby playback paths resolve to the episode item id', () {
     expect(
       embyItemIdFromVideoPath('emby://series/season/episode-1'),
@@ -236,8 +316,9 @@ void main() {
     final temporaryDirectory = await Directory.systemTemp.createTemp(
       'nipaplay-selected-subtitle-source-test-',
     );
-    PathProviderPlatform.instance =
-        _TemporaryPathProvider(temporaryDirectory.path);
+    PathProviderPlatform.instance = _TemporaryPathProvider(
+      temporaryDirectory.path,
+    );
     addTearDown(() async {
       PathProviderPlatform.instance = previousPathProvider;
       await temporaryDirectory.delete(recursive: true);
@@ -251,12 +332,14 @@ void main() {
         request.response
           ..statusCode = HttpStatus.ok
           ..headers.contentType = ContentType.json
-          ..write(jsonEncode({
-            'MediaSources': [
-              {'Id': 'source-a'},
-              {'Id': 'source-b'},
-            ],
-          }));
+          ..write(
+            jsonEncode({
+              'MediaSources': [
+                {'Id': 'source-a'},
+                {'Id': 'source-b'},
+              ],
+            }),
+          );
       } else {
         request.response
           ..statusCode = HttpStatus.ok
@@ -361,10 +444,7 @@ void main() {
       ),
     );
     expect(streaming, contains('String? mediaSourceId'));
-    expect(
-      streaming,
-      contains('mediaSourceId: mediaSourceId ??'),
-    );
+    expect(streaming, contains('mediaSourceId: mediaSourceId ??'));
     final embyReload = streaming.substring(
       streaming.indexOf('extension EmbyQualitySwitch'),
     );
@@ -399,9 +479,7 @@ void main() {
     );
     expect(
       compactStreaming,
-      contains(
-        'getSubtitleTracks(itemId, mediaSourceId: mediaSourceId)',
-      ),
+      contains('getSubtitleTracks(itemId, mediaSourceId: mediaSourceId)'),
     );
     expect(
       compactStreaming,
@@ -415,8 +493,9 @@ void main() {
       streaming.indexOf('Future<void> _loadStreamingExternalSubtitles'),
     );
     expect(
-      RegExp(r'_currentPlaybackSession\?\.mediaSourceId')
-          .allMatches(embySubtitleLoader),
+      RegExp(
+        r'_currentPlaybackSession\?\.mediaSourceId',
+      ).allMatches(embySubtitleLoader),
       hasLength(1),
     );
   });
