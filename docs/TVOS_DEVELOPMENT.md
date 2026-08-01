@@ -51,6 +51,12 @@ Components**, create an Apple TV simulator, and then use:
 ./tool/flutter_tvos.sh run -d <apple-tv-device-id>
 ```
 
+tvOS uses indirect focus navigation rather than touch-style pointer input.
+In Simulator, use the arrow keys to move focus, Return to activate, and Escape
+to go back; a trackpad or mouse wheel can also move focus. NipaPlay enables its
+large-screen, focusable layout by default on Apple TV. A saved per-device
+choice still takes precedence after the user explicitly leaves that mode.
+
 For a physical Apple TV, select a Development Team for the Runner target in
 `tvos/Runner.xcworkspace`, then build or run against the paired device. The
 team is deliberately not committed because signing identities are
