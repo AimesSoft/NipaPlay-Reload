@@ -11,6 +11,7 @@ import 'media_server_transport_client_stub.dart'
 /// Sends Emby/Jellyfin HTTP requests through one configurable transport.
 class MediaServerTransport {
   static String? _connectionUserAgentCache;
+  static Future<void>? _connectionUserAgentSaveQueueTail;
 
   static const String defaultConnectionUserAgent = defaultNipaPlayUserAgent;
 
@@ -31,15 +32,34 @@ class MediaServerTransport {
   /// An empty value restores [defaultConnectionUserAgent].
   static Future<String> saveConnectionUserAgent(String userAgent) async {
     final sanitized = sanitizeHttpUserAgent(userAgent);
-    _connectionUserAgentCache = sanitized;
+    final previousSave = _connectionUserAgentSaveQueueTail;
+    final currentSave = Completer<void>();
+    final currentSaveFuture = currentSave.future;
+    _connectionUserAgentSaveQueueTail = currentSaveFuture;
     try {
+      if (previousSave != null) {
+        await previousSave;
+      }
       final preferences = await SharedPreferences.getInstance();
-      await preferences.setString(
+      _connectionUserAgentCache ??= sanitizeHttpUserAgent(
+        preferences.getString(SettingsKeys.mediaServerConnectionUserAgent) ??
+            '',
+      );
+      final saved = await preferences.setString(
         SettingsKeys.mediaServerConnectionUserAgent,
         sanitized,
       );
-    } catch (_) {}
-    return sanitized;
+      if (!saved) {
+        throw StateError('Failed to persist media-server User-Agent');
+      }
+      _connectionUserAgentCache = sanitized;
+      return sanitized;
+    } finally {
+      currentSave.complete();
+      if (identical(_connectionUserAgentSaveQueueTail, currentSaveFuture)) {
+        _connectionUserAgentSaveQueueTail = null;
+      }
+    }
   }
 
   /// Returns the stored value; an empty value means to use the app default.

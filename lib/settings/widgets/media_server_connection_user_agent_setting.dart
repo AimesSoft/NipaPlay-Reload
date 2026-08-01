@@ -15,7 +15,17 @@ bool supportsMediaServerConnectionUserAgentSetting({bool isWeb = kIsWeb}) {
 }
 
 class MediaServerConnectionUserAgentSetting extends StatefulWidget {
-  const MediaServerConnectionUserAgentSetting({super.key});
+  const MediaServerConnectionUserAgentSetting({
+    super.key,
+    this.loadUserAgent,
+    this.saveUserAgent,
+  });
+
+  /// Overrides the persisted-value loader in tests or alternate hosts.
+  final Future<String> Function()? loadUserAgent;
+
+  /// Overrides the persisted-value writer in tests or alternate hosts.
+  final Future<String> Function(String userAgent)? saveUserAgent;
 
   @override
   State<MediaServerConnectionUserAgentSetting> createState() =>
@@ -61,7 +71,9 @@ class _MediaServerConnectionUserAgentSettingState
   }
 
   Future<void> _loadUserAgent() async {
-    final stored = await MediaServerServiceBase.getStoredConnectionUserAgent();
+    final loadUserAgent = widget.loadUserAgent ??
+        MediaServerServiceBase.getStoredConnectionUserAgent;
+    final stored = await loadUserAgent();
     if (!mounted) return;
     setState(() {
       _storedUserAgent = stored;
@@ -74,29 +86,50 @@ class _MediaServerConnectionUserAgentSettingState
     if (!mounted || input == null) return;
 
     setState(() => _isSaving = true);
-    final saved = await MediaServerServiceBase.saveConnectionUserAgent(input);
-    if (!mounted) return;
-    setState(() {
-      _storedUserAgent = saved;
-      _isSaving = false;
-    });
-    AdaptiveSnackBar.show(
-      context,
-      message: saved.isEmpty
-          ? _text(
-              context,
-              '已恢复默认连接 UA',
-              '已恢復預設連線 UA',
-              'Default connection UA restored.',
-            )
-          : _text(
-              context,
-              '连接 UA 已保存',
-              '連線 UA 已儲存',
-              'Connection UA saved.',
-            ),
-      type: AdaptiveSnackBarType.success,
-    );
+    try {
+      final saveUserAgent = widget.saveUserAgent ??
+          MediaServerServiceBase.saveConnectionUserAgent;
+      final saved = await saveUserAgent(input);
+      if (!mounted) return;
+      setState(() => _storedUserAgent = saved);
+      AdaptiveSnackBar.show(
+        context,
+        message: saved.isEmpty
+            ? _text(
+                context,
+                '已恢复默认连接 UA',
+                '已恢復預設連線 UA',
+                'Default connection UA restored.',
+              )
+            : _text(
+                context,
+                '连接 UA 已保存',
+                '連線 UA 已儲存',
+                'Connection UA saved.',
+              ),
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[MediaServerConnectionUserAgentSetting] save failed: '
+        '$error\n$stackTrace',
+      );
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: _text(
+          context,
+          '连接 UA 保存失败',
+          '連線 UA 儲存失敗',
+          'Failed to save connection UA.',
+        ),
+        type: AdaptiveSnackBarType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   Future<String?> _showInputDialog() async {

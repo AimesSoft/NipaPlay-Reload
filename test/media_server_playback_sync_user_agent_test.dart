@@ -10,8 +10,11 @@ import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test('Emby and Jellyfin playback sync use the configured User-Agent',
       () async {
     final embyRequests = <_RecordedRequest>[];
@@ -97,7 +100,8 @@ void main() {
     expect(embyRequests, hasLength(2));
     expect(jellyfinRequests, hasLength(2));
     expect(
-      [...embyRequests, ...jellyfinRequests].map((request) => request.userAgent),
+      [...embyRequests, ...jellyfinRequests]
+          .map((request) => request.userAgent),
       everyElement('SyncClient/4.0'),
     );
     expect(embyRequests.first.method, 'GET');

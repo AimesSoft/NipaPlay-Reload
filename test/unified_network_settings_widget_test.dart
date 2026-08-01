@@ -116,4 +116,43 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'connection UA save failure keeps the old value and re-enables editing',
+    (tester) async {
+      var saveAttempts = 0;
+      await tester.pumpWidget(
+        buildApp(
+          MediaServerConnectionUserAgentSetting(
+            loadUserAgent: () async => 'WorkingClient/1.0',
+            saveUserAgent: (value) async {
+              saveAttempts++;
+              throw StateError('simulated write failure');
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final tile = find.text('连接 User-Agent（Jellyfin/Emby）');
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).last,
+        'UnsavedClient/2.0',
+      );
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(saveAttempts, 1);
+      expect(find.text('WorkingClient/1.0'), findsOneWidget);
+      expect(find.text('连接 UA 保存失败'), findsOneWidget);
+
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsWidgets);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    },
+  );
 }

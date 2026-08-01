@@ -1,29 +1,36 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/services/media_server_transport.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  test('adds the app User-Agent unless the caller already supplied one',
-      () async {
-    final client = _RecordingClient();
-    final transport = MediaServerTransport.fromClient(client);
-    addTearDown(transport.close);
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    await transport.send(
-      http.Request('GET', Uri.parse('http://media.invalid/default')),
-      timeout: const Duration(seconds: 1),
-    );
-    await transport.send(
-      http.Request('GET', Uri.parse('http://media.invalid/explicit'))
-        ..headers['user-agent'] = 'ExplicitClient/3.0',
-      timeout: const Duration(seconds: 1),
-    );
+  test(
+    'adds the app User-Agent unless the caller already supplied one',
+    () async {
+      final client = _RecordingClient();
+      final transport = MediaServerTransport.fromClient(client);
+      addTearDown(transport.close);
 
-    expect(client.userAgents, ['NipaPlay/1.0', 'ExplicitClient/3.0']);
-  });
+      await transport.send(
+        http.Request('GET', Uri.parse('http://media.invalid/default')),
+        timeout: const Duration(seconds: 1),
+      );
+      await transport.send(
+        http.Request('GET', Uri.parse('http://media.invalid/explicit'))
+          ..headers['user-agent'] = 'ExplicitClient/3.0',
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(client.userAgents, ['NipaPlay/1.0', 'ExplicitClient/3.0']);
+    },
+  );
 
   test('closes its pending client only after a request times out', () async {
     final client = _StallingClient();
@@ -32,19 +39,13 @@ void main() {
     final targetUri = Uri.parse('http://media.invalid/slow');
 
     final responseFuture = transport.send(
-      http.Request(
-        'GET',
-        targetUri,
-      ),
+      http.Request('GET', targetUri),
       timeout: const Duration(milliseconds: 100),
     );
     expect(client.sentRequests, [('GET', targetUri)]);
     expect(client.isClosed, isFalse);
 
-    await expectLater(
-      responseFuture,
-      throwsA(isA<TimeoutException>()),
-    );
+    await expectLater(responseFuture, throwsA(isA<TimeoutException>()));
     expect(client.isClosed, isTrue);
   });
 
@@ -92,6 +93,55 @@ void main() {
     );
   });
 
+  test(
+    'connection User-Agent save failures are reported and keep the old UA',
+    () async {
+      const channel = MethodChannel('plugins.flutter.io/shared_preferences');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final persistenceError = PlatformException(
+        code: 'write-failed',
+        message: 'simulated persistence failure',
+      );
+      var failWrites = true;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'getAll') {
+          return <String, Object>{
+            'flutter.${SettingsKeys.mediaServerConnectionUserAgent}':
+                'WorkingClient/1.0',
+          };
+        }
+        if (call.method == 'setString' && failWrites) {
+          throw persistenceError;
+        }
+        return true;
+      });
+      SharedPreferences.resetStatic();
+      addTearDown(() async {
+        failWrites = false;
+        await MediaServerTransport.saveConnectionUserAgent('');
+        messenger.setMockMethodCallHandler(channel, null);
+        SharedPreferences.resetStatic();
+      });
+
+      await expectLater(
+        MediaServerTransport.saveConnectionUserAgent('UnsavedClient/2.0'),
+        throwsA(
+          isA<PlatformException>()
+              .having((error) => error.code, 'code', persistenceError.code)
+              .having(
+                (error) => error.message,
+                'message',
+                persistenceError.message,
+              ),
+        ),
+      );
+      expect(
+        await MediaServerTransport.getStoredConnectionUserAgent(),
+        'WorkingClient/1.0',
+      );
+    },
+  );
 }
 
 class _StallingClient extends http.BaseClient {

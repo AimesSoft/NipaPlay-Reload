@@ -4,8 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test('media-server image detection stays inside the registered base path',
       () {
     setMediaServerBaseUrl('test-emby', 'https://media.example/emby');
