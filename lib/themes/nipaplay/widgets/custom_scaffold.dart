@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
@@ -139,7 +141,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
 
     final bool isDesktop = globals.isDesktop;
     final bool isTablet = globals.isTablet;
-    final bool isDesktopOrTablet = isDesktop || isTablet;
+    final bool isTelevisionSurface =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
+    final bool isDesktopOrTablet = isDesktop || isTablet || isTelevisionSurface;
     final bool useLargeScreenLayout = widget.useLargeScreenLayout &&
         widget.pageIsHome &&
         isDesktopOrTablet &&

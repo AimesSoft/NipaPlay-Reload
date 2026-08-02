@@ -11,6 +11,7 @@ import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
@@ -1700,13 +1701,17 @@ class MainPageState extends State<MainPage>
     final mediaPadding = MediaQuery.of(context).padding;
     final bool isMac = !kIsWeb && Platform.isMacOS;
     final bool isDesktop = globals.isDesktop;
-    final bool canUseLargeScreenLayout = globals.isDesktopOrTablet;
+    final bool isTelevisionSurface =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
+    final bool canUseLargeScreenLayout =
+        globals.isDesktopOrTablet || isTelevisionSurface;
     final bool labsEnableLargeScreenMode =
         context.watch<LabsSettingsProvider>().enableLargeScreenMode;
     final bool allowLargeScreenControls = labsEnableLargeScreenMode;
-    final bool isLargeScreenLayoutActive = canUseLargeScreenLayout &&
-        allowLargeScreenControls &&
-        _useLargeScreenLayout;
+    final bool isLargeScreenLayoutActive = isTelevisionSurface ||
+        (canUseLargeScreenLayout &&
+            allowLargeScreenControls &&
+            _useLargeScreenLayout);
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =

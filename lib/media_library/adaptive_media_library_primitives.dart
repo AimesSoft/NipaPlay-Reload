@@ -7,6 +7,14 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+
+bool _useTelevisionMediaControl(material.BuildContext context) {
+  return AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television ||
+      NipaplayLargeScreenModeScope.isActiveOf(context);
+}
 
 enum AdaptiveMediaActionEmphasis {
   plain,
@@ -79,6 +87,18 @@ class AdaptiveMediaActionButton extends material.StatelessWidget {
       );
     }
 
+    if (_useTelevisionMediaControl(context)) {
+      final button = NipaplayLargeScreenActionButton(
+        icon: desktopIcon ?? material.Icons.arrow_forward_rounded,
+        label: label,
+        onPressed: onPressed,
+        compact: compact,
+      );
+      return expand
+          ? material.SizedBox(width: double.infinity, child: button)
+          : button;
+    }
+
     if (emphasis == AdaptiveMediaActionEmphasis.primary && onPressed != null) {
       return BlurButton(
         icon: desktopIcon,
@@ -147,6 +167,13 @@ class AdaptiveMediaIconButton extends material.StatelessWidget {
           onPressed: onPressed,
           child: material.Icon(phoneIcon, size: size, color: color),
         ),
+      );
+    }
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenIconButton(
+        icon: desktopIcon,
+        tooltip: tooltip,
+        onPressed: onPressed,
       );
     }
     return material.Tooltip(
@@ -320,21 +347,31 @@ class AdaptiveMediaExpansionTile extends material.StatelessWidget {
         ],
       ),
     );
-    final interactiveHeader = phone
-        ? cupertino.CupertinoButton(
-            padding: material.EdgeInsets.zero,
-            borderRadius: material.BorderRadius.circular(8),
-            onPressed: () => onExpansionChanged(!expanded),
-            child: header,
-          )
-        : material.MouseRegion(
-            cursor: material.SystemMouseCursors.click,
-            child: material.GestureDetector(
-              behavior: material.HitTestBehavior.opaque,
-              onTap: () => onExpansionChanged(!expanded),
-              child: header,
-            ),
-          );
+    final material.Widget interactiveHeader;
+    if (phone) {
+      interactiveHeader = cupertino.CupertinoButton(
+        padding: material.EdgeInsets.zero,
+        borderRadius: material.BorderRadius.circular(8),
+        onPressed: () => onExpansionChanged(!expanded),
+        child: header,
+      );
+    } else if (_useTelevisionMediaControl(context)) {
+      interactiveHeader = NipaplayLargeScreenFocusableAction(
+        onActivate: () => onExpansionChanged(!expanded),
+        borderRadius: material.BorderRadius.circular(8),
+        focusScale: 1.01,
+        child: header,
+      );
+    } else {
+      interactiveHeader = material.MouseRegion(
+        cursor: material.SystemMouseCursors.click,
+        child: material.GestureDetector(
+          behavior: material.HitTestBehavior.opaque,
+          onTap: () => onExpansionChanged(!expanded),
+          child: header,
+        ),
+      );
+    }
 
     return material.Column(
       crossAxisAlignment: material.CrossAxisAlignment.stretch,
@@ -411,6 +448,14 @@ class AdaptiveMediaListTile extends material.StatelessWidget {
         padding: material.EdgeInsets.zero,
         borderRadius: material.BorderRadius.circular(8),
         onPressed: onTap,
+        child: content,
+      );
+    }
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onTap,
+        borderRadius: material.BorderRadius.circular(8),
+        focusScale: 1.015,
         child: content,
       );
     }
@@ -559,34 +604,43 @@ class AdaptiveMediaCheckbox extends material.StatelessWidget {
             onChanged == null ? null : (next) => onChanged!.call(next ?? false),
       );
     }
+    final checkbox = material.AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      width: 22,
+      height: 22,
+      decoration: material.BoxDecoration(
+        color: value ? accent : material.Colors.transparent,
+        borderRadius: material.BorderRadius.circular(6),
+        border: material.Border.all(
+          color: value
+              ? accent
+              : material.Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.38),
+          width: 1.5,
+        ),
+      ),
+      child: value
+          ? const material.Icon(
+              material.Icons.check_rounded,
+              size: 16,
+              color: material.Colors.white,
+            )
+          : null,
+    );
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onChanged == null ? null : () => onChanged!.call(!value),
+        borderRadius: material.BorderRadius.circular(8),
+        padding: const material.EdgeInsets.all(5),
+        child: checkbox,
+      );
+    }
     return material.GestureDetector(
       behavior: material.HitTestBehavior.opaque,
       onTap: onChanged == null ? null : () => onChanged!.call(!value),
-      child: material.AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        width: 22,
-        height: 22,
-        decoration: material.BoxDecoration(
-          color: value ? accent : material.Colors.transparent,
-          borderRadius: material.BorderRadius.circular(6),
-          border: material.Border.all(
-            color: value
-                ? accent
-                : material.Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.38),
-            width: 1.5,
-          ),
-        ),
-        child: value
-            ? const material.Icon(
-                material.Icons.check_rounded,
-                size: 16,
-                color: material.Colors.white,
-              )
-            : null,
-      ),
+      child: checkbox,
     );
   }
 }
