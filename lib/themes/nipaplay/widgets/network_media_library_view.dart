@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -28,6 +29,7 @@ import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 enum NetworkMediaServerType { jellyfin, emby }
 
@@ -928,7 +930,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       currentSortSettings['sortBy']!,
       currentSortSettings['sortOrder']!,
     );
-    final selection = await showDialog<_RemoteSortSelection>(
+    final selection = await showInViewDialog<_RemoteSortSelection>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.54),
       builder: (context) {
@@ -950,6 +952,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   const SizedBox(height: 14),
                   Expanded(
                     child: ListView.separated(
+                      scrollCacheExtent:
+                          ScrollCacheExtent.viewport(items.length.toDouble()),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
@@ -957,19 +961,31 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                         final value = item.value;
                         final description = value.description;
                         return NipaplayLargeScreenFocusableAction(
-                          autofocus: index == 0,
+                          isSelected: item.isSelected,
                           onActivate: () => Navigator.of(context).pop(value),
                           borderRadius: BorderRadius.circular(8),
                           padding: const EdgeInsets.all(14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                item.title,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w900,
-                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.title,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                  if (item.isSelected)
+                                    Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                      color: _accentColor,
+                                    ),
+                                ],
                               ),
                               if (description?.isNotEmpty == true) ...[
                                 const SizedBox(height: 4),

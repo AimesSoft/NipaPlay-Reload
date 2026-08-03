@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
@@ -218,5 +221,108 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(lowerActivationCount, 1);
+  });
+
+  testWidgets('selected action is focused and exposes selection feedback',
+      (tester) async {
+    final otherFocusNode = FocusNode();
+    addTearDown(otherFocusNode.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              NipaplayLargeScreenFocusableAction(
+                isSelected: true,
+                onActivate: () {},
+                child: const Text('Current sort'),
+              ),
+              NipaplayLargeScreenFocusableAction(
+                focusNode: otherFocusNode,
+                onActivate: () {},
+                child: const Text('Other sort'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final label = find.text('Current sort');
+    expect(Focus.of(tester.element(label)).hasFocus, isTrue);
+
+    final semantics = tester.getSemantics(label);
+    expect(semantics.flagsCollection.isSelected, ui.Tristate.isTrue);
+
+    otherFocusNode.requestFocus();
+    await tester.pumpAndSettle();
+
+    final selectedAction = find.ancestor(
+      of: label,
+      matching: find.byType(NipaplayLargeScreenFocusableAction),
+    );
+    final surface = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: selectedAction,
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final decoration = surface.decoration! as BoxDecoration;
+    final foregroundDecoration = surface.foregroundDecoration! as BoxDecoration;
+    expect(decoration.color, isNot(const Color(0x08000000)));
+    expect(foregroundDecoration.border!.top.color, isNot(Colors.transparent));
+  });
+
+  testWidgets('default action has no selection semantics', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NipaplayLargeScreenFocusableAction(
+          onActivate: () {},
+          child: const Text('Regular action'),
+        ),
+      ),
+    );
+
+    final semantics = tester.getSemantics(find.text('Regular action'));
+    expect(semantics.flagsCollection.isSelected, ui.Tristate.none);
+    expect(semantics.flagsCollection.isButton, isFalse);
+  });
+
+  testWidgets('selected action scrolls into view when initially offscreen',
+      (tester) async {
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 180,
+            child: ListView.builder(
+              controller: scrollController,
+              scrollCacheExtent: const ScrollCacheExtent.viewport(20),
+              itemExtent: 60,
+              itemCount: 20,
+              itemBuilder: (context, index) {
+                return NipaplayLargeScreenFocusableAction(
+                  isSelected: index == 19,
+                  onActivate: () {},
+                  child: Text('Sort $index'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(scrollController.offset, greaterThan(0));
+    final viewport = tester.getRect(find.byType(ListView));
+    final selected = tester.getRect(find.text('Sort 19'));
+    expect(selected.top, greaterThanOrEqualTo(viewport.top));
+    expect(selected.bottom, lessThanOrEqualTo(viewport.bottom));
   });
 }
