@@ -802,7 +802,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 ignoring: !showSystemBars,
                 child: NipaplayLargeScreenTopStatusOverlay(
                   isDarkMode: widget.isDarkMode,
-                  opaqueBackground: usePlayerContextPanel,
+                  useVideoBackground: usePlayerContextPanel,
                 ),
               ),
             ),
@@ -821,7 +821,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 ignoring: !showSystemBars,
                 child: NipaplayLargeScreenBottomHintOverlay(
                   isDarkMode: widget.isDarkMode,
-                  opaqueBackground: usePlayerContextPanel,
+                  useVideoBackground: usePlayerContextPanel,
                   onToggleMenu: _toggleTabPanel,
                   contextKey: _contextActionKey,
                   contextIcon: usePlayerContextPanel
