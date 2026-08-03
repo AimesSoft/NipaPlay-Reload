@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
 class AutoNextEpisodeService {
@@ -144,9 +145,11 @@ class AutoNextEpisodeService {
   // 判断是否为本地文件
   bool _isLocalFile(String filePath) {
     // 不是HTTP URL 且不是流媒体协议的就是本地文件
-    return !filePath.startsWith('http') && 
-           !filePath.startsWith('jellyfin://') && 
-           !filePath.startsWith('emby://');
+    return !filePath.startsWith('http') &&
+        !filePath.startsWith('jellyfin://') &&
+        !filePath.startsWith('emby://') &&
+        !MediaSourceUtils.isNewWebDavPath(filePath) &&
+        !MediaSourceUtils.isNewSmbPath(filePath);
   }
   
   // 显示倒计时消息

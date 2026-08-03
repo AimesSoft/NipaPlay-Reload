@@ -479,6 +479,16 @@ class WebDAVService {
     return WebDAVResolvedFile(connection: bestConnection, relativePath: normalizedPath);
   }
 
+  /// Resolve either the stable WebDAV media path used by the library or a
+  /// legacy fully-qualified WebDAV URL.
+  WebDAVResolvedFile? resolveMediaPath(String mediaPath) {
+    final trimmed = mediaPath.trim();
+    if (trimmed.toLowerCase().startsWith('webdav://')) {
+      return resolveConnectionByNamePath(trimmed);
+    }
+    return resolveFileUrl(trimmed);
+  }
+
   Future<void> updateConnectionStatus(String name) async {
     final index = _connections.indexWhere((conn) => conn.name == name);
     if (index == -1) {

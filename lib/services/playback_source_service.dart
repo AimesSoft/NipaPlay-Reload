@@ -577,18 +577,8 @@ class PlaybackSourceService {
     await WebDAVService.instance.initialize();
     final path = item.videoPath;
 
-    WebDAVResolvedFile resolved;
-    if (MediaSourceUtils.isNewWebDavPath(path)) {
-      // 新格式: webdav://connectionName/path
-      final byName = WebDAVService.instance.resolveConnectionByNamePath(path);
-      if (byName == null) throw Exception('无法识别 WebDAV 连接: $path');
-      resolved = byName;
-    } else {
-      // 旧格式: http://user:pass@host:port/path
-      final byUrl = WebDAVService.instance.resolveFileUrl(path);
-      if (byUrl == null) throw Exception('无法识别 WebDAV 连接');
-      resolved = byUrl;
-    }
+    final resolved = WebDAVService.instance.resolveMediaPath(path);
+    if (resolved == null) throw Exception('无法识别 WebDAV 连接: $path');
 
     final animeId = item.animeId ?? item.historyItem?.animeId;
 
@@ -621,13 +611,17 @@ class PlaybackSourceService {
       ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
     return videos.map((entry) {
+      final mediaPath = MediaSourceUtils.buildWebDavPath(
+        resolved.connection.name,
+        entry.path,
+      );
       final url = WebDAVService.instance.getFileUrl(
         resolved.connection,
         entry.path,
       );
       final title = p.basenameWithoutExtension(entry.name);
       final history = WatchHistoryItem(
-        filePath: url,
+        filePath: mediaPath,
         animeName: title,
         episodeTitle: entry.name,
         watchProgress: 0,
@@ -637,7 +631,7 @@ class PlaybackSourceService {
       );
       return PlaybackDetailEpisode(
         id: entry.path,
-        videoPath: url,
+        videoPath: mediaPath,
         title: title,
         subtitle: resolved.connection.name,
         historyItem: history,
@@ -717,11 +711,13 @@ class PlaybackSourceService {
       ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
     return videos.map((entry) {
+      final mediaPath =
+          MediaSourceUtils.buildSmbPath(connection.name, entry.path);
       final url =
           SMBProxyService.instance.buildStreamUrl(connection, entry.path);
       final title = p.basenameWithoutExtension(entry.name);
       final history = WatchHistoryItem(
-        filePath: url,
+        filePath: mediaPath,
         animeName: title,
         episodeTitle: entry.name,
         watchProgress: 0,
@@ -731,7 +727,7 @@ class PlaybackSourceService {
       );
       return PlaybackDetailEpisode(
         id: entry.path,
-        videoPath: url,
+        videoPath: mediaPath,
         title: title,
         subtitle: connection.name,
         historyItem: history,
