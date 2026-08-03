@@ -640,6 +640,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       (videoState) => videoState.showControls,
     );
     final bool usePlayerContextPanel = widget.currentIndex == 1 && hasVideo;
+    final bool useDarkSystemBars = usePlayerContextPanel || widget.isDarkMode;
     final bool showPanelBackdrop =
         _isTabPanelVisible || _isSettingsPanelVisible || _isPlayerMenuVisible;
     final bool showSystemBars =
@@ -801,7 +802,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
               child: IgnorePointer(
                 ignoring: !showSystemBars,
                 child: NipaplayLargeScreenTopStatusOverlay(
-                  isDarkMode: widget.isDarkMode,
+                  isDarkMode: useDarkSystemBars,
                   useVideoBackground: usePlayerContextPanel,
                 ),
               ),
@@ -820,19 +821,18 @@ class _NipaplayLargeScreenScaffoldLayoutState
               child: IgnorePointer(
                 ignoring: !showSystemBars,
                 child: NipaplayLargeScreenBottomHintOverlay(
-                  isDarkMode: widget.isDarkMode,
+                  isDarkMode: useDarkSystemBars,
                   useVideoBackground: usePlayerContextPanel,
-                  onToggleMenu: _toggleTabPanel,
+                  onToggleMenu: usePlayerContextPanel
+                      ? _togglePlayerMenu
+                      : _toggleTabPanel,
+                  menuLabel: usePlayerContextPanel ? '播放器菜单' : '菜单',
                   contextKey: _contextActionKey,
-                  contextIcon: usePlayerContextPanel
-                      ? Icons.tune_rounded
-                      : Icons.settings_rounded,
-                  contextLabel: usePlayerContextPanel ? '播放器菜单' : '设置',
-                  onOpenContext: globals.isTvOS && !usePlayerContextPanel
+                  contextIcon: Icons.settings_rounded,
+                  contextLabel: '设置',
+                  onOpenContext: globals.isTvOS || usePlayerContextPanel
                       ? null
-                      : () => _toggleContextPanel(
-                            usePlayerMenu: usePlayerContextPanel,
-                          ),
+                      : () => _toggleContextPanel(usePlayerMenu: false),
                 ),
               ),
             ),
