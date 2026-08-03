@@ -24,6 +24,20 @@ void main() {
     expect(desktopSection, isNot(contains('const Spacer()')));
   });
 
+  test('desktop ranking windows use plain NipaPlay dropdown layouts', () {
+    final source = File(
+      'lib/themes/nipaplay/widgets/dashboard_home_page_trending.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('backdropBlurSigma: 34')));
+    expect(source, contains('class _NipaplayTrendingFilterControls'));
+    expect(source, contains('BlurDropdown<TrendingRankingKind>'));
+    expect(source, contains('class _NipaplayFullTrendingView'));
+    expect(source, contains('compact: true'));
+    expect(source, contains('crossAxisAlignment: CrossAxisAlignment.end'));
+    expect(source, contains('SliverGridDelegateWithMaxCrossAxisExtent'));
+  });
+
   group('TrendingBangumiQuery', () {
     test('builds all supported endpoint paths', () {
       expect(
