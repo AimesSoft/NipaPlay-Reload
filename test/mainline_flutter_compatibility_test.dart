@@ -184,6 +184,18 @@ void main() {
     expect(workflow, contains('hap-sign-tool.jar'));
     expect(workflow, contains('verify-app'));
     expect(workflow, contains('release-HarmonyOS-signed'));
+    expect(workflow, contains('OHOS_FLUTTER_BASE_TAG: 3.35.8-ohos-1.0.1'));
+    expect(
+      workflow,
+      contains(
+        r'+refs/tags/$OHOS_FLUTTER_BASE_TAG:refs/tags/$OHOS_FLUTTER_BASE_TAG',
+      ),
+    );
+    expect(workflow, contains('merge-base --is-ancestor'));
+    expect(
+      workflow,
+      isNot(contains(r'fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"')),
+    );
     expect(workflow,
         contains('expect .github/workflows/scripts/sign-ohos-hap.exp'));
     expect(workflow, isNot(contains("printf '%s\\n%s\\n'")));
