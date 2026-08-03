@@ -346,7 +346,6 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet &&
           !globals.isPhone &&
-          !globals.isTablet &&
           !globals.isTelevision,
     ),
     UnifiedSettingEntry(
@@ -407,6 +406,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet &&
           !globals.isPhone &&
+          !globals.isTablet &&
           !globals.isTelevision,
     ),
     UnifiedSettingEntry(
