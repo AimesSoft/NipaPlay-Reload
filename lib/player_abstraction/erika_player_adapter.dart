@@ -297,19 +297,33 @@ class _NipaplayErikaWindowOverlayVideoViewState
     _retryTimer?.cancel();
     _frameTimer?.cancel();
     widget.onPlatformViewIdChanged?.call(null);
+    // Clear the Flutter cutout synchronously. Native teardown is asynchronous,
+    // so leaving this rect behind makes the next page look transparent until a
+    // resize/fullscreen event happens to force another repaint.
     widget.onFrameRectChanged?.call(null);
-    unawaited(_hideOverlayFrame());
-    unawaited(
-      widget.player.detachWindowOverlay(generation: _surfaceGeneration),
-    );
+    unawaited(_releaseOverlaySurface());
     super.dispose();
+  }
+
+  Future<void> _releaseOverlaySurface() async {
+    await _hideOverlayFrame();
+    try {
+      await widget.player.detachWindowOverlay(
+        generation: _surfaceGeneration,
+      );
+    } catch (error) {
+      debugPrint(
+        'NipaplayErikaWindowOverlayVideoView: detach overlay failed: $error',
+      );
+    }
   }
 
   void _startFrameTimer() {
     _frameTimer?.cancel();
-    final interval = defaultTargetPlatform == TargetPlatform.windows
-        ? const Duration(milliseconds: 16)
-        : const Duration(milliseconds: 250);
+    // The Windows plugin follows WM_MOVE/WM_SIZE natively. This timer is only a
+    // fallback for Flutter-only layout changes; polling at display refresh rate
+    // duplicates native window movement work and makes live dragging stutter.
+    const interval = Duration(milliseconds: 250);
     _frameTimer = Timer.periodic(
       interval,
       (_) => _scheduleFrameUpdate(),
@@ -620,17 +634,23 @@ class ErikaPlayerAdapter
     };
   }
 
+  static bool get _isHarmonyOS =>
+      !kIsWeb && defaultTargetPlatform.name == 'ohos';
+
   static bool get _isSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.android);
+          defaultTargetPlatform == TargetPlatform.android ||
+          _isHarmonyOS);
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
   bool get usesWindowOverlayVideoSurface =>
-      _isSupported && defaultTargetPlatform != TargetPlatform.android;
+      _isSupported &&
+      defaultTargetPlatform != TargetPlatform.android &&
+      !_isHarmonyOS;
 
   @override
   double get volume => _volume;
@@ -1145,7 +1165,7 @@ class ErikaPlayerAdapter
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (defaultTargetPlatform == TargetPlatform.android || _isHarmonyOS) {
       return ErikaVideoView(
         player: _player,
         debugLabel: debugLabel,
@@ -1739,7 +1759,7 @@ class ErikaPlayerAdapter
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-        'Erika is currently only wired on Android/iOS/macOS/Windows.',
+        'Erika is currently only wired on Android/iOS/macOS/Windows/HarmonyOS.',
       );
     }
   }

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "PermissionhandlerAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PermissionhandlerAbility_label",
+      "value": "label"
+    }
+  ]
+}

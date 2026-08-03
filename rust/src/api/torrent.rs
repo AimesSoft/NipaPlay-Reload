@@ -84,7 +84,10 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
                 persistence: Some(SessionPersistenceConfig::Json {
                     folder: Some(session_dir),
                 }),
-                disable_dht_persistence: cfg!(target_os = "android"),
+                // HarmonyOS uses Rust's `aarch64-unknown-linux-ohos` target,
+                // whose HOME points outside the application sandbox. Keep
+                // rqbit from writing its global DHT cache there.
+                disable_dht_persistence: cfg!(any(target_os = "android", feature = "ohos")),
                 ..Default::default()
             },
         )
@@ -947,14 +950,20 @@ fn default_session_dir(download_dir: &str) -> PathBuf {
             .join("torrent_session");
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", feature = "ohos"))]
     {
-        // Android does not expose XDG_DATA_HOME or HOME env vars.
-        // Fall back to a hidden folder inside the download directory.
+        // Android does not expose XDG_DATA_HOME or HOME env vars. HarmonyOS
+        // exposes a HOME outside the application sandbox. Store the session
+        // beside downloads so both platforms use an app-writable location.
         return PathBuf::from(download_dir).join(".nipaplay_torrent_session");
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "android",
+        feature = "ohos"
+    )))]
     {
         if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
             return PathBuf::from(data_home)
@@ -970,7 +979,8 @@ fn default_session_dir(download_dir: &str) -> PathBuf {
         }
     }
 
-    PathBuf::from(download_dir).join(".nipaplay_torrent_session")
+    #[cfg(not(any(target_os = "android", feature = "ohos")))]
+    return PathBuf::from(download_dir).join(".nipaplay_torrent_session");
 }
 
 fn normalize_torrent_id(id: i32) -> Result<usize, String> {

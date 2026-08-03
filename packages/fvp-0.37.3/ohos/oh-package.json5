@@ -1,0 +1,11 @@
+{
+  "name": "fvp",
+  "version": "1.0.0",
+  "description": "fvp flutter plugin for OpenHarmony",
+  "main": "index.ets",
+  "author": "",
+  "license": "BSD-3-Clause",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har"
+  }
+}

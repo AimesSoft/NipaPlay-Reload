@@ -57,7 +57,34 @@ class AndroidEnvironment {
   bool ndkIsInstalled() {
     final ndkPath = path.join(sdkPath, 'ndk', ndkVersion);
     final ndkPackageXml = File(path.join(ndkPath, 'package.xml'));
-    return ndkPackageXml.existsSync();
+    if (ndkPackageXml.existsSync()) {
+      return true;
+    }
+
+    // SDK Manager writes package.xml outside the NDK archive, so valid NDKs
+    // installed by Android Studio or extracted from Google's official archive
+    // may not contain it. Check files required by the actual build before
+    // invoking sdkmanager; otherwise Cargokit attempts the same large download
+    // once for every target ABI.
+    final sourceProperties = File(path.join(ndkPath, 'source.properties'));
+    final toolchainFile =
+        File(path.join(ndkPath, 'build', 'cmake', 'android.toolchain.cmake'));
+    final prebuiltHost = Platform.isMacOS
+        ? 'darwin-x86_64'
+        : (Platform.isLinux ? 'linux-x86_64' : 'windows-x86_64');
+    final clangName = Platform.isWindows ? 'clang.exe' : 'clang';
+    final clang = File(path.join(
+      ndkPath,
+      'toolchains',
+      'llvm',
+      'prebuilt',
+      prebuiltHost,
+      'bin',
+      clangName,
+    ));
+    return sourceProperties.existsSync() &&
+        toolchainFile.existsSync() &&
+        clang.existsSync();
   }
 
   void installNdk({

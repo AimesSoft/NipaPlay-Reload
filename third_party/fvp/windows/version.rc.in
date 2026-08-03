@@ -1,0 +1,37 @@
+#include "winver.h"
+// https://learn.microsoft.com/en-us/windows/win32/menurc/versioninfo-resource
+
+//IDI_ICON1               ICON    DISCARDABLE     "@CMAKE_SOURCE_DIR@/@PROJECT_NAME@.ico"
+
+1 VERSIONINFO // VS_VERSION_INFO
+ FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,@PROJECT_VERSION_TWEAK@
+ PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,@PROJECT_VERSION_TWEAK@
+ FILEFLAGSMASK 0x0000003FL //VS_FFI_FILEFLAGSMASK: all flags
+// macro is not supported by llvm-rc
+//#ifdef _DEBUG
+ FILEFLAGS 0x00000001L //VS_FF_DEBUG. contains debug
+//#else
+// FILEFLAGS 0x0000003FL //VS_FFI_FILEFLAGSMASK . VS_FF_DEBUG|
+//#endif
+ FILEOS 0x00040004L //VOS_NT_WINDOWS32
+ FILETYPE 0x00000002L //VFT_DLL
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "000004b0"
+        BEGIN
+            VALUE "CompanyName", "Wang Bin, wbsecg1@gmail.com, mediadevkit.com"
+            VALUE "FileDescription", "@PROJECT_DESCRIPTION@@MODULE_DETAIL@"
+            VALUE "FileVersion", "@PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,@PROJECT_VERSION_TWEAK@"
+            VALUE "LegalCopyright", "Copyright (C) @COPYRIGHT_YEAR@ WangBin, wbsecg1@gmail.com"
+            VALUE "OriginalFilename", "@PROJECT_NAME@.dll"
+            VALUE "InternalName", "@PROJECT_NAME@"
+            VALUE "ProductName", "@PROJECT_NAME@"
+            VALUE "ProductVersion", "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.@PROJECT_VERSION_TWEAK@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0, 1200
+    END
+END

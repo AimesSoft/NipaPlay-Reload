@@ -34,6 +34,7 @@ class DandanplayService {
   static const Duration _animeSearchCacheDuration = Duration(days: 7);
   static const Duration _emptyAnimeSearchCacheDuration = Duration(hours: 12);
   static const Duration _unmatchedVideoCacheDuration = Duration(days: 3);
+  static const int _filenameFallbackVersion = 2;
   static const int _animeSearchCacheMaxEntries = 300;
   static const Duration _bangumiDetailsCacheDuration = Duration(hours: 6);
   static const Duration _authorizedBangumiDetailsCacheDuration =
@@ -312,6 +313,13 @@ class DandanplayService {
       final videoInfo = cacheMap[fileHash];
       if (videoInfo is Map<String, dynamic>) {
         if (videoInfo['isMatched'] == false) {
+          final fallbackVersion =
+              _tryParsePositiveInt(videoInfo['filenameFallbackVersion']) ?? 0;
+          if (fallbackVersion < _filenameFallbackVersion) {
+            cacheMap.remove(fileHash);
+            await prefs.setString(_videoCacheKey, json.encode(cacheMap));
+            return null;
+          }
           final cachedAt = _tryParsePositiveInt(videoInfo['cachedAt']);
           if (cachedAt != null) {
             final age = DateTime.now().difference(
@@ -2145,6 +2153,7 @@ class DandanplayService {
       'fileHash': fileHash,
       'fileSize': fileSize,
       'cachedAt': DateTime.now().millisecondsSinceEpoch,
+      'filenameFallbackVersion': _filenameFallbackVersion,
       'matches': [],
     };
     if (fileHash.isNotEmpty) {
@@ -2219,11 +2228,11 @@ class DandanplayService {
     if (baseName.isEmpty) return null;
 
     final patterns = <RegExp>[
-      RegExp(r'第\\s*(\\d{1,3})\\s*[话集]'),
-      RegExp(r'\\bS\\d{1,2}E(\\d{1,3})\\b', caseSensitive: false),
-      RegExp(r'\\b(?:EP|Ep|ep)\\s*(\\d{1,3})\\b'),
-      RegExp(r'\\bE(\\d{1,3})\\b', caseSensitive: false),
-      RegExp(r'\\[(\\d{1,3})\\]'),
+      RegExp(r'第\s*(\d{1,3})\s*[话集]'),
+      RegExp(r'\bS\d{1,2}E(\d{1,3})\b', caseSensitive: false),
+      RegExp(r'\b(?:EP|Ep|ep)\s*(\d{1,3})\b'),
+      RegExp(r'\bE(\d{1,3})\b', caseSensitive: false),
+      RegExp(r'\[(\d{1,3})\]'),
     ];
 
     for (final pattern in patterns) {
@@ -2236,7 +2245,7 @@ class DandanplayService {
       }
     }
 
-    final allNumbers = RegExp(r'(\\d{1,4})').allMatches(baseName);
+    final allNumbers = RegExp(r'(\d{1,4})').allMatches(baseName);
     int? candidate;
     for (final m in allNumbers) {
       final parsed = int.tryParse(m.group(1) ?? '');
@@ -2323,8 +2332,14 @@ class DandanplayService {
     required String fileHash,
     required int fileSize,
   }) async {
+    final episodeNumber = _tryExtractEpisodeNumberFromFileName(fileName);
+    final extractedTitle = _extractAnimeTitleKeywordFromFileName(fileName);
     final keywordCandidates = <String>[
-      _extractAnimeTitleKeywordFromFileName(fileName),
+      MediaFilenameParser.extractAnimeSearchKeyword(
+        fileName,
+        episodeNumber: episodeNumber,
+      ),
+      extractedTitle,
       _extractRawBaseNameFromFileName(fileName),
     ].where((e) => e.trim().isNotEmpty).toSet().toList();
 
@@ -2338,30 +2353,59 @@ class DandanplayService {
     }
     if (animes.isEmpty) return null;
 
-    final firstAnime = animes.first;
-    final animeId = _tryParsePositiveInt(firstAnime['animeId']);
-    final animeTitle = firstAnime['animeTitle']?.toString() ?? '';
-    if (animeId == null || animeTitle.trim().isEmpty) return null;
-
-    final episodes = await _getBangumiEpisodes(animeId);
-    if (episodes.isEmpty) return null;
-
-    final episodeNumber = _tryExtractEpisodeNumberFromFileName(fileName);
+    Map<String, dynamic>? selectedAnime;
     Map<String, dynamic>? selectedEpisode;
-    if (episodeNumber != null) {
-      selectedEpisode = episodes.cast<Map<String, dynamic>>().firstWhere(
-            (ep) => _tryParsePositiveInt(ep['episodeNumber']) == episodeNumber,
-            orElse: () => <String, dynamic>{},
-          );
-      if (selectedEpisode.isEmpty) {
-        selectedEpisode = null;
+    if (episodeNumber == null) {
+      final firstAnime = animes.first;
+      final animeId = _tryParsePositiveInt(firstAnime['animeId']);
+      if (animeId == null) return null;
+      final episodes = await _getBangumiEpisodes(animeId);
+      final numberedEpisodes = episodes
+          .where((ep) => _tryParsePositiveInt(ep['episodeNumber']) != null)
+          .toList();
+      if (numberedEpisodes.isEmpty) return null;
+      selectedAnime = firstAnime;
+      selectedEpisode = numberedEpisodes.first;
+    } else {
+      var remainingEpisode = episodeNumber;
+      for (final anime in animes) {
+        final candidateAnimeId = _tryParsePositiveInt(anime['animeId']);
+        if (candidateAnimeId == null) continue;
+        final episodes = await _getBangumiEpisodes(candidateAnimeId);
+        final numberedEpisodes = episodes
+            .where((ep) => _tryParsePositiveInt(ep['episodeNumber']) != null)
+            .toList();
+        if (numberedEpisodes.isEmpty) continue;
+
+        final match = numberedEpisodes.cast<Map<String, dynamic>>().firstWhere(
+              (ep) =>
+                  _tryParsePositiveInt(ep['episodeNumber']) == remainingEpisode,
+              orElse: () => <String, dynamic>{},
+            );
+        if (match.isNotEmpty) {
+          selectedAnime = anime;
+          selectedEpisode = match;
+          break;
+        }
+
+        final seasonEpisodeCount = numberedEpisodes
+            .map((ep) => _tryParsePositiveInt(ep['episodeNumber']) ?? 0)
+            .fold<int>(0, (max, value) => value > max ? value : max);
+        if (seasonEpisodeCount <= 0 || remainingEpisode <= seasonEpisodeCount) {
+          break;
+        }
+        remainingEpisode -= seasonEpisodeCount;
       }
     }
-    selectedEpisode ??= episodes.first;
+    if (selectedAnime == null || selectedEpisode == null) return null;
 
+    final animeId = _tryParsePositiveInt(selectedAnime['animeId']);
+    final animeTitle = selectedAnime['animeTitle']?.toString() ?? '';
     final episodeId = _tryParsePositiveInt(selectedEpisode['episodeId']);
     final episodeTitle = selectedEpisode['episodeTitle']?.toString() ?? '';
-    if (episodeId == null) return null;
+    if (animeId == null || animeTitle.trim().isEmpty || episodeId == null) {
+      return null;
+    }
 
     final match = <String, dynamic>{
       'animeId': animeId,
@@ -2387,7 +2431,8 @@ class DandanplayService {
 
   static Future<int> _getDanmakuChConvertFlag() async {
     final prefs = await SharedPreferences.getInstance();
-    final convert = prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ?? true;
+    final convert =
+        prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ?? true;
     return convert ? 1 : 0;
   }
 
@@ -2401,16 +2446,15 @@ class DandanplayService {
       final comments = data['comments'] as List;
 
       final formattedComments = comments.map((comment) {
-
         // 将 comment 转换为 Map<String, dynamic>
         final raw = Map<String, dynamic>.from(comment as Map);
         final pParts = (raw['p'] as String).split(',');
 
-        final time     = double.tryParse(pParts[0]) ?? 0.0;   // 弹幕出现时间 (秒)
-        final mode     = DanmakuMode.fromCode(int.tryParse(pParts[1])); // 弹幕模式
-        final color    = int.tryParse(pParts[2]) ?? 16777215; // 弹幕颜色 (十进制 RGB)
-        final content  = raw['m'] as String;                  // 弹幕内容
-        final senderId = resolveDanmakuSenderId(raw);         // 发送者ID
+        final time = double.tryParse(pParts[0]) ?? 0.0; // 弹幕出现时间 (秒)
+        final mode = DanmakuMode.fromCode(int.tryParse(pParts[1])); // 弹幕模式
+        final color = int.tryParse(pParts[2]) ?? 16777215; // 弹幕颜色 (十进制 RGB)
+        final content = raw['m'] as String; // 弹幕内容
+        final senderId = resolveDanmakuSenderId(raw); // 发送者ID
 
         // 将十进制颜色值转换为 RGB 格式
         final r = (color >> 16) & 0xFF;

@@ -1,0 +1,19 @@
+name: wakelock_plus_ohos
+description: NipaPlay's HarmonyOS implementation of wakelock_plus.
+version: 1.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  wakelock_plus_platform_interface: ^1.3.0
+
+flutter:
+  plugin:
+    platforms:
+      ohos:
+        pluginClass: WakelockPlugin

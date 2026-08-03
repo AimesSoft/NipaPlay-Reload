@@ -118,8 +118,12 @@ bool get isMobilePlatform {
     return defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android;
   }
-  return Platform.isIOS || Platform.isAndroid;
+  return Platform.isIOS || Platform.isAndroid || isHarmonyOS;
 }
+
+/// Uses the operating-system string so this source remains analyzable with
+/// both upstream Flutter and the OpenHarmony Flutter fork.
+bool get isHarmonyOS => !kIsWeb && Platform.operatingSystem == 'ohos';
 
 bool get isMobile {
   // 获取屏幕宽度
