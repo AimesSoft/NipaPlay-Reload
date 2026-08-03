@@ -126,6 +126,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 '排行榜',
@@ -137,7 +138,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               _buildScrollButton(
                 icon: Icons.tune_rounded,
                 onTap: () => _showTrendingFilter(cupertinoStyle: false),
