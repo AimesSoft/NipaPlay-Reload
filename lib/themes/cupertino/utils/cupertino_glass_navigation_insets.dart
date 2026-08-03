@@ -1,6 +1,6 @@
 const double _glassTabBarEdgeGap = 6.0;
 const double _pageActionsEdgeGap = 12.0;
-const double _nativeIOS26PageActionsExtraTrailingGap = 8.0;
+const double _nativeIOS26PageActionsExtraTrailingGap = 16.0;
 
 /// Height required by the fallback glass tab bar's icon-and-label layout.
 const double cupertinoGlassTabBarHeight = 64.0;
