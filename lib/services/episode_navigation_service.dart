@@ -12,8 +12,8 @@ import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 /// 剧集导航结果
@@ -895,6 +895,10 @@ class EpisodeNavigationService {
   /// 模式1：从文件系统获取上一话（优先模式）
   Future<EpisodeNavigationResult> _getPreviousEpisodeFromFileSystem(String currentFilePath) async {
     try {
+      if (MediaSourceUtils.isWebDavPath(currentFilePath)) {
+        return await _getAdjacentEpisodeFromWebDav(currentFilePath, -1);
+      }
+
       // SMB 代理流媒体：按目录文件名排序导航
       if (_isSmbProxyStreamUrl(currentFilePath)) {
         return await _getPreviousEpisodeFromSmbProxyStream(currentFilePath);
@@ -951,6 +955,10 @@ class EpisodeNavigationService {
   /// 模式1：从文件系统获取下一话（优先模式）
   Future<EpisodeNavigationResult> _getNextEpisodeFromFileSystem(String currentFilePath) async {
     try {
+      if (MediaSourceUtils.isWebDavPath(currentFilePath)) {
+        return await _getAdjacentEpisodeFromWebDav(currentFilePath, 1);
+      }
+
       // SMB 代理流媒体：按目录文件名排序导航
       if (_isSmbProxyStreamUrl(currentFilePath)) {
         return await _getNextEpisodeFromSmbProxyStream(currentFilePath);
@@ -1025,7 +1033,9 @@ class EpisodeNavigationService {
   Future<bool> _checkFileExists(String filePath) async {
     try {
       // 如果是URL（流媒体），直接返回true
-      if (_isStreamingUrl(filePath)) {
+      if (_isStreamingUrl(filePath) ||
+          MediaSourceUtils.isNewWebDavPath(filePath) ||
+          MediaSourceUtils.isNewSmbPath(filePath)) {
         return true;
       }
 
@@ -1214,6 +1224,85 @@ class EpisodeNavigationService {
       debugPrint('[SMB导航] 获取上一话时出错：$e');
       return EpisodeNavigationResult.failure('SMB导航出错：$e');
     }
+  }
+
+  Future<EpisodeNavigationResult> _getAdjacentEpisodeFromWebDav(
+    String currentFilePath,
+    int offset,
+  ) async {
+    final direction = offset > 0 ? '下一话' : '上一话';
+    try {
+      await WebDAVService.instance.initialize();
+      final resolved =
+          WebDAVService.instance.resolveMediaPath(currentFilePath);
+      if (resolved == null) {
+        return EpisodeNavigationResult.failure('无法识别WebDAV连接');
+      }
+
+      final entries = await WebDAVService.instance.listDirectory(
+        resolved.connection,
+        _webDavParentDirectory(resolved),
+      );
+      final videoFiles = entries
+          .where((entry) =>
+              !entry.isDirectory &&
+              WebDAVService.instance.isVideoFile(entry.name))
+          .toList()
+        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+
+      if (videoFiles.length <= 1) {
+        return EpisodeNavigationResult.failure('目录中没有其他视频文件');
+      }
+
+      final currentUrl = WebDAVService.instance.getFileUrl(
+        resolved.connection,
+        resolved.relativePath,
+      );
+      final currentIndex = videoFiles.indexWhere((entry) {
+        final entryUrl = WebDAVService.instance.getFileUrl(
+          resolved.connection,
+          entry.path,
+        );
+        return entryUrl == currentUrl;
+      });
+      if (currentIndex == -1) {
+        return EpisodeNavigationResult.failure('在目录中找不到当前文件');
+      }
+
+      final adjacentIndex = currentIndex + offset;
+      if (adjacentIndex < 0 || adjacentIndex >= videoFiles.length) {
+        return EpisodeNavigationResult.failure('没有找到可播放的$direction');
+      }
+
+      final adjacent = videoFiles[adjacentIndex];
+      return EpisodeNavigationResult.success(
+        filePath: MediaSourceUtils.buildWebDavPath(
+          resolved.connection.name,
+          adjacent.path,
+        ),
+        message: '从WebDAV目录找到$direction：${adjacent.name}',
+      );
+    } catch (e) {
+      debugPrint('[WebDAV导航] 获取$direction时出错：$e');
+      return EpisodeNavigationResult.failure('WebDAV导航出错：$e');
+    }
+  }
+
+  String _webDavParentDirectory(WebDAVResolvedFile resolved) {
+    final connectionUri = Uri.parse(resolved.connection.url);
+    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
+    final normalizedBase = basePath.endsWith('/') ? basePath : '$basePath/';
+    final filePath = resolved.relativePath.startsWith('/')
+        ? resolved.relativePath
+        : '/${resolved.relativePath}';
+    if (filePath.length > normalizedBase.length &&
+        filePath.startsWith(normalizedBase)) {
+      final relative = filePath.substring(normalizedBase.length);
+      final parent = path.posix.dirname(relative);
+      return parent == '.' ? '/' : parent;
+    }
+    final parent = path.posix.dirname(resolved.relativePath);
+    return parent == '.' ? '/' : parent;
   }
 
   /// 检查是否为流媒体URL
@@ -1653,7 +1742,9 @@ class EpisodeNavigationService {
 
   /// 检查是否可以使用文件系统导航
   bool canUseFileSystemNavigation(String filePath) {
-    return !_isStreamingUrl(filePath) || _isSmbProxyStreamUrl(filePath) || MediaSourceUtils.isNewSmbPath(filePath);
+    return !_isStreamingUrl(filePath) ||
+        _isSmbProxyStreamUrl(filePath) ||
+        MediaSourceUtils.isWebDavPath(filePath);
   }
 
   /// 检查是否可以使用流媒体简单导航（Jellyfin/Emby的adjacentTo API）
