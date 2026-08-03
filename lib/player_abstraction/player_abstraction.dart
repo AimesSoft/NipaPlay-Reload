@@ -2,7 +2,11 @@
 export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
 export './player_data_models.dart';
 export './abstract_player.dart'
-    show AbstractPlayer, AsyncDisposablePlayer, AsyncSeekPlayer;
+    show
+        AbstractPlayer,
+        AsyncDisposablePlayer,
+        AsyncSeekPlayer,
+        MediaLoadAwarePlayer;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 
@@ -133,6 +137,57 @@ class Player {
   }
 
   Future<void> prepare() => _delegate.prepare();
+
+  bool get supportsMediaLoadReadiness =>
+      _delegate is core_player.MediaLoadAwarePlayer;
+
+  bool get isMediaReady {
+    final delegate = _delegate;
+    if (delegate is core_player.MediaLoadAwarePlayer) {
+      return (delegate as core_player.MediaLoadAwarePlayer).isMediaReady;
+    }
+    return delegate.mediaInfo.duration > 0;
+  }
+
+  bool get hasReceivedRealPosition {
+    final delegate = _delegate;
+    if (delegate is core_player.MediaLoadAwarePlayer) {
+      return (delegate as core_player.MediaLoadAwarePlayer)
+          .hasReceivedRealPosition;
+    }
+    return true;
+  }
+
+  bool get hasMediaLoadFailed {
+    final delegate = _delegate;
+    return delegate is core_player.MediaLoadAwarePlayer &&
+        (delegate as core_player.MediaLoadAwarePlayer).hasMediaLoadFailed;
+  }
+
+  String? get mediaLoadError {
+    final delegate = _delegate;
+    return delegate is core_player.MediaLoadAwarePlayer
+        ? (delegate as core_player.MediaLoadAwarePlayer).mediaLoadError
+        : null;
+  }
+
+  Future<bool> waitUntilMediaReady({required Duration timeout}) {
+    final delegate = _delegate;
+    if (delegate is core_player.MediaLoadAwarePlayer) {
+      return (delegate as core_player.MediaLoadAwarePlayer)
+          .waitUntilMediaReady(timeout: timeout);
+    }
+    return Future<bool>.value(delegate.mediaInfo.duration > 0);
+  }
+
+  Future<bool> retryCurrentMediaLoad() {
+    final delegate = _delegate;
+    if (delegate is core_player.MediaLoadAwarePlayer) {
+      return (delegate as core_player.MediaLoadAwarePlayer)
+          .retryCurrentMediaLoad();
+    }
+    return Future<bool>.value(false);
+  }
 
   void seek({required int position}) => _delegate.seek(position: position);
 
