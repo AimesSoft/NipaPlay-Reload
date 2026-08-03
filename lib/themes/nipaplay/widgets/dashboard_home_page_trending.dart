@@ -943,10 +943,11 @@ class _NipaplayTrendingFilterControlsState
           );
         }
         return Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(child: fields.first),
-            const SizedBox(width: 30),
-            Expanded(child: fields.last),
+            fields.first,
+            const SizedBox(width: 20),
+            fields.last,
           ],
         );
       },
