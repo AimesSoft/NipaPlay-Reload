@@ -618,7 +618,8 @@ void main() {
     expect(qr, contains('MobileScanner('));
   });
 
-  test('obsolete appearance modes are removed and phone sections reorder', () {
+  test('appearance settings expose home section ordering outside television',
+      () {
     final appearance = File(
       'lib/settings/pages/appearance_settings_content.dart',
     ).readAsStringSync();
@@ -630,6 +631,14 @@ void main() {
     expect(appearance, isNot(contains('RecentWatchingStyle')));
     expect(appearance, isNot(contains('_detailModeDropdownKey')));
     expect(appearance, isNot(contains('_recentStyleDropdownKey')));
+    expect(
+      appearance,
+      contains(
+        RegExp(
+          r'if \(!globals\.isTelevision\) \.\.\.\[[\s\S]*?AdaptiveSettingsDragList<HomeSectionType>',
+        ),
+      ),
+    );
     expect(appearance, contains('AdaptiveSettingsDragList<HomeSectionType>'));
     expect(appearance, contains('onReorder: homeSections.reorderSections'));
     expect(general, isNot(contains('HomeSectionsSettingsProvider')));

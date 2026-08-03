@@ -346,7 +346,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           ),
         ],
       ),
-      if (globals.isPhone) ...[
+      if (!globals.isTelevision) ...[
         const SizedBox(height: 16),
         AdaptiveSettingsDragList<HomeSectionType>(
           items: [
