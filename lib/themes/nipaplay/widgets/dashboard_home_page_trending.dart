@@ -451,10 +451,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
               initialResult: result,
               onQueryChanged: _applyTrendingQuery,
               onAnimeSelected: (anime) {
-                Navigator.of(windowContext).pop();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _showAnimeDetail(anime);
-                });
+                if (mounted) _showAnimeDetail(anime);
               },
             ),
           );
@@ -498,10 +495,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
         : secondaryColor;
 
     void openDetails() {
-      Navigator.of(sheetContext).pop();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showAnimeDetail(anime);
-      });
+      if (mounted) _showAnimeDetail(anime);
     }
 
     final content = Padding(
