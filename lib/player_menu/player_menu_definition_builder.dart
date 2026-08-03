@@ -74,6 +74,13 @@ class PlayerMenuDefinitionBuilder {
         visibilityPredicate: (ctx) => ctx.hasVideo,
       ),
       PlayerMenuItemDefinition(
+        paneId: PlayerMenuPaneId.seekStep,
+        category: PlayerMenuCategory.playbackControl,
+        icon: PlayerMenuIconToken.seekStep,
+        title: '播放设置',
+        visibilityPredicate: (ctx) => ctx.hasVideo,
+      ),
+      PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.playbackRate,
         category: PlayerMenuCategory.video,
         icon: PlayerMenuIconToken.playbackRate,

@@ -26,6 +26,8 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -321,6 +323,17 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
+    if (_useTelevisionCollectionLayout(context)) {
+      return _TelevisionMediaCollectionControlBar(
+        sourceLabel: sourceLabel,
+        controller: controller,
+        sort: sort,
+        isSyncing: isSyncing,
+        onSearchChanged: onSearchChanged,
+        onSortChanged: onSortChanged,
+        onSync: onSync,
+      );
+    }
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoMediaSearchToolbar(
         controller: controller,
@@ -387,6 +400,80 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
   }
 }
 
+bool _useTelevisionCollectionLayout(material.BuildContext context) {
+  return AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television ||
+      NipaplayLargeScreenModeScope.isActiveOf(context);
+}
+
+class _TelevisionMediaCollectionControlBar extends material.StatelessWidget {
+  const _TelevisionMediaCollectionControlBar({
+    required this.sourceLabel,
+    required this.controller,
+    required this.sort,
+    required this.isSyncing,
+    required this.onSearchChanged,
+    required this.onSortChanged,
+    required this.onSync,
+  });
+
+  final String sourceLabel;
+  final material.TextEditingController controller;
+  final MediaCollectionSort sort;
+  final bool isSyncing;
+  final material.ValueChanged<String> onSearchChanged;
+  final material.ValueChanged<MediaCollectionSort> onSortChanged;
+  final material.VoidCallback? onSync;
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    final nextSort = sort == MediaCollectionSort.recentlyAdded
+        ? MediaCollectionSort.name
+        : MediaCollectionSort.recentlyAdded;
+    final sortLabel =
+        sort == MediaCollectionSort.recentlyAdded ? '最近添加' : '名称排序';
+    return material.Padding(
+      padding: const material.EdgeInsets.only(bottom: 14),
+      child: NipaplayLargeScreenPanel(
+        padding: const material.EdgeInsets.all(10),
+        child: material.Row(
+          children: [
+            material.Expanded(
+              child: NipaplayLargeScreenTextInput(
+                controller: controller,
+                hintText: '搜索$sourceLabel',
+                onChanged: onSearchChanged,
+                suffix: controller.text.isEmpty
+                    ? null
+                    : NipaplayLargeScreenIconButton(
+                        icon: material.Icons.close_rounded,
+                        tooltip: '清空搜索',
+                        onPressed: () {
+                          controller.clear();
+                          onSearchChanged('');
+                        },
+                      ),
+              ),
+            ),
+            const material.SizedBox(width: 12),
+            NipaplayLargeScreenActionButton(
+              icon: material.Icons.sort_by_alpha_rounded,
+              label: sortLabel,
+              onPressed: () => onSortChanged(nextSort),
+              tooltip: '切换媒体库排序方式',
+            ),
+            const material.SizedBox(width: 10),
+            NipaplayLargeScreenActionButton(
+              icon: material.Icons.sync_rounded,
+              label: isSyncing ? '同步中' : '同步',
+              onPressed: onSync,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   const AdaptiveMediaCollectionItems({
     super.key,
@@ -415,10 +502,72 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
       source,
       sourceLabel: sourceLabel,
     );
+    if (_useTelevisionCollectionLayout(context)) {
+      return _buildTelevision(context, emptyContent);
+    }
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _buildPhone(context, emptyContent);
     }
     return _buildDesktop(context, emptyContent);
+  }
+
+  material.Widget _buildTelevision(
+    material.BuildContext context,
+    MediaCollectionEmptyContent emptyContent,
+  ) {
+    if (isLoading) {
+      return material.Center(
+        child: AdaptiveMediaActivityIndicator(color: AppAccentColors.current),
+      );
+    }
+    if (items.isEmpty) {
+      return NipaplayLargeScreenEmptyState(
+        icon: cupertino.CupertinoIcons.rectangle_stack,
+        title: emptyContent.title,
+        subtitle: emptyContent.subtitle,
+      );
+    }
+
+    return material.LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = (constraints.maxWidth / 190).floor().clamp(3, 8);
+        return material.GridView.builder(
+          key: const material.ValueKey<String>(
+            'television-media-collection-grid',
+          ),
+          primary: true,
+          padding: const material.EdgeInsets.fromLTRB(6, 4, 6, 72),
+          physics: const material.ClampingScrollPhysics(),
+          gridDelegate: material.SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisExtent: 286,
+            mainAxisSpacing: 18,
+            crossAxisSpacing: 18,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final detail = details[item.animeId];
+            return NipaplayLargeScreenModeScope(
+              isActive: true,
+              child: AnimeCard(
+                key: material.ValueKey<String>(
+                  'television-media-poster-${item.animeId}',
+                ),
+                imageUrl:
+                    _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
+                name: _AdaptiveMediaCollectionViewState._title(item, detail),
+                rating: detail?.rating,
+                source: sourceLabel,
+                enableBackgroundBlur: false,
+                enableBackdropImage: false,
+                onTap: () => onTap(item),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   material.Widget _buildPhone(
@@ -531,7 +680,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final count = allHistory
         .where((item) =>
             item.animeId == animeId &&
-            mediaLibraryItemMatchesSource(item, source, includeClearedMatchInfo: true))
+            mediaLibraryItemMatchesSource(item, source,
+                includeClearedMatchInfo: true))
         .length;
     return '共$count集';
   }
@@ -540,7 +690,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final episodes = allHistory
         .where((item) =>
             item.animeId == animeId &&
-            mediaLibraryItemMatchesSource(item, source, includeClearedMatchInfo: true))
+            mediaLibraryItemMatchesSource(item, source,
+                includeClearedMatchInfo: true))
         .toList();
     final watchedIds = episodes
         .where((item) => item.watchProgress > 0.01 || item.lastPosition > 0)

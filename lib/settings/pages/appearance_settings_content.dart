@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -75,6 +76,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
     final settingsProvider = context.watch<SettingsProvider>();
     final videoState = context.watch<VideoPlayerState>();
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     final scaleDivisions = ((AppearanceSettingsProvider.uiScaleMax -
                 AppearanceSettingsProvider.uiScaleMin) /
             AppearanceSettingsProvider.uiScaleStep)
@@ -187,42 +189,44 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             options: _playerControlColorOptions,
             onChanged: videoState.setMinimalProgressBarColor,
           ),
-          AdaptiveSettingsTile<bool>.toggle(
-            title: _text(
-              context,
-              '左上角发弹幕按钮',
-              '左上角發彈幕按鈕',
-              'Top Send Danmaku Button',
+          if (!isLargeScreen)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '左上角发弹幕按钮',
+                '左上角發彈幕按鈕',
+                'Top Send Danmaku Button',
+              ),
+              subtitle: _text(
+                context,
+                '在播放器左上角显示发弹幕按钮',
+                '在播放器左上角顯示發彈幕按鈕',
+                'Show the send danmaku button at the top left of the player.',
+              ),
+              icon: Ionicons.chatbubble_ellipses_outline,
+              phoneIcon: cupertino.CupertinoIcons.chat_bubble_2,
+              value: videoState.playerTopSendDanmakuButtonVisible,
+              onChanged: videoState.setPlayerTopSendDanmakuButtonVisible,
             ),
-            subtitle: _text(
-              context,
-              '在播放器左上角显示发弹幕按钮',
-              '在播放器左上角顯示發彈幕按鈕',
-              'Show the send danmaku button at the top left of the player.',
+          if (!isLargeScreen)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '左上角跳过按钮',
+                '左上角跳過按鈕',
+                'Top Skip Button',
+              ),
+              subtitle: _text(
+                context,
+                '在播放器左上角显示跳过按钮',
+                '在播放器左上角顯示跳過按鈕',
+                'Show the skip button at the top left of the player.',
+              ),
+              icon: Ionicons.play_skip_forward_outline,
+              phoneIcon: cupertino.CupertinoIcons.forward_end,
+              value: videoState.playerTopSkipButtonVisible,
+              onChanged: videoState.setPlayerTopSkipButtonVisible,
             ),
-            icon: Ionicons.chatbubble_ellipses_outline,
-            phoneIcon: cupertino.CupertinoIcons.chat_bubble_2,
-            value: videoState.playerTopSendDanmakuButtonVisible,
-            onChanged: videoState.setPlayerTopSendDanmakuButtonVisible,
-          ),
-          AdaptiveSettingsTile<bool>.toggle(
-            title: _text(
-              context,
-              '左上角跳过按钮',
-              '左上角跳過按鈕',
-              'Top Skip Button',
-            ),
-            subtitle: _text(
-              context,
-              '在播放器左上角显示跳过按钮',
-              '在播放器左上角顯示跳過按鈕',
-              'Show the skip button at the top left of the player.',
-            ),
-            icon: Ionicons.play_skip_forward_outline,
-            phoneIcon: cupertino.CupertinoIcons.forward_end,
-            value: videoState.playerTopSkipButtonVisible,
-            onChanged: videoState.setPlayerTopSkipButtonVisible,
-          ),
           if (showDesktopOnlySettings)
             AdaptiveSettingsTile<bool>.toggle(
               title: _text(
@@ -242,47 +246,49 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               value: videoState.playerTopResizeButtonVisible,
               onChanged: videoState.setPlayerTopResizeButtonVisible,
             ),
-          AdaptiveSettingsTile<bool>.toggle(
-            title: _text(
-              context,
-              '左上角逐帧后退/前进',
-              '左上角逐格後退/前進',
-              'Top Frame Step Buttons',
+          if (!isLargeScreen)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '左上角逐帧后退/前进',
+                '左上角逐格後退/前進',
+                'Top Frame Step Buttons',
+              ),
+              subtitle: _text(
+                context,
+                '在播放器左上角显示逐帧后退和逐帧前进按钮',
+                '在播放器左上角顯示逐格後退和逐格前進按鈕',
+                'Show frame back and frame forward buttons at the top left.',
+              ),
+              icon: Ionicons.play_circle_outline,
+              phoneIcon: cupertino.CupertinoIcons.play_circle,
+              value: videoState.playerTopFrameStepButtonsVisible,
+              onChanged: videoState.setPlayerTopFrameStepButtonsVisible,
             ),
-            subtitle: _text(
-              context,
-              '在播放器左上角显示逐帧后退和逐帧前进按钮',
-              '在播放器左上角顯示逐格後退和逐格前進按鈕',
-              'Show frame back and frame forward buttons at the top left.',
-            ),
-            icon: Ionicons.play_circle_outline,
-            phoneIcon: cupertino.CupertinoIcons.play_circle,
-            value: videoState.playerTopFrameStepButtonsVisible,
-            onChanged: videoState.setPlayerTopFrameStepButtonsVisible,
-          ),
         ],
       ),
       const SizedBox(height: 16),
       AdaptiveSettingsSection(
         children: [
-          AdaptiveSettingsTile<bool>.toggle(
-            title: _text(
-              context,
-              '番剧卡片显示介绍',
-              '番劇卡片顯示介紹',
-              'Show Anime Card Summary',
+          if (!isLargeScreen)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '番剧卡片显示介绍',
+                '番劇卡片顯示介紹',
+                'Show Anime Card Summary',
+              ),
+              subtitle: _text(
+                context,
+                '关闭后仅显示封面和标题',
+                '關閉後僅顯示封面與標題',
+                'When off, cards only show cover art and title.',
+              ),
+              icon: Ionicons.document_text_outline,
+              phoneIcon: cupertino.CupertinoIcons.doc_text,
+              value: appearanceSettings.showAnimeCardSummary,
+              onChanged: appearanceSettings.setShowAnimeCardSummary,
             ),
-            subtitle: _text(
-              context,
-              '关闭后仅显示封面和标题',
-              '關閉後僅顯示封面與標題',
-              'When off, cards only show cover art and title.',
-            ),
-            icon: Ionicons.document_text_outline,
-            phoneIcon: cupertino.CupertinoIcons.doc_text,
-            value: appearanceSettings.showAnimeCardSummary,
-            onChanged: appearanceSettings.setShowAnimeCardSummary,
-          ),
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,

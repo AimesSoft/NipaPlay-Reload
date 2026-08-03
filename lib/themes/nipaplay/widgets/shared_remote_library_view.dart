@@ -612,7 +612,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       onActivate: () => _openEpisodeSheet(context, provider, anime),
       borderRadius: BorderRadius.circular(8),
       padding: EdgeInsets.zero,
-      focusScale: 1.035,
+      focusScale: 1,
       style: NipaplayLargeScreenFocusableStyle(
         idleBackgroundDark: Colors.white.withValues(alpha: 0.07),
         idleBackgroundLight: Colors.white.withValues(alpha: 0.82),

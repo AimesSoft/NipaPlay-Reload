@@ -6,6 +6,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:provider/provider.dart';
 
 /// 手动弹幕匹配器
@@ -41,6 +43,21 @@ class ManualDanmakuMatcher {
     BuildContext context, {
     String? initialVideoTitle,
   }) async {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenViewContainer.show<Map<String, dynamic>>(
+        context: context,
+        title: '手动匹配弹幕',
+        subtitle: '搜索番剧，再使用方向键选择对应剧集',
+        maxWidth: 1100,
+        maxHeightFactor: 0.92,
+        autofocusClose: false,
+        builder: (_) => ManualDanmakuMatchDialog(
+          initialVideoTitle: initialVideoTitle,
+          embedded: true,
+        ),
+      );
+    }
+
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<Map<String, dynamic>>(
         context: context,

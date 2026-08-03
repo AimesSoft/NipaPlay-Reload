@@ -15,6 +15,9 @@ import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_remote_host_selection_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 
 class SharedRemoteHostSelectionSheet extends StatelessWidget {
   const SharedRemoteHostSelectionSheet({
@@ -25,6 +28,18 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   final bool embedded;
 
   static Future<void> show(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenViewContainer.show<void>(
+        context: context,
+        title: '选择共享客户端',
+        subtitle: '选择已有客户端，或扫描局域网添加新设备',
+        maxWidth: 1280,
+        maxHeightFactor: 0.88,
+        autofocusClose: false,
+        builder: (_) => const SharedRemoteHostSelectionSheet(embedded: true),
+      );
+    }
+
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<void>(
         context: context,
@@ -51,29 +66,37 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<SharedRemoteLibraryProvider>();
     final data = _buildViewModel(context, provider);
-    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
+    if (!isLargeScreen &&
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoSharedRemoteHostSelectionView(data: data);
     }
     final screenSize = MediaQuery.of(context).size;
     final baseDialogWidth =
         globals.DialogSizes.getDialogWidth(screenSize.width);
     final bool useWideDialog =
-        globals.isDesktopOrTablet && screenSize.width >= 720;
-    final dialogWidth = useWideDialog
-        ? (screenSize.width * 0.78).clamp(600.0, 880.0)
-        : baseDialogWidth;
+        isLargeScreen || (globals.isDesktopOrTablet && screenSize.width >= 720);
+    final dialogWidth = isLargeScreen
+        ? (screenSize.width * 0.86).clamp(900.0, 1160.0)
+        : useWideDialog
+            ? (screenSize.width * 0.78).clamp(600.0, 880.0)
+            : baseDialogWidth;
     final bool useSplitLayout = dialogWidth >= 620;
-    final sheetHeight = data.items.isEmpty
-        ? (screenSize.height * 0.4).clamp(260.0, 360.0).toDouble()
-        : screenSize.height * 0.55;
+    final sheetHeight = isLargeScreen
+        ? screenSize.height * 0.7
+        : data.items.isEmpty
+            ? (screenSize.height * 0.4).clamp(260.0, 360.0).toDouble()
+            : screenSize.height * 0.55;
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = colorScheme.onSurface;
-    final subTextColor = colorScheme.onSurface.withOpacity(0.7);
-    final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.18);
+    final subTextColor = colorScheme.onSurface.withValues(alpha: 0.7);
+    final mutedTextColor = colorScheme.onSurface.withValues(alpha: 0.5);
+    final borderColor = colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.12 : 0.18,
+    );
     final panelColor =
         isDark ? const Color(0xFF242424) : const Color(0xFFEDEDED);
     final itemColor =
@@ -104,7 +127,12 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
         child: SizedBox(
           height: sheetHeight,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            padding: EdgeInsets.fromLTRB(
+              isLargeScreen ? 28 : 20,
+              isLargeScreen ? 22 : 16,
+              isLargeScreen ? 28 : 20,
+              isLargeScreen ? 24 : 16,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,20 +166,22 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                   locale: const Locale('zh', 'CN'),
                   style: TextStyle(
                     color: subTextColor,
-                    fontSize: 13,
+                    fontSize: isLargeScreen ? 16 : 13,
                     height: 1.3,
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Expanded(
                   child: useSplitLayout
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(child: listWidget),
-                            SizedBox(width: 16),
+                            SizedBox(width: isLargeScreen ? 22 : 16),
                             SizedBox(
-                              width: (dialogWidth * 0.32).clamp(220.0, 280.0),
+                              width: isLargeScreen
+                                  ? (dialogWidth * 0.30).clamp(280.0, 340.0)
+                                  : (dialogWidth * 0.32).clamp(220.0, 280.0),
                               child: _buildActionPanel(
                                 context,
                                 data.actions,
@@ -170,7 +200,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                               context,
                               data.actions,
                             ),
-                            SizedBox(height: 12),
+                            const SizedBox(height: 12),
                             Expanded(child: listWidget),
                           ],
                         ),
@@ -221,12 +251,13 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
           label: '扫描局域网',
           onPressed: () => _showLanScanDialog(context, provider),
         ),
-        SharedRemoteHostSelectionAction(
-          kind: SharedRemoteHostSelectionActionKind.scanQr,
-          label: '扫码连接',
-          enabled: RemoteAccessQrCameraScanner.isSupported,
-          onPressed: () => _connectByQr(context, provider),
-        ),
+        if (!globals.isTelevision)
+          SharedRemoteHostSelectionAction(
+            kind: SharedRemoteHostSelectionActionKind.scanQr,
+            label: '扫码连接',
+            enabled: RemoteAccessQrCameraScanner.isSupported,
+            onPressed: () => _connectByQr(context, provider),
+          ),
         SharedRemoteHostSelectionAction(
           kind: SharedRemoteHostSelectionActionKind.addManually,
           label: '添加共享客户端',
@@ -253,9 +284,11 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Ionicons.cloud_offline_outline,
-              color: subTextColor.withOpacity(0.8)),
-          SizedBox(height: 10),
+          Icon(
+            Ionicons.cloud_offline_outline,
+            color: subTextColor.withValues(alpha: 0.8),
+          ),
+          const SizedBox(height: 10),
           Text(
             '尚未添加任何共享客户端\n请使用操作按钮进行添加',
             textAlign: TextAlign.center,
@@ -276,77 +309,101 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     required Color borderColor,
     required Color itemColor,
   }) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     return ListView.separated(
       itemCount: hosts.length,
-      separatorBuilder: (_, __) => SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final host = hosts[index];
+        final card = Container(
+          padding: EdgeInsets.all(isLargeScreen ? 18 : 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: borderColor, width: 0.6),
+            color: itemColor,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Ionicons.desktop_outline,
+                    color: subTextColor,
+                    size: isLargeScreen ? 24 : 18,
+                  ),
+                  SizedBox(width: isLargeScreen ? 10 : 6),
+                  Expanded(
+                    child: Text(
+                      host.displayName,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: isLargeScreen ? 18 : 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (host.isActive)
+                    Icon(
+                      Ionicons.checkmark_circle,
+                      color: textColor,
+                      size: isLargeScreen ? 22 : 18,
+                    )
+                  else
+                    Icon(
+                      Ionicons.chevron_forward,
+                      color: textColor.withValues(alpha: 0.5),
+                      size: isLargeScreen ? 20 : 16,
+                    ),
+                ],
+              ),
+              SizedBox(height: isLargeScreen ? 8 : 6),
+              Text(
+                host.baseUrl,
+                style: TextStyle(
+                  color: subTextColor,
+                  fontSize: isLargeScreen ? 14 : 12,
+                ),
+              ),
+              if (host.errorMessage?.isNotEmpty == true) ...[
+                SizedBox(height: isLargeScreen ? 10 : 8),
+                Text(
+                  host.errorMessage!,
+                  locale: const Locale('zh', 'CN'),
+                  style: TextStyle(
+                    color: subTextColor,
+                    fontSize: isLargeScreen ? 14 : 12,
+                  ),
+                ),
+              ],
+              SizedBox(height: isLargeScreen ? 8 : 6),
+              Text(
+                '${host.isOnline ? '在线' : '离线'} · ${host.lastConnectedLabel}',
+                style: TextStyle(
+                  color: mutedTextColor,
+                  fontSize: isLargeScreen ? 13 : 11,
+                ),
+              ),
+            ],
+          ),
+        );
+        if (isLargeScreen) {
+          return NipaplayLargeScreenFocusableAction(
+            key: ValueKey<String>('large-screen-shared-host-${host.id}'),
+            onActivate: () => host.onSelect(),
+            borderRadius: BorderRadius.circular(8),
+            padding: EdgeInsets.zero,
+            focusScale: 1.025,
+            child: card,
+          );
+        }
         return MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => host.onSelect(),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: borderColor, width: 0.6),
-                color: itemColor,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Ionicons.desktop_outline,
-                        color: subTextColor,
-                        size: 18,
-                      ),
-                      SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          host.displayName,
-                          style: TextStyle(
-                            color: textColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (host.isActive)
-                        Icon(
-                          Ionicons.checkmark_circle,
-                          color: textColor,
-                          size: 18,
-                        )
-                      else
-                        Icon(Ionicons.chevron_forward,
-                            color: textColor.withOpacity(0.5), size: 16),
-                    ],
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    host.baseUrl,
-                    style: TextStyle(color: subTextColor, fontSize: 12),
-                  ),
-                  if (host.errorMessage?.isNotEmpty == true) ...[
-                    SizedBox(height: 8),
-                    Text(
-                      host.errorMessage!,
-                      locale: const Locale('zh', 'CN'),
-                      style: TextStyle(color: subTextColor, fontSize: 12),
-                    ),
-                  ],
-                  SizedBox(height: 6),
-                  Text(
-                    '${host.isOnline ? '在线' : '离线'} · ${host.lastConnectedLabel}',
-                    style: TextStyle(color: mutedTextColor, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
+            child: card,
           ),
         );
       },
@@ -357,6 +414,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     BuildContext context,
     List<SharedRemoteHostSelectionAction> actions,
   ) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     return Wrap(
       spacing: 12,
       runSpacing: 10,
@@ -371,6 +429,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                 ? () => actions[index].onPressed()
                 : null,
             minWidth: 160,
+            autofocus: isLargeScreen && index == 0,
           ),
       ],
     );
@@ -384,6 +443,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     required Color borderColor,
     required Color panelColor,
   }) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -403,7 +463,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           for (var index = 0; index < actions.length; index++) ...[
             (index == 0
                 ? _buildPrimaryActionButton
@@ -414,10 +474,11 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                   ? () => actions[index].onPressed()
                   : null,
               expand: true,
+              autofocus: isLargeScreen && index == 0,
             ),
             if (index != actions.length - 1) const SizedBox(height: 8),
           ],
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Text(
             '已开启远程访问的设备会被自动发现，未发现可手动输入地址。',
             locale: const Locale('zh', 'CN'),
@@ -438,6 +499,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     required VoidCallback? onPressed,
     bool expand = false,
     double minWidth = 0,
+    bool autofocus = false,
   }) {
     final button = AdaptiveMediaActionButton(
       label: label,
@@ -446,6 +508,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
       phoneIcon: icon,
       emphasis: AdaptiveMediaActionEmphasis.primary,
       expand: expand,
+      autofocus: autofocus,
     );
 
     if (expand) {
@@ -464,6 +527,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     required VoidCallback? onPressed,
     bool expand = false,
     double minWidth = 0,
+    bool autofocus = false,
   }) {
     final button = AdaptiveMediaActionButton(
       label: label,
@@ -471,6 +535,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
       desktopIcon: icon,
       phoneIcon: icon,
       expand: expand,
+      autofocus: autofocus,
     );
 
     if (expand) {

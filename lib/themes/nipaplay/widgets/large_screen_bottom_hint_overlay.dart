@@ -14,6 +14,7 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     this.contextLabel = '设置',
     this.contextIcon = Icons.settings_rounded,
     this.contextKey,
+    this.useVideoBackground = false,
   });
 
   final bool isDarkMode;
@@ -23,14 +24,20 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   final String contextLabel;
   final IconData contextIcon;
   final Key? contextKey;
+  final bool useVideoBackground;
 
   @override
   Widget build(BuildContext context) {
     final Color iconColor = isDarkMode ? Colors.white : Colors.black87;
     final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color backgroundTint = isDarkMode
-        ? Colors.black.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.14);
+    final Color backgroundTint = useVideoBackground
+        ? (isDarkMode ? Colors.black : Colors.white).withValues(alpha: 0.5)
+        : isDarkMode
+            ? Colors.black.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.14);
+    final Color dividerColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.12);
 
     Widget buildAction({
       required Widget icon,
@@ -76,8 +83,13 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: ColoredBox(
-            color: backgroundTint,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: backgroundTint,
+              border: Border(
+                top: BorderSide(color: dividerColor, width: 1),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: Row(

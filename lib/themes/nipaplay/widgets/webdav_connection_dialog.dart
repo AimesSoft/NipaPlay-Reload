@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -146,139 +147,164 @@ class _WebDAVFormState extends State<_WebDAVForm> {
 
     return TextSelectionTheme(
       data: selectionTheme,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
-              style: TextStyle(
-                color: subTextColor,
-                fontSize: 13,
+      child: TvOSRemoteTextInputGroup(
+        title:
+            widget.editConnection == null ? '添加 WebDAV 服务器' : '编辑 WebDAV 服务器',
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
+                style: TextStyle(
+                  color: subTextColor,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 24),
+              SizedBox(height: 24),
 
-            // 连接名称
-            TextFormField(
-              controller: _nameController,
-              cursorColor: accentColor,
-              style: TextStyle(color: textColor),
-              decoration: buildDecoration(
-                label: '连接名称（可选）',
-                hint: '留空则自动生成',
-              ),
-              validator: (value) {
-                // 连接名称现在是可选的，不需要验证
-                return null;
-              },
-            ),
-
-            SizedBox(height: 16),
-
-            // WebDAV URL
-            TextFormField(
-              controller: _urlController,
-              cursorColor: accentColor,
-              style: TextStyle(color: textColor),
-              decoration: buildDecoration(
-                label: 'WebDAV地址',
-                hint: 'https://your-server.com/webdav',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入WebDAV地址';
-                }
-                if (!value.startsWith('http://') &&
-                    !value.startsWith('https://')) {
-                  return '请输入有效的URL地址';
-                }
-                return null;
-              },
-            ),
-
-            SizedBox(height: 16),
-
-            // 用户名
-            TextFormField(
-              controller: _usernameController,
-              cursorColor: accentColor,
-              style: TextStyle(color: textColor),
-              decoration: buildDecoration(
-                label: '用户名',
-                hint: '可选，如果服务器需要认证',
-              ),
-            ),
-
-            SizedBox(height: 16),
-
-            // 密码
-            TextFormField(
-              controller: _passwordController,
-              obscureText: !_passwordVisible,
-              cursorColor: accentColor,
-              style: TextStyle(color: textColor),
-              decoration: buildDecoration(
-                label: '密码',
-                hint: '可选，如果服务器需要认证',
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                    color: accentColor,
+              // 连接名称
+              TvOSRemoteTextInputControl(
+                title: '连接名称（可选）',
+                fieldId: 'name',
+                child: TextFormField(
+                  controller: _nameController,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: buildDecoration(
+                    label: '连接名称（可选）',
+                    hint: '留空则自动生成',
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _passwordVisible = !_passwordVisible;
-                    });
+                  validator: (value) {
+                    // 连接名称现在是可选的，不需要验证
+                    return null;
                   },
-                  style: IconButton.styleFrom(
-                    overlayColor: Colors.transparent,
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // WebDAV URL
+              TvOSRemoteTextInputControl(
+                title: 'WebDAV地址',
+                fieldId: 'url',
+                required: true,
+                child: TextFormField(
+                  controller: _urlController,
+                  keyboardType: TextInputType.url,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: buildDecoration(
+                    label: 'WebDAV地址',
+                    hint: 'https://your-server.com/webdav',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入WebDAV地址';
+                    }
+                    if (!value.startsWith('http://') &&
+                        !value.startsWith('https://')) {
+                      return '请输入有效的URL地址';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // 用户名
+              TvOSRemoteTextInputControl(
+                title: '用户名',
+                fieldId: 'username',
+                child: TextFormField(
+                  controller: _usernameController,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: buildDecoration(
+                    label: '用户名',
+                    hint: '可选，如果服务器需要认证',
                   ),
                 ),
               ),
-            ),
 
-            SizedBox(height: 24),
+              SizedBox(height: 16),
 
-            // 按钮行
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  style: plainButtonStyle,
-                  child: const Text('取消'),
+              // 密码
+              TvOSRemoteTextInputControl(
+                title: '密码',
+                fieldId: 'password',
+                obscureText: true,
+                child: TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_passwordVisible,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: buildDecoration(
+                    label: '密码',
+                    hint: '可选，如果服务器需要认证',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _passwordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: accentColor,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _passwordVisible = !_passwordVisible;
+                        });
+                      },
+                      style: IconButton.styleFrom(
+                        overlayColor: Colors.transparent,
+                      ),
+                    ),
+                  ),
                 ),
-                SizedBox(width: 12),
-                TextButton(
-                  onPressed: _isLoading ? null : _testConnection,
-                  style: accentButtonStyle,
-                  child: _isLoading
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(accentColor),
-                          ),
-                        )
-                      : const Text('测试连接'),
-                ),
-                SizedBox(width: 12),
-                TextButton(
-                  onPressed: _isLoading ? null : _saveConnection,
-                  style: accentButtonStyle,
-                  child: Text(widget.editConnection == null ? '添加' : '保存'),
-                ),
-              ],
-            ),
-          ],
+              ),
+
+              SizedBox(height: 24),
+
+              // 按钮行
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    style: plainButtonStyle,
+                    child: const Text('取消'),
+                  ),
+                  SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _isLoading ? null : _testConnection,
+                    style: accentButtonStyle,
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(accentColor),
+                            ),
+                          )
+                        : const Text('测试连接'),
+                  ),
+                  SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _isLoading ? null : _saveConnection,
+                    style: accentButtonStyle,
+                    child: Text(widget.editConnection == null ? '添加' : '保存'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -191,7 +191,7 @@ class _AnimeCardState extends State<AnimeCard> {
     return NipaplayLargeScreenFocusableAction(
       onActivate: widget.onTap,
       borderRadius: BorderRadius.circular(12),
-      focusScale: 1.04,
+      focusScale: 1,
       style: const NipaplayLargeScreenFocusableStyle(
         idleBackgroundDark: Colors.transparent,
         idleBackgroundLight: Colors.transparent,

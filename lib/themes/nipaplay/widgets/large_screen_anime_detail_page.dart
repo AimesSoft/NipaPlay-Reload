@@ -1185,7 +1185,6 @@ class _NipaplayLargeScreenAnimeDetailPageState
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final Color dividerColor = isDark ? Colors.white12 : Colors.black12;
     final mediaPadding = MediaQuery.of(context).padding;
-
     final anime = _anime;
     final coverImageUrl = anime == null ? '' : _coverImageUrl(anime);
 

@@ -17,6 +17,9 @@ import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SharedRemoteLanScanDialog {
@@ -24,7 +27,22 @@ class SharedRemoteLanScanDialog {
     BuildContext context, {
     required SharedRemoteLibraryProvider provider,
   }) {
-    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+    final surface = AppDisplaySurfaceScope.of(context);
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenViewContainer.show<bool>(
+        context: context,
+        title: '扫描局域网',
+        subtitle: '使用方向键选择设备，按确认键连接',
+        maxWidth: 1180,
+        maxHeightFactor: 0.86,
+        autofocusClose: false,
+        builder: (_) => _SharedRemoteLanScanDialogContent(
+          provider: provider,
+        ),
+      );
+    }
+
+    if (surface == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<bool>(
         context: context,
         title: '扫描局域网',
@@ -420,17 +438,20 @@ class _SharedRemoteLanScanDialogContentState
   @override
   Widget build(BuildContext context) {
     const defaultPort = 1180;
+    final isTelevision = NipaplayLargeScreenModeScope.isActiveOf(context);
     final accentColor = AppAccentColors.current;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = Theme.of(context).colorScheme.onSurface;
-    final subTextColor = textColor.withOpacity(0.7);
-    final mutedTextColor = textColor.withOpacity(0.5);
-    final borderColor = textColor.withOpacity(isDark ? 0.12 : 0.18);
+    final subTextColor = textColor.withValues(alpha: 0.7);
+    final mutedTextColor = textColor.withValues(alpha: 0.5);
+    final borderColor = textColor.withValues(alpha: isDark ? 0.12 : 0.18);
     final itemColor =
         isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
-    final height = (MediaQuery.of(context).size.height * 0.55)
-        .clamp(320.0, 520.0)
-        .toDouble();
+    final height = isTelevision
+        ? double.infinity
+        : (MediaQuery.of(context).size.height * 0.55)
+            .clamp(320.0, 520.0)
+            .toDouble();
     final prefixLabel = _prefixes.isEmpty ? '自动获取网段' : _prefixes.join('、');
     final statusText = _errorMessage ??
         (_isScanning
@@ -439,122 +460,191 @@ class _SharedRemoteLanScanDialogContentState
                 : '正在扫描：$prefixLabel（默认端口 $defaultPort）  $_scanned/$_total  已发现 ${_foundHosts.length} 台')
             : '扫描完成：$prefixLabel  共找到 ${_foundHosts.length} 台');
 
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '将自动发现局域网中已开启“远程访问”的 NipaPlay（无需手动输入端口）。若未发现设备，会回退扫描默认端口 1180（旧版本兼容）。',
-            style: TextStyle(
-              color: subTextColor,
-              fontSize: 13,
-              height: 1.35,
-            ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '将自动发现局域网中已开启“远程访问”的 NipaPlay（无需手动输入端口）。若未发现设备，会回退扫描默认端口 1180（旧版本兼容）。',
+          style: TextStyle(
+            color: subTextColor,
+            fontSize: isTelevision ? 16 : 13,
+            height: 1.35,
           ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              const Spacer(),
-              SizedBox(
-                width: 120,
-                child: AdaptiveMediaActionButton(
-                  label: _isScanning ? '停止' : '重新扫描',
-                  desktopIcon: Ionicons.refresh_outline,
-                  phoneIcon: Ionicons.refresh_outline,
-                  onPressed: _isScanning
-                      ? () => _cancelScan(updateState: true)
-                      : _startScan,
-                  compact: true,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                _isScanning
-                    ? Ionicons.radio_outline
-                    : Ionicons.checkmark_circle_outline,
-                color: _isScanning ? subTextColor : mutedTextColor,
-                size: 16,
-              ),
-              SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    color: _errorMessage != null
-                        ? Colors.orangeAccent
-                        : subTextColor,
-                    fontSize: 12,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (_isScanning)
-                AdaptiveMediaActivityIndicator(
-                  color: accentColor,
-                  size: 14,
-                ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Expanded(
-            child: _foundHosts.isEmpty
-                ? Center(
-                    child: Text(
-                      _isScanning ? '暂未发现设备…' : '未发现任何设备',
-                      style: TextStyle(color: mutedTextColor),
+        ),
+        SizedBox(height: isTelevision ? 18 : 12),
+        Row(
+          children: [
+            const Spacer(),
+            SizedBox(
+              width: isTelevision ? 210 : 120,
+              child: isTelevision
+                  ? NipaplayLargeScreenActionButton(
+                      key: const ValueKey<String>(
+                        'television-lan-scan-action',
+                      ),
+                      icon: _isScanning
+                          ? Ionicons.stop_circle_outline
+                          : Ionicons.refresh_outline,
+                      label: _isScanning ? '停止扫描' : '重新扫描',
+                      autofocus: true,
+                      onPressed: _isScanning
+                          ? () => _cancelScan(updateState: true)
+                          : _startScan,
+                    )
+                  : AdaptiveMediaActionButton(
+                      label: _isScanning ? '停止' : '重新扫描',
+                      desktopIcon: Ionicons.refresh_outline,
+                      phoneIcon: Ionicons.refresh_outline,
+                      onPressed: _isScanning
+                          ? () => _cancelScan(updateState: true)
+                          : _startScan,
+                      compact: true,
                     ),
-                  )
-                : ListView.separated(
-                    itemCount: _foundHosts.length,
-                    separatorBuilder: (_, __) => SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final host = _foundHosts[index];
-                      final title = (host.hostname?.trim().isNotEmpty ?? false)
-                          ? host.hostname!.trim()
-                          : host.ip;
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: borderColor),
-                          color: itemColor,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Ionicons.desktop_outline,
-                                color: subTextColor, size: 18),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    title,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    host.baseUrl,
-                                    style: TextStyle(
-                                      color: subTextColor,
-                                      fontSize: 12,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+            ),
+          ],
+        ),
+        SizedBox(height: isTelevision ? 16 : 10),
+        Row(
+          children: [
+            Icon(
+              _isScanning
+                  ? Ionicons.radio_outline
+                  : Ionicons.checkmark_circle_outline,
+              color: _isScanning ? subTextColor : mutedTextColor,
+              size: isTelevision ? 20 : 16,
+            ),
+            SizedBox(width: isTelevision ? 10 : 6),
+            Expanded(
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  color: _errorMessage != null
+                      ? Colors.orangeAccent
+                      : subTextColor,
+                  fontSize: isTelevision ? 15 : 12,
+                  fontWeight:
+                      isTelevision ? FontWeight.w600 : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_isScanning)
+              AdaptiveMediaActivityIndicator(
+                color: accentColor,
+                size: isTelevision ? 20 : 14,
+              ),
+          ],
+        ),
+        SizedBox(height: isTelevision ? 18 : 12),
+        Expanded(
+          child: _foundHosts.isEmpty
+              ? Center(
+                  child: isTelevision
+                      ? NipaplayLargeScreenPanel(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 44,
+                            vertical: 34,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isScanning
+                                    ? Ionicons.radio_outline
+                                    : Ionicons.cloud_offline_outline,
+                                color: mutedTextColor,
+                                size: 38,
                               ),
+                              const SizedBox(height: 14),
+                              Text(
+                                _isScanning ? '正在寻找局域网设备…' : '未发现任何设备',
+                                style: TextStyle(
+                                  color: mutedTextColor,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Text(
+                          _isScanning ? '暂未发现设备…' : '未发现任何设备',
+                          style: TextStyle(color: mutedTextColor),
+                        ),
+                )
+              : ListView.separated(
+                  key: ValueKey<String>(
+                    isTelevision
+                        ? 'television-lan-scan-results'
+                        : 'lan-scan-results',
+                  ),
+                  primary: isTelevision,
+                  padding: EdgeInsets.only(
+                    bottom: isTelevision ? 18 : 0,
+                  ),
+                  itemCount: _foundHosts.length,
+                  separatorBuilder: (_, __) =>
+                      SizedBox(height: isTelevision ? 14 : 10),
+                  itemBuilder: (context, index) {
+                    final host = _foundHosts[index];
+                    final title = (host.hostname?.trim().isNotEmpty ?? false)
+                        ? host.hostname!.trim()
+                        : host.ip;
+                    final card = Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(isTelevision ? 10 : 14),
+                        border: Border.all(color: borderColor),
+                        color: itemColor,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Ionicons.desktop_outline,
+                            color: subTextColor,
+                            size: isTelevision ? 30 : 18,
+                          ),
+                          SizedBox(width: isTelevision ? 18 : 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: isTelevision ? 19 : null,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: isTelevision ? 5 : 2),
+                                Text(
+                                  host.baseUrl,
+                                  style: TextStyle(
+                                    color: subTextColor,
+                                    fontSize: isTelevision ? 14 : 12,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            SizedBox(width: 10),
+                          ),
+                          SizedBox(width: isTelevision ? 18 : 10),
+                          if (isTelevision)
+                            NipaplayLargeScreenActionButton(
+                              key: ValueKey<String>(
+                                'television-lan-add-${host.baseUrl}',
+                              ),
+                              icon: Ionicons.add_outline,
+                              label: _isAdding ? '添加中' : '添加',
+                              onPressed: _isAdding
+                                  ? null
+                                  : () => _addDiscoveredHost(host),
+                              compact: true,
+                            )
+                          else
                             AdaptiveMediaActionButton(
                               label: '添加',
                               onPressed: _isAdding
@@ -562,14 +652,31 @@ class _SharedRemoteLanScanDialogContentState
                                   : () => _addDiscoveredHost(host),
                               compact: true,
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+                        ],
+                      ),
+                    );
+                    return card;
+                  },
+                ),
+        ),
+      ],
+    );
+
+    return SizedBox(
+      key: ValueKey<String>(
+        isTelevision ? 'television-lan-scan-page' : 'lan-scan-page',
       ),
+      height: height,
+      width: double.infinity,
+      child: isTelevision
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
+              child: FocusTraversalGroup(
+                policy: ReadingOrderTraversalPolicy(),
+                child: content,
+              ),
+            )
+          : content,
     );
   }
 }

@@ -2,7 +2,12 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class DesktopAccountView extends StatelessWidget {
   const DesktopAccountView({
@@ -18,29 +23,41 @@ class DesktopAccountView extends StatelessWidget {
   Widget build(BuildContext context) {
     final dividerColor =
         fluent.FluentTheme.of(context).resources.dividerStrokeColorDefault;
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _DesktopDandanplayAccountSection(
+            data: data.dandanplay,
+            userActivity: userActivity,
+          ),
+        ),
+        Container(
+          width: 1,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          color: dividerColor,
+        ),
+        Expanded(
+          child: _DesktopBangumiAccountSection(data: data.bangumi),
+        ),
+      ],
+    );
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPageScaffold(
+        title: '个人中心',
+        subtitle: '弹弹play、Bangumi 与观看记录',
+        padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
+        headerBottomSpacing: 16,
+        child: content,
+      );
+    }
+
     return fluent.ScaffoldPage(
       padding: EdgeInsets.zero,
       content: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _DesktopDandanplayAccountSection(
-                data: data.dandanplay,
-                userActivity: userActivity,
-              ),
-            ),
-            Container(
-              width: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              color: dividerColor,
-            ),
-            Expanded(
-              child: _DesktopBangumiAccountSection(data: data.bangumi),
-            ),
-          ],
-        ),
+        child: content,
       ),
     );
   }
@@ -148,8 +165,10 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
         children: [
           _buildStatusCard(context),
           const SizedBox(height: 16),
-          _buildDandanCard(context),
-          const SizedBox(height: 16),
+          if (!globals.isTelevision) ...[
+            _buildDandanCard(context),
+            const SizedBox(height: 16),
+          ],
           _buildTokenCard(context),
           const SizedBox(height: 16),
           _buildSyncCard(),
@@ -284,11 +303,54 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
             BangumiAccountViewModel.tokenDescription,
           ),
           const SizedBox(height: 12),
-          fluent.PasswordBox(
-            controller: data.tokenController,
-            placeholder: BangumiAccountViewModel.tokenPlaceholder,
-            enabled: !data.isLoading,
-          ),
+          if (NipaplayLargeScreenModeScope.isActiveOf(context))
+            AdaptiveMediaTextField(
+              controller: data.tokenController,
+              obscureText: true,
+              remoteInputTitle: BangumiAccountViewModel.tokenTitle,
+              remoteInputFieldId: 'bangumi_access_token',
+              remoteInputRequired: true,
+              cursorColor: AppAccentColors.current,
+              style: TextStyle(
+                color: fluent.FluentTheme.of(context)
+                    .resources
+                    .textFillColorPrimary,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                hintText: BangumiAccountViewModel.tokenPlaceholder,
+                hintStyle: TextStyle(
+                  color: fluent.FluentTheme.of(context)
+                      .resources
+                      .textFillColorSecondary,
+                ),
+                filled: true,
+                fillColor: fluent.FluentTheme.of(context)
+                    .resources
+                    .controlFillColorDefault,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: fluent.FluentTheme.of(context)
+                        .resources
+                        .controlStrokeColorDefault,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: AppAccentColors.current,
+                    width: 2,
+                  ),
+                ),
+              ),
+            )
+          else
+            fluent.PasswordBox(
+              controller: data.tokenController,
+              placeholder: BangumiAccountViewModel.tokenPlaceholder,
+              enabled: !data.isLoading,
+            ),
           const SizedBox(height: 16),
           Row(
             children: [

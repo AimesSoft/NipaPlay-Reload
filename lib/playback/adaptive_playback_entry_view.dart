@@ -7,6 +7,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class AdaptivePlaybackEntryView extends material.StatelessWidget {
   const AdaptivePlaybackEntryView({
@@ -15,6 +16,7 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
     required this.mascotScale,
     required this.onMascotTap,
     required this.onSelectFile,
+    required this.onAddMedia,
     required this.onOpenUrlInput,
     this.detachedPlayer = false,
     this.onLocateDetachedPlayer,
@@ -25,6 +27,7 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
   final material.Animation<double> mascotScale;
   final material.VoidCallback onMascotTap;
   final material.VoidCallback onSelectFile;
+  final material.VoidCallback onAddMedia;
   final material.VoidCallback onOpenUrlInput;
   final bool detachedPlayer;
   final material.VoidCallback? onLocateDetachedPlayer;
@@ -38,6 +41,7 @@ class AdaptivePlaybackEntryView extends material.StatelessWidget {
       mascotScale: mascotScale,
       onMascotTap: onMascotTap,
       onSelectFile: onSelectFile,
+      onAddMedia: onAddMedia,
       onOpenUrlInput: onOpenUrlInput,
       detachedPlayer: detachedPlayer,
       onLocateDetachedPlayer: onLocateDetachedPlayer,
@@ -59,6 +63,7 @@ class _PlaybackEntryRendererData {
     required this.mascotScale,
     required this.onMascotTap,
     required this.onSelectFile,
+    required this.onAddMedia,
     required this.onOpenUrlInput,
     required this.detachedPlayer,
     this.onLocateDetachedPlayer,
@@ -69,6 +74,7 @@ class _PlaybackEntryRendererData {
   final material.Animation<double> mascotScale;
   final material.VoidCallback onMascotTap;
   final material.VoidCallback onSelectFile;
+  final material.VoidCallback onAddMedia;
   final material.VoidCallback onOpenUrlInput;
   final bool detachedPlayer;
   final material.VoidCallback? onLocateDetachedPlayer;
@@ -221,6 +227,11 @@ class _NipaplayPlaybackEntryRendererState
     final theme = material.Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
     final detached = data.detachedPlayer;
+    final isTelevision = globals.isTelevision ||
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
+    if (isTelevision && !detached) {
+      return _buildTelevisionEntry(context, data, textColor);
+    }
     final primaryLabel = detached ? '定位独立窗口' : data.content.selectFileLabel;
     final primaryDescription = detached
         ? '播放器正在独立窗口中继续播放，播放状态和控制设置保持不变'
@@ -300,6 +311,74 @@ class _NipaplayPlaybackEntryRendererState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  material.Widget _buildTelevisionEntry(
+    material.BuildContext context,
+    _PlaybackEntryRendererData data,
+    material.Color textColor,
+  ) {
+    return material.Center(
+      child: material.Row(
+        mainAxisSize: material.MainAxisSize.min,
+        crossAxisAlignment: material.CrossAxisAlignment.center,
+        children: [
+          _PlaybackMascot(
+            scale: data.mascotScale,
+            size: 120,
+            onTap: data.onMascotTap,
+          ),
+          const material.SizedBox(width: 20),
+          material.ConstrainedBox(
+            constraints: const material.BoxConstraints(maxWidth: 620),
+            child: material.Column(
+              mainAxisSize: material.MainAxisSize.min,
+              crossAxisAlignment: material.CrossAxisAlignment.start,
+              children: [
+                material.Text(
+                  data.content.emptyTitle,
+                  style: material.TextStyle(color: textColor, fontSize: 18),
+                ),
+                const material.SizedBox(height: 18),
+                AdaptiveMediaActionButton(
+                  label: data.content.enterUrlLabel,
+                  onPressed: data.onOpenUrlInput,
+                  desktopIcon: material.Icons.link_rounded,
+                  phoneIcon: cupertino.CupertinoIcons.link,
+                  emphasis: AdaptiveMediaActionEmphasis.primary,
+                  autofocus: true,
+                ),
+                const material.SizedBox(height: 8),
+                material.Text(
+                  data.content.enterUrlDescription,
+                  style: material.TextStyle(
+                    color: textColor.withValues(alpha: 0.68),
+                    fontSize: 14,
+                  ),
+                ),
+                const material.SizedBox(height: 18),
+                _PlaybackChoiceDivider(textColor: textColor),
+                const material.SizedBox(height: 18),
+                AdaptiveMediaActionButton(
+                  label: data.content.addMediaLabel,
+                  onPressed: data.onAddMedia,
+                  desktopIcon: material.Icons.add_to_queue_rounded,
+                  phoneIcon: cupertino.CupertinoIcons.add_circled,
+                ),
+                const material.SizedBox(height: 8),
+                material.Text(
+                  data.content.addMediaDescription,
+                  style: material.TextStyle(
+                    color: textColor.withValues(alpha: 0.68),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

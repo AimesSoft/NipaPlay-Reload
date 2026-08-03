@@ -165,12 +165,14 @@ class _CupertinoDanmakuOffsetPaneState
                       title: const Text('重置偏移'),
                       subtitle: const Text('恢复为无偏移状态'),
                       trailing: const Icon(CupertinoIcons.refresh),
-                      onTap: currentOffset == 0
-                          ? null
-                          : () {
-                              videoState.setManualDanmakuOffset(0);
-                              BlurSnackBar.show(context, '已重置弹幕偏移');
-                            },
+                      onTap: () {
+                        if (currentOffset == 0) {
+                          BlurSnackBar.show(context, '当前已是无偏移状态');
+                          return;
+                        }
+                        videoState.setManualDanmakuOffset(0);
+                        BlurSnackBar.show(context, '已重置弹幕偏移');
+                      },
                     ),
                   ],
                 ),

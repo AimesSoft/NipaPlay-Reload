@@ -20,7 +20,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class DanmakuSettingsContent extends StatefulWidget {
@@ -551,34 +553,43 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _spoilerAiUrlController,
-          keyboardType: TextInputType.url,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: InputDecoration(
-            labelText: '接口 URL',
-            hintText: urlHint,
+        TvOSRemoteTextInputControl(
+          title: '接口 URL',
+          child: TextField(
+            controller: _spoilerAiUrlController,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: '接口 URL',
+              hintText: urlHint,
+            ),
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _spoilerAiModelController,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: InputDecoration(
-            labelText: '模型',
-            hintText: modelHint,
+        TvOSRemoteTextInputControl(
+          title: '模型',
+          child: TextField(
+            controller: _spoilerAiModelController,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: '模型',
+              hintText: modelHint,
+            ),
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _spoilerAiApiKeyController,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: const InputDecoration(
-            labelText: 'API Key',
-            hintText: '请输入你的 API Key',
+        TvOSRemoteTextInputControl(
+          title: 'API Key',
+          child: TextField(
+            controller: _spoilerAiApiKeyController,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              labelText: 'API Key',
+              hintText: '请输入你的 API Key',
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -725,10 +736,10 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isErikaPlayerKernel =
+    final isErikaPlayerKernel = globals.isTelevision ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final showNextPlusPlusToggle =
+    final showNextPlusPlusToggle = !globals.isTelevision &&
         _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
     final showRendererSupersample = !isErikaPlayerKernel &&
         (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
