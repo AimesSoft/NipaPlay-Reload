@@ -199,8 +199,9 @@ void main() {
       isTrue,
     );
   });
-  testWidgets('television collection renders a focusable poster grid',
+  testWidgets('desktop large-screen collection uses light theme card text',
       (tester) async {
+    final lightTheme = ThemeData.light();
     final item = WatchHistoryItem(
       animeId: 42,
       animeName: '测试番剧',
@@ -216,20 +217,24 @@ void main() {
       ChangeNotifierProvider<AppearanceSettingsProvider>(
         create: (_) => AppearanceSettingsProvider(),
         child: MaterialApp(
+          theme: lightTheme,
           home: AppDisplaySurfaceScope(
-            surface: AppDisplaySurface.television,
-            child: SizedBox(
-              width: 1280,
-              height: 720,
-              child: AdaptiveMediaCollectionItems(
-                source: UnifiedMediaLibrarySource.local,
-                sourceLabel: '本地媒体库',
-                isLoading: false,
-                items: <WatchHistoryItem>[item],
-                allHistory: <WatchHistoryItem>[item],
-                details: const {},
-                onRefresh: () async {},
-                onTap: (_) {},
+            surface: AppDisplaySurface.desktopTablet,
+            child: NipaplayLargeScreenModeScope(
+              isActive: true,
+              child: SizedBox(
+                width: 1280,
+                height: 720,
+                child: AdaptiveMediaCollectionItems(
+                  source: UnifiedMediaLibrarySource.local,
+                  sourceLabel: '本地媒体库',
+                  isLoading: false,
+                  items: <WatchHistoryItem>[item],
+                  allHistory: <WatchHistoryItem>[item],
+                  details: const {},
+                  onRefresh: () async {},
+                  onTap: (_) {},
+                ),
               ),
             ),
           ),
@@ -249,6 +254,11 @@ void main() {
     expect(
       find.byType(NipaplayLargeScreenFocusableAction),
       findsOneWidget,
+    );
+    final title = tester.widget<Text>(find.text('测试番剧'));
+    expect(
+      title.style?.color,
+      lightTheme.colorScheme.onSurface.withValues(alpha: 0.9),
     );
   });
 
