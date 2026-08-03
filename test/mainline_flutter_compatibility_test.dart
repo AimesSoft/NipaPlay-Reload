@@ -175,6 +175,8 @@ void main() {
   test('HarmonyOS CI builds and signs without committed credentials', () {
     final workflow =
         File('.github/workflows/build-ohos.yml').readAsStringSync();
+    final signingHelper =
+        File('.github/workflows/scripts/sign-ohos-hap.exp').readAsStringSync();
 
     expect(workflow, contains('workflow_dispatch:'));
     expect(workflow, contains('workflow_call:'));
@@ -182,6 +184,9 @@ void main() {
     expect(workflow, contains('hap-sign-tool.jar'));
     expect(workflow, contains('verify-app'));
     expect(workflow, contains('release-HarmonyOS-signed'));
+    expect(workflow,
+        contains('expect .github/workflows/scripts/sign-ohos-hap.exp'));
+    expect(workflow, isNot(contains("printf '%s\\n%s\\n'")));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_CERT_BASE64 }}'));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}'));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}'));
@@ -196,6 +201,11 @@ void main() {
     );
     expect(workflow, isNot(contains('/Users/')));
     expect(workflow, isNot(contains('.ohos/config')));
+    expect(signingHelper, contains('-pwdInputMode 1'));
+    expect(signingHelper, contains('please input KeystorePwd'));
+    expect(signingHelper, contains('please input KeyPwd'));
+    expect(signingHelper, contains(r'$env(SIGNING_KEYSTORE_PASSWORD)'));
+    expect(signingHelper, contains(r'$env(SIGNING_KEY_PASSWORD)'));
   });
 
   test('release CI publishes HarmonyOS and Apple TV sideload packages', () {

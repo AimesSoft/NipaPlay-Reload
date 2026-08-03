@@ -130,6 +130,7 @@ jobs:
             ca-certificates \
             cmake \
             curl \
+            expect \
             git \
             make \
             nasm \
@@ -266,19 +267,13 @@ jobs:
           fi
 
           signed_hap="dist/NipaPlay-${VERSION}-HarmonyOS-arm64-signed.hap"
-          printf '%s\n%s\n' "$SIGNING_KEYSTORE_PASSWORD" "$SIGNING_KEY_PASSWORD" |
-            java -jar "$sign_tool" sign-app \
-              -mode localSign \
-              -keyAlias "$SIGNING_KEY_ALIAS" \
-              -appCertFile "$signing_dir/application.cer" \
-              -profileFile "$signing_dir/profile.p7b" \
-              -inFile "$UNSIGNED_HAP" \
-              -signAlg SHA256withECDSA \
-              -keystoreFile "$signing_dir/application.p12" \
-              -outFile "$signed_hap" \
-              -compatibleVersion 18 \
-              -signCode 1 \
-              -pwdInputMode 1
+          expect .github/workflows/scripts/sign-ohos-hap.exp \
+            "$sign_tool" \
+            "$signing_dir/application.cer" \
+            "$signing_dir/profile.p7b" \
+            "$signing_dir/application.p12" \
+            "$UNSIGNED_HAP" \
+            "$signed_hap"
 
           java -jar "$sign_tool" verify-app \
             -inFile "$signed_hap" \

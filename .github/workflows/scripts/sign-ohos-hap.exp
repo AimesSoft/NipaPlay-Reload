@@ -1,0 +1,54 @@
+#!/usr/bin/expect -f
+
+# hap-sign-tool's interactive password mode reads from java.io.Console rather
+# than stdin. GitHub Actions has no controlling terminal, so piping passwords
+# to the process fails with "Console not available". Expect supplies a
+# pseudo-terminal while keeping both passwords out of the command line.
+
+set timeout -1
+
+if {[llength $argv] != 6} {
+  puts stderr "Usage: sign-ohos-hap.exp <sign-tool> <certificate> <profile> <keystore> <input-hap> <output-hap>"
+  exit 2
+}
+
+foreach variable {
+  SIGNING_KEY_ALIAS
+  SIGNING_KEYSTORE_PASSWORD
+  SIGNING_KEY_PASSWORD
+} {
+  if {![info exists env($variable)] || $env($variable) eq ""} {
+    puts stderr "Missing required environment variable: $variable"
+    exit 2
+  }
+}
+
+lassign $argv sign_tool certificate profile keystore input_hap output_hap
+
+spawn java -jar $sign_tool sign-app \
+  -mode localSign \
+  -keyAlias $env(SIGNING_KEY_ALIAS) \
+  -appCertFile $certificate \
+  -profileFile $profile \
+  -inFile $input_hap \
+  -signAlg SHA256withECDSA \
+  -keystoreFile $keystore \
+  -outFile $output_hap \
+  -compatibleVersion 18 \
+  -signCode 1 \
+  -pwdInputMode 1
+
+expect {
+  -re {please input KeystorePwd[^\r\n]*} {
+    send -- "$env(SIGNING_KEYSTORE_PASSWORD)\r"
+    exp_continue
+  }
+  -re {please input KeyPwd[^\r\n]*} {
+    send -- "$env(SIGNING_KEY_PASSWORD)\r"
+    exp_continue
+  }
+  eof
+}
+
+set wait_result [wait]
+exit [lindex $wait_result 3]
