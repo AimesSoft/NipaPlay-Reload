@@ -16,14 +16,12 @@ const double kNipaplayLargeScreenPlayerMenuPanelWidth = 960;
 class NipaplayLargeScreenPlayerMenuPanel extends StatefulWidget {
   const NipaplayLargeScreenPlayerMenuPanel({
     super.key,
-    required this.isDarkMode,
     required this.initialFocusNode,
     required this.onExitPlayback,
     required this.onSendDanmaku,
     required this.onRequestClose,
   });
 
-  final bool isDarkMode;
   final FocusNode initialFocusNode;
   final VoidCallback onExitPlayback;
   final VoidCallback onSendDanmaku;
@@ -59,59 +57,80 @@ class _NipaplayLargeScreenPlayerMenuPanelState
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        widget.isDarkMode ? Colors.white : const Color(0xFF161922);
-    return Focus(
-      focusNode: _panelFocusNode,
-      onKeyEvent: _handleKeyEvent,
-      child: FocusTraversalGroup(
-        policy: ReadingOrderTraversalPolicy(),
-        child: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: Container(
-              width: kNipaplayLargeScreenPlayerMenuPanelWidth,
-              color: widget.isDarkMode
-                  ? Colors.black.withValues(alpha: 0.72)
-                  : Colors.white.withValues(alpha: 0.88),
-              child: Consumer<VideoPlayerState>(
-                builder: (context, videoState, _) {
-                  final definitions = PlayerMenuDefinitionBuilder(
-                    context: PlayerMenuContext(
-                      videoState: videoState,
-                      kernelType: PlayerFactory.getKernelType(),
-                    ),
-                  ).build();
-                  final entries = <_PlayerMenuTabEntry>[
-                    const _PlayerMenuTabEntry.actions(),
-                    ...definitions.map(_PlayerMenuTabEntry.definition),
-                  ];
-                  _latestEntries = entries;
-                  _focusedTabIndex = _focusedTabIndex.clamp(
-                    0,
-                    entries.length - 1,
-                  );
-                  final selectedEntry = _resolveSelectedEntry(entries);
+    final parentTheme = Theme.of(context);
+    final darkColorScheme = ColorScheme.fromSeed(
+      seedColor: parentTheme.colorScheme.primary,
+      brightness: Brightness.dark,
+    );
+    final darkTheme = parentTheme.copyWith(
+      colorScheme: darkColorScheme,
+      scaffoldBackgroundColor: Colors.black,
+      canvasColor: Colors.black,
+      dividerColor: Colors.white12,
+      textTheme: parentTheme.textTheme.apply(
+        bodyColor: darkColorScheme.onSurface,
+        displayColor: darkColorScheme.onSurface,
+      ),
+      primaryTextTheme: parentTheme.primaryTextTheme.apply(
+        bodyColor: darkColorScheme.onPrimary,
+        displayColor: darkColorScheme.onPrimary,
+      ),
+      iconTheme: parentTheme.iconTheme.copyWith(
+        color: darkColorScheme.onSurface,
+      ),
+    );
 
-                  return Row(
-                    children: [
-                      _buildTabs(entries, selectedEntry, textColor),
-                      VerticalDivider(
-                        width: 1,
-                        thickness: 1,
-                        color:
-                            widget.isDarkMode ? Colors.white12 : Colors.black12,
+    return Theme(
+      data: darkTheme,
+      child: Focus(
+        focusNode: _panelFocusNode,
+        onKeyEvent: _handleKeyEvent,
+        child: FocusTraversalGroup(
+          policy: ReadingOrderTraversalPolicy(),
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: Container(
+                width: kNipaplayLargeScreenPlayerMenuPanelWidth,
+                color: Colors.black.withValues(alpha: 0.72),
+                child: Consumer<VideoPlayerState>(
+                  builder: (context, videoState, _) {
+                    final definitions = PlayerMenuDefinitionBuilder(
+                      context: PlayerMenuContext(
+                        videoState: videoState,
+                        kernelType: PlayerFactory.getKernelType(),
                       ),
-                      Expanded(
-                        child: _buildContent(
-                          videoState,
-                          selectedEntry,
-                          textColor,
+                    ).build();
+                    final entries = <_PlayerMenuTabEntry>[
+                      const _PlayerMenuTabEntry.actions(),
+                      ...definitions.map(_PlayerMenuTabEntry.definition),
+                    ];
+                    _latestEntries = entries;
+                    _focusedTabIndex = _focusedTabIndex.clamp(
+                      0,
+                      entries.length - 1,
+                    );
+                    final selectedEntry = _resolveSelectedEntry(entries);
+
+                    return Row(
+                      children: [
+                        _buildTabs(entries, selectedEntry, Colors.white),
+                        const VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: Colors.white12,
                         ),
-                      ),
-                    ],
-                  );
-                },
+                        Expanded(
+                          child: _buildContent(
+                            videoState,
+                            selectedEntry,
+                            Colors.white,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -240,9 +259,9 @@ class _NipaplayLargeScreenPlayerMenuPanelState
               ],
             ),
           ),
-          Divider(
+          const Divider(
             height: 1,
-            color: widget.isDarkMode ? Colors.white12 : Colors.black12,
+            color: Colors.white12,
           ),
           Expanded(
             child: FocusScope(

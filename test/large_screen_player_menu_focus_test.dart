@@ -87,7 +87,8 @@ void main() {
     );
 
     expect(find.byType(fluent.ToggleSwitch), findsOneWidget);
-    tester.widget<fluent.ToggleSwitch>(find.byType(fluent.ToggleSwitch))
+    tester
+        .widget<fluent.ToggleSwitch>(find.byType(fluent.ToggleSwitch))
         .onChanged!(true);
     await tester.pump();
     expect(value, isTrue);
@@ -115,7 +116,6 @@ void main() {
             child: Align(
               alignment: Alignment.centerRight,
               child: NipaplayLargeScreenPlayerMenuPanel(
-                isDarkMode: true,
                 initialFocusNode: tabFocusNode,
                 onExitPlayback: () {},
                 onSendDanmaku: () {},
