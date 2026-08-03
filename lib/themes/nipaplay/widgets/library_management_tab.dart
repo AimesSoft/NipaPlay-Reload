@@ -118,10 +118,12 @@ class _MountedLibraryEntry {
 
 class _RemoteScrapeCandidate {
   final String filePath;
+  final String probePath;
   final String fileName;
 
   const _RemoteScrapeCandidate({
     required this.filePath,
+    required this.probePath,
     required this.fileName,
   });
 }
@@ -4427,8 +4429,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     required Color subtitleColor,
     required Color iconColor,
   }) {
-    final fileUrls = videoFiles
-        .map((f) => WebDAVService.instance.getFileUrl(connection, f.path))
+    final filePaths = videoFiles
+        .map((f) => MediaSourceUtils.buildWebDavPath(
+              connection.name,
+              f.path,
+            ))
         .toList();
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
@@ -4451,7 +4456,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       onTap: () {
         _showBatchDanmakuMatchDialog(
           folderPath,
-          fileUrls,
+          filePaths,
           initialSearchKeyword: folderDisplayName,
           onSuccessRefresh: () => setState(() {}),
         );
@@ -4489,7 +4494,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       onTap: () async {
         final folderKey = '${connection.name}:$folderPath';
         // 构建一个唯一标识符作为folderPath参数
-        final uniqueFolderPath = 'webdav://${connection.name}${folderPath}';
+        final uniqueFolderPath =
+            MediaSourceUtils.buildWebDavPath(connection.name, folderPath);
         final result =
             await CustomMediaInfoDialog.show(context, uniqueFolderPath);
         if (result != null) {
@@ -4574,7 +4580,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       onTap: () async {
         final folderKey = '${connection.name}:$folderPath';
         // 构建一个唯一标识符作为folderPath参数
-        final uniqueFolderPath = 'smb://${connection.name}${folderPath}';
+        final uniqueFolderPath =
+            MediaSourceUtils.buildSmbPath(connection.name, folderPath);
         final result =
             await CustomMediaInfoDialog.show(context, uniqueFolderPath);
         if (result != null) {
@@ -5441,13 +5448,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           );
         } else {
           final canPlay = WebDAVService.instance.isVideoFile(file.name);
-          final fileUrl = canPlay
-              ? WebDAVService.instance.getFileUrl(connection, file.path)
+          final filePath = canPlay
+              ? MediaSourceUtils.buildWebDavPath(connection.name, file.path)
               : null;
           return FutureBuilder<WatchHistoryItem?>(
-            future: fileUrl == null
+            future: filePath == null
                 ? Future<WatchHistoryItem?>.value(null)
-                : WatchHistoryManager.getHistoryItem(fileUrl),
+                : WatchHistoryManager.getHistoryItem(filePath),
             builder: (context, snapshot) {
               final subtitleText = canPlay
                   ? _buildScanSubtitleText(
@@ -5493,8 +5500,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               // 显示自定义媒体信息对话框
                               await CustomMediaInfoDialog.show(
                                 context,
-                                p.dirname(fileUrl!),
-                                initialVideoPath: fileUrl!,
+                                MediaSourceUtils.buildWebDavPath(
+                                  connection.name,
+                                  p.posix.dirname(file.path),
+                                ),
+                                initialVideoPath: filePath!,
                               );
                             },
                           ),
@@ -5504,7 +5514,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                             color: iconColor,
                             tooltip: '手动匹配弹幕',
                             onPressed: () => _showManualDanmakuMatchDialog(
-                              fileUrl!,
+                              filePath!,
                               file.name,
                               snapshot.data,
                               onSuccessRefresh: () => setState(() {}),
@@ -5786,7 +5796,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     for (final candidate in candidates) {
       try {
         final videoInfo =
-            await DandanplayService.getVideoInfo(candidate.filePath);
+            await DandanplayService.getVideoInfo(candidate.probePath);
         final matches = videoInfo['matches'];
         if (videoInfo['isMatched'] != true ||
             matches is! List ||
@@ -5973,7 +5983,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
-                  filePath: WebDAVService.instance.getFileUrl(
+                  filePath: MediaSourceUtils.buildWebDavPath(
+                    connection.name,
+                    file.path,
+                  ),
+                  probePath: WebDAVService.instance.getFileUrl(
                     connection,
                     file.path,
                   ),
@@ -6189,7 +6203,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
-                  filePath: SMBProxyService.instance.buildStreamUrl(
+                  filePath: MediaSourceUtils.buildSmbPath(
+                    connection.name,
+                    file.path,
+                  ),
+                  probePath: SMBProxyService.instance.buildStreamUrl(
                     connection,
                     file.path,
                   ),
