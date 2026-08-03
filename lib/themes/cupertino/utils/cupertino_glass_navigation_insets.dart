@@ -1,6 +1,6 @@
 const double _glassTabBarEdgeGap = 6.0;
 const double _pageActionsEdgeGap = 12.0;
-const double _nativeIOS26PageActionsExtraTrailingGap = 16.0;
+const double _ios27PageActionsExtraTrailingGap = 16.0;
 
 /// Height required by the fallback glass tab bar's icon-and-label layout.
 const double cupertinoGlassTabBarHeight = 64.0;
@@ -17,13 +17,13 @@ double resolveGlassTabBarBottomOffset({
 
 /// Resolves the trailing offset for the floating page-action toolbar.
 ///
-/// Native iOS 26 Liquid Glass chrome extends farther toward the screen edge
-/// than the fallback toolbar, so it needs a little more visual breathing room.
+/// iOS 27 Liquid Glass chrome extends farther toward the screen edge than the
+/// other toolbar implementations, so only that release gets an extra inset.
 double resolvePageActionsTrailingOffset({
   required double viewPaddingRight,
-  required bool usesNativeIOS26Toolbar,
+  required int iosMajorVersion,
 }) {
   return viewPaddingRight +
       _pageActionsEdgeGap +
-      (usesNativeIOS26Toolbar ? _nativeIOS26PageActionsExtraTrailingGap : 0);
+      (iosMajorVersion == 27 ? _ios27PageActionsExtraTrailingGap : 0);
 }

@@ -261,7 +261,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final usesNativeIOS26Toolbar = PlatformInfo.isIOS26OrHigher();
     final pageActionsTrailingOffset = resolvePageActionsTrailingOffset(
       viewPaddingRight: MediaQuery.paddingOf(context).right,
-      usesNativeIOS26Toolbar: usesNativeIOS26Toolbar,
+      iosMajorVersion: PlatformInfo.iOSVersion,
     );
     final glassTabBarSettings =
         CupertinoTheme.brightnessOf(context) == Brightness.light
