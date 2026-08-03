@@ -1184,6 +1184,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     final Color surfaceColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final Color dividerColor = isDark ? Colors.white12 : Colors.black12;
+    final mediaPadding = MediaQuery.of(context).padding;
     final anime = _anime;
     final coverImageUrl = anime == null ? '' : _coverImageUrl(anime);
 
@@ -1225,46 +1226,54 @@ class _NipaplayLargeScreenAnimeDetailPageState
           body: Stack(
             children: [
               Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: surfaceColor,
-                    border: Border.all(color: dividerColor, width: 1),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    0,
+                    kNipaplayLargeScreenBottomHintHeight,
+                    0,
+                    kNipaplayLargeScreenBottomHintHeight + mediaPadding.bottom,
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    children: [
-                      if (coverImageUrl.isNotEmpty)
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      border: Border.all(color: dividerColor, width: 1),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      children: [
+                        if (coverImageUrl.isNotEmpty)
+                          Positioned.fill(
+                            child: ImageFiltered(
+                              imageFilter:
+                                  ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                              child: Opacity(
+                                opacity: isDark ? 0.25 : 0.35,
+                                child: CachedNetworkImageWidget(
+                                  imageUrl: coverImageUrl,
+                                  fit: BoxFit.cover,
+                                  shouldCompress: false,
+                                  loadMode: CachedImageLoadMode.hybrid,
+                                ),
+                              ),
+                            ),
+                          ),
                         Positioned.fill(
-                          child: ImageFiltered(
-                            imageFilter:
-                                ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                            child: Opacity(
-                              opacity: isDark ? 0.25 : 0.35,
-                              child: CachedNetworkImageWidget(
-                                imageUrl: coverImageUrl,
-                                fit: BoxFit.cover,
-                                shouldCompress: false,
-                                loadMode: CachedImageLoadMode.hybrid,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  surfaceColor.withValues(alpha: 0.12),
+                                  surfaceColor.withValues(alpha: 0.42),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                surfaceColor.withValues(alpha: 0.12),
-                                surfaceColor.withValues(alpha: 0.42),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(child: body),
-                    ],
+                        Positioned.fill(child: body),
+                      ],
+                    ),
                   ),
                 ),
               ),
