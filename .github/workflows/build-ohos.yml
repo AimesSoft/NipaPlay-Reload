@@ -57,6 +57,7 @@ env:
   # This is the OpenHarmony Flutter revision used for the device-tested
   # 3.35.8-ohos-1.0.1 toolchain.
   OHOS_FLUTTER_COMMIT: 6f4181db61f0db87339edca1fb0e5108c3740e11
+  OHOS_FLUTTER_BASE_TAG: 3.35.8-ohos-1.0.1
   OHOS_FLUTTER_REPOSITORY: https://atomgit.com/openharmony-tpc/flutter_flutter.git
   OHOS_FLUTTER_ROOT: /opt/flutter-ohos
   HARMONY_COMMANDLINE_ROOT: /opt/harmonyos-tools/command-line-tools
@@ -148,7 +149,7 @@ jobs:
             ${{ github.workspace }}/.pub-cache
             ~/.cargo/git
             ~/.cargo/registry
-          key: ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-${{ hashFiles('pubspec.lock', 'pubspec_overrides.ohos.yaml', 'rust/Cargo.lock') }}-v1
+          key: ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-${{ hashFiles('pubspec.lock', 'pubspec_overrides.ohos.yaml', 'rust/Cargo.lock') }}-v2
           restore-keys: |
             ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-
 
@@ -163,9 +164,17 @@ jobs:
           else
             git -C "$OHOS_FLUTTER_ROOT" remote set-url origin "$OHOS_FLUTTER_REPOSITORY"
           fi
-          git -C "$OHOS_FLUTTER_ROOT" fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"
+          # Flutter derives its SDK version from reachable Git tags. Fetch the
+          # tested commit together with its nearest release tag; fetching only
+          # the commit makes the SDK report 0.0.0-unknown and breaks pub's
+          # Flutter-version constraints.
+          git -C "$OHOS_FLUTTER_ROOT" fetch --depth=16 origin \
+            "$OHOS_FLUTTER_COMMIT" \
+            "+refs/tags/$OHOS_FLUTTER_BASE_TAG:refs/tags/$OHOS_FLUTTER_BASE_TAG"
           git -C "$OHOS_FLUTTER_ROOT" checkout --detach --force FETCH_HEAD
           test "$(git -C "$OHOS_FLUTTER_ROOT" rev-parse HEAD)" = "$OHOS_FLUTTER_COMMIT"
+          git -C "$OHOS_FLUTTER_ROOT" merge-base --is-ancestor \
+            "$OHOS_FLUTTER_BASE_TAG" HEAD
 
           {
             echo "$OHOS_FLUTTER_ROOT/bin"
