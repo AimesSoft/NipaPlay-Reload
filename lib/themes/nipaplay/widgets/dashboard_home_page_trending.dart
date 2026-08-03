@@ -337,7 +337,6 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
                           ],
                         ),
                       ),
-                      const Divider(height: 1),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
                         child: _NipaplayTrendingFilterControls(
@@ -353,7 +352,6 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
                           }),
                         ),
                       ),
-                      const Divider(height: 1),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                         child: Row(
@@ -1059,7 +1057,6 @@ class _NipaplayFullTrendingViewState extends State<_NipaplayFullTrendingView> {
             ],
           ),
         ),
-        const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 11),
           child: _NipaplayTrendingFilterControls(
@@ -1070,7 +1067,6 @@ class _NipaplayFullTrendingViewState extends State<_NipaplayFullTrendingView> {
             onScopeChanged: _changeScope,
           ),
         ),
-        const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 7),
           child: Row(
