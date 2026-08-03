@@ -12,9 +12,10 @@ import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
   const NipaplayLargeScreenTopStatusOverlay(
-      {super.key, required this.isDarkMode});
+      {super.key, required this.isDarkMode, this.opaqueBackground = false});
 
   final bool isDarkMode;
+  final bool opaqueBackground;
 
   @override
   State<NipaplayLargeScreenTopStatusOverlay> createState() =>
@@ -170,9 +171,11 @@ class _NipaplayLargeScreenTopStatusOverlayState
   @override
   Widget build(BuildContext context) {
     final textColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    final backgroundTint = widget.isDarkMode
-        ? Colors.black.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.14);
+    final backgroundTint = widget.opaqueBackground
+        ? (widget.isDarkMode ? Colors.black : Colors.white)
+        : widget.isDarkMode
+            ? Colors.black.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.14);
     final dividerColor = widget.isDarkMode
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.12);

@@ -14,6 +14,7 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     this.contextLabel = '设置',
     this.contextIcon = Icons.settings_rounded,
     this.contextKey,
+    this.opaqueBackground = false,
   });
 
   final bool isDarkMode;
@@ -23,14 +24,17 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   final String contextLabel;
   final IconData contextIcon;
   final Key? contextKey;
+  final bool opaqueBackground;
 
   @override
   Widget build(BuildContext context) {
     final Color iconColor = isDarkMode ? Colors.white : Colors.black87;
     final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color backgroundTint = isDarkMode
-        ? Colors.black.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.14);
+    final Color backgroundTint = opaqueBackground
+        ? (isDarkMode ? Colors.black : Colors.white)
+        : isDarkMode
+            ? Colors.black.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.14);
     final Color dividerColor = isDarkMode
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.12);
