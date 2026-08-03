@@ -86,6 +86,9 @@ fixed to the Erika kernel through the tvOS dependency profile; Media Kit, MDK,
 file pickers, URL launcher, and camera-based features remain hidden where they
 do not have usable tvOS implementations.
 
-The CI workflow builds an unsigned simulator app. App Store or physical-device
-artifacts require Apple signing credentials and should be added as a separate
-release step rather than embedding a personal team in the project.
+Pull-request CI builds an unsigned simulator app. Manual and reusable release
+runs build an unsigned arm64 device IPA for sideloading tools to re-sign with
+the user's Apple developer identity. This keeps personal teams and provisioning
+profiles out of the project while still producing a physical Apple TV package.
+App Store or directly installable device-specific artifacts continue to require
+Apple signing credentials and a matching tvOS provisioning profile.
