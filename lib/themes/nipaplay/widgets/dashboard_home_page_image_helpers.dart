@@ -647,7 +647,8 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     final resolvedOnTap = enabled ? onTap : null;
     final button = _HoverScaleButton(
       enabled: enabled,
-      onTap: _isLargeScreenModeActive ? null : resolvedOnTap,
+      // 大屏焦点层负责键盘/遥控器激活，按钮自身仍需接收桌面鼠标点击。
+      onTap: resolvedOnTap,
       child: Icon(
         icon,
         size: 24, // 与标题字体大小一致

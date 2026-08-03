@@ -4,6 +4,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 
 void main() {
+  testWidgets('mouse tap activates once when child also handles the tap',
+      (tester) async {
+    var activationCount = 0;
+    void activate() => activationCount++;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NipaplayLargeScreenFocusableAction(
+            onActivate: activate,
+            child: GestureDetector(
+              onTap: activate,
+              child: const Icon(Icons.tune),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pump();
+
+    expect(activationCount, 1);
+  });
+
   testWidgets('hover scaling keeps every button surface unscaled',
       (tester) async {
     final previousHighlightStrategy = FocusManager.instance.highlightStrategy;

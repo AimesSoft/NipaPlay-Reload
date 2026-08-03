@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum HomeSectionType {
   todaySeries,
+  trending,
   randomRecommendations,
   continueWatching,
   remoteLibraries,
@@ -14,6 +15,8 @@ extension HomeSectionTypeExtension on HomeSectionType {
     switch (this) {
       case HomeSectionType.todaySeries:
         return 'today_series';
+      case HomeSectionType.trending:
+        return 'trending';
       case HomeSectionType.randomRecommendations:
         return 'random_recommendations';
       case HomeSectionType.continueWatching:
@@ -29,6 +32,8 @@ extension HomeSectionTypeExtension on HomeSectionType {
     switch (this) {
       case HomeSectionType.todaySeries:
         return '今日新番';
+      case HomeSectionType.trending:
+        return '排行榜';
       case HomeSectionType.randomRecommendations:
         return '随机推荐';
       case HomeSectionType.continueWatching:
@@ -56,6 +61,7 @@ class HomeSectionsSettingsProvider extends ChangeNotifier {
 
   static const List<HomeSectionType> defaultOrder = [
     HomeSectionType.todaySeries,
+    HomeSectionType.trending,
     HomeSectionType.randomRecommendations,
     HomeSectionType.continueWatching,
     HomeSectionType.remoteLibraries,

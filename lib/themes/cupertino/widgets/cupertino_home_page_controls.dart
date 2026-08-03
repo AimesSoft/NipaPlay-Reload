@@ -11,6 +11,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
         forceRefreshRecommended: true,
         forceRefreshRandom: true,
         forceRefreshToday: true,
+        forceRefreshTrending: true,
       ),
     ]);
   }
@@ -56,6 +57,9 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           break;
         case UnifiedHomeComponentType.todaySeries:
           addSection(_buildCupertinoTodaySection());
+          break;
+        case UnifiedHomeComponentType.trending:
+          addSection(_buildCupertinoTrendingSection());
           break;
         case UnifiedHomeComponentType.randomRecommendations:
           addSection(_buildCupertinoRandomSection());
@@ -474,6 +478,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
     required VoidCallback onTap,
     String? subtitle,
     double? rating,
+    String? badgeText,
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -497,6 +502,36 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
                       top: 7,
                       right: 7,
                       child: _buildCupertinoRating(rating),
+                    ),
+                  if (badgeText != null && badgeText.isNotEmpty)
+                    Positioned(
+                      left: 7,
+                      top: 7,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppAccentColors.current,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: TextStyle(
+                              color: ThemeData.estimateBrightnessForColor(
+                                        AppAccentColors.current,
+                                      ) ==
+                                      Brightness.light
+                                  ? Colors.black87
+                                  : Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                 ],
               ),

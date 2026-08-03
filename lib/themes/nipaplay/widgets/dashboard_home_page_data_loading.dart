@@ -5,6 +5,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     bool forceRefreshRecommended = false,
     bool forceRefreshRandom = false,
     bool forceRefreshToday = false,
+    bool forceRefreshTrending = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     _lastLoadTime = DateTime.now();
@@ -47,6 +48,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       futures.addAll([
         _loadTodayAnimes(forceRefresh: forceRefreshToday),
         _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
+        _loadTrending(forceRefresh: forceRefreshTrending),
       ]);
       await Future.wait(futures);
     } catch (_) {
@@ -56,6 +58,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         await _loadRecentContent();
         await _loadTodayAnimes(forceRefresh: forceRefreshToday);
         await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
+        await _loadTrending(forceRefresh: forceRefreshTrending);
       } catch (_) {}
     }
 
@@ -74,6 +77,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       forceRefreshRecommended: true,
       forceRefreshRandom: true,
       forceRefreshToday: true,
+      forceRefreshTrending: true,
     ));
   }
 
