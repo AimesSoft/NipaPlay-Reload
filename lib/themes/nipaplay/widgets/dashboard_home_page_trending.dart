@@ -1178,7 +1178,7 @@ class _NipaplayFullTrendingViewState extends State<_NipaplayFullTrendingView> {
         final centerWidth = 210.0 * scale;
         final gap = 18.0 * scale;
         return SizedBox(
-          height: 326,
+          height: 390,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1278,11 +1278,12 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
     final secondaryColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return SizedBox(
       width: widget.width,
-      height: widget.height,
+      height: (widget.height ?? 304) + 64,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
+          SizedBox(
+            height: widget.height ?? 304,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(5),
               child: Stack(
