@@ -14,6 +14,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/backup_file_type_groups.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -236,14 +237,28 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
   Future<void> _showFullRestoreDialog() async {
     // 选择备份文件
-    final XFile? file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'NipaPlay 完整备份', extensions: ['npb']),
-      ],
-    );
+    XFile? file;
+    try {
+      file = await openFile(
+        acceptedTypeGroups: [
+          buildBackupFileTypeGroup(
+            label: 'NipaPlay 完整备份',
+            extension: 'npb',
+          ),
+        ],
+      );
+    } catch (e) {
+      _showMessage('无法打开系统文件选择器: $e', isError: true);
+      return;
+    }
 
     if (file == null) {
       _showMessage('未选择文件');
+      return;
+    }
+
+    if (!hasBackupFileExtension(file.path, 'npb')) {
+      _showMessage('请选择 .npb 格式的完整备份文件', isError: true);
       return;
     }
 
@@ -384,13 +399,21 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
     try {
       final XFile? file = await openFile(
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'NipaPlay 历史备份', extensions: ['nph']),
+        acceptedTypeGroups: [
+          buildBackupFileTypeGroup(
+            label: 'NipaPlay 历史备份',
+            extension: 'nph',
+          ),
         ],
       );
 
       if (file == null) {
         _showMessage('未选择文件');
+        return;
+      }
+
+      if (!hasBackupFileExtension(file.path, 'nph')) {
+        _showMessage('请选择 .nph 格式的观看记录备份文件', isError: true);
         return;
       }
 
@@ -712,8 +735,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child:
-                      const Text('取消'),
+                  child: const Text('取消'),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -726,8 +748,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child:
-                      const Text('确定'),
+                  child: const Text('确定'),
                 ),
               ],
             ),
@@ -1009,8 +1030,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child:
-                      const Text('取消'),
+                  child: const Text('取消'),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -1023,8 +1043,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child:
-                      const Text('确定'),
+                  child: const Text('确定'),
                 ),
               ],
             ),
