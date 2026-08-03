@@ -13,7 +13,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveSlider, AdaptiveSwitch;
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -40,7 +39,6 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     this.dropdownItems,
     this.onDropdownChanged,
     this.dropdownKey,
-    this.useNativeIOS26Dropdown = false,
     this.switchValue,
     this.onSwitchChanged,
     this.hideNativeIOS26Switch = false,
@@ -69,7 +67,6 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     required List<DropdownMenuItemData<T>> items,
     required FutureOr<void> Function(T value) onChanged,
     material.GlobalKey? dropdownKey,
-    bool useNativeIOS26Dropdown = false,
   }) {
     return AdaptiveSettingsTile<T>._(
       key: key,
@@ -82,7 +79,6 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       dropdownItems: items,
       onDropdownChanged: onChanged,
       dropdownKey: dropdownKey,
-      useNativeIOS26Dropdown: useNativeIOS26Dropdown,
     );
   }
 
@@ -230,10 +226,6 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   final FutureOr<void> Function(T value)? onDropdownChanged;
   final material.GlobalKey? dropdownKey;
 
-  /// Uses the native UIKit popup menu on iOS 26 and later.
-  ///
-  /// Other platforms and earlier iOS versions keep the shared bottom sheet.
-  final bool useNativeIOS26Dropdown;
   final bool? switchValue;
   final material.ValueChanged<bool>? onSwitchChanged;
 
@@ -408,9 +400,12 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     }
     final label =
         selected?.title ?? (items.isNotEmpty ? items.first.title : '');
-    if (useNativeIOS26Dropdown && usesNativeIOS26SettingsControls) {
-      return AdaptivePopupMenuButton.text<T>(
-        label: label,
+    final trigger = _PhoneMenuChip(label: label);
+    if (items.isEmpty) {
+      return trigger;
+    }
+    if (usesNativeIOS26SettingsControls) {
+      return AdaptivePopupMenuButton.widget<T>(
         items: <AdaptivePopupMenuEntry>[
           for (final item in items)
             AdaptivePopupMenuItem<T>(
@@ -426,35 +421,16 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
           }
           onDropdownChanged?.call(items[index].value);
         },
-        shrinkWrap: true,
         buttonStyle: PopupButtonStyle.plain,
+        child: trigger,
       );
     }
-    return cupertino.CupertinoButton(
-      padding: material.EdgeInsets.zero,
-      minimumSize: material.Size.zero,
-      onPressed: items.isEmpty
-          ? null
-          : () async {
-              final selectedIndex =
-                  await CupertinoBottomSheet.showSelection<int>(
-                context: context,
-                title: title,
-                options: [
-                  for (final entry in items.asMap().entries)
-                    CupertinoBottomSheetOption(
-                      label: entry.value.title,
-                      value: entry.key,
-                      selected: entry.value.isSelected,
-                      enabled: entry.value.enabled,
-                    ),
-                ],
-              );
-              if (selectedIndex != null) {
-                onDropdownChanged?.call(items[selectedIndex].value);
-              }
-            },
-      child: _PhoneMenuChip(label: label),
+    return BlurDropdown<T>(
+      dropdownKey: dropdownKey ?? material.GlobalKey(),
+      items: items,
+      onItemSelected: (value) => onDropdownChanged?.call(value),
+      controlBuilder: (context, selectedLabel) =>
+          _PhoneMenuChip(label: selectedLabel),
     );
   }
 

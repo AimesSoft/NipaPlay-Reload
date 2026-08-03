@@ -25,21 +25,6 @@ class LabsSettingsContent extends StatelessWidget {
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
-                if (!globals.isTelevision)
-                  AdaptiveSettingsTile.toggle(
-                    title:
-                        _text(context, '大屏幕模式', '大螢幕模式', 'Large Screen Mode'),
-                    subtitle: _text(
-                      context,
-                      '开启后，桌面和平板布局右上角显示大屏幕模式按钮',
-                      '開啟後，桌面和平板布局右上角顯示大螢幕模式按鈕',
-                      'Show the large-screen mode button in the desktop and tablet layout.',
-                    ),
-                    icon: Ionicons.tv_outline,
-                    phoneIcon: cupertino.CupertinoIcons.tv,
-                    value: labsSettings.enableLargeScreenMode,
-                    onChanged: labsSettings.setEnableLargeScreenMode,
-                  ),
                 if (PlayerFactory.isErikaKernelSupported &&
                     !globals.isTelevision)
                   AdaptiveSettingsTile.toggle(
