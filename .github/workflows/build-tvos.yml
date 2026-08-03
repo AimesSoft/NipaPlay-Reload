@@ -8,7 +8,7 @@ on:
         description: Application version from pubspec.yaml
         value: ${{ jobs.build.outputs.version }}
       artifact-name:
-        description: Uploaded tvOS simulator application
+        description: Uploaded tvOS build artifact
         value: ${{ jobs.build.outputs.artifact-name }}
   pull_request:
     paths:
@@ -32,12 +32,12 @@ concurrency:
 
 jobs:
   build:
-    name: Build tvOS simulator app
+    name: Build tvOS package
     runs-on: macos-26
     timeout-minutes: 120
     outputs:
       version: ${{ steps.project.outputs.version }}
-      artifact-name: release-tvOS-simulator
+      artifact-name: ${{ steps.artifact.outputs.name }}
     steps:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -96,29 +96,100 @@ jobs:
             run tool/configure_flutter_dependencies.dart tvos
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
 
-      - name: Build unsigned tvOS simulator app
+      - name: Build tvOS simulator application
+        if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" \
-            build tvos --simulator --debug
+            build tvos --simulator --debug --no-pub
 
-      - name: Locate tvOS application
-        id: artifact
+      - name: Build unsigned tvOS device application
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          app_path="$(find build/tvos -type d -name '*.app' -print -quit)"
+          unsigned_config="$RUNNER_TEMP/NipaPlay-tvOS-unsigned.xcconfig"
+          printf '%s\n' \
+            'CODE_SIGNING_ALLOWED = NO' \
+            'CODE_SIGNING_REQUIRED = NO' \
+            'CODE_SIGN_IDENTITY =' \
+            'DEVELOPMENT_TEAM =' \
+            'PROVISIONING_PROFILE_SPECIFIER =' \
+            > "$unsigned_config"
+
+          XCODE_XCCONFIG_FILE="$unsigned_config" \
+            "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" \
+            build tvos --release --no-pub
+
+      - name: Prepare tvOS artifact
+        id: artifact
+        shell: bash
+        env:
+          VERSION: ${{ steps.project.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            app_path="$(find build/tvos -path '*-appletvsimulator/*.app' -type d -print -quit)"
+            if [[ -z "$app_path" ]]; then
+              echo "No tvOS simulator .app was produced." >&2
+              find build -maxdepth 5 -print
+              exit 1
+            fi
+            echo "name=release-tvOS-simulator" >> "$GITHUB_OUTPUT"
+            echo "path=$app_path" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          app_path="$(find build/tvos/Release-appletvos -maxdepth 1 -type d -name '*.app' -print -quit)"
           if [[ -z "$app_path" ]]; then
-            echo "No tvOS .app was produced." >&2
+            echo "No tvOS device .app was produced." >&2
             find build -maxdepth 5 -print
             exit 1
           fi
-          echo "path=$app_path" >> "$GITHUB_OUTPUT"
+
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Info.plist")"
+          executable="$app_path/$executable_name"
+          if ! lipo -archs "$executable" | tr ' ' '\n' | grep -qx arm64; then
+            echo "tvOS device executable is not arm64: $(lipo -archs "$executable")" >&2
+            exit 1
+          fi
+          if ! xcrun vtool -show-build "$executable" | grep -q 'platform TVOS'; then
+            echo "tvOS package does not target physical Apple TV devices." >&2
+            xcrun vtool -show-build "$executable" || true
+            exit 1
+          fi
+
+          mkdir -p dist/Payload
+          /usr/bin/ditto "$app_path" "dist/Payload/$(basename "$app_path")"
+          ipa_name="NipaPlay-${VERSION}-tvOS-arm64-sideload.ipa"
+          (
+            cd dist
+            /usr/bin/ditto -c -k --keepParent Payload "$ipa_name"
+          )
+          test -s "dist/$ipa_name"
+          shasum -a 256 "dist/$ipa_name" > dist/SHA256SUMS-tvOS
+
+          echo "name=release-tvOS-sideload" >> "$GITHUB_OUTPUT"
+          echo "path=dist/$ipa_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload tvOS simulator application
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: release-tvOS-simulator
           path: ${{ steps.artifact.outputs.path }}
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload tvOS sideload package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tvOS-sideload
+          path: |
+            ${{ steps.artifact.outputs.path }}
+            dist/SHA256SUMS-tvOS
+          if-no-files-found: error
+          retention-days: 14

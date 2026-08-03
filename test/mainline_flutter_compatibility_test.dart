@@ -198,6 +198,37 @@ void main() {
     expect(workflow, isNot(contains('.ohos/config')));
   });
 
+  test('release CI publishes HarmonyOS and Apple TV sideload packages', () {
+    final releaseWorkflow =
+        File('.github/workflows/main.yml').readAsStringSync();
+    final tvOSWorkflow =
+        File('.github/workflows/build-tvos.yml').readAsStringSync();
+
+    expect(
+        releaseWorkflow, contains('uses: ./.github/workflows/build-ohos.yml'));
+    expect(
+        releaseWorkflow, contains('uses: ./.github/workflows/build-tvos.yml'));
+    expect(releaseWorkflow, contains('sign_hap: true'));
+    expect(releaseWorkflow, contains('Build-HarmonyOS'));
+    expect(releaseWorkflow, contains('Build-tvOS'));
+    expect(
+      releaseWorkflow,
+      contains('/tmp/artifacts/release-HarmonyOS-signed/*.hap'),
+    );
+    expect(
+      releaseWorkflow,
+      contains('/tmp/artifacts/release-tvOS-sideload/*.ipa'),
+    );
+
+    expect(tvOSWorkflow, contains("github.event_name == 'pull_request'"));
+    expect(tvOSWorkflow, contains('CODE_SIGNING_ALLOWED = NO'));
+    expect(tvOSWorkflow, contains('build tvos --release --no-pub'));
+    expect(tvOSWorkflow, contains('build/tvos/Release-appletvos'));
+    expect(tvOSWorkflow, contains("grep -q 'platform TVOS'"));
+    expect(tvOSWorkflow, contains('release-tvOS-sideload'));
+    expect(tvOSWorkflow, contains('tvOS-arm64-sideload.ipa'));
+  });
+
   test('application source does not require custom Platform APIs', () {
     final incompatibleFiles = Directory('lib')
         .listSync(recursive: true)
