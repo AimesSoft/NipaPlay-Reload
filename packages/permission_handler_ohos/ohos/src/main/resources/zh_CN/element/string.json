@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "模块描述"
+    },
+    {
+      "name": "PermissionhandlerAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PermissionhandlerAbility_label",
+      "value": "label"
+    }
+  ]
+}

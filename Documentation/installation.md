@@ -35,6 +35,12 @@
 
 - 从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载匹配架构的 APK（常见 arm64），启用"未知来源"后安装。
 
+## HarmonyOS
+
+HarmonyOS 版本目前需要从源码构建 HAP，并使用 DevEco Studio 配置开发者签名。
+开发者请参考
+[HarmonyOS 依赖与构建说明](../docs/HARMONYOS_MIGRATION_STATUS.md#harmonyos-依赖启用与恢复)。
+
 ## iOS
 
 iOS 用户可以选择以下几种安装方式：

@@ -1,0 +1,10 @@
+
+/node_modules
+/oh_modules
+/.preview
+/build
+/.cxx
+/.test
+libs/arm64-v8a/libapp.so
+*.har
+oh-package-lock.json5

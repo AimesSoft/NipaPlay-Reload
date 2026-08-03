@@ -33,9 +33,8 @@ jobs:
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
-      ERIKA_REF: v0.1.3
-      ERIKA_PREBUILT: "1"
-      ERIKA_PREBUILT_TAG: v0.1.3
+      # The integration commit is newer than the v0.1.3 native bundle.
+      ERIKA_PREBUILT: "0"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

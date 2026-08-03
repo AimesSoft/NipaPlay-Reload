@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "wakelock_plus_ohos",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

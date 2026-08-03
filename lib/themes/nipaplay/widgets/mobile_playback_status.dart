@@ -22,6 +22,8 @@ class MobilePlaybackStatus extends StatefulWidget {
 
 class _MobilePlaybackStatusState extends State<MobilePlaybackStatus> {
   static const Duration _refreshInterval = Duration(seconds: 30);
+  static bool get _supportsBatteryPlugin =>
+      !kIsWeb && defaultTargetPlatform.name != 'ohos';
 
   final Battery _battery = Battery();
 
@@ -50,7 +52,7 @@ class _MobilePlaybackStatusState extends State<MobilePlaybackStatus> {
   }
 
   void _listenBatteryState() {
-    if (kIsWeb) {
+    if (!_supportsBatteryPlugin) {
       _batteryAvailable = false;
       return;
     }
@@ -75,7 +77,7 @@ class _MobilePlaybackStatusState extends State<MobilePlaybackStatus> {
   }
 
   Future<void> _refreshBatteryInfo() async {
-    if (!_batteryAvailable || kIsWeb) return;
+    if (!_batteryAvailable || !_supportsBatteryPlugin) return;
     try {
       final level = await _battery.batteryLevel;
       final state = await _battery.batteryState;

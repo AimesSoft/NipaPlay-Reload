@@ -23,6 +23,9 @@ class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
 
 class _NipaplayLargeScreenTopStatusOverlayState
     extends State<NipaplayLargeScreenTopStatusOverlay> {
+  static bool get _supportsBatteryPlugin =>
+      !kIsWeb && defaultTargetPlatform.name != 'ohos';
+
   final Battery _battery = Battery();
   Timer? _timer;
   StreamSubscription<BatteryState>? _batteryStateSubscription;
@@ -45,7 +48,7 @@ class _NipaplayLargeScreenTopStatusOverlayState
   }
 
   void _listenBatteryState() {
-    if (kIsWeb) {
+    if (!_supportsBatteryPlugin) {
       _batteryAvailable = false;
       return;
     }
@@ -73,7 +76,7 @@ class _NipaplayLargeScreenTopStatusOverlayState
   }
 
   Future<void> _refreshBattery() async {
-    if (!_batteryAvailable || kIsWeb) {
+    if (!_batteryAvailable || !_supportsBatteryPlugin) {
       return;
     }
     try {

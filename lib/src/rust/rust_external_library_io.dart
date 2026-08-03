@@ -23,6 +23,10 @@ ExternalLibrary openRustExternalLibrary() {
     return ExternalLibrary.open('lib$_stem.so');
   }
 
+  if (Platform.operatingSystem == 'ohos') {
+    return ExternalLibrary.open('lib$_stem.so');
+  }
+
   if (Platform.isWindows) {
     final exeDir = p.dirname(Platform.resolvedExecutable);
     return _openFirstAvailable(
