@@ -3,6 +3,25 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('large screen mode is a permanent feature outside labs', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    final labs = File(
+      'lib/settings/pages/labs_settings_content.dart',
+    ).readAsStringSync();
+    final labsProvider = File(
+      'lib/providers/labs_settings_provider.dart',
+    ).readAsStringSync();
+    final settingsKeys = File(
+      'lib/constants/settings_keys.dart',
+    ).readAsStringSync();
+
+    expect(main, contains('shouldOfferLargeScreenModeControl('));
+    expect(main, isNot(contains('_isLabsLargeScreenModeEnabled')));
+    expect(labs, isNot(contains('enableLargeScreenMode')));
+    expect(labsProvider, isNot(contains('enableLargeScreenMode')));
+    expect(settingsKeys, isNot(contains('labsEnableLargeScreenMode')));
+  });
+
   test('televisions remove controls that require touch or desktop access', () {
     final scaffold = File(
       'lib/themes/nipaplay/widgets/large_screen_scaffold_layout.dart',
@@ -31,7 +50,7 @@ void main() {
       scaffold,
       contains('globals.isTelevision || usePlayerContextPanel'),
     );
-    expect(labs, contains('if (!globals.isTelevision)'));
+    expect(labs, isNot(contains('enableLargeScreenMode')));
     expect(plugins, contains('if (!globals.isTelevision)'));
     expect(remote, contains('if (!globals.isTelevision)'));
     expect(remote, contains('if (!globals.isTelevision &&'));
