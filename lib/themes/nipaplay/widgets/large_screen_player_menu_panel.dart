@@ -399,9 +399,32 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     }
   }
 
-  void _requestContentFocusAfterFrame() {
+  void _requestContentFocusAfterFrame({int danmakuLayoutAttempt = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_isContentFocused) return;
+      if (_selectedPaneId == PlayerMenuPaneId.danmakuList) {
+        // CupertinoDanmakuListPane jumps to the current playback position in
+        // its own first post-frame callback. Resolve row geometry on the next
+        // frame so focus is not assigned to an item that is immediately moved
+        // out of view.
+        if (danmakuLayoutAttempt == 0) {
+          _contentFocusScope.requestFocus();
+          _requestContentFocusAfterFrame(danmakuLayoutAttempt: 1);
+          return;
+        }
+        if (_focusFirstFullyVisibleDanmakuRow()) return;
+        if (danmakuLayoutAttempt < 4) {
+          _contentFocusScope.requestFocus();
+          _requestContentFocusAfterFrame(
+            danmakuLayoutAttempt: danmakuLayoutAttempt + 1,
+          );
+          return;
+        }
+        // Empty/loading lists intentionally keep the content region active;
+        // never fall through to the header switch as an initial row focus.
+        _contentFocusScope.requestFocus();
+        return;
+      }
       if (!_ensureContentFocus()) {
         _setContentFocused(false);
       }
@@ -412,6 +435,12 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     final currentFocus = FocusManager.instance.primaryFocus;
     if (_isUsableContentFocus(currentFocus)) {
       currentFocus!.requestFocus();
+      return true;
+    }
+
+    if (_selectedPaneId == PlayerMenuPaneId.danmakuList) {
+      if (_focusFirstFullyVisibleDanmakuRow()) return true;
+      _contentFocusScope.requestFocus();
       return true;
     }
 
@@ -434,6 +463,53 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     // descendants. Keep the region active so one left press still returns to
     // the tab column and a later right press can pick up newly loaded controls.
     _contentFocusScope.requestFocus();
+    return true;
+  }
+
+  bool _focusFirstFullyVisibleDanmakuRow() {
+    final candidates = <({FocusNode node, double top})>[];
+    for (final node in _contentFocusScope.traversalDescendants) {
+      if (!_isUsableContentFocus(node)) continue;
+      final nodeContext = node.context;
+      if (nodeContext == null ||
+          nodeContext.findAncestorWidgetOfExactType<
+                  NipaplayLargeScreenPlayerMenuDanmakuRow>() ==
+              null) {
+        continue;
+      }
+
+      final rowRenderObject = nodeContext.findRenderObject();
+      final scrollable = Scrollable.maybeOf(nodeContext);
+      final viewportRenderObject = scrollable?.context.findRenderObject();
+      if (rowRenderObject is! RenderBox ||
+          viewportRenderObject is! RenderBox ||
+          !rowRenderObject.attached ||
+          !viewportRenderObject.attached ||
+          !rowRenderObject.hasSize ||
+          !viewportRenderObject.hasSize) {
+        continue;
+      }
+
+      final rowRect =
+          rowRenderObject.localToGlobal(Offset.zero) & rowRenderObject.size;
+      final viewportRect = viewportRenderObject.localToGlobal(Offset.zero) &
+          viewportRenderObject.size;
+      const visibilityTolerance = 0.5;
+      final isFullyVisible =
+          rowRect.top >= viewportRect.top - visibilityTolerance &&
+              rowRect.bottom <= viewportRect.bottom + visibilityTolerance &&
+              rowRect.left >= viewportRect.left - visibilityTolerance &&
+              rowRect.right <= viewportRect.right + visibilityTolerance;
+      if (isFullyVisible) {
+        candidates.add((node: node, top: rowRect.top));
+      }
+    }
+
+    if (candidates.isEmpty) return false;
+    candidates.sort((a, b) => a.top.compareTo(b.top));
+    final target = candidates.first.node;
+    target.requestFocus();
+    _lastContentFocusNode = target;
     return true;
   }
 

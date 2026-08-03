@@ -316,73 +316,77 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
                       int.tryParse(danmaku['type']?.toString() ?? '1') ?? 1;
                   final bool isFiltered = !_isDanmakuVisible(danmaku);
 
-                  return Padding(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                    child: AdaptivePlayerMenuActionSurface(
-                      onTap: () => _seekToTime(timeMs),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isCurrent
-                              ? CupertinoTheme.of(context)
-                                  .primaryColor
-                                  .withValues(alpha: 0.12)
-                              : CupertinoColors.systemGrey6
-                                  .resolveFrom(context),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
+                  return AdaptivePlayerMenuDanmakuListRow(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 2,
+                      ),
+                      child: AdaptivePlayerMenuActionSurface(
+                        onTap: () => _seekToTime(timeMs),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
                             color: isCurrent
-                                ? CupertinoTheme.of(context).primaryColor
-                                : CupertinoColors.separator
+                                ? CupertinoTheme.of(context)
+                                    .primaryColor
+                                    .withValues(alpha: 0.12)
+                                : CupertinoColors.systemGrey6
                                     .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isCurrent
+                                  ? CupertinoTheme.of(context).primaryColor
+                                  : CupertinoColors.separator
+                                      .resolveFrom(context),
+                            ),
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(CupertinoIcons.clock, size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatTime(timeMs),
-                                  style: TextStyle(
-                                    fontWeight: isCurrent
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(CupertinoIcons.clock, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _formatTime(timeMs),
+                                    style: TextStyle(
+                                      fontWeight: isCurrent
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                _buildTag(
-                                  context,
-                                  _danmakuTypeLabel(type),
-                                  color: _typeColor(type),
-                                ),
-                                if (isFiltered) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 8),
                                   _buildTag(
                                     context,
-                                    '已屏蔽',
-                                    color: CupertinoColors.systemRed,
+                                    _danmakuTypeLabel(type),
+                                    color: _typeColor(type),
                                   ),
+                                  if (isFiltered) ...[
+                                    const SizedBox(width: 6),
+                                    _buildTag(
+                                      context,
+                                      '已屏蔽',
+                                      color: CupertinoColors.systemRed,
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              content,
-                              style: TextStyle(
-                                color: isFiltered
-                                    ? CupertinoColors.secondaryLabel
-                                        .resolveFrom(context)
-                                    : null,
-                                decoration: isFiltered
-                                    ? TextDecoration.lineThrough
-                                    : null,
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 6),
+                              Text(
+                                content,
+                                style: TextStyle(
+                                  color: isFiltered
+                                      ? CupertinoColors.secondaryLabel
+                                          .resolveFrom(context)
+                                      : null,
+                                  decoration: isFiltered
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

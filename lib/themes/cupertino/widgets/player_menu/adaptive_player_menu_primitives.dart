@@ -192,6 +192,25 @@ class AdaptivePlayerMenuActionSurface extends StatelessWidget {
   }
 }
 
+/// Marks a danmaku-list action so the television menu can resolve its initial
+/// focus from the rows that are actually laid out in the current viewport.
+class AdaptivePlayerMenuDanmakuListRow extends StatelessWidget {
+  const AdaptivePlayerMenuDanmakuListRow({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPlayerMenuDanmakuRow(child: child);
+    }
+    return child;
+  }
+}
+
 class AdaptivePlayerMenuTextField extends StatelessWidget {
   const AdaptivePlayerMenuTextField({
     super.key,

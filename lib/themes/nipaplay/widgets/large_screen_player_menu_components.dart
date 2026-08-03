@@ -4,6 +4,23 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double kNipaplayLargeScreenPlayerMenuSidebarWidth = 256;
 
+/// Identifies an actionable danmaku-list row inside the large-screen menu.
+///
+/// The list is lazily built and may begin with a partially clipped row after
+/// it jumps to the current playback time. The menu panel uses this marker to
+/// choose the first fully visible row when focus enters the content region.
+class NipaplayLargeScreenPlayerMenuDanmakuRow extends StatelessWidget {
+  const NipaplayLargeScreenPlayerMenuDanmakuRow({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
 /// Reusable presentation primitives for player settings shown on a television.
 ///
 /// The player-menu panes keep owning their data and operations. These widgets
