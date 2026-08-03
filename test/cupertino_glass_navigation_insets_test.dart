@@ -43,4 +43,36 @@ void main() {
       );
     });
   });
+
+  group('resolvePageActionsTrailingOffset', () {
+    test('moves the native iOS 26 toolbar eight points inward', () {
+      expect(
+        resolvePageActionsTrailingOffset(
+          viewPaddingRight: 0,
+          usesNativeIOS26Toolbar: true,
+        ),
+        20,
+      );
+    });
+
+    test('preserves the safe area while moving the native toolbar inward', () {
+      expect(
+        resolvePageActionsTrailingOffset(
+          viewPaddingRight: 6,
+          usesNativeIOS26Toolbar: true,
+        ),
+        26,
+      );
+    });
+
+    test('keeps the fallback toolbar at its original offset', () {
+      expect(
+        resolvePageActionsTrailingOffset(
+          viewPaddingRight: 6,
+          usesNativeIOS26Toolbar: false,
+        ),
+        18,
+      );
+    });
+  });
 }
