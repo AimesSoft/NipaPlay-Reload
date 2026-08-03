@@ -17,6 +17,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dar
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -248,9 +249,9 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final pages = _pages;
     final selectedIndex = _selectedIndex;
     final selectedPage = pages[selectedIndex];
-    final bottomNavigationForegroundColor =
-        resolveCupertinoBottomNavigationForegroundColor(
-      CupertinoTheme.brightnessOf(context),
+    final bottomNavigationColors = resolveCupertinoBottomNavigationColors(
+      brightness: CupertinoTheme.brightnessOf(context),
+      accentColor: AppAccentColors.current,
     );
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final nativeTabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
@@ -322,8 +323,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         final cupertinoTabBar = CupertinoTabBar(
           currentIndex: selectedIndex,
           onTap: _selectIndex,
-          activeColor: bottomNavigationForegroundColor,
-          inactiveColor: bottomNavigationForegroundColor,
+          activeColor: bottomNavigationColors.selected,
+          inactiveColor: bottomNavigationColors.unselected,
           height: nativeTabBarHeight,
           items: _buildCupertinoItems(context, pages),
         );
@@ -338,8 +339,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             bottomNavigationBar: isBottomNavigationVisible
                 ? AdaptiveBottomNavigationBar(
                     useNativeBottomBar: bottomBar.useNativeBottomBar,
-                    selectedItemColor: bottomNavigationForegroundColor,
-                    unselectedItemColor: bottomNavigationForegroundColor,
+                    selectedItemColor: bottomNavigationColors.selected,
+                    unselectedItemColor: bottomNavigationColors.unselected,
                     cupertinoTabBar: cupertinoTabBar,
                     items: _buildNativeItems(context, pages),
                     selectedIndex: selectedIndex,
@@ -370,10 +371,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     verticalPadding: 0,
                     barHeight: cupertinoGlassTabBarHeight,
                     settings: glassTabBarSettings,
-                    selectedIconColor: bottomNavigationForegroundColor,
-                    selectedLabelColor: bottomNavigationForegroundColor,
-                    unselectedIconColor: bottomNavigationForegroundColor,
-                    unselectedLabelColor: bottomNavigationForegroundColor,
+                    selectedIconColor: bottomNavigationColors.selected,
+                    selectedLabelColor: bottomNavigationColors.selected,
+                    unselectedIconColor: bottomNavigationColors.unselected,
+                    unselectedLabelColor: bottomNavigationColors.unselected,
                     quality: GlassQuality.standard,
                   ),
                 ),
