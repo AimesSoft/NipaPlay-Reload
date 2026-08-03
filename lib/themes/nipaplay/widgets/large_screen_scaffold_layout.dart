@@ -776,7 +776,6 @@ class _NipaplayLargeScreenScaffoldLayoutState
               child: ExcludeFocus(
                 excluding: !_isPlayerMenuVisible,
                 child: NipaplayLargeScreenPlayerMenuPanel(
-                  isDarkMode: widget.isDarkMode,
                   initialFocusNode: _playerMenuInitialFocusNode,
                   onExitPlayback: () {
                     unawaited(_exitPlaybackFromPlayerMenu());
