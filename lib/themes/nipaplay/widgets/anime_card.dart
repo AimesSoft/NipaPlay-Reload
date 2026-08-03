@@ -203,8 +203,10 @@ class _AnimeCardState extends State<AnimeCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final settings = context.watch<AppearanceSettingsProvider>();
     final bool enableBlur = settings.enableWidgetBlurEffect;
+    final titleColor = theme.colorScheme.onSurface.withValues(alpha: 0.9);
 
     final Widget imageCard = Container(
       decoration: BoxDecoration(
@@ -303,12 +305,12 @@ class _AnimeCardState extends State<AnimeCard> {
             padding: const EdgeInsets.symmetric(horizontal: 2.0),
             child: Text(
               widget.name,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 13,
-                    height: 1.3,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w500,
-                  ),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontSize: 13,
+                height: 1.3,
+                color: titleColor,
+                fontWeight: FontWeight.w500,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.left,
