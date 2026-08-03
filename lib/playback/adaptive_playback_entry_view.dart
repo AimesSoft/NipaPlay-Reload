@@ -7,6 +7,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class AdaptivePlaybackEntryView extends material.StatelessWidget {
   const AdaptivePlaybackEntryView({
@@ -226,7 +227,7 @@ class _NipaplayPlaybackEntryRendererState
     final theme = material.Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
     final detached = data.detachedPlayer;
-    final isTelevision =
+    final isTelevision = globals.isTelevision ||
         AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
     if (isTelevision && !detached) {
       return _buildTelevisionEntry(context, data, textColor);
