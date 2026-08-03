@@ -659,8 +659,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
               padding: useFullBleedContent
                   ? EdgeInsets.zero
                   : EdgeInsets.only(
-                      top: kNipaplayLargeScreenBottomHintHeight,
-                      bottom: kNipaplayLargeScreenBottomHintHeight +
+                      top: kNipaplayLargeScreenSystemBarHeight,
+                      bottom: kNipaplayLargeScreenSystemBarHeight +
                           mediaPadding.bottom,
                     ),
               child: MediaQuery.removePadding(
@@ -803,7 +803,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             curve: Curves.easeOutCubic,
             left: 0,
             right: 0,
-            top: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
+            top: showSystemBars ? 0 : -kNipaplayLargeScreenSystemBarHeight,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
@@ -821,7 +821,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             curve: Curves.easeOutCubic,
             left: 0,
             right: 0,
-            bottom: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
+            bottom: showSystemBars ? 0 : -kNipaplayLargeScreenSystemBarHeight,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,

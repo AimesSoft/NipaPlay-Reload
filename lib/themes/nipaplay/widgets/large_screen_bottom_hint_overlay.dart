@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-const double kNipaplayLargeScreenBottomHintHeight = 56;
+const double kNipaplayLargeScreenSystemBarHeight = 40;
 
 class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   const NipaplayLargeScreenBottomHintOverlay({
@@ -72,7 +72,7 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     }
 
     return SizedBox(
-      height: kNipaplayLargeScreenBottomHintHeight,
+      height: kNipaplayLargeScreenSystemBarHeight,
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
