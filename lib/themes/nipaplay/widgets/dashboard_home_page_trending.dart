@@ -1121,7 +1121,7 @@ class _NipaplayFullTrendingViewState extends State<_NipaplayFullTrendingView> {
         SliverToBoxAdapter(child: _buildPodium(items.take(3).toList())),
         if (items.length > 3)
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 180,
