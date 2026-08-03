@@ -8,8 +8,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/app/app_navigation_scope.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/media_library/adaptive_add_media_flow.dart';
 import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
 import 'package:nipaplay/playback/unified_playback_entry_model.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
@@ -93,7 +92,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
       mascotScale: _mascotScale,
       onMascotTap: () => _mascotController.forward(from: 0),
       onSelectFile: _handleUploadVideo,
-      onAddMedia: _openMediaLibrary,
+      onAddMedia: () => unawaited(_showAddMedia()),
       onOpenUrlInput: () => unawaited(_showUrlInputDialog()),
       detachedPlayer: widget.detachedPlayer,
       onLocateDetachedPlayer: widget.onLocateDetachedPlayer,
@@ -101,8 +100,8 @@ class _VideoUploadUIState extends State<VideoUploadUI>
     );
   }
 
-  void _openMediaLibrary() {
-    AppNavigationScope.maybeOf(context)?.onSelectPage(AppPageIds.mediaLibrary);
+  Future<void> _showAddMedia() async {
+    await showAdaptiveAddMediaFlow(context);
   }
 
   Future<void> _showUrlInputDialog() async {

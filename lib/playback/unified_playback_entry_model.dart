@@ -7,6 +7,7 @@ class UnifiedPlaybackEntryContent {
     required this.selectFileLabel,
     required this.selectFileDescription,
     required this.addMediaLabel,
+    required this.addMediaDescription,
     required this.enterUrlLabel,
     required this.enterUrlDescription,
     required this.urlHelp,
@@ -21,6 +22,7 @@ class UnifiedPlaybackEntryContent {
   final String selectFileLabel;
   final String selectFileDescription;
   final String addMediaLabel;
+  final String addMediaDescription;
   final String enterUrlLabel;
   final String enterUrlDescription;
   final String urlHelp;
@@ -37,6 +39,7 @@ const UnifiedPlaybackEntryContent unifiedPlaybackEntryContent =
   selectFileLabel: '选择文件',
   selectFileDescription: '从本地文件、相册或文件管理器中打开视频',
   addMediaLabel: '添加媒体',
+  addMediaDescription: '连接 NipaPlay、媒体服务器或网络文件共享',
   enterUrlLabel: '输入链接',
   enterUrlDescription: '粘贴 http/https 串流直链后直接播放',
   urlHelp: '支持 http/https 串流直链，建议使用 Media Kit 或 MDK 内核。',

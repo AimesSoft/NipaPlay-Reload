@@ -350,12 +350,30 @@ class _NipaplayPlaybackEntryRendererState
                   emphasis: AdaptiveMediaActionEmphasis.primary,
                   autofocus: true,
                 ),
-                const material.SizedBox(height: 12),
+                const material.SizedBox(height: 8),
+                material.Text(
+                  data.content.enterUrlDescription,
+                  style: material.TextStyle(
+                    color: textColor.withValues(alpha: 0.68),
+                    fontSize: 14,
+                  ),
+                ),
+                const material.SizedBox(height: 18),
+                _PlaybackChoiceDivider(textColor: textColor),
+                const material.SizedBox(height: 18),
                 AdaptiveMediaActionButton(
                   label: data.content.addMediaLabel,
                   onPressed: data.onAddMedia,
                   desktopIcon: material.Icons.add_to_queue_rounded,
                   phoneIcon: cupertino.CupertinoIcons.add_circled,
+                ),
+                const material.SizedBox(height: 8),
+                material.Text(
+                  data.content.addMediaDescription,
+                  style: material.TextStyle(
+                    color: textColor.withValues(alpha: 0.68),
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
