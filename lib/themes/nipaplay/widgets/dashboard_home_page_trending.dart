@@ -841,7 +841,8 @@ class _NipaplayTrendingFilterControlsState
 
     return Row(
       children: [
-        Expanded(
+        SizedBox(
+          width: 88,
           child: Text(
             label,
             style: const TextStyle(
@@ -850,6 +851,7 @@ class _NipaplayTrendingFilterControlsState
             ),
           ),
         ),
+        const SizedBox(width: 16),
         control,
       ],
     );
