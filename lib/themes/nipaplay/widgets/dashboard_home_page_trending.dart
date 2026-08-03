@@ -829,12 +829,8 @@ class _NipaplayTrendingFilterControlsState
               ),
             ),
           ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: control,
-            ),
-          ),
+          const SizedBox(width: 8),
+          control,
         ],
       );
     }
