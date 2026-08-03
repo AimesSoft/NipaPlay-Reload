@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/utils/cupertino_bottom_navigation_style.dart';
 import 'package:nipaplay/themes/cupertino/utils/cupertino_glass_navigation_insets.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
@@ -248,15 +249,19 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final pages = _pages;
     final selectedIndex = _selectedIndex;
     final selectedPage = pages[selectedIndex];
-    final activeColor = AppAccentColors.current;
-    final inactiveColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.inactiveGray,
-      context,
+    final bottomNavigationColors = resolveCupertinoBottomNavigationColors(
+      brightness: CupertinoTheme.brightnessOf(context),
+      accentColor: AppAccentColors.current,
     );
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final nativeTabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
     final glassTabBarBottom = resolveGlassTabBarBottomOffset(
       viewPaddingBottom: bottomInset,
+    );
+    final usesNativeIOS26Toolbar = PlatformInfo.isIOS26OrHigher();
+    final pageActionsTrailingOffset = resolvePageActionsTrailingOffset(
+      viewPaddingRight: MediaQuery.paddingOf(context).right,
+      iosMajorVersion: PlatformInfo.iOSVersion,
     );
     final glassTabBarSettings =
         CupertinoTheme.brightnessOf(context) == Brightness.light
@@ -304,7 +309,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                   ),
                   Positioned(
                     top: MediaQuery.paddingOf(context).top + 4,
-                    right: 12 + MediaQuery.paddingOf(context).right,
+                    right: pageActionsTrailingOffset,
                     child: CupertinoAppPageActions(
                       actionIds: selectedPage.actionIds,
                     ),
@@ -318,13 +323,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         final cupertinoTabBar = CupertinoTabBar(
           currentIndex: selectedIndex,
           onTap: _selectIndex,
-          activeColor: activeColor,
-          inactiveColor: inactiveColor,
+          activeColor: bottomNavigationColors.selected,
+          inactiveColor: bottomNavigationColors.unselected,
           height: nativeTabBarHeight,
           items: _buildCupertinoItems(context, pages),
         );
 
-        if (PlatformInfo.isIOS26OrHigher()) {
+        if (usesNativeIOS26Toolbar) {
           return AdaptiveScaffold(
             minimizeBehavior: TabBarMinimizeBehavior.never,
             enableBlur: true,
@@ -334,8 +339,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             bottomNavigationBar: isBottomNavigationVisible
                 ? AdaptiveBottomNavigationBar(
                     useNativeBottomBar: bottomBar.useNativeBottomBar,
-                    selectedItemColor: activeColor,
-                    unselectedItemColor: inactiveColor,
+                    selectedItemColor: bottomNavigationColors.selected,
+                    unselectedItemColor: bottomNavigationColors.unselected,
                     cupertinoTabBar: cupertinoTabBar,
                     items: _buildNativeItems(context, pages),
                     selectedIndex: selectedIndex,
@@ -366,10 +371,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     verticalPadding: 0,
                     barHeight: cupertinoGlassTabBarHeight,
                     settings: glassTabBarSettings,
-                    selectedIconColor: activeColor,
-                    selectedLabelColor: activeColor,
-                    unselectedIconColor: inactiveColor,
-                    unselectedLabelColor: inactiveColor,
+                    selectedIconColor: bottomNavigationColors.selected,
+                    selectedLabelColor: bottomNavigationColors.selected,
+                    unselectedIconColor: bottomNavigationColors.unselected,
+                    unselectedLabelColor: bottomNavigationColors.unselected,
                     quality: GlassQuality.standard,
                   ),
                 ),

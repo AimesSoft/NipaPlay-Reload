@@ -14,16 +14,23 @@ class _BlurDropdownGlobalState {
   static int expandedCount = 0;
 }
 
+typedef BlurDropdownControlBuilder = Widget Function(
+  BuildContext context,
+  String selectedLabel,
+);
+
 class BlurDropdown<T> extends StatefulWidget {
   final GlobalKey dropdownKey;
   final List<DropdownMenuItemData<T>> items;
   final FutureOr<void> Function(T value) onItemSelected;
+  final BlurDropdownControlBuilder? controlBuilder;
 
   const BlurDropdown({
     super.key,
     required this.dropdownKey,
     required this.items,
     required this.onItemSelected,
+    this.controlBuilder,
   });
 
   static bool get isAnyExpanded => _BlurDropdownGlobalState.expandedCount > 0;
@@ -196,67 +203,83 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     final bgColor =
         isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white;
 
-    final control = Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: (_isDropdownOpen ||
-                  (isLargeScreenModeActive && _isControlFocused))
-              ? activeColor
-              : idleBorderColor,
-          width: (_isDropdownOpen ||
-                  (isLargeScreenModeActive && _isControlFocused))
-              ? 1.5
-              : 1,
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        key: widget.dropdownKey,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: () {
-              if (_isSelecting || _animationController.isAnimating) {
-                return;
-              }
-              if (_isDropdownOpen) {
-                _closeDropdown(restoreControlFocus: true);
-              } else {
-                _openDropdown(
-                  requestMenuFocus: isLargeScreenModeActive,
-                );
-              }
-            },
+    void toggleDropdown() {
+      if (_isSelecting || _animationController.isAnimating) {
+        return;
+      }
+      if (_isDropdownOpen) {
+        _closeDropdown(restoreControlFocus: true);
+      } else {
+        _openDropdown(requestMenuFocus: isLargeScreenModeActive);
+      }
+    }
+
+    final customControl = widget.controlBuilder?.call(
+      context,
+      _getSelectedItemText(),
+    );
+    final control = customControl != null
+        ? GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: toggleDropdown,
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _getSelectedItemText(),
-                    style: getTitleTextStyle(context),
-                  ),
-                  const SizedBox(width: 10),
-                  RotationTransition(
-                    turns: Tween(begin: 0.0, end: 0.5)
-                        .animate(_animationController),
-                    child: Icon(
-                      Ionicons.chevron_down_outline,
-                      color: _isDropdownOpen
-                          ? activeColor
-                          : (isDark ? Colors.white : Colors.black87),
-                    ),
-                  ),
-                ],
+              child: KeyedSubtree(
+                key: widget.dropdownKey,
+                child: customControl,
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          )
+        : Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: (_isDropdownOpen ||
+                        (isLargeScreenModeActive && _isControlFocused))
+                    ? activeColor
+                    : idleBorderColor,
+                width: (_isDropdownOpen ||
+                        (isLargeScreenModeActive && _isControlFocused))
+                    ? 1.5
+                    : 1,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              key: widget.dropdownKey,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: toggleDropdown,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _getSelectedItemText(),
+                          style: getTitleTextStyle(context),
+                        ),
+                        const SizedBox(width: 10),
+                        RotationTransition(
+                          turns: Tween(begin: 0.0, end: 0.5)
+                              .animate(_animationController),
+                          child: Icon(
+                            Ionicons.chevron_down_outline,
+                            color: _isDropdownOpen
+                                ? activeColor
+                                : (isDark ? Colors.white : Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
 
     if (!isLargeScreenModeActive) {
       return control;

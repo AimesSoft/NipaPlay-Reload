@@ -7,6 +7,13 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double kNipaplayWindowCaptionHeight = WindowControlButtons.buttonHeight;
 
+bool shouldOfferLargeScreenModeControl({
+  required bool isDesktopOrTablet,
+  required bool isTelevisionSurface,
+}) {
+  return isDesktopOrTablet && !isTelevisionSurface;
+}
+
 class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
   const NipaplayLargeScreenModeActionsOverlay({
     super.key,

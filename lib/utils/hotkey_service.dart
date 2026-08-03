@@ -10,6 +10,19 @@ import 'video_player_state.dart';
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 
+@visibleForTesting
+bool shouldBlockDesktopHotkeys({
+  required bool isLargeScreenModeActive,
+  required bool hasActiveOverlay,
+  required bool isEditableTextFocused,
+  required bool playerHotkeysSuppressed,
+}) {
+  return isLargeScreenModeActive ||
+      hasActiveOverlay ||
+      isEditableTextFocused ||
+      playerHotkeysSuppressed;
+}
+
 /// 热键管理服务，用于替代Flutter内部的键盘事件处理
 class HotkeyService extends ChangeNotifier {
   static final HotkeyService _instance = HotkeyService._internal();
@@ -48,6 +61,9 @@ class HotkeyService extends ChangeNotifier {
   // 上下文，用于访问Provider
   BuildContext? _context;
 
+  // 大屏幕模式拥有独立的焦点与遥控输入层，激活时必须屏蔽全部旧热键。
+  bool _isLargeScreenModeActive = false;
+
   // overlay 计数器，>0 时表示有对话框/overlay 在视频播放界面上方
   static int _overlayCount = 0;
 
@@ -73,6 +89,22 @@ class HotkeyService extends ChangeNotifier {
   Timer? _longPressTimer;
   bool _isForwardKeyPressed = false;
   bool _isSpeedBoostActive = false;
+
+  void setLargeScreenModeActive(bool isActive) {
+    if (_isLargeScreenModeActive == isActive) {
+      return;
+    }
+    _isLargeScreenModeActive = isActive;
+    if (!isActive) {
+      return;
+    }
+
+    _isForwardKeyPressed = false;
+    _longPressTimer?.cancel();
+    if (_isSpeedBoostActive) {
+      _stopSpeedBoost();
+    }
+  }
 
   // 初始化热键服务
   Future<void> initialize(BuildContext context) async {
@@ -287,7 +319,7 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
-          if (_shouldBlockHotkeyInTextInput()) {
+          if (_shouldBlockHotkey()) {
             return;
           }
           ////debugPrint('[HotkeyService] 热键触发: $description ($keyString)');
@@ -310,19 +342,17 @@ class HotkeyService extends ChangeNotifier {
     return focusedContext.widget is EditableText;
   }
 
-  bool _shouldBlockHotkeyInTextInput() {
-    if (hasActiveOverlay) {
+  bool _shouldBlockHotkey() {
+    if (_isLargeScreenModeActive) {
       return true;
     }
-    if (_isEditableTextFocused()) {
-      return true;
-    }
-    // 播放器内菜单打开时禁用热键
     final videoState = _getVideoPlayerState();
-    if (videoState != null && videoState.hotkeysSuppressed) {
-      return true;
-    }
-    return false;
+    return shouldBlockDesktopHotkeys(
+      isLargeScreenModeActive: false,
+      hasActiveOverlay: hasActiveOverlay,
+      isEditableTextFocused: _isEditableTextFocused(),
+      playerHotkeysSuppressed: videoState?.hotkeysSuppressed ?? false,
+    );
   }
 
   bool _isShiftPressed() {
@@ -883,13 +913,13 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
-          if (_shouldBlockHotkeyInTextInput()) {
+          if (_shouldBlockHotkey()) {
             return;
           }
           _handleForwardKeyDown();
         },
         keyUpHandler: (HotKey hotKey) {
-          if (_shouldBlockHotkeyInTextInput()) {
+          if (_shouldBlockHotkey()) {
             return;
           }
           _handleForwardKeyUp();
@@ -903,7 +933,7 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleForwardKeyDown() {
-    if (_shouldBlockHotkeyInTextInput()) {
+    if (_shouldBlockHotkey()) {
       return;
     }
     _isForwardKeyPressed = true;
@@ -936,7 +966,7 @@ class HotkeyService extends ChangeNotifier {
     }
 
     // block 检查仅影响"短按快进"逻辑（倍速已在上面的分支中处理）
-    if (_shouldBlockHotkeyInTextInput()) {
+    if (_shouldBlockHotkey()) {
       return;
     }
     // 如果没有触发倍速（短按），执行快进
@@ -962,7 +992,7 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleEscape() {
-    if (_shouldBlockHotkeyInTextInput()) {
+    if (_shouldBlockHotkey()) {
       return;
     }
     final windowService = DesktopPlayerWindowService.instance;

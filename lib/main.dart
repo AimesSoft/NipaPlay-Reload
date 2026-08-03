@@ -1356,6 +1356,7 @@ class MainPageState extends State<MainPage>
     _useLargeScreenLayout = await LargeScreenModePreferences.load(
       defaultValue: globals.isTelevision,
     );
+    _syncLargeScreenHotkeySuppression();
     final initialIndex = _getInitialTabIndex();
 
     if (mounted) {
@@ -1392,7 +1393,7 @@ class MainPageState extends State<MainPage>
         _initializeHotkeys();
       }
 
-      if (_useLargeScreenLayout && _isLabsLargeScreenModeEnabled()) {
+      if (_useLargeScreenLayout) {
         unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
       }
     });
@@ -1480,6 +1481,7 @@ class MainPageState extends State<MainPage>
 
   @override
   void dispose() {
+    HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
@@ -1540,15 +1542,18 @@ class MainPageState extends State<MainPage>
     await windowManager.close();
   }
 
+  void _syncLargeScreenHotkeySuppression() {
+    final isLargeScreenModeActive = globals.isTelevision ||
+        (globals.isDesktopOrTablet && _useLargeScreenLayout);
+    HotkeyService().setLargeScreenModeActive(isLargeScreenModeActive);
+  }
+
   Future<void> _toggleLargeScreenLayout() async {
-    final labsSettings = context.read<LabsSettingsProvider>();
-    if (!labsSettings.enableLargeScreenMode && !_useLargeScreenLayout) {
-      return;
-    }
     final nextValue = !_useLargeScreenLayout;
     setState(() {
       _useLargeScreenLayout = nextValue;
     });
+    _syncLargeScreenHotkeySuppression();
     try {
       await LargeScreenModePreferences.save(nextValue);
     } catch (e) {
@@ -1572,13 +1577,6 @@ class MainPageState extends State<MainPage>
     } catch (e) {
       debugPrint('[MainPageState] 切换大屏幕模式全屏状态失败: $e');
     }
-  }
-
-  bool _isLabsLargeScreenModeEnabled() {
-    if (!mounted) {
-      return false;
-    }
-    return context.read<LabsSettingsProvider>().enableLargeScreenMode;
   }
 
   ThemeMode _nextThemeMode() {
@@ -1690,16 +1688,14 @@ class MainPageState extends State<MainPage>
 
   @override
   void onWindowEvent(String eventName) {
-    if (eventName == 'leave-full-screen' &&
-        _useLargeScreenLayout &&
-        _isLabsLargeScreenModeEnabled()) {
+    if (eventName == 'leave-full-screen' && _useLargeScreenLayout) {
       unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
     }
   }
 
   @override
   void onWindowLeaveFullScreen() {
-    if (_useLargeScreenLayout && _isLabsLargeScreenModeEnabled()) {
+    if (_useLargeScreenLayout) {
       unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
     }
   }
@@ -1718,13 +1714,12 @@ class MainPageState extends State<MainPage>
         AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
     final bool canUseLargeScreenLayout =
         globals.isDesktopOrTablet || isTelevisionSurface;
-    final bool labsEnableLargeScreenMode =
-        context.watch<LabsSettingsProvider>().enableLargeScreenMode;
-    final bool allowLargeScreenControls = labsEnableLargeScreenMode;
+    final bool allowLargeScreenControls = shouldOfferLargeScreenModeControl(
+      isDesktopOrTablet: globals.isDesktopOrTablet,
+      isTelevisionSurface: isTelevisionSurface,
+    );
     final bool isLargeScreenLayoutActive = isTelevisionSurface ||
-        (canUseLargeScreenLayout &&
-            allowLargeScreenControls &&
-            _useLargeScreenLayout);
+        (canUseLargeScreenLayout && _useLargeScreenLayout);
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =
