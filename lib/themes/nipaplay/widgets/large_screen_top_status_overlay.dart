@@ -173,15 +173,23 @@ class _NipaplayLargeScreenTopStatusOverlayState
     final backgroundTint = widget.isDarkMode
         ? Colors.black.withValues(alpha: 0.18)
         : Colors.white.withValues(alpha: 0.14);
+    final dividerColor = widget.isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.12);
     final clockText = _formatClock(_now);
 
     return SizedBox(
-      height: kNipaplayLargeScreenSystemBarHeight,
+      height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: ColoredBox(
-            color: backgroundTint,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: backgroundTint,
+              border: Border(
+                bottom: BorderSide(color: dividerColor, width: 1),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Align(

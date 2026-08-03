@@ -633,7 +633,6 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   @override
   Widget build(BuildContext context) {
-    final mediaPadding = MediaQuery.of(context).padding;
     final bool hasVideo = context.select<VideoPlayerState, bool>(
       (videoState) => videoState.hasVideo,
     );
@@ -641,7 +640,6 @@ class _NipaplayLargeScreenScaffoldLayoutState
       (videoState) => videoState.showControls,
     );
     final bool usePlayerContextPanel = widget.currentIndex == 1 && hasVideo;
-    final bool useFullBleedContent = usePlayerContextPanel;
     final bool showPanelBackdrop =
         _isTabPanelVisible || _isSettingsPanelVisible || _isPlayerMenuVisible;
     final bool showSystemBars =
@@ -655,23 +653,15 @@ class _NipaplayLargeScreenScaffoldLayoutState
       child: Stack(
         children: [
           Positioned.fill(
-            child: Padding(
-              padding: useFullBleedContent
-                  ? EdgeInsets.zero
-                  : EdgeInsets.only(
-                      top: kNipaplayLargeScreenSystemBarHeight,
-                      bottom: kNipaplayLargeScreenSystemBarHeight +
-                          mediaPadding.bottom,
-                    ),
-              child: MediaQuery.removePadding(
-                context: context,
-                removeTop: true,
-                child: NipaplayLargeScreenPlayerMenuScope(
-                  onMenuPressed: () {
-                    _handlePlayerMenuPress(context.read<VideoPlayerState>());
-                  },
-                  child: widget.content,
-                ),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              removeBottom: true,
+              child: NipaplayLargeScreenPlayerMenuScope(
+                onMenuPressed: () {
+                  _handlePlayerMenuPress(context.read<VideoPlayerState>());
+                },
+                child: widget.content,
               ),
             ),
           ),
@@ -803,7 +793,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             curve: Curves.easeOutCubic,
             left: 0,
             right: 0,
-            top: showSystemBars ? 0 : -kNipaplayLargeScreenSystemBarHeight,
+            top: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
@@ -821,7 +811,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             curve: Curves.easeOutCubic,
             left: 0,
             right: 0,
-            bottom: showSystemBars ? 0 : -kNipaplayLargeScreenSystemBarHeight,
+            bottom: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
