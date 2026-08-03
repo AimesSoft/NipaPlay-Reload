@@ -175,6 +175,32 @@ class MediaSourceUtils {
     );
   }
 
+  /// Parse either a stable SMB media path or the legacy local proxy URL.
+  static ({String connectionName, String relativePath})? parseSmbMediaPath(
+      String filePath) {
+    final stablePath = parseSmbPath(filePath);
+    if (stablePath != null &&
+        stablePath.connectionName.trim().isNotEmpty &&
+        stablePath.relativePath.trim().isNotEmpty) {
+      return (
+        connectionName: stablePath.connectionName.trim(),
+        relativePath: stablePath.relativePath.trim(),
+      );
+    }
+
+    final uri = Uri.tryParse(filePath);
+    final connectionName = uri?.queryParameters['conn']?.trim();
+    final relativePath = uri?.queryParameters['path']?.trim();
+    if (uri?.path != '/smb/stream' ||
+        connectionName == null ||
+        connectionName.isEmpty ||
+        relativePath == null ||
+        relativePath.isEmpty) {
+      return null;
+    }
+    return (connectionName: connectionName, relativePath: relativePath);
+  }
+
   /// 将旧的 WebDAV 完整 URL 转换为新格式
   /// 旧格式: http://user:pass@host:port/path/to/file.mp4
   /// 新格式: webdav://connectionName/path/to/file.mp4
@@ -332,5 +358,16 @@ class MediaSourceUtils {
 
     return SMBProxyService.instance
         .buildStreamUrl(connection, parsed.relativePath);
+  }
+
+  /// Resolve stable remote-library paths while leaving regular URLs alone.
+  static String? resolveRemotePathToUrl(String filePath) {
+    if (isNewWebDavPath(filePath)) {
+      return resolveWebDavPathToUrl(filePath);
+    }
+    if (isNewSmbPath(filePath)) {
+      return resolveSmbPathToUrl(filePath);
+    }
+    return filePath;
   }
 }
