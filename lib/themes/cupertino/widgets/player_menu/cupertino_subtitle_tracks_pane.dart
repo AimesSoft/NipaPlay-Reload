@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
@@ -280,6 +281,7 @@ class _CupertinoSubtitleTracksPaneState
 
   @override
   Widget build(BuildContext context) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     final embeddedTracks = widget.videoState.player.mediaInfo.subtitle;
     final canLoadRemote = !kIsWeb &&
         widget.videoState.currentVideoPath != null &&
@@ -308,7 +310,7 @@ class _CupertinoSubtitleTracksPaneState
       ),
     ];
 
-    if (!kIsWeb) {
+    if (!kIsWeb && !isLargeScreen) {
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -335,26 +337,26 @@ class _CupertinoSubtitleTracksPaneState
           ),
         ),
       );
+    }
 
-      if (canLoadRemote) {
-        children.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: AdaptiveButton.child(
-              style: AdaptiveButtonStyle.prominentGlass,
-              onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(CupertinoIcons.cloud_download),
-                  SizedBox(width: 6),
-                  Text('从远程媒体库加载字幕'),
-                ],
-              ),
+    if (canLoadRemote) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          child: AdaptiveButton.child(
+            style: AdaptiveButtonStyle.prominentGlass,
+            onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(CupertinoIcons.cloud_download),
+                SizedBox(width: 6),
+                Text('从远程媒体库加载字幕'),
+              ],
             ),
           ),
-        );
-      }
+        ),
+      );
     }
 
     if (_externalSubtitles.isNotEmpty) {

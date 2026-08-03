@@ -1422,7 +1422,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   double _sanitizeNext2DanmakuOutlineWidth(double? value) {
-    return normalizeDanmakuOutlineWidthLevel(value);
+    return normalizeDanmakuOutlineWidthLevel(
+      value,
+      fallback: globals.isTelevision
+          ? defaultTvOSErikaDanmakuOutlineWidthLevel
+          : defaultDanmakuOutlineWidthLevel,
+    );
   }
 
   bool _isSupportedDanmakuFontExtension(String path) {
@@ -1501,6 +1506,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadDanmakuDisplayEffectSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final migrateTvOSErikaOutlineDefault = globals.isTelevision &&
+        !(prefs.getBool(
+              SettingsKeys.tvOSErikaDanmakuOutlineDefaultMigrated,
+            ) ??
+            false);
     final loadedFontFilePath =
         (prefs.getString(SettingsKeys.danmakuFontFilePath) ?? '').trim();
     var loadedFontFamily =
@@ -1511,9 +1521,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final loadedShadowStyle = _resolveDanmakuShadowStyle(
       prefs.getInt(SettingsKeys.danmakuShadowStyle),
     );
-    final loadedNext2OutlineWidth = _sanitizeNext2DanmakuOutlineWidth(
-      prefs.getDouble(SettingsKeys.next2DanmakuOutlineWidth),
-    );
+    final loadedNext2OutlineWidth = migrateTvOSErikaOutlineDefault
+        ? defaultTvOSErikaDanmakuOutlineWidthLevel
+        : _sanitizeNext2DanmakuOutlineWidth(
+            prefs.getDouble(SettingsKeys.next2DanmakuOutlineWidth),
+          );
 
     var effectiveFontPath = loadedFontFilePath;
     if (effectiveFontPath.isNotEmpty) {
@@ -1558,6 +1570,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await prefs.setDouble(
         SettingsKeys.next2DanmakuOutlineWidth,
         loadedNext2OutlineWidth,
+      );
+    }
+    if (migrateTvOSErikaOutlineDefault) {
+      await prefs.setBool(
+        SettingsKeys.tvOSErikaDanmakuOutlineDefaultMigrated,
+        true,
       );
     }
 

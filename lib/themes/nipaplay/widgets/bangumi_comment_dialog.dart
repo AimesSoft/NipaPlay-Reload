@@ -9,6 +9,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_comment_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 class BangumiCommentDialog extends StatefulWidget {
   final String animeTitle;
@@ -398,27 +399,31 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
           ),
         ),
         SizedBox(height: 8),
-        TextField(
-          controller: _commentController,
-          minLines: 3,
-          maxLines: 4,
+        TvOSRemoteTextInputControl(
+          title: '短评',
           maxLength: 200,
-          onTapOutside: (_) => _dismissKeyboard(),
-          style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
-          cursorColor: _accentColor,
-          decoration: InputDecoration(
-            counterStyle: TextStyle(color: _mutedTextColor, fontSize: 11),
-            hintText: '写下你的短评（可选）',
-            hintStyle: TextStyle(color: _mutedTextColor, fontSize: 13),
-            filled: true,
-            fillColor: _panelAltColor,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: _borderColor, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: _accentColor, width: 1.2),
+          child: TextField(
+            controller: _commentController,
+            minLines: 3,
+            maxLines: 4,
+            maxLength: 200,
+            onTapOutside: (_) => _dismissKeyboard(),
+            style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
+            cursorColor: _accentColor,
+            decoration: InputDecoration(
+              counterStyle: TextStyle(color: _mutedTextColor, fontSize: 11),
+              hintText: '写下你的短评（可选）',
+              hintStyle: TextStyle(color: _mutedTextColor, fontSize: 13),
+              filled: true,
+              fillColor: _panelAltColor,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _borderColor, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _accentColor, width: 1.2),
+              ),
             ),
           ),
         ),

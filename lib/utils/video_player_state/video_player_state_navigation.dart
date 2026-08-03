@@ -1111,9 +1111,19 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
             // 如果之前已经有有效的时长信息，而现在临时返回0，可能是正常的操作过程
             final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
-            final bool isTemporaryInvalid = hasValidDurationBefore &&
-                playerPosition == 0 &&
-                playerDuration == 0;
+            final bool isTemporaryInvalid =
+                hasValidDurationBefore && playerDuration == 0;
+            final bool isMediaLoadPending = player.supportsMediaLoadReadiness &&
+                !player.isMediaReady &&
+                !player.hasMediaLoadFailed;
+            final bool isReadyUnknownDurationMedia =
+                player.supportsMediaLoadReadiness &&
+                    player.isMediaReady &&
+                    playerDuration == 0;
+            final bool isWaitingForFirstRealPosition =
+                player.supportsMediaLoadReadiness &&
+                    !player.hasReceivedRealPosition &&
+                    playerDuration == 0;
 
             final bool isStreamingPath =
                 (_currentVideoPath?.startsWith('jellyfin://') ?? false) ||
@@ -1143,6 +1153,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _currentVideoPath == null && _status == PlayerStatus.idle;
 
             if (isTemporaryInvalid ||
+                isMediaLoadPending ||
+                isReadyUnknownDurationMedia ||
+                isWaitingForFirstRealPosition ||
+                _status == PlayerStatus.loading ||
                 isStreamingStartupGrace ||
                 isJellyfinInitializing ||
                 isPlayerResetting ||

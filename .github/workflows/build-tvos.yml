@@ -1,0 +1,124 @@
+name: Build tvOS
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: Application version from pubspec.yaml
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: Uploaded tvOS simulator application
+        value: ${{ jobs.build.outputs.artifact-name }}
+  pull_request:
+    paths:
+      - '.flutter-version-tvos'
+      - '.github/workflows/build-tvos.yml'
+      - 'lib/**'
+      - 'packages/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'pubspec_overrides.tvos.yaml'
+      - 'third_party/**'
+      - 'tool/**'
+      - 'tvos/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-tvos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build tvOS simulator app
+    runs-on: macos-26
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.project.outputs.version }}
+      artifact-name: release-tvOS-simulator
+    steps:
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Read project versions
+        id: project
+        shell: bash
+        run: |
+          echo "flutter-tvos=$(tr -d '[:space:]' < .flutter-version-tvos)" >> "$GITHUB_OUTPUT"
+          echo "version=$(awk '/^version:/ {print $2; exit}' pubspec.yaml)" >> "$GITHUB_OUTPUT"
+          echo "FLUTTER_TVOS_ROOT=$RUNNER_TEMP/flutter-tvos" >> "$GITHUB_ENV"
+
+      - name: Cache flutter-tvos artifacts and Pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/flutter-tvos/engine_artifacts
+            ${{ runner.temp }}/flutter-tvos/flutter/bin/cache
+            ~/.pub-cache
+          key: tvos-${{ runner.os }}-${{ steps.project.outputs.flutter-tvos }}-${{ hashFiles('pubspec.lock', 'pubspec_overrides.tvos.yaml') }}-v1
+          restore-keys: |
+            tvos-${{ runner.os }}-${{ steps.project.outputs.flutter-tvos }}-
+
+      - name: Install pinned flutter-tvos SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$FLUTTER_TVOS_ROOT"
+          if [[ ! -d "$FLUTTER_TVOS_ROOT/.git" ]]; then
+            git -C "$FLUTTER_TVOS_ROOT" init
+            git -C "$FLUTTER_TVOS_ROOT" remote add origin \
+              https://github.com/fluttertv/flutter-tvos.git
+          else
+            git -C "$FLUTTER_TVOS_ROOT" remote set-url origin \
+              https://github.com/fluttertv/flutter-tvos.git
+          fi
+          git -C "$FLUTTER_TVOS_ROOT" fetch \
+            --depth 1 \
+            origin \
+            'refs/tags/${{ steps.project.outputs.flutter-tvos }}'
+          git -C "$FLUTTER_TVOS_ROOT" checkout --detach --force FETCH_HEAD
+          "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" precache
+          "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" --version
+
+      - name: Resolve dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$FLUTTER_TVOS_ROOT/flutter/bin/dart" \
+            run tool/configure_flutter_dependencies.dart tvos
+          "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
+
+      - name: Build unsigned tvOS simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" \
+            build tvos --simulator --debug
+
+      - name: Locate tvOS application
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find build/tvos -type d -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "No tvOS .app was produced." >&2
+            find build -maxdepth 5 -print
+            exit 1
+          fi
+          echo "path=$app_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload tvOS simulator application
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tvOS-simulator
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error

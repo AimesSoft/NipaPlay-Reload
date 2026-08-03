@@ -8,7 +8,6 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
@@ -16,6 +15,8 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:nipaplay/utils/github_accel_resolver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +41,17 @@ class PluginMarketDialog extends StatefulWidget {
   final bool embedded;
 
   static Future<void> show(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenViewContainer.show<void>(
+        context: context,
+        title: '插件市场',
+        subtitle: '使用遥控器浏览、查看说明并安装插件',
+        maxWidth: 1180,
+        maxHeightFactor: 0.9,
+        autofocusClose: false,
+        builder: (_) => const PluginMarketDialog(embedded: true),
+      );
+    }
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<void>(
         context: context,
@@ -393,22 +405,13 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
                 ],
               ),
               const Spacer(),
-              Tooltip(
-                message: '刷新',
-                child: HoverScaleTextButton(
-                  onPressed: _isLoading || _isRefreshing
-                      ? null
-                      : () => _refreshPlugins(),
-                  padding: const EdgeInsets.all(8),
-                  hoverScale: 1.16,
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: _isRefreshing
-                        ? const AdaptiveMediaActivityIndicator(size: 20)
-                        : const Icon(Ionicons.refresh_outline, size: 24),
-                  ),
-                ),
+              AdaptiveMediaIconButton(
+                desktopIcon: Ionicons.refresh_outline,
+                phoneIcon: cupertino.CupertinoIcons.refresh,
+                tooltip: '刷新',
+                onPressed: _isLoading || _isRefreshing
+                    ? null
+                    : () => _refreshPlugins(),
               ),
             ],
           ),
@@ -446,11 +449,11 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            HoverScaleTextButton(
-              text: '重新加载',
+            AdaptiveMediaActionButton(
+              label: '重新加载',
+              desktopIcon: Ionicons.refresh_outline,
               onPressed: _loadPlugins,
-              idleColor: _accentColor,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              emphasis: AdaptiveMediaActionEmphasis.primary,
             ),
           ],
         ),
@@ -647,18 +650,11 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
             const SizedBox(height: 12),
             Row(
               children: [
-                HoverScaleTextButton(
+                AdaptiveMediaActionButton(
+                  label: '查看文档',
+                  desktopIcon: Ionicons.document_outline,
+                  compact: true,
                   onPressed: () => _showPluginReadme(plugin),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.document_outline, size: 16),
-                      SizedBox(width: 6),
-                      Text('查看文档'),
-                    ],
-                  ),
                 ),
                 const Spacer(),
                 _buildActionButtons(plugin),
@@ -685,36 +681,35 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       final hasUpdate = plugin.localVersion != null &&
           _compareVersions(plugin.version, plugin.localVersion!) > 0;
       if (hasUpdate) {
-        return HoverScaleTextButton(
-          text: '更新',
+        return AdaptiveMediaActionButton(
+          label: '更新',
+          desktopIcon: Ionicons.refresh_outline,
           onPressed: () => _installPlugin(plugin),
-          idleColor: _accentColor,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          emphasis: AdaptiveMediaActionEmphasis.primary,
         );
       }
-      return HoverScaleTextButton(
-        text: '已安装',
+      return AdaptiveMediaActionButton(
+        label: '已安装',
+        desktopIcon: Ionicons.checkmark_circle_outline,
         onPressed: () {
           BlurSnackBar.show(context, '该插件已安装');
         },
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       );
     }
 
     if (!isVersionCompatible) {
-      return HoverScaleTextButton(
-        text: '版本不兼容',
+      return const AdaptiveMediaActionButton(
+        label: '版本不兼容',
+        desktopIcon: Ionicons.warning_outline,
         onPressed: null,
-        idleColor: Colors.grey[600],
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       );
     }
 
-    return HoverScaleTextButton(
-      text: '安装',
+    return AdaptiveMediaActionButton(
+      label: '安装',
+      desktopIcon: Ionicons.download_outline,
       onPressed: () => _installPlugin(plugin),
-      idleColor: _accentColor,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      emphasis: AdaptiveMediaActionEmphasis.primary,
     );
   }
 
@@ -727,11 +722,11 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
           child: Row(
             children: [
-              HoverScaleTextButton(
+              AdaptiveMediaIconButton(
+                desktopIcon: Ionicons.chevron_back_outline,
+                phoneIcon: cupertino.CupertinoIcons.back,
+                tooltip: '返回插件列表',
                 onPressed: _closeReadme,
-                padding: const EdgeInsets.all(8),
-                hoverScale: 1.16,
-                child: const Icon(Ionicons.chevron_back_outline, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -790,22 +785,29 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
+    final content = _showReadme
+        ? _buildReadmeView(context)
+        : Column(
+            children: [
+              _buildHeader(context),
+              Expanded(child: _buildContent(context)),
+            ],
+          );
+
+    if (isLargeScreen && widget.embedded) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        child: content,
+      );
+    }
 
     return NipaplayWindowScaffold(
       embedded: widget.embedded,
       maxWidth: 800,
       maxHeightFactor: 0.85,
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-      child: _showReadme
-          ? _buildReadmeView(context)
-          : Column(
-              children: [
-                _buildHeader(context),
-                Expanded(
-                  child: _buildContent(context),
-                ),
-              ],
-            ),
+      child: content,
     );
   }
 }

@@ -890,6 +890,35 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
+  /// Uses a single, television-friendly timeout for large-screen controls.
+  ///
+  /// The desktop player also owns legacy 1.5 second mouse timers. Those are
+  /// deliberately cancelled here so remote navigation always gets five full
+  /// seconds after the latest interaction.
+  void resetLargeScreenControlsAutoHideTimer() {
+    _hideControlsTimer?.cancel();
+    _hideMouseTimer?.cancel();
+    resetAutoHideTimer();
+  }
+
+  /// Idempotently reveals the controls for a remote MENU/Escape event.
+  ///
+  /// flutter-tvos can surface one remote press both as a key event and as a
+  /// navigation popRoute. Making reveal idempotent prevents the two delivery
+  /// paths from toggling the controls on and immediately back off.
+  void revealLargeScreenControls() {
+    _hideControlsTimer?.cancel();
+    _hideMouseTimer?.cancel();
+    _autoHideTimer?.cancel();
+
+    final visibilityChanged = !_showControls;
+    _showControls = true;
+    resetLargeScreenControlsAutoHideTimer();
+    if (visibilityChanged) {
+      _notifyListeners();
+    }
+  }
+
   void setControlsHovered(bool value) {
     if (_controlsVisibilityLocked && !value) {
       return;

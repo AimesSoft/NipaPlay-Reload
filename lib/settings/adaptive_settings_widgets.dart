@@ -19,6 +19,8 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -847,6 +849,54 @@ class _ColorSwatch<T> extends material.StatelessWidget {
             .onSurface
             .withValues(alpha: 0.22);
     final color = enabled ? option.color : option.color.withValues(alpha: 0.42);
+    final swatch = material.AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      curve: material.Curves.easeOutCubic,
+      width: 30,
+      height: 30,
+      decoration: material.BoxDecoration(
+        color: color,
+        shape: material.BoxShape.circle,
+        border: material.Border.all(
+          color: borderColor,
+          width: selected ? 3 : 1,
+        ),
+        boxShadow: [
+          if (selected)
+            material.BoxShadow(
+              color: AppAccentColors.current.withValues(alpha: 0.22),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+        ],
+      ),
+      child: selected
+          ? material.Icon(
+              material.Icons.check_rounded,
+              size: 16,
+              color: checkColor,
+            )
+          : null,
+    );
+    final onActivate = enabled ? () => onChanged(option.value) : null;
+    final control = NipaplayLargeScreenModeScope.isActiveOf(context)
+        ? NipaplayLargeScreenFocusableAction(
+            onActivate: onActivate,
+            borderRadius: material.BorderRadius.circular(18),
+            padding: material.EdgeInsets.zero,
+            focusScale: 1.10,
+            style: NipaplayLargeScreenFocusableStyle(
+              focusStrokeColor: AppAccentColors.current,
+              idleBackgroundDark: material.Colors.transparent,
+              idleBackgroundLight: material.Colors.transparent,
+            ),
+            child: swatch,
+          )
+        : material.GestureDetector(
+            behavior: material.HitTestBehavior.opaque,
+            onTap: onActivate,
+            child: swatch,
+          );
 
     return material.Tooltip(
       message: option.title,
@@ -854,39 +904,7 @@ class _ColorSwatch<T> extends material.StatelessWidget {
         button: true,
         selected: selected,
         label: option.title,
-        child: material.GestureDetector(
-          behavior: material.HitTestBehavior.opaque,
-          onTap: enabled ? () => onChanged(option.value) : null,
-          child: material.AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            curve: material.Curves.easeOutCubic,
-            width: 30,
-            height: 30,
-            decoration: material.BoxDecoration(
-              color: color,
-              shape: material.BoxShape.circle,
-              border: material.Border.all(
-                color: borderColor,
-                width: selected ? 3 : 1,
-              ),
-              boxShadow: [
-                if (selected)
-                  material.BoxShadow(
-                    color: AppAccentColors.current.withValues(alpha: 0.22),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-              ],
-            ),
-            child: selected
-                ? material.Icon(
-                    material.Icons.check_rounded,
-                    size: 16,
-                    color: checkColor,
-                  )
-                : null,
-          ),
-        ),
+        child: control,
       ),
     );
   }

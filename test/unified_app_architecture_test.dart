@@ -1677,6 +1677,7 @@ void main() {
             mascotScale: const AlwaysStoppedAnimation<double>(1),
             onMascotTap: () {},
             onSelectFile: () {},
+            onAddMedia: () {},
             onOpenUrlInput: () {},
           ),
         ),
@@ -1686,6 +1687,43 @@ void main() {
     expect(find.byType(CupertinoButton), findsWidgets);
     expect(find.byType(CupertinoTextField), findsNothing);
     expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('television playback entry only offers URL and add media',
+      (tester) async {
+    var selectFileCount = 0;
+    var addMediaCount = 0;
+    var openUrlCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.television,
+          child: AdaptivePlaybackEntryView(
+            content: unifiedPlaybackEntryContent,
+            mascotScale: const AlwaysStoppedAnimation<double>(1),
+            onMascotTap: () {},
+            onSelectFile: () => selectFileCount += 1,
+            onAddMedia: () => addMediaCount += 1,
+            onOpenUrlInput: () => openUrlCount += 1,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('选择文件'), findsNothing);
+    expect(find.text(unifiedPlaybackEntryContent.selectFileDescription),
+        findsNothing);
+    expect(find.text(unifiedPlaybackEntryContent.enterUrlDescription),
+        findsNothing);
+    expect(find.text('输入链接'), findsOneWidget);
+    expect(find.text('添加媒体'), findsOneWidget);
+
+    await tester.tap(find.text('输入链接'));
+    await tester.tap(find.text('添加媒体'));
+    expect(openUrlCount, 1);
+    expect(addMediaCount, 1);
+    expect(selectFileCount, 0);
   });
 
   testWidgets('playback URL popup builds one adaptive phone form',

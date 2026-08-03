@@ -16,6 +16,7 @@ import 'local_media_management_api.dart';
 import 'web_ui_proxy_api.dart';
 import 'network_media_settings_api.dart';
 import 'remote_control_api_service.dart';
+import 'remote_text_input_service.dart';
 import 'remote_control_settings.dart';
 import 'package:path/path.dart' as p;
 
@@ -30,6 +31,8 @@ class WebApiService {
       NetworkMediaSettingsApi();
   final WebUiProxyApi _webUiProxyApi = WebUiProxyApi();
   final RemoteControlApiService _remoteControlApi = RemoteControlApiService();
+  final RemoteTextInputApiService _remoteTextInputApi =
+      RemoteTextInputApiService();
 
   WebApiService() {
     _router.get('/info', handleInfoRequest);
@@ -79,6 +82,7 @@ class WebApiService {
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
     _router.mount('/settings/network/', _networkMediaSettingsApi.router);
     _router.mount('/remote/control/', _remoteControlApi.router);
+    _router.mount('/remote/input/', _remoteTextInputApi.router);
   }
 
   Handler get handler => _router;

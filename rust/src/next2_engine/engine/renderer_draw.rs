@@ -479,9 +479,11 @@ impl Next2Renderer {
             ];
 
             let mut cursor_x = (item.x + item.scroll_speed as f64 * interp_dt) as f32;
+            let item_left = cursor_x;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);
             let tokens = &item.tokens;
+            let mut visual_bounds: Option<RenderBounds> = None;
 
             for token in tokens {
                 match token {
@@ -504,6 +506,20 @@ impl Next2Renderer {
                             let glyph_top = baseline_y + entry.offset_y;
                             let glyph_right = glyph_left + entry.width as f32;
                             let glyph_bottom = glyph_top + entry.height as f32;
+                            if item.is_me {
+                                // The MSDF quad contains `spread` pixels of transparent
+                                // distance-field margin. Exclude that margin (while
+                                // retaining outline + AA coverage) so the self marker
+                                // follows the visible glyph instead of its atlas cell.
+                                let visible_inset = (entry.spread - outline_px - 1.0).max(0.0);
+                                include_render_bounds(
+                                    &mut visual_bounds,
+                                    glyph_left + visible_inset,
+                                    glyph_top + visible_inset,
+                                    glyph_right - visible_inset,
+                                    glyph_bottom - visible_inset,
+                                );
+                            }
 
                             if shadow.opacity > 0.0 {
                                 self.push_shadow_quad(
@@ -551,6 +567,26 @@ impl Next2Renderer {
                         let glyph_right = glyph_left + entry.width as f32;
                         let glyph_bottom = glyph_top + entry.height as f32;
 
+                        if item.is_me {
+                            // Emoji bitmaps are generated with symmetric transparent
+                            // padding. Recover the painted content box from the stored
+                            // advance/font size, then retain only the outline margin.
+                            let horizontal_padding =
+                                ((entry.width as f32 - entry.advance.max(0.0)) * 0.5).max(0.0);
+                            let vertical_padding =
+                                ((entry.height as f32 - item.font_size) * 0.5).max(0.0);
+                            let emoji_margin = emoji_outline_px + 1.0;
+                            let inset_x = (horizontal_padding - emoji_margin).max(0.0);
+                            let inset_y = (vertical_padding - emoji_margin).max(0.0);
+                            include_render_bounds(
+                                &mut visual_bounds,
+                                glyph_left + inset_x,
+                                glyph_top + inset_y,
+                                glyph_right - inset_x,
+                                glyph_bottom - inset_y,
+                            );
+                        }
+
                         if shadow.opacity > 0.0 {
                             self.push_shadow_quad(
                                 (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE,
@@ -582,6 +618,83 @@ impl Next2Renderer {
 
                         cursor_x += entry.advance.max(1.0) + side_bearing * 2.0;
                     }
+                }
+            }
+
+            if item.is_me {
+                if let Some(marker) = resolve_self_marker_bounds(
+                    item_left,
+                    cursor_x,
+                    item.width,
+                    item.y as f32,
+                    item.font_size,
+                    visual_bounds,
+                ) {
+                    // Scale in texture pixels so high-DPI/supersampled surfaces
+                    // retain a clearly visible ~2 logical-pixel border.
+                    let stroke = self_marker_stroke(item.font_size);
+                    let left = marker.left;
+                    let top = marker.top;
+                    let right = marker.right;
+                    let bottom = marker.bottom;
+                    // Chroma-key green keeps locally-sent danmaku immediately
+                    // recognizable against both light and dark video frames.
+                    let color = [0.0, 1.0, 0.0, item.opacity];
+                    let params = [1.0, 0.0, GLYPH_MODE_SOLID, 0.0];
+                    let uv = [0.0, 0.0];
+
+                    self.push_quad(
+                        left,
+                        top,
+                        right,
+                        top + stroke,
+                        uv,
+                        uv,
+                        uv,
+                        uv,
+                        color,
+                        color,
+                        params,
+                    );
+                    self.push_quad(
+                        left,
+                        bottom - stroke,
+                        right,
+                        bottom,
+                        uv,
+                        uv,
+                        uv,
+                        uv,
+                        color,
+                        color,
+                        params,
+                    );
+                    self.push_quad(
+                        left,
+                        top + stroke,
+                        left + stroke,
+                        bottom - stroke,
+                        uv,
+                        uv,
+                        uv,
+                        uv,
+                        color,
+                        color,
+                        params,
+                    );
+                    self.push_quad(
+                        right - stroke,
+                        top + stroke,
+                        right,
+                        bottom - stroke,
+                        uv,
+                        uv,
+                        uv,
+                        uv,
+                        color,
+                        color,
+                        params,
+                    );
                 }
             }
         }
@@ -745,6 +858,104 @@ impl Next2Renderer {
 
         self.vertices.extend_from_slice(&[v0, v1, v2, v0, v2, v3]);
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RenderBounds {
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+}
+
+fn include_render_bounds(
+    bounds: &mut Option<RenderBounds>,
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+) {
+    if !left.is_finite()
+        || !top.is_finite()
+        || !right.is_finite()
+        || !bottom.is_finite()
+        || right <= left
+        || bottom <= top
+    {
+        return;
+    }
+    match bounds {
+        Some(current) => {
+            current.left = current.left.min(left);
+            current.top = current.top.min(top);
+            current.right = current.right.max(right);
+            current.bottom = current.bottom.max(bottom);
+        }
+        None => {
+            *bounds = Some(RenderBounds {
+                left,
+                top,
+                right,
+                bottom,
+            });
+        }
+    }
+}
+
+fn self_marker_padding(font_size: f32) -> f32 {
+    (font_size * 0.12).clamp(4.0, 9.0)
+}
+
+fn self_marker_stroke(font_size: f32) -> f32 {
+    (font_size * 0.08).clamp(2.5, 5.0)
+}
+
+/// Builds a self-send marker from the same glyph/emoji bounds used for GPU
+/// drawing. The collision width is only a fallback: it includes layout-only
+/// outline expansion and using it for a normal rendered item biases the box to
+/// the right. Vertically, center a minimum one-em box on the actual painted
+/// content so Emoji baseline padding cannot pull the marker upward.
+fn resolve_self_marker_bounds(
+    item_left: f32,
+    cursor_x: f32,
+    fallback_width: f32,
+    item_y: f32,
+    font_size: f32,
+    visual: Option<RenderBounds>,
+) -> Option<RenderBounds> {
+    let advance_width = (cursor_x - item_left).max(0.0);
+    let advance_right = item_left
+        + if advance_width > 0.0 {
+            advance_width
+        } else {
+            fallback_width.max(0.0)
+        };
+
+    let (mut left, mut right) = (item_left, advance_right);
+    if let Some(bounds) = visual {
+        left = left.min(bounds.left);
+        right = right.max(bounds.right);
+    }
+    if !left.is_finite() || !right.is_finite() || right <= left {
+        return None;
+    }
+
+    let safe_font_size = font_size.max(1.0);
+    let (content_top, content_bottom) = if let Some(bounds) = visual {
+        let center = (bounds.top + bounds.bottom) * 0.5;
+        let height = (bounds.bottom - bounds.top).max(safe_font_size);
+        (center - height * 0.5, center + height * 0.5)
+    } else {
+        (item_y, item_y + safe_font_size)
+    };
+    let padding = self_marker_padding(safe_font_size);
+
+    Some(RenderBounds {
+        left: left - padding,
+        top: content_top - padding,
+        right: right + padding,
+        bottom: content_bottom + padding,
+    })
 }
 
 fn create_render_texture_with_usage(
@@ -968,6 +1179,62 @@ fn intersection_1d(f: &[f32], i: usize, j: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn self_marker_centers_on_visible_content_and_uses_real_advance() {
+        let marker = resolve_self_marker_bounds(
+            10.0,
+            70.0,
+            100.0,
+            0.0,
+            30.0,
+            Some(RenderBounds {
+                left: 12.0,
+                top: 20.0,
+                right: 68.0,
+                bottom: 50.0,
+            }),
+        )
+        .expect("marker bounds");
+
+        // 30px font → 4px padding. The 100px collision fallback must not
+        // stretch a normally rendered 60px item to the right.
+        assert_eq!(marker.left, 6.0);
+        assert_eq!(marker.right, 74.0);
+        assert_eq!((marker.top + marker.bottom) * 0.5, 35.0);
+        assert_eq!(marker.bottom - marker.top, 38.0);
+    }
+
+    #[test]
+    fn self_marker_stroke_scales_for_supersampled_textures() {
+        assert_eq!(self_marker_stroke(24.0), 2.5);
+        assert_eq!(self_marker_stroke(50.0), 4.0);
+        assert_eq!(self_marker_stroke(100.0), 5.0);
+    }
+
+    #[test]
+    fn narrow_latin_glyphs_keep_their_font_advance() {
+        let fonts = load_font_chain(None).expect("load test fonts");
+        let face = fonts
+            .iter()
+            .find_map(|font| font.face.glyph_index('j').map(|id| (&font.face, id)))
+            .expect("test font contains j");
+        let px = 50.0_f32;
+        let expected = scale_metric_to_px(
+            face.0
+                .glyph_hor_advance(face.1)
+                .expect("j has a horizontal advance") as f32,
+            face.0,
+            px,
+        );
+        let actual = glyph_advance_px(face.0, face.1, px);
+
+        assert!((actual - expected).abs() < f32::EPSILON);
+        assert!(
+            actual < px * FALLBACK_GLYPH_ADVANCE_RATIO,
+            "j advance {actual} was expanded to the fallback cell width"
+        );
+    }
 
     #[test]
     fn parallel_msdf_generation_matches_serial_generation() {

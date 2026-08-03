@@ -6,6 +6,8 @@ import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:provider/provider.dart';
 
@@ -30,6 +32,15 @@ class UnifiedAppViewPresenter {
     final localizations = AppLocalizations.of(context) ??
         lookupAppLocalizations(context.read<AppLanguageProvider>().locale);
     final title = definition.title(localizations);
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return _showTelevision<T>(
+        context,
+        definition: definition,
+        request: request,
+        title: title,
+      );
+    }
 
     return switch (surface) {
       AppDisplaySurface.desktopTablet => _showDesktopTablet<T>(
@@ -120,12 +131,17 @@ class UnifiedAppViewPresenter {
     required UnifiedAppViewRequest request,
     required String title,
   }) {
-    return _showDesktopTablet<T>(
-      context,
-      definition: definition,
-      request: request,
+    return NipaplayLargeScreenViewContainer.show<T>(
+      context: context,
       title: title,
-      contentSurface: AppDisplaySurface.television,
+      subtitle: '使用遥控器方向键浏览，按返回键关闭',
+      maxWidth: definition.layout.televisionMaxWidth,
+      maxHeightFactor: definition.layout.televisionMaxHeightFactor,
+      builder: (containerContext) => definition.build(
+        containerContext,
+        AppDisplaySurface.television,
+        request,
+      ),
     );
   }
 }

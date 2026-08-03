@@ -8,6 +8,16 @@ mod present;
 /// on each side, which cannot represent the 3.9px thick profile safely.
 pub(crate) const DANMAKU_MSDF_RANGE: f64 = 10.0;
 
+/// Shared font bytes used by both the GPU atlas and DFM+ collision metrics.
+/// Keeping a single static prevents the 6 MB primary font from being embedded
+/// twice just because measurement and rendering live in different modules.
+pub(crate) static DEFAULT_FONT_DATA: &[u8] = include_bytes!("../../assets/subfont.ttf");
+pub(crate) static FALLBACK_FONT_DATA: &[&[u8]] = &[
+    include_bytes!("../assets/next2_fonts/NotoSansYi-Regular.ttf"),
+    include_bytes!("../assets/next2_fonts/NotoSansGeorgian-Regular.ttf"),
+    include_bytes!("../assets/next2_fonts/NotoSansLao-Regular.ttf"),
+];
+
 /// Resolve the three user-facing outline levels to a safe MSDF width.
 ///
 /// The setting is a profile selector, not a numeric width multiplier:

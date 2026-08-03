@@ -7,7 +7,9 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoDanmakuTracksPane extends StatefulWidget {
@@ -120,6 +122,7 @@ class _CupertinoDanmakuTracksPaneState
 
   @override
   Widget build(BuildContext context) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
         SliverPadding(
@@ -159,40 +162,42 @@ class _CupertinoDanmakuTracksPaneState
                 ),
               ],
             ),
-            AdaptivePlayerMenuSection(
-              header: const Text('本地弹幕'),
-              children: [
-                AdaptivePlayerMenuTile(
-                  title: const Text('加载本地弹幕文件'),
-                  subtitle: const Text('支持 JSON / XML 格式'),
-                  trailing: _isLoadingLocal
-                      ? const AdaptivePlayerMenuProgressIndicator()
-                      : const Icon(CupertinoIcons.cloud_download),
-                  onTap: _isLoadingLocal ? null : _loadLocalDanmakuFile,
-                ),
-              ],
-            ),
-            AdaptivePlayerMenuSection(
-              header: const Text('在线来源'),
-              children: [
-                _buildSourceTile(
-                  context,
-                  title: 'DandanPlay',
-                  subtitle: '弹弹Play 官方弹幕库',
-                  enabled: true,
-                ),
-                _buildSourceTile(
-                  context,
-                  title: 'Bilibili',
-                  subtitle: '需在设置中配置账号',
-                ),
-                _buildSourceTile(
-                  context,
-                  title: 'AcFun',
-                  subtitle: '即将开放',
-                ),
-              ],
-            ),
+            if (!globals.isTelevision)
+              AdaptivePlayerMenuSection(
+                header: const Text('本地弹幕'),
+                children: [
+                  AdaptivePlayerMenuTile(
+                    title: const Text('加载本地弹幕文件'),
+                    subtitle: const Text('支持 JSON / XML 格式'),
+                    trailing: _isLoadingLocal
+                        ? const AdaptivePlayerMenuProgressIndicator()
+                        : const Icon(CupertinoIcons.cloud_download),
+                    onTap: _isLoadingLocal ? null : _loadLocalDanmakuFile,
+                  ),
+                ],
+              ),
+            if (!isLargeScreen)
+              AdaptivePlayerMenuSection(
+                header: const Text('在线来源'),
+                children: [
+                  _buildSourceTile(
+                    context,
+                    title: 'DandanPlay',
+                    subtitle: '弹弹Play 官方弹幕库',
+                    enabled: true,
+                  ),
+                  _buildSourceTile(
+                    context,
+                    title: 'Bilibili',
+                    subtitle: '需在设置中配置账号',
+                  ),
+                  _buildSourceTile(
+                    context,
+                    title: 'AcFun',
+                    subtitle: '即将开放',
+                  ),
+                ],
+              ),
             const SizedBox(height: 24),
           ]),
         ),
