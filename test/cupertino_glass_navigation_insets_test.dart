@@ -45,13 +45,13 @@ void main() {
   });
 
   group('resolvePageActionsTrailingOffset', () {
-    test('moves the native iOS 26 toolbar eight points inward', () {
+    test('moves the native iOS 26 toolbar sixteen points inward', () {
       expect(
         resolvePageActionsTrailingOffset(
           viewPaddingRight: 0,
           usesNativeIOS26Toolbar: true,
         ),
-        20,
+        28,
       );
     });
 
@@ -61,7 +61,7 @@ void main() {
           viewPaddingRight: 6,
           usesNativeIOS26Toolbar: true,
         ),
-        26,
+        34,
       );
     });
 
