@@ -23,37 +23,41 @@ class DesktopAccountView extends StatelessWidget {
   Widget build(BuildContext context) {
     final dividerColor =
         fluent.FluentTheme.of(context).resources.dividerStrokeColorDefault;
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _DesktopDandanplayAccountSection(
+            data: data.dandanplay,
+            userActivity: userActivity,
+          ),
+        ),
+        Container(
+          width: 1,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          color: dividerColor,
+        ),
+        Expanded(
+          child: _DesktopBangumiAccountSection(data: data.bangumi),
+        ),
+      ],
+    );
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPageScaffold(
+        title: '个人中心',
+        subtitle: '弹弹play、Bangumi 与观看记录',
+        padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
+        headerBottomSpacing: 16,
+        child: content,
+      );
+    }
+
     return fluent.ScaffoldPage(
       padding: EdgeInsets.zero,
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const NipaplayLargeScreenPageTopSpacer(),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _DesktopDandanplayAccountSection(
-                      data: data.dandanplay,
-                      userActivity: userActivity,
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    color: dividerColor,
-                  ),
-                  Expanded(
-                    child: _DesktopBangumiAccountSection(data: data.bangumi),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+      content: Padding(
+        padding: const EdgeInsets.all(16),
+        child: content,
       ),
     );
   }
