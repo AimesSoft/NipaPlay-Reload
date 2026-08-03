@@ -1218,8 +1218,6 @@ class _NipaplayRankingCard extends StatefulWidget {
 }
 
 class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
-  bool _hovered = false;
-
   Color _rankColor(BuildContext context) {
     return switch (widget.item.rank) {
       1 => const Color(0xFFFFC400),
@@ -1243,8 +1241,8 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
       decoration: BoxDecoration(
         color: _rankColor(context),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(8),
-          bottomRight: Radius.circular(8),
+          topLeft: Radius.circular(5),
+          bottomRight: Radius.circular(5),
         ),
       ),
       child: Text(
@@ -1266,17 +1264,10 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
         widget.featured ? _buildFeaturedCard(context) : _buildGridCard(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
-        child: AnimatedScale(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOutCubic,
-          scale: _hovered ? 1.025 : 1,
-          child: child,
-        ),
+        child: child,
       ),
     );
   }
@@ -1284,89 +1275,74 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
   Widget _buildFeaturedCard(BuildContext context) {
     final anime = widget.item.anime;
     final title = anime.nameCn.isNotEmpty ? anime.nameCn : anime.name;
+    final secondaryColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return SizedBox(
       width: widget.width,
       height: widget.height,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImageWidget(
-              imageUrl: anime.imageUrl,
-              fit: BoxFit.cover,
-              memCacheWidth: ((widget.width ?? 210) * 2).round(),
-              memCacheHeight: ((widget.height ?? 304) * 2).round(),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.42, 1],
-                  colors: [Colors.transparent, Color(0xE6000000)],
-                ),
-              ),
-            ),
-            Positioned(top: 0, left: 0, child: _buildRankBadge(context)),
-            Positioned(
-              left: 10,
-              right: 9,
-              bottom: 9,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      height: 1.16,
-                      fontWeight: FontWeight.w700,
-                      shadows: [Shadow(blurRadius: 3, color: Colors.black)],
-                    ),
+                  CachedNetworkImageWidget(
+                    imageUrl: anime.imageUrl,
+                    fit: BoxFit.cover,
+                    memCacheWidth: ((widget.width ?? 210) * 2).round(),
+                    memCacheHeight: ((widget.height ?? 304) * 2).round(),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      if (anime.rating case final rating?) ...[
-                        Text(
-                          '评分 ${rating.toStringAsFixed(1)}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          _formatTrendingMetric(widget.item, widget.kind),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFFFA726),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        anime.isFavorited == true
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: Colors.white,
-                        size: 17,
-                      ),
-                    ],
-                  ),
+                  Positioned(top: 0, left: 0, child: _buildRankBadge(context)),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              if (anime.rating case final rating?)
+                Text(
+                  '评分 ${rating.toStringAsFixed(1)}',
+                  style: TextStyle(color: secondaryColor, fontSize: 11),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _formatTrendingMetric(widget.item, widget.kind),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppAccentColors.current,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Icon(
+                anime.isFavorited == true
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                color: anime.isFavorited == true
+                    ? AppAccentColors.current
+                    : secondaryColor,
+                size: 17,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1380,7 +1356,7 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
       children: [
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(5),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1391,29 +1367,6 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
                   memCacheHeight: 440,
                 ),
                 Positioned(top: 0, left: 0, child: _buildRankBadge(context)),
-                Positioned(
-                  top: 5,
-                  right: 5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xD91B1B1B),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _formatTrendingMetric(widget.item, widget.kind),
-                      maxLines: 1,
-                      style: const TextStyle(
-                        color: Color(0xFFFFA726),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1438,7 +1391,19 @@ class _NipaplayRankingCardState extends State<_NipaplayRankingCard> {
                   : '评分 ${anime.rating!.toStringAsFixed(1)}',
               style: TextStyle(color: secondaryColor, fontSize: 10),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _formatTrendingMetric(widget.item, widget.kind),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppAccentColors.current,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             Icon(
               anime.isFavorited == true
                   ? Icons.favorite_rounded
