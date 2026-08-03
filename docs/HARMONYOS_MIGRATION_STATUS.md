@@ -110,8 +110,10 @@ GitHub 托管 runner 默认不包含 HarmonyOS Command Line Tools、Hvigor 和 o
 
 这个容器用于提供构建工具，不包含 NipaPlay 的签名凭据。工作流的权限限制为
 只读仓库内容，签名文件只在 runner 临时目录中从 Secrets 解码，签名完成后立即
-删除。`hap-sign-tool.jar` 的交互密码模式要求使用系统终端，工作流通过 `expect`
-提供临时伪终端，并从环境变量响应密码提示；密码不会作为命令行参数写入日志。
+删除。容器内 HarmonyOS CLI 6.1.1 的 `hap-sign-tool.jar` 不支持交互式
+`pwdInputMode` 参数，因此工作流使用其支持的 `keyPwd` 和 `keystorePwd` 非交互
+参数。密码来自 GitHub Actions Secrets，日志会自动脱敏，并且签名任务只允许在
+明确提供 Secrets 的受信任工作流中运行。
 
 `workflow_dispatch` 只在该工作流已经存在于仓库默认分支时显示。合并后可进入
 **Actions > Build HarmonyOS > Run workflow** 手动运行，也可以由其他工作流通过
