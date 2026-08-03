@@ -143,7 +143,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 16),
               _buildScrollButton(
                 icon: Icons.tune_rounded,
                 onTap: () => _showTrendingFilter(cupertinoStyle: false),
