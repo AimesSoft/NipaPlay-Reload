@@ -194,6 +194,11 @@ void main() {
     expect(workflow, contains('merge-base --is-ancestor'));
     expect(
       workflow,
+      matches(RegExp(r'apt-get install -y[\s\S]*?\bpython3\b')),
+      reason: 'The HarmonyOS dependency setup generates build metadata with Python.',
+    );
+    expect(
+      workflow,
       isNot(contains(r'fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"')),
     );
     expect(workflow,
