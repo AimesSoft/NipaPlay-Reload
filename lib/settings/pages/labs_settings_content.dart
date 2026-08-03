@@ -5,6 +5,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 class LabsSettingsContent extends StatelessWidget {
@@ -24,20 +25,23 @@ class LabsSettingsContent extends StatelessWidget {
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
-                AdaptiveSettingsTile.toggle(
-                  title: _text(context, '大屏幕模式', '大螢幕模式', 'Large Screen Mode'),
-                  subtitle: _text(
-                    context,
-                    '开启后，桌面和平板布局右上角显示大屏幕模式按钮',
-                    '開啟後，桌面和平板布局右上角顯示大螢幕模式按鈕',
-                    'Show the large-screen mode button in the desktop and tablet layout.',
+                if (!globals.isTelevision)
+                  AdaptiveSettingsTile.toggle(
+                    title:
+                        _text(context, '大屏幕模式', '大螢幕模式', 'Large Screen Mode'),
+                    subtitle: _text(
+                      context,
+                      '开启后，桌面和平板布局右上角显示大屏幕模式按钮',
+                      '開啟後，桌面和平板布局右上角顯示大螢幕模式按鈕',
+                      'Show the large-screen mode button in the desktop and tablet layout.',
+                    ),
+                    icon: Ionicons.tv_outline,
+                    phoneIcon: cupertino.CupertinoIcons.tv,
+                    value: labsSettings.enableLargeScreenMode,
+                    onChanged: labsSettings.setEnableLargeScreenMode,
                   ),
-                  icon: Ionicons.tv_outline,
-                  phoneIcon: cupertino.CupertinoIcons.tv,
-                  value: labsSettings.enableLargeScreenMode,
-                  onChanged: labsSettings.setEnableLargeScreenMode,
-                ),
-                if (PlayerFactory.isErikaKernelSupported)
+                if (PlayerFactory.isErikaKernelSupported &&
+                    !globals.isTelevision)
                   AdaptiveSettingsTile.toggle(
                     title: _text(
                       context,

@@ -11,6 +11,7 @@ import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
@@ -23,6 +24,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_actions.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'themes/nipaplay/pages/settings/settings_entries.dart';
@@ -160,7 +162,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb) {
+  if (!kIsWeb && globals.supportsRustNativeBridge) {
     try {
       await ensureRustInitialized();
     } catch (error) {
@@ -294,9 +296,9 @@ void main(List<String> args) async {
     }
   }
 
-  // MediaKit/libmpv still has no HarmonyOS backend. FVP and Erika initialize
-  // independently and do not require MediaKit's native runtime.
-  if (!globals.isHarmonyOS) {
+  // Native runtime support is centralized so Android TV can continue using
+  // the Android plugin graph while tvOS keeps its dedicated dependencies.
+  if (globals.supportsMediaKitNativeRuntime) {
     try {
       MediaKit.ensureInitialized();
     } catch (e) {
@@ -431,7 +433,10 @@ void main(List<String> args) async {
 
     // 加载设置
     Future.wait(<Future<dynamic>>[
-      SettingsStorage.loadString('themeMode', defaultValue: 'system'),
+      SettingsStorage.loadString(
+        'themeMode',
+        defaultValue: globals.isTelevision ? 'dark' : 'system',
+      ),
       SettingsStorage.loadString(
         'backgroundImageMode',
         defaultValue: kIsWeb ? '关闭' : globals.backgroundImageMode,
@@ -456,7 +461,8 @@ void main(List<String> args) async {
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
 
-      final themeMode = (results[0] as String?) ?? 'system';
+      final themeMode =
+          (results[0] as String?) ?? (globals.isTelevision ? 'dark' : 'system');
       final animeDetailMode = (results[3] as String?) ?? 'simple';
       final backgroundImageRenderMode = (results[4] as String?) ??
           BackgroundImageRenderMode.opacity.storageKey;
@@ -503,7 +509,8 @@ void main(List<String> args) async {
 
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, dynamic>;
-    final savedThemeMode = settingsMap['themeMode'] as String? ?? 'system';
+    final savedThemeMode = settingsMap['themeMode'] as String? ??
+        (globals.isTelevision ? 'dark' : 'system');
     final savedDetailModeString =
         settingsMap['animeDetailMode'] as String? ?? 'simple';
     final savedBackgroundRenderModeString =
@@ -957,7 +964,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
               isWeb: kIsWeb,
               isIOS: !kIsWeb && Platform.isIOS,
               isTablet: globals.isTablet,
-              isTelevision: globals.isAndroidTv,
+              isTelevision: globals.isTelevision,
             );
             Widget overlayBuilder(Widget child) {
               return _buildGlobalAppOverlay(child, isDragging: _isDragging);
@@ -1346,7 +1353,9 @@ class MainPageState extends State<MainPage>
   }
 
   Future<void> _initializeController() async {
-    _useLargeScreenLayout = await LargeScreenModePreferences.load();
+    _useLargeScreenLayout = await LargeScreenModePreferences.load(
+      defaultValue: globals.isTelevision,
+    );
     final initialIndex = _getInitialTabIndex();
 
     if (mounted) {
@@ -1705,13 +1714,17 @@ class MainPageState extends State<MainPage>
     final mediaPadding = MediaQuery.of(context).padding;
     final bool isMac = !kIsWeb && Platform.isMacOS;
     final bool isDesktop = globals.isDesktop;
-    final bool canUseLargeScreenLayout = globals.isDesktopOrTablet;
+    final bool isTelevisionSurface =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television;
+    final bool canUseLargeScreenLayout =
+        globals.isDesktopOrTablet || isTelevisionSurface;
     final bool labsEnableLargeScreenMode =
         context.watch<LabsSettingsProvider>().enableLargeScreenMode;
     final bool allowLargeScreenControls = labsEnableLargeScreenMode;
-    final bool isLargeScreenLayoutActive = canUseLargeScreenLayout &&
-        allowLargeScreenControls &&
-        _useLargeScreenLayout;
+    final bool isLargeScreenLayoutActive = isTelevisionSurface ||
+        (canUseLargeScreenLayout &&
+            allowLargeScreenControls &&
+            _useLargeScreenLayout);
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =
@@ -1823,9 +1836,11 @@ Widget _buildGlobalAppOverlay(
   Widget child, {
   required bool isDragging,
 }) {
+  final appChild =
+      globals.isTelevision ? TvOSRemoteTextInputScope(child: child) : child;
   return Stack(
     children: [
-      child,
+      appChild,
       const _SystemResourceOverlay(),
       if (isDragging) const DragDropOverlay(),
     ],

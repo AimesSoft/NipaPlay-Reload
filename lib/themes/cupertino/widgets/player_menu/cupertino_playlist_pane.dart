@@ -752,7 +752,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
                 return Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  child: GestureDetector(
+                  child: AdaptivePlayerMenuActionSurface(
                     onTap: isCurrent ? null : () => _playEpisode(path),
                     child: Container(
                       padding: const EdgeInsets.all(12),

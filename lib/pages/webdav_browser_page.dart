@@ -18,6 +18,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
@@ -343,7 +344,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       animeName:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
-      filePath: MediaSourceUtils.buildWebDavPath(_currentConnection!.name, file.path),
+      filePath:
+          MediaSourceUtils.buildWebDavPath(_currentConnection!.name, file.path),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -1566,54 +1568,61 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
         Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _searchController,
-                style: TextStyle(color: textColor),
-                decoration: InputDecoration(
-                  hintText: '搜索文件...',
-                  hintStyle: TextStyle(color: secondaryTextColor),
-                  prefixIcon: Icon(Icons.search, color: secondaryTextColor),
-                  filled: true,
-                  fillColor: Colors.transparent,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide:
-                        BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+              child: TvOSRemoteTextInputControl(
+                title: '搜索文件',
+                child: TextField(
+                  controller: _searchController,
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    hintText: '搜索文件...',
+                    hintStyle: TextStyle(color: secondaryTextColor),
+                    prefixIcon: Icon(Icons.search, color: secondaryTextColor),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: secondaryTextColor.withOpacity(0.3),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: secondaryTextColor.withOpacity(0.3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear, color: secondaryTextColor),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchKeyword = '';
+                                _searchResults = [];
+                              });
+                            },
+                          )
+                        : null,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide:
-                        BorderSide(color: secondaryTextColor.withOpacity(0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: accentColor),
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, color: secondaryTextColor),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchKeyword = '';
-                              _searchResults = [];
-                            });
-                          },
-                        )
-                      : null,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchKeyword = value;
+                    });
+                  },
+                  onSubmitted: (value) {
+                    if (value.isNotEmpty) {
+                      _startSearch();
+                    }
+                  },
                 ),
-                onChanged: (value) {
-                  setState(() {
-                    _searchKeyword = value;
-                  });
-                },
-                onSubmitted: (value) {
-                  if (value.isNotEmpty) {
-                    _startSearch();
-                  }
-                },
               ),
             ),
             SizedBox(width: 8),
@@ -2031,7 +2040,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final historyItem = WatchHistoryItem(
       animeName: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: result.file.name,
-      filePath: MediaSourceUtils.buildWebDavPath(_currentConnection!.name, result.file.path),
+      filePath: MediaSourceUtils.buildWebDavPath(
+          _currentConnection!.name, result.file.path),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,

@@ -4,6 +4,7 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -236,6 +237,9 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                                   AdaptiveMediaTextField(
                                     controller: _controllers[field.key]!,
                                     focusNode: _focusNodes[field.key],
+                                    remoteInputTitle: field.label,
+                                    remoteInputFieldId: field.key,
+                                    remoteInputRequired: field.required,
                                     cursorColor: _accentColor,
                                     style: TextStyle(
                                       color: colorScheme.onSurface,
@@ -299,7 +303,11 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
         ),
       ),
     );
-    if (widget.embedded) return content;
+    final groupedContent = TvOSRemoteTextInputGroup(
+      title: widget.title,
+      child: content,
+    );
+    if (widget.embedded) return groupedContent;
     return NipaplayWindowScaffold(
       maxWidth: dialogWidth,
       maxHeightFactor: 0.9,
@@ -308,7 +316,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
         Navigator.of(context).maybePop();
       },
       backgroundColor: surfaceColor,
-      child: content,
+      child: groupedContent,
     );
   }
 }

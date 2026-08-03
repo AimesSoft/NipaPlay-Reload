@@ -11,6 +11,12 @@ NipaPlay-Reload 是一个跨平台应用，这意味着我们的代码需要能�
 > `pubspec_overrides.linux.yaml`。其他平台继续使用 `.fvmrc`；切回其他平台前运行
 > `dart run tool/configure_flutter_dependencies.dart mainline` 清除生成的覆盖文件。
 
+> Apple TV 与其他平台共用同一个仓库和 `lib/` 业务代码。tvOS 使用
+> `.flutter-version-tvos` 固定 Flutter fork，并通过
+> `./tool/flutter_tvos.sh` 自动启用 `pubspec_overrides.tvos.yaml`。只有
+> `tvos/` 原生工程和依赖配置是平台专属的；大屏幕布局与焦点控件必须继续放在
+> 共享代码中，供桌面、平板和其他电视平台复用。
+
 ## 平台特定代码的核心技术
 
 在 Flutter 中，我们有多种方法来处理平台差异。以下是项目中最常用的几种技术，从简单到复杂排序。

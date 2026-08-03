@@ -15,6 +15,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -609,34 +610,40 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: widthController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  cursorColor: AppAccentColors.current,
-                  decoration: InputDecoration(
-                    labelText: _text(context, '宽度 (px)', '寬度 (px)', 'Width'),
-                    labelStyle: TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.7),
+                child: TvOSRemoteTextInputControl(
+                  title: _text(context, '宽度 (px)', '寬度 (px)', 'Width'),
+                  child: TextField(
+                    controller: widthController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    cursorColor: AppAccentColors.current,
+                    decoration: InputDecoration(
+                      labelText: _text(context, '宽度 (px)', '寬度 (px)', 'Width'),
+                      labelStyle: TextStyle(
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
                     ),
+                    style: TextStyle(color: AppAccentColors.current),
                   ),
-                  style: TextStyle(color: AppAccentColors.current),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: TextField(
-                  controller: heightController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  cursorColor: AppAccentColors.current,
-                  decoration: InputDecoration(
-                    labelText: _text(context, '高度 (px)', '高度 (px)', 'Height'),
-                    labelStyle: TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.7),
+                child: TvOSRemoteTextInputControl(
+                  title: _text(context, '高度 (px)', '高度 (px)', 'Height'),
+                  child: TextField(
+                    controller: heightController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    cursorColor: AppAccentColors.current,
+                    decoration: InputDecoration(
+                      labelText: _text(context, '高度 (px)', '高度 (px)', 'Height'),
+                      labelStyle: TextStyle(
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
                     ),
+                    style: TextStyle(color: AppAccentColors.current),
                   ),
-                  style: TextStyle(color: AppAccentColors.current),
                 ),
               ),
             ],

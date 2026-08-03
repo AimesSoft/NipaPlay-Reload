@@ -21,12 +21,16 @@ class UnifiedVirtualWindowLayout {
     this.desktopMaxHeightFactor = 0.8,
     this.phoneHeightRatio = 0.94,
     this.phoneFloatingTitle = true,
+    this.televisionMaxWidth = 1280,
+    this.televisionMaxHeightFactor = 0.88,
   });
 
   final double desktopMaxWidth;
   final double desktopMaxHeightFactor;
   final double phoneHeightRatio;
   final bool phoneFloatingTitle;
+  final double televisionMaxWidth;
+  final double televisionMaxHeightFactor;
 }
 
 enum UnifiedAppViewContentType { settings }

@@ -8,6 +8,8 @@ import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 
 /// 手动弹幕匹配对话框
 ///
@@ -32,6 +34,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
   static Color get _accentColor => AppAccentColors.current;
 
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(
+    debugLabel: 'manual_danmaku_search',
+  );
+  bool _requestedInitialTelevisionFocus = false;
 
   bool _isSearching = false;
   bool _showEpisodesView = false;
@@ -82,8 +88,22 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_requestedInitialTelevisionFocus ||
+        !NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return;
+    }
+    _requestedInitialTelevisionFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     // 启用全局热键
     disposeHotkeys();
     super.dispose();
@@ -317,6 +337,9 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
         Expanded(
           child: AdaptiveMediaTextField(
             controller: _searchController,
+            focusNode: _searchFocusNode,
+            remoteInputTitle: '搜索番剧',
+            remoteInputFieldId: 'manual_danmaku_search',
             cursorColor: _accentColor,
             style: TextStyle(color: _textColor),
             decoration: InputDecoration(
@@ -435,54 +458,65 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     final typeDescription = match['typeDescription'] ?? '未知类型';
     final episodeCount = match['episodeCount'] ?? 0;
 
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _panelAltColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: _textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '$typeDescription | ${episodeCount}集',
+                  style: TextStyle(
+                    color: _subTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.chevron_right,
+            size: 18,
+            color: _mutedTextColor,
+          ),
+        ],
+      ),
+    );
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: () => _loadAnimeEpisodes(match),
+        borderRadius: BorderRadius.circular(10),
+        focusScale: 1.01,
+        child: content,
+      );
+    }
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _loadAnimeEpisodes(match),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: _panelAltColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _borderColor),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: _textColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '$typeDescription | ${episodeCount}集',
-                      style: TextStyle(
-                        color: _subTextColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: _mutedTextColor,
-              ),
-            ],
-          ),
-        ),
+        child: content,
       ),
     );
   }
@@ -501,47 +535,57 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     final borderColor =
         isSelected ? _accentColor.withOpacity(0.6) : _borderColor;
 
-    return Container(
+    final content = Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: borderColor),
       ),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          setState(() {
-            _selectedEpisode = episode;
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: _textColor,
-                    fontSize: 13,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: _textColor,
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              if (isSelected)
-                Icon(
-                  Icons.check_circle,
-                  color: _accentColor,
-                  size: 18,
-                ),
-            ],
-          ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: _accentColor,
+                size: 18,
+              ),
+          ],
         ),
       ),
+    );
+    void selectEpisode() {
+      setState(() {
+        _selectedEpisode = episode;
+      });
+    }
+
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: selectEpisode,
+        borderRadius: BorderRadius.circular(10),
+        focusScale: 1.01,
+        child: content,
+      );
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: selectEpisode,
+      child: content,
     );
   }
 
@@ -731,48 +775,51 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
         ? sheetScope.contentTopInset / 1.3 + sheetScope.contentTopSpacing + 8
         : 16.0;
 
-    return Focus(
-      autofocus: true,
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
+    final content = SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, topPadding, 24, 24 + keyboardHeight),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!widget.embedded) ...[
+            _buildHeader(),
+            SizedBox(height: 16),
+          ],
+          if (!_showEpisodesView) ...[
+            _buildSearchBar(),
+            SizedBox(height: 12),
+          ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWideLayout = constraints.maxWidth >= 720;
+              return _showEpisodesView
+                  ? _buildEpisodesContent(isWideLayout, context)
+                  : _buildResultsPanel(context);
+            },
+          ),
+          if (_showEpisodesView) ...[
+            SizedBox(height: 12),
+            _buildActionButtons(),
+          ],
+        ],
+      ),
+    );
+    final body = Focus(
+      autofocus: !isLargeScreen,
       onKeyEvent: _handleKeyEvent,
       child: TextSelectionTheme(
         data: _selectionTheme,
-        child: NipaplayWindowScaffold(
-          embedded: widget.embedded,
-          maxWidth: dialogWidth,
-          maxHeightFactor: 0.9,
-          onClose: () => Navigator.of(context).maybePop(),
-          backgroundColor: _surfaceColor,
-          child: SingleChildScrollView(
-            padding:
-                EdgeInsets.fromLTRB(24, topPadding, 24, 24 + keyboardHeight),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!widget.embedded) ...[
-                  _buildHeader(),
-                  SizedBox(height: 16),
-                ],
-                if (!_showEpisodesView) ...[
-                  _buildSearchBar(),
-                  SizedBox(height: 12),
-                ],
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWideLayout = constraints.maxWidth >= 720;
-                    return _showEpisodesView
-                        ? _buildEpisodesContent(isWideLayout, context)
-                        : _buildResultsPanel(context);
-                  },
-                ),
-                if (_showEpisodesView) ...[
-                  SizedBox(height: 12),
-                  _buildActionButtons(),
-                ],
-              ],
-            ),
-          ),
-        ),
+        child: content,
       ),
+    );
+    if (isLargeScreen && widget.embedded) return body;
+    return NipaplayWindowScaffold(
+      embedded: widget.embedded,
+      maxWidth: dialogWidth,
+      maxHeightFactor: 0.9,
+      onClose: () => Navigator.of(context).maybePop(),
+      backgroundColor: _surfaceColor,
+      child: body,
     );
   }
 }

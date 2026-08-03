@@ -12,9 +12,10 @@ import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
   const NipaplayLargeScreenTopStatusOverlay(
-      {super.key, required this.isDarkMode});
+      {super.key, required this.isDarkMode, this.useVideoBackground = false});
 
   final bool isDarkMode;
+  final bool useVideoBackground;
 
   @override
   State<NipaplayLargeScreenTopStatusOverlay> createState() =>
@@ -170,9 +171,15 @@ class _NipaplayLargeScreenTopStatusOverlayState
   @override
   Widget build(BuildContext context) {
     final textColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    final backgroundTint = widget.isDarkMode
-        ? Colors.black.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.14);
+    final backgroundTint = widget.useVideoBackground
+        ? (widget.isDarkMode ? Colors.black : Colors.white)
+            .withValues(alpha: 0.5)
+        : widget.isDarkMode
+            ? Colors.black.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.14);
+    final dividerColor = widget.isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.12);
     final clockText = _formatClock(_now);
 
     return SizedBox(
@@ -180,8 +187,13 @@ class _NipaplayLargeScreenTopStatusOverlayState
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: ColoredBox(
-            color: backgroundTint,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: backgroundTint,
+              border: Border(
+                bottom: BorderSide(color: dividerColor, width: 1),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Align(

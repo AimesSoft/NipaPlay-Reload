@@ -319,6 +319,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  ffi_leak_tracker:
+    dependency: transitive
+    description:
+      name: ffi_leak_tracker
+      sha256: "4093d4ef9ca06ffe2786e73bfb25e22aa92112b9bb4ec941f11e3e6b61489a97"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.2"
   file:
     dependency: transitive
     description:
@@ -956,18 +964,27 @@ packages:
     dependency: "direct main"
     description:
       name: package_info_plus
-      sha256: "16eee997588c60225bda0488b6dcfac69280a6b7a3cf02c741895dd370a02968"
+      sha256: "127e1751e37ffb2ff4658beeaca77bad0c27bf5f932bd3a501c2296926d4b481"
       url: "https://pub.dev"
     source: hosted
-    version: "8.3.1"
+    version: "10.2.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
       name: package_info_plus_platform_interface
-      sha256: "202a487f08836a592a6bd4f901ac69b3a8f146af552bbd14407b6b41e1c3f086"
+      sha256: db762cb2f4f25ee60fb6359773861b0f199e00b90d237bd85a76a1e806b46ef4
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.1"
+    version: "4.1.0"
+  package_info_plus_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/package_info_plus_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.1"
   path:
     dependency: "direct main"
     description:
@@ -1024,6 +1041,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  path_provider_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/path_provider_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.3"
   path_provider_windows:
     dependency: transitive
     description:
@@ -1342,6 +1368,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.2"
+  shared_preferences_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/shared_preferences_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.2"
   shared_preferences_web:
     dependency: transitive
     description:
@@ -1466,6 +1501,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
+  sqflite_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/sqflite_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.2"
   sqlite3:
     dependency: transitive
     description:
@@ -1746,6 +1790,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.7.0"
+  video_player_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/video_player_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.1"
   video_player_web:
     dependency: transitive
     description:
@@ -1773,10 +1826,10 @@ packages:
     dependency: "direct main"
     description:
       name: wakelock_plus
-      sha256: "61713aa82b7f85c21c9f4cd0a148abd75f38a74ec645fcb1e446f882c82fd09b"
+      sha256: "7253bca0fcf40d8413ddfcf4d2a1fa0a82475e79be25a4f2c564b695c9351486"
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.3"
+    version: "1.7.0"
   wakelock_plus_ohos:
     dependency: "direct main"
     description:
@@ -1788,10 +1841,19 @@ packages:
     dependency: transitive
     description:
       name: wakelock_plus_platform_interface
-      sha256: "036deb14cd62f558ca3b73006d52ce049fabcdcb2eddfe0bf0fe4e8a943b5cf2"
+      sha256: "0618d1799f0b28bcf98255b4ee8313e6fc4d38589dc4ee5fe5840d57d1aff6da"
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.0"
+    version: "1.6.0"
+  wakelock_plus_tvos:
+    dependency: "direct main"
+    description:
+      path: "packages/wakelock_plus_tvos"
+      ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      resolved-ref: "79dc1ac13b94d593e2361bf10b5ed8bdd225d3db"
+      url: "https://github.com/fluttertv/plugins.git"
+    source: git
+    version: "0.0.1"
   web:
     dependency: transitive
     description:
@@ -1812,10 +1874,10 @@ packages:
     dependency: transitive
     description:
       name: win32
-      sha256: d7cb55e04cd34096cd3a79b3330245f54cb96a370a1c27adb3c84b917de8b08e
+      sha256: ba6f4bba816c8d7e3c1580e170f3786d216951cc6b94babc3b814c08d2cb2738
       url: "https://pub.dev"
     source: hosted
-    version: "5.15.0"
+    version: "6.3.0"
   window_manager:
     dependency: "direct main"
     description:
@@ -1849,5 +1911,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.10.0 <4.0.0"
+  dart: ">=3.11.0 <4.0.0"
   flutter: ">=3.44.0"
