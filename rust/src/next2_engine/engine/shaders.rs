@@ -159,6 +159,10 @@ fn median3(r: f32, g: f32, b: f32) -> f32 {
 @fragment
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
     let mode = v.params.z;
+    if (mode > 1.5) {
+        let alpha = v.color.a;
+        return vec4<f32>(v.color.rgb * alpha, alpha);
+    }
     let is_emoji = mode > 0.5;
     let is_shadow = v.params.w > 0.5;
     let spread = max(v.params.x, 0.001);
