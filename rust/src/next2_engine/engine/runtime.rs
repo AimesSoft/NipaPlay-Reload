@@ -70,6 +70,7 @@ const EMOJI_OUTLINE_SCALE: f32 = 0.58;
 const EMOJI_SIDE_BEARING_RATIO: f32 = 0.08;
 const GLYPH_MODE_TEXT: f32 = 0.0;
 const GLYPH_MODE_EMOJI: f32 = 1.0;
+const GLYPH_MODE_SOLID: f32 = 2.0;
 const SHADOW_ALPHA_SCALE: f32 = 1.0;
 /// Shadow render texture scale relative to the screen. 0.5 renders the shadow
 /// mask/blur at half resolution (1/4 the pixel area); the shadow is blurred
@@ -78,13 +79,6 @@ const SHADOW_ALPHA_SCALE: f32 = 1.0;
 const SHADOW_RENDER_SCALE: f32 = 0.5;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
-
-static FONT_DATA: &[u8] = include_bytes!("../../../../assets/subfont.ttf");
-static NEXT2_FALLBACK_FONTS: &[&[u8]] = &[
-    include_bytes!("../../../assets/next2_fonts/NotoSansYi-Regular.ttf"),
-    include_bytes!("../../../assets/next2_fonts/NotoSansGeorgian-Regular.ttf"),
-    include_bytes!("../../../assets/next2_fonts/NotoSansLao-Regular.ttf"),
-];
 
 #[derive(Clone)]
 pub struct RenderFrameInput {
