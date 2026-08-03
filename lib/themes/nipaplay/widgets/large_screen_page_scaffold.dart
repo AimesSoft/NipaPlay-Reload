@@ -49,22 +49,6 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.78, -0.72),
-                  radius: 1.35,
-                  colors: [
-                    AppAccentColors.current
-                        .withValues(alpha: isDark ? 0.12 : 0.08),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.66],
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
