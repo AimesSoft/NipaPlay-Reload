@@ -137,6 +137,7 @@ jobs:
             nasm \
             ninja-build \
             pkg-config \
+            python3 \
             unzip \
             xz-utils \
             zstd
