@@ -3,6 +3,7 @@ import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 enum UnifiedHomeComponentType {
   hero,
   todaySeries,
+  trending,
   randomRecommendations,
   continueWatching,
   remoteLibraries,
@@ -45,6 +46,13 @@ List<UnifiedHomeComponent> buildUnifiedHomeComponents({
             sectionType: HomeSectionType.todaySeries,
           ));
         }
+        break;
+      case HomeSectionType.trending:
+        components.add(const UnifiedHomeComponent(
+          id: 'trending',
+          type: UnifiedHomeComponentType.trending,
+          sectionType: HomeSectionType.trending,
+        ));
         break;
       case HomeSectionType.randomRecommendations:
         if (hasRandomRecommendations) {
