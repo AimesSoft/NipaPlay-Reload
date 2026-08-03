@@ -4,6 +4,7 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 
 class CupertinoBottomSheetOption<T> {
   const CupertinoBottomSheetOption({
@@ -777,10 +778,12 @@ class CupertinoBottomSheetContentLayout extends StatelessWidget {
       });
     }
     final Color effectiveBackground = backgroundColor ??
-        CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground,
-          context,
-        );
+        (NipaplayLargeScreenModeScope.isActiveOf(context)
+            ? CupertinoColors.transparent
+            : CupertinoDynamicColor.resolve(
+                CupertinoColors.systemGroupedBackground,
+                context,
+              ));
 
     final slivers = sliversBuilder(context, contentTopSpacing);
     return ColoredBox(

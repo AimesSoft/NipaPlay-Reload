@@ -1,6 +1,12 @@
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
+    show AdaptiveSwitch;
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 /// Shared presentation primitives for the phone player-menu renderer.
 ///
@@ -22,6 +28,15 @@ class AdaptivePlayerMenuSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPlayerMenuSection(
+        header: header,
+        footer: footer,
+        margin: margin,
+        children: children,
+      );
+    }
+
     final secondaryColor = CupertinoColors.secondaryLabel.resolveFrom(context);
     final headerStyle = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
           color: secondaryColor,
@@ -103,6 +118,18 @@ class AdaptivePlayerMenuTile extends StatelessWidget {
       );
     }
 
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPlayerMenuTile(
+        leading: leading,
+        title: title,
+        subtitle: subtitle,
+        additionalInfo: additionalInfo,
+        trailing: trailing,
+        onActivate: onTap,
+        padding: padding,
+      );
+    }
+
     return GlassListTile(
       leading: leading,
       title: title,
@@ -112,6 +139,56 @@ class AdaptivePlayerMenuTile extends StatelessWidget {
       contentPadding:
           padding ?? const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
     );
+  }
+}
+
+/// Switch presentation shared by every player-menu pane.
+///
+/// The television renderer uses the real Fluent UI toggle so the focused
+/// control has the same shape and interaction semantics as settings. Phone
+/// and desktop surfaces keep their existing adaptive platform switch.
+class AdaptivePlayerMenuSwitch extends StatelessWidget {
+  const AdaptivePlayerMenuSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return FluentSettingsSwitch(value: value, onChanged: onChanged);
+    }
+    return AdaptiveSwitch(value: value, onChanged: onChanged);
+  }
+}
+
+/// A generic tappable surface used by timeline and playlist rows that are not
+/// shaped like a conventional settings tile.
+class AdaptivePlayerMenuActionSurface extends StatelessWidget {
+  const AdaptivePlayerMenuActionSurface({
+    super.key,
+    required this.child,
+    required this.onTap,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenPlayerMenuActionSurface(
+        onActivate: onTap,
+        padding: EdgeInsets.zero,
+        margin: EdgeInsets.zero,
+        child: child,
+      );
+    }
+    return GestureDetector(onTap: onTap, child: child);
   }
 }
 
@@ -159,9 +236,10 @@ class AdaptivePlayerMenuTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassTextField(
+    final isTelevision = useTvOSRemoteTextInput(context);
+    final field = GlassTextField(
       controller: controller,
-      focusNode: focusNode,
+      focusNode: isTelevision ? null : focusNode,
       placeholder: placeholder,
       prefixIcon: prefix,
       suffixIcon: suffix,
@@ -172,14 +250,23 @@ class AdaptivePlayerMenuTextField extends StatelessWidget {
       maxLength: maxLength,
       obscureText: obscureText,
       enabled: enabled,
-      readOnly: readOnly,
-      autofocus: autofocus,
+      readOnly: readOnly || isTelevision,
+      autofocus: isTelevision ? false : autofocus,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       inputFormatters: inputFormatters,
       padding: padding,
       useOwnLayer: true,
       quality: GlassQuality.standard,
+    );
+    if (!isTelevision) return field;
+    return TvOSRemoteTextInputControl(
+      focusNode: focusNode,
+      title: placeholder,
+      maxLength: maxLength,
+      obscureText: obscureText,
+      autofocus: autofocus,
+      child: field,
     );
   }
 }

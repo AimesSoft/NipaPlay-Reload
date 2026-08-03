@@ -216,7 +216,7 @@ class PlayerKernelManager {
       // Web平台只支持特定内核
       return ['Video Player'];
     } else if (isTvOS) {
-      return ['Video Player'];
+      return ['Erika'];
     } else if (PlayerFactory.isHarmonyOS) {
       return ['FVP', 'Erika'];
     } else if (Platform.isIOS) {
@@ -242,22 +242,20 @@ class PlayerKernelManager {
 
   /// 获取当前播放器内核
   static Future<String> getCurrentPlayerKernel() async {
-    if (isTvOS) return 'Video Player';
+    if (isTvOS) return 'Erika';
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('player_kernel') ?? 'FVP';
   }
 
   /// 设置播放器内核
   static Future<void> setPlayerKernel(String kernel) async {
+    final resolvedKernel = isTvOS ? 'Erika' : kernel;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'player_kernel',
-      isTvOS ? 'Video Player' : kernel,
-    );
+    await prefs.setString('player_kernel', resolvedKernel);
 
     // 转换为枚举值
     PlayerKernelType kernelType;
-    switch (kernel) {
+    switch (resolvedKernel) {
       case 'FVP':
         kernelType = PlayerKernelType.mdk;
         break;

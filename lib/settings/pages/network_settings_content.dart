@@ -11,6 +11,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
@@ -541,14 +542,17 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
             ),
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            initialValue: inputValue,
-            onChanged: (value) => inputValue = value,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: const InputDecoration(
-              hintText: 'http://127.0.0.1:8000',
+          TvOSRemoteTextInputControl(
+            title: 'HTTP 代理',
+            child: TextFormField(
+              initialValue: inputValue,
+              onChanged: (value) => inputValue = value,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(
+                hintText: 'http://127.0.0.1:8000',
+              ),
             ),
           ),
         ],
@@ -588,19 +592,22 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            enableSuggestions: false,
-            cursorColor: AppAccentColors.current,
-            decoration: InputDecoration(
-              hintText: 'https://example.com',
-              hintStyle: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.38),
+          TvOSRemoteTextInputControl(
+            title: title,
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              enableSuggestions: false,
+              cursorColor: AppAccentColors.current,
+              decoration: InputDecoration(
+                hintText: 'https://example.com',
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurface.withValues(alpha: 0.38),
+                ),
               ),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
-            style: TextStyle(color: colorScheme.onSurface),
           ),
         ],
       ),
@@ -651,21 +658,29 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.multiline,
-            minLines: 2,
-            maxLines: 4,
-            autocorrect: false,
-            enableSuggestions: false,
-            cursorColor: AppAccentColors.current,
-            decoration: InputDecoration(
-              hintText: 'Mozilla/5.0 ...',
-              hintStyle: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.38),
-              ),
+          TvOSRemoteTextInputControl(
+            title: _text(
+              context,
+              '自定义 User-Agent',
+              '自訂 User-Agent',
+              'Custom User-Agent',
             ),
-            style: TextStyle(color: colorScheme.onSurface),
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.multiline,
+              minLines: 2,
+              maxLines: 4,
+              autocorrect: false,
+              enableSuggestions: false,
+              cursorColor: AppAccentColors.current,
+              decoration: InputDecoration(
+                hintText: 'Mozilla/5.0 ...',
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurface.withValues(alpha: 0.38),
+                ),
+              ),
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
           ),
         ],
       ),

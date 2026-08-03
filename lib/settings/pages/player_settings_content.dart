@@ -166,7 +166,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）\niOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu；HarmonyOS 使用 OHNativeWindow、OpenGL ES 和 OHAudio';
+        return 'Erika Rust 播放器（实验性）\niOS/tvOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu；HarmonyOS 使用 OHNativeWindow、OpenGL ES 和 OHAudio';
     }
   }
 
@@ -298,11 +298,14 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final showErikaKernel = PlayerFactory.isErikaKernelSupported &&
-        (PlayerFactory.isHarmonyOS ||
+        (globals.isTvOS ||
+            PlayerFactory.isHarmonyOS ||
             context.watch<LabsSettingsProvider>().enableErikaPlayerKernel);
+    final fallbackKernelType =
+        globals.isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
     final visibleKernelType =
         _selectedKernelType == PlayerKernelType.erika && !showErikaKernel
-            ? PlayerKernelType.mdk
+            ? fallbackKernelType
             : _selectedKernelType;
     // Web 平台现在允许访问此页面，但部分功能受限
     return AdaptiveSettingsPage(
@@ -335,19 +338,20 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-            if (!kIsWeb) ...[
+            if (!kIsWeb && !globals.isTvOS) ...[
               AdaptiveSettingsTile.dropdown(
                 title: "播放器内核",
                 subtitle: "选择播放器使用的核心引擎",
                 icon: Ionicons.play_circle_outline,
                 items: [
-                  DropdownMenuItemData(
-                    title: "MDK",
-                    value: PlayerKernelType.mdk,
-                    isSelected: visibleKernelType == PlayerKernelType.mdk,
-                    description:
-                        _getPlayerKernelDescription(PlayerKernelType.mdk),
-                  ),
+                  if (!globals.isTvOS)
+                    DropdownMenuItemData(
+                      title: "MDK",
+                      value: PlayerKernelType.mdk,
+                      isSelected: visibleKernelType == PlayerKernelType.mdk,
+                      description:
+                          _getPlayerKernelDescription(PlayerKernelType.mdk),
+                    ),
                   if (!PlayerFactory.isHarmonyOS) ...[
                     DropdownMenuItemData(
                       title: "Video Player",
@@ -357,14 +361,15 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                       description: _getPlayerKernelDescription(
                           PlayerKernelType.videoPlayer),
                     ),
-                    DropdownMenuItemData(
-                      title: "Libmpv",
-                      value: PlayerKernelType.mediaKit,
-                      isSelected:
-                          visibleKernelType == PlayerKernelType.mediaKit,
-                      description: _getPlayerKernelDescription(
-                          PlayerKernelType.mediaKit),
-                    ),
+                    if (!globals.isTvOS)
+                      DropdownMenuItemData(
+                        title: "Libmpv",
+                        value: PlayerKernelType.mediaKit,
+                        isSelected:
+                            visibleKernelType == PlayerKernelType.mediaKit,
+                        description: _getPlayerKernelDescription(
+                            PlayerKernelType.mediaKit),
+                      ),
                   ],
                   if (showErikaKernel)
                     DropdownMenuItemData(
@@ -792,33 +797,60 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                 },
               ),
             ],
-            Divider(
-                color: colorScheme.onSurface.withValues(alpha: 0.12),
-                height: 1),
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                return AdaptiveSettingsTile.toggle(
-                  title: 'MKV 章节标记',
-                  subtitle: '在进度条上显示 MKV 自带章节分割线，悬停高亮后点击可跳转章节（仅 libmpv 内核）',
-                  icon: Ionicons.bookmark_outline,
-                  value: videoState.chapterMarkersEnabled,
-                  onChanged: (bool value) async {
-                    await videoState.setChapterMarkersEnabled(value);
-                    if (!context.mounted) return;
-                    BlurSnackBar.show(
-                      context,
-                      value ? '已开启 MKV 章节标记' : '已关闭 MKV 章节标记',
-                    );
-                  },
-                );
-              },
-            ),
-            Divider(
-                color: colorScheme.onSurface.withValues(alpha: 0.12),
-                height: 1),
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                if (visibleKernelType == PlayerKernelType.mdk) {
+            if (visibleKernelType == PlayerKernelType.mediaKit) ...[
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return AdaptiveSettingsTile.toggle(
+                    title: 'MKV 章节标记',
+                    subtitle: '在进度条上显示 MKV 自带章节分割线，悬停高亮后点击可跳转章节（仅 libmpv 内核）',
+                    icon: Ionicons.bookmark_outline,
+                    value: videoState.chapterMarkersEnabled,
+                    onChanged: (bool value) async {
+                      await videoState.setChapterMarkersEnabled(value);
+                      if (!context.mounted) return;
+                      BlurSnackBar.show(
+                        context,
+                        value ? '已开启 MKV 章节标记' : '已关闭 MKV 章节标记',
+                      );
+                    },
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  const int stepSize = 4;
+                  const int minValue = PlayerFactory.minPrecacheBufferSizeMb;
+                  const int maxValue = PlayerFactory.maxPrecacheBufferSizeMb;
+                  final int divisions =
+                      ((maxValue - minValue) / stepSize).round();
+                  return AdaptiveSettingsTile.slider(
+                    title: '播放预缓存大小',
+                    subtitle:
+                        '当前 ${videoState.precacheBufferSizeMb} MB，修改后重新打开视频生效',
+                    icon: Ionicons.cloud_download_outline,
+                    value: videoState.precacheBufferSizeMb.toDouble(),
+                    min: minValue.toDouble(),
+                    max: maxValue.toDouble(),
+                    divisions: divisions,
+                    onChanged: (value) {
+                      videoState.setPrecacheBufferSizeMb(value.round());
+                    },
+                    labelFormatter: (value) => '${value.round()} MB',
+                  );
+                },
+              ),
+            ] else if (visibleKernelType == PlayerKernelType.mdk) ...[
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
                   const int minSeconds = 1;
                   const int maxSeconds = 120;
                   return AdaptiveSettingsTile.slider(
@@ -836,32 +868,9 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     },
                     labelFormatter: (value) => '${value.round()} 秒',
                   );
-                }
-                final bool enableSetting =
-                    visibleKernelType == PlayerKernelType.mediaKit;
-                const int stepSize = 4;
-                const int minValue = PlayerFactory.minPrecacheBufferSizeMb;
-                const int maxValue = PlayerFactory.maxPrecacheBufferSizeMb;
-                final int divisions =
-                    ((maxValue - minValue) / stepSize).round();
-                return AdaptiveSettingsTile.slider(
-                  title: '播放预缓存大小',
-                  subtitle: enableSetting
-                      ? '当前 ${videoState.precacheBufferSizeMb} MB，修改后重新打开视频生效'
-                      : '仅 Libmpv 内核生效',
-                  icon: Ionicons.cloud_download_outline,
-                  enabled: enableSetting,
-                  value: videoState.precacheBufferSizeMb.toDouble(),
-                  min: minValue.toDouble(),
-                  max: maxValue.toDouble(),
-                  divisions: divisions,
-                  onChanged: (value) {
-                    videoState.setPrecacheBufferSizeMb(value.round());
-                  },
-                  labelFormatter: (value) => '${value.round()} MB',
-                );
-              },
-            ),
+                },
+              ),
+            ],
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),

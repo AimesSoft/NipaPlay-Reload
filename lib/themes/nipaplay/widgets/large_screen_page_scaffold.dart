@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class NipaplayLargeScreenPageScaffold extends StatelessWidget {
@@ -393,7 +394,7 @@ class NipaplayLargeScreenEmptyState extends StatelessWidget {
   }
 }
 
-class NipaplayLargeScreenTextInput extends StatelessWidget {
+class NipaplayLargeScreenTextInput extends StatefulWidget {
   const NipaplayLargeScreenTextInput({
     super.key,
     required this.controller,
@@ -412,49 +413,161 @@ class NipaplayLargeScreenTextInput extends StatelessWidget {
   final Widget? suffix;
 
   @override
+  State<NipaplayLargeScreenTextInput> createState() =>
+      _NipaplayLargeScreenTextInputState();
+}
+
+class _NipaplayLargeScreenTextInputState
+    extends State<NipaplayLargeScreenTextInput> {
+  late final FocusNode _controlFocusNode;
+  late final FocusNode _editingFocusNode;
+  bool _isEditing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controlFocusNode = FocusNode(
+      debugLabel: 'nipaplay_large_screen_text_input_control',
+    );
+    _editingFocusNode = FocusNode(
+      debugLabel: 'nipaplay_large_screen_text_input_editing',
+      skipTraversal: true,
+    )..addListener(_handleEditingFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _editingFocusNode.removeListener(_handleEditingFocusChanged);
+    _editingFocusNode.dispose();
+    _controlFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleEditingFocusChanged() {
+    if (_editingFocusNode.hasFocus || !_isEditing || !mounted) return;
+    setState(() {
+      _isEditing = false;
+    });
+  }
+
+  void _beginEditing() {
+    if (_isEditing) {
+      _editingFocusNode.requestFocus();
+      return;
+    }
+    setState(() {
+      _isEditing = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _editingFocusNode.requestFocus();
+    });
+  }
+
+  void _finishEditing({TraversalDirection? moveDirection}) {
+    if (_isEditing) {
+      setState(() {
+        _isEditing = false;
+      });
+    }
+    _controlFocusNode.requestFocus();
+    if (moveDirection == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _controlFocusNode.focusInDirection(moveDirection);
+    });
+  }
+
+  KeyEventResult _handleEditingKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_isEditing || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _finishEditing(moveDirection: TraversalDirection.up);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _finishEditing(moveDirection: TraversalDirection.down);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.gameButtonB) {
+      _finishEditing();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF171923);
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
-      },
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: TextStyle(color: textColor.withValues(alpha: 0.48)),
-          prefixIcon:
-              Icon(prefixIcon, color: textColor.withValues(alpha: 0.58)),
-          suffixIcon: suffix,
-          filled: true,
-          fillColor: isDark
-              ? Colors.white.withValues(alpha: 0.09)
-              : Colors.white.withValues(alpha: 0.82),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: textColor.withValues(alpha: 0.10),
+    return TvOSRemoteTextInputAnchor(
+      title: widget.hintText,
+      child: Focus(
+        onKeyEvent: _handleEditingKeyEvent,
+        child: NipaplayLargeScreenFocusableAction(
+          focusNode: _controlFocusNode,
+          onActivate: _beginEditing,
+          borderRadius: BorderRadius.circular(8),
+          focusScale: 1.01,
+          padding: EdgeInsets.zero,
+          style: const NipaplayLargeScreenFocusableStyle(
+            idleBackgroundDark: Colors.transparent,
+            idleBackgroundLight: Colors.transparent,
+            focusStrokeWidth: 2,
+          ),
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _editingFocusNode,
+            canRequestFocus: _isEditing,
+            readOnly: !_isEditing,
+            showCursor: _isEditing,
+            enableInteractiveSelection: _isEditing,
+            onTap: _beginEditing,
+            onChanged: widget.onChanged,
+            onSubmitted: (value) {
+              widget.onSubmitted?.call(value);
+              _finishEditing();
+            },
+            style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              hintStyle: TextStyle(color: textColor.withValues(alpha: 0.48)),
+              prefixIcon: Icon(
+                widget.prefixIcon,
+                color: textColor.withValues(alpha: 0.58),
+              ),
+              suffixIcon: widget.suffix,
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : Colors.white.withValues(alpha: 0.82),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: textColor.withValues(alpha: 0.10),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: textColor.withValues(alpha: 0.10),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: AppAccentColors.current,
+                  width: 2,
+                ),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: textColor.withValues(alpha: 0.10),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: AppAccentColors.current,
-              width: 2,
-            ),
-          ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );

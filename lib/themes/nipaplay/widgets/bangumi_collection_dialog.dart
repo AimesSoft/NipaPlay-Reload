@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 class BangumiCollectionDialog extends StatefulWidget {
   final String animeTitle;
@@ -537,46 +538,49 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
             SizedBox(width: 12),
             SizedBox(
               width: 72,
-              child: TextField(
-                controller: _episodeController,
-                enabled: !_isSubmitting,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onTapOutside: (_) => _dismissKeyboard(),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _textColor, fontSize: 14),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  filled: true,
-                  fillColor: _panelAltColor,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: _borderColor),
+              child: TvOSRemoteTextInputControl(
+                title: '观看进度',
+                child: TextField(
+                  controller: _episodeController,
+                  enabled: !_isSubmitting,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onTapOutside: (_) => _dismissKeyboard(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _textColor, fontSize: 14),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    filled: true,
+                    fillColor: _panelAltColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _accentColor),
+                    ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: _borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: _accentColor),
-                  ),
+                  onChanged: (value) {
+                    if (value.isEmpty) {
+                      _updateEpisodeStatus(0);
+                      return;
+                    }
+                    final parsed = int.tryParse(value);
+                    if (parsed != null) {
+                      final int sanitized = parsed < 0
+                          ? 0
+                          : (parsed > maxValue ? maxValue : parsed);
+                      _updateEpisodeStatus(sanitized);
+                    }
+                  },
                 ),
-                onChanged: (value) {
-                  if (value.isEmpty) {
-                    _updateEpisodeStatus(0);
-                    return;
-                  }
-                  final parsed = int.tryParse(value);
-                  if (parsed != null) {
-                    final int sanitized = parsed < 0
-                        ? 0
-                        : (parsed > maxValue ? maxValue : parsed);
-                    _updateEpisodeStatus(sanitized);
-                  }
-                },
               ),
             ),
             SizedBox(width: 12),
@@ -654,27 +658,31 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           ),
         ),
         SizedBox(height: 8),
-        TextField(
-          controller: _commentController,
-          minLines: 3,
-          maxLines: 4,
+        TvOSRemoteTextInputControl(
+          title: '短评',
           maxLength: 200,
-          onTapOutside: (_) => _dismissKeyboard(),
-          style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
-          cursorColor: _accentColor,
-          decoration: InputDecoration(
-            counterStyle: TextStyle(color: _mutedTextColor, fontSize: 11),
-            hintText: '写下你的短评（可选）',
-            hintStyle: TextStyle(color: _mutedTextColor, fontSize: 13),
-            filled: true,
-            fillColor: _panelAltColor,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: _borderColor, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: _accentColor, width: 1.2),
+          child: TextField(
+            controller: _commentController,
+            minLines: 3,
+            maxLines: 4,
+            maxLength: 200,
+            onTapOutside: (_) => _dismissKeyboard(),
+            style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
+            cursorColor: _accentColor,
+            decoration: InputDecoration(
+              counterStyle: TextStyle(color: _mutedTextColor, fontSize: 11),
+              hintText: '写下你的短评（可选）',
+              hintStyle: TextStyle(color: _mutedTextColor, fontSize: 13),
+              filled: true,
+              fillColor: _panelAltColor,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _borderColor, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _accentColor, width: 1.2),
+              ),
             ),
           ),
         ),

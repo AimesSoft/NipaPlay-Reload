@@ -6,12 +6,14 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
+import 'package:nipaplay/services/remote_text_input_service.dart';
 import 'package:nipaplay/settings/pages/remote_access_receiver_settings_section.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_remote_text_input_sheet.dart';
 import 'package:provider/provider.dart';
 
 class UnifiedRemoteAccessSettingsContent extends StatefulWidget {
@@ -91,8 +93,19 @@ class _UnifiedRemoteAccessSettingsContentState
 
   Future<void> _scanQrAndConnect() async {
     try {
-      final payload = await RemoteAccessQrCameraScanner.scan(context);
-      if (payload == null) return;
+      final scannedText =
+          await RemoteAccessQrCameraScanner.scanRawText(context);
+      if (scannedText == null) return;
+
+      final remoteInput =
+          RemoteTextInputClientService.tryParseScannedText(scannedText);
+      if (remoteInput != null) {
+        if (!mounted) return;
+        await CupertinoRemoteTextInputSheet.show(context, remoteInput);
+        return;
+      }
+
+      final payload = RemoteAccessQrService.parseScannedText(scannedText);
 
       final candidates = payload.allCandidateBaseUrls;
       RemoteAccessServerInfo? info;
@@ -264,8 +277,8 @@ class _UnifiedRemoteAccessSettingsContentState
             ),
             if (RemoteAccessQrCameraScanner.isSupported)
               AdaptiveSettingsTile<void>.card(
-                title: '拍摄二维码连接',
-                subtitle: '同时连接共享媒体库与遥控器',
+                title: '扫描连接或输入二维码',
+                subtitle: '连接设备，或为 Apple TV 打开远程输入菜单',
                 icon: CupertinoIcons.camera,
                 phoneIcon: CupertinoIcons.camera,
                 onTap: _scanQrAndConnect,

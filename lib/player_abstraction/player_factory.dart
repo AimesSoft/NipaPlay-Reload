@@ -57,7 +57,8 @@ class PlayerFactory {
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
 
   static bool get isErikaKernelSupported {
-    if (kIsWeb || isTvOS) return false;
+    if (kIsWeb) return false;
+    if (isTvOS) return true;
     return defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
@@ -82,18 +83,33 @@ class PlayerFactory {
           prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
       final androidAudioOutput =
           prefs.getString(_androidAudioOutputKey) ?? 'opensles';
-      final erikaAndroidOutputModeIndex =
-          prefs.getInt(_erikaAndroidOutputModeKey);
+      final erikaAndroidOutputModeIndex = prefs.getInt(
+        _erikaAndroidOutputModeKey,
+      );
 
       if (isTvOS) {
-        _cachedKernelType = PlayerKernelType.videoPlayer;
-        debugPrint('[PlayerFactory] tvOS 强制使用 Video Player 内核');
+        _cachedKernelType = PlayerKernelType.erika;
+        await prefs.setInt(
+          _playerKernelTypeKey,
+          PlayerKernelType.erika.index,
+        );
       } else if (kernelTypeIndex != null &&
-          kernelTypeIndex < PlayerKernelType.values.length) {
+          kernelTypeIndex < PlayerKernelType.values.length &&
+          _isKernelSupportedOnCurrentPlatform(
+            PlayerKernelType.values[kernelTypeIndex],
+          )) {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
       } else {
-        _cachedKernelType = PlayerKernelType.mdk;
-        debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
+        _cachedKernelType = _defaultKernelType;
+        debugPrint(
+          '[PlayerFactory] 无有效内核设置，使用默认: '
+          '${_defaultKernelType.name}',
+        );
+      }
+      if (isTvOS) {
+        debugPrint(
+          '[PlayerFactory] tvOS 强制使用 Erika 播放内核',
+        );
       }
       _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
         bufferSizeMb ?? defaultPrecacheBufferSizeMb,
@@ -103,8 +119,9 @@ class PlayerFactory {
         _cachedMacOSNativeVideoEnabled,
       );
       _cachedAndroidAudioOutput = androidAudioOutput;
-      _cachedErikaAndroidOutputMode =
-          _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
+      _cachedErikaAndroidOutputMode = _decodeErikaAndroidOutputMode(
+        erikaAndroidOutputModeIndex,
+      );
       _cachedCustomPlayerUA =
           prefs.getString(SettingsKeys.customPlayerUA) ?? '';
       _cachedHttpProxy =
@@ -114,8 +131,7 @@ class PlayerFactory {
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
-      _cachedKernelType =
-          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
+      _cachedKernelType = _defaultKernelType;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
@@ -132,8 +148,7 @@ class PlayerFactory {
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
-      _cachedKernelType =
-          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
+      _cachedKernelType = _defaultKernelType;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
       _cachedAndroidAudioOutput = 'opensles';
@@ -152,26 +167,32 @@ class PlayerFactory {
             prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
         final androidAudioOutput =
             prefs.getString(_androidAudioOutputKey) ?? 'opensles';
-        final erikaAndroidOutputModeIndex =
-            prefs.getInt(_erikaAndroidOutputModeKey);
-        if (!isTvOS &&
-            kernelTypeIndex != null &&
-            kernelTypeIndex < PlayerKernelType.values.length) {
+        final erikaAndroidOutputModeIndex = prefs.getInt(
+          _erikaAndroidOutputModeKey,
+        );
+        if (kernelTypeIndex != null &&
+            kernelTypeIndex < PlayerKernelType.values.length &&
+            _isKernelSupportedOnCurrentPlatform(
+              PlayerKernelType.values[kernelTypeIndex],
+            )) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
           debugPrint(
-              '[PlayerFactory] 异步更新内核设置: ${_cachedKernelType.toString()}');
+            '[PlayerFactory] 异步更新内核设置: ${_cachedKernelType.toString()}',
+          );
         }
         if (bufferSizeMb != null) {
-          _cachedPrecacheBufferSizeMb =
-              _clampPrecacheBufferSizeMb(bufferSizeMb);
+          _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
+            bufferSizeMb,
+          );
         }
         _cachedMacOSNativeVideoEnabled = macOSNativeVideoEnabled;
         MediaKitPlayerAdapter.setMacOSNativeVideoPreference(
           _cachedMacOSNativeVideoEnabled,
         );
         _cachedAndroidAudioOutput = androidAudioOutput;
-        _cachedErikaAndroidOutputMode =
-            _decodeErikaAndroidOutputMode(erikaAndroidOutputModeIndex);
+        _cachedErikaAndroidOutputMode = _decodeErikaAndroidOutputMode(
+          erikaAndroidOutputModeIndex,
+        );
         _cachedCustomPlayerUA =
             prefs.getString(SettingsKeys.customPlayerUA) ?? '';
         _cachedHttpProxy =
@@ -181,12 +202,11 @@ class PlayerFactory {
 
       debugPrint(
         '[PlayerFactory] 同步设置临时默认值: '
-        '${isTvOS ? "Video Player" : "MDK"}',
+        '${_defaultKernelType.name}',
       );
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
-      _cachedKernelType =
-          isTvOS ? PlayerKernelType.videoPlayer : PlayerKernelType.mdk;
+      _cachedKernelType = _defaultKernelType;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedAndroidAudioOutput = 'opensles';
       _cachedErikaAndroidOutputMode = PlayerErikaAndroidOutputMode.sdr;
@@ -195,12 +215,27 @@ class PlayerFactory {
 
   // 获取当前内核设置
   static PlayerKernelType getKernelType() {
-    if (isTvOS) return PlayerKernelType.videoPlayer;
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    return _cachedKernelType ?? PlayerKernelType.mdk;
+    if (isTvOS) {
+      return PlayerKernelType.erika;
+    }
+    return _cachedKernelType ?? _defaultKernelType;
   }
+
+  static PlayerKernelType get _defaultKernelType =>
+      isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
+
+  static bool _isKernelSupportedOnCurrentPlatform(PlayerKernelType type) {
+    if (kIsWeb) return type == PlayerKernelType.videoPlayer;
+    if (isTvOS) return isKernelSupportedOnTvOS(type);
+    return true;
+  }
+
+  @visibleForTesting
+  static bool isKernelSupportedOnTvOS(PlayerKernelType type) =>
+      type == PlayerKernelType.erika;
 
   /// 获取自定义播放器 User-Agent（空字符串 = 用内核默认 UA）。
   static String getCustomPlayerUA() {
@@ -321,7 +356,8 @@ class PlayerFactory {
       }
     } catch (e) {
       debugPrint(
-          '[PlayerFactory] Failed to save Erika Android output mode: $e');
+        '[PlayerFactory] Failed to save Erika Android output mode: $e',
+      );
     }
   }
 
@@ -344,8 +380,10 @@ class PlayerFactory {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(SettingsKeys.customPlayerUA, resolved);
       _cachedCustomPlayerUA = resolved;
-      debugPrint('[PlayerFactory] 已保存自定义播放器 UA: '
-          '${resolved.isEmpty ? "(空=默认)" : resolved}');
+      debugPrint(
+        '[PlayerFactory] 已保存自定义播放器 UA: '
+        '${resolved.isEmpty ? "(空=默认)" : resolved}',
+      );
     } catch (e) {
       debugPrint('[PlayerFactory] 保存自定义播放器 UA 出错: $e');
     }
@@ -372,16 +410,20 @@ class PlayerFactory {
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
     // 如果是Web平台，强制使用VideoPlayer
-    if (kIsWeb || isTvOS) {
-      debugPrint(
-        '[PlayerFactory] ${isTvOS ? "tvOS" : "Web"} 强制创建 '
-        'Video Player 播放器',
-      );
+    if (kIsWeb) {
+      debugPrint('[PlayerFactory] Web 强制创建 Video Player 播放器');
       return VideoPlayerAdapter();
     }
 
     // 如果没有指定内核类型，从缓存或设置中读取
     kernelType ??= getKernelType();
+    if (!_isKernelSupportedOnCurrentPlatform(kernelType)) {
+      debugPrint(
+        '[PlayerFactory] ${kernelType.name} 不支持当前平台，回退到 '
+        '${_defaultKernelType.name}',
+      );
+      kernelType = _defaultKernelType;
+    }
     switch (kernelType) {
       case PlayerKernelType.mdk:
         debugPrint('[PlayerFactory] 创建 MDK 播放器');
@@ -408,11 +450,12 @@ class PlayerFactory {
 
   // 保存内核设置
   static Future<void> saveKernelType(PlayerKernelType type) async {
-    if (kIsWeb || isTvOS) {
-      debugPrint(
-        '[PlayerFactory] ${isTvOS ? "tvOS" : "Web"} 不支持更改'
-        '播放器内核',
-      );
+    if (kIsWeb) {
+      debugPrint('[PlayerFactory] Web 不支持更改播放器内核');
+      return;
+    }
+    if (!_isKernelSupportedOnCurrentPlatform(type)) {
+      debugPrint('[PlayerFactory] ${type.name} 不支持当前平台，忽略内核切换');
       return;
     }
     try {

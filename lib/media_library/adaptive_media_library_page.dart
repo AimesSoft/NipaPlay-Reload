@@ -47,6 +47,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart'
     as desktop_smb;
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'
     as desktop_webdav;
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 
@@ -232,7 +233,10 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         final sections = applyMediaLibrarySectionOrder(
           buildUnifiedMediaLibrarySections(
             MediaLibraryAvailability(
-              showLocal: !kIsWeb,
+              showLocal: shouldExposeLocalMediaLibrary(
+                isWeb: kIsWeb,
+                isTvOS: globals.isTvOS,
+              ),
               showWebDAVLibrary: watchHistoryProvider.isLoaded &&
                   mediaLibraryHasItemsForSource(
                     watchHistoryProvider.history,

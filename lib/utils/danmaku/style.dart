@@ -23,10 +23,14 @@ enum DanmakuShadowStyle {
 /// 至少保留为细边，1.5 及以上归入粗边。这里的 2 只是档位标识，
 /// Next2/DFM+ 不会再把它当成 2 倍描边宽度直接传给 MSDF shader。
 const double defaultDanmakuOutlineWidthLevel = 2.0;
+const double defaultTvOSErikaDanmakuOutlineWidthLevel = 1.0;
 
-double normalizeDanmakuOutlineWidthLevel(double? value) {
+double normalizeDanmakuOutlineWidthLevel(
+  double? value, {
+  double fallback = defaultDanmakuOutlineWidthLevel,
+}) {
   if (value == null || !value.isFinite) {
-    return defaultDanmakuOutlineWidthLevel;
+    return fallback;
   }
   if (value <= 0.0) {
     return 0.0;

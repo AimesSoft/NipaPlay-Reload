@@ -9,10 +9,14 @@ export 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart' as platform_ui;
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors, Icons, Theme, Wrap;
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
 
 typedef AdaptiveSnackBarType = platform_ui.AdaptiveSnackBarType;
 
@@ -112,6 +116,33 @@ class AdaptiveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      final effectiveOnPressed = enabled ? onPressed : null;
+      final fallbackColor = Theme.of(context).colorScheme.onSurface;
+      final isProminent = style == platform_ui.AdaptiveButtonStyle.filled ||
+          style == platform_ui.AdaptiveButtonStyle.prominentGlass;
+      return Opacity(
+        opacity: effectiveOnPressed == null ? 0.45 : 1,
+        child: NipaplayLargeScreenPlayerMenuActionSurface(
+          onActivate: effectiveOnPressed,
+          selected: isProminent,
+          margin: EdgeInsets.zero,
+          padding: padding ?? _defaultPadding(size),
+          child: IconTheme(
+            data: IconThemeData(color: iconColor ?? fallbackColor, size: 20),
+            child: DefaultTextStyle(
+              style: TextStyle(
+                color: textColor ?? fallbackColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+              child: _buildContent(fallbackColor),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (!_useLiquidGlassFallback(context)) {
       if (sfSymbol != null) {
         return platform_ui.AdaptiveButton.sfSymbol(
@@ -272,6 +303,25 @@ class AdaptiveSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return Opacity(
+        opacity: onChanged == null ? 0.45 : 1,
+        child: NipaplayLargeScreenPlayerMenuActionSurface(
+          onActivate: onChanged == null ? null : () => onChanged!(!value),
+          selected: value,
+          margin: EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          child: Icon(
+            value ? Icons.toggle_on_rounded : Icons.toggle_off_rounded,
+            color: value
+                ? (activeColor ?? CupertinoTheme.of(context).primaryColor)
+                : Colors.white54,
+            size: 32,
+          ),
+        ),
+      );
+    }
+
     if (!_useLiquidGlassFallback(context)) {
       return platform_ui.AdaptiveSwitch(
         value: value,
@@ -325,6 +375,19 @@ class AdaptiveSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenEditableSlider(
+        value: value,
+        min: min,
+        max: max,
+        divisions: divisions,
+        label: label,
+        onChanged: onChanged,
+        onChangeStart: onChangeStart,
+        onChangeEnd: onChangeEnd,
+      );
+    }
+
     if (!_useLiquidGlassFallback(context)) {
       return platform_ui.AdaptiveSlider(
         value: value,
@@ -384,6 +447,25 @@ class AdaptiveSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      Widget control = Wrap(
+        spacing: 8,
+        runSpacing: 2,
+        children: [
+          for (var index = 0; index < labels.length; index++)
+            NipaplayLargeScreenPlayerMenuChip(
+              label: labels[index],
+              selected: index == selectedIndex,
+              onPressed: enabled ? () => onValueChanged(index) : _noop,
+            ),
+        ],
+      );
+      if (!enabled) {
+        control = Opacity(opacity: 0.45, child: IgnorePointer(child: control));
+      }
+      return control;
+    }
+
     if (!_useLiquidGlassFallback(context)) {
       return platform_ui.AdaptiveSegmentedControl(
         labels: labels,

@@ -238,6 +238,12 @@ class RemoteAccessQrCameraScanner {
   }
 
   static Future<RemoteAccessQrPayload?> scan(BuildContext context) async {
+    final scannedText = await scanRawText(context);
+    if (scannedText == null) return null;
+    return RemoteAccessQrService.parseScannedText(scannedText);
+  }
+
+  static Future<String?> scanRawText(BuildContext context) async {
     if (!isSupported) {
       throw UnsupportedError('当前平台不支持相机扫码');
     }
@@ -247,7 +253,7 @@ class RemoteAccessQrCameraScanner {
       CupertinoPageRoute(builder: (_) => const _RemoteAccessQrScannerPage()),
     );
     if (scannedText == null || scannedText.trim().isEmpty) return null;
-    return RemoteAccessQrService.parseScannedText(scannedText);
+    return scannedText.trim();
   }
 }
 

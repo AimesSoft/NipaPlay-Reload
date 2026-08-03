@@ -18,7 +18,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 class PluginSettingsContent extends StatefulWidget {
@@ -68,13 +70,14 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
           children: [
             AdaptiveSettingsSection(
               children: [
-                AdaptiveSettingsTile<void>.card(
-                  title: _importPluginTitle(context),
-                  subtitle: _importPluginHint(context),
-                  icon: Ionicons.cloud_upload_outline,
-                  phoneIcon: cupertino.CupertinoIcons.square_arrow_down,
-                  onTap: () => _importPlugin(context, pluginService),
-                ),
+                if (!globals.isTvOS)
+                  AdaptiveSettingsTile<void>.card(
+                    title: _importPluginTitle(context),
+                    subtitle: _importPluginHint(context),
+                    icon: Ionicons.cloud_upload_outline,
+                    phoneIcon: cupertino.CupertinoIcons.square_arrow_down,
+                    onTap: () => _importPlugin(context, pluginService),
+                  ),
                 AdaptiveSettingsTile<void>.card(
                   title: _pluginMarketTitle(context),
                   subtitle: _pluginMarketSubtitle(context),
@@ -400,13 +403,16 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     return BlurDialog.show<String>(
       context: context,
       title: _githubProxyLabel(context),
-      contentWidget: TextField(
-        controller: controller,
+      contentWidget: TvOSRemoteTextInputControl(
+        title: _githubProxyLabel(context),
         autofocus: true,
-        cursorColor: AppAccentColors.current,
-        decoration: InputDecoration(
-          hintText: _githubProxyHint(context),
-          errorText: _proxyUrlError,
+        child: TextField(
+          controller: controller,
+          cursorColor: AppAccentColors.current,
+          decoration: InputDecoration(
+            hintText: _githubProxyHint(context),
+            errorText: _proxyUrlError,
+          ),
         ),
       ),
       actions: [
@@ -1323,20 +1329,23 @@ class _PluginTextSettingFieldState extends State<_PluginTextSettingField> {
             onChanged: widget.onChanged,
           )
         else
-          TextField(
-            controller: _controller,
-            decoration: InputDecoration(
-              hintText: widget.hintText,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          TvOSRemoteTextInputControl(
+            title: widget.title,
+            child: TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                hintText: widget.hintText,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                isDense: true,
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              isDense: true,
+              onChanged: widget.onChanged,
             ),
-            onChanged: widget.onChanged,
           ),
       ],
     );

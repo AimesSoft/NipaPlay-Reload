@@ -1,476 +1,730 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
+import 'package:nipaplay/player_menu/player_menu_models.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_pane_host.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
-const double kNipaplayLargeScreenPlayerMenuPanelWidth = 430;
+const double kNipaplayLargeScreenPlayerMenuPanelWidth = 960;
 
-class NipaplayLargeScreenPlayerMenuPanel extends StatelessWidget {
+class NipaplayLargeScreenPlayerMenuPanel extends StatefulWidget {
   const NipaplayLargeScreenPlayerMenuPanel({
     super.key,
     required this.isDarkMode,
+    required this.initialFocusNode,
+    required this.onExitPlayback,
+    required this.onSendDanmaku,
     required this.onRequestClose,
   });
 
   final bool isDarkMode;
+  final FocusNode initialFocusNode;
+  final VoidCallback onExitPlayback;
+  final VoidCallback onSendDanmaku;
   final VoidCallback onRequestClose;
 
   @override
+  State<NipaplayLargeScreenPlayerMenuPanel> createState() =>
+      _NipaplayLargeScreenPlayerMenuPanelState();
+}
+
+class _NipaplayLargeScreenPlayerMenuPanelState
+    extends State<NipaplayLargeScreenPlayerMenuPanel> {
+  final FocusNode _panelFocusNode = FocusNode(
+    debugLabel: 'nipaplay_large_screen_player_menu_panel',
+  );
+  final FocusScopeNode _contentFocusScope = FocusScopeNode(
+    debugLabel: 'nipaplay_large_screen_player_menu_content',
+  );
+  final ScrollController _tabScrollController = ScrollController();
+  List<_PlayerMenuTabEntry> _latestEntries = const [];
+  PlayerMenuPaneId? _selectedPaneId;
+  int _focusedTabIndex = 0;
+  bool _isContentFocused = false;
+  FocusNode? _lastContentFocusNode;
+
+  @override
+  void dispose() {
+    _panelFocusNode.dispose();
+    _contentFocusScope.dispose();
+    _tabScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final textColor = isDarkMode ? Colors.white : const Color(0xFF161922);
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-        child: Container(
-          width: kNipaplayLargeScreenPlayerMenuPanelWidth,
-          color: isDarkMode
-              ? Colors.black.withValues(alpha: 0.62)
-              : Colors.white.withValues(alpha: 0.82),
-          padding: const EdgeInsets.fromLTRB(20, 72, 20, 72),
-          child: Consumer<VideoPlayerState>(
-            builder: (context, videoState, _) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+    final textColor =
+        widget.isDarkMode ? Colors.white : const Color(0xFF161922);
+    return Focus(
+      focusNode: _panelFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
+              width: kNipaplayLargeScreenPlayerMenuPanelWidth,
+              color: widget.isDarkMode
+                  ? Colors.black.withValues(alpha: 0.72)
+                  : Colors.white.withValues(alpha: 0.88),
+              child: Consumer<VideoPlayerState>(
+                builder: (context, videoState, _) {
+                  final definitions = PlayerMenuDefinitionBuilder(
+                    context: PlayerMenuContext(
+                      videoState: videoState,
+                      kernelType: PlayerFactory.getKernelType(),
+                    ),
+                  ).build();
+                  final entries = <_PlayerMenuTabEntry>[
+                    const _PlayerMenuTabEntry.actions(),
+                    ...definitions.map(_PlayerMenuTabEntry.definition),
+                  ];
+                  _latestEntries = entries;
+                  _focusedTabIndex = _focusedTabIndex.clamp(
+                    0,
+                    entries.length - 1,
+                  );
+                  final selectedEntry = _resolveSelectedEntry(entries);
+
+                  return Row(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '播放器菜单',
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '倍速、步长、弹幕和字幕',
-                              style: TextStyle(
-                                color: textColor.withValues(alpha: 0.62),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                      _buildTabs(entries, selectedEntry, textColor),
+                      VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color:
+                            widget.isDarkMode ? Colors.white12 : Colors.black12,
                       ),
-                      _LargeScreenPlayerMenuIconButton(
-                        icon: Icons.close_rounded,
-                        label: '关闭',
-                        onPressed: onRequestClose,
+                      Expanded(
+                        child: _buildContent(
+                          videoState,
+                          selectedEntry,
+                          textColor,
+                        ),
                       ),
                     ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabs(
+    List<_PlayerMenuTabEntry> entries,
+    _PlayerMenuTabEntry selectedEntry,
+    Color textColor,
+  ) {
+    return Focus(
+      focusNode: widget.initialFocusNode,
+      descendantsAreFocusable: false,
+      onFocusChange: (focused) {
+        if (focused && _isContentFocused && mounted) {
+          setState(() => _isContentFocused = false);
+        }
+      },
+      child: SizedBox(
+        width: kNipaplayLargeScreenPlayerMenuSidebarWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 62, 16, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '播放器菜单',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        _LargeScreenPlayerMenuSection(
-                          title: '播放',
-                          children: [
-                            _LargeScreenPlayerMenuOptionGrid(
-                              values: const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
-                              labelFor: (value) =>
-                                  '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)}x',
-                              selectedValue: videoState.playbackRate,
-                              onSelected: (value) =>
-                                  videoState.setPlaybackRate(value),
-                            ),
-                            const SizedBox(height: 12),
-                            _LargeScreenPlayerMenuOptionGrid(
-                              values: const [5, 10, 30, 60],
-                              labelFor: (value) => '${value.toInt()}秒步长',
-                              selectedValue: videoState.seekStepSeconds,
-                              onSelected: (value) =>
-                                  videoState.setSeekStepSeconds(value),
-                            ),
-                          ],
-                        ),
-                        _LargeScreenPlayerMenuSection(
-                          title: '弹幕',
-                          children: [
-                            _LargeScreenPlayerMenuSwitchTile(
-                              icon: Icons.chat_bubble_outline_rounded,
-                              title: '显示弹幕',
-                              value: videoState.danmakuVisible,
-                              onPressed: videoState.toggleDanmakuVisible,
-                            ),
-                            _LargeScreenPlayerMenuStepperTile(
-                              icon: Icons.opacity_rounded,
-                              title: '弹幕不透明度',
-                              valueLabel:
-                                  '${(videoState.danmakuOpacity * 100).round()}%',
-                              onDecrease: () => videoState.setDanmakuOpacity(
-                                (videoState.danmakuOpacity - 0.1)
-                                    .clamp(0.1, 1.0)
-                                    .toDouble(),
-                              ),
-                              onIncrease: () => videoState.setDanmakuOpacity(
-                                (videoState.danmakuOpacity + 0.1)
-                                    .clamp(0.1, 1.0)
-                                    .toDouble(),
-                              ),
-                            ),
-                            _LargeScreenPlayerMenuStepperTile(
-                              icon: Icons.format_size_rounded,
-                              title: '弹幕字号',
-                              valueLabel: videoState.danmakuFontSize <= 0
-                                  ? '默认'
-                                  : videoState.danmakuFontSize
-                                      .toStringAsFixed(0),
-                              onDecrease: () => videoState.setDanmakuFontSize(
-                                (videoState.danmakuFontSize <= 0
-                                        ? 24
-                                        : videoState.danmakuFontSize - 2)
-                                    .clamp(12, 72)
-                                    .toDouble(),
-                              ),
-                              onIncrease: () => videoState.setDanmakuFontSize(
-                                (videoState.danmakuFontSize <= 0
-                                        ? 28
-                                        : videoState.danmakuFontSize + 2)
-                                    .clamp(12, 72)
-                                    .toDouble(),
-                              ),
-                            ),
-                          ],
-                        ),
-                        _LargeScreenPlayerMenuSection(
-                          title: '字幕',
-                          children: [
-                            _LargeScreenPlayerMenuStepperTile(
-                              icon: Icons.subtitles_rounded,
-                              title: '字幕缩放',
-                              valueLabel:
-                                  '${(videoState.subtitleScale * 100).round()}%',
-                              onDecrease: () => videoState.setSubtitleScale(
-                                (videoState.subtitleScale - 0.05)
-                                    .clamp(0.5, 2.0)
-                                    .toDouble(),
-                              ),
-                              onIncrease: () => videoState.setSubtitleScale(
-                                (videoState.subtitleScale + 0.05)
-                                    .clamp(0.5, 2.0)
-                                    .toDouble(),
-                              ),
-                            ),
-                            _LargeScreenPlayerMenuStepperTile(
-                              icon: Icons.timer_rounded,
-                              title: '字幕延迟',
-                              valueLabel:
-                                  '${videoState.subtitleDelaySeconds.toStringAsFixed(1)}秒',
-                              onDecrease: () =>
-                                  videoState.setSubtitleDelaySeconds(
-                                videoState.subtitleDelaySeconds - 0.1,
-                              ),
-                              onIncrease: () =>
-                                  videoState.setSubtitleDelaySeconds(
-                                videoState.subtitleDelaySeconds + 0.1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        _LargeScreenPlayerMenuSection(
-                          title: '显示',
-                          children: [
-                            _LargeScreenPlayerMenuSwitchTile(
-                              icon: Icons.fullscreen_rounded,
-                              title: videoState.isFullscreen ? '退出全屏' : '进入全屏',
-                              value: videoState.isFullscreen,
-                              onPressed: () => videoState.toggleFullscreen(),
-                            ),
-                            _LargeScreenPlayerMenuSwitchTile(
-                              icon: Icons.fit_screen_rounded,
-                              title: '窗口适配视频',
-                              value: false,
-                              showSwitch: false,
-                              onPressed: videoState.resizeWindowToVideoSize,
-                            ),
-                          ],
-                        ),
-                      ],
+                  const SizedBox(height: 5),
+                  Text(
+                    '完整设置',
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.58),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuSection extends StatelessWidget {
-  const _LargeScreenPlayerMenuSection({
-    required this.title,
-    required this.children,
-  });
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = Theme.of(context).brightness == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF161922);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: textColor.withValues(alpha: 0.62),
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuOptionGrid extends StatelessWidget {
-  const _LargeScreenPlayerMenuOptionGrid({
-    required this.values,
-    required this.labelFor,
-    required this.selectedValue,
-    required this.onSelected,
-  });
-
-  final List<double> values;
-  final String Function(double value) labelFor;
-  final double selectedValue;
-  final ValueChanged<double> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: values.map((value) {
-        final selected = (selectedValue - value).abs() < 0.01;
-        return _LargeScreenPlayerMenuChip(
-          label: labelFor(value),
-          selected: selected,
-          onPressed: () => onSelected(value),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuChip extends StatelessWidget {
-  const _LargeScreenPlayerMenuChip({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return NipaplayLargeScreenFocusableAction(
-      onActivate: onPressed,
-      borderRadius: BorderRadius.circular(8),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-      style: NipaplayLargeScreenFocusableStyle(
-        idleBackgroundDark: selected
-            ? AppAccentColors.current.withValues(alpha: 0.28)
-            : Colors.white.withValues(alpha: 0.08),
-        idleBackgroundLight: selected
-            ? AppAccentColors.current.withValues(alpha: 0.18)
-            : Colors.white.withValues(alpha: 0.78),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuSwitchTile extends StatelessWidget {
-  const _LargeScreenPlayerMenuSwitchTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.onPressed,
-    this.showSwitch = true,
-  });
-
-  final IconData icon;
-  final String title;
-  final bool value;
-  final VoidCallback onPressed;
-  final bool showSwitch;
-
-  @override
-  Widget build(BuildContext context) {
-    return _LargeScreenPlayerMenuTile(
-      icon: icon,
-      title: title,
-      trailing: showSwitch
-          ? Icon(
-              value ? Icons.toggle_on_rounded : Icons.toggle_off_rounded,
-              color: value ? AppAccentColors.current : Colors.white54,
-              size: 34,
-            )
-          : const Icon(Icons.chevron_right_rounded),
-      onPressed: onPressed,
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuStepperTile extends StatelessWidget {
-  const _LargeScreenPlayerMenuStepperTile({
-    required this.icon,
-    required this.title,
-    required this.valueLabel,
-    required this.onDecrease,
-    required this.onIncrease,
-  });
-
-  final IconData icon;
-  final String title;
-  final String valueLabel;
-  final VoidCallback onDecrease;
-  final VoidCallback onIncrease;
-
-  @override
-  Widget build(BuildContext context) {
-    return _LargeScreenPlayerMenuTile(
-      icon: icon,
-      title: title,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _LargeScreenPlayerMenuIconButton(
-            icon: Icons.remove_rounded,
-            label: '减少',
-            onPressed: onDecrease,
-          ),
-          SizedBox(
-            width: 74,
-            child: Text(
-              valueLabel,
-              maxLines: 1,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
               ),
             ),
-          ),
-          _LargeScreenPlayerMenuIconButton(
-            icon: Icons.add_rounded,
-            label: '增加',
-            onPressed: onIncrease,
-          ),
-        ],
-      ),
-      onPressed: onIncrease,
-    );
-  }
-}
-
-class _LargeScreenPlayerMenuTile extends StatelessWidget {
-  const _LargeScreenPlayerMenuTile({
-    required this.icon,
-    required this.title,
-    required this.trailing,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String title;
-  final Widget trailing;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: NipaplayLargeScreenFocusableAction(
-        onActivate: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        focusScale: 1.015,
-        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-        style: NipaplayLargeScreenFocusableStyle(
-          idleBackgroundDark: Colors.white.withValues(alpha: 0.08),
-          idleBackgroundLight: Colors.white.withValues(alpha: 0.78),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22),
-            const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                ),
+              child: ListView.builder(
+                controller: _tabScrollController,
+                padding: const EdgeInsets.only(bottom: 58),
+                itemExtent: 62,
+                itemCount: entries.length,
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return NipaplayLargeScreenPlayerMenuTab(
+                    icon: entry.icon,
+                    title: entry.title,
+                    category: entry.categoryTitle,
+                    selected: entry.samePaneAs(selectedEntry),
+                    focused: !_isContentFocused && index == _focusedTabIndex,
+                    onTap: () => _selectTab(index),
+                  );
+                },
               ),
             ),
-            const SizedBox(width: 10),
-            trailing,
           ],
         ),
       ),
     );
   }
+
+  Widget _buildContent(
+    VideoPlayerState videoState,
+    _PlayerMenuTabEntry selectedEntry,
+    Color textColor,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 54, 18, 52),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selectedEntry.title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 23,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        selectedEntry.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: 0.58),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '← 返回分类  ·  菜单键关闭',
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: 0.48),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: widget.isDarkMode ? Colors.white12 : Colors.black12,
+          ),
+          Expanded(
+            child: FocusScope(
+              node: _contentFocusScope,
+              canRequestFocus: _isContentFocused,
+              descendantsAreFocusable: _isContentFocused,
+              child: selectedEntry.paneId == null
+                  ? _PlayerMenuActionsPane(
+                      videoState: videoState,
+                      onExitPlayback: widget.onExitPlayback,
+                      onSendDanmaku: widget.onSendDanmaku,
+                      onRequestClose: widget.onRequestClose,
+                    )
+                  : NipaplayLargeScreenPlayerMenuPaneHost(
+                      paneId: selectedEntry.paneId!,
+                      videoState: videoState,
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _PlayerMenuTabEntry _resolveSelectedEntry(
+    List<_PlayerMenuTabEntry> entries,
+  ) {
+    for (final entry in entries) {
+      if (entry.paneId == _selectedPaneId) {
+        return entry;
+      }
+    }
+    return entries.first;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
+    if (command == null) {
+      return KeyEventResult.ignored;
+    }
+    switch (command) {
+      case NipaplayLargeScreenInputCommand.toggleMenu:
+      case NipaplayLargeScreenInputCommand.back:
+        widget.onRequestClose();
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateUp:
+        if (_isContentFocused) {
+          _moveContentVerticalFocus(reverse: true);
+        } else {
+          _moveTabFocus(-1);
+        }
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateDown:
+        if (_isContentFocused) {
+          _moveContentVerticalFocus(reverse: false);
+        } else {
+          _moveTabFocus(1);
+        }
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateLeft:
+        if (_isContentFocused) {
+          _setContentFocused(false);
+        }
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateRight:
+        if (_isContentFocused) {
+          _moveContentFocus(TraversalDirection.right);
+        } else {
+          _setContentFocused(true);
+        }
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.activate:
+        if (_isContentFocused) {
+          _activateContentFocus();
+        } else {
+          _setContentFocused(true);
+        }
+        return KeyEventResult.handled;
+    }
+  }
+
+  void _moveTabFocus(int delta) {
+    if (_latestEntries.isEmpty) return;
+    final next = (_focusedTabIndex + delta).clamp(
+      0,
+      _latestEntries.length - 1,
+    );
+    if (next == _focusedTabIndex) return;
+    setState(() {
+      _focusedTabIndex = next;
+      _selectedPaneId = _latestEntries[next].paneId;
+      _lastContentFocusNode = null;
+    });
+    _revealFocusedTab();
+  }
+
+  void _selectTab(int index) {
+    if (_latestEntries.isEmpty) return;
+    final next = index.clamp(0, _latestEntries.length - 1);
+    setState(() {
+      _focusedTabIndex = next;
+      _selectedPaneId = _latestEntries[next].paneId;
+      _isContentFocused = false;
+      _lastContentFocusNode = null;
+    });
+    widget.initialFocusNode.requestFocus();
+    _revealFocusedTab();
+  }
+
+  void _revealFocusedTab() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_tabScrollController.hasClients) return;
+      const itemExtent = 62.0;
+      final position = _tabScrollController.position;
+      final itemTop = _focusedTabIndex * itemExtent;
+      final itemBottom = itemTop + itemExtent;
+      var target = position.pixels;
+      if (itemTop < position.pixels) {
+        target = itemTop;
+      } else if (itemBottom > position.pixels + position.viewportDimension) {
+        target = itemBottom - position.viewportDimension;
+      }
+      target = target.clamp(position.minScrollExtent, position.maxScrollExtent);
+      if ((target - position.pixels).abs() < 1) return;
+      _tabScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _setContentFocused(bool value) {
+    if (_isContentFocused == value) {
+      if (value) {
+        _requestContentFocusAfterFrame();
+      } else {
+        widget.initialFocusNode.requestFocus();
+      }
+      return;
+    }
+    if (!value) {
+      final primaryFocus = FocusManager.instance.primaryFocus;
+      if (_isFocusInsideContentScope(primaryFocus) &&
+          !identical(primaryFocus, _contentFocusScope)) {
+        _lastContentFocusNode = primaryFocus;
+      }
+    }
+    setState(() => _isContentFocused = value);
+    if (value) {
+      _requestContentFocusAfterFrame();
+    } else {
+      widget.initialFocusNode.requestFocus();
+    }
+  }
+
+  void _requestContentFocusAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isContentFocused) return;
+      if (!_ensureContentFocus()) {
+        _setContentFocused(false);
+      }
+    });
+  }
+
+  bool _ensureContentFocus() {
+    final currentFocus = FocusManager.instance.primaryFocus;
+    if (_isUsableContentFocus(currentFocus)) {
+      currentFocus!.requestFocus();
+      return true;
+    }
+
+    final rememberedFocus = _lastContentFocusNode;
+    if (_isUsableContentFocus(rememberedFocus)) {
+      rememberedFocus!.requestFocus();
+      _ensureFocusedControlVisible();
+      return true;
+    }
+
+    for (final candidate in _contentFocusScope.traversalDescendants) {
+      if (!_isUsableContentFocus(candidate)) continue;
+      candidate.requestFocus();
+      _lastContentFocusNode = candidate;
+      _ensureFocusedControlVisible();
+      return true;
+    }
+
+    // Information and loading panes may temporarily have no actionable
+    // descendants. Keep the region active so one left press still returns to
+    // the tab column and a later right press can pick up newly loaded controls.
+    _contentFocusScope.requestFocus();
+    return true;
+  }
+
+  bool _moveContentFocus(TraversalDirection direction) {
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus) &&
+        !_ensureContentFocus()) {
+      return false;
+    }
+    final fallback = FocusManager.instance.primaryFocus;
+    final moved = fallback == null || identical(fallback, _contentFocusScope)
+        ? _contentFocusScope.focusInDirection(direction)
+        : fallback.focusInDirection(direction);
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      _restoreContentFocus(fallback);
+      return false;
+    }
+    _rememberAndRevealCurrentContentFocus();
+    return moved;
+  }
+
+  bool _moveContentVerticalFocus({required bool reverse}) {
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus) &&
+        !_ensureContentFocus()) {
+      return false;
+    }
+    final fallback = FocusManager.instance.primaryFocus;
+    final focused = fallback == null || identical(fallback, _contentFocusScope)
+        ? null
+        : fallback;
+    final moved = reverse
+        ? (focused?.previousFocus() ?? _contentFocusScope.previousFocus())
+        : (focused?.nextFocus() ?? _contentFocusScope.nextFocus());
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      _restoreContentFocus(fallback);
+      return false;
+    }
+    if (!moved) {
+      _jumpContentScrollBoundary(
+        reverse ? TraversalDirection.up : TraversalDirection.down,
+      );
+    }
+    _rememberAndRevealCurrentContentFocus();
+    return moved;
+  }
+
+  bool _isFocusInsideContentScope(FocusNode? node) {
+    if (node == null) return false;
+    if (identical(node, _contentFocusScope)) return true;
+    return node.ancestors.contains(_contentFocusScope);
+  }
+
+  bool _isUsableContentFocus(FocusNode? node) {
+    return node != null &&
+        node is! FocusScopeNode &&
+        !identical(node, _contentFocusScope) &&
+        _isFocusInsideContentScope(node) &&
+        node.canRequestFocus &&
+        !node.skipTraversal &&
+        node.context != null;
+  }
+
+  void _rememberAndRevealCurrentContentFocus() {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (_isUsableContentFocus(primaryFocus)) {
+      _lastContentFocusNode = primaryFocus;
+    }
+    _ensureFocusedControlVisible();
+  }
+
+  void _ensureFocusedControlVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isContentFocused) return;
+      final focusContext = FocusManager.instance.primaryFocus?.context;
+      if (focusContext == null) return;
+      Scrollable.ensureVisible(
+        focusContext,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    });
+  }
+
+  void _restoreContentFocus(FocusNode? fallback) {
+    if (fallback != null &&
+        _isFocusInsideContentScope(fallback) &&
+        fallback.canRequestFocus &&
+        fallback.context != null) {
+      fallback.requestFocus();
+      return;
+    }
+    _ensureContentFocus();
+  }
+
+  void _jumpContentScrollBoundary(TraversalDirection direction) {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final scrollController =
+        PrimaryScrollController.maybeOf(focusContext ?? context);
+    if (scrollController == null || !scrollController.hasClients) return;
+    final target = direction == TraversalDirection.up
+        ? scrollController.position.minScrollExtent
+        : scrollController.position.maxScrollExtent;
+    scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _activateContentFocus() {
+    final focused = FocusManager.instance.primaryFocus;
+    if (!_isUsableContentFocus(focused)) {
+      _ensureContentFocus();
+      return;
+    }
+    final nodeContext = focused!.context;
+    if (nodeContext == null) return;
+    Actions.maybeInvoke<ActivateIntent>(nodeContext, const ActivateIntent());
+  }
 }
 
-class _LargeScreenPlayerMenuIconButton extends StatelessWidget {
-  const _LargeScreenPlayerMenuIconButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
+class _PlayerMenuActionsPane extends StatelessWidget {
+  const _PlayerMenuActionsPane({
+    required this.videoState,
+    required this.onExitPlayback,
+    required this.onSendDanmaku,
+    required this.onRequestClose,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
+  final VideoPlayerState videoState;
+  final VoidCallback onExitPlayback;
+  final VoidCallback onSendDanmaku;
+  final VoidCallback onRequestClose;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: NipaplayLargeScreenFocusableAction(
-        onActivate: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        focusScale: 1.08,
-        padding: const EdgeInsets.all(8),
-        style: NipaplayLargeScreenFocusableStyle(
-          idleBackgroundDark: Colors.white.withValues(alpha: 0.10),
-          idleBackgroundLight: Colors.white.withValues(alpha: 0.70),
+    return ListView(
+      padding: const EdgeInsets.only(top: 12, bottom: 24),
+      children: [
+        NipaplayLargeScreenPlayerMenuSection(
+          header: const Text('播放操作'),
+          children: [
+            NipaplayLargeScreenPlayerMenuTile(
+              leading: const Icon(Icons.arrow_back_rounded),
+              title: const Text('返回媒体库'),
+              subtitle: const Text('结束当前播放并返回媒体库'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onActivate: onExitPlayback,
+            ),
+            if (videoState.playerTopSendDanmakuButtonVisible)
+              NipaplayLargeScreenPlayerMenuTile(
+                leading: const Icon(Icons.chat_bubble_outline_rounded),
+                title: const Text('发送弹幕'),
+                subtitle: const Text('输入并发送一条弹幕'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onActivate: onSendDanmaku,
+              ),
+            NipaplayLargeScreenPlayerMenuTile(
+              leading: const Icon(Icons.subtitles_rounded),
+              title: const Text('显示弹幕'),
+              subtitle: Text(videoState.danmakuVisible ? '当前已显示' : '当前已关闭'),
+              trailing: FluentSettingsSwitch(
+                value: videoState.danmakuVisible,
+                onChanged: (_) => videoState.toggleDanmakuVisible(),
+              ),
+              onActivate: videoState.toggleDanmakuVisible,
+            ),
+          ],
         ),
-        child: Icon(icon, size: 20),
-      ),
+        NipaplayLargeScreenPlayerMenuSection(
+          header: const Text('菜单'),
+          children: [
+            NipaplayLargeScreenPlayerMenuTile(
+              leading: const Icon(Icons.close_rounded),
+              title: const Text('关闭播放器菜单'),
+              subtitle: const Text('也可以再次按遥控器菜单键'),
+              onActivate: onRequestClose,
+            ),
+          ],
+        ),
+      ],
     );
+  }
+}
+
+class _PlayerMenuTabEntry {
+  const _PlayerMenuTabEntry.actions()
+      : definition = null,
+        paneId = null;
+
+  _PlayerMenuTabEntry.definition(PlayerMenuItemDefinition definition)
+      : definition = definition,
+        paneId = definition.paneId;
+
+  final PlayerMenuItemDefinition? definition;
+  final PlayerMenuPaneId? paneId;
+
+  String get title => definition?.title ?? '常用操作';
+
+  String get categoryTitle =>
+      definition == null ? '播放' : _categoryTitle(definition!.category);
+
+  String get description => definition == null
+      ? '退出播放、发送弹幕和显示开关'
+      : _paneDescription(definition!.paneId);
+
+  IconData get icon =>
+      definition == null ? Icons.tune_rounded : _iconFor(definition!.icon);
+
+  bool samePaneAs(_PlayerMenuTabEntry other) => paneId == other.paneId;
+
+  static String _categoryTitle(PlayerMenuCategory category) {
+    switch (category) {
+      case PlayerMenuCategory.playbackControl:
+        return '播放控制';
+      case PlayerMenuCategory.video:
+        return '视频';
+      case PlayerMenuCategory.audio:
+        return '音频';
+      case PlayerMenuCategory.subtitle:
+        return '字幕';
+      case PlayerMenuCategory.danmaku:
+        return '弹幕';
+      case PlayerMenuCategory.player:
+        return '播放器';
+      case PlayerMenuCategory.streaming:
+        return '串流';
+      case PlayerMenuCategory.info:
+        return '信息';
+    }
+  }
+
+  static String _paneDescription(PlayerMenuPaneId paneId) {
+    switch (paneId) {
+      case PlayerMenuPaneId.subtitleSettings:
+        return '字幕大小、延迟、位置、颜色、字体和样式';
+      case PlayerMenuPaneId.subtitleTracks:
+        return '选择内嵌、外部或远程字幕轨道';
+      case PlayerMenuPaneId.subtitleList:
+        return '浏览字幕内容并跳转到对应时间';
+      case PlayerMenuPaneId.audioTracks:
+        return '选择本地或服务器音频轨道';
+      case PlayerMenuPaneId.danmakuSettings:
+        return '完整弹幕显示、样式、屏蔽和导出设置';
+      case PlayerMenuPaneId.danmakuTracks:
+        return '管理和启用不同来源的弹幕轨道';
+      case PlayerMenuPaneId.danmakuList:
+        return '浏览弹幕内容并跳转到对应时间';
+      case PlayerMenuPaneId.danmakuOffset:
+        return '修正弹幕与视频之间的同步差异';
+      case PlayerMenuPaneId.playbackRate:
+        return '选择预设或输入精确播放速度';
+      case PlayerMenuPaneId.playlist:
+        return '浏览并切换当前播放列表';
+      case PlayerMenuPaneId.jellyfinQuality:
+        return '选择服务器媒体源、转码质量和字幕';
+      case PlayerMenuPaneId.playbackInfo:
+        return '查看当前媒体、弹幕和播放状态';
+      case PlayerMenuPaneId.seekStep:
+        return '设置快进快退、长按倍速和跳过时间';
+    }
+  }
+
+  static IconData _iconFor(PlayerMenuIconToken token) {
+    switch (token) {
+      case PlayerMenuIconToken.subtitleSettings:
+        return Icons.text_fields_rounded;
+      case PlayerMenuIconToken.subtitles:
+        return Icons.subtitles_rounded;
+      case PlayerMenuIconToken.subtitleList:
+        return Icons.format_list_bulleted_rounded;
+      case PlayerMenuIconToken.audioTrack:
+        return Icons.audiotrack_rounded;
+      case PlayerMenuIconToken.danmakuSettings:
+        return Icons.chat_bubble_outline_rounded;
+      case PlayerMenuIconToken.danmakuTracks:
+        return Icons.dynamic_feed_rounded;
+      case PlayerMenuIconToken.danmakuList:
+        return Icons.view_list_rounded;
+      case PlayerMenuIconToken.danmakuOffset:
+        return Icons.timer_rounded;
+      case PlayerMenuIconToken.playbackRate:
+        return Icons.speed_rounded;
+      case PlayerMenuIconToken.playlist:
+        return Icons.playlist_play_rounded;
+      case PlayerMenuIconToken.jellyfinQuality:
+        return Icons.high_quality_rounded;
+      case PlayerMenuIconToken.playbackInfo:
+        return Icons.info_outline_rounded;
+      case PlayerMenuIconToken.seekStep:
+        return Icons.skip_next_rounded;
+    }
   }
 }

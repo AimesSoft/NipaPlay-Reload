@@ -53,9 +53,12 @@ Components**, create an Apple TV simulator, and then use:
 
 tvOS uses indirect focus navigation rather than touch-style pointer input.
 In Simulator, use the arrow keys to move focus, Return to activate, and Escape
-to go back; a trackpad or mouse wheel can also move focus. NipaPlay enables its
-large-screen, focusable layout by default on Apple TV. A saved per-device
-choice still takes precedence after the user explicitly leaves that mode.
+to go back; a trackpad or mouse wheel can also move focus. At the root screen,
+the Siri Remote MENU button and Simulator Escape key toggle NipaPlay's left
+menu instead of leaving the application. In a nested route they retain their
+normal back-navigation behavior. NipaPlay enables its large-screen, focusable
+layout by default on Apple TV. A saved per-device choice still takes precedence
+after the user explicitly leaves that mode.
 
 For a physical Apple TV, select a Development Team for the Runner target in
 `tvos/Runner.xcworkspace`, then build or run against the paired device. The

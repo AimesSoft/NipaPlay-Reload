@@ -64,6 +64,13 @@ class MediaLibraryAvailability {
   final bool showEmby;
 }
 
+bool shouldExposeLocalMediaLibrary({
+  required bool isWeb,
+  required bool isTvOS,
+}) {
+  return !isWeb && !isTvOS;
+}
+
 List<UnifiedMediaLibrarySection> buildUnifiedMediaLibrarySections(
   MediaLibraryAvailability availability,
 ) {

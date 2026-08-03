@@ -1,6 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show AdaptiveButton, AdaptiveButtonStyle, AdaptiveSwitch;
+    show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
@@ -309,10 +309,11 @@ class _CupertinoJellyfinQualityPaneState
                     AdaptivePlayerMenuTile(
                       title: const Text('烧录字幕'),
                       subtitle: const Text('转码时将字幕写入画面'),
-                      trailing: AdaptiveSwitch(
+                      trailing: AdaptivePlayerMenuSwitch(
                         value: _burnIn,
                         onChanged: (value) => setState(() => _burnIn = value),
                       ),
+                      onTap: () => setState(() => _burnIn = !_burnIn),
                     ),
                   ],
                 ),

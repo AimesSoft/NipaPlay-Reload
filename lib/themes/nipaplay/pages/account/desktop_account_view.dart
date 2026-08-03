@@ -2,7 +2,11 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class DesktopAccountView extends StatelessWidget {
   const DesktopAccountView({
@@ -148,8 +152,10 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
         children: [
           _buildStatusCard(context),
           const SizedBox(height: 16),
-          _buildDandanCard(context),
-          const SizedBox(height: 16),
+          if (!globals.isTvOS) ...[
+            _buildDandanCard(context),
+            const SizedBox(height: 16),
+          ],
           _buildTokenCard(context),
           const SizedBox(height: 16),
           _buildSyncCard(),
@@ -284,11 +290,54 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
             BangumiAccountViewModel.tokenDescription,
           ),
           const SizedBox(height: 12),
-          fluent.PasswordBox(
-            controller: data.tokenController,
-            placeholder: BangumiAccountViewModel.tokenPlaceholder,
-            enabled: !data.isLoading,
-          ),
+          if (NipaplayLargeScreenModeScope.isActiveOf(context))
+            AdaptiveMediaTextField(
+              controller: data.tokenController,
+              obscureText: true,
+              remoteInputTitle: BangumiAccountViewModel.tokenTitle,
+              remoteInputFieldId: 'bangumi_access_token',
+              remoteInputRequired: true,
+              cursorColor: AppAccentColors.current,
+              style: TextStyle(
+                color: fluent.FluentTheme.of(context)
+                    .resources
+                    .textFillColorPrimary,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                hintText: BangumiAccountViewModel.tokenPlaceholder,
+                hintStyle: TextStyle(
+                  color: fluent.FluentTheme.of(context)
+                      .resources
+                      .textFillColorSecondary,
+                ),
+                filled: true,
+                fillColor: fluent.FluentTheme.of(context)
+                    .resources
+                    .controlFillColorDefault,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: fluent.FluentTheme.of(context)
+                        .resources
+                        .controlStrokeColorDefault,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: AppAccentColors.current,
+                    width: 2,
+                  ),
+                ),
+              ),
+            )
+          else
+            fluent.PasswordBox(
+              controller: data.tokenController,
+              placeholder: BangumiAccountViewModel.tokenPlaceholder,
+              enabled: !data.isLoading,
+            ),
           const SizedBox(height: 16),
           Row(
             children: [

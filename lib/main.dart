@@ -23,6 +23,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_actions.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'themes/nipaplay/pages/settings/settings_entries.dart';
@@ -1825,9 +1826,11 @@ Widget _buildGlobalAppOverlay(
   Widget child, {
   required bool isDragging,
 }) {
+  final appChild =
+      globals.isTvOS ? TvOSRemoteTextInputScope(child: child) : child;
   return Stack(
     children: [
-      child,
+      appChild,
       const _SystemResourceOverlay(),
       if (isDragging) const DragDropOverlay(),
     ],

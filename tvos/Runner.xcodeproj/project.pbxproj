@@ -13,6 +13,10 @@
 		97C1470A1CF9000082B4168D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000082B4168D /* Main.storyboard */; };
 		97C1470B1CF9000082B4168D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000082B4168E /* LaunchScreen.storyboard */; };
 		97C1470F1CF9000082B4168C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000082B4168C /* Assets.xcassets */; };
+		A11000000000000000000001 /* TVOSReleaseSimulatorShaderOverride.m in Sources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000002 /* TVOSReleaseSimulatorShaderOverride.m */; };
+		A11000000000000000000003 /* impeller_entity_simulator.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000006 /* impeller_entity_simulator.metallib */; };
+		A11000000000000000000004 /* impeller_modern_simulator.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000007 /* impeller_modern_simulator.metallib */; };
+		A11000000000000000000005 /* impeller_framebuffer_blend_simulator.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000008 /* impeller_framebuffer_blend_simulator.metallib */; };
 		AAF20000000000000000F00D /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = AAF30000000000000000F00D /* FlutterGeneratedPluginSwiftPackage */; };
 /* End PBXBuildFile section */
 
@@ -32,6 +36,10 @@
 		97C146FE1CF9000082B4168C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		97C146FF1CF9000082B4168D /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Main.storyboard; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FF1CF9000082B4168E /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A11000000000000000000002 /* TVOSReleaseSimulatorShaderOverride.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TVOSReleaseSimulatorShaderOverride.m; sourceTree = "<group>"; };
+		A11000000000000000000006 /* impeller_entity_simulator.metallib */ = {isa = PBXFileReference; lastKnownFileType = file; path = impeller_entity_simulator.metallib; sourceTree = "<group>"; };
+		A11000000000000000000007 /* impeller_modern_simulator.metallib */ = {isa = PBXFileReference; lastKnownFileType = file; path = impeller_modern_simulator.metallib; sourceTree = "<group>"; };
+		A11000000000000000000008 /* impeller_framebuffer_blend_simulator.metallib */ = {isa = PBXFileReference; lastKnownFileType = file; path = impeller_framebuffer_blend_simulator.metallib; sourceTree = "<group>"; };
 		AAA000000000000000000003 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		BDF72F073BB03CABBB7A2BD0 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -83,6 +91,10 @@
 			isa = PBXGroup;
 			children = (
 				97C146FA1CF9000082B4168C /* AppDelegate.swift */,
+				A11000000000000000000002 /* TVOSReleaseSimulatorShaderOverride.m */,
+				A11000000000000000000006 /* impeller_entity_simulator.metallib */,
+				A11000000000000000000007 /* impeller_modern_simulator.metallib */,
+				A11000000000000000000008 /* impeller_framebuffer_blend_simulator.metallib */,
 				AAA000000000000000000003 /* Runner-Bridging-Header.h */,
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
@@ -126,6 +138,7 @@
 				97C146EC1CF9000082B4168C /* Resources */,
 				AAF10000000000000000F00D /* Embed App.framework */,
 				9740EEB31CF901A200538489 /* Copy flutter_assets */,
+				A12000000000000000000001 /* Use AOT Flutter engine on Release simulator */,
 				AAF50000000000000000F00D /* Sign Flutter.framework */,
 				673C87D86BD3FB0C35538A8B /* [CP] Embed Pods Frameworks */,
 			);
@@ -183,6 +196,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				97C1470F1CF9000082B4168C /* Assets.xcassets in Resources */,
+				A11000000000000000000003 /* impeller_entity_simulator.metallib in Resources */,
+				A11000000000000000000004 /* impeller_modern_simulator.metallib in Resources */,
+				A11000000000000000000005 /* impeller_framebuffer_blend_simulator.metallib in Resources */,
 				97C1470A1CF9000082B4168D /* Main.storyboard in Resources */,
 				97C1470B1CF9000082B4168D /* LaunchScreen.storyboard in Resources */,
 			);
@@ -279,6 +295,21 @@
 			shellPath = /bin/sh;
 			shellScript = "#!/bin/sh\n# Code-sign the Flutter engine embedded via the FlutterFramework Swift package.\n# Xcode auto-embeds the dynamic Flutter.framework that is pulled in transitively\n# through the static FlutterGeneratedPluginSwiftPackage umbrella, but it does NOT\n# code-sign it (Flutter.framework is not an explicit \"Embed & Sign\" product on this\n# target). The engine artifact ships ORIGIN-signed by flutter-tvos — that origin\n# signature is what satisfies App Store review's ITMS-91065 commonly-used-SDK\n# check (an app-identity re-sign does not). Re-sign the embedded copy here with\n# the app's own identity, the same way CocoaPods' embed script did, so device\n# installs don't carry nested code signed by a foreign team. Runs for build,\n# run, AND archive.\n#\n# Order matters: check whether signing is needed at all FIRST, so the simulator\n# and other no-signing builds skip silently. On a build that DOES sign, a\n# missing Flutter.framework is not \"nothing to do\" — it means the SPM embed did\n# not happen and the app would ship without the engine (or with one signed by a\n# foreign team), which only surfaces at device install or review. Fail loudly.\n# Use CODESIGNING_FOLDER_PATH (the bundle being signed), not ${PRODUCT_NAME}.app,\n# which is wrong whenever the product name is overridden.\nFRAMEWORK=\"${CODESIGNING_FOLDER_PATH}/Frameworks/Flutter.framework\"\nif [ \"${CODE_SIGNING_REQUIRED}\" = \"NO\" ] || [ -z \"${EXPANDED_CODE_SIGN_IDENTITY}\" ]; then\n  echo \"Skipping Flutter.framework signing (code signing not required for this build).\"\nelif [ ! -d \"${FRAMEWORK}\" ]; then\n  echo \"error: Flutter.framework was not embedded at ${FRAMEWORK}. Regenerate the tvOS project (flutter-tvos create .).\"\n  exit 1\nelse\n  echo \"Codesigning Flutter.framework with ${EXPANDED_CODE_SIGN_IDENTITY}...\"\n  codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none --generate-entitlement-der \"${FRAMEWORK}\"\nfi\n";
 		};
+		A12000000000000000000001 /* Use AOT Flutter engine on Release simulator */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Use AOT Flutter engine on Release simulator";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/sh\n# flutter-tvos currently ships only a Debug engine for the simulator. A Release\n# Dart snapshot therefore has to use the arm64 AOT engine with its Mach-O\n# platform changed to TVOSSIMULATOR. The simulator-only shader override in\n# Runner supplies matching Metal libraries. Device builds are untouched.\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${PLATFORM_NAME}\" != \"appletvsimulator\" ]; then\n  exit 0\nfi\nENGINE_ARTIFACT_ROOT=\"$(dirname \"${FLUTTER_ROOT}\")/engine_artifacts\"\nSOURCE_ENGINE=\"${ENGINE_ARTIFACT_ROOT}/tvos_release_arm64/Flutter.framework/Flutter\"\nDESTINATION_FRAMEWORK=\"${CODESIGNING_FOLDER_PATH}/Frameworks/Flutter.framework\"\nDESTINATION_ENGINE=\"${DESTINATION_FRAMEWORK}/Flutter\"\nPATCHED_ENGINE=\"${DERIVED_FILE_DIR}/Flutter.release-appletvsimulator\"\nif [ ! -f \"${SOURCE_ENGINE}\" ] || [ ! -d \"${DESTINATION_FRAMEWORK}\" ]; then\n  echo \"error: Missing Flutter tvOS Release engine artifact or embedded framework.\" >&2\n  exit 1\nfi\nxcrun vtool -set-build-version 8 \"${TVOS_DEPLOYMENT_TARGET}\" \"${SDK_VERSION}\" -replace -output \"${PATCHED_ENGINE}\" \"${SOURCE_ENGINE}\"\ninstall -m 0755 \"${PATCHED_ENGINE}\" \"${DESTINATION_ENGINE}\"\ncodesign --force --sign - --timestamp=none \"${DESTINATION_FRAMEWORK}\"\necho \"Installed AOT Flutter engine for the tvOS Release simulator.\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -286,6 +317,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A11000000000000000000001 /* TVOSReleaseSimulatorShaderOverride.m in Sources */,
 				97C146FB1CF9000082B4168C /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
