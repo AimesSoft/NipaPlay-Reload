@@ -5,6 +5,7 @@ import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
@@ -24,27 +25,35 @@ class DesktopAccountView extends StatelessWidget {
         fluent.FluentTheme.of(context).resources.dividerStrokeColorDefault;
     return fluent.ScaffoldPage(
       padding: EdgeInsets.zero,
-      content: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _DesktopDandanplayAccountSection(
-                data: data.dandanplay,
-                userActivity: userActivity,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const NipaplayLargeScreenPageTopSpacer(),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _DesktopDandanplayAccountSection(
+                      data: data.dandanplay,
+                      userActivity: userActivity,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    color: dividerColor,
+                  ),
+                  Expanded(
+                    child: _DesktopBangumiAccountSection(data: data.bangumi),
+                  ),
+                ],
               ),
             ),
-            Container(
-              width: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              color: dividerColor,
-            ),
-            Expanded(
-              child: _DesktopBangumiAccountSection(data: data.bangumi),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
