@@ -45,31 +45,41 @@ void main() {
   });
 
   group('resolvePageActionsTrailingOffset', () {
-    test('moves the native iOS 26 toolbar sixteen points inward', () {
+    test('moves the iOS 27 toolbar sixteen points inward', () {
       expect(
         resolvePageActionsTrailingOffset(
           viewPaddingRight: 0,
-          usesNativeIOS26Toolbar: true,
+          iosMajorVersion: 27,
         ),
         28,
       );
     });
 
-    test('preserves the safe area while moving the native toolbar inward', () {
+    test('preserves the safe area while moving the iOS 27 toolbar inward', () {
       expect(
         resolvePageActionsTrailingOffset(
           viewPaddingRight: 6,
-          usesNativeIOS26Toolbar: true,
+          iosMajorVersion: 27,
         ),
         34,
       );
     });
 
-    test('keeps the fallback toolbar at its original offset', () {
+    test('keeps the iOS 26 toolbar at its original offset', () {
       expect(
         resolvePageActionsTrailingOffset(
           viewPaddingRight: 6,
-          usesNativeIOS26Toolbar: false,
+          iosMajorVersion: 26,
+        ),
+        18,
+      );
+    });
+
+    test('does not apply the workaround to versions after iOS 27', () {
+      expect(
+        resolvePageActionsTrailingOffset(
+          viewPaddingRight: 6,
+          iosMajorVersion: 28,
         ),
         18,
       );
