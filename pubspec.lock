@@ -298,8 +298,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/erika_flutter"
-      ref: "29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b"
-      resolved-ref: "29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b"
+      ref: "v0.1.4"
+      resolved-ref: "63b2b0bf26f51d0bbec62177ed820f6bd2a7baac"
       url: "https://github.com/AimesSoft/Erika.git"
     source: git
     version: "0.1.4"

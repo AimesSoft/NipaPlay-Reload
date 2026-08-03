@@ -13,4 +13,8 @@ if [[ ! -x "$flutter_tvos_bin" ]]; then
   exit 1
 fi
 
+"$flutter_tvos_root/flutter/bin/dart" \
+  run "$project_root/tool/configure_flutter_dependencies.dart" tvos \
+  >/dev/null
+
 exec "$flutter_tvos_bin" "$@"

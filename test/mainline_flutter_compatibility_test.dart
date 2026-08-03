@@ -14,6 +14,14 @@ void main() {
     expect(File('.fvmrc').readAsStringSync(), contains('3.44.6'));
     expect(File('pubspec_overrides.ohos.yaml').existsSync(), isTrue);
     expect(File('pubspec_overrides.linux.yaml').existsSync(), isTrue);
+    expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
+    expect(pubspec, contains('package_info_plus: ^10.2.1'));
+    expect(pubspec, contains('wakelock_plus: ^1.7.0'));
+    expect(pubspec, contains('ref: v0.1.4'));
+    expect(
+      pubspec,
+      isNot(contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b')),
+    );
     expect(
       File('.flutter-version-linux').readAsStringSync().trim(),
       '3.47.0-0.3.pre',
@@ -57,10 +65,34 @@ void main() {
     expect(linuxKeys, containsAll(['desktop_multi_window', 'fvp']));
   });
 
+  test('tvOS mode isolates only its SDK-specific Erika revision', () {
+    final sharedKeys = _dependencyOverrideKeys(
+      File('pubspec.yaml').readAsStringSync(),
+    );
+    final tvOSOverrides = File(
+      'pubspec_overrides.tvos.yaml',
+    ).readAsStringSync();
+    final tvOSKeys = _dependencyOverrideKeys(tvOSOverrides);
+    final wrapper = File('tool/flutter_tvos.sh').readAsStringSync();
+    final workflow = File(
+      '.github/workflows/build-tvos.yml',
+    ).readAsStringSync();
+
+    expect(tvOSKeys, containsAll(sharedKeys));
+    expect(tvOSOverrides, isNot(contains('package_info_plus:')));
+    expect(tvOSOverrides, isNot(contains('wakelock_plus:')));
+    expect(
+      tvOSOverrides,
+      contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b'),
+    );
+    expect(wrapper, contains('configure_flutter_dependencies.dart" tvos'));
+    expect(workflow, contains('configure_flutter_dependencies.dart tvos'));
+  });
+
   test('desktop multi-window downgrade is isolated to HarmonyOS mode', () {
     final sharedPubspec = File('pubspec.yaml').readAsStringSync();
-    final harmonyOverrides = File('pubspec_overrides.ohos.yaml')
-        .readAsStringSync();
+    final harmonyOverrides =
+        File('pubspec_overrides.ohos.yaml').readAsStringSync();
     final mainlineFacade = File(
       'packages/desktop_multi_window/lib/desktop_multi_window.dart',
     ).readAsStringSync();
@@ -84,8 +116,8 @@ void main() {
   });
 
   test('Linux build selects its dedicated Flutter and dependency profile', () {
-    final workflow = File('.github/workflows/build-linux.yml')
-        .readAsStringSync();
+    final workflow =
+        File('.github/workflows/build-linux.yml').readAsStringSync();
     final containerRunner = File('containerbuild/run.sh').readAsStringSync();
 
     expect(workflow, contains('.flutter-version-linux'));
@@ -141,8 +173,8 @@ void main() {
   });
 
   test('HarmonyOS CI builds and signs without committed credentials', () {
-    final workflow = File('.github/workflows/build-ohos.yml')
-        .readAsStringSync();
+    final workflow =
+        File('.github/workflows/build-ohos.yml').readAsStringSync();
 
     expect(workflow, contains('workflow_dispatch:'));
     expect(workflow, contains('workflow_call:'));

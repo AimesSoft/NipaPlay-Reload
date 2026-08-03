@@ -18,6 +18,7 @@ on:
       - 'packages/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'pubspec_overrides.tvos.yaml'
       - 'third_party/**'
       - 'tool/**'
       - 'tvos/**'
@@ -62,7 +63,7 @@ jobs:
             ${{ runner.temp }}/flutter-tvos/engine_artifacts
             ${{ runner.temp }}/flutter-tvos/flutter/bin/cache
             ~/.pub-cache
-          key: tvos-${{ runner.os }}-${{ steps.project.outputs.flutter-tvos }}-${{ hashFiles('pubspec.lock') }}-v1
+          key: tvos-${{ runner.os }}-${{ steps.project.outputs.flutter-tvos }}-${{ hashFiles('pubspec.lock', 'pubspec_overrides.tvos.yaml') }}-v1
           restore-keys: |
             tvos-${{ runner.os }}-${{ steps.project.outputs.flutter-tvos }}-
 
@@ -92,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           "$FLUTTER_TVOS_ROOT/flutter/bin/dart" \
-            run tool/configure_flutter_dependencies.dart mainline
+            run tool/configure_flutter_dependencies.dart tvos
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
 
       - name: Build unsigned tvOS simulator app
