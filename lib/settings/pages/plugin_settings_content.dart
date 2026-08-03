@@ -70,7 +70,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
           children: [
             AdaptiveSettingsSection(
               children: [
-                if (!globals.isTvOS)
+                if (!globals.isTelevision)
                   AdaptiveSettingsTile<void>.card(
                     title: _importPluginTitle(context),
                     subtitle: _importPluginHint(context),

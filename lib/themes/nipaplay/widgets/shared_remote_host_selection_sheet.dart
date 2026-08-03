@@ -251,7 +251,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
           label: '扫描局域网',
           onPressed: () => _showLanScanDialog(context, provider),
         ),
-        if (!globals.isTvOS)
+        if (!globals.isTelevision)
           SharedRemoteHostSelectionAction(
             kind: SharedRemoteHostSelectionActionKind.scanQr,
             label: '扫码连接',

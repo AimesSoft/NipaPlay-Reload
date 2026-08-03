@@ -87,9 +87,9 @@ const mediaSourceOptions = <MediaSourceOption>[
 ];
 
 List<MediaSourceOption> availableMediaSourceOptions({
-  required bool isTvOS,
+  required bool isTelevision,
 }) {
-  if (!isTvOS) {
+  if (!isTelevision) {
     return mediaSourceOptions;
   }
   return mediaSourceOptions

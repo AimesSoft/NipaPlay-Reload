@@ -73,7 +73,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   int get _menuItemCount {
     final int actionCount = [
-      globals.isTvOS ? null : widget.onToggleLargeScreen,
+      globals.isTelevision ? null : widget.onToggleLargeScreen,
       widget.onToggleThemeFromOrigin,
       widget.onOpenSettings,
     ].where((callback) => callback != null).length;
@@ -718,7 +718,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 },
                 onTabActivated: _closeTabPanel,
                 onToggleLargeScreen:
-                    globals.isTvOS ? null : widget.onToggleLargeScreen,
+                    globals.isTelevision ? null : widget.onToggleLargeScreen,
                 onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
                 onOpenSettings: _toggleSettingsPanel,
               ),
@@ -830,7 +830,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
                   contextKey: _contextActionKey,
                   contextIcon: Icons.settings_rounded,
                   contextLabel: '设置',
-                  onOpenContext: globals.isTvOS || usePlayerContextPanel
+                  onOpenContext: globals.isTelevision || usePlayerContextPanel
                       ? null
                       : () => _toggleContextPanel(usePlayerMenu: false),
                 ),
@@ -841,7 +841,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       ),
     );
     return NipaplayTvOSPopRouteGuard(
-      enabled: globals.isTvOS,
+      enabled: globals.isTelevision,
       onRootPopRoute: _handleTvOSRootPopRoute,
       child: content,
     );

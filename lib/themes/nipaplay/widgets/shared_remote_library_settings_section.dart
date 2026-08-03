@@ -248,7 +248,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       label: '新增客户端',
     );
 
-    if (globals.isTvOS || !RemoteAccessQrCameraScanner.isSupported) {
+    if (globals.isTelevision || !RemoteAccessQrCameraScanner.isSupported) {
       return SizedBox(width: double.infinity, child: addButton);
     }
 

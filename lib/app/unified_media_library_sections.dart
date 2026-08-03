@@ -66,9 +66,9 @@ class MediaLibraryAvailability {
 
 bool shouldExposeLocalMediaLibrary({
   required bool isWeb,
-  required bool isTvOS,
+  required bool isTelevision,
 }) {
-  return !isWeb && !isTvOS;
+  return !isWeb && !isTelevision;
 }
 
 List<UnifiedMediaLibrarySection> buildUnifiedMediaLibrarySections(

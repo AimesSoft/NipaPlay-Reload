@@ -20,15 +20,15 @@ typedef TvOSRemoteInputRequestHandler = Future<void> Function(
 
 @visibleForTesting
 bool resolveTvOSRemoteTextInputEnabled({
-  required bool platformIsTvOS,
+  required bool platformIsTelevision,
   required AppDisplaySurface surface,
 }) {
-  return platformIsTvOS || surface == AppDisplaySurface.television;
+  return platformIsTelevision || surface == AppDisplaySurface.television;
 }
 
 bool useTvOSRemoteTextInput(BuildContext context) {
   return resolveTvOSRemoteTextInputEnabled(
-    platformIsTvOS: globals.isTvOS,
+    platformIsTelevision: globals.isTelevision,
     surface: AppDisplaySurfaceScope.of(context),
   );
 }

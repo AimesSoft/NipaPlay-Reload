@@ -5,21 +5,21 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 
 void main() {
-  test('tvOS exposes Erika as its only player kernel', () {
+  test('televisions expose Erika as their only player kernel', () {
     expect(
-      PlayerFactory.isKernelSupportedOnTvOS(PlayerKernelType.videoPlayer),
+      PlayerFactory.isKernelSupportedOnTelevision(PlayerKernelType.videoPlayer),
       isFalse,
     );
     expect(
-      PlayerFactory.isKernelSupportedOnTvOS(PlayerKernelType.erika),
+      PlayerFactory.isKernelSupportedOnTelevision(PlayerKernelType.erika),
       isTrue,
     );
     expect(
-      PlayerFactory.isKernelSupportedOnTvOS(PlayerKernelType.mdk),
+      PlayerFactory.isKernelSupportedOnTelevision(PlayerKernelType.mdk),
       isFalse,
     );
     expect(
-      PlayerFactory.isKernelSupportedOnTvOS(PlayerKernelType.mediaKit),
+      PlayerFactory.isKernelSupportedOnTelevision(PlayerKernelType.mediaKit),
       isFalse,
     );
   });
@@ -48,16 +48,16 @@ void main() {
 
     expect(
       labs,
-      contains('PlayerFactory.isErikaKernelSupported && !isTvOS'),
+      contains('PlayerFactory.isErikaKernelSupported &&'),
     );
-    expect(player, contains('if (!kIsWeb && !globals.isTvOS)'));
+    expect(player, contains('if (!kIsWeb && !globals.isTelevision)'));
     expect(
       danmaku,
-      contains('final isErikaPlayerKernel = globals.isTvOS ||'),
+      contains('final isErikaPlayerKernel = globals.isTelevision ||'),
     );
     expect(
       danmaku,
-      contains('final showNextPlusPlusToggle = !globals.isTvOS &&'),
+      contains('final showNextPlusPlusToggle = !globals.isTelevision &&'),
     );
   });
 
@@ -76,7 +76,8 @@ void main() {
     expect(monitor, contains('_instance._updatePlayerKernelType();'));
     expect(monitor, contains("_instance._activeDecoder = 'Erika（等待媒体）';"));
 
-    final tvOSBranchStart = monitor.indexOf('    } else {\n      // tvOS');
+    final tvOSBranchStart =
+        monitor.indexOf('    } else {\n      // Television');
     final tvOSBranchEnd = monitor.indexOf('\n    }\n  }', tvOSBranchStart);
     expect(tvOSBranchStart, greaterThanOrEqualTo(0));
     expect(tvOSBranchEnd, greaterThan(tvOSBranchStart));
@@ -94,16 +95,21 @@ void main() {
     expect(
         entries,
         contains('contentType: UnifiedSettingContentType.storage,'
-            '\n      visible: (context, surface) => !globals.isTvOS,'));
+            '\n      visible: (context, surface) => !globals.isTelevision,'));
     expect(
       entries,
       contains('contentType: UnifiedSettingContentType.externalPlayer,'
-          '\n      visible: (context, surface) => !globals.isTvOS,'),
+          '\n      visible: (context, surface) => !globals.isTelevision,'),
     );
-    expect(entries, contains('!globals.isPhone &&\n          !globals.isTvOS'));
     expect(
       entries,
-      contains('visible: (context, surface) => !kIsWeb && !globals.isTvOS'),
+      contains('!globals.isPhone &&\n          !globals.isTelevision'),
+    );
+    expect(
+      entries,
+      contains(
+        'visible: (context, surface) => !kIsWeb && !globals.isTelevision',
+      ),
     );
   });
 }

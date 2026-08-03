@@ -46,6 +46,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const double uiScaleStep = 0.05;
   static const double defaultUiScale = 1.0;
   static const double defaultTabletUiScale = 1.2;
+  static const double defaultTelevisionUiScale = 1.2;
 
   late AnimeCardAction _animeCardAction;
   late bool _showDanmakuDensityChart;
@@ -102,6 +103,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     if (kIsWeb) {
       return defaultUiScale;
     }
+    if (globals.isTelevision) {
+      return defaultTelevisionUiScale;
+    }
     return globals.isTablet ? defaultTabletUiScale : defaultUiScale;
   }
 
@@ -116,7 +120,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_widgetBlurEffectKey, false);
-      _showDanmakuDensityChart = prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
+      _showDanmakuDensityChart =
+          prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       _diffuseLowResolutionPosters =
           prefs.getBool(_diffuseLowResolutionPostersKey) ?? true;

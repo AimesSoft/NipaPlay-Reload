@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
-import 'package:nipaplay/utils/platform_identity.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'dart:async'; // 导入dart:async库
 
 // Define available player types if you plan to support more than one.
@@ -58,7 +58,7 @@ class PlayerFactory {
 
   static bool get isErikaKernelSupported {
     if (kIsWeb) return false;
-    if (isTvOS) return true;
+    if (globals.isTelevision) return true;
     return defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
@@ -87,7 +87,7 @@ class PlayerFactory {
         _erikaAndroidOutputModeKey,
       );
 
-      if (isTvOS) {
+      if (globals.isTelevision) {
         _cachedKernelType = PlayerKernelType.erika;
         await prefs.setInt(
           _playerKernelTypeKey,
@@ -106,9 +106,9 @@ class PlayerFactory {
           '${_defaultKernelType.name}',
         );
       }
-      if (isTvOS) {
+      if (globals.isTelevision) {
         debugPrint(
-          '[PlayerFactory] tvOS 强制使用 Erika 播放内核',
+          '[PlayerFactory] 电视设备强制使用 Erika 播放内核',
         );
       }
       _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
@@ -218,23 +218,23 @@ class PlayerFactory {
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    if (isTvOS) {
+    if (globals.isTelevision) {
       return PlayerKernelType.erika;
     }
     return _cachedKernelType ?? _defaultKernelType;
   }
 
   static PlayerKernelType get _defaultKernelType =>
-      isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
+      globals.isTelevision ? PlayerKernelType.erika : PlayerKernelType.mdk;
 
   static bool _isKernelSupportedOnCurrentPlatform(PlayerKernelType type) {
     if (kIsWeb) return type == PlayerKernelType.videoPlayer;
-    if (isTvOS) return isKernelSupportedOnTvOS(type);
+    if (globals.isTelevision) return isKernelSupportedOnTelevision(type);
     return true;
   }
 
   @visibleForTesting
-  static bool isKernelSupportedOnTvOS(PlayerKernelType type) =>
+  static bool isKernelSupportedOnTelevision(PlayerKernelType type) =>
       type == PlayerKernelType.erika;
 
   /// 获取自定义播放器 User-Agent（空字符串 = 用内核默认 UA）。

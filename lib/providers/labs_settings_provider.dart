@@ -12,10 +12,10 @@ class LabsSettingsProvider extends ChangeNotifier {
   bool _enableErikaPlayerKernel = false;
   bool _isLoaded = false;
 
-  // The television layout is a first-class mode on Apple TV rather than an
-  // experimental feature. The separate layout preference can still be used
-  // to leave large-screen mode for the current device.
-  bool get enableLargeScreenMode => globals.isTvOS || _enableLargeScreenMode;
+  // Television layouts are a first-class mode rather than an experimental
+  // feature. Desktop and tablet devices still use the separate preference.
+  bool get enableLargeScreenMode =>
+      globals.isTelevision || _enableLargeScreenMode;
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get isLoaded => _isLoaded;
 
@@ -33,7 +33,7 @@ class LabsSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setEnableLargeScreenMode(bool enabled) async {
-    if (globals.isTvOS) return;
+    if (globals.isTelevision) return;
     if (_enableLargeScreenMode == enabled) return;
     _enableLargeScreenMode = enabled;
     notifyListeners();
