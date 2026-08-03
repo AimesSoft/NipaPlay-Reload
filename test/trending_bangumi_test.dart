@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -9,6 +10,20 @@ import 'package:nipaplay/services/trending_bangumi_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('desktop ranking actions stay beside the section title', () {
+    final source = File(
+      'lib/themes/nipaplay/widgets/dashboard_home_page_trending.dart',
+    ).readAsStringSync();
+    final desktopSection = source.substring(
+      source.indexOf('Widget _buildTrendingSection()'),
+      source.indexOf('Widget _buildTrendingErrorState()'),
+    );
+
+    expect(desktopSection, contains('mainAxisSize: MainAxisSize.min'));
+    expect(desktopSection, contains('const SizedBox(width: 8)'));
+    expect(desktopSection, isNot(contains('const Spacer()')));
+  });
+
   group('TrendingBangumiQuery', () {
     test('builds all supported endpoint paths', () {
       expect(
