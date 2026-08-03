@@ -384,7 +384,6 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                   _savePlayerKernelSettings(kernelType);
                 },
                 dropdownKey: _playerKernelDropdownKey,
-                useNativeIOS26Dropdown: true,
               ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),

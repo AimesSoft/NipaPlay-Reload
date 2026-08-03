@@ -1,7 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:adaptive_platform_ui/src/widgets/ios26/ios26_popup_menu_button.dart'
     show IOS26PopupMenuButton;
-import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
@@ -28,7 +27,7 @@ void main() {
     expect(find.text('Selected library'), findsOneWidget);
   });
 
-  testWidgets('opted-in iOS 26 dropdown uses the native popup menu',
+  testWidgets('every iOS 26 dropdown uses the native menu and shared trigger',
       (tester) async {
     String? selectedValue;
     PlatformInfo.setPlatformOverride(PlatformOverride.ios, iosVersion: 26);
@@ -49,7 +48,6 @@ void main() {
               DropdownMenuItemData(title: 'MediaKit', value: 'media-kit'),
             ],
             onChanged: (value) => selectedValue = value,
-            useNativeIOS26Dropdown: true,
           ),
         ),
       ),
@@ -61,7 +59,9 @@ void main() {
     expect(popupFinder, findsOneWidget);
 
     final popup = tester.widget<IOS26PopupMenuButton<String>>(popupFinder);
-    expect(popup.buttonLabel, 'MDK');
+    expect(popup.child, isNotNull);
+    expect(popup.buttonLabel, isNull);
+    expect(find.text('MDK'), findsOneWidget);
     expect(
       (popup.items.first as AdaptivePopupMenuItem<String>).icon,
       'checkmark',
@@ -74,8 +74,9 @@ void main() {
     expect(selectedValue, 'media-kit');
   });
 
-  testWidgets('iOS 18 opted-in dropdown keeps the bottom-sheet button',
+  testWidgets('iOS 18 dropdown uses the NipaPlay menu with shared trigger',
       (tester) async {
+    String? selectedValue;
     PlatformInfo.setPlatformOverride(PlatformOverride.ios, iosVersion: 18);
     addTearDown(PlatformInfo.clearPlatformOverride);
 
@@ -91,9 +92,9 @@ void main() {
                 value: 'mdk',
                 isSelected: true,
               ),
+              DropdownMenuItemData(title: 'MediaKit', value: 'media-kit'),
             ],
-            onChanged: (_) {},
-            useNativeIOS26Dropdown: true,
+            onChanged: (value) => selectedValue = value,
           ),
         ),
       ),
@@ -105,6 +106,16 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.byType(cupertino.CupertinoButton), findsOneWidget);
+    expect(find.byType(BlurDropdown<String>), findsOneWidget);
+    expect(find.text('MDK'), findsOneWidget);
+    expect(find.text('MediaKit'), findsNothing);
+
+    await tester.tap(find.text('MDK'));
+    await tester.pumpAndSettle();
+    expect(find.text('MediaKit'), findsOneWidget);
+
+    await tester.tap(find.text('MediaKit'));
+    await tester.pumpAndSettle();
+    expect(selectedValue, 'media-kit');
   });
 }

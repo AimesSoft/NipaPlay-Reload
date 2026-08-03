@@ -769,7 +769,6 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   _saveDanmakuRenderEngineSettings(value);
                 },
                 dropdownKey: _danmakuRenderEngineDropdownKey,
-                useNativeIOS26Dropdown: true,
               ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
