@@ -176,7 +176,7 @@ class _NipaplayLargeScreenTopStatusOverlayState
     final clockText = _formatClock(_now);
 
     return SizedBox(
-      height: kNipaplayLargeScreenBottomHintHeight,
+      height: kNipaplayLargeScreenSystemBarHeight,
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),

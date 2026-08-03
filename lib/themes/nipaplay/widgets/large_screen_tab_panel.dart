@@ -189,8 +189,8 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
         width: kNipaplayLargeScreenTabPanelWidth,
         child: Padding(
           padding: const EdgeInsets.only(
-            top: kNipaplayLargeScreenBottomHintHeight,
-            bottom: kNipaplayLargeScreenBottomHintHeight,
+            top: kNipaplayLargeScreenSystemBarHeight,
+            bottom: kNipaplayLargeScreenSystemBarHeight,
           ),
           child: _NipaplayLargeScreenTabPanelCommandHost(
             commandNotifier: commandNotifier,

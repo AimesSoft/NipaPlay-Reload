@@ -1230,9 +1230,9 @@ class _NipaplayLargeScreenAnimeDetailPageState
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
                     0,
-                    kNipaplayLargeScreenBottomHintHeight,
+                    kNipaplayLargeScreenSystemBarHeight,
                     0,
-                    kNipaplayLargeScreenBottomHintHeight + mediaPadding.bottom,
+                    kNipaplayLargeScreenSystemBarHeight + mediaPadding.bottom,
                   ),
                   child: Container(
                     decoration: BoxDecoration(

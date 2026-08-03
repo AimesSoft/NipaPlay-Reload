@@ -601,7 +601,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           left: 0,
           right: 0,
           top: showChrome
-              ? kNipaplayLargeScreenBottomHintHeight
+              ? kNipaplayLargeScreenSystemBarHeight
               : -_largeScreenTopBarHeight,
           child: AnimatedOpacity(
             opacity: showChrome ? 1.0 : 0.0,
@@ -735,7 +735,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       left: 42,
       right: 42,
       bottom: showChrome
-          ? kNipaplayLargeScreenBottomHintHeight + 18
+          ? kNipaplayLargeScreenSystemBarHeight + 18
           : _largeScreenBottomControlsHiddenBottom,
       child: AnimatedOpacity(
         opacity: showChrome ? 1.0 : 0.0,

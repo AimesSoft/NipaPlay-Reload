@@ -1,12 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('large-screen top and bottom system bars stay 40 pixels high',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              const NipaplayLargeScreenTopStatusOverlay(isDarkMode: true),
+              NipaplayLargeScreenBottomHintOverlay(
+                isDarkMode: true,
+                onToggleMenu: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(kNipaplayLargeScreenSystemBarHeight, 40);
+    expect(
+      tester.getSize(find.byType(NipaplayLargeScreenTopStatusOverlay)).height,
+      40,
+    );
+    expect(
+      tester.getSize(find.byType(NipaplayLargeScreenBottomHintOverlay)).height,
+      40,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('television layout can default on without overriding a saved choice',
       () async {
     SharedPreferences.setMockInitialValues(const {});
