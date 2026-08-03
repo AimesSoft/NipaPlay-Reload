@@ -167,8 +167,8 @@ class _NipaplayLargeScreenSettingsPanelState
                   width: _kNipaplayLargeScreenSettingsMenuWidth,
                   child: Padding(
                     padding: const EdgeInsets.only(
-                      top: kNipaplayLargeScreenSystemBarHeight,
-                      bottom: kNipaplayLargeScreenSystemBarHeight,
+                      top: kNipaplayLargeScreenBottomHintHeight,
+                      bottom: kNipaplayLargeScreenBottomHintHeight,
                     ),
                     child: ListView.builder(
                       padding: EdgeInsets.zero,
@@ -220,8 +220,8 @@ class _NipaplayLargeScreenSettingsPanelState
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(
-                  top: kNipaplayLargeScreenSystemBarHeight,
-                  bottom: kNipaplayLargeScreenSystemBarHeight,
+                  top: kNipaplayLargeScreenBottomHintHeight,
+                  bottom: kNipaplayLargeScreenBottomHintHeight,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

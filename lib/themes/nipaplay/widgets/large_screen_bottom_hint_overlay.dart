@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-const double kNipaplayLargeScreenSystemBarHeight = 40;
+const double kNipaplayLargeScreenBottomHintHeight = 56;
 
 class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   const NipaplayLargeScreenBottomHintOverlay({
@@ -31,6 +31,9 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     final Color backgroundTint = isDarkMode
         ? Colors.black.withValues(alpha: 0.18)
         : Colors.white.withValues(alpha: 0.14);
+    final Color dividerColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.12);
 
     Widget buildAction({
       required Widget icon,
@@ -72,12 +75,17 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     }
 
     return SizedBox(
-      height: kNipaplayLargeScreenSystemBarHeight,
+      height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: ColoredBox(
-            color: backgroundTint,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: backgroundTint,
+              border: Border(
+                top: BorderSide(color: dividerColor, width: 1),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: Row(
