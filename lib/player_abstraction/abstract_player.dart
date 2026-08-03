@@ -14,6 +14,22 @@ abstract interface class AsyncSeekPlayer {
   Future<void> seekAndWait({required int position});
 }
 
+/// Optional capability for backends that can distinguish an accepted play
+/// command from a media source that has actually produced usable metadata.
+abstract interface class MediaLoadAwarePlayer {
+  bool get isMediaReady;
+  bool get hasReceivedRealPosition;
+  bool get hasMediaLoadFailed;
+  String? get mediaLoadError;
+
+  Future<bool> waitUntilMediaReady({required Duration timeout});
+
+  /// Retries the current source only when doing so is safe and useful.
+  /// Returns false when the source/error is not retryable or a retry was
+  /// already attempted.
+  Future<bool> retryCurrentMediaLoad();
+}
+
 abstract class AbstractPlayer {
   // Properties
   double get volume;
