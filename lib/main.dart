@@ -1112,6 +1112,7 @@ class MainPageState extends State<MainPage>
   bool _hotkeysAreRegistered = false;
   VideoPlayerState? _videoPlayerState;
   AppearanceSettingsProvider? _appearanceSettingsProvider;
+  LabsSettingsProvider? _labsSettingsProvider;
 
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
@@ -1356,6 +1357,7 @@ class MainPageState extends State<MainPage>
     _useLargeScreenLayout = await LargeScreenModePreferences.load(
       defaultValue: globals.isTelevision,
     );
+    _syncLargeScreenHotkeySuppression();
     final initialIndex = _getInitialTabIndex();
 
     if (mounted) {
@@ -1456,6 +1458,19 @@ class MainPageState extends State<MainPage>
       _appearanceSettingsProvider = newAppearanceSettingsProvider;
     }
 
+    final newLabsSettingsProvider =
+        Provider.of<LabsSettingsProvider>(context, listen: false);
+    if (newLabsSettingsProvider != _labsSettingsProvider) {
+      _labsSettingsProvider?.removeListener(
+        _syncLargeScreenHotkeySuppression,
+      );
+      _labsSettingsProvider = newLabsSettingsProvider;
+      _labsSettingsProvider?.addListener(
+        _syncLargeScreenHotkeySuppression,
+      );
+      _syncLargeScreenHotkeySuppression();
+    }
+
     // 初始化对话框尺寸管理器 - 只初始化一次
     if (!globals.DialogSizes.isInitialized) {
       final screenSize = MediaQuery.of(context).size;
@@ -1480,7 +1495,11 @@ class MainPageState extends State<MainPage>
 
   @override
   void dispose() {
+    HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
+    _labsSettingsProvider?.removeListener(
+      _syncLargeScreenHotkeySuppression,
+    );
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
@@ -1540,6 +1559,14 @@ class MainPageState extends State<MainPage>
     await windowManager.close();
   }
 
+  void _syncLargeScreenHotkeySuppression() {
+    final isLargeScreenModeActive = globals.isTelevision ||
+        (globals.isDesktopOrTablet &&
+            (_labsSettingsProvider?.enableLargeScreenMode ?? false) &&
+            _useLargeScreenLayout);
+    HotkeyService().setLargeScreenModeActive(isLargeScreenModeActive);
+  }
+
   Future<void> _toggleLargeScreenLayout() async {
     final labsSettings = context.read<LabsSettingsProvider>();
     if (!labsSettings.enableLargeScreenMode && !_useLargeScreenLayout) {
@@ -1549,6 +1576,7 @@ class MainPageState extends State<MainPage>
     setState(() {
       _useLargeScreenLayout = nextValue;
     });
+    _syncLargeScreenHotkeySuppression();
     try {
       await LargeScreenModePreferences.save(nextValue);
     } catch (e) {
