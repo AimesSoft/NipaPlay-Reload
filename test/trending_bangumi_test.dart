@@ -20,7 +20,7 @@ void main() {
     );
 
     expect(desktopSection, contains('mainAxisSize: MainAxisSize.min'));
-    expect(desktopSection, contains('const SizedBox(width: 16)'));
+    expect(desktopSection, contains('const SizedBox(width: 32)'));
     expect(desktopSection, isNot(contains('const Spacer()')));
   });
 
