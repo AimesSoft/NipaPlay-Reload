@@ -85,3 +85,16 @@ const mediaSourceOptions = <MediaSourceOption>[
     iconKind: MediaSourceIconKind.smb,
   ),
 ];
+
+List<MediaSourceOption> availableMediaSourceOptions({
+  required bool isTvOS,
+}) {
+  if (!isTvOS) {
+    return mediaSourceOptions;
+  }
+  return mediaSourceOptions
+      .where(
+        (option) => option.id != 'local_folder' && option.id != 'nipaplay',
+      )
+      .toList(growable: false);
+}

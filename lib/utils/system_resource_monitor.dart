@@ -71,10 +71,13 @@ class SystemResourceMonitor {
       _instance._activeDecoder = '浏览器解码';
       _instance._gpuUsage = null;
     } else {
-      _instance._playerKernelType = 'Video Player';
-      _instance._danmakuKernelType = 'Canvas';
+      // tvOS is locked to Erika by PlayerFactory. Keep the diagnostics panel
+      // in sync with the actual factory policy instead of reporting the
+      // video_player fallback that is never selected on Apple TV.
+      _instance._updatePlayerKernelType();
+      _instance._danmakuKernelType = 'DFM+';
       _instance._mdkVersion = 'N/A';
-      _instance._activeDecoder = 'AVFoundation';
+      _instance._activeDecoder = 'Erika（等待媒体）';
       _instance._gpuUsage = null;
     }
   }

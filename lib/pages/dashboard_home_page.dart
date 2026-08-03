@@ -114,6 +114,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       onActivate: onActivate,
       borderRadius: borderRadius,
       padding: padding,
+      focusScale: 1,
       child: child,
     );
   }

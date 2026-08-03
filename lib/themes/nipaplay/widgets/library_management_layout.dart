@@ -6,6 +6,8 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:provider/provider.dart';
 
@@ -269,6 +271,24 @@ class LibraryManagementFolderRow extends StatelessWidget {
       ),
     );
 
+    final isLargeScreen =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television ||
+            NipaplayLargeScreenModeScope.isActiveOf(context);
+    final interactiveRow = isLargeScreen
+        ? NipaplayLargeScreenFocusableAction(
+            onActivate: onTap,
+            borderRadius: BorderRadius.circular(8),
+            focusScale: 1,
+            child: content,
+          )
+        : MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
+            ),
+          );
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone
@@ -278,14 +298,7 @@ class LibraryManagementFolderRow extends StatelessWidget {
               onPressed: onTap,
               child: content,
             )
-          : MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onTap,
-                child: content,
-              ),
-            ),
+          : interactiveRow,
     );
   }
 }

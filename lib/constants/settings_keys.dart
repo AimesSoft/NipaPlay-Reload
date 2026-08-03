@@ -112,6 +112,8 @@ class SettingsKeys {
   static const String danmakuShadowStyle = 'danmaku_shadow_style'; // 阴影样式设置
   static const String next2DanmakuOutlineWidth =
       'next2_danmaku_outline_width'; // 描边宽度设置
+  static const String tvOSErikaDanmakuOutlineDefaultMigrated =
+      'tvos_erika_danmaku_outline_default_migrated_v1';
   static const String danmakuDisplayArea = 'danmaku_display_area'; // 显示区域设置
   static const String danmakuSpeedMultiplier =
       'danmaku_speed_multiplier'; // 速度倍数设置

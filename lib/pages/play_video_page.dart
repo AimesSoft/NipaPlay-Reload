@@ -29,12 +29,21 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/mobile_playback_status.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_progress_bar.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
+
+@visibleForTesting
+bool shouldConsumeLargeScreenPlaybackPop({
+  required bool isLargeScreen,
+  required bool hasVideo,
+}) {
+  return isLargeScreen && hasVideo;
+}
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -65,6 +74,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _pictureInPicturePlayStateChangedByDrag = false;
   Timer? _uiLockButtonTimer;
   bool _isExiting = false;
+  final FocusNode _largeScreenPlayPauseFocusNode = FocusNode(
+    debugLabel: 'nipaplay_large_screen_player_play_pause',
+  );
+  bool? _lastLargeScreenControlsVisibility;
 
   bool get _isMacOSHdrVideoOnlyEnabled {
     return !kIsWeb &&
@@ -99,6 +112,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   @override
   void dispose() {
     _uiLockButtonTimer?.cancel();
+    _largeScreenPlayPauseFocusNode.dispose();
     super.dispose();
   }
 
@@ -109,6 +123,16 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       return false;
     }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (shouldConsumeLargeScreenPlaybackPop(
+      isLargeScreen: NipaplayLargeScreenModeScope.isActiveOf(context),
+      hasVideo: videoState.hasVideo,
+    )) {
+      if (!NipaplayLargeScreenPlayerMenuScope.maybeHandleMenuPress(context)) {
+        videoState.setControlsHovered(false);
+        videoState.revealLargeScreenControls();
+      }
+      return false;
+    }
     final shouldExit = await videoState.handleBackButton();
     if (shouldExit) {
       setState(() => _isExiting = true);
@@ -119,21 +143,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     return shouldExit;
   }
 
-  Future<void> _handlePlayerBack(VideoPlayerState videoState) async {
-    if (DesktopMultiWindow.isSecondaryWindow(context)) {
-      await DesktopPlayerWindowService.instance.returnPlayerToMain();
-      return;
-    }
-    try {
-      final shouldExit = await videoState.handleBackButton();
-      if (!shouldExit) return;
-      await videoState.resetPlayer();
-    } catch (e) {
-      if (!mounted) return;
-      BlurSnackBar.show(context, '重置播放器时出错: $e');
-    }
-  }
-
   Future<void> _resizeCurrentWindowToVideo(VideoPlayerState videoState) async {
     final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
     if (detachedWindow != null) {
@@ -141,22 +150,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       return;
     }
     await videoState.resizeWindowToVideoSize();
-  }
-
-  Future<void> _toggleCurrentWindowFullscreen(
-    VideoPlayerState videoState,
-  ) async {
-    final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
-    if (detachedWindow != null) {
-      await detachedWindow.setFullscreen(!detachedWindow.isFullscreen);
-      return;
-    }
-    await videoState.toggleFullscreen();
-  }
-
-  bool _isCurrentWindowFullscreen(VideoPlayerState videoState) {
-    return DesktopMultiWindow.maybeControllerOf(context)?.isFullscreen ??
-        videoState.isFullscreen;
   }
 
   void _handleSideSwipeDragStart(DragStartDetails details) {
@@ -585,21 +578,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     );
   }
 
-  Future<void> _handleLargeScreenBack(VideoPlayerState videoState) async {
-    await _handlePlayerBack(videoState);
-  }
-
   Widget _buildLargeScreenMaterialControls(VideoPlayerState videoState) {
-    final bool showShareButton = SystemShareService.isSupported;
-    final bool showScreenshotButton = !kIsWeb;
-    final bool showAirPlayButton =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
     final title = (videoState.animeTitle ?? '').trim().isNotEmpty
         ? videoState.animeTitle!.trim()
         : '正在播放';
     final episodeTitle = (videoState.episodeTitle ?? '').trim();
     final bool showChrome = videoState.showControls;
+    _syncLargeScreenPlayerControlFocus(videoState, showChrome);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -632,12 +618,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     color: Colors.black.withValues(alpha: 0.34),
                     child: Row(
                       children: [
-                        _LargeScreenPlayerBarButton(
-                          tooltip: '返回',
-                          icon: Ionicons.chevron_back_outline,
-                          onPressed: () => _handleLargeScreenBack(videoState),
-                        ),
-                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -671,27 +651,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             ],
                           ),
                         ),
-                        if (videoState.playerTopSendDanmakuButtonVisible)
-                          _LargeScreenPlayerBarButton(
-                            tooltip: '发送弹幕',
-                            icon: Ionicons.chatbubble_ellipses_outline,
-                            onPressed: () => _showSendDanmakuDialog(videoState),
-                          ),
                         if (videoState.playerTopSkipButtonVisible)
                           _LargeScreenPlayerBarButton(
                             tooltip: '跳过',
                             icon: Ionicons.play_skip_forward_outline,
                             onPressed: videoState.skip,
-                          ),
-                        if (globals.isDesktop &&
-                            videoState.playerTopResizeButtonVisible)
-                          _LargeScreenPlayerBarButton(
-                            tooltip: ShortcutTooltipManager()
-                                .formatActionWithShortcut(
-                                    'resize_to_video', '窗口适配视频'),
-                            icon: Ionicons.resize_outline,
-                            onPressed: () =>
-                                _resizeCurrentWindowToVideo(videoState),
                           ),
                         if (videoState.playerTopFrameStepButtonsVisible) ...[
                           _LargeScreenPlayerBarButton(
@@ -714,7 +678,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             ),
                             icon: Icons.picture_in_picture_alt_rounded,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               final service =
                                   DesktopPlayerWindowService.instance;
                               if (detachedWindow != null) {
@@ -741,39 +706,13 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                   ? Icons.push_pin_rounded
                                   : Icons.push_pin_outlined,
                               onPressed: () {
-                                videoState.resetHideControlsTimer();
+                                videoState
+                                    .resetLargeScreenControlsAutoHideTimer();
                                 unawaited(
                                   detachedWindow.toggleAlwaysOnTop(),
                                 );
                               },
                             ),
-                          ),
-                        if (showAirPlayButton)
-                          _LargeScreenPlayerBarButton(
-                            tooltip: '投屏 (AirPlay)',
-                            icon: Icons.airplay_rounded,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _showAirPlayPicker(videoState);
-                            },
-                          ),
-                        if (showScreenshotButton)
-                          _LargeScreenPlayerBarButton(
-                            tooltip: '截图',
-                            icon: Icons.camera_alt_outlined,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _captureScreenshot(videoState);
-                            },
-                          ),
-                        if (showShareButton)
-                          _LargeScreenPlayerBarButton(
-                            tooltip: '分享',
-                            icon: Icons.share_rounded,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _shareCurrentMedia(videoState);
-                            },
                           ),
                       ],
                     ),
@@ -858,7 +797,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             icon: Icons.skip_previous_rounded,
                             enabled: videoState.canPlayPreviousEpisode,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               unawaited(videoState.playPreviousEpisode());
                             },
                           ),
@@ -866,7 +806,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             tooltip: '快退 ${videoState.seekStepDisplayLabel}',
                             icon: Icons.fast_rewind_rounded,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               videoState.seekBackwardByStep();
                             },
                           ),
@@ -879,8 +820,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                 : Ionicons.play,
                             emphasized: true,
                             autofocus: true,
+                            focusNode: _largeScreenPlayPauseFocusNode,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               videoState.togglePlayPause();
                             },
                           ),
@@ -888,7 +831,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             tooltip: '快进 ${videoState.seekStepDisplayLabel}',
                             icon: Icons.fast_forward_rounded,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               videoState.seekForwardByStep();
                             },
                           ),
@@ -899,7 +843,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             icon: Icons.skip_next_rounded,
                             enabled: videoState.canPlayNextEpisode,
                             onPressed: () {
-                              videoState.resetHideControlsTimer();
+                              videoState
+                                  .resetLargeScreenControlsAutoHideTimer();
                               unawaited(videoState.playNextEpisode());
                             },
                           ),
@@ -917,43 +862,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               ),
                             ),
                           ),
-                          _LargeScreenPlayerControlButton(
-                            tooltip:
-                                videoState.danmakuVisible ? '隐藏弹幕' : '显示弹幕',
-                            icon: videoState.danmakuVisible
-                                ? Icons.chat_bubble_outline_rounded
-                                : Icons.speaker_notes_off_outlined,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              videoState.toggleDanmakuVisible();
-                            },
-                          ),
-                          _LargeScreenPlayerControlButton(
-                            tooltip: globals.isTablet
-                                ? (videoState.isAppBarHidden
-                                    ? '显示菜单栏'
-                                    : '隐藏菜单栏')
-                                : (_isCurrentWindowFullscreen(videoState)
-                                    ? '退出全屏'
-                                    : '全屏'),
-                            icon: globals.isTablet
-                                ? (videoState.isAppBarHidden
-                                    ? Icons.fullscreen_exit_rounded
-                                    : Icons.fullscreen_rounded)
-                                : (_isCurrentWindowFullscreen(videoState)
-                                    ? Icons.fullscreen_exit_rounded
-                                    : Icons.fullscreen_rounded),
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              if (globals.isTablet) {
-                                videoState.toggleAppBarVisibility();
-                              } else {
-                                unawaited(
-                                  _toggleCurrentWindowFullscreen(videoState),
-                                );
-                              }
-                            },
-                          ),
                         ],
                       ),
                     ],
@@ -965,6 +873,29 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ),
       ),
     );
+  }
+
+  void _syncLargeScreenPlayerControlFocus(
+    VideoPlayerState videoState,
+    bool controlsVisible,
+  ) {
+    if (_lastLargeScreenControlsVisibility == controlsVisible) {
+      return;
+    }
+    _lastLargeScreenControlsVisibility = controlsVisible;
+    if (!controlsVisible || videoState.hotkeysSuppressed) {
+      return;
+    }
+    videoState.resetLargeScreenControlsAutoHideTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !videoState.showControls ||
+          videoState.hotkeysSuppressed ||
+          !_largeScreenPlayPauseFocusNode.canRequestFocus) {
+        return;
+      }
+      _largeScreenPlayPauseFocusNode.requestFocus();
+    });
   }
 
   Widget _buildMaterialControls(
@@ -1457,18 +1388,35 @@ class _LargeScreenPlayerBarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 10),
-      child: SizedBox(
-        width: 44,
-        height: 44,
-        child: Center(
-          child: ShadowActionButton(
-            tooltip: tooltip,
-            icon: icon,
-            iconSize: 26,
-            padding: EdgeInsets.zero,
-            onPressed: onPressed,
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 10),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: NipaplayLargeScreenFocusableAction(
+            onActivate: onPressed,
+            borderRadius: BorderRadius.circular(8),
+            focusScale: 1.08,
+            style: const NipaplayLargeScreenFocusableStyle(
+              idleBackgroundDark: Color(0x10000000),
+              idleBackgroundLight: Color(0x10000000),
+              contentColorDark: Colors.white,
+              contentColorLight: Colors.white,
+              focusStrokeColor: Colors.white,
+              focusStrokeWidth: 2,
+            ),
+            child: Center(
+              child: Icon(
+                icon,
+                color: Colors.white,
+                size: 26,
+                shadows: const [
+                  Shadow(color: Color(0x99000000), blurRadius: 5),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1484,6 +1432,7 @@ class _LargeScreenPlayerControlButton extends StatelessWidget {
     this.enabled = true,
     this.emphasized = false,
     this.autofocus = false,
+    this.focusNode,
   });
 
   final String tooltip;
@@ -1492,6 +1441,7 @@ class _LargeScreenPlayerControlButton extends StatelessWidget {
   final bool enabled;
   final bool emphasized;
   final bool autofocus;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -1510,6 +1460,7 @@ class _LargeScreenPlayerControlButton extends StatelessWidget {
           width: size,
           height: size,
           child: NipaplayLargeScreenFocusableAction(
+            focusNode: focusNode,
             autofocus: autofocus,
             onActivate: enabled ? onPressed : null,
             borderRadius: BorderRadius.circular(8),

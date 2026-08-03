@@ -7,6 +7,15 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
+
+bool _useTelevisionMediaControl(material.BuildContext context) {
+  return AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television ||
+      NipaplayLargeScreenModeScope.isActiveOf(context);
+}
 
 enum AdaptiveMediaActionEmphasis {
   plain,
@@ -24,6 +33,7 @@ class AdaptiveMediaActionButton extends material.StatelessWidget {
     this.emphasis = AdaptiveMediaActionEmphasis.plain,
     this.compact = false,
     this.expand = false,
+    this.autofocus = false,
   });
 
   final String label;
@@ -33,6 +43,7 @@ class AdaptiveMediaActionButton extends material.StatelessWidget {
   final AdaptiveMediaActionEmphasis emphasis;
   final bool compact;
   final bool expand;
+  final bool autofocus;
 
   @override
   material.Widget build(material.BuildContext context) {
@@ -77,6 +88,19 @@ class AdaptiveMediaActionButton extends material.StatelessWidget {
         onPressed: onPressed,
         child: content,
       );
+    }
+
+    if (_useTelevisionMediaControl(context)) {
+      final button = NipaplayLargeScreenActionButton(
+        icon: desktopIcon ?? material.Icons.arrow_forward_rounded,
+        label: label,
+        onPressed: onPressed,
+        autofocus: autofocus,
+        compact: compact,
+      );
+      return expand
+          ? material.SizedBox(width: double.infinity, child: button)
+          : button;
     }
 
     if (emphasis == AdaptiveMediaActionEmphasis.primary && onPressed != null) {
@@ -147,6 +171,13 @@ class AdaptiveMediaIconButton extends material.StatelessWidget {
           onPressed: onPressed,
           child: material.Icon(phoneIcon, size: size, color: color),
         ),
+      );
+    }
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenIconButton(
+        icon: desktopIcon,
+        tooltip: tooltip,
+        onPressed: onPressed,
       );
     }
     return material.Tooltip(
@@ -320,21 +351,31 @@ class AdaptiveMediaExpansionTile extends material.StatelessWidget {
         ],
       ),
     );
-    final interactiveHeader = phone
-        ? cupertino.CupertinoButton(
-            padding: material.EdgeInsets.zero,
-            borderRadius: material.BorderRadius.circular(8),
-            onPressed: () => onExpansionChanged(!expanded),
-            child: header,
-          )
-        : material.MouseRegion(
-            cursor: material.SystemMouseCursors.click,
-            child: material.GestureDetector(
-              behavior: material.HitTestBehavior.opaque,
-              onTap: () => onExpansionChanged(!expanded),
-              child: header,
-            ),
-          );
+    final material.Widget interactiveHeader;
+    if (phone) {
+      interactiveHeader = cupertino.CupertinoButton(
+        padding: material.EdgeInsets.zero,
+        borderRadius: material.BorderRadius.circular(8),
+        onPressed: () => onExpansionChanged(!expanded),
+        child: header,
+      );
+    } else if (_useTelevisionMediaControl(context)) {
+      interactiveHeader = NipaplayLargeScreenFocusableAction(
+        onActivate: () => onExpansionChanged(!expanded),
+        borderRadius: material.BorderRadius.circular(8),
+        focusScale: 1.01,
+        child: header,
+      );
+    } else {
+      interactiveHeader = material.MouseRegion(
+        cursor: material.SystemMouseCursors.click,
+        child: material.GestureDetector(
+          behavior: material.HitTestBehavior.opaque,
+          onTap: () => onExpansionChanged(!expanded),
+          child: header,
+        ),
+      );
+    }
 
     return material.Column(
       crossAxisAlignment: material.CrossAxisAlignment.stretch,
@@ -414,6 +455,14 @@ class AdaptiveMediaListTile extends material.StatelessWidget {
         child: content,
       );
     }
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onTap,
+        borderRadius: material.BorderRadius.circular(8),
+        focusScale: 1.015,
+        child: content,
+      );
+    }
     return material.MouseRegion(
       cursor: material.SystemMouseCursors.click,
       child: material.GestureDetector(
@@ -461,69 +510,80 @@ class AdaptiveMediaSearchField extends material.StatelessWidget {
     final textColor = dark ? material.Colors.white : material.Colors.black87;
     final secondary = textColor.withValues(alpha: 0.52);
     final active = theme.colorScheme.primary;
-    return material.AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
-      height: 40,
-      padding: const material.EdgeInsets.symmetric(horizontal: 11),
-      decoration: material.BoxDecoration(
-        color: dark
-            ? material.Colors.white.withValues(alpha: 0.12)
-            : material.Colors.white,
-        borderRadius: material.BorderRadius.circular(8),
-        border: material.Border.all(
-          color:
-              focusNode.hasFocus ? active : textColor.withValues(alpha: 0.10),
-          width: focusNode.hasFocus ? 1.5 : 1,
-        ),
-      ),
-      child: material.Row(
-        children: [
-          material.Icon(
-            material.Icons.search_rounded,
-            size: 18,
-            color: focusNode.hasFocus ? active : secondary,
+    return material.ListenableBuilder(
+      listenable: focusNode,
+      builder: (context, child) => material.AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        height: 40,
+        padding: const material.EdgeInsets.symmetric(horizontal: 11),
+        decoration: material.BoxDecoration(
+          color: dark
+              ? material.Colors.white.withValues(alpha: 0.12)
+              : material.Colors.white,
+          borderRadius: material.BorderRadius.circular(8),
+          border: material.Border.all(
+            color:
+                focusNode.hasFocus ? active : textColor.withValues(alpha: 0.10),
+            width: focusNode.hasFocus ? 2 : 1,
           ),
-          const material.SizedBox(width: 9),
-          material.Expanded(
-            child: material.Stack(
-              alignment: material.Alignment.centerLeft,
-              children: [
-                if (controller.text.isEmpty)
-                  material.IgnorePointer(
-                    child: material.Text(
-                      placeholder,
-                      maxLines: 1,
-                      overflow: material.TextOverflow.ellipsis,
-                      style: material.TextStyle(
-                        color: secondary,
-                        fontSize: 14,
+          boxShadow: focusNode.hasFocus
+              ? [
+                  material.BoxShadow(
+                    color: active.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                  ),
+                ]
+              : null,
+        ),
+        child: material.Row(
+          children: [
+            material.Icon(
+              material.Icons.search_rounded,
+              size: 18,
+              color: focusNode.hasFocus ? active : secondary,
+            ),
+            const material.SizedBox(width: 9),
+            material.Expanded(
+              child: material.Stack(
+                alignment: material.Alignment.centerLeft,
+                children: [
+                  if (controller.text.isEmpty)
+                    material.IgnorePointer(
+                      child: material.Text(
+                        placeholder,
+                        maxLines: 1,
+                        overflow: material.TextOverflow.ellipsis,
+                        style: material.TextStyle(
+                          color: secondary,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
+                  material.EditableText(
+                    controller: controller,
+                    focusNode: focusNode,
+                    style: material.TextStyle(color: textColor, fontSize: 14),
+                    cursorColor: active,
+                    backgroundCursorColor: secondary,
+                    selectionColor: active.withValues(alpha: 0.28),
+                    onChanged: onChanged,
+                    onSubmitted: onSubmitted,
+                    textInputAction: material.TextInputAction.search,
+                    maxLines: 1,
                   ),
-                material.EditableText(
-                  controller: controller,
-                  focusNode: focusNode,
-                  style: material.TextStyle(color: textColor, fontSize: 14),
-                  cursorColor: active,
-                  backgroundCursorColor: secondary,
-                  selectionColor: active.withValues(alpha: 0.28),
-                  onChanged: onChanged,
-                  onSubmitted: onSubmitted,
-                  textInputAction: material.TextInputAction.search,
-                  maxLines: 1,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (controller.text.isNotEmpty)
-            AdaptiveMediaIconButton(
-              desktopIcon: material.Icons.close_rounded,
-              phoneIcon: cupertino.CupertinoIcons.clear,
-              tooltip: '清空搜索',
-              size: 17,
-              onPressed: _clear,
-            ),
-        ],
+            if (controller.text.isNotEmpty)
+              AdaptiveMediaIconButton(
+                desktopIcon: material.Icons.close_rounded,
+                phoneIcon: cupertino.CupertinoIcons.clear,
+                tooltip: '清空搜索',
+                size: 17,
+                onPressed: _clear,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -559,34 +619,43 @@ class AdaptiveMediaCheckbox extends material.StatelessWidget {
             onChanged == null ? null : (next) => onChanged!.call(next ?? false),
       );
     }
+    final checkbox = material.AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      width: 22,
+      height: 22,
+      decoration: material.BoxDecoration(
+        color: value ? accent : material.Colors.transparent,
+        borderRadius: material.BorderRadius.circular(6),
+        border: material.Border.all(
+          color: value
+              ? accent
+              : material.Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.38),
+          width: 1.5,
+        ),
+      ),
+      child: value
+          ? const material.Icon(
+              material.Icons.check_rounded,
+              size: 16,
+              color: material.Colors.white,
+            )
+          : null,
+    );
+    if (_useTelevisionMediaControl(context)) {
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: onChanged == null ? null : () => onChanged!.call(!value),
+        borderRadius: material.BorderRadius.circular(8),
+        padding: const material.EdgeInsets.all(5),
+        child: checkbox,
+      );
+    }
     return material.GestureDetector(
       behavior: material.HitTestBehavior.opaque,
       onTap: onChanged == null ? null : () => onChanged!.call(!value),
-      child: material.AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        width: 22,
-        height: 22,
-        decoration: material.BoxDecoration(
-          color: value ? accent : material.Colors.transparent,
-          borderRadius: material.BorderRadius.circular(6),
-          border: material.Border.all(
-            color: value
-                ? accent
-                : material.Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.38),
-            width: 1.5,
-          ),
-        ),
-        child: value
-            ? const material.Icon(
-                material.Icons.check_rounded,
-                size: 16,
-                color: material.Colors.white,
-              )
-            : null,
-      ),
+      child: checkbox,
     );
   }
 }
@@ -608,6 +677,9 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.maxLength,
+    this.remoteInputTitle,
+    this.remoteInputFieldId,
+    this.remoteInputRequired = false,
   });
 
   final material.TextEditingController controller;
@@ -624,6 +696,9 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
   final material.ValueChanged<String>? onChanged;
   final material.ValueChanged<String>? onSubmitted;
   final int? maxLength;
+  final String? remoteInputTitle;
+  final String? remoteInputFieldId;
+  final bool remoteInputRequired;
 
   @override
   material.State<AdaptiveMediaTextField> createState() =>
@@ -633,12 +708,18 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
 class _AdaptiveMediaTextFieldState
     extends material.State<AdaptiveMediaTextField> {
   late final material.FocusNode _internalFocusNode;
+  late final material.FocusNode _televisionEditableFocusNode;
   material.FocusNode get _focusNode => widget.focusNode ?? _internalFocusNode;
 
   @override
   void initState() {
     super.initState();
     _internalFocusNode = material.FocusNode();
+    _televisionEditableFocusNode = material.FocusNode(
+      debugLabel: 'adaptive_media_text_field_tvos_editable',
+      canRequestFocus: false,
+      skipTraversal: true,
+    );
     _focusNode.addListener(_handleFocusChanged);
   }
 
@@ -658,6 +739,7 @@ class _AdaptiveMediaTextFieldState
   @override
   void dispose() {
     _focusNode.removeListener(_handleFocusChanged);
+    _televisionEditableFocusNode.dispose();
     _internalFocusNode.dispose();
     super.dispose();
   }
@@ -698,6 +780,7 @@ class _AdaptiveMediaTextFieldState
       );
     }
 
+    final isTelevision = useTvOSRemoteTextInput(context);
     final theme = material.Theme.of(context);
     final style = widget.style ?? theme.textTheme.bodyMedium!;
     final enabledBorder = decoration?.enabledBorder;
@@ -711,7 +794,7 @@ class _AdaptiveMediaTextFieldState
     final borderRadius = activeBorder is material.OutlineInputBorder
         ? activeBorder.borderRadius
         : material.BorderRadius.circular(8);
-    return material.Container(
+    final field = material.Container(
       padding: decoration?.contentPadding ??
           const material.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: material.BoxDecoration(
@@ -733,7 +816,7 @@ class _AdaptiveMediaTextFieldState
             ),
           material.EditableText(
             controller: widget.controller,
-            focusNode: _focusNode,
+            focusNode: isTelevision ? _televisionEditableFocusNode : _focusNode,
             style: style,
             cursorColor: widget.cursorColor ?? theme.colorScheme.primary,
             backgroundCursorColor:
@@ -745,6 +828,7 @@ class _AdaptiveMediaTextFieldState
             obscureText: widget.obscureText,
             textInputAction: widget.textInputAction,
             textAlign: widget.textAlign,
+            readOnly: isTelevision,
             onChanged: (value) {
               setState(() {});
               widget.onChanged?.call(value);
@@ -760,6 +844,16 @@ class _AdaptiveMediaTextFieldState
           ),
         ],
       ),
+    );
+    if (!isTelevision) return field;
+    return TvOSRemoteTextInputControl(
+      focusNode: _focusNode,
+      title: widget.remoteInputTitle ?? placeholder,
+      maxLength: widget.maxLength,
+      fieldId: widget.remoteInputFieldId,
+      required: widget.remoteInputRequired,
+      obscureText: widget.obscureText,
+      child: field,
     );
   }
 }

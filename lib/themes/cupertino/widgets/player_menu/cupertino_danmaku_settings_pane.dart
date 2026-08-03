@@ -4,13 +4,14 @@ import 'dart:io' as io;
 import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show AdaptiveButton, AdaptiveButtonStyle, AdaptiveSwitch;
+    show AdaptiveButton, AdaptiveButtonStyle;
 
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -300,6 +301,7 @@ class _CupertinoDanmakuSettingsPaneState
 
   @override
   Widget build(BuildContext context) {
+    final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     final isErikaPlayerKernel =
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final showBinaryDanmakuEffectToggles =
@@ -352,23 +354,24 @@ class _CupertinoDanmakuSettingsPaneState
                 ),
               ],
             ),
-            AdaptivePlayerMenuSection(
-              header: const Text('保存弹幕'),
-              children: [
-                AdaptivePlayerMenuTile(
-                  title: const Text('保存为 JSON'),
-                  subtitle: const Text('通用格式，便于再次导入'),
-                  trailing: const Icon(CupertinoIcons.right_chevron),
-                  onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
-                ),
-                AdaptivePlayerMenuTile(
-                  title: const Text('保存为 XML'),
-                  subtitle: const Text('Bilibili XML 格式'),
-                  trailing: const Icon(CupertinoIcons.right_chevron),
-                  onTap: () => _saveDanmaku(_DanmakuExportFormat.xml),
-                ),
-              ],
-            ),
+            if (!isLargeScreen)
+              AdaptivePlayerMenuSection(
+                header: const Text('保存弹幕'),
+                children: [
+                  AdaptivePlayerMenuTile(
+                    title: const Text('保存为 JSON'),
+                    subtitle: const Text('通用格式，便于再次导入'),
+                    trailing: const Icon(CupertinoIcons.right_chevron),
+                    onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
+                  ),
+                  AdaptivePlayerMenuTile(
+                    title: const Text('保存为 XML'),
+                    subtitle: const Text('Bilibili XML 格式'),
+                    trailing: const Icon(CupertinoIcons.right_chevron),
+                    onTap: () => _saveDanmaku(_DanmakuExportFormat.xml),
+                  ),
+                ],
+              ),
             AdaptivePlayerMenuSection(
               header: const Text('弹幕样式'),
               children: [
@@ -396,18 +399,20 @@ class _CupertinoDanmakuSettingsPaneState
                   divisions: 96,
                   onChanged: widget.videoState.setDanmakuFontSize,
                 ),
-                AdaptivePlayerMenuTile(
-                  title: const Text('字体选择'),
-                  subtitle: Text('当前字体：${_danmakuFontLabel()}'),
-                  trailing: const Icon(CupertinoIcons.right_chevron),
-                  onTap: _pickDanmakuFontFile,
-                ),
-                AdaptivePlayerMenuTile(
-                  title: const Text('恢复默认字体'),
-                  subtitle: const Text('使用系统默认弹幕字体'),
-                  trailing: const Icon(CupertinoIcons.refresh),
-                  onTap: _resetDanmakuFont,
-                ),
+                if (!isLargeScreen)
+                  AdaptivePlayerMenuTile(
+                    title: const Text('字体选择'),
+                    subtitle: Text('当前字体：${_danmakuFontLabel()}'),
+                    trailing: const Icon(CupertinoIcons.right_chevron),
+                    onTap: _pickDanmakuFontFile,
+                  ),
+                if (!isLargeScreen)
+                  AdaptivePlayerMenuTile(
+                    title: const Text('恢复默认字体'),
+                    subtitle: const Text('使用系统默认弹幕字体'),
+                    trailing: const Icon(CupertinoIcons.refresh),
+                    onTap: _resetDanmakuFont,
+                  ),
                 _buildSliderTile(
                   context,
                   title: '滚动速度',
@@ -572,10 +577,11 @@ class _CupertinoDanmakuSettingsPaneState
     return AdaptivePlayerMenuTile(
       title: Text(title),
       subtitle: Text(subtitle),
-      trailing: AdaptiveSwitch(
+      trailing: AdaptivePlayerMenuSwitch(
         value: value,
         onChanged: onChanged,
       ),
+      onTap: () => onChanged(!value),
     );
   }
 
@@ -666,7 +672,7 @@ class _CupertinoDanmakuSettingsPaneState
             runSpacing: 8,
             children: values.map((value) {
               final selected = value == selectedValue;
-              return GestureDetector(
+              return AdaptivePlayerMenuActionSurface(
                 onTap: () => onSelected(value),
                 child: Container(
                   padding:
@@ -726,7 +732,7 @@ class _CupertinoDanmakuSettingsPaneState
             children: [
               Text(_getDisplayText(word)),
               const SizedBox(width: 6),
-              GestureDetector(
+              AdaptivePlayerMenuActionSurface(
                 onTap: () => widget.videoState.removeDanmakuBlockWord(word),
                 child: const Icon(
                   CupertinoIcons.clear_circled_solid,

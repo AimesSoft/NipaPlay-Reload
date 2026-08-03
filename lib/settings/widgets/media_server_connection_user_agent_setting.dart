@@ -9,6 +9,7 @@ import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 bool supportsMediaServerConnectionUserAgentSetting({bool isWeb = kIsWeb}) {
   return !isWeb;
@@ -144,14 +145,18 @@ class _MediaServerConnectionUserAgentSettingState
         children: [
           Text(_description(context)),
           const SizedBox(height: 12),
-          TextFormField(
-            initialValue: inputValue,
-            onChanged: (value) => inputValue = value,
-            autocorrect: false,
-            enableSuggestions: false,
+          TvOSRemoteTextInputControl(
+            title: _title(context),
             maxLength: 256,
-            decoration: const InputDecoration(
-              hintText: MediaServerServiceBase.defaultConnectionUserAgent,
+            child: TextFormField(
+              initialValue: inputValue,
+              onChanged: (value) => inputValue = value,
+              autocorrect: false,
+              enableSuggestions: false,
+              maxLength: 256,
+              decoration: const InputDecoration(
+                hintText: MediaServerServiceBase.defaultConnectionUserAgent,
+              ),
             ),
           ),
         ],

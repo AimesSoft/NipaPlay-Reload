@@ -29,7 +29,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dar
     show MediaServerType, NetworkMediaServerDialog;
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -568,15 +570,16 @@ class _RemoteMediaLibrarySettingsContentState
           children: [
             AdaptiveSettingsSection(
               children: [
-                AdaptiveSettingsTile<void>.card(
-                  title: _sharedRemoteTitle(context),
-                  subtitle: _sharedRemoteSubtitle(context, provider),
-                  icon: Ionicons.laptop_outline,
-                  phoneIcon: cupertino.CupertinoIcons.device_laptop,
-                  enabled: provider.hasActiveHost,
-                  onTap: () => _openSharedRemoteLibrary(context),
-                ),
-                if (RemoteAccessQrCameraScanner.isSupported)
+                if (!globals.isTvOS)
+                  AdaptiveSettingsTile<void>.card(
+                    title: _sharedRemoteTitle(context),
+                    subtitle: _sharedRemoteSubtitle(context, provider),
+                    icon: Ionicons.laptop_outline,
+                    phoneIcon: cupertino.CupertinoIcons.device_laptop,
+                    enabled: provider.hasActiveHost,
+                    onTap: () => _openSharedRemoteLibrary(context),
+                  ),
+                if (!globals.isTvOS && RemoteAccessQrCameraScanner.isSupported)
                   AdaptiveSettingsTile<void>.card(
                     title: _text(context, '扫码连接共享客户端', '掃碼連接共享客戶端',
                         'Scan to Connect Shared Client'),
@@ -1215,23 +1218,35 @@ class _RemoteMediaLibrarySettingsContentState
       return BlurDialog.show<_SharedHostEditResult>(
         context: context,
         title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
-        contentWidget: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: _text(context, '备注名称', '備註名稱', 'Display name'),
+        contentWidget: TvOSRemoteTextInputGroup(
+          title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TvOSRemoteTextInputControl(
+                title: _text(context, '备注名称', '備註名稱', 'Display name'),
+                fieldId: 'displayName',
+                child: TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: _text(context, '备注名称', '備註名稱', 'Display name'),
+                  ),
+                ),
               ),
-            ),
-            TextField(
-              controller: urlController,
-              decoration: InputDecoration(
-                labelText: _text(context, '访问地址', '存取地址', 'Access URL'),
-                hintText: '192.168.1.100:1180',
+              TvOSRemoteTextInputControl(
+                title: _text(context, '访问地址', '存取地址', 'Access URL'),
+                fieldId: 'baseUrl',
+                required: true,
+                child: TextField(
+                  controller: urlController,
+                  decoration: InputDecoration(
+                    labelText: _text(context, '访问地址', '存取地址', 'Access URL'),
+                    hintText: '192.168.1.100:1180',
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           HoverScaleTextButton(
@@ -1332,11 +1347,15 @@ class _RemoteMediaLibrarySettingsContentState
             children: [
               Text(l10n.deviceIdDialogHint),
               const SizedBox(height: 12),
-              TextField(
-                controller: controller,
+              TvOSRemoteTextInputControl(
+                title: l10n.deviceIdDialogTitle,
                 maxLength: 128,
-                decoration: InputDecoration(
-                  hintText: l10n.deviceIdDialogPlaceholder,
+                child: TextField(
+                  controller: controller,
+                  maxLength: 128,
+                  decoration: InputDecoration(
+                    hintText: l10n.deviceIdDialogPlaceholder,
+                  ),
                 ),
               ),
               Text(l10n.deviceIdDialogValidationHint),

@@ -127,7 +127,9 @@ dependencies:
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/Erika.git
-      ref: v0.1.4
+      # Apple TV requires the tvOS plugin and native Erika bridge added after
+      # v0.1.4. Pin the exact revision so release builds stay reproducible.
+      ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b
       path: packages/erika_flutter
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0

@@ -1,14 +1,30 @@
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_panel.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_settings_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_pop_route_guard.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+
+enum NipaplayLargeScreenPlayerMenuTarget { revealControls, openPlayerMenu }
+
+@visibleForTesting
+NipaplayLargeScreenPlayerMenuTarget resolveLargeScreenPlayerMenuTarget({
+  required bool controlsVisible,
+}) {
+  return controlsVisible
+      ? NipaplayLargeScreenPlayerMenuTarget.openPlayerMenu
+      : NipaplayLargeScreenPlayerMenuTarget.revealControls;
+}
 
 class NipaplayLargeScreenScaffoldLayout extends StatefulWidget {
   const NipaplayLargeScreenScaffoldLayout({
@@ -44,18 +60,20 @@ class _NipaplayLargeScreenScaffoldLayoutState
       _tabPanelCommand;
   late final ValueNotifier<NipaplayLargeScreenSettingsPanelCommand?>
       _settingsPanelCommand;
+  late final FocusNode _playerMenuInitialFocusNode;
   final GlobalKey _contextActionKey =
       GlobalKey(debugLabel: 'nipaplay_large_screen_context_action');
   bool _isTabPanelVisible = false;
   bool _isSettingsPanelVisible = false;
   bool _isPlayerMenuVisible = false;
+  DateTime? _lastPlayerMenuPressAt;
   int _focusedMenuIndex = 0;
   int _focusedSettingsIndex = 0;
   int _settingsEntryCount = 0;
 
   int get _menuItemCount {
     final int actionCount = [
-      widget.onToggleLargeScreen,
+      globals.isTvOS ? null : widget.onToggleLargeScreen,
       widget.onToggleThemeFromOrigin,
       widget.onOpenSettings,
     ].where((callback) => callback != null).length;
@@ -66,6 +84,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
   void initState() {
     super.initState();
     _inputFocusNode = FocusNode(debugLabel: 'nipaplay_large_screen_input');
+    _playerMenuInitialFocusNode = FocusNode(
+      debugLabel: 'nipaplay_large_screen_player_menu_initial',
+    );
     _tabPanelCommand = ValueNotifier<NipaplayLargeScreenTabPanelCommand?>(null);
     _settingsPanelCommand =
         ValueNotifier<NipaplayLargeScreenSettingsPanelCommand?>(null);
@@ -79,6 +100,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   @override
   void dispose() {
+    _playerMenuInitialFocusNode.dispose();
     _settingsPanelCommand.dispose();
     _tabPanelCommand.dispose();
     _inputFocusNode.dispose();
@@ -181,6 +203,69 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _openPlayerMenu();
   }
 
+  bool _isPlayerPlaybackContext(VideoPlayerState videoState) {
+    return widget.currentIndex == 1 && videoState.hasVideo;
+  }
+
+  void _revealPlayerControls(VideoPlayerState videoState) {
+    videoState.setControlsHovered(false);
+    videoState.revealLargeScreenControls();
+  }
+
+  bool _handlePlayerMenuPress(VideoPlayerState videoState) {
+    final now = DateTime.now();
+    final lastPressAt = _lastPlayerMenuPressAt;
+    if (lastPressAt != null &&
+        now.difference(lastPressAt) < const Duration(milliseconds: 300)) {
+      return true;
+    }
+    _lastPlayerMenuPressAt = now;
+
+    if (_isSettingsPanelVisible) {
+      _closeSettingsPanel();
+    } else if (_isPlayerMenuVisible) {
+      _closePlayerMenu();
+    } else if (_isTabPanelVisible) {
+      _closeTabPanel();
+    } else {
+      switch (resolveLargeScreenPlayerMenuTarget(
+        controlsVisible: videoState.showControls,
+      )) {
+        case NipaplayLargeScreenPlayerMenuTarget.revealControls:
+          _revealPlayerControls(videoState);
+        case NipaplayLargeScreenPlayerMenuTarget.openPlayerMenu:
+          _openPlayerMenu();
+      }
+    }
+    return true;
+  }
+
+  KeyEventResult _handlePlayerMediaKey(
+    VideoPlayerState videoState,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.mediaPlayPause:
+        videoState.togglePlayPause();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.mediaPlay:
+        if (videoState.status != PlayerStatus.playing) {
+          videoState.togglePlayPause();
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.mediaPause:
+        if (videoState.status == PlayerStatus.playing) {
+          videoState.togglePlayPause();
+        }
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
   void _openPlayerMenu() {
     final videoState = context.read<VideoPlayerState>();
     if (!videoState.hasVideo) {
@@ -191,8 +276,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
     });
     videoState.setControlsVisibilityLocked(true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      FocusScope.of(context).nextFocus();
+      if (!mounted ||
+          !_isPlayerMenuVisible ||
+          !_playerMenuInitialFocusNode.canRequestFocus) {
+        return;
+      }
+      _playerMenuInitialFocusNode.requestFocus();
     });
   }
 
@@ -204,10 +293,33 @@ class _NipaplayLargeScreenScaffoldLayoutState
       setState(() {
         _isPlayerMenuVisible = false;
       });
-      context.read<VideoPlayerState>().setControlsVisibilityLocked(false);
+      final videoState = context.read<VideoPlayerState>();
+      videoState.setControlsVisibilityLocked(false);
+      videoState.resetLargeScreenControlsAutoHideTimer();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isPlayerMenuVisible) {
+          _ensureContentFocus();
+        }
+      });
     } else {
       _isPlayerMenuVisible = false;
     }
+  }
+
+  Future<void> _exitPlaybackFromPlayerMenu() async {
+    final videoState = context.read<VideoPlayerState>();
+    _closePlayerMenu();
+    final shouldExit = await videoState.handleBackButton();
+    if (shouldExit) {
+      await videoState.resetPlayer();
+    }
+  }
+
+  Future<void> _sendDanmakuFromPlayerMenu() async {
+    final videoState = context.read<VideoPlayerState>();
+    _closePlayerMenu();
+    await Future<void>.delayed(Duration.zero);
+    await videoState.showSendDanmakuDialog();
   }
 
   int _clampMenuIndex(int index) {
@@ -292,8 +404,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   bool _moveContentFocus(TraversalDirection direction) {
     final focusScope = FocusScope.of(context);
-    final focusedChild = focusScope.focusedChild;
-    if (focusedChild == null || focusedChild == _inputFocusNode) {
+    final focusedNode = FocusManager.instance.primaryFocus;
+    if (focusedNode == null || focusedNode == _inputFocusNode) {
       final moved = focusScope.nextFocus();
       if (moved) {
         _ensurePrimaryFocusVisible();
@@ -305,7 +417,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       }
       return moved;
     }
-    final moved = focusedChild.focusInDirection(direction);
+    final moved = focusedNode.focusInDirection(direction);
     if (moved) {
       _ensurePrimaryFocusVisible();
     }
@@ -335,16 +447,49 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   void _ensureContentFocus() {
     final focusScope = FocusScope.of(context);
-    if (focusScope.focusedChild == null ||
-        focusScope.focusedChild == _inputFocusNode) {
+    final focusedNode = FocusManager.instance.primaryFocus;
+    if (focusedNode == null || focusedNode == _inputFocusNode) {
       focusScope.nextFocus();
     }
   }
 
+  bool _handleTvOSRootPopRoute() {
+    final videoState = context.read<VideoPlayerState>();
+    if (_isPlayerPlaybackContext(videoState)) {
+      return _handlePlayerMenuPress(videoState);
+    }
+    if (_isSettingsPanelVisible) {
+      _closeSettingsPanel();
+    } else if (_isPlayerMenuVisible) {
+      _closePlayerMenu();
+    } else if (_isTabPanelVisible) {
+      _closeTabPanel();
+    } else {
+      _toggleTabPanel();
+    }
+    return true;
+  }
+
   KeyEventResult _handleInputKeyEvent(FocusNode node, KeyEvent event) {
+    final videoState = context.read<VideoPlayerState>();
+    final isPlayerPlaybackContext = _isPlayerPlaybackContext(videoState);
+    if (isPlayerPlaybackContext) {
+      final mediaResult = _handlePlayerMediaKey(videoState, event);
+      if (mediaResult == KeyEventResult.handled) {
+        return mediaResult;
+      }
+    }
     final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
     if (command == null) {
       return KeyEventResult.ignored;
+    }
+
+    if (isPlayerPlaybackContext &&
+        (command == NipaplayLargeScreenInputCommand.toggleMenu ||
+            command == NipaplayLargeScreenInputCommand.back)) {
+      return _handlePlayerMenuPress(videoState)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
 
     if (_isSettingsPanelVisible) {
@@ -415,6 +560,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
           _moveMenuFocus(-1);
           return KeyEventResult.handled;
         }
+        if (isPlayerPlaybackContext && !videoState.showControls) {
+          videoState.increaseVolume();
+          return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext) {
+          videoState.resetLargeScreenControlsAutoHideTimer();
+        }
         return _moveContentFocus(TraversalDirection.up)
             ? KeyEventResult.handled
             : KeyEventResult.ignored;
@@ -423,12 +575,26 @@ class _NipaplayLargeScreenScaffoldLayoutState
           _moveMenuFocus(1);
           return KeyEventResult.handled;
         }
+        if (isPlayerPlaybackContext && !videoState.showControls) {
+          videoState.decreaseVolume();
+          return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext) {
+          videoState.resetLargeScreenControlsAutoHideTimer();
+        }
         return _moveContentFocus(TraversalDirection.down)
             ? KeyEventResult.handled
             : KeyEventResult.ignored;
       case NipaplayLargeScreenInputCommand.navigateLeft:
         if (_isTabPanelVisible) {
           return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext && !videoState.showControls) {
+          videoState.seekBackwardByStep();
+          return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext) {
+          videoState.resetLargeScreenControlsAutoHideTimer();
         }
         return _moveContentFocus(TraversalDirection.left)
             ? KeyEventResult.handled
@@ -437,6 +603,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
         if (_isTabPanelVisible) {
           return KeyEventResult.handled;
         }
+        if (isPlayerPlaybackContext && !videoState.showControls) {
+          videoState.seekForwardByStep();
+          return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext) {
+          videoState.resetLargeScreenControlsAutoHideTimer();
+        }
         return _moveContentFocus(TraversalDirection.right)
             ? KeyEventResult.handled
             : KeyEventResult.ignored;
@@ -444,6 +617,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
         if (_isTabPanelVisible) {
           _activateFocusedMenuItem();
           return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext && !videoState.showControls) {
+          videoState.togglePlayPause();
+          return KeyEventResult.handled;
+        }
+        if (isPlayerPlaybackContext) {
+          videoState.resetLargeScreenControlsAutoHideTimer();
         }
         return _activateContentFocus()
             ? KeyEventResult.handled
@@ -467,7 +647,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     final bool showSystemBars =
         !usePlayerContextPanel || videoControlsVisible || showPanelBackdrop;
 
-    return Focus(
+    final content = Focus(
       focusNode: _inputFocusNode,
       autofocus: true,
       canRequestFocus: true,
@@ -486,7 +666,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
               child: MediaQuery.removePadding(
                 context: context,
                 removeTop: true,
-                child: widget.content,
+                child: NipaplayLargeScreenPlayerMenuScope(
+                  onMenuPressed: () {
+                    _handlePlayerMenuPress(context.read<VideoPlayerState>());
+                  },
+                  child: widget.content,
+                ),
               ),
             ),
           ),
@@ -541,7 +726,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
                   });
                 },
                 onTabActivated: _closeTabPanel,
-                onToggleLargeScreen: widget.onToggleLargeScreen,
+                onToggleLargeScreen:
+                    globals.isTvOS ? null : widget.onToggleLargeScreen,
                 onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
                 onOpenSettings: _toggleSettingsPanel,
               ),
@@ -596,9 +782,19 @@ class _NipaplayLargeScreenScaffoldLayoutState
             bottom: 0,
             child: IgnorePointer(
               ignoring: !_isPlayerMenuVisible,
-              child: NipaplayLargeScreenPlayerMenuPanel(
-                isDarkMode: widget.isDarkMode,
-                onRequestClose: _closePlayerMenu,
+              child: ExcludeFocus(
+                excluding: !_isPlayerMenuVisible,
+                child: NipaplayLargeScreenPlayerMenuPanel(
+                  isDarkMode: widget.isDarkMode,
+                  initialFocusNode: _playerMenuInitialFocusNode,
+                  onExitPlayback: () {
+                    unawaited(_exitPlaybackFromPlayerMenu());
+                  },
+                  onSendDanmaku: () {
+                    unawaited(_sendDanmakuFromPlayerMenu());
+                  },
+                  onRequestClose: _closePlayerMenu,
+                ),
               ),
             ),
           ),
@@ -640,15 +836,22 @@ class _NipaplayLargeScreenScaffoldLayoutState
                       ? Icons.tune_rounded
                       : Icons.settings_rounded,
                   contextLabel: usePlayerContextPanel ? '播放器菜单' : '设置',
-                  onOpenContext: () => _toggleContextPanel(
-                    usePlayerMenu: usePlayerContextPanel,
-                  ),
+                  onOpenContext: globals.isTvOS && !usePlayerContextPanel
+                      ? null
+                      : () => _toggleContextPanel(
+                            usePlayerMenu: usePlayerContextPanel,
+                          ),
                 ),
               ),
             ),
           ),
         ],
       ),
+    );
+    return NipaplayTvOSPopRouteGuard(
+      enabled: globals.isTvOS,
+      onRootPopRoute: _handleTvOSRootPopRoute,
+      child: content,
     );
   }
 }

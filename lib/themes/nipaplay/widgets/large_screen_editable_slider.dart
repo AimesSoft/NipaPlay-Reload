@@ -15,6 +15,8 @@ class NipaplayLargeScreenEditableSlider extends StatefulWidget {
     this.label,
     this.onChangeStart,
     this.onChangeEnd,
+    this.focusNode,
+    this.autofocus = false,
   });
 
   final double value;
@@ -25,10 +27,8 @@ class NipaplayLargeScreenEditableSlider extends StatefulWidget {
   final ValueChanged<double>? onChanged;
   final ValueChanged<double>? onChangeStart;
   final ValueChanged<double>? onChangeEnd;
-
-  static int _editingCount = 0;
-
-  static bool get isAnyEditing => _editingCount > 0;
+  final FocusNode? focusNode;
+  final bool autofocus;
 
   @override
   State<NipaplayLargeScreenEditableSlider> createState() =>
@@ -37,9 +37,7 @@ class NipaplayLargeScreenEditableSlider extends StatefulWidget {
 
 class _NipaplayLargeScreenEditableSliderState
     extends State<NipaplayLargeScreenEditableSlider> {
-  bool _isEditing = false;
   bool _hasFocus = false;
-  double? _editingStartValue;
 
   bool get _canEdit {
     return widget.onChanged != null && widget.max > widget.min;
@@ -53,44 +51,6 @@ class _NipaplayLargeScreenEditableSliderState
     return (widget.max - widget.min) / 20;
   }
 
-  void _beginEditing() {
-    if (!_canEdit || _isEditing) {
-      return;
-    }
-    widget.onChangeStart?.call(widget.value);
-    setState(() {
-      _setEditingState(true);
-      _editingStartValue = widget.value;
-    });
-  }
-
-  void _cancelEditing() {
-    if (!_isEditing) {
-      return;
-    }
-    final startValue = _editingStartValue;
-    if (startValue != null && widget.onChanged != null) {
-      widget.onChanged!(startValue.clamp(widget.min, widget.max).toDouble());
-    }
-    widget.onChangeEnd?.call(startValue ?? widget.value);
-    setState(() {
-      _setEditingState(false);
-      _editingStartValue = null;
-    });
-  }
-
-  void _setEditingState(bool value) {
-    if (_isEditing == value) {
-      return;
-    }
-    _isEditing = value;
-    if (value) {
-      NipaplayLargeScreenEditableSlider._editingCount++;
-    } else if (NipaplayLargeScreenEditableSlider._editingCount > 0) {
-      NipaplayLargeScreenEditableSlider._editingCount--;
-    }
-  }
-
   void _adjustValue(bool increase) {
     if (!_canEdit) {
       return;
@@ -102,15 +62,9 @@ class _NipaplayLargeScreenEditableSliderState
     final nextValue = (widget.value + (increase ? step : -step))
         .clamp(widget.min, widget.max)
         .toDouble();
+    widget.onChangeStart?.call(widget.value);
     widget.onChanged?.call(nextValue);
-  }
-
-  @override
-  void dispose() {
-    if (_isEditing && NipaplayLargeScreenEditableSlider._editingCount > 0) {
-      NipaplayLargeScreenEditableSlider._editingCount--;
-    }
-    super.dispose();
+    widget.onChangeEnd?.call(nextValue);
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -119,41 +73,28 @@ class _NipaplayLargeScreenEditableSliderState
     }
 
     final key = event.logicalKey;
-    final isEnter = key == LogicalKeyboardKey.enter ||
+    final isActivate = key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.gameButtonA;
-    final isEscape = key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.gameButtonB;
     final isLeft = key == LogicalKeyboardKey.arrowLeft;
     final isRight = key == LogicalKeyboardKey.arrowRight;
-    final isUp = key == LogicalKeyboardKey.arrowUp;
-    final isDown = key == LogicalKeyboardKey.arrowDown;
 
-    if (!_isEditing) {
-      if (isEnter) {
-        _beginEditing();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (isEscape) {
-      _cancelEditing();
-      return KeyEventResult.handled;
-    }
-
-    if (isLeft || isDown) {
+    if (isLeft) {
       _adjustValue(false);
       return KeyEventResult.handled;
     }
-
-    if (isRight || isUp) {
+    if (isRight) {
       _adjustValue(true);
       return KeyEventResult.handled;
     }
+    if (isActivate) {
+      return KeyEventResult.handled;
+    }
 
+    // Up and down deliberately bubble to the owning two-column panel, which
+    // moves focus to the previous or next control. Left and right never bubble
+    // while this slider owns focus, so they cannot accidentally return to tabs.
     return KeyEventResult.ignored;
   }
 
@@ -163,61 +104,85 @@ class _NipaplayLargeScreenEditableSliderState
         NipaplayLargeScreenModeScope.isActiveOf(context);
     final normalizedValue =
         widget.value.clamp(widget.min, widget.max).toDouble();
-    final slider = fluent.Slider(
-      value: normalizedValue,
-      min: widget.min,
-      max: widget.max,
-      divisions: widget.divisions,
-      onChangeStart: widget.onChangeStart,
-      onChangeEnd: widget.onChangeEnd,
-      onChanged: widget.onChanged,
-      label: widget.label,
+    final materialTheme = Theme.of(context);
+    final accent = AppAccentColors.current;
+    final inactiveTrackColor = materialTheme.brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.28)
+        : Colors.black.withValues(alpha: 0.24);
+    final disabledTrackColor = materialTheme.brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.10);
+    final sliderStyle = fluent.SliderThemeData(
+      margin: EdgeInsets.zero,
+      useThumbBall: true,
+      trackHeight: const WidgetStatePropertyAll<double>(4),
+      thumbRadius: const WidgetStatePropertyAll<double>(10),
+      thumbBallInnerFactor: const WidgetStatePropertyAll<double>(0.52),
+      activeColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        return states.contains(WidgetState.disabled)
+            ? accent.withValues(alpha: 0.34)
+            : accent;
+      }),
+      inactiveColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        return states.contains(WidgetState.disabled)
+            ? disabledTrackColor
+            : inactiveTrackColor;
+      }),
+      thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        return states.contains(WidgetState.disabled)
+            ? accent.withValues(alpha: 0.45)
+            : accent;
+      }),
+      labelBackgroundColor: materialTheme.colorScheme.surface,
+      labelForegroundColor: materialTheme.colorScheme.onSurface,
+    );
+    final slider = fluent.FluentTheme(
+      data: fluent.FluentThemeData(
+        brightness: materialTheme.brightness,
+        accentColor: fluent.AccentColor.swatch({
+          'normal': accent,
+          'default': accent,
+        }),
+      ),
+      child: fluent.Slider(
+        value: normalizedValue,
+        min: widget.min,
+        max: widget.max,
+        divisions: widget.divisions,
+        onChangeStart: widget.onChangeStart,
+        onChangeEnd: widget.onChangeEnd,
+        onChanged: widget.onChanged,
+        label: widget.label,
+        style: sliderStyle,
+      ),
     );
 
     if (!isLargeScreenModeActive) {
       return slider;
     }
 
-    final colorScheme = Theme.of(context).colorScheme;
-    final borderColor = _isEditing
+    final colorScheme = materialTheme.colorScheme;
+    final borderColor = _hasFocus
         ? AppAccentColors.current
-        : (_hasFocus
-            ? colorScheme.onSurface.withValues(alpha: 0.5)
-            : Colors.transparent);
+        : colorScheme.onSurface.withValues(alpha: 0.12);
 
-    return Actions(
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            _beginEditing();
-            return null;
-          },
-        ),
+    return Focus(
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: (focused) {
+        if (_hasFocus == focused) return;
+        setState(() => _hasFocus = focused);
       },
-      child: Focus(
-        onFocusChange: (focused) {
-          if (_hasFocus == focused) {
-            return;
-          }
-          setState(() {
-            _hasFocus = focused;
-            if (!focused) {
-              _setEditingState(false);
-              _editingStartValue = null;
-            }
-          });
-        },
-        onKeyEvent: _handleKeyEvent,
-        descendantsAreFocusable: false,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderColor, width: 1.2),
-          ),
-          child: slider,
+      onKeyEvent: _handleKeyEvent,
+      descendantsAreFocusable: false,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor, width: _hasFocus ? 2 : 1.2),
         ),
+        child: slider,
       ),
     );
   }

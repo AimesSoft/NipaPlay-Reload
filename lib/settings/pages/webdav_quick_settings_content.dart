@@ -8,6 +8,7 @@ import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:provider/provider.dart';
 
 class WebDAVQuickSettingsContent extends StatefulWidget {
@@ -474,14 +475,17 @@ class _WebDAVQuickSettingsContentState
     final result = await BlurDialog.show<String>(
       context: context,
       title: title,
-      contentWidget: TextField(
-        controller: controller,
+      contentWidget: TvOSRemoteTextInputControl(
+        title: title,
         autofocus: true,
-        minLines: 1,
-        maxLines: 3,
-        decoration: InputDecoration(
-          hintText: hintText,
-          helperText: helperText,
+        child: TextField(
+          controller: controller,
+          minLines: 1,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: hintText,
+            helperText: helperText,
+          ),
         ),
       ),
       actions: [

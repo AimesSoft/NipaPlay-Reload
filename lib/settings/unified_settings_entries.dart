@@ -322,6 +322,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.folder_open_outline,
       phoneIcon: cupertino.CupertinoIcons.archivebox,
       contentType: UnifiedSettingContentType.storage,
+      visible: (context, surface) => !globals.isTvOS,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.network,
@@ -343,7 +344,9 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       phoneIcon: cupertino.CupertinoIcons.cloud_upload,
       contentType: UnifiedSettingContentType.backupRestore,
       visible: (context, surface) =>
-          surface == UnifiedSettingsSurface.desktopTablet && !globals.isPhone,
+          surface == UnifiedSettingsSurface.desktopTablet &&
+          !globals.isPhone &&
+          !globals.isTvOS,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.player,
@@ -390,6 +393,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.open_outline,
       phoneIcon: cupertino.CupertinoIcons.square_arrow_up,
       contentType: UnifiedSettingContentType.externalPlayer,
+      visible: (context, surface) => !globals.isTvOS,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.shortcuts,
@@ -400,7 +404,9 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       phoneIcon: cupertino.CupertinoIcons.keyboard,
       contentType: UnifiedSettingContentType.shortcuts,
       visible: (context, surface) =>
-          surface == UnifiedSettingsSurface.desktopTablet && !globals.isPhone,
+          surface == UnifiedSettingsSurface.desktopTablet &&
+          !globals.isPhone &&
+          !globals.isTvOS,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.remoteAccess,
@@ -416,7 +422,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.link_outline,
       phoneIcon: cupertino.CupertinoIcons.dot_radiowaves_left_right,
       contentType: UnifiedSettingContentType.remoteAccess,
-      visible: (context, surface) => !kIsWeb,
+      visible: (context, surface) => !kIsWeb && !globals.isTvOS,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.remoteMediaLibrary,

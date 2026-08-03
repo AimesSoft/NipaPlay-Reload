@@ -2,9 +2,6 @@ import 'dart:async';
 
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
-    show AdaptiveSwitch;
-
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -257,7 +254,7 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
                   children: [
                     const Text('显示被屏蔽'),
                     const SizedBox(width: 6),
-                    AdaptiveSwitch(
+                    AdaptivePlayerMenuSwitch(
                       value: _showFiltered,
                       onChanged: (value) {
                         setState(() => _showFiltered = value);
@@ -322,7 +319,7 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
                   return Padding(
                     padding:
                         const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                    child: GestureDetector(
+                    child: AdaptivePlayerMenuActionSurface(
                       onTap: () => _seekToTime(timeMs),
                       child: Container(
                         padding: const EdgeInsets.all(12),
@@ -428,20 +425,24 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
   }
 
   Color _typeColor(int type) {
-    switch (DanmakuMode.fromCode(type))
-    {
-    case DanmakuMode.bottom : return CupertinoColors.activeGreen;
-    case DanmakuMode.top    : return CupertinoColors.activeOrange;
-    default                 : return CupertinoColors.activeBlue;
+    switch (DanmakuMode.fromCode(type)) {
+      case DanmakuMode.bottom:
+        return CupertinoColors.activeGreen;
+      case DanmakuMode.top:
+        return CupertinoColors.activeOrange;
+      default:
+        return CupertinoColors.activeBlue;
     }
   }
 
   String _danmakuTypeLabel(int type) {
-    switch (DanmakuMode.fromCode(type))
-    {
-    case DanmakuMode.bottom : return '底部';
-    case DanmakuMode.top    : return '顶部';
-    default                 : return '滚动';
+    switch (DanmakuMode.fromCode(type)) {
+      case DanmakuMode.bottom:
+        return '底部';
+      case DanmakuMode.top:
+        return '顶部';
+      default:
+        return '滚动';
     }
   }
 }

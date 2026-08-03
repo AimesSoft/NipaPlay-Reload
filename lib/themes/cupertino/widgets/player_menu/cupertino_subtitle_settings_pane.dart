@@ -8,8 +8,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
         AdaptiveButton,
         AdaptiveButtonSize,
         AdaptiveButtonStyle,
-        AdaptiveSegmentedControl,
-        AdaptiveSwitch;
+        AdaptiveSegmentedControl;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
@@ -751,10 +750,11 @@ class _CupertinoSubtitleSettingsPaneState
   }) {
     return AdaptivePlayerMenuTile(
       title: Text(title),
-      trailing: AdaptiveSwitch(
+      trailing: AdaptivePlayerMenuSwitch(
         value: value,
         onChanged: onChanged,
       ),
+      onTap: () => onChanged(!value),
     );
   }
 

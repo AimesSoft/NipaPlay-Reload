@@ -12,7 +12,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SharedRemoteLibrarySettingsSection extends StatelessWidget {
   const SharedRemoteLibrarySettingsSection({super.key});
@@ -246,7 +248,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       label: '新增客户端',
     );
 
-    if (!RemoteAccessQrCameraScanner.isSupported) {
+    if (globals.isTvOS || !RemoteAccessQrCameraScanner.isSupported) {
       return SizedBox(width: double.infinity, child: addButton);
     }
 
@@ -406,21 +408,24 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       title: '重命名',
       contentWidget: TextSelectionTheme(
         data: selectionTheme,
-        child: TextField(
-          controller: controller,
-          cursorColor: _accentColor,
-          decoration: InputDecoration(
-            labelText: '备注名称',
-            labelStyle: TextStyle(color: secondaryTextColor),
-            hintStyle: TextStyle(color: hintColor),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: borderColor),
+        child: TvOSRemoteTextInputControl(
+          title: '备注名称',
+          child: TextField(
+            controller: controller,
+            cursorColor: _accentColor,
+            decoration: InputDecoration(
+              labelText: '备注名称',
+              labelStyle: TextStyle(color: secondaryTextColor),
+              hintStyle: TextStyle(color: hintColor),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: borderColor),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: _accentColor),
+              ),
             ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: _accentColor),
-            ),
+            style: TextStyle(color: _accentColor),
           ),
-          style: TextStyle(color: _accentColor),
         ),
       ),
       actions: [
@@ -465,21 +470,24 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       title: '修改访问地址',
       contentWidget: TextSelectionTheme(
         data: selectionTheme,
-        child: TextField(
-          controller: controller,
-          cursorColor: _accentColor,
-          decoration: InputDecoration(
-            labelText: '访问地址',
-            labelStyle: TextStyle(color: secondaryTextColor),
-            hintStyle: TextStyle(color: hintColor),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: borderColor),
+        child: TvOSRemoteTextInputControl(
+          title: '访问地址',
+          child: TextField(
+            controller: controller,
+            cursorColor: _accentColor,
+            decoration: InputDecoration(
+              labelText: '访问地址',
+              labelStyle: TextStyle(color: secondaryTextColor),
+              hintStyle: TextStyle(color: hintColor),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: borderColor),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: _accentColor),
+              ),
             ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: _accentColor),
-            ),
+            style: TextStyle(color: _accentColor),
           ),
-          style: TextStyle(color: _accentColor),
         ),
       ),
       actions: [
