@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/build_info.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/utils/platform_utils.dart' as platform;
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -140,13 +141,14 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
                   value: devOptions.enableFileLog,
                   onChanged: (value) => _setFileLog(context, devOptions, value),
                 ),
-                AdaptiveSettingsTile<void>.card(
-                  title: l10n.openLogDirectoryTitle,
-                  subtitle: l10n.openLogDirectorySubtitle,
-                  icon: Ionicons.folder_open_outline,
-                  phoneIcon: cupertino.CupertinoIcons.folder_open,
-                  onTap: () => _openLogDirectory(context),
-                ),
+                if (!globals.isTablet)
+                  AdaptiveSettingsTile<void>.card(
+                    title: l10n.openLogDirectoryTitle,
+                    subtitle: l10n.openLogDirectorySubtitle,
+                    icon: Ionicons.folder_open_outline,
+                    phoneIcon: cupertino.CupertinoIcons.folder_open,
+                    onTap: () => _openLogDirectory(context),
+                  ),
                 AdaptiveSettingsTile<void>.card(
                   title: l10n.terminalOutput,
                   subtitle: l10n.terminalOutputSubtitle,

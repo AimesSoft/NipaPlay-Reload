@@ -346,6 +346,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet &&
           !globals.isPhone &&
+          !globals.isTablet &&
           !globals.isTelevision,
     ),
     UnifiedSettingEntry(
@@ -393,7 +394,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.open_outline,
       phoneIcon: cupertino.CupertinoIcons.square_arrow_up,
       contentType: UnifiedSettingContentType.externalPlayer,
-      visible: (context, surface) => !globals.isTelevision,
+      visible: (context, surface) => !globals.isTelevision && !globals.isTablet,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.shortcuts,
