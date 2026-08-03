@@ -32,8 +32,33 @@ void applyMediaKitNetworkOptions(
   if (httpProxy.isNotEmpty) setter('http-proxy', httpProxy);
 }
 
+@visibleForTesting
+bool isRetryableMediaKitLoadError(String message) {
+  final error = message.toLowerCase();
+  if (error.contains('401') ||
+      error.contains('403') ||
+      error.contains('unauthorized') ||
+      error.contains('forbidden') ||
+      error.contains('404') ||
+      error.contains('not found') ||
+      error.contains('unsupported') ||
+      error.contains('codec') ||
+      error.contains('format')) {
+    return false;
+  }
+  return error.contains('network') ||
+      error.contains('connection') ||
+      error.contains('timeout') ||
+      error.contains('timed out') ||
+      error.contains('eof') ||
+      error.contains('no data') ||
+      error.contains('failed to open') ||
+      error.contains('cannot open');
+}
+
 /// MediaKit播放器适配器
-class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
+class MediaKitPlayerAdapter
+    implements AbstractPlayer, MediaLoadAwarePlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
@@ -288,6 +313,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   bool _pendingExternalAudioIsFresh = false;
   // 媒体加载代数计数器，用于作废旧的外挂音频延迟加载操作
   int _mediaLoadGeneration = 0;
+  Completer<bool> _mediaReadyCompleter = Completer<bool>();
+  bool _mediaReady = false;
+  bool _hasReceivedRealPosition = false;
+  bool _mediaLoadFailed = false;
+  bool _mediaLoadErrorRetryable = false;
+  bool _mediaLoadRetryAttempted = false;
+  String? _mediaLoadError;
+  Media? _lastPreparedMainMedia;
 
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
@@ -956,7 +989,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
     });
 
-    _player.stream.tracks.listen(_updateMediaInfo);
+    _player.stream.tracks.listen((tracks) {
+      _updateMediaInfo(tracks);
+      final hasPlayableTrack =
+          _filterRealTracks<VideoTrack>(tracks.video).isNotEmpty ||
+              _filterRealTracks<AudioTrack>(tracks.audio).isNotEmpty;
+      if (hasPlayableTrack) {
+        _markCurrentMediaReady('tracks');
+      }
+    });
 
     // 添加对视频尺寸变化的监听
     //debugPrint('[MediaKit] 设置videoParams监听器');
@@ -968,6 +1009,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           params.dw! > 0 &&
           params.dh! > 0) {
         _updateMediaInfoWithVideoDimensions(params.dw!, params.dh!);
+        _markCurrentMediaReady('video-params');
       }
     });
 
@@ -1003,6 +1045,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // 锚点未重建。暂停时 mpv 不推送 time-pos（无变化），seek 触发的 position
       // 更新锚点是合理的（恢复时用）。仅保留 _isDisposed 丢弃。
       if (_isDisposed) return;
+      _hasReceivedRealPosition = true;
       final newMs = position.inMilliseconds;
       final actualMs = _lastActualPosition.inMilliseconds;
       // 仅前进场景更新锚点；回退/相等则保留锚点（下游 drift 修正处理）。
@@ -1035,6 +1078,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     _player.stream.error.listen((error) {
       debugPrint('MediaKit错误: $error');
+      _recordCurrentMediaLoadError(error);
       _handleStreamingError(error);
     });
 
@@ -1042,6 +1086,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (duration.inMilliseconds > 0 &&
           _mediaInfo.duration != duration.inMilliseconds) {
         _mediaInfo = _mediaInfo.copyWith(duration: duration.inMilliseconds);
+      }
+      if (duration.inMilliseconds > 0) {
+        _markCurrentMediaReady('duration');
       }
       // 时长确定后尝试获取 MKV 章节列表（chapter-list 在 file-loaded 后可用，
       // 且常随 duration 一起就绪）。参考 REFERENCE/mpv/player/lua/osc.lua:3201
@@ -1059,6 +1106,56 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         debugPrint('MediaKit MPV日志: [${log.level}/${log.prefix}] ${log.text}');
       }
     });
+  }
+
+  void _resetMediaLoadState({required bool preserveRetryAttempt}) {
+    if (!_mediaReadyCompleter.isCompleted) {
+      _mediaReadyCompleter.complete(false);
+    }
+    _mediaReadyCompleter = Completer<bool>();
+    _mediaReady = false;
+    _hasReceivedRealPosition = false;
+    _mediaLoadFailed = false;
+    _mediaLoadErrorRetryable = false;
+    _mediaLoadError = null;
+    if (!preserveRetryAttempt) {
+      _mediaLoadRetryAttempted = false;
+    }
+    _interpolatedPosition = Duration.zero;
+    _lastActualPosition = Duration.zero;
+    _lastPositionTimestampUs = 0;
+  }
+
+  void _markCurrentMediaReady(String evidence) {
+    if (_isDisposed || _currentMedia.isEmpty || _mediaReady) {
+      return;
+    }
+    _mediaReady = true;
+    _mediaLoadFailed = false;
+    _mediaLoadErrorRetryable = false;
+    _mediaLoadError = null;
+    if (!_mediaReadyCompleter.isCompleted) {
+      _mediaReadyCompleter.complete(true);
+    }
+    debugPrint(
+      'MediaKit: 媒体已就绪 generation=$_mediaLoadGeneration evidence=$evidence',
+    );
+  }
+
+  void _recordCurrentMediaLoadError(Object error) {
+    if (_isDisposed || _currentMedia.isEmpty || _mediaReady) {
+      return;
+    }
+    final message = error.toString();
+    _mediaLoadFailed = true;
+    _mediaLoadError = message;
+    _mediaLoadErrorRetryable = isRetryableMediaKitLoadError(message);
+    // A retryable transport error may be followed by usable metadata while
+    // mpv reconnects internally. Keep the fast-path future open until the
+    // caller's short deadline instead of aborting a source that recovered.
+    if (!_mediaLoadErrorRetryable && !_mediaReadyCompleter.isCompleted) {
+      _mediaReadyCompleter.complete(false);
+    }
   }
 
   void _printAllTracksInfo(Tracks tracks) {
@@ -1982,6 +2079,67 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   int get position => _interpolatedPosition.inMilliseconds;
 
   @override
+  bool get isMediaReady => _mediaReady;
+
+  @override
+  bool get hasReceivedRealPosition => _hasReceivedRealPosition;
+
+  @override
+  bool get hasMediaLoadFailed => _mediaLoadFailed;
+
+  @override
+  String? get mediaLoadError => _mediaLoadError;
+
+  @override
+  Future<bool> waitUntilMediaReady({required Duration timeout}) async {
+    if (_mediaReady) return true;
+    if (_mediaLoadFailed && !_mediaLoadErrorRetryable) return false;
+    final completer = _mediaReadyCompleter;
+    return Future.any<bool>([
+      completer.future,
+      Future<bool>.delayed(timeout, () => false),
+    ]);
+  }
+
+  bool get _currentMainMediaIsNetwork {
+    final value = _lastPreparedMainMedia?.uri.toString().toLowerCase() ?? '';
+    return value.startsWith('http://') || value.startsWith('https://');
+  }
+
+  @override
+  Future<bool> retryCurrentMediaLoad() async {
+    final media = _lastPreparedMainMedia;
+    if (_isDisposed ||
+        media == null ||
+        _mediaReady ||
+        !_currentMainMediaIsNetwork ||
+        _mediaLoadRetryAttempted ||
+        (_mediaLoadFailed && !_mediaLoadErrorRetryable)) {
+      return false;
+    }
+
+    _mediaLoadRetryAttempted = true;
+    final originalGeneration = _mediaLoadGeneration;
+    try {
+      await _player.stop();
+      if (_isDisposed || originalGeneration != _mediaLoadGeneration) {
+        return false;
+      }
+      _mediaLoadGeneration++;
+      final generation = _mediaLoadGeneration;
+      _resetMediaLoadState(preserveRetryAttempt: true);
+      debugPrint(
+        'MediaKit: 网络媒体首次载入未就绪，执行一次透明重试 generation=$generation',
+      );
+      _openMainMedia(media);
+      return true;
+    } catch (error) {
+      _recordCurrentMediaLoadError(error);
+      return false;
+    }
+  }
+
+  @override
   int get bufferedPosition {
     final bufferMs = _player.state.buffer.inMilliseconds;
     if (bufferMs <= 0) {
@@ -2070,6 +2228,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _isDisposed = false;
     // 递增代数计数器，使旧的延迟加载操作作废
     _mediaLoadGeneration++;
+    _resetMediaLoadState(preserveRetryAttempt: false);
     // 清除不属于当前视频的残留外部音频路径，防止旧视频的MKA被加载到新视频上
     if (!_pendingExternalAudioIsFresh) {
       _pendingExternalAudioFile = null;
@@ -2144,6 +2303,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_isDisposed) {
       return;
     }
+    final openGeneration = _mediaLoadGeneration;
+    _lastPreparedMainMedia = media;
     final outputMode = _usesPlatformVideoSurface
         ? (Platform.isWindows ? 'windows-native' : 'macos-native')
         : 'flutter-texture';
@@ -2172,7 +2333,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           unawaited(_dumpPlatformMpvVideoDiagnostics('before-open'));
         }
         await _player.open(media, play: false);
-        if (_usesPlatformVideoSurface && !_isDisposed && platform != null) {
+        if (_isDisposed || openGeneration != _mediaLoadGeneration) {
+          return;
+        }
+        if (_usesPlatformVideoSurface && platform != null) {
           await _setMpvRuntimeProperty(platform, 'vid', 'auto');
           await _setMpvRuntimeProperty(platform, 'vo', 'libmpv');
           await _setMpvRuntimeProperty(platform, 'wid', '0');
@@ -2186,6 +2350,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         }
       } catch (error) {
         debugPrint('MediaKit: 打开媒体失败: $error');
+        if (openGeneration == _mediaLoadGeneration) {
+          _recordCurrentMediaLoadError(error);
+        }
       }
     }());
     _scheduleMacOSHdrDiagnostics();
@@ -2363,6 +2530,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
     _isDisposed = true;
+    if (!_mediaReadyCompleter.isCompleted) {
+      _mediaReadyCompleter.complete(false);
+    }
     _ticker?.dispose();
     _trackSubscription?.cancel();
     _positionSubscription?.cancel();
@@ -3195,7 +3365,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   void _onTick(Duration elapsed) {
-    if (_player.state.playing) {
+    // `playing=true` only means mpv accepted the play command. Network media
+    // may still have no demuxed metadata at this point, so do not manufacture
+    // a position from wall time until readiness and a real time-pos event have
+    // both been observed.
+    if (_player.state.playing && _mediaReady && _hasReceivedRealPosition) {
       // 使用微秒精度的 DateTime.now() 替代原来的毫秒精度。
       // Windows 平台上毫秒级时钟默认粒度约 15.6ms，导致插值 delta
       // 在连续帧之间跳变，造成弹幕可见的"抽帧"。微秒精度（~1µs）
