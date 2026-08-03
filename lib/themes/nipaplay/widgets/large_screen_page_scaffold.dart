@@ -2,9 +2,31 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+
+/// Blank content placed at the start of a large-screen page so its initial
+/// title is not covered by the overlaid top status bar.
+///
+/// This deliberately remains a page child instead of padding the outer app
+/// viewport, which stays full-screen underneath the status-bar overlay.
+class NipaplayLargeScreenPageTopSpacer extends StatelessWidget {
+  const NipaplayLargeScreenPageTopSpacer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return const SizedBox.shrink();
+    }
+    return const SizedBox(
+      key: ValueKey<String>('large-screen-page-top-spacer'),
+      height: kNipaplayLargeScreenBottomHintHeight,
+    );
+  }
+}
 
 class NipaplayLargeScreenPageScaffold extends StatelessWidget {
   const NipaplayLargeScreenPageScaffold({
@@ -62,60 +84,72 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
           ),
         ],
         Positioned.fill(
-          child: Padding(
-            padding: padding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const NipaplayLargeScreenPageTopSpacer(),
+              Expanded(
+                child: Padding(
+                  padding: padding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 34,
-                              fontWeight: FontWeight.w900,
-                              height: 1.0,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                if (subtitle != null &&
+                                    subtitle!.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    subtitle!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: mutedColor,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (subtitle != null &&
-                              subtitle!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              subtitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: mutedColor,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          if (actions.isNotEmpty) ...[
+                            const SizedBox(width: 20),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: actions,
                             ),
+                          ],
+                          if (trailing != null) ...[
+                            const SizedBox(width: 20),
+                            trailing!,
                           ],
                         ],
                       ),
-                    ),
-                    if (actions.isNotEmpty) ...[
-                      const SizedBox(width: 20),
-                      Wrap(spacing: 10, runSpacing: 10, children: actions),
+                      SizedBox(height: headerBottomSpacing),
+                      Expanded(child: child),
                     ],
-                    if (trailing != null) ...[
-                      const SizedBox(width: 20),
-                      trailing!,
-                    ],
-                  ],
+                  ),
                 ),
-                SizedBox(height: headerBottomSpacing),
-                Expanded(child: child),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
