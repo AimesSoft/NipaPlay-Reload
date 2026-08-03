@@ -94,7 +94,7 @@ List<MediaSourceOption> availableMediaSourceOptions({
   }
   return mediaSourceOptions
       .where(
-        (option) => option.id != 'local_folder' && option.id != 'nipaplay',
+        (option) => option.id != 'local_folder',
       )
       .toList(growable: false);
 }
