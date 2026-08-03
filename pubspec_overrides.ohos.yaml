@@ -46,6 +46,10 @@ dependency_overrides:
       url: https://gitee.com/openharmony-sig/flutter_plus_plugins.git
       ref: br_package_info_plus-v8.1.0_ohos
       path: packages/package_info_plus/package_info_plus
+  # The tvOS registrant packages are native-only, but their current metadata
+  # requests platform-interface releases that require a newer Dart SDK. Keep
+  # the HarmonyOS 3.35 graph on the interfaces used by its adapted plugins.
+  package_info_plus_platform_interface: 3.2.1
   sqflite:
     git:
       url: https://gitcode.com/openharmony-sig/flutter_sqflite.git
@@ -60,6 +64,7 @@ dependency_overrides:
       url: https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git
       ref: br_wakelock_plus_1.2.8_ohos
       path: wakelock_plus
+  wakelock_plus_platform_interface: 1.3.0
   # FVP 0.37.3 calls ResourceManager as a function; API 18 exposes it as a
   # property. Keep the fix local until it is released upstream.
   fvp:

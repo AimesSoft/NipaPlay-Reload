@@ -474,9 +474,11 @@ class SettingsItem extends StatelessWidget {
         final currentValue = switchValue ?? false;
         return _buildLargeScreenRow(
           context,
-          trailing: FluentSettingsSwitch(
-            value: currentValue,
-            onChanged: enabled ? onSwitchChanged : null,
+          trailing: ExcludeFocus(
+            child: FluentSettingsSwitch(
+              value: currentValue,
+              onChanged: enabled ? onSwitchChanged : null,
+            ),
           ),
           onActivate: onSwitchChanged != null
               ? () => onSwitchChanged!(!currentValue)
@@ -500,71 +502,58 @@ class SettingsItem extends StatelessWidget {
         final double min = sliderMin ?? 0;
         final double max = sliderMax ?? 1;
         final double current = sliderValue ?? min;
-        final int? divisions = sliderDivisions;
-        final double step = (divisions != null && divisions > 0)
-            ? ((max - min) / divisions)
-            : ((max - min) / 20);
-        final bool canAdjustByEnter =
-            enabled && onSliderChanged != null && max > min && step > 0;
         final valueLabel = sliderLabelFormatter?.call(sliderValue ?? 0) ??
             (sliderValue ?? 0).toStringAsFixed(1);
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
-          child: NipaplayLargeScreenFocusableAction(
-            onActivate: canAdjustByEnter
-                ? () {
-                    double next = current + step;
-                    if (next > max) {
-                      next = min;
-                    }
-                    onSliderChanged!(next.clamp(min, max).toDouble());
-                  }
-                : null,
-            borderRadius: BorderRadius.circular(8),
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            focusScale: 1.012,
-            style: NipaplayLargeScreenFocusableStyle(
-              idleBackgroundDark: Colors.white.withValues(alpha: 0.040),
-              idleBackgroundLight: Colors.black.withValues(alpha: 0.035),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.040)
+                  : Colors.black.withValues(alpha: 0.035),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _largeScreenIcon(context),
-                    Expanded(child: _largeScreenTextBlock(context)),
-                    const SizedBox(width: 18),
-                    Text(
-                      valueLabel,
-                      locale: const Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                        color: _largeScreenTextColor(context),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      _largeScreenIcon(context),
+                      Expanded(child: _largeScreenTextBlock(context)),
+                      const SizedBox(width: 18),
+                      Text(
+                        valueLabel,
+                        locale: const Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: _largeScreenTextColor(context),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  fluent.FluentTheme(
+                    data: fluent.FluentThemeData(
+                      brightness: Theme.of(context).brightness,
+                      accentColor: fluent.AccentColor.swatch({
+                        'normal': _fluentAccentColor,
+                        'default': _fluentAccentColor,
+                      }),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                fluent.FluentTheme(
-                  data: fluent.FluentThemeData(
-                    brightness: Theme.of(context).brightness,
-                    accentColor: fluent.AccentColor.swatch({
-                      'normal': _fluentAccentColor,
-                      'default': _fluentAccentColor,
-                    }),
+                    child: NipaplayLargeScreenEditableSlider(
+                      value: current,
+                      min: min,
+                      max: max,
+                      divisions: sliderDivisions,
+                      onChanged: enabled ? onSliderChanged : null,
+                      label: sliderLabelFormatter?.call(sliderValue ?? 0),
+                    ),
                   ),
-                  child: NipaplayLargeScreenEditableSlider(
-                    value: current,
-                    min: min,
-                    max: max,
-                    divisions: sliderDivisions,
-                    onChanged: enabled ? onSliderChanged : null,
-                    label: sliderLabelFormatter?.call(sliderValue ?? 0),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

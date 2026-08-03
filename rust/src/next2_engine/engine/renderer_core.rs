@@ -485,6 +485,8 @@ impl Next2Renderer {
                 shadow_style,
                 opacity,
                 scroll_speed: item.scroll_speed as f32,
+                is_me: item.is_me,
+                width: item.width.max(0.0) as f32,
             });
         }
 

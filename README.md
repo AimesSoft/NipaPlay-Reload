@@ -163,6 +163,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 * **[完整使用文档](Documentation/index.md)**：安装配置、Emby 连接教程、故障排查。
 * **[贡献者指南](CONTRIBUTING_GUIDE/00-Introduction.md)**：如何参与开发、添加新功能。
+* **[Apple TV 开发指南](docs/TVOS_DEVELOPMENT.md)**：独立 tvOS Flutter SDK、模拟器构建与当前能力边界。
 * **反馈问题**：请在软件内的“开发者选项”中导出日志，或在 GitHub Issues 中提交。
 
 ## 技术栈
@@ -191,7 +192,8 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 - [ ] 补帧功能 (SVP/Other)
 - [x] macOS HDR 支持（Erika 内核 EDR 原生 + Media Kit）
 - [ ] 跨平台 HDR 和杜比视界支持（Windows/Linux/Android）
-- [ ] 鸿蒙 OS / Vision Pro / Apple TV 移植
+- [ ] 鸿蒙 OS / Vision Pro 移植
+- [x] Apple TV（tvOS）开发者预览构建
 
 ## 赞助与鸣谢
 

@@ -362,7 +362,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                           vertical: 4, horizontal: 4),
-                      child: GestureDetector(
+                      child: AdaptivePlayerMenuActionSurface(
                         onTap: () => _seekToTime(entry.startTimeMs),
                         child: Container(
                           padding: const EdgeInsets.all(12),

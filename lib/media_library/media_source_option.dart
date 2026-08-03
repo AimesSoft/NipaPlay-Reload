@@ -85,3 +85,16 @@ const mediaSourceOptions = <MediaSourceOption>[
     iconKind: MediaSourceIconKind.smb,
   ),
 ];
+
+List<MediaSourceOption> availableMediaSourceOptions({
+  required bool isTelevision,
+}) {
+  if (!isTelevision) {
+    return mediaSourceOptions;
+  }
+  return mediaSourceOptions
+      .where(
+        (option) => option.id != 'local_folder',
+      )
+      .toList(growable: false);
+}

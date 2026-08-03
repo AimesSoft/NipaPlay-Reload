@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -29,6 +28,7 @@ class NipaplayLargeScreenSettingsPanel extends StatefulWidget {
     this.onFocusedIndexChanged,
     this.onEntryCountChanged,
     this.onRequestClose,
+    this.entriesOverride,
   });
 
   final bool isDarkMode;
@@ -38,6 +38,9 @@ class NipaplayLargeScreenSettingsPanel extends StatefulWidget {
   final ValueChanged<int>? onFocusedIndexChanged;
   final ValueChanged<int>? onEntryCountChanged;
   final VoidCallback? onRequestClose;
+
+  @visibleForTesting
+  final List<NipaplaySettingEntry>? entriesOverride;
 
   @override
   State<NipaplayLargeScreenSettingsPanel> createState() =>
@@ -49,9 +52,13 @@ class _NipaplayLargeScreenSettingsPanelState
   late List<NipaplaySettingEntry> _entries;
   int _selectedIndex = 0;
   bool _isContentFocused = false;
+  final FocusNode _menuFocusNode = FocusNode(
+    debugLabel: 'nipaplay_large_screen_settings_menu',
+  );
   final FocusScopeNode _contentFocusScope = FocusScopeNode(
     debugLabel: 'nipaplay_large_screen_settings_content',
   );
+  FocusNode? _lastContentFocusNode;
   OnKeyEventCallback? _earlyKeyHandler;
 
   @override
@@ -68,6 +75,7 @@ class _NipaplayLargeScreenSettingsPanelState
       FocusManager.instance.removeEarlyKeyEventHandler(_earlyKeyHandler!);
       _earlyKeyHandler = null;
     }
+    _menuFocusNode.dispose();
     _contentFocusScope.dispose();
     super.dispose();
   }
@@ -85,10 +93,6 @@ class _NipaplayLargeScreenSettingsPanelState
     if (BlurDropdown.isAnyExpanded) {
       return KeyEventResult.ignored;
     }
-    if (NipaplayLargeScreenEditableSlider.isAnyEditing) {
-      return KeyEventResult.ignored;
-    }
-
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowUp) {
       _moveContentVerticalFocus(reverse: true);
@@ -103,7 +107,7 @@ class _NipaplayLargeScreenSettingsPanelState
 
   @override
   Widget build(BuildContext context) {
-    _entries = buildNipaplaySettingEntries(context);
+    _entries = widget.entriesOverride ?? buildNipaplaySettingEntries(context);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -149,60 +153,65 @@ class _NipaplayLargeScreenSettingsPanelState
             return;
           }
           _selectIndex(normalizedFocusedIndex);
+          _setContentFocused(true);
         },
         child: Row(
           children: [
-            SizedBox(
-              width: _kNipaplayLargeScreenSettingsMenuWidth,
-              child: NipaplayLargeScreenSidePanel(
-                isDarkMode: widget.isDarkMode,
+            Focus(
+              focusNode: _menuFocusNode,
+              descendantsAreFocusable: false,
+              child: SizedBox(
                 width: _kNipaplayLargeScreenSettingsMenuWidth,
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    top: kNipaplayLargeScreenBottomHintHeight,
-                    bottom: kNipaplayLargeScreenBottomHintHeight,
-                  ),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: _entries.length,
-                    itemBuilder: (context, index) {
-                      final entry = _entries[index];
-                      final bool isSelectedByFocus =
-                          !_isContentFocused && index == normalizedFocusedIndex;
-                      final bool isSelectedByPage = index == _selectedIndex;
-                      final bool isActive =
-                          isSelectedByFocus || isSelectedByPage;
-                      final Color itemColor =
-                          isActive ? Colors.white : inactiveColor;
-                      return NipaplayLargeScreenSidePanelItem(
-                        isSelected: isActive,
-                        activeColor: _kNipaplayLargeScreenActiveColor,
-                        inactiveColor: inactiveColor,
-                        onTap: () {
-                          _setContentFocused(false);
-                          widget.onFocusedIndexChanged?.call(index);
-                          _selectIndex(index);
-                        },
-                        child: Row(
-                          children: [
-                            Icon(entry.icon, size: 19, color: itemColor),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                entry.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: itemColor,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
+                child: NipaplayLargeScreenSidePanel(
+                  isDarkMode: widget.isDarkMode,
+                  width: _kNipaplayLargeScreenSettingsMenuWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      top: kNipaplayLargeScreenBottomHintHeight,
+                      bottom: kNipaplayLargeScreenBottomHintHeight,
+                    ),
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: _entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = _entries[index];
+                        final bool isSelectedByFocus = !_isContentFocused &&
+                            index == normalizedFocusedIndex;
+                        final bool isSelectedByPage = index == _selectedIndex;
+                        final bool isActive =
+                            isSelectedByFocus || isSelectedByPage;
+                        final Color itemColor =
+                            isActive ? Colors.white : inactiveColor;
+                        return NipaplayLargeScreenSidePanelItem(
+                          isSelected: isActive,
+                          activeColor: _kNipaplayLargeScreenActiveColor,
+                          inactiveColor: inactiveColor,
+                          onTap: () {
+                            _setContentFocused(false);
+                            widget.onFocusedIndexChanged?.call(index);
+                            _selectIndex(index);
+                          },
+                          child: Row(
+                            children: [
+                              Icon(entry.icon, size: 19, color: itemColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  entry.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: itemColor,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -256,6 +265,8 @@ class _NipaplayLargeScreenSettingsPanelState
                     Expanded(
                       child: FocusScope(
                         node: _contentFocusScope,
+                        canRequestFocus: _isContentFocused,
+                        descendantsAreFocusable: _isContentFocused,
                         child: KeyedSubtree(
                           key: ValueKey<String>(_entries[_selectedIndex].id),
                           child: _entries[_selectedIndex].page,
@@ -282,25 +293,41 @@ class _NipaplayLargeScreenSettingsPanelState
     }
     setState(() {
       _selectedIndex = clamped;
+      _lastContentFocusNode = null;
     });
   }
 
   void _setContentFocused(bool value) {
     if (_isContentFocused == value) {
+      if (value) {
+        _requestContentFocusAfterFrame();
+      } else {
+        _menuFocusNode.requestFocus();
+      }
       return;
     }
-    setState(() {
-      _isContentFocused = value;
-    });
+    if (!value) {
+      final primaryFocus = FocusManager.instance.primaryFocus;
+      if (_isUsableContentFocus(primaryFocus)) {
+        _lastContentFocusNode = primaryFocus;
+      }
+    }
+    setState(() => _isContentFocused = value);
 
     if (value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        _ensureContentFocus();
-      });
+      _requestContentFocusAfterFrame();
+    } else {
+      _menuFocusNode.requestFocus();
     }
+  }
+
+  void _requestContentFocusAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isContentFocused) {
+        return;
+      }
+      _ensureContentFocus();
+    });
   }
 
   void _handleNavigateUp() {
@@ -308,7 +335,7 @@ class _NipaplayLargeScreenSettingsPanelState
       _moveContentVerticalFocus(reverse: true);
       return;
     }
-    widget.onFocusedIndexChanged?.call(widget.focusedIndex - 1);
+    _moveMenuFocus(-1);
   }
 
   void _handleNavigateDown() {
@@ -316,74 +343,45 @@ class _NipaplayLargeScreenSettingsPanelState
       _moveContentVerticalFocus(reverse: false);
       return;
     }
-    widget.onFocusedIndexChanged?.call(widget.focusedIndex + 1);
+    _moveMenuFocus(1);
   }
 
   void _handleNavigateLeft() {
-    if (!_isContentFocused) {
+    if (!_isContentFocused || BlurDropdown.isAnyExpanded) {
       return;
     }
-    final moved = _moveContentFocus(TraversalDirection.left);
-    if (!moved) {
-      _setContentFocused(false);
-    }
+    _setContentFocused(false);
   }
 
   void _handleNavigateRight() {
-    if (!_isContentFocused) {
-      _setContentFocused(true);
+    if (BlurDropdown.isAnyExpanded) {
       return;
     }
-    _moveContentFocus(TraversalDirection.right);
+    if (!_isContentFocused) {
+      _selectIndex(widget.focusedIndex);
+      _setContentFocused(true);
+    }
   }
 
-  bool _moveContentFocus(TraversalDirection direction) {
-    final previousPrimaryFocus = FocusManager.instance.primaryFocus;
-    if (!_isFocusInsideContentScope(previousPrimaryFocus)) {
-      _ensureContentFocus();
-    }
-    final fallbackFocus =
-        _contentFocusScope.focusedChild ?? FocusManager.instance.primaryFocus;
-
-    final focusedChild = _contentFocusScope.focusedChild;
-    if (focusedChild == null) {
-      final moved = _contentFocusScope.focusInDirection(direction);
-      if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
-        _restoreContentFocus(fallbackFocus);
-        return false;
-      }
-      if (!moved &&
-          (direction == TraversalDirection.up ||
-              direction == TraversalDirection.down)) {
-        _jumpContentScrollBoundary(direction);
-      }
-      return moved;
-    }
-
-    final moved = focusedChild.focusInDirection(direction);
-    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
-      _restoreContentFocus(fallbackFocus);
-      return false;
-    }
-    if (!moved &&
-        (direction == TraversalDirection.up ||
-            direction == TraversalDirection.down)) {
-      _jumpContentScrollBoundary(direction);
-    }
-    return moved;
+  void _moveMenuFocus(int delta) {
+    if (_entries.isEmpty) return;
+    final next = (widget.focusedIndex + delta).clamp(0, _entries.length - 1);
+    if (next == widget.focusedIndex) return;
+    widget.onFocusedIndexChanged?.call(next);
+    _selectIndex(next);
   }
 
   bool _moveContentVerticalFocus({required bool reverse}) {
-    final previousPrimaryFocus = FocusManager.instance.primaryFocus;
-    if (!_isFocusInsideContentScope(previousPrimaryFocus)) {
-      _ensureContentFocus();
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus) &&
+        !_ensureContentFocus()) {
+      return false;
     }
-    final fallbackFocus =
-        _contentFocusScope.focusedChild ?? FocusManager.instance.primaryFocus;
-
+    final fallbackFocus = FocusManager.instance.primaryFocus;
+    final focused =
+        identical(fallbackFocus, _contentFocusScope) ? null : fallbackFocus;
     final moved = reverse
-        ? _contentFocusScope.previousFocus()
-        : _contentFocusScope.nextFocus();
+        ? (focused?.previousFocus() ?? _contentFocusScope.previousFocus())
+        : (focused?.nextFocus() ?? _contentFocusScope.nextFocus());
 
     if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
       _restoreContentFocus(fallbackFocus);
@@ -395,6 +393,7 @@ class _NipaplayLargeScreenSettingsPanelState
         reverse ? TraversalDirection.up : TraversalDirection.down,
       );
     }
+    _rememberAndRevealCurrentContentFocus();
     return moved;
   }
 
@@ -410,11 +409,8 @@ class _NipaplayLargeScreenSettingsPanelState
   }
 
   void _restoreContentFocus(FocusNode? fallbackFocus) {
-    if (fallbackFocus != null &&
-        _isFocusInsideContentScope(fallbackFocus) &&
-        fallbackFocus.canRequestFocus &&
-        fallbackFocus.context != null) {
-      fallbackFocus.requestFocus();
+    if (_isUsableContentFocus(fallbackFocus)) {
+      fallbackFocus!.requestFocus();
       return;
     }
     _ensureContentFocus();
@@ -437,21 +433,70 @@ class _NipaplayLargeScreenSettingsPanelState
     scrollController.jumpTo(target);
   }
 
-  void _ensureContentFocus() {
-    if (_contentFocusScope.focusedChild != null) {
-      return;
+  bool _ensureContentFocus() {
+    final currentFocus = FocusManager.instance.primaryFocus;
+    if (_isUsableContentFocus(currentFocus)) {
+      currentFocus!.requestFocus();
+      return true;
     }
+
+    final rememberedFocus = _lastContentFocusNode;
+    if (_isUsableContentFocus(rememberedFocus)) {
+      rememberedFocus!.requestFocus();
+      _ensureFocusedControlVisible();
+      return true;
+    }
+
+    for (final candidate in _contentFocusScope.traversalDescendants) {
+      if (!_isUsableContentFocus(candidate)) continue;
+      candidate.requestFocus();
+      _lastContentFocusNode = candidate;
+      _ensureFocusedControlVisible();
+      return true;
+    }
+
     _contentFocusScope.requestFocus();
-    _contentFocusScope.nextFocus();
+    return true;
+  }
+
+  bool _isUsableContentFocus(FocusNode? node) {
+    return node != null &&
+        node is! FocusScopeNode &&
+        _isFocusInsideContentScope(node) &&
+        node.canRequestFocus &&
+        !node.skipTraversal &&
+        node.context != null;
+  }
+
+  void _rememberAndRevealCurrentContentFocus() {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (_isUsableContentFocus(primaryFocus)) {
+      _lastContentFocusNode = primaryFocus;
+    }
+    _ensureFocusedControlVisible();
+  }
+
+  void _ensureFocusedControlVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isContentFocused) return;
+      final focusContext = FocusManager.instance.primaryFocus?.context;
+      if (focusContext == null) return;
+      Scrollable.ensureVisible(
+        focusContext,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    });
   }
 
   void _activateContentFocus() {
-    final focused = _contentFocusScope.focusedChild;
-    if (focused == null) {
+    final focused = FocusManager.instance.primaryFocus;
+    if (!_isUsableContentFocus(focused)) {
       _ensureContentFocus();
       return;
     }
-    final nodeContext = focused.context;
+    final nodeContext = focused!.context;
     if (nodeContext == null) {
       return;
     }

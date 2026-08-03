@@ -947,6 +947,20 @@ fn scale_metric_to_px(units: f32, face: &Face<'static>, px: f32) -> f32 {
     units * (px / units_per_em)
 }
 
+/// Resolve the horizontal pen advance for a glyph.
+///
+/// A font-provided advance is authoritative, including a zero advance for
+/// combining marks. The fallback ratio is only for fonts that do not expose
+/// a horizontal advance at all. Applying the fallback as a minimum makes
+/// narrow Latin glyphs such as `i`, `j`, and `l` occupy roughly the same cell
+/// as `o`, which shows up as artificial gaps inside words.
+fn glyph_advance_px(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> f32 {
+    face.glyph_hor_advance(glyph_id)
+        .map(|units| scale_metric_to_px(units as f32, face, px))
+        .filter(|advance| advance.is_finite() && *advance >= 0.0)
+        .unwrap_or(px * FALLBACK_GLYPH_ADVANCE_RATIO)
+}
+
 fn hash_font_bytes(bytes: &[u8], collection_index: u32) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut hasher);
@@ -963,10 +977,10 @@ fn load_font_chain(custom_font: Option<FontSource>) -> Result<Vec<FontFaceHandle
         let _ = load_faces_from_owned_bytes(boxed, &mut seen, &mut fonts)?;
     }
 
-    let primary_bytes = FONT_DATA.to_vec().into_boxed_slice();
+    let primary_bytes = super::DEFAULT_FONT_DATA.to_vec().into_boxed_slice();
     load_faces_from_owned_bytes(primary_bytes, &mut seen, &mut fonts)?;
 
-    for bytes in NEXT2_FALLBACK_FONTS {
+    for bytes in super::FALLBACK_FONT_DATA {
         let boxed = (*bytes).to_vec().into_boxed_slice();
         let _ = load_faces_from_owned_bytes(boxed, &mut seen, &mut fonts);
     }
@@ -1033,12 +1047,7 @@ fn rasterize_glyph_on_face(fonts: &[FontFaceHandle], ch: char, px: f32) -> Optio
         }
     }
     let face = face?;
-    let advance_units = face
-        .glyph_hor_advance(glyph_id)
-        .map(|v| v as f32)
-        .unwrap_or_else(|| face.units_per_em() as f32 * FALLBACK_GLYPH_ADVANCE_RATIO);
-    let advance =
-        scale_metric_to_px(advance_units, face, px).max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
+    let advance = glyph_advance_px(face, glyph_id, px);
 
     let Some(bbox) = face.glyph_bounding_box(glyph_id) else {
         let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;

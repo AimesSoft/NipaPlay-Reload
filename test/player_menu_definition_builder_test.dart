@@ -51,6 +51,13 @@ class _FakePlayer implements Player {
 
 void main() {
   group('PlayerMenuDefinitionBuilder', () {
+    test('includes the complete playback controls', () {
+      final paneIds = _visiblePaneIds(subtitleTracks: const []);
+
+      expect(paneIds, contains(PlayerMenuPaneId.seekStep));
+      expect(paneIds, contains(PlayerMenuPaneId.playbackRate));
+    });
+
     test('hides subtitle settings and list when no subtitle tracks exist', () {
       final paneIds = _visiblePaneIds(subtitleTracks: const []);
 

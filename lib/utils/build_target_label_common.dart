@@ -54,6 +54,11 @@ String _formatPlatform(String rawValue) {
   if (value.isEmpty) {
     return '';
   }
+  if (value == 'tvos' ||
+      value.contains('apple tv') ||
+      value.contains('appletv')) {
+    return 'AppleTV OS';
+  }
   if (value.contains('ios')) {
     return 'iOS';
   }

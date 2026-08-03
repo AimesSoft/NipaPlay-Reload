@@ -48,4 +48,21 @@ void main() {
       lessThan(method.indexOf('AnimatedScale(')),
     );
   });
+
+  test('tvOS community links share the appreciation QR dialog container', () {
+    final source = File(
+      'lib/settings/pages/about_settings_content.dart',
+    ).readAsStringSync();
+
+    expect(
+      RegExp(r'onTap: \(\) => _openCommunityLink\(').allMatches(source).length,
+      5,
+    );
+    expect(source, contains('if (!globals.isTelevision)'));
+    expect(source, contains('Future<void> _showAboutQrDialog({'));
+    expect(source, contains('return BlurDialog.show<void>('));
+    expect(source, isNot(contains('NipaplayLargeScreenViewContainer.show')));
+    expect(source, contains('QrImageView('));
+    expect(source, contains('data: url'));
+  });
 }

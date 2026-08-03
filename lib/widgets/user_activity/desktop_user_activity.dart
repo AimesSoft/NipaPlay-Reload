@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
@@ -48,7 +50,7 @@ class _DesktopUserActivityState extends State<DesktopUserActivity> {
     final accent = theme.accentColor.defaultBrushFor(theme.brightness);
     final isDarkMode = theme.brightness == Brightness.dark;
     final unselectedLabelColor = isDarkMode ? Colors.white60 : Colors.black54;
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
@@ -117,6 +119,13 @@ class _DesktopUserActivityState extends State<DesktopUserActivity> {
           child: _buildTabBody(_selectedIndex, accent, textSecondary),
         ),
       ],
+    );
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return content;
+    }
+    return FocusTraversalGroup(
+      policy: ReadingOrderTraversalPolicy(),
+      child: content,
     );
   }
 
@@ -371,12 +380,11 @@ class _ActivityListItemState extends State<_ActivityListItem> {
     const coverRadius = 4.0;
     final accentColor = AppAccentColors.current;
 
-    return MouseRegion(
+    final itemSurface = MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: theme.resources.cardBackgroundFillColorDefault,
           borderRadius: BorderRadius.circular(8),
@@ -477,6 +485,25 @@ class _ActivityListItemState extends State<_ActivityListItem> {
         ),
       ),
     );
+
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: itemSurface,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: NipaplayLargeScreenFocusableAction(
+        onActivate: widget.onPressed,
+        borderRadius: BorderRadius.circular(8),
+        style: const NipaplayLargeScreenFocusableStyle(
+          idleBackgroundDark: Colors.transparent,
+          idleBackgroundLight: Colors.transparent,
+        ),
+        child: itemSurface,
+      ),
+    );
   }
 }
 
@@ -509,7 +536,7 @@ class _DesktopActivityTabState extends State<_DesktopActivityTab> {
     final color =
         widget.selected ? widget.selectedColor : widget.unselectedColor;
     const labelStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.w500);
-    return MouseRegion(
+    final tab = MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -544,6 +571,19 @@ class _DesktopActivityTabState extends State<_DesktopActivityTab> {
           ),
         ),
       ),
+    );
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return tab;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: widget.onPressed,
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      style: const NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: Colors.transparent,
+        idleBackgroundLight: Colors.transparent,
+      ),
+      child: tab,
     );
   }
 }

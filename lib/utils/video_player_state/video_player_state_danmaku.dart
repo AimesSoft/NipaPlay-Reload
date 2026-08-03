@@ -598,7 +598,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   // 更新合并后的弹幕列表
-  void _updateMergedDanmakuList() {
+  void _updateMergedDanmakuList({bool preserveOverlay = false}) {
     final List<Map<String, dynamic>> mergedList = [];
 
     // 合并所有启用的轨道
@@ -683,8 +683,13 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       danmakuController?.loadDanmaku(filteredList);
     }
 
-    // 通过更新key来强制刷新DanmakuOverlay
-    _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
+    // A single locally-sent danmaku is a content hot reload. Preserve the
+    // overlay state so its native surface, current scene, and emoji atlas stay
+    // alive while the layout revision is prepared. Track/source replacement
+    // keeps the legacy forced-rebuild behavior.
+    if (!preserveOverlay) {
+      _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
+    }
 
     debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
     _notifyListeners(); // 确保通知UI更新
@@ -1604,13 +1609,17 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 添加弹幕到轨道
       final trackDanmaku =
           _danmakuTracks[trackId]!['danmakuList'] as List<Map<String, dynamic>>;
-      trackDanmaku.add(danmaku);
+      // This entry point is used only after a local send succeeds. Normalize
+      // the marker here as a final guard for callers whose server response
+      // omits `isMe` (for example the remote-controller fallback payload).
+      final localDanmaku = <String, dynamic>{...danmaku, 'isMe': true};
+      trackDanmaku.add(localDanmaku);
       _danmakuTracks[trackId]!['count'] = trackDanmaku.length;
 
       // 重新计算合并后的弹幕列表
-      _updateMergedDanmakuList();
+      _updateMergedDanmakuList(preserveOverlay: true);
 
-      debugPrint('已将新弹幕添加到轨道 "$trackName": ${danmaku['content']}');
+      debugPrint('已将新弹幕添加到轨道 "$trackName": ${localDanmaku['content']}');
     }
   }
 

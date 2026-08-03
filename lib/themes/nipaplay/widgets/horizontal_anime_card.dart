@@ -121,7 +121,7 @@ class HorizontalAnimeCard extends StatelessWidget {
     return NipaplayLargeScreenFocusableAction(
       onActivate: onTap,
       borderRadius: borderRadius,
-      focusScale: 1.03,
+      focusScale: 1,
       style: const NipaplayLargeScreenFocusableStyle(
         idleBackgroundDark: Colors.transparent,
         idleBackgroundLight: Colors.transparent,

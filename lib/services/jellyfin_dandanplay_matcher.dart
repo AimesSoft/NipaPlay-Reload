@@ -12,6 +12,7 @@ import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -1673,28 +1674,31 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: '手动搜索动画名称',
-                            hintStyle:
-                                TextStyle(color: Colors.white.withOpacity(0.6)),
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.3)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.3)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
+                        child: TvOSRemoteTextInputControl(
+                          title: '手动搜索动画名称',
+                          child: TextField(
+                            controller: _searchController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: '手动搜索动画名称',
+                              hintStyle: TextStyle(
                                   color: Colors.white.withOpacity(0.6)),
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.3)),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.3)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.6)),
+                              ),
                             ),
+                            onSubmitted: (_) => _performSearch(),
                           ),
-                          onSubmitted: (_) => _performSearch(),
                         ),
                       ),
                       const SizedBox(width: 8),

@@ -1,4 +1,3 @@
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
@@ -21,6 +20,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
@@ -28,6 +28,9 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/search/tag_search_controller.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_tag_search_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 
 class _TagSearchStyle {
   const _TagSearchStyle({
@@ -138,6 +141,23 @@ class TagSearchModal extends StatefulWidget {
     List<String>? preselectedTags,
     VoidCallback? onBeforeOpenAnimeDetail,
   }) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return NipaplayLargeScreenViewContainer.show<void>(
+        context: context,
+        title: '番剧搜索',
+        subtitle: '使用方向键浏览筛选项，评分滑块可用左右键调整',
+        maxWidth: 1240,
+        maxHeightFactor: 0.92,
+        autofocusClose: false,
+        builder: (_) => TagSearchModal(
+          prefilledTag: prefilledTag,
+          preselectedTags: preselectedTags,
+          onBeforeOpenAnimeDetail: onBeforeOpenAnimeDetail,
+          embedded: true,
+        ),
+      );
+    }
+
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<void>(
         context: context,
@@ -717,34 +737,37 @@ class _TagSearchModalState extends State<TagSearchModal> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _textTagController,
-                    style: TextStyle(color: style.textPrimary),
-                    cursorColor: style.accentColor,
-                    decoration: InputDecoration(
-                      hintText: '输入标签名称',
-                      hintStyle: TextStyle(color: style.textMuted),
-                      filled: true,
-                      fillColor: style.inputFillColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: style.inputBorderColor),
+                  child: TvOSRemoteTextInputControl(
+                    title: '添加标签',
+                    child: TextField(
+                      controller: _textTagController,
+                      style: TextStyle(color: style.textPrimary),
+                      cursorColor: style.accentColor,
+                      decoration: InputDecoration(
+                        hintText: '输入标签名称',
+                        hintStyle: TextStyle(color: style.textMuted),
+                        filled: true,
+                        fillColor: style.inputFillColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: style.inputBorderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: style.inputBorderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              BorderSide(color: style.inputFocusedBorderColor),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: style.inputBorderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: style.inputFocusedBorderColor),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
+                      onSubmitted: (_) => _addTextTag(),
                     ),
-                    onSubmitted: (_) => _addTextTag(),
                   ),
                 ),
                 SizedBox(width: 8),
@@ -1210,27 +1233,30 @@ class _TagSearchModalState extends State<TagSearchModal> {
         // 关键词搜索
         _buildAdvancedSearchSection(
           '关键词',
-          TextField(
-            controller: _keywordController,
-            style: TextStyle(color: style.textPrimary),
-            onSubmitted: (_) => _performSmartSearch(),
-            cursorColor: style.accentColor,
-            decoration: InputDecoration(
-              hintText: '输入作品标题关键词',
-              hintStyle: TextStyle(color: style.textMuted),
-              filled: true,
-              fillColor: style.inputFillColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: style.inputBorderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: style.inputBorderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: style.inputFocusedBorderColor),
+          TvOSRemoteTextInputControl(
+            title: '关键词',
+            child: TextField(
+              controller: _keywordController,
+              style: TextStyle(color: style.textPrimary),
+              onSubmitted: (_) => _performSmartSearch(),
+              cursorColor: style.accentColor,
+              decoration: InputDecoration(
+                hintText: '输入作品标题关键词',
+                hintStyle: TextStyle(color: style.textMuted),
+                filled: true,
+                fillColor: style.inputFillColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: style.inputBorderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: style.inputBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: style.inputFocusedBorderColor),
+                ),
               ),
             ),
           ),
@@ -1405,21 +1431,6 @@ class _TagSearchModalState extends State<TagSearchModal> {
     required ValueChanged<double> onChanged,
     required _TagSearchStyle style,
   }) {
-    final searchColor = AppAccentColors.current;
-    final sliderStyle = fluent.SliderThemeData(
-      activeColor: fluent.WidgetStatePropertyAll(style.accentColor),
-      thumbColor: fluent.WidgetStatePropertyAll(style.accentColor),
-      inactiveColor: fluent.WidgetStatePropertyAll(
-        style.accentColor.withOpacity(0.25),
-      ),
-      trackHeight: const fluent.WidgetStatePropertyAll(3.5),
-    );
-    final fluentTheme = fluent.FluentThemeData(
-      brightness: Theme.of(context).brightness,
-      accentColor: fluent.ColorExtension(searchColor).toAccentColor(),
-      sliderTheme: sliderStyle,
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1443,17 +1454,13 @@ class _TagSearchModalState extends State<TagSearchModal> {
           ],
         ),
         SizedBox(height: 6),
-        fluent.FluentTheme(
-          data: fluentTheme,
-          child: fluent.Slider(
-            value: value,
-            min: 0,
-            max: 10,
-            divisions: 10,
-            label: value.round().toString(),
-            style: sliderStyle,
-            onChanged: onChanged,
-          ),
+        NipaplayLargeScreenEditableSlider(
+          value: value,
+          min: 0,
+          max: 10,
+          divisions: 10,
+          label: value.round().toString(),
+          onChanged: onChanged,
         ),
       ],
     );

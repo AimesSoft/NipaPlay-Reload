@@ -79,6 +79,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   bool _updateQueued = false;
 
   bool _forceLayout = false;
+  bool _contentHotReload = false;
 
   // Optimized texture update state: avoid redundant per-frame async calls
   // when texture ID is already stable. Only re-acquire when size changes.
@@ -256,20 +257,31 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   @override
   void didUpdateWidget(covariant DfmPlusOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.danmakuListVersion != widget.danmakuListVersion ||
+    final contentChanged =
+        oldWidget.danmakuListVersion != widget.danmakuListVersion;
+    final layoutConfigChanged =
         oldWidget.allowStacking != widget.allowStacking ||
-        oldWidget.mergeDanmaku != widget.mergeDanmaku ||
-        oldWidget.fontSize != widget.fontSize ||
-        oldWidget.displayArea != widget.displayArea ||
-        oldWidget.scrollDurationSeconds != widget.scrollDurationSeconds ||
-        oldWidget.customFontFamily != widget.customFontFamily ||
-        oldWidget.customFontFilePath != widget.customFontFilePath ||
-        oldWidget.outlineWidth != widget.outlineWidth ||
-        oldWidget.shadowStyle != widget.shadowStyle ||
-        oldWidget.trackGapRatio != widget.trackGapRatio ||
-        oldWidget.maxQuantity != widget.maxQuantity ||
-        oldWidget.maxLinesPerType != widget.maxLinesPerType ||
-        !listEquals(oldWidget.blockWords, widget.blockWords)) {
+            oldWidget.mergeDanmaku != widget.mergeDanmaku ||
+            oldWidget.fontSize != widget.fontSize ||
+            oldWidget.displayArea != widget.displayArea ||
+            oldWidget.scrollDurationSeconds != widget.scrollDurationSeconds ||
+            oldWidget.customFontFamily != widget.customFontFamily ||
+            oldWidget.customFontFilePath != widget.customFontFilePath ||
+            oldWidget.outlineWidth != widget.outlineWidth ||
+            oldWidget.shadowStyle != widget.shadowStyle ||
+            oldWidget.trackGapRatio != widget.trackGapRatio ||
+            oldWidget.maxQuantity != widget.maxQuantity ||
+            oldWidget.maxLinesPerType != widget.maxLinesPerType ||
+            !listEquals(oldWidget.blockWords, widget.blockWords);
+    if (contentChanged || layoutConfigChanged) {
+      // A content-only revision can atomically replace the prepared layout
+      // without clearing the native scene or re-running first-frame prewarm.
+      // Never downgrade an already-pending full reconfigure to a hot reload.
+      if (!_forceLayout) {
+        _contentHotReload = contentChanged && !layoutConfigChanged;
+      } else if (layoutConfigChanged) {
+        _contentHotReload = false;
+      }
       _forceLayout = true;
       _queueUpdate();
     } else if (oldWidget.isVisible != widget.isVisible) {
@@ -540,6 +552,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // If config changed, run async configure first.
         final bool mustSubmit = _forceLayout;
         if (mustSubmit) {
+          if (!mounted) {
+            return;
+          }
+          final locale = Localizations.maybeLocaleOf(context);
+          final contentHotReload = _contentHotReload;
+          _contentHotReload = false;
           _forceLayout = false;
           await _bridge.configure(
             danmakuList: widget.danmakuList,
@@ -556,6 +574,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
             outlineWidth: widget.outlineWidth,
             customFontFamily: widget.customFontFamily,
             customFontFilePath: widget.customFontFilePath,
+            locale: locale,
             blockWords: widget.blockWords,
           );
           if (!mounted) {
@@ -564,8 +583,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           // Reset after configure so motion resumes from the current media time
           // with a fresh wall-clock baseline.
           _resetDisplayTimeToMedia();
-          // Re-arm the initial large-window prefetch for the new content.
-          _initialPrefetchDone = false;
+          // Only a genuine renderer/layout configuration change needs the
+          // initial empty-scene prewarm. Content hot reloads retain the scene
+          // and atlas, then replace the visible frame atomically.
+          if (!contentHotReload) {
+            _initialPrefetchDone = false;
+          }
         }
 
         // ── Submit-rate throttle (P1-4) ──

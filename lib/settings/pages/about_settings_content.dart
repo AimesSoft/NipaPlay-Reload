@@ -9,11 +9,15 @@ import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/build_target_label.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
 import 'package:nipaplay/widgets/about_version_banner_text.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutSettingsContent extends StatefulWidget {
@@ -57,28 +61,40 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
               icon: Ionicons.logo_github,
               phoneIcon:
                   cupertino.CupertinoIcons.chevron_left_slash_chevron_right,
-              onTap: () => _launchURL(AboutSettingsData.repositoryUrl),
+              onTap: () => _openCommunityLink(
+                l10n.openSourceCommunity,
+                AboutSettingsData.repositoryUrl,
+              ),
             ),
             AdaptiveSettingsTile<void>.card(
               title: 'AimesSoft/NipaPlay-Reload',
               subtitle: AboutSettingsData.repositoryUrl,
               icon: Ionicons.logo_github,
               phoneIcon: cupertino.CupertinoIcons.link,
-              onTap: () => _launchURL(AboutSettingsData.repositoryUrl),
+              onTap: () => _openCommunityLink(
+                'AimesSoft/NipaPlay-Reload',
+                AboutSettingsData.repositoryUrl,
+              ),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.aboutQqGroup('961207150'),
               subtitle: AboutSettingsData.qqGroupUrl,
               icon: Ionicons.chatbubbles_outline,
               phoneIcon: cupertino.CupertinoIcons.chat_bubble_2,
-              onTap: () => _launchURL(AboutSettingsData.qqGroupUrl),
+              onTap: () => _openCommunityLink(
+                l10n.aboutQqGroup('961207150'),
+                AboutSettingsData.qqGroupUrl,
+              ),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.aboutOfficialWebsite,
               subtitle: AboutSettingsData.officialWebsiteUrl,
               icon: Ionicons.globe_outline,
               phoneIcon: cupertino.CupertinoIcons.globe,
-              onTap: () => _launchURL(AboutSettingsData.officialWebsiteUrl),
+              onTap: () => _openCommunityLink(
+                l10n.aboutOfficialWebsite,
+                AboutSettingsData.officialWebsiteUrl,
+              ),
             ),
           ],
         ),
@@ -90,7 +106,10 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
               subtitle: AboutSettingsData.afdianUrl,
               icon: Ionicons.heart,
               phoneIcon: cupertino.CupertinoIcons.heart_fill,
-              onTap: () => _launchURL(AboutSettingsData.afdianUrl),
+              onTap: () => _openCommunityLink(
+                l10n.aboutAfdianSponsorPage,
+                AboutSettingsData.afdianUrl,
+              ),
             ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.appreciationCode,
@@ -289,7 +308,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
   ) {
     final isHovered = !_isCheckingUpdate && _isUpdateActionHovered;
 
-    return MouseRegion(
+    final action = MouseRegion(
       cursor: _isCheckingUpdate
           ? SystemMouseCursors.basic
           : SystemMouseCursors.click,
@@ -355,6 +374,15 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
           ),
         ),
       ),
+    );
+    if (!NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return action;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: _isCheckingUpdate ? null : _manualCheckForUpdates,
+      borderRadius: BorderRadius.circular(8),
+      focusScale: 1,
+      child: ExcludeFocus(child: action),
     );
   }
 
@@ -551,10 +579,9 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
   }
 
   void _showAppreciationQR() {
-    BlurDialog.show(
-      context: context,
+    _showAboutQrDialog(
       title: context.l10n.appreciationCode,
-      contentWidget: ConstrainedBox(
+      content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 300, maxHeight: 400),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -577,12 +604,100 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _openCommunityLink(String title, String url) async {
+    if (!globals.isTelevision) {
+      await _launchURL(url);
+      return;
+    }
+
+    await _showAboutQrDialog(
+      title: title,
+      content: _buildUrlQrContent(context, url),
+    );
+  }
+
+  Future<void> _showAboutQrDialog({
+    required String title,
+    required Widget content,
+  }) {
+    return BlurDialog.show<void>(
+      context: context,
+      title: title,
+      contentWidget: content,
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.l10n.close),
         ),
       ],
+    );
+  }
+
+  Widget _buildUrlQrContent(BuildContext context, String url) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final instruction = switch (languageCode) {
+      'zh' => '请使用手机扫描二维码打开此链接',
+      _ => 'Scan the QR code with your phone to open this link.',
+    };
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420, maxHeight: 480),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                instruction,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colorScheme.onSurface.withValues(alpha: 0.76),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      blurRadius: 30,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: QrImageView(
+                    data: url,
+                    version: QrVersions.auto,
+                    size: 300,
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              Text(
+                url,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

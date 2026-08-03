@@ -394,6 +394,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
     return NipaplayLargeScreenFocusableAction(
       onActivate: () => _onRecommendedItemTap(item),
       borderRadius: BorderRadius.circular(8),
+      focusScale: 1,
       child: card,
     );
   }
@@ -622,6 +623,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
     return NipaplayLargeScreenFocusableAction(
       onActivate: () => _onRecommendedItemTap(item),
       borderRadius: BorderRadius.circular(4),
+      focusScale: 1,
       child: card,
     );
   }
