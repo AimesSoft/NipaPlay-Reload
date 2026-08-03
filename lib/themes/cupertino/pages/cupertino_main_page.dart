@@ -258,6 +258,11 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final glassTabBarBottom = resolveGlassTabBarBottomOffset(
       viewPaddingBottom: bottomInset,
     );
+    final usesNativeIOS26Toolbar = PlatformInfo.isIOS26OrHigher();
+    final pageActionsTrailingOffset = resolvePageActionsTrailingOffset(
+      viewPaddingRight: MediaQuery.paddingOf(context).right,
+      usesNativeIOS26Toolbar: usesNativeIOS26Toolbar,
+    );
     final glassTabBarSettings =
         CupertinoTheme.brightnessOf(context) == Brightness.light
             ? _lightPhoneNavigationGlassSettings
@@ -304,7 +309,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                   ),
                   Positioned(
                     top: MediaQuery.paddingOf(context).top + 4,
-                    right: 12 + MediaQuery.paddingOf(context).right,
+                    right: pageActionsTrailingOffset,
                     child: CupertinoAppPageActions(
                       actionIds: selectedPage.actionIds,
                     ),
@@ -324,7 +329,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           items: _buildCupertinoItems(context, pages),
         );
 
-        if (PlatformInfo.isIOS26OrHigher()) {
+        if (usesNativeIOS26Toolbar) {
           return AdaptiveScaffold(
             minimizeBehavior: TabBarMinimizeBehavior.never,
             enableBlur: true,
