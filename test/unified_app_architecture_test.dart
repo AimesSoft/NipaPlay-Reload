@@ -559,7 +559,11 @@ void main() {
     );
   });
 
-  test('iOS 26 kernel selectors opt into native dropdown menus', () {
+  test('phone setting selectors share native and NipaPlay dropdown routing',
+      () {
+    final adaptive = File(
+      'lib/settings/adaptive_settings_widgets.dart',
+    ).readAsStringSync();
     final player = File(
       'lib/settings/pages/player_settings_content.dart',
     ).readAsStringSync();
@@ -567,24 +571,14 @@ void main() {
       'lib/settings/pages/danmaku_settings_content.dart',
     ).readAsStringSync();
 
-    expect(
-      player,
-      matches(
-        RegExp(
-          r'title: "播放器内核",[\s\S]*?'
-          r'useNativeIOS26Dropdown: true,',
-        ),
-      ),
-    );
-    expect(
-      danmaku,
-      matches(
-        RegExp(
-          r"title: '弹幕渲染引擎',[\s\S]*?"
-          r'useNativeIOS26Dropdown: true,',
-        ),
-      ),
-    );
+    expect(adaptive, contains('if (usesNativeIOS26SettingsControls)'));
+    expect(adaptive, contains('AdaptivePopupMenuButton.widget<T>'));
+    expect(adaptive, contains('return BlurDropdown<T>('));
+    expect(adaptive, contains('final trigger = _PhoneMenuChip(label: label)'));
+    expect(adaptive, isNot(contains('CupertinoBottomSheet.showSelection')));
+    expect(adaptive, isNot(contains('useNativeIOS26Dropdown')));
+    expect(player, isNot(contains('useNativeIOS26Dropdown')));
+    expect(danmaku, isNot(contains('useNativeIOS26Dropdown')));
   });
 
   test('shared host selection has one model and adaptive renderers', () {
