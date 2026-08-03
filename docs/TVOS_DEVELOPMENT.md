@@ -19,7 +19,7 @@ that platform onto the tvOS or mainline toolchain.
 
 ## Local setup
 
-Xcode and CocoaPods are required. From the tvOS worktree, run:
+Xcode and CocoaPods are required. From the NipaPlay repository root, run:
 
 ```bash
 ./tool/setup_tvos.sh
@@ -30,12 +30,14 @@ The setup script installs the pinned fork next to the repository by default:
 ```text
 FlutterProject/
   flutter-tvos/
-  nipaplay-tvos/
+  nipaplay/
 ```
 
 Set `FLUTTER_TVOS_ROOT` before running the script to use another location.
 Use the repository wrapper for subsequent commands so the normal Flutter SDK
-is never changed:
+is never changed. The wrapper automatically enables
+`pubspec_overrides.tvos.yaml`, just as Linux and HarmonyOS select their own
+dependency profiles:
 
 ```bash
 ./tool/flutter_tvos.sh doctor -v
@@ -56,9 +58,8 @@ In Simulator, use the arrow keys to move focus, Return to activate, and Escape
 to go back; a trackpad or mouse wheel can also move focus. At the root screen,
 the Siri Remote MENU button and Simulator Escape key toggle NipaPlay's left
 menu instead of leaving the application. In a nested route they retain their
-normal back-navigation behavior. NipaPlay enables its large-screen, focusable
-layout by default on Apple TV. A saved per-device choice still takes precedence
-after the user explicitly leaves that mode.
+normal back-navigation behavior. NipaPlay always enables its large-screen,
+focusable layout on Apple TV.
 
 For a physical Apple TV, select a Development Team for the Runner target in
 `tvos/Runner.xcworkspace`, then build or run against the paired device. The
@@ -67,16 +68,23 @@ developer-specific.
 
 ## Platform behavior
 
+tvOS is part of the same repository and application source as every other
+platform. Shared display-surface and large-screen widgets live under `lib/` and
+can also be enabled by desktop, tablet, and television surfaces. Only the
+`tvos/` native runner, `.flutter-version-tvos`, the dependency override profile,
+and the SDK wrapper are platform-specific. A second Git worktree is optional
+for parallel builds; it is not a separate source repository.
+
 The fork reports both `Platform.isIOS == true` and
 `Platform.operatingSystem == 'tvos'`. NipaPlay uses the latter to keep Apple TV
 out of phone-only code paths and to select the television display surface.
 
 Only Flutter plugins with an explicit `tvos:` implementation are registered.
-The current target pins the official fluttertv implementations for
-SharedPreferences, path provider, package info, SQLite, wakelock, and video
-playback. The Apple TV build therefore uses the `Video Player` kernel. FVP,
-Media Kit, Erika, the Rust texture renderer, file pickers, URL launcher, and
-camera-based features remain unavailable until they gain native tvOS ports.
+The target pins the official fluttertv implementations for SharedPreferences,
+path provider, package info, SQLite, wakelock, and video playback. Playback is
+fixed to the Erika kernel through the tvOS dependency profile; Media Kit, MDK,
+file pickers, URL launcher, and camera-based features remain hidden where they
+do not have usable tvOS implementations.
 
 The CI workflow builds an unsigned simulator app. App Store or physical-device
 artifacts require Apple signing credentials and should be added as a separate

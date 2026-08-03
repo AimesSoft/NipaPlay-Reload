@@ -62,13 +62,15 @@ void main() {
   });
 
   test('tvOS release pins the native Erika plugin and reports Erika', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final tvOSOverrides = File(
+      'pubspec_overrides.tvos.yaml',
+    ).readAsStringSync();
     final monitor = File(
       'lib/utils/system_resource_monitor.dart',
     ).readAsStringSync();
 
     expect(
-      pubspec,
+      tvOSOverrides,
       contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b'),
     );
     expect(monitor, contains('_instance._updatePlayerKernelType();'));

@@ -89,7 +89,6 @@ void main() {
       contains('local_folder'),
     );
   });
-
   testWidgets('television media library uses remote-first navigation',
       (tester) async {
     String? selectedId;
@@ -199,7 +198,6 @@ void main() {
       isTrue,
     );
   });
-
   testWidgets('television collection renders a focusable poster grid',
       (tester) async {
     final item = WatchHistoryItem(

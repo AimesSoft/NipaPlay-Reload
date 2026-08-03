@@ -1,0 +1,42 @@
+# tvOS-only dependency graph for the pinned flutter-tvos SDK.
+#
+# Activate through ./tool/flutter_tvos.sh or manually with:
+#   dart run tool/configure_flutter_dependencies.dart tvos
+#
+# Pub replaces dependency_overrides as a complete section, so the shared
+# overrides from pubspec.yaml are repeated below the tvOS-specific entries.
+dependency_overrides:
+  # Apple TV requires the tvOS plugin and native Erika bridge added after
+  # v0.1.4. Pin the exact revision so release builds stay reproducible.
+  erika_flutter:
+    git:
+      url: https://github.com/AimesSoft/Erika.git
+      ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b
+      path: packages/erika_flutter
+  # Shared repository overrides. Keep these keys aligned with pubspec.yaml.
+  liquid_glass_widgets:
+    path: packages/liquid_glass_widgets
+  media_kit:
+    path: packages/media_kit
+  media_kit_video:
+    path: packages/media_kit_video
+  media_kit_libs_video:
+    path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
+  adaptive_platform_ui:
+    path: packages/adaptive_platform_ui
+  media_kit_libs_linux:
+    path: third_party/media-kit-upstream/libs/linux/media_kit_libs_linux
+  media_kit_libs_ios_video:
+    path: third_party/media-kit-upstream/libs/ios/media_kit_libs_ios_video
+  media_kit_libs_android_video:
+    path: third_party/media-kit-upstream/libs/android/media_kit_libs_android_video
+  media_kit_libs_windows_video:
+    path: third_party/media-kit-upstream/libs/windows/media_kit_libs_windows_video
+  media_kit_libs_macos_video:
+    path: third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video
+  smb_connect:
+    path: third_party/smb_connect
+  kmbal_ionicons:
+    path: third_party/kmbal_ionicons
+  volume_controller:
+    path: third_party/volume_controller
