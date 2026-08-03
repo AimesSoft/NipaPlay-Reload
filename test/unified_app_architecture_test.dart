@@ -330,6 +330,7 @@ void main() {
       <UnifiedHomeComponentType>[
         UnifiedHomeComponentType.hero,
         UnifiedHomeComponentType.todaySeries,
+        UnifiedHomeComponentType.trending,
         UnifiedHomeComponentType.continueWatching,
         UnifiedHomeComponentType.remoteLibraries,
         UnifiedHomeComponentType.localLibrary,

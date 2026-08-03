@@ -7,6 +7,31 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('mouse tap activates once when child also handles the tap',
+      (tester) async {
+    var activationCount = 0;
+    void activate() => activationCount++;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NipaplayLargeScreenFocusableAction(
+            onActivate: activate,
+            child: GestureDetector(
+              onTap: activate,
+              child: const Icon(Icons.tune),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pump();
+
+    expect(activationCount, 1);
+  });
+
   test('television layout can default on without overriding a saved choice',
       () async {
     SharedPreferences.setMockInitialValues(const {});

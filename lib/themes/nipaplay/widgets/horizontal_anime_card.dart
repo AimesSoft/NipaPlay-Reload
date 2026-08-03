@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
@@ -26,6 +27,7 @@ class HorizontalAnimeCard extends StatelessWidget {
   final String? source;
   final String? summary;
   final String? progress; // 新增：观看进度
+  final String? badgeText;
   final VoidCallback onTap;
 
   const HorizontalAnimeCard({
@@ -37,27 +39,69 @@ class HorizontalAnimeCard extends StatelessWidget {
     this.source,
     this.summary,
     this.progress,
+    this.badgeText,
   });
 
   Widget _buildCover() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+    final badgeForeground =
+        ThemeData.estimateBrightnessForColor(AppAccentColors.current) ==
+                Brightness.light
+            ? Colors.black87
+            : Colors.white;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: CachedNetworkImageWidget(
-        imageUrl: imageUrl,
-        fit: BoxFit.cover,
-        loadMode: CachedImageLoadMode.legacy,
-        memCacheWidth: 200,
-      ),
+          clipBehavior: Clip.hardEdge,
+          child: CachedNetworkImageWidget(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            loadMode: CachedImageLoadMode.legacy,
+            memCacheWidth: 200,
+          ),
+        ),
+        if (badgeText != null && badgeText!.isNotEmpty)
+          Positioned(
+            left: 7,
+            top: 7,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppAccentColors.current,
+                borderRadius: BorderRadius.circular(5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                child: Text(
+                  badgeText!,
+                  style: TextStyle(
+                    color: badgeForeground,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

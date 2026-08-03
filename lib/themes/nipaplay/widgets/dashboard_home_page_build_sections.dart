@@ -88,6 +88,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         case UnifiedHomeComponentType.todaySeries:
           addSectionWidgets(section, [_buildTodaySeriesSection()]);
           break;
+        case UnifiedHomeComponentType.trending:
+          addSectionWidgets(section, [_buildTrendingSection()]);
+          break;
         case UnifiedHomeComponentType.randomRecommendations:
           addSectionWidgets(section, [_buildRandomRecommendationsSection()]);
           break;
