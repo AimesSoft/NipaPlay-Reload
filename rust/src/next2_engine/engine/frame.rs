@@ -29,6 +29,13 @@ struct FrameItemPayload {
     /// behavior; also the path taken by Next2 which doesn't send it).
     #[serde(default)]
     scroll_speed: f64,
+    /// Marks a locally-sent danmaku. Rendered with a rectangular highlight.
+    #[serde(default)]
+    is_me: bool,
+    /// Layout/collision width in texture pixels. A non-positive value falls
+    /// back to the advances accumulated while building vertices.
+    #[serde(default)]
+    width: f64,
 }
 
 #[derive(Deserialize)]
@@ -67,6 +74,8 @@ struct FrameItem {
     opacity: f32,
     /// Signed scroll velocity (texture px/s). 0 = static, no interpolation.
     scroll_speed: f32,
+    is_me: bool,
+    width: f32,
 }
 
 #[derive(Clone)]
@@ -142,4 +151,3 @@ fn decode_emoji_rasters(payloads: &[FrameEmojiGlyphPayload]) -> Vec<EmojiRasterD
     }
     out
 }
-
