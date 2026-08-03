@@ -162,7 +162,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb && !globals.isTvOS) {
+  if (!kIsWeb && globals.supportsRustNativeBridge) {
     try {
       await ensureRustInitialized();
     } catch (error) {
@@ -296,9 +296,9 @@ void main(List<String> args) async {
     }
   }
 
-  // MediaKit/libmpv has no HarmonyOS or tvOS backend. Those targets select a
-  // platform-supported player without initializing MediaKit's native runtime.
-  if (!globals.isHarmonyOS && !globals.isTvOS) {
+  // Native runtime support is centralized so Android TV can continue using
+  // the Android plugin graph while tvOS keeps its dedicated dependencies.
+  if (globals.supportsMediaKitNativeRuntime) {
     try {
       MediaKit.ensureInitialized();
     } catch (e) {
@@ -433,7 +433,10 @@ void main(List<String> args) async {
 
     // 加载设置
     Future.wait(<Future<dynamic>>[
-      SettingsStorage.loadString('themeMode', defaultValue: 'system'),
+      SettingsStorage.loadString(
+        'themeMode',
+        defaultValue: globals.isTelevision ? 'dark' : 'system',
+      ),
       SettingsStorage.loadString(
         'backgroundImageMode',
         defaultValue: kIsWeb ? '关闭' : globals.backgroundImageMode,
@@ -458,7 +461,8 @@ void main(List<String> args) async {
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
 
-      final themeMode = (results[0] as String?) ?? 'system';
+      final themeMode =
+          (results[0] as String?) ?? (globals.isTelevision ? 'dark' : 'system');
       final animeDetailMode = (results[3] as String?) ?? 'simple';
       final backgroundImageRenderMode = (results[4] as String?) ??
           BackgroundImageRenderMode.opacity.storageKey;
@@ -505,7 +509,8 @@ void main(List<String> args) async {
 
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, dynamic>;
-    final savedThemeMode = settingsMap['themeMode'] as String? ?? 'system';
+    final savedThemeMode = settingsMap['themeMode'] as String? ??
+        (globals.isTelevision ? 'dark' : 'system');
     final savedDetailModeString =
         settingsMap['animeDetailMode'] as String? ?? 'simple';
     final savedBackgroundRenderModeString =
@@ -1349,7 +1354,7 @@ class MainPageState extends State<MainPage>
 
   Future<void> _initializeController() async {
     _useLargeScreenLayout = await LargeScreenModePreferences.load(
-      defaultValue: globals.isTvOS,
+      defaultValue: globals.isTelevision,
     );
     final initialIndex = _getInitialTabIndex();
 
@@ -1832,7 +1837,7 @@ Widget _buildGlobalAppOverlay(
   required bool isDragging,
 }) {
   final appChild =
-      globals.isTvOS ? TvOSRemoteTextInputScope(child: child) : child;
+      globals.isTelevision ? TvOSRemoteTextInputScope(child: child) : child;
   return Stack(
     children: [
       appChild,

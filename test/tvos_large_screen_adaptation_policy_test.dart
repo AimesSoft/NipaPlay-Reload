@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('tvOS removes controls that cannot be used on Apple TV', () {
+  test('televisions remove controls that require touch or desktop access', () {
     final scaffold = File(
       'lib/themes/nipaplay/widgets/large_screen_scaffold_layout.dart',
     ).readAsStringSync();
@@ -19,22 +19,22 @@ void main() {
 
     expect(
       scaffold,
-      contains('globals.isTvOS ? null : widget.onToggleLargeScreen'),
+      contains('globals.isTelevision ? null : widget.onToggleLargeScreen'),
     );
     expect(
       scaffold,
-      isNot(contains('globals.isTvOS ? null : widget.onOpenSettings')),
+      isNot(contains('globals.isTelevision ? null : widget.onOpenSettings')),
     );
     expect(scaffold, contains('widget.onOpenSettings,'));
     expect(scaffold, contains('onOpenSettings: _toggleSettingsPanel'));
     expect(
       scaffold,
-      contains('globals.isTvOS && !usePlayerContextPanel'),
+      contains('globals.isTelevision || usePlayerContextPanel'),
     );
-    expect(labs, contains('if (!isTvOS)'));
-    expect(plugins, contains('if (!globals.isTvOS)'));
-    expect(remote, contains('if (!globals.isTvOS)'));
-    expect(remote, contains('if (!globals.isTvOS &&'));
+    expect(labs, contains('if (!globals.isTelevision)'));
+    expect(plugins, contains('if (!globals.isTelevision)'));
+    expect(remote, contains('if (!globals.isTelevision)'));
+    expect(remote, contains('if (!globals.isTelevision &&'));
   });
 
   test('large screen account and settings use supported controls', () {
@@ -51,7 +51,7 @@ void main() {
       'lib/settings/pages/about_settings_content.dart',
     ).readAsStringSync();
 
-    expect(account, contains('if (!globals.isTvOS) ...['));
+    expect(account, contains('if (!globals.isTelevision) ...['));
     expect(account, contains('AdaptiveMediaTextField('));
     expect(account, contains("remoteInputFieldId: 'bangumi_access_token'"));
     expect(
@@ -147,7 +147,7 @@ void main() {
       'lib/themes/cupertino/widgets/player_menu/cupertino_subtitle_settings_pane.dart',
     ].map((path) => File(path).readAsStringSync()).join('\n');
 
-    expect(tracks, contains('if (!globals.isTvOS)'));
+    expect(tracks, contains('if (!globals.isTelevision)'));
     expect(tracks, contains("const Text('加载本地弹幕文件')"));
     expect(primitives, contains('FluentSettingsSwitch('));
     expect(largeScreenPanel, contains('FluentSettingsSwitch('));

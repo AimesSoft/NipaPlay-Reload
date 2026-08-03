@@ -892,7 +892,9 @@ class _MediaLibrarySectionOrderEditorState
 }
 
 Future<String?> showAdaptiveMediaSourcePicker(material.BuildContext context) {
-  final options = availableMediaSourceOptions(isTvOS: globals.isTvOS);
+  final options = availableMediaSourceOptions(
+    isTelevision: globals.isTelevision,
+  );
   if (_useTelevisionMediaLibraryLayout(context)) {
     return NipaplayLargeScreenViewContainer.show<String>(
       context: context,

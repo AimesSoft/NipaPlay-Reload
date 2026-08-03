@@ -5,7 +5,7 @@ import '../player_abstraction/player_factory.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 import '../danmaku_next/next2_platform_support.dart';
-import 'platform_identity.dart';
+import 'globals.dart' as globals;
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'video_player_state.dart';
@@ -215,7 +215,7 @@ class PlayerKernelManager {
     if (kIsWeb) {
       // Web平台只支持特定内核
       return ['Video Player'];
-    } else if (isTvOS) {
+    } else if (globals.isTelevision) {
       return ['Erika'];
     } else if (PlayerFactory.isHarmonyOS) {
       return ['FVP', 'Erika'];
@@ -242,14 +242,14 @@ class PlayerKernelManager {
 
   /// 获取当前播放器内核
   static Future<String> getCurrentPlayerKernel() async {
-    if (isTvOS) return 'Erika';
+    if (globals.isTelevision) return 'Erika';
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('player_kernel') ?? 'FVP';
   }
 
   /// 设置播放器内核
   static Future<void> setPlayerKernel(String kernel) async {
-    final resolvedKernel = isTvOS ? 'Erika' : kernel;
+    final resolvedKernel = globals.isTelevision ? 'Erika' : kernel;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('player_kernel', resolvedKernel);
 
@@ -397,7 +397,9 @@ class PlayerKernelManager {
   static String _getPlatformInfo() {
     if (kIsWeb) return 'Web';
     if (Platform.isAndroid) return 'Android';
-    if (isTvOS) return 'tvOS';
+    if (globals.isTelevision) {
+      return globals.isAndroidTv ? 'Android TV' : 'tvOS';
+    }
     if (Platform.isIOS) return 'iOS';
     if (Platform.isWindows) return 'Windows';
     if (Platform.isMacOS) return 'macOS';

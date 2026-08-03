@@ -322,7 +322,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.folder_open_outline,
       phoneIcon: cupertino.CupertinoIcons.archivebox,
       contentType: UnifiedSettingContentType.storage,
-      visible: (context, surface) => !globals.isTvOS,
+      visible: (context, surface) => !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.network,
@@ -346,7 +346,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet &&
           !globals.isPhone &&
-          !globals.isTvOS,
+          !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.player,
@@ -393,7 +393,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.open_outline,
       phoneIcon: cupertino.CupertinoIcons.square_arrow_up,
       contentType: UnifiedSettingContentType.externalPlayer,
-      visible: (context, surface) => !globals.isTvOS,
+      visible: (context, surface) => !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.shortcuts,
@@ -406,7 +406,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       visible: (context, surface) =>
           surface == UnifiedSettingsSurface.desktopTablet &&
           !globals.isPhone &&
-          !globals.isTvOS,
+          !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.remoteAccess,
@@ -422,7 +422,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.link_outline,
       phoneIcon: cupertino.CupertinoIcons.dot_radiowaves_left_right,
       contentType: UnifiedSettingContentType.remoteAccess,
-      visible: (context, surface) => !kIsWeb && !globals.isTvOS,
+      visible: (context, surface) => !kIsWeb && !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.remoteMediaLibrary,

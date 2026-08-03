@@ -41,20 +41,20 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('tvOS excludes local library sections and the local folder source', () {
+  test('televisions exclude local library sections and local folders', () {
     expect(
-      shouldExposeLocalMediaLibrary(isWeb: false, isTvOS: true),
+      shouldExposeLocalMediaLibrary(isWeb: false, isTelevision: true),
       isFalse,
     );
     expect(
-      shouldExposeLocalMediaLibrary(isWeb: false, isTvOS: false),
+      shouldExposeLocalMediaLibrary(isWeb: false, isTelevision: false),
       isTrue,
     );
     final tvOSSections = buildUnifiedMediaLibrarySections(
       MediaLibraryAvailability(
         showLocal: shouldExposeLocalMediaLibrary(
           isWeb: false,
-          isTvOS: true,
+          isTelevision: true,
         ),
         showWebDAVLibrary: false,
         showWebDAVManagement: false,
@@ -75,17 +75,18 @@ void main() {
       isNot(contains(MediaLibrarySectionIds.localManagement)),
     );
 
-    final tvOSOptions = availableMediaSourceOptions(isTvOS: true);
+    final televisionOptions = availableMediaSourceOptions(isTelevision: true);
     expect(
-      tvOSOptions.map((option) => option.id),
+      televisionOptions.map((option) => option.id),
       isNot(contains('local_folder')),
     );
     expect(
-      tvOSOptions.map((option) => option.id),
-      isNot(contains('nipaplay')),
+      televisionOptions.map((option) => option.id),
+      contains('nipaplay'),
     );
     expect(
-      availableMediaSourceOptions(isTvOS: false).map((option) => option.id),
+      availableMediaSourceOptions(isTelevision: false)
+          .map((option) => option.id),
       contains('local_folder'),
     );
   });

@@ -162,7 +162,7 @@ class _CupertinoDanmakuTracksPaneState
                 ),
               ],
             ),
-            if (!globals.isTvOS)
+            if (!globals.isTelevision)
               AdaptivePlayerMenuSection(
                 header: const Text('本地弹幕'),
                 children: [

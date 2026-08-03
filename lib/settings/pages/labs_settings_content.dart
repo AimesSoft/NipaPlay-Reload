@@ -5,7 +5,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
-import 'package:nipaplay/utils/platform_identity.dart' show isTvOS;
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 class LabsSettingsContent extends StatelessWidget {
@@ -25,7 +25,7 @@ class LabsSettingsContent extends StatelessWidget {
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
-                if (!isTvOS)
+                if (!globals.isTelevision)
                   AdaptiveSettingsTile.toggle(
                     title:
                         _text(context, '大屏幕模式', '大螢幕模式', 'Large Screen Mode'),
@@ -40,7 +40,8 @@ class LabsSettingsContent extends StatelessWidget {
                     value: labsSettings.enableLargeScreenMode,
                     onChanged: labsSettings.setEnableLargeScreenMode,
                   ),
-                if (PlayerFactory.isErikaKernelSupported && !isTvOS)
+                if (PlayerFactory.isErikaKernelSupported &&
+                    !globals.isTelevision)
                   AdaptiveSettingsTile.toggle(
                     title: _text(
                       context,

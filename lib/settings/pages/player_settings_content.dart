@@ -298,11 +298,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final showErikaKernel = PlayerFactory.isErikaKernelSupported &&
-        (globals.isTvOS ||
+        (globals.isTelevision ||
             PlayerFactory.isHarmonyOS ||
             context.watch<LabsSettingsProvider>().enableErikaPlayerKernel);
     final fallbackKernelType =
-        globals.isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
+        globals.isTelevision ? PlayerKernelType.erika : PlayerKernelType.mdk;
     final visibleKernelType =
         _selectedKernelType == PlayerKernelType.erika && !showErikaKernel
             ? fallbackKernelType
@@ -338,13 +338,13 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-            if (!kIsWeb && !globals.isTvOS) ...[
+            if (!kIsWeb && !globals.isTelevision) ...[
               AdaptiveSettingsTile.dropdown(
                 title: "播放器内核",
                 subtitle: "选择播放器使用的核心引擎",
                 icon: Ionicons.play_circle_outline,
                 items: [
-                  if (!globals.isTvOS)
+                  if (!globals.isTelevision)
                     DropdownMenuItemData(
                       title: "MDK",
                       value: PlayerKernelType.mdk,
@@ -361,7 +361,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                       description: _getPlayerKernelDescription(
                           PlayerKernelType.videoPlayer),
                     ),
-                    if (!globals.isTvOS)
+                    if (!globals.isTelevision)
                       DropdownMenuItemData(
                         title: "Libmpv",
                         value: PlayerKernelType.mediaKit,

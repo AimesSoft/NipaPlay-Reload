@@ -14,14 +14,14 @@ void main() {
       () {
     expect(
       resolveTvOSRemoteTextInputEnabled(
-        platformIsTvOS: true,
+        platformIsTelevision: true,
         surface: AppDisplaySurface.desktopTablet,
       ),
       isTrue,
     );
     expect(
       resolveTvOSRemoteTextInputEnabled(
-        platformIsTvOS: false,
+        platformIsTelevision: false,
         surface: AppDisplaySurface.desktopTablet,
       ),
       isFalse,

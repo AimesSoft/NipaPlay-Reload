@@ -164,6 +164,11 @@ bool get isTabletLikeMobile => isMobilePlatform && isTablet;
 bool get isAndroidTv => _startupAndroidTv;
 bool get isTelevision => isAndroidTv || isTvOS;
 
+/// Native bootstrap capabilities stay centralized because tvOS uses a
+/// different Flutter/plugin graph while Android TV uses Android runtimes.
+bool get supportsRustNativeBridge => !isTvOS;
+bool get supportsMediaKitNativeRuntime => !isHarmonyOS && !isTvOS;
+
 bool get isIPad {
   if (kIsWeb) {
     return defaultTargetPlatform == TargetPlatform.iOS && isTablet;
@@ -174,7 +179,7 @@ bool get isIPad {
 }
 
 bool get isDownloaderSupportedPlatform {
-  if (isTvOS) return false;
+  if (isTelevision) return false;
   if (!kIsWeb && Platform.isIOS) {
     return PluginService.forceEnableDownloader;
   }

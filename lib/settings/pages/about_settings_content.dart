@@ -608,7 +608,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
   }
 
   Future<void> _openCommunityLink(String title, String url) async {
-    if (!globals.isTvOS) {
+    if (!globals.isTelevision) {
       await _launchURL(url);
       return;
     }

@@ -221,7 +221,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
             MediaLibraryAvailability(
               showLocal: shouldExposeLocalMediaLibrary(
                 isWeb: kIsWeb,
-                isTvOS: globals.isTvOS,
+                isTelevision: globals.isTelevision,
               ),
               showWebDAVLibrary: watchHistoryProvider.isLoaded &&
                   mediaLibraryHasItemsForSource(

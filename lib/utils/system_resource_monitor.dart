@@ -8,7 +8,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/src/rust/api/performance.dart' as rust_perf;
 import 'package:nipaplay/src/rust/rust_init.dart';
-import 'package:nipaplay/utils/platform_identity.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 系统资源监控类
 /// 提供真实的 CPU / 内存 / GPU / FPS 指标。
@@ -59,7 +59,7 @@ class SystemResourceMonitor {
   String get danmakuKernelType => _danmakuKernelType;
 
   static Future<void> initialize() async {
-    if (!kIsWeb && !isTvOS) {
+    if (!kIsWeb && !globals.isTelevision) {
       _instance._initMdkVersion();
       _instance._updatePlayerKernelType();
       _instance._updateDanmakuKernelType();
@@ -71,9 +71,8 @@ class SystemResourceMonitor {
       _instance._activeDecoder = '浏览器解码';
       _instance._gpuUsage = null;
     } else {
-      // tvOS is locked to Erika by PlayerFactory. Keep the diagnostics panel
-      // in sync with the actual factory policy instead of reporting the
-      // video_player fallback that is never selected on Apple TV.
+      // Television devices are locked to Erika by PlayerFactory. Keep the
+      // diagnostics panel in sync with the actual factory policy.
       _instance._updatePlayerKernelType();
       _instance._danmakuKernelType = 'DFM+';
       _instance._mdkVersion = 'N/A';

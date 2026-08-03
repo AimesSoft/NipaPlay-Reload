@@ -570,7 +570,7 @@ class _RemoteMediaLibrarySettingsContentState
           children: [
             AdaptiveSettingsSection(
               children: [
-                if (!globals.isTvOS)
+                if (!globals.isTelevision)
                   AdaptiveSettingsTile<void>.card(
                     title: _sharedRemoteTitle(context),
                     subtitle: _sharedRemoteSubtitle(context, provider),
@@ -579,7 +579,8 @@ class _RemoteMediaLibrarySettingsContentState
                     enabled: provider.hasActiveHost,
                     onTap: () => _openSharedRemoteLibrary(context),
                   ),
-                if (!globals.isTvOS && RemoteAccessQrCameraScanner.isSupported)
+                if (!globals.isTelevision &&
+                    RemoteAccessQrCameraScanner.isSupported)
                   AdaptiveSettingsTile<void>.card(
                     title: _text(context, '扫码连接共享客户端', '掃碼連接共享客戶端',
                         'Scan to Connect Shared Client'),

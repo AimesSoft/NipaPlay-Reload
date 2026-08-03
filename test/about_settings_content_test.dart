@@ -58,7 +58,7 @@ void main() {
       RegExp(r'onTap: \(\) => _openCommunityLink\(').allMatches(source).length,
       5,
     );
-    expect(source, contains('if (!globals.isTvOS)'));
+    expect(source, contains('if (!globals.isTelevision)'));
     expect(source, contains('Future<void> _showAboutQrDialog({'));
     expect(source, contains('return BlurDialog.show<void>('));
     expect(source, isNot(contains('NipaplayLargeScreenViewContainer.show')));

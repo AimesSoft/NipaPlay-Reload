@@ -165,7 +165,7 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
         children: [
           _buildStatusCard(context),
           const SizedBox(height: 16),
-          if (!globals.isTvOS) ...[
+          if (!globals.isTelevision) ...[
             _buildDandanCard(context),
             const SizedBox(height: 16),
           ],
