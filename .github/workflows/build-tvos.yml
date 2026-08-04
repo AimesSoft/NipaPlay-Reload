@@ -89,6 +89,27 @@ jobs:
             origin \
             'refs/tags/${{ steps.project.outputs.flutter-tvos }}'
           git -C "$FLUTTER_TVOS_ROOT" checkout --detach --force FETCH_HEAD
+
+          # The cache restores flutter/bin/cache without the Flutter checkout.
+          # Recreate the pinned checkout in place so flutter-tvos can reuse the
+          # cached artifacts instead of rejecting flutter/ as a non-Git folder.
+          flutter_revision="$(tr -d '[:space:]' < \
+            "$FLUTTER_TVOS_ROOT/bin/internal/flutter.version")"
+          flutter_sdk_root="$FLUTTER_TVOS_ROOT/flutter"
+          mkdir -p "$flutter_sdk_root"
+          if [[ ! -d "$flutter_sdk_root/.git" ]]; then
+            git -C "$flutter_sdk_root" init
+            git -C "$flutter_sdk_root" remote add origin \
+              https://github.com/flutter/flutter.git
+          else
+            git -C "$flutter_sdk_root" remote set-url origin \
+              https://github.com/flutter/flutter.git
+          fi
+          git -C "$flutter_sdk_root" fetch --depth 1 origin "$flutter_revision"
+          git -C "$flutter_sdk_root" checkout --detach --force FETCH_HEAD
+          test "$(git -C "$flutter_sdk_root" rev-parse HEAD)" = \
+            "$flutter_revision"
+
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" precache
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" --version
 
