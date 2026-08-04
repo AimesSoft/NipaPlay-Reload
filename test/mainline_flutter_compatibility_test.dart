@@ -273,6 +273,13 @@ void main() {
     }
   });
 
+  test('App Store existing-build publishing remains non-interactive', () {
+    final workflow = File('.github/workflows/main.yml').readAsStringSync();
+
+    expect('--skip_binary_upload true'.allMatches(workflow).length, 2);
+    expect('--ipa "\$SIGNED_IPA"'.allMatches(workflow).length, 4);
+  });
+
   test('application source does not require custom Platform APIs', () {
     final incompatibleFiles = Directory('lib')
         .listSync(recursive: true)
