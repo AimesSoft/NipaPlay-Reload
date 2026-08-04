@@ -29,4 +29,14 @@ class SystemShareService {
       'subject': subject,
     });
   }
+
+  /// 通过 iOS 系统文件选择器导出一个已经生成的本地文件。
+  static Future<void> exportFile(String filePath) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      throw UnsupportedError('System file export is only supported on iOS');
+    }
+    await _channel.invokeMethod<void>('exportFile', <String, dynamic>{
+      'filePath': filePath,
+    });
+  }
 }

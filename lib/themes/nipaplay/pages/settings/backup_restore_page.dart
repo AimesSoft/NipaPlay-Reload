@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -12,6 +16,7 @@ import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -33,6 +38,17 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   bool _isProcessing = false;
   bool _autoSyncEnabled = false;
   String? _autoSyncPath;
+
+  bool get _useIosDocumentExporter => !kIsWeb && Platform.isIOS;
+
+  Future<String> _createIosBackupExportPath(String fileName) async {
+    final temporaryDirectory = await getTemporaryDirectory();
+    final exportDirectory = Directory(
+      path.join(temporaryDirectory.path, 'nipaplay_backup_exports'),
+    );
+    await exportDirectory.create(recursive: true);
+    return path.join(exportDirectory.path, fileName);
+  }
 
   @override
   void initState() {
@@ -195,21 +211,19 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     final backupService = FullBackupService();
     String? selectedDirectory;
     String? selectedFilePath;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final saveLocation = await getSaveLocation(
-        suggestedName: backupService.buildBackupFileName(result),
-        acceptedTypeGroups: [
-          buildBackupFileTypeGroup(
-            label: 'NipaPlay 完整备份',
-            extension: 'npb',
-          ),
-        ],
-      );
-      selectedFilePath = saveLocation?.path;
-    } else {
-      selectedDirectory = await getDirectoryPath(
-        confirmButtonText: '选择保存位置',
-      );
+    try {
+      if (_useIosDocumentExporter) {
+        selectedFilePath = await _createIosBackupExportPath(
+          backupService.buildBackupFileName(result),
+        );
+      } else {
+        selectedDirectory = await getDirectoryPath(
+          confirmButtonText: '选择保存位置',
+        );
+      }
+    } catch (error) {
+      _showMessage('备份失败: $error', isError: true);
+      return;
     }
 
     if (selectedDirectory == null && selectedFilePath == null) {
@@ -241,7 +255,12 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
             );
 
       if (filePath != null) {
-        _showMessage('备份成功！文件保存至: $filePath');
+        if (_useIosDocumentExporter) {
+          await SystemShareService.exportFile(filePath);
+          _showMessage('备份已生成，请在系统文件选择器中选择保存位置');
+        } else {
+          _showMessage('备份成功！文件保存至: $filePath');
+        }
       } else {
         _showMessage('备份失败', isError: true);
       }
@@ -390,17 +409,10 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       final backupService = BackupService();
       String? selectedDirectory;
       String? selectedFilePath;
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        final saveLocation = await getSaveLocation(
-          suggestedName: backupService.buildWatchHistoryBackupFileName(),
-          acceptedTypeGroups: [
-            buildBackupFileTypeGroup(
-              label: 'NipaPlay 历史备份',
-              extension: 'nph',
-            ),
-          ],
+      if (_useIosDocumentExporter) {
+        selectedFilePath = await _createIosBackupExportPath(
+          backupService.buildWatchHistoryBackupFileName(),
         );
-        selectedFilePath = saveLocation?.path;
       } else {
         selectedDirectory = await getDirectoryPath(
           confirmButtonText: '选择保存位置',
@@ -417,7 +429,12 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
           : await backupService.exportWatchHistory(selectedDirectory!);
 
       if (result != null) {
-        _showMessage('备份成功！文件保存至: $result');
+        if (_useIosDocumentExporter) {
+          await SystemShareService.exportFile(result);
+          _showMessage('备份已生成，请在系统文件选择器中选择保存位置');
+        } else {
+          _showMessage('备份成功！文件保存至: $result');
+        }
       } else {
         _showMessage('备份失败', isError: true);
       }
