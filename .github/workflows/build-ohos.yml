@@ -209,6 +209,48 @@ jobs:
           flutter_bin="$OHOS_FLUTTER_ROOT/bin/flutter"
           "$flutter_dart" run tool/configure_flutter_dependencies.dart ohos
           "$flutter_bin" pub get
+
+          erika_sha="$(awk '
+            /^  erika_flutter:/ {in_erika=1; next}
+            in_erika && /^      resolved-ref:/ {
+              gsub(/"/, "", $2)
+              print $2
+              exit
+            }
+            in_erika && /^  [^ ]/ {exit}
+          ' pubspec.lock)"
+          erika_plugin="$PUB_CACHE/git/Erika-$erika_sha/packages/erika_flutter/ohos/src/main/ets/components/plugin/ErikaFlutterPlugin.ets"
+          test -f "$erika_plugin"
+          python3 - "$erika_plugin" <<'PY'
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding='utf-8')
+          replacements = {
+              "    const metadataValue = args.get('metadata');":
+                  "    const metadataValue: ESObject | undefined = args.get('metadata');",
+              "    const nativeArgs = new Map<string, ESObject>(args);":
+                  "    const nativeArgs: Map<string, ESObject> = new Map<string, ESObject>(args);",
+              "    const metadata = value as Map<string, ESObject>;":
+                  "    const metadata: Map<string, ESObject> = value as Map<string, ESObject>;",
+              "    const titleValue = metadata.get('title');":
+                  "    const titleValue: ESObject | undefined = metadata.get('title');",
+              "    const artist = metadata.get('artist');":
+                  "    const artist: ESObject | undefined = metadata.get('artist');",
+              "    const album = metadata.get('album');":
+                  "    const album: ESObject | undefined = metadata.get('album');",
+              "    const artwork = metadata.get('artwork');":
+                  "    const artwork: ESObject | undefined = metadata.get('artwork');",
+              "    const args = extra ?? new Map<string, ESObject>();":
+                  "    const args: Map<string, ESObject> = extra ?? new Map<string, ESObject>();",
+          }
+          for old, new in replacements.items():
+              if source.count(old) != 1:
+                  raise SystemExit(f'Unexpected Erika v0.1.5 ArkTS source: {old}')
+              source = source.replace(old, new)
+          path.write_text(source, encoding='utf-8')
+          PY
           python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
 
       - name: Read project version
