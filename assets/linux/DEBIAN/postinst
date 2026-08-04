@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
-# 创建应用程序的符号链接到 /usr/bin
-ln -sf /opt/nipaplay/NipaPlay /usr/bin/nipaplay-reload
+# 创建应用程序的符号链接到 /usr/bin（指向 launcher.sh 以便正确设置库路径）
+ln -sf /opt/nipaplay/launcher.sh /usr/bin/nipaplay-reload
 chmod +x /usr/bin/nipaplay-reload
 
 # 检查并创建 libmpv 兼容性符号链接
