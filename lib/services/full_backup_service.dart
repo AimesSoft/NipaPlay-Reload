@@ -1129,7 +1129,13 @@ class FullBackupService {
       return value.isInfinite || value.isNaN ? 0.0 : value;
     }
     if (value is Map) {
-      return value.map((k, v) => MapEntry(k, _sanitizeForJson(v)));
+      // JSON 对象的键只能是字符串。这里显式生成 Map<String, dynamic>，
+      // 避免在 `value is Map` 类型提升后，Map.map 推断出
+      // Map<dynamic, dynamic>，导致 collectBackupData 返回时强转失败。
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _sanitizeForJson(entry.value),
+      };
     }
     if (value is List) {
       return value.map(_sanitizeForJson).toList();
