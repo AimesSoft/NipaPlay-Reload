@@ -178,9 +178,14 @@ jobs:
             fi
           fi
           '''
-          if source.count(old) != 1:
+          old_count = source.count(old)
+          new_count = source.count(new)
+          if old_count == 1 and new_count == 0:
+              path.write_text(source.replace(old, new), encoding='utf-8')
+          elif old_count == 0 and new_count == 1:
+              print('Erika v0.1.5 tvOS podspec is already patched.')
+          else:
               raise SystemExit('Unexpected Erika v0.1.5 tvOS podspec layout')
-          path.write_text(source.replace(old, new), encoding='utf-8')
           PY
 
       - name: Build tvOS simulator application
