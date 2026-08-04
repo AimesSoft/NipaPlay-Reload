@@ -30,6 +30,10 @@ concurrency:
   group: build-tvos-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ERIKA_PREBUILT: "1"
+  ERIKA_PREBUILT_TAG: v0.1.5
+
 jobs:
   build:
     name: Build tvOS package
