@@ -253,6 +253,26 @@ void main() {
     expect(tvOSWorkflow, contains('tvOS-arm64-sideload.ipa'));
   });
 
+  test('App Store publishing includes localized Apple TV privacy policies', () {
+    final workflow = File('.github/workflows/main.yml').readAsStringSync();
+    final zhPolicy = File(
+      '.github/app-store-metadata/apple-tv-privacy-policy.zh-Hans.txt',
+    ).readAsStringSync();
+    final enPolicy = File(
+      '.github/app-store-metadata/apple-tv-privacy-policy.en-US.txt',
+    ).readAsStringSync();
+
+    expect(
+      'apple_tv_privacy_policy.txt'.allMatches(workflow).length,
+      4,
+    );
+    for (final policy in [zhPolicy, enPolicy]) {
+      expect(policy.trim(), isNotEmpty);
+      expect(policy.length, lessThanOrEqualTo(4000));
+      expect(policy, contains('https://nipaplay.aimes-soft.com/#privacy'));
+    }
+  });
+
   test('application source does not require custom Platform APIs', () {
     final incompatibleFiles = Directory('lib')
         .listSync(recursive: true)

@@ -1,0 +1,12 @@
+Last updated: August 20, 2025
+
+NipaPlay values your privacy. To provide video playback, danmaku matching, and account synchronization, the app may process the following information: your user ID and login credentials when you choose to sign in to a dandanplay account; playback history that you choose to synchronize; danmaku comments that you post; and a hash calculated locally from the first 16 MB of a video file for danmaku matching. NipaPlay does not upload or store your video files.
+
+If you use NipaPlay only as a local video player, without signing in or using network features such as online danmaku matching, the app does not collect your personal information. Information is used only for authentication, playback-history synchronization, posting danmaku, and matching danmaku. We do not use personal information for tracking or targeted advertising, and we do not sell or trade personal information.
+
+Sign-in, synchronization, and danmaku matching rely on the dandanplay API. Related user IDs, playback history, danmaku content, and video hashes may be sent to dandanplay servers for processing. Except for official dandanplay services, we do not share personal information with other third parties without your explicit consent, unless required by law.
+
+We use reasonable security measures to protect your information. You can manage or delete account information and playback history through official dandanplay channels. We will provide appropriate notice when this policy is updated.
+
+Full privacy policy: https://nipaplay.aimes-soft.com/#privacy
+Contact: https://github.com/MCDFsteve/NipaPlay-Reload/issues
