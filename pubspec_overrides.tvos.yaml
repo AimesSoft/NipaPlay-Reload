@@ -6,12 +6,11 @@
 # Pub replaces dependency_overrides as a complete section, so the shared
 # overrides from pubspec.yaml are repeated below the tvOS-specific entries.
 dependency_overrides:
-  # Apple TV requires the tvOS plugin and native Erika bridge added after
-  # v0.1.4. Pin the exact revision so release builds stay reproducible.
+  # Keep the tvOS plugin source aligned with its versioned prebuilt runtime.
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/Erika.git
-      ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b
+      ref: v0.1.5
       path: packages/erika_flutter
   # Shared repository overrides. Keep these keys aligned with pubspec.yaml.
   liquid_glass_widgets:
