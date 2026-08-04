@@ -124,6 +124,65 @@ jobs:
             run tool/configure_flutter_dependencies.dart tvos
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
 
+      - name: Keep Erika prebuilt path independent of Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          erika_root="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.parse import unquote, urlparse
+
+          config_path = Path('.dart_tool/package_config.json').resolve()
+          config = json.loads(config_path.read_text(encoding='utf-8'))
+          package = next(
+              item for item in config['packages'] if item['name'] == 'erika_flutter'
+          )
+          uri = urlparse(package['rootUri'])
+          if uri.scheme == 'file':
+              root = Path(unquote(uri.path))
+          elif not uri.scheme:
+              root = (config_path.parent / unquote(uri.path)).resolve()
+          else:
+              raise SystemExit(f"Unsupported Erika package URI: {package['rootUri']}")
+          print(root)
+          PY
+          )"
+          podspec="$erika_root/tvos/erika_flutter.podspec"
+          test -f "$podspec"
+          python3 - "$podspec" <<'PY'
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding='utf-8')
+          old = '''if ! command -v rustup >/dev/null 2>&1; then
+            echo "error: rustup is required to build Erika for tvOS" >&2
+            exit 1
+          fi
+          if ! rustup run nightly rustc --version >/dev/null 2>&1; then
+            rustup toolchain install nightly --profile minimal --component rust-src
+          elif ! rustup component list --toolchain nightly --installed | grep -q '^rust-src'; then
+            rustup component add rust-src --toolchain nightly
+          fi
+          '''
+          new = '''if [ "${ERIKA_PREBUILT:-0}" != "1" ] || [ "${ERIKA_FORCE_SOURCE_BUILD:-0}" = "1" ]; then
+            if ! command -v rustup >/dev/null 2>&1; then
+              echo "error: rustup is required to build Erika for tvOS" >&2
+              exit 1
+            fi
+            if ! rustup run nightly rustc --version >/dev/null 2>&1; then
+              rustup toolchain install nightly --profile minimal --component rust-src
+            elif ! rustup component list --toolchain nightly --installed | grep -q '^rust-src'; then
+              rustup component add rust-src --toolchain nightly
+            fi
+          fi
+          '''
+          if source.count(old) != 1:
+              raise SystemExit('Unexpected Erika v0.1.5 tvOS podspec layout')
+          path.write_text(source.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Build tvOS simulator application
         if: github.event_name == 'pull_request'
         shell: bash
