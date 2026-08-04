@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('shared pubspec does not force platform-specific dependency forks', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
+    final erikaRef = _gitDependencyRef(pubspec, 'erika_flutter');
 
     expect(pubspec, isNot(contains('gitcode.com/openharmony')));
     expect(pubspec, isNot(contains('gitee.com/openharmony')));
@@ -17,11 +18,7 @@ void main() {
     expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
     expect(pubspec, contains('package_info_plus: ^10.2.1'));
     expect(pubspec, contains('wakelock_plus: ^1.7.0'));
-    expect(pubspec, contains('ref: v0.1.4'));
-    expect(
-      pubspec,
-      isNot(contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b')),
-    );
+    expect(erikaRef, matches(RegExp(r'^[0-9a-f]{40}$')));
     expect(
       File('.flutter-version-linux').readAsStringSync().trim(),
       '3.47.0-0.3.pre',
@@ -73,6 +70,11 @@ void main() {
       'pubspec_overrides.tvos.yaml',
     ).readAsStringSync();
     final tvOSKeys = _dependencyOverrideKeys(tvOSOverrides);
+    final sharedErikaRef = _gitDependencyRef(
+      File('pubspec.yaml').readAsStringSync(),
+      'erika_flutter',
+    );
+    final tvOSErikaRef = _gitDependencyRef(tvOSOverrides, 'erika_flutter');
     final wrapper = File('tool/flutter_tvos.sh').readAsStringSync();
     final workflow = File(
       '.github/workflows/build-tvos.yml',
@@ -81,12 +83,11 @@ void main() {
     expect(tvOSKeys, containsAll(sharedKeys));
     expect(tvOSOverrides, isNot(contains('package_info_plus:')));
     expect(tvOSOverrides, isNot(contains('wakelock_plus:')));
-    expect(
-      tvOSOverrides,
-      contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b'),
-    );
+    expect(tvOSErikaRef, 'v0.1.5');
+    expect(tvOSErikaRef, isNot(sharedErikaRef));
     expect(wrapper, contains('configure_flutter_dependencies.dart" tvos'));
     expect(workflow, contains('configure_flutter_dependencies.dart tvos'));
+    expect(workflow, contains('ERIKA_PREBUILT_TAG: $tvOSErikaRef'));
   });
 
   test('desktop multi-window downgrade is isolated to HarmonyOS mode', () {
@@ -301,4 +302,21 @@ Set<String> _dependencyOverrideKeys(String yaml) {
   }
 
   return keys;
+}
+
+String _gitDependencyRef(String yaml, String packageName) {
+  final lines = yaml.split('\n');
+  final packageLine = RegExp('^  ${RegExp.escape(packageName)}:\\s*\$');
+
+  for (var index = 0; index < lines.length; index++) {
+    if (!packageLine.hasMatch(lines[index])) continue;
+    for (var nested = index + 1; nested < lines.length; nested++) {
+      final line = lines[nested];
+      if (RegExp(r'^  [a-zA-Z0-9_]+:\s*$').hasMatch(line)) break;
+      final ref = RegExp(r'^      ref:\s*(\S+)\s*$').firstMatch(line);
+      if (ref != null) return ref.group(1)!;
+    }
+  }
+
+  throw StateError('No git ref found for $packageName');
 }
