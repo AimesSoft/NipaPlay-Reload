@@ -24,6 +24,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
   const AdaptiveMediaLibraryScaffold({
@@ -628,7 +629,7 @@ Future<List<String>?> showAdaptiveMediaLibrarySectionOrder(
     );
   }
 
-  return material.showDialog<List<String>>(
+  return showInViewDialog<List<String>>(
     context: context,
     builder: (dialogContext) {
       final viewport = material.MediaQuery.sizeOf(dialogContext);
