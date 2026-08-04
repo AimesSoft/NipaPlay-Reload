@@ -604,6 +604,11 @@ jobs:
           # Copy app files
           echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
+
+          # Install the launcher script next to the binary (.desktop file points to it)
+          echo "Installing launcher.sh"
+          cp "${ASSETS_LINUX_DIR}/launcher.sh" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/launcher.sh"
+          chmod +x "${DEB_ROOT}/opt/${APP_NAME_LOWER}/launcher.sh"
           
           # Copy system libmpv libraries to ensure availability
           echo "Copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
@@ -682,6 +687,10 @@ jobs:
           echo "Copying desktop file and icon to AppDir root"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
           cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}"
+          # Copy launcher script into AppDir (available when the AppImage is extracted)
+          echo "Copying launcher.sh to AppDir root"
+          cp "${ASSETS_LINUX_DIR}/launcher.sh" "${APPDIR}/launcher.sh"
+          chmod +x "${APPDIR}/launcher.sh"
           
           # Download linuxdeployqt
           echo "Downloading linuxdeployqt..."
@@ -718,6 +727,11 @@ jobs:
           # Copy the essential runtime files from the build output
           echo "Copying application files to archive directory"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${ARCHIVE_CONTENT_DIR}/"
+
+          # Install the launcher script alongside the binary
+          echo "Installing launcher.sh"
+          cp "${ASSETS_LINUX_DIR}/launcher.sh" "${ARCHIVE_CONTENT_DIR}/launcher.sh"
+          chmod +x "${ARCHIVE_CONTENT_DIR}/launcher.sh"
           
           # Copy system libmpv libraries to tar.gz archive
           echo "Copying system libmpv libraries to tar.gz archive"
@@ -861,6 +875,7 @@ jobs:
           cp -r "${BUILD_OUTPUT_DIR}/." "${RPM_BUILD_ROOT}/SOURCES/bundle/"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${RPM_BUILD_ROOT}/SOURCES/"
           cp "${ICON_SOURCE_PATH}" "${RPM_BUILD_ROOT}/SOURCES/logo512.png"
+          cp "${ASSETS_LINUX_DIR}/launcher.sh" "${RPM_BUILD_ROOT}/SOURCES/"
           
           # Prepare spec file
           echo "Preparing RPM spec file..."
