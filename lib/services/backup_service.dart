@@ -18,6 +18,13 @@ class BackupService {
   /// [directoryPath] 保存目录路径
   /// 返回保存的文件路径，如果失败返回 null
   Future<String?> exportWatchHistory(String directoryPath) async {
+    return exportWatchHistoryToFile(
+      path.join(directoryPath, buildWatchHistoryBackupFileName()),
+    );
+  }
+
+  /// 将观看历史导出到指定文件路径，供 iOS 系统保存面板使用。
+  Future<String?> exportWatchHistoryToFile(String filePath) async {
     try {
       // 从数据库获取所有观看历史
       final database = WatchHistoryDatabase.instance;
@@ -31,13 +38,6 @@ class BackupService {
       // 创建备份数据结构
       final backupData = _createBackupData(historyItems);
 
-      // 生成文件名（使用易读的日期时间格式）
-      final now = DateTime.now();
-      final dateString = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final timeString = '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
-      final fileName = 'nipaplay_history_${dateString}_$timeString.nph';
-      final filePath = path.join(directoryPath, fileName);
-
       // 写入二进制文件
       final file = File(filePath);
       await file.writeAsBytes(backupData);
@@ -48,6 +48,15 @@ class BackupService {
       debugPrint('导出观看历史失败: $e');
       return null;
     }
+  }
+
+  String buildWatchHistoryBackupFileName({DateTime? now}) {
+    final timestamp = now ?? DateTime.now();
+    final dateString =
+        '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final timeString =
+        '${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}';
+    return 'nipaplay_history_${dateString}_$timeString.nph';
   }
 
   /// 从 .nph 二进制文件导入观看历史

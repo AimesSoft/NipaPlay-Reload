@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
@@ -191,12 +192,27 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
     if (result == null || result.isEmpty) return;
 
-    // 选择保存位置
-    final String? selectedDirectory = await getDirectoryPath(
-      confirmButtonText: '选择保存位置',
-    );
+    final backupService = FullBackupService();
+    String? selectedDirectory;
+    String? selectedFilePath;
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final saveLocation = await getSaveLocation(
+        suggestedName: backupService.buildBackupFileName(result),
+        acceptedTypeGroups: [
+          buildBackupFileTypeGroup(
+            label: 'NipaPlay 完整备份',
+            extension: 'npb',
+          ),
+        ],
+      );
+      selectedFilePath = saveLocation?.path;
+    } else {
+      selectedDirectory = await getDirectoryPath(
+        confirmButtonText: '选择保存位置',
+      );
+    }
 
-    if (selectedDirectory == null) {
+    if (selectedDirectory == null && selectedFilePath == null) {
       _showMessage('未选择保存位置');
       return;
     }
@@ -212,12 +228,17 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         appVersion = packageInfo.version;
       } catch (_) {}
 
-      final backupService = FullBackupService();
-      final filePath = await backupService.exportBackup(
-        directoryPath: selectedDirectory,
-        categories: result,
-        appVersion: appVersion,
-      );
+      final filePath = selectedFilePath != null
+          ? await backupService.exportBackupToFile(
+              filePath: selectedFilePath,
+              categories: result,
+              appVersion: appVersion,
+            )
+          : await backupService.exportBackup(
+              directoryPath: selectedDirectory!,
+              categories: result,
+              appVersion: appVersion,
+            );
 
       if (filePath != null) {
         _showMessage('备份成功！文件保存至: $filePath');
@@ -366,17 +387,34 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     });
 
     try {
-      final String? selectedDirectory = await getDirectoryPath(
-        confirmButtonText: '选择保存位置',
-      );
+      final backupService = BackupService();
+      String? selectedDirectory;
+      String? selectedFilePath;
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final saveLocation = await getSaveLocation(
+          suggestedName: backupService.buildWatchHistoryBackupFileName(),
+          acceptedTypeGroups: [
+            buildBackupFileTypeGroup(
+              label: 'NipaPlay 历史备份',
+              extension: 'nph',
+            ),
+          ],
+        );
+        selectedFilePath = saveLocation?.path;
+      } else {
+        selectedDirectory = await getDirectoryPath(
+          confirmButtonText: '选择保存位置',
+        );
+      }
 
-      if (selectedDirectory == null) {
+      if (selectedDirectory == null && selectedFilePath == null) {
         _showMessage('未选择保存位置');
         return;
       }
 
-      final backupService = BackupService();
-      final result = await backupService.exportWatchHistory(selectedDirectory);
+      final result = selectedFilePath != null
+          ? await backupService.exportWatchHistoryToFile(selectedFilePath)
+          : await backupService.exportWatchHistory(selectedDirectory!);
 
       if (result != null) {
         _showMessage('备份成功！文件保存至: $result');
