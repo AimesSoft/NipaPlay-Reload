@@ -66,6 +66,8 @@ env:
   OHOS_SDK_NATIVE: /opt/harmonyos-tools/command-line-tools/sdk/default/openharmony/native
   RUSTUP_TOOLCHAIN: 1.93.0
   FVP_DEPS_LATEST: "0"
+  ERIKA_PREBUILT: "1"
+  ERIKA_PREBUILT_TAG: v0.1.5
 
 jobs:
   build:
