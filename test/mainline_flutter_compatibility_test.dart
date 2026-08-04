@@ -193,7 +193,8 @@ void main() {
     expect(
       workflow,
       matches(RegExp(r'apt-get install -y[\s\S]*?\bpython3\b')),
-      reason: 'The HarmonyOS dependency setup generates build metadata with Python.',
+      reason:
+          'The HarmonyOS dependency setup generates build metadata with Python.',
     );
     expect(
       workflow,
@@ -265,6 +266,16 @@ void main() {
       isEmpty,
       reason: 'Platform.isOhos is unavailable in upstream Dart.',
     );
+  });
+
+  test('application source avoids scroll APIs newer than HarmonyOS Flutter',
+      () {
+    final source = File(
+      'lib/themes/nipaplay/widgets/network_media_library_view.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('ScrollCacheExtent')));
+    expect(source, isNot(contains('scrollCacheExtent:')));
   });
 }
 
