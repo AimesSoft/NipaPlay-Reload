@@ -253,6 +253,7 @@ class MediaKitPlayerAdapter
   }
 
   final Player _player;
+  double _requestedVolume = 1.0;
   VideoController? _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final GlobalKey _repaintBoundaryKey = GlobalKey();
@@ -1875,7 +1876,8 @@ class MediaKitPlayerAdapter
 
   @override
   set volume(double value) {
-    _player.setVolume(value.clamp(0.0, 1.0) * 100);
+    _requestedVolume = value.clamp(0.0, 1.0).toDouble();
+    _player.setVolume(_requestedVolume * 100.0);
   }
 
   // 添加播放速度属性实现
@@ -2335,6 +2337,20 @@ class MediaKitPlayerAdapter
         await _player.open(media, play: false);
         if (_isDisposed || openGeneration != _mediaLoadGeneration) {
           return;
+        }
+        if (Platform.isWindows) {
+          // Windows 的 WASAPI 输出会在媒体打开时才完成初始化。首次播放前
+          // 下发的音量可能因此没有应用到新建的音频输出；内核热切换之所以
+          // 能恢复正常，是因为切换流程会在媒体就绪后再次写入音量。
+          try {
+            await _player.setVolume(_requestedVolume * 100.0);
+          } catch (error) {
+            // 音量同步失败不应把已经成功打开的媒体标记成载入失败。
+            debugPrint('MediaKit: Windows 音频输出初始化后同步音量失败: $error');
+          }
+          if (_isDisposed || openGeneration != _mediaLoadGeneration) {
+            return;
+          }
         }
         if (_usesPlatformVideoSurface && platform != null) {
           await _setMpvRuntimeProperty(platform, 'vid', 'auto');

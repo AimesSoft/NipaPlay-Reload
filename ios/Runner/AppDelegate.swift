@@ -43,6 +43,65 @@ import Photos
       )
 
       channel.setMethodCallHandler { [weak controller] call, result in
+        if call.method == "exportFile" {
+          guard
+            let args = call.arguments as? [String: Any],
+            let filePath = args["filePath"] as? String,
+            !filePath.isEmpty
+          else {
+            result(
+              FlutterError(
+                code: "INVALID_ARGUMENTS",
+                message: "A file path is required",
+                details: nil
+              )
+            )
+            return
+          }
+
+          guard FileManager.default.fileExists(atPath: filePath) else {
+            result(
+              FlutterError(
+                code: "FILE_NOT_FOUND",
+                message: "The file to export does not exist",
+                details: filePath
+              )
+            )
+            return
+          }
+
+          DispatchQueue.main.async {
+            guard let controller = controller else {
+              result(
+                FlutterError(
+                  code: "NO_CONTROLLER",
+                  message: "No view controller is available",
+                  details: nil
+                )
+              )
+              return
+            }
+
+            let fileURL = URL(fileURLWithPath: filePath)
+            let picker: UIDocumentPickerViewController
+            if #available(iOS 14.0, *) {
+              picker = UIDocumentPickerViewController(
+                forExporting: [fileURL],
+                asCopy: true
+              )
+            } else {
+              picker = UIDocumentPickerViewController(
+                url: fileURL,
+                in: .exportToService
+              )
+            }
+            controller.present(picker, animated: true) {
+              result(true)
+            }
+          }
+          return
+        }
+
         guard call.method == "share" else {
           result(FlutterMethodNotImplemented)
           return
