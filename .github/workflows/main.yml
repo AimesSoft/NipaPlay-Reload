@@ -517,6 +517,14 @@ jobs:
             --max-characters 4000 \
             --max-attempts 5
 
+      - name: Add localized Apple TV privacy policy metadata
+        shell: bash
+        run: |
+          cp .github/app-store-metadata/apple-tv-privacy-policy.zh-Hans.txt \
+            "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE/apple_tv_privacy_policy.txt"
+          cp .github/app-store-metadata/apple-tv-privacy-policy.en-US.txt \
+            "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE/apple_tv_privacy_policy.txt"
+
       - name: Upload App Store release notes artifact
         uses: actions/upload-artifact@v4
         with:
@@ -735,6 +743,14 @@ jobs:
             --en-locale "$APP_STORE_EN_LOCALE" \
             --max-characters 4000 \
             --max-attempts 5
+
+      - name: Add localized Apple TV privacy policy metadata
+        shell: bash
+        run: |
+          cp .github/app-store-metadata/apple-tv-privacy-policy.zh-Hans.txt \
+            "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE/apple_tv_privacy_policy.txt"
+          cp .github/app-store-metadata/apple-tv-privacy-policy.en-US.txt \
+            "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE/apple_tv_privacy_policy.txt"
 
       - name: Upload recovered App Store release notes artifact
         uses: actions/upload-artifact@v4
