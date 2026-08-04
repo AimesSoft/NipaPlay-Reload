@@ -182,6 +182,28 @@ void main() {
     expect(workflow, contains('hap-sign-tool.jar'));
     expect(workflow, contains('verify-app'));
     expect(workflow, contains('release-HarmonyOS-signed'));
+    expect(workflow, contains('OHOS_FLUTTER_BASE_TAG: 3.35.8-ohos-1.0.1'));
+    expect(
+      workflow,
+      contains(
+        r'+refs/tags/$OHOS_FLUTTER_BASE_TAG:refs/tags/$OHOS_FLUTTER_BASE_TAG',
+      ),
+    );
+    expect(workflow, contains('merge-base --is-ancestor'));
+    expect(
+      workflow,
+      matches(RegExp(r'apt-get install -y[\s\S]*?\bpython3\b')),
+      reason: 'The HarmonyOS dependency setup generates build metadata with Python.',
+    );
+    expect(
+      workflow,
+      isNot(contains(r'fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"')),
+    );
+    expect(workflow, contains(r'-keyPwd "$SIGNING_KEY_PASSWORD"'));
+    expect(workflow, contains(r'-keystorePwd "$SIGNING_KEYSTORE_PASSWORD"'));
+    expect(workflow, isNot(contains('-pwdInputMode')));
+    expect(workflow, contains('set +x'));
+    expect(workflow, isNot(contains("printf '%s\\n%s\\n'")));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_CERT_BASE64 }}'));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}'));
     expect(workflow, contains(r'${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}'));

@@ -57,6 +57,7 @@ env:
   # This is the OpenHarmony Flutter revision used for the device-tested
   # 3.35.8-ohos-1.0.1 toolchain.
   OHOS_FLUTTER_COMMIT: 6f4181db61f0db87339edca1fb0e5108c3740e11
+  OHOS_FLUTTER_BASE_TAG: 3.35.8-ohos-1.0.1
   OHOS_FLUTTER_REPOSITORY: https://atomgit.com/openharmony-tpc/flutter_flutter.git
   OHOS_FLUTTER_ROOT: /opt/flutter-ohos
   HARMONY_COMMANDLINE_ROOT: /opt/harmonyos-tools/command-line-tools
@@ -135,6 +136,7 @@ jobs:
             nasm \
             ninja-build \
             pkg-config \
+            python3 \
             unzip \
             xz-utils \
             zstd
@@ -147,7 +149,7 @@ jobs:
             ${{ github.workspace }}/.pub-cache
             ~/.cargo/git
             ~/.cargo/registry
-          key: ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-${{ hashFiles('pubspec.lock', 'pubspec_overrides.ohos.yaml', 'rust/Cargo.lock') }}-v1
+          key: ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-${{ hashFiles('pubspec.lock', 'pubspec_overrides.ohos.yaml', 'rust/Cargo.lock') }}-v2
           restore-keys: |
             ohos-arm64-flutter-${{ env.OHOS_FLUTTER_COMMIT }}-rust-1.93.0-
 
@@ -162,9 +164,17 @@ jobs:
           else
             git -C "$OHOS_FLUTTER_ROOT" remote set-url origin "$OHOS_FLUTTER_REPOSITORY"
           fi
-          git -C "$OHOS_FLUTTER_ROOT" fetch --depth=1 origin "$OHOS_FLUTTER_COMMIT"
+          # Flutter derives its SDK version from reachable Git tags. Fetch the
+          # tested commit together with its nearest release tag; fetching only
+          # the commit makes the SDK report 0.0.0-unknown and breaks pub's
+          # Flutter-version constraints.
+          git -C "$OHOS_FLUTTER_ROOT" fetch --depth=16 origin \
+            "$OHOS_FLUTTER_COMMIT" \
+            "+refs/tags/$OHOS_FLUTTER_BASE_TAG:refs/tags/$OHOS_FLUTTER_BASE_TAG"
           git -C "$OHOS_FLUTTER_ROOT" checkout --detach --force FETCH_HEAD
           test "$(git -C "$OHOS_FLUTTER_ROOT" rev-parse HEAD)" = "$OHOS_FLUTTER_COMMIT"
+          git -C "$OHOS_FLUTTER_ROOT" merge-base --is-ancestor \
+            "$OHOS_FLUTTER_BASE_TAG" HEAD
 
           {
             echo "$OHOS_FLUTTER_ROOT/bin"
@@ -266,19 +276,24 @@ jobs:
           fi
 
           signed_hap="dist/NipaPlay-${VERSION}-HarmonyOS-arm64-signed.hap"
-          printf '%s\n%s\n' "$SIGNING_KEYSTORE_PASSWORD" "$SIGNING_KEY_PASSWORD" |
-            java -jar "$sign_tool" sign-app \
-              -mode localSign \
-              -keyAlias "$SIGNING_KEY_ALIAS" \
-              -appCertFile "$signing_dir/application.cer" \
-              -profileFile "$signing_dir/profile.p7b" \
-              -inFile "$UNSIGNED_HAP" \
-              -signAlg SHA256withECDSA \
-              -keystoreFile "$signing_dir/application.p12" \
-              -outFile "$signed_hap" \
-              -compatibleVersion 18 \
-              -signCode 1 \
-              -pwdInputMode 1
+          # The signer bundled with HarmonyOS CLI 6.1.1 does not expose
+          # pwdInputMode. Use its supported non-interactive password options;
+          # GitHub masks secret values in logs and this job only runs for
+          # trusted workflows with explicitly supplied signing secrets.
+          set +x
+          java -jar "$sign_tool" sign-app \
+            -mode localSign \
+            -keyAlias "$SIGNING_KEY_ALIAS" \
+            -keyPwd "$SIGNING_KEY_PASSWORD" \
+            -appCertFile "$signing_dir/application.cer" \
+            -profileFile "$signing_dir/profile.p7b" \
+            -inFile "$UNSIGNED_HAP" \
+            -signAlg SHA256withECDSA \
+            -keystoreFile "$signing_dir/application.p12" \
+            -keystorePwd "$SIGNING_KEYSTORE_PASSWORD" \
+            -outFile "$signed_hap" \
+            -compatibleVersion 18 \
+            -signCode 1
 
           java -jar "$sign_tool" verify-app \
             -inFile "$signed_hap" \

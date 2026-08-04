@@ -110,7 +110,10 @@ GitHub 托管 runner 默认不包含 HarmonyOS Command Line Tools、Hvigor 和 o
 
 这个容器用于提供构建工具，不包含 NipaPlay 的签名凭据。工作流的权限限制为
 只读仓库内容，签名文件只在 runner 临时目录中从 Secrets 解码，签名完成后立即
-删除；密码通过标准输入交给 `hap-sign-tool.jar`，不会作为命令行参数写入日志。
+删除。容器内 HarmonyOS CLI 6.1.1 的 `hap-sign-tool.jar` 不支持交互式
+`pwdInputMode` 参数，因此工作流使用其支持的 `keyPwd` 和 `keystorePwd` 非交互
+参数。密码来自 GitHub Actions Secrets，日志会自动脱敏，并且签名任务只允许在
+明确提供 Secrets 的受信任工作流中运行。
 
 `workflow_dispatch` 只在该工作流已经存在于仓库默认分支时显示。合并后可进入
 **Actions > Build HarmonyOS > Run workflow** 手动运行，也可以由其他工作流通过
@@ -167,17 +170,19 @@ release-HarmonyOS-signed/
 
 #### 当前验证结果
 
-提交工作流前已经完成以下等价流程验证：
+已经完成以下本地与 GitHub Actions 验证：
 
 - 使用固定的 OpenHarmony Flutter commit 完成 OHOS arm64 Release unsigned
   HAP 构建；
 - 使用 HarmonyOS `hap-sign-tool.jar` 完成签名和 `verify-app` 校验；
 - 将生成的 signed HAP 侧载到 HarmonyOS 6.1 真机并成功启动应用；
+- 在 fork 的 GitHub Actions 中使用六项签名 Secrets 完成完整 Release 构建、
+  签名、校验，并成功上传 signed 和 unsigned 两种 HAP artifact；
 - `actionlint`、YAML 解析及主线 Flutter 兼容性测试通过。
 
-本地验证可以确认构建命令、签名参数和最终 HAP 可安装。GitHub runner 的完整
-远端执行仍应在工作流进入默认分支并配置 Secrets 后，以一次实际 Action 运行
-结果为准。
+主仓库合并工作流后仍需配置相同的六项 Secrets；证书和 Profile 决定 signed HAP
+可用于真机侧载、AGC 邀请测试还是正式发布，工作流本身不会改变 Profile 的授权
+范围。
 
 ### 提交前恢复默认依赖
 
