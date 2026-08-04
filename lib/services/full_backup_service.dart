@@ -51,43 +51,25 @@ class FullBackupService {
     required Set<BackupCategory> categories,
     String appVersion = '',
   }) async {
+    final fileName = buildBackupFileName(categories);
+    return exportBackupToFile(
+      filePath: path.join(directoryPath, fileName),
+      categories: categories,
+      appVersion: appVersion,
+    );
+  }
+
+  /// 导出全量备份到指定文件路径，供 iOS 系统保存面板使用。
+  Future<String?> exportBackupToFile({
+    required String filePath,
+    required Set<BackupCategory> categories,
+    String appVersion = '',
+  }) async {
     try {
-      final backupData = <String, dynamic>{
-        'version': _backupFormatVersion,
-        'timestamp': DateTime.now().toIso8601String(),
-        'appVersion': appVersion,
-      };
-
-      if (categories.contains(BackupCategory.preferences)) {
-        backupData['preferences'] = await _collectPreferences();
-      }
-
-      if (categories.contains(BackupCategory.mediaLibraries)) {
-        backupData['mediaLibraries'] = await _collectMediaLibraries();
-      }
-
-      if (categories.contains(BackupCategory.watchHistory)) {
-        backupData['watchHistory'] = await _collectWatchHistory(includeThumbnails: true);
-      }
-
-      if (categories.contains(BackupCategory.episodeMatches)) {
-        backupData['episodeMatches'] = await _collectEpisodeMatches();
-      }
-
-      if (categories.contains(BackupCategory.accounts)) {
-        backupData['accounts'] = await _collectAccounts();
-      }
-
-      // 生成文件名
-      final now = DateTime.now();
-      final dateString =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final timeString =
-          '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
-      final categorySuffix = _buildCategorySuffix(categories);
-      final fileName =
-          'nipaplay_backup_${categorySuffix}_${dateString}_$timeString.npb';
-      final filePath = path.join(directoryPath, fileName);
+      final backupData = await collectBackupData(
+        categories: categories,
+        appVersion: appVersion,
+      );
 
       // 写入文件（编码前净化 Infinity/NaN 等非法 double，避免备份失败）
       final sanitized = _sanitizeForJson(backupData);
@@ -102,6 +84,19 @@ class FullBackupService {
       debugPrint('导出备份失败: $e');
       return null;
     }
+  }
+
+  String buildBackupFileName(
+    Set<BackupCategory> categories, {
+    DateTime? now,
+  }) {
+    final timestamp = now ?? DateTime.now();
+    final dateString =
+        '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final timeString =
+        '${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}';
+    final categorySuffix = _buildCategorySuffix(categories);
+    return 'nipaplay_backup_${categorySuffix}_${dateString}_$timeString.npb';
   }
 
   /// 仅收集备份数据（不写文件），供外部使用
@@ -1134,7 +1129,13 @@ class FullBackupService {
       return value.isInfinite || value.isNaN ? 0.0 : value;
     }
     if (value is Map) {
-      return value.map((k, v) => MapEntry(k, _sanitizeForJson(v)));
+      // JSON 对象的键只能是字符串。这里显式生成 Map<String, dynamic>，
+      // 避免在 `value is Map` 类型提升后，Map.map 推断出
+      // Map<dynamic, dynamic>，导致 collectBackupData 返回时强转失败。
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _sanitizeForJson(entry.value),
+      };
     }
     if (value is List) {
       return value.map(_sanitizeForJson).toList();

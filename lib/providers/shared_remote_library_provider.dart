@@ -8,6 +8,7 @@ import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
@@ -16,6 +17,12 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+
+typedef _RemoteDirectoryCacheKey = ({
+  String hostId,
+  String connectionName,
+  String path,
+});
 
 class SharedRemoteLibraryProvider extends ChangeNotifier {
   static const String _hostsPrefsKey = 'shared_remote_hosts';
@@ -56,6 +63,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   List<SharedRemoteScannedFolder> _scannedFolders = [];
   List<WebDAVConnection> _webdavConnections = [];
   List<SMBConnection> _smbConnections = [];
+  static final ProcessMemoryListCache<_RemoteDirectoryCacheKey, WebDAVFile>
+      _webdavDirectoryCache =
+      ProcessMemoryListCache<_RemoteDirectoryCacheKey, WebDAVFile>();
+  static final ProcessMemoryListCache<_RemoteDirectoryCacheKey, SMBFileEntry>
+      _smbDirectoryCache =
+      ProcessMemoryListCache<_RemoteDirectoryCacheKey, SMBFileEntry>();
 
   SharedRemoteScanStatus? _scanStatus;
   bool _isManagementLoading = false;
@@ -214,6 +227,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
 
     _hosts.removeWhere((host) => host.id == hostId);
+    _clearRemoteDirectoryCaches(hostId: hostId);
     if (_activeHostId == hostId) {
       _activeHostId = _hosts.isNotEmpty ? _hosts.first.id : null;
       _animeSummaries = [];
@@ -244,6 +258,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
     if (!_hosts.any((host) => host.id == hostId)) return;
     _activeHostId = hostId;
+    _clearRemoteDirectoryCaches();
     _animeSummaries = [];
     _episodeCache.clear();
     _scannedFolders = [];
@@ -1086,10 +1101,30 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       throw Exception('WebDAV 连接名称为空');
     }
 
+    final key = (
+      hostId: host.id,
+      connectionName: sanitizedName,
+      path: _normalizeRemoteDirectoryPath(path),
+    );
+    return _webdavDirectoryCache.getOrLoad(
+      key,
+      () => _fetchRemoteWebDAVDirectory(
+        host: host,
+        name: sanitizedName,
+        path: path,
+      ),
+    );
+  }
+
+  Future<List<WebDAVFile>> _fetchRemoteWebDAVDirectory({
+    required SharedRemoteHost host,
+    required String name,
+    required String path,
+  }) async {
     try {
       final uri =
           Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
-              .replace(queryParameters: {'name': sanitizedName, 'path': path});
+              .replace(queryParameters: {'name': name, 'path': path});
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
 
@@ -1171,7 +1206,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       final rawMessage = e.toString();
       final friendly = existing != null && existing.trim().isNotEmpty
           ? existing
-          : _buildManagementFriendlyError(e, host);
+          : (rawMessage.contains(_managementUnsupportedMessage)
+              ? _managementUnsupportedMessage
+              : _buildManagementFriendlyError(e, host));
       _managementErrorMessage = friendly;
       notifyListeners();
       rethrow;
@@ -1335,9 +1372,29 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       throw Exception('SMB 连接名称为空');
     }
 
+    final key = (
+      hostId: host.id,
+      connectionName: sanitizedName,
+      path: _normalizeRemoteDirectoryPath(path),
+    );
+    return _smbDirectoryCache.getOrLoad(
+      key,
+      () => _fetchRemoteSMBDirectory(
+        host: host,
+        name: sanitizedName,
+        path: path,
+      ),
+    );
+  }
+
+  Future<List<SMBFileEntry>> _fetchRemoteSMBDirectory({
+    required SharedRemoteHost host,
+    required String name,
+    required String path,
+  }) async {
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/list')
-          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+          .replace(queryParameters: {'name': name, 'path': path});
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
 
@@ -1839,6 +1896,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         throw Exception(body['message'] ?? 'Failed to add WebDAV');
       }
 
+      _clearRemoteDirectoryCaches(
+        hostId: host.id,
+        connectionName: connection.name,
+      );
       await refreshManagement(userInitiated: true);
     } catch (e) {
       _managementErrorMessage = e.toString();
@@ -1865,6 +1926,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         throw Exception(body['message'] ?? 'Failed to remove WebDAV');
       }
 
+      _clearRemoteDirectoryCaches(
+        hostId: host.id,
+        connectionName: name,
+      );
       await refreshManagement(userInitiated: true);
     } catch (e) {
       _managementErrorMessage = e.toString();
@@ -1893,6 +1958,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         throw Exception(body['message'] ?? 'Failed to add SMB');
       }
 
+      _clearRemoteDirectoryCaches(
+        hostId: host.id,
+        connectionName: connection.name,
+      );
       await refreshManagement(userInitiated: true);
     } catch (e) {
       _managementErrorMessage = e.toString();
@@ -1919,6 +1988,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         throw Exception(body['message'] ?? 'Failed to remove SMB');
       }
 
+      _clearRemoteDirectoryCaches(
+        hostId: host.id,
+        connectionName: name,
+      );
       await refreshManagement(userInitiated: true);
     } catch (e) {
       _managementErrorMessage = e.toString();
@@ -1954,6 +2027,34 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
 
     return '同步失败: $e';
+  }
+
+  String _normalizeRemoteDirectoryPath(String path) {
+    var normalized = path.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty) return '/';
+    if (!normalized.startsWith('/')) normalized = '/$normalized';
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+
+  void _clearRemoteDirectoryCaches({
+    String? hostId,
+    String? connectionName,
+  }) {
+    bool matches(_RemoteDirectoryCacheKey key) {
+      if (hostId != null && key.hostId != hostId) return false;
+      if (connectionName != null &&
+          key.connectionName != connectionName.trim()) {
+        return false;
+      }
+      return true;
+    }
+
+    _webdavDirectoryCache.removeWhere(matches);
+    _smbDirectoryCache.removeWhere(matches);
   }
 
   void clearManagementError() {
