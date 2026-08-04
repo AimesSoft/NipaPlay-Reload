@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
 
+import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 
 class SMBConnection {
@@ -88,6 +89,16 @@ class SMBFileEntry {
   });
 }
 
+typedef _SMBDirectoryCacheKey = ({
+  String name,
+  String host,
+  int port,
+  String username,
+  String password,
+  String domain,
+  String path,
+});
+
 class SMBService {
   static const String _connectionsKey = 'smb_connections';
   static const Set<String> _videoExtensions = {
@@ -165,6 +176,9 @@ class SMBService {
   static final SMBService instance = SMBService._();
 
   final List<SMBConnection> _connections = [];
+  final ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>
+      _directoryCache =
+      ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>();
 
   List<SMBConnection> get connections => List.unmodifiable(_connections);
 
@@ -205,6 +219,7 @@ class SMBService {
     final success = await _testConnection(normalized);
     if (success) {
       _connections.add(normalized.copyWith(isConnected: true));
+      clearDirectoryCache(connectionName: normalized.name);
       await _saveConnections();
     }
     return success;
@@ -226,12 +241,17 @@ class SMBService {
     } else {
       _connections[index] = normalized.copyWith(isConnected: true);
     }
+    clearDirectoryCache(connectionName: originalName);
+    if (normalized.name != originalName) {
+      clearDirectoryCache(connectionName: normalized.name);
+    }
     await _saveConnections();
     return true;
   }
 
   Future<void> removeConnection(String name) async {
     _connections.removeWhere((conn) => conn.name == name);
+    clearDirectoryCache(connectionName: name);
     await _saveConnections();
   }
 
@@ -241,6 +261,7 @@ class SMBService {
     final normalized = _connections[index];
     final success = await _testConnection(normalized);
     _connections[index] = normalized.copyWith(isConnected: success);
+    clearDirectoryCache(connectionName: name);
     await _saveConnections();
   }
 
@@ -256,71 +277,49 @@ class SMBService {
     SMBConnection connection,
     String path,
   ) async {
-    final normalizedConnection = _normalizeConnection(connection);
-
-    if (Smb2NativeService.instance.isSupported) {
-      try {
-        final files = await Smb2NativeService.instance.listDirectory(
-          normalizedConnection,
-          path,
-        );
-        return files
-            .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
-            .toList();
-      } catch (e) {
-        debugPrint('libsmb2 列目录失败，回退 smb_connect: $e');
-      }
-    }
-
-    final client = await _createClient(normalizedConnection);
-    try {
-      if (path.isEmpty || path == '/' || path == '\\') {
-        final shares = await client.listShares();
-        return shares
-            .where((share) => share.isDirectory())
-            .map(
-              (share) => SMBFileEntry(
-                name: share.name,
-                path: _normalizePath(share.path),
-                isDirectory: true,
-                isShare: true,
-              ),
-            )
-            .toList();
-      }
-
-      final normalizedPath = _normalizePath(path);
-      final directoryFile =
-          await client.file(normalizedPath.endsWith('/') ? normalizedPath : '$normalizedPath/');
-      final files = await client.listFiles(directoryFile);
-
-      return files
-          .map(
-            (file) => SMBFileEntry(
-              name: file.name,
-              path: _normalizePath(file.path),
-              isDirectory: file.isDirectory(),
-              size: file.size > 0 ? file.size : null,
-            ),
-          )
-          .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
-          .toList();
-    } finally {
-      await client.close();
-    }
+    final files = await _listDirectoryAllCached(connection, path);
+    return files
+        .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
+        .toList();
   }
 
   Future<List<SMBFileEntry>> listDirectoryAll(
     SMBConnection connection,
     String path,
-  ) async {
-    final normalizedConnection = _normalizeConnection(connection);
+  ) {
+    return _listDirectoryAllCached(connection, path);
+  }
 
+  Future<List<SMBFileEntry>> _listDirectoryAllCached(
+    SMBConnection connection,
+    String path,
+  ) {
+    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedPath = _normalizePath(path);
+    final key = (
+      name: normalizedConnection.name,
+      host: normalizedConnection.host,
+      port: normalizedConnection.port,
+      username: normalizedConnection.username,
+      password: normalizedConnection.password,
+      domain: normalizedConnection.domain,
+      path: normalizedPath,
+    );
+    return _directoryCache.getOrLoad(
+      key,
+      () => _fetchDirectoryAll(normalizedConnection, normalizedPath),
+    );
+  }
+
+  Future<List<SMBFileEntry>> _fetchDirectoryAll(
+    SMBConnection normalizedConnection,
+    String normalizedPath,
+  ) async {
     if (Smb2NativeService.instance.isSupported) {
       try {
         return await Smb2NativeService.instance.listDirectory(
           normalizedConnection,
-          path,
+          normalizedPath,
         );
       } catch (e) {
         debugPrint('libsmb2 列目录失败，回退 smb_connect: $e');
@@ -329,7 +328,7 @@ class SMBService {
 
     final client = await _createClient(normalizedConnection);
     try {
-      if (path.isEmpty || path == '/' || path == '\\') {
+      if (normalizedPath == '/') {
         final shares = await client.listShares();
         return shares
             .where((share) => share.isDirectory())
@@ -344,7 +343,6 @@ class SMBService {
             .toList();
       }
 
-      final normalizedPath = _normalizePath(path);
       final directoryFile = await client.file(
           normalizedPath.endsWith('/') ? normalizedPath : '$normalizedPath/');
       final files = await client.listFiles(directoryFile);
@@ -362,6 +360,15 @@ class SMBService {
     } finally {
       await client.close();
     }
+  }
+
+  void clearDirectoryCache({String? connectionName}) {
+    final normalizedName = connectionName?.trim();
+    if (normalizedName == null || normalizedName.isEmpty) {
+      _directoryCache.clear();
+      return;
+    }
+    _directoryCache.removeWhere((key) => key.name == normalizedName);
   }
 
   Future<bool> _testConnection(SMBConnection connection) async {
@@ -428,7 +435,8 @@ class SMBService {
     }
 
     // Bracketed IPv6: [fe80::1]:445
-    final bracketMatch = RegExp(r'^\[([^\]]+)\]:(\d{1,5})$').firstMatch(trimmed);
+    final bracketMatch =
+        RegExp(r'^\[([^\]]+)\]:(\d{1,5})$').firstMatch(trimmed);
     if (bracketMatch != null) {
       final host = bracketMatch.group(1) ?? '';
       final port = int.tryParse(bracketMatch.group(2) ?? '');
