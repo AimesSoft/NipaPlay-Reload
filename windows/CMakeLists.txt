@@ -29,8 +29,9 @@ set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")
 set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 
-# Use Unicode for all projects.
-add_definitions(-DUNICODE -D_UNICODE)
+# Use Unicode and keep the Windows SDK from shadowing std::min/std::max in
+# plugin sources, including Erika's system media controls bridge.
+add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
 
 # Suppress deprecated experimental/coroutine warning in newer MSVC
 add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
