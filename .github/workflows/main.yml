@@ -613,6 +613,7 @@ jobs:
         run: |
           fastlane deliver \
             --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+            --ipa "$SIGNED_IPA" \
             --skip_binary_upload true \
             --build_number "$APP_BUILD_NUMBER" \
             --app_identifier "$APP_BUNDLE_ID" \
@@ -840,6 +841,7 @@ jobs:
         run: |
           fastlane deliver \
             --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+            --ipa "$SIGNED_IPA" \
             --skip_binary_upload true \
             --build_number "$APP_BUILD_NUMBER" \
             --app_identifier "$APP_BUNDLE_ID" \
