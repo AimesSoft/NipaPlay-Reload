@@ -277,7 +277,8 @@ void main() {
     final workflow = File('.github/workflows/main.yml').readAsStringSync();
 
     expect('--skip_binary_upload true'.allMatches(workflow).length, 2);
-    expect('--ipa "\$SIGNED_IPA"'.allMatches(workflow).length, 4);
+    expect('mkdir -p metadata'.allMatches(workflow).length, 2);
+    expect('--ipa "\$SIGNED_IPA"'.allMatches(workflow).length, 2);
   });
 
   test('application source does not require custom Platform APIs', () {
