@@ -105,7 +105,10 @@ jobs:
             git -C "$flutter_sdk_root" remote set-url origin \
               https://github.com/flutter/flutter.git
           fi
-          git -C "$flutter_sdk_root" fetch --depth 1 origin "$flutter_revision"
+          # Flutter derives its SDK version from Git tags. Match the upstream
+          # flutter-tvos bootstrap so pub does not see 0.0.0-unknown.
+          git -C "$flutter_sdk_root" fetch \
+            --depth 1 --quiet --tags origin "$flutter_revision"
           git -C "$flutter_sdk_root" checkout --detach --force FETCH_HEAD
           test "$(git -C "$flutter_sdk_root" rev-parse HEAD)" = \
             "$flutter_revision"
