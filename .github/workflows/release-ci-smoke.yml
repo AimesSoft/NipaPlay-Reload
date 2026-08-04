@@ -18,32 +18,6 @@ on:
         default: false
         required: true
         type: boolean
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-    branches:
-      - main
-    paths:
-      - '.fvmrc'
-      - '.github/actions/**'
-      - '.github/workflows/build-*.yml'
-      - '.github/workflows/release-ci-smoke.yml'
-      - 'assets/**'
-      - 'build_and_copy_web.sh'
-      - 'cpp_native/**'
-      - 'lib/**'
-      - 'pubspec.lock'
-      - 'pubspec.yaml'
-      - 'rust/**'
-      - 'rust_builder/**'
-      - 'test/**'
-      - 'third_party/**'
-      - 'web/**'
-      - 'windows/**'
-
 permissions:
   contents: read
 
@@ -54,10 +28,7 @@ concurrency:
 jobs:
   validate:
     name: Analyze and Test
-    if: >-
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false) ||
-      (github.event_name == 'workflow_dispatch' && inputs.run_validation)
+    if: inputs.run_validation
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository

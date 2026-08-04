@@ -71,7 +71,7 @@ void main() {
 
     expect(
       tvOSOverrides,
-      contains('ref: 29f47da8e64ae9caacfd7317c2a6ad9d2d609e9b'),
+      contains('ref: v0.1.5'),
     );
     expect(monitor, contains('_instance._updatePlayerKernelType();'));
     expect(monitor, contains("_instance._activeDecoder = 'Erika（等待媒体）';"));
@@ -99,7 +99,7 @@ void main() {
     expect(
       entries,
       contains('contentType: UnifiedSettingContentType.externalPlayer,'
-          '\n      visible: (context, surface) => !globals.isTelevision,'),
+          '\n      visible: (context, surface) => !globals.isTelevision && !globals.isTablet,'),
     );
     expect(
       entries,
