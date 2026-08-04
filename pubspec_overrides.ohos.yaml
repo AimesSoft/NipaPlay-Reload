@@ -43,7 +43,7 @@ dependency_overrides:
       path: packages/url_launcher/url_launcher
   package_info_plus:
     git:
-      url: https://gitee.com/openharmony-sig/flutter_plus_plugins.git
+      url: https://gitcode.com/openharmony-sig/flutter_plus_plugins.git
       ref: br_package_info_plus-v8.1.0_ohos
       path: packages/package_info_plus/package_info_plus
   # The tvOS registrant packages are native-only, but their current metadata
@@ -61,7 +61,7 @@ dependency_overrides:
       ref: br_v7.1.4_ohos
   wakelock_plus:
     git:
-      url: https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_wakelock_plus.git
       ref: br_wakelock_plus_1.2.8_ohos
       path: wakelock_plus
   wakelock_plus_platform_interface: 1.3.0

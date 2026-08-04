@@ -424,12 +424,8 @@ runs:
 
             # 上传公证
             echo "☁️ 上传到 Apple 进行公证..."
-            SUBMISSION_ID=$(xcrun notarytool submit "$NOTARIZATION_ZIP" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_APP_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --output-format json \
-              --wait | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+            SUBMISSION_ID="$("$GITHUB_WORKSPACE/.github/workflows/scripts/submit-macos-notarization.sh" \
+              "$NOTARIZATION_ZIP")"
 
             if [ -z "$SUBMISSION_ID" ] || [ "$SUBMISSION_ID" = "null" ]; then
               echo "❌ 获取提交ID失败"
@@ -580,12 +576,8 @@ runs:
 
             if [ "$ENABLE_NOTARIZATION" = "true" ]; then
               echo "🔐 公证 macOS ${artifact_label} PKG..."
-              SUBMISSION_ID=$(xcrun notarytool submit "$pkg_name" \
-                --apple-id "$APPLE_ID" \
-                --password "$APPLE_APP_PASSWORD" \
-                --team-id "$APPLE_TEAM_ID" \
-                --output-format json \
-                --wait | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+              SUBMISSION_ID="$("$GITHUB_WORKSPACE/.github/workflows/scripts/submit-macos-notarization.sh" \
+                "$pkg_name")"
 
               if [ -z "$SUBMISSION_ID" ] || [ "$SUBMISSION_ID" = "null" ]; then
                 echo "❌ 获取 PKG 公证提交ID失败"

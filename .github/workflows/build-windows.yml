@@ -13,7 +13,9 @@ on:
 jobs:
   build:
     name: Build Windows Package
-    runs-on: windows-latest
+    # Keep the release build on the VS 2022 SDK until Erika's Windows SMTC
+    # bridge supports the C++/WinRT projection shipped by VS 2026.
+    runs-on: windows-2022
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-Windows-x64
