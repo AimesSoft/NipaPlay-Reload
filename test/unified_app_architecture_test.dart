@@ -1569,15 +1569,18 @@ void main() {
     final page = File(
       'lib/media_library/adaptive_media_library_page.dart',
     ).readAsStringSync();
+    final addMediaFlow = File(
+      'lib/media_library/adaptive_add_media_flow.dart',
+    ).readAsStringSync();
     final keys = File('lib/constants/settings_keys.dart').readAsStringSync();
 
     expect(keys, contains('mediaLibrarySelectedSection'));
     expect(page, contains('_restoreSelectedSection'));
     expect(page, contains('onSectionSelected: _selectSection'));
     expect(page, contains('_selectMountedMediaLibrarySection'));
-    expect(page, contains('MediaLibrarySectionIds.localManagement'));
-    expect(page, contains('MediaLibrarySectionIds.webdavManagement'));
-    expect(page, contains('MediaLibrarySectionIds.smbManagement'));
+    expect(addMediaFlow, contains('MediaLibrarySectionIds.localManagement'));
+    expect(addMediaFlow, contains('MediaLibrarySectionIds.webdavManagement'));
+    expect(addMediaFlow, contains('MediaLibrarySectionIds.smbManagement'));
   });
 
   test('shared media summaries hydrate covers without a 24 item cap', () {
@@ -1718,7 +1721,7 @@ void main() {
     expect(find.text(unifiedPlaybackEntryContent.selectFileDescription),
         findsNothing);
     expect(find.text(unifiedPlaybackEntryContent.enterUrlDescription),
-        findsNothing);
+        findsOneWidget);
     expect(find.text('输入链接'), findsOneWidget);
     expect(find.text('添加媒体'), findsOneWidget);
 
