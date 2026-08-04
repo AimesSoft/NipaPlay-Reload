@@ -300,18 +300,21 @@ void main() {
         home: Scaffold(
           body: SizedBox(
             height: 180,
-            child: ListView.builder(
+            child: SingleChildScrollView(
               controller: scrollController,
-              scrollCacheExtent: const ScrollCacheExtent.viewport(20),
-              itemExtent: 60,
-              itemCount: 20,
-              itemBuilder: (context, index) {
-                return NipaplayLargeScreenFocusableAction(
-                  isSelected: index == 19,
-                  onActivate: () {},
-                  child: Text('Sort $index'),
-                );
-              },
+              child: Column(
+                children: List.generate(
+                  20,
+                  (index) => SizedBox(
+                    height: 60,
+                    child: NipaplayLargeScreenFocusableAction(
+                      isSelected: index == 19,
+                      onActivate: () {},
+                      child: Text('Sort $index'),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -320,7 +323,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(scrollController.offset, greaterThan(0));
-    final viewport = tester.getRect(find.byType(ListView));
+    final viewport = tester.getRect(find.byType(SingleChildScrollView));
     final selected = tester.getRect(find.text('Sort 19'));
     expect(selected.top, greaterThanOrEqualTo(viewport.top));
     expect(selected.bottom, lessThanOrEqualTo(viewport.bottom));

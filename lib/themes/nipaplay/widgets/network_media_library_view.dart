@@ -951,56 +951,20 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   ),
                   const SizedBox(height: 14),
                   Expanded(
-                    child: ListView.separated(
-                      scrollCacheExtent:
-                          ScrollCacheExtent.viewport(items.length.toDouble()),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        final value = item.value;
-                        final description = value.description;
-                        return NipaplayLargeScreenFocusableAction(
-                          isSelected: item.isSelected,
-                          onActivate: () => Navigator.of(context).pop(value),
-                          borderRadius: BorderRadius.circular(8),
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      item.title,
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                  ),
-                                  if (item.isSelected)
-                                    Icon(
-                                      Icons.check_rounded,
-                                      size: 18,
-                                      color: _accentColor,
-                                    ),
-                                ],
-                              ),
-                              if (description?.isNotEmpty == true) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  description!,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.62),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          for (var index = 0;
+                              index < items.length;
+                              index++) ...[
+                            if (index > 0) const SizedBox(height: 8),
+                            _buildLargeScreenRemoteSortItem(
+                              context,
+                              items[index],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1013,6 +977,54 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (selection != null) {
       _applyRemoteSortSelection(selection);
     }
+  }
+
+  Widget _buildLargeScreenRemoteSortItem(
+    BuildContext dialogContext,
+    DropdownMenuItemData<_RemoteSortSelection> item,
+  ) {
+    final value = item.value;
+    final description = value.description;
+    return NipaplayLargeScreenFocusableAction(
+      isSelected: item.isSelected,
+      onActivate: () => Navigator.of(dialogContext).pop(value),
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (item.isSelected)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: _accentColor,
+                ),
+            ],
+          ),
+          if (description?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Text(
+              description!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.62),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildLibrariesView(dynamic provider, dynamic service) {
