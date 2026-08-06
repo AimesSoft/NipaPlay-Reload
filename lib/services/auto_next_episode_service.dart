@@ -174,8 +174,8 @@ class AutoNextEpisodeService {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     BlurSnackBar.show(
       context,
-      canComment ? '已经没有下一话了，要留个评论吗？' : '播放完成，没有下一话了',
-      actionText: canComment ? '评论' : null,
+      canComment ? '已经全部看完了，要留个评论吗？' : '播放完成，没有下一话了',
+      actionText: canComment ? '打分和评论' : null,
       actionColor: canComment ? Theme.of(context).colorScheme.primary : null,
       duration: canComment ? const Duration(seconds: 8) : null,
       onAction: canComment
