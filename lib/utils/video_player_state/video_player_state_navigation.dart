@@ -263,15 +263,30 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
   /// 将 WebDAV 路径编码为 URL 安全格式，作为 DB 查找的回退。
   /// 对路径段逐段 encodeComponent，保留 webdav://连接名 前缀和 '/' 分隔符。
+  /// 将 WebDAV 路径重新编码为 URL 安全格式，作为 DB 查找的回退。
+  /// 注意：不使用裸 Uri.encodeComponent，因为部分 WebDAV 服务器（如 alist）
+  /// 不会编码路径中的 + 号，而 encodeComponent 会把 + 变成 %2B，
+  /// 导致与 DB 中存储的路径（含字面量 +）不匹配。
   String _encodeWebDavPath(String rawPath) {
     final parsed = MediaSourceUtils.parseWebDavPath(rawPath);
     if (parsed == null) return rawPath;
     final encodedRelative = parsed.relativePath
         .split('/')
-        .map((s) => s.isEmpty ? s : Uri.encodeComponent(s))
+        .map((s) => s.isEmpty ? s : _encodePathSegmentForWebDav(s))
         .join('/');
     return MediaSourceUtils.buildWebDavPath(
         parsed.connectionName, encodedRelative);
+  }
+
+  /// 编码路径段，保留 WebDAV 服务器通常不编码的字符。
+  /// Uri.encodeComponent 遵循 RFC 3986 编码所有非保留字符，
+  /// 但部分服务器在路径中不编码 + ! ' ( ) * 等字符。
+  static String _encodePathSegmentForWebDav(String segment) {
+    var encoded = Uri.encodeComponent(segment);
+    // 部分 WebDAV 服务器（alist 等）路径中保留 + 为字面量，
+    // 而 encodeComponent 将其编码为 %2B。
+    encoded = encoded.replaceAll('%2B', '+');
+    return encoded;
   }
 
   // 播放下一话
