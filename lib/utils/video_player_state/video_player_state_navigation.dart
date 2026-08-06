@@ -2,6 +2,18 @@ part of video_player_state;
 
 const bool _enablePlaybackDiagnostics = false;
 
+@visibleForTesting
+bool shouldTreatMdkPositionAsEnded({
+  required int remainingMs,
+  required int movementMs,
+  required int stalledDurationMs,
+}) {
+  return remainingMs >= 0 &&
+      remainingMs <= 1500 &&
+      movementMs.abs() <= 20 &&
+      stalledDurationMs >= 750;
+}
+
 void _playbackDiag(String Function() messageBuilder) {
   if (!_enablePlaybackDiagnostics) {
     return;
@@ -186,8 +198,171 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
   }
 
+  /// Returns the item immediately following the current item in the same
+  /// playlist used by the player UI.
+  Future<PlaybackDetailEpisode?> nextPlaylistEpisode() async {
+    final currentPath = _currentVideoPath;
+    final detailContext = _playbackDetailContext;
+    if (currentPath == null || detailContext == null) return null;
+
+    try {
+      final episodes = await detailContext.episodeLoader();
+      return PlaybackPlaylist.next(
+        episodes,
+        currentPath,
+        isSamePath: _isSamePlaylistPath,
+      );
+    } catch (e) {
+      debugPrint('[播放列表] 获取下一项失败: $e');
+      return null;
+    }
+  }
+
+  bool _isSamePlaylistPath(String a, String b) {
+    if (a == b) return true;
+
+    final smbA = MediaSourceUtils.parseSmbMediaPath(a);
+    final smbB = MediaSourceUtils.parseSmbMediaPath(b);
+    if (smbA != null && smbB != null) {
+      return smbA.connectionName == smbB.connectionName &&
+          _normalizePlaylistPath(smbA.relativePath) ==
+              _normalizePlaylistPath(smbB.relativePath);
+    }
+
+    final webDavA = WebDAVService.instance.resolveMediaPath(a);
+    final webDavB = WebDAVService.instance.resolveMediaPath(b);
+    if (webDavA != null && webDavB != null) {
+      return webDavA.connection.name == webDavB.connection.name &&
+          _normalizePlaylistPath(webDavA.relativePath) ==
+              _normalizePlaylistPath(webDavB.relativePath);
+    }
+    return false;
+  }
+
+  String _normalizePlaylistPath(String value) {
+    var normalized = value.replaceAll('\\', '/');
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    if (!normalized.startsWith('/')) normalized = '/$normalized';
+    return normalized.length > 1 && normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
+  }
+
   // 播放下一话
-  Future<void> playNextEpisode() async {
+  Future<void> playNextEpisode({
+    PlaybackDetailEpisode? verifiedPlaylistEpisode,
+  }) async {
+    if (_playbackDetailContext == null) {
+      await _playNextEpisodeUsingLegacyNavigation();
+      return;
+    }
+
+    final nextEpisode = verifiedPlaylistEpisode ?? await nextPlaylistEpisode();
+    if (nextEpisode == null) {
+      debugPrint('[下一话] 当前播放列表已经是最后一项');
+      _showEpisodeNotFoundMessage('下一话');
+      return;
+    }
+
+    if (_isEpisodeNavigating) {
+      _showNavigationBusyMessage('下一话');
+      return;
+    }
+    _isEpisodeNavigating = true;
+    try {
+      await _playPlaylistEpisode(nextEpisode);
+    } catch (e) {
+      debugPrint('[下一话] 播放列表切换失败: $e');
+      _showEpisodeErrorMessage('下一话', e.toString());
+      rethrow;
+    } finally {
+      _isEpisodeNavigating = false;
+    }
+  }
+
+  Future<void> _playPlaylistEpisode(PlaybackDetailEpisode episode) async {
+    // 优先查询数据库中的真实观看记录，因为 WebDAV/SMB 的 episodeLoader
+    // 创建的占位 historyItem 中 animeName/episodeTitle 都是文件名，没有
+    // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
+    var historyItem = await WatchHistoryManager.getHistoryItemByPath(episode.videoPath) ??
+        episode.historyItem;
+    final detailContext = _playbackDetailContext;
+
+    // 播放列表中的本地文件项通常只保存路径。切集前补回媒体库中的匹配记录，
+    // 并用播放列表元数据兜底，避免 initializePlayer 将下一话当作裸文件载入。
+    if (historyItem == null &&
+        detailContext != null &&
+        detailContext.isIdentified) {
+      historyItem = WatchHistoryItem(
+        filePath: episode.videoPath,
+        animeName: detailContext.title,
+        episodeTitle: episode.title,
+        animeId: episode.animeId ?? detailContext.animeId,
+        episodeId: episode.episodeId,
+        watchProgress: episode.progress ?? 0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+        thumbnailPath: detailContext.imageUrl,
+      );
+    }
+    if (historyItem != null &&
+        WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
+      historyItem = await _tryAutoMatchForNavigation(historyItem);
+    }
+
+    PlaybackSession? playbackSession = episode.playbackSession;
+    if (episode.videoPath.startsWith('jellyfin://')) {
+      playbackSession ??= await JellyfinService.instance.createPlaybackSession(
+        itemId: episode.videoPath.replaceFirst('jellyfin://', ''),
+      );
+    } else if (episode.videoPath.startsWith('emby://')) {
+      final rawPath = episode.videoPath.replaceFirst('emby://', '');
+      playbackSession ??= await EmbyService.instance.createPlaybackSession(
+        itemId: rawPath.split('/').last,
+      );
+    }
+
+    final actualPlayUrl = episode.actualPlayUrl ??
+        (MediaSourceUtils.isNewWebDavPath(episode.videoPath) ||
+                MediaSourceUtils.isNewSmbPath(episode.videoPath)
+            ? MediaSourceUtils.resolveRemotePathToUrl(episode.videoPath)
+            : null);
+
+    // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
+    // 将上下文的番剧名写回 historyItem。否则 initializePlayer 会优先读取
+    // historyItem.animeName（WebDAV/SMB 的 _loadXxxEpisodes 创建的占位记录中
+    // animeName 是文件名），导致 resolvedDetailContext.title 的正确番剧名被忽略。
+    final bool historyWasUnidentified =
+        historyItem != null && historyItem.animeId == null;
+    if (historyWasUnidentified &&
+        detailContext != null &&
+        detailContext.isIdentified) {
+      historyItem = historyItem.copyWith(
+        animeName: detailContext.title,
+      );
+    }
+
+    final playableItem = PlayableItem(
+      videoPath: episode.videoPath,
+      title: historyItem?.animeName ?? detailContext?.title ?? episode.subtitle,
+      subtitle: historyItem?.episodeTitle ?? episode.title,
+      animeId:
+          historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
+      episodeId: historyItem?.episodeId ?? episode.episodeId,
+      historyItem: historyItem,
+      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
+      // 不传入旧的 detailContext，否则 PlaybackSourceService.resolve() 会
+      // 直接复用上一集的上下文（subtitle 是上一集的剧集名），导致新一集显示旧标题。
+    );
+
+    // 与番剧详情页点击剧集使用同一个正式入口。该入口会完整传递
+    // PlayableItem 的番剧/剧集元数据并统一解析播放来源。
+    await PlaybackService().play(playableItem);
+  }
+
+  Future<void> _playNextEpisodeUsingLegacyNavigation() async {
     if (!canPlayNextEpisode || _currentVideoPath == null) {
       debugPrint('[下一话] 无法播放下一话：检查条件不满足');
       return;
@@ -1068,8 +1243,36 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               _updateWatchHistory();
             }
 
-            // 检测播放结束
-            if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
+            // 检测播放结束。MDK 在部分文件的 EOF 不会切换为 paused/stopped，
+            // position 也可能停在容器 duration 前数百毫秒，因此额外识别
+            // “已接近末尾且位置持续停滞”，避免单纯扩大阈值而截断片尾。
+            final remainingMs = playerDuration - playerPosition;
+            final reachedExactEnd = remainingMs <= 100;
+            var reachedMdkStalledEnd = false;
+            if (player.getPlayerKernelName() == 'MDK' &&
+                remainingMs >= 0 &&
+                remainingMs <= 1500) {
+              final positionIsStalled = _mdkNearEndLastPositionMs >= 0 &&
+                  (playerPosition - _mdkNearEndLastPositionMs).abs() <= 20;
+              if (positionIsStalled) {
+                _mdkNearEndStalledSinceMs = _mdkNearEndStalledSinceMs == 0
+                    ? nowTime
+                    : _mdkNearEndStalledSinceMs;
+                reachedMdkStalledEnd = shouldTreatMdkPositionAsEnded(
+                  remainingMs: remainingMs,
+                  movementMs: playerPosition - _mdkNearEndLastPositionMs,
+                  stalledDurationMs: nowTime - _mdkNearEndStalledSinceMs,
+                );
+              } else {
+                _mdkNearEndStalledSinceMs = 0;
+              }
+              _mdkNearEndLastPositionMs = playerPosition;
+            } else {
+              _mdkNearEndLastPositionMs = -1;
+              _mdkNearEndStalledSinceMs = 0;
+            }
+
+            if (reachedExactEnd || reachedMdkStalledEnd) {
               player.state = PlaybackState.paused;
               _setStatus(PlayerStatus.paused, message: '播放结束');
               if (_currentVideoPath != null) {

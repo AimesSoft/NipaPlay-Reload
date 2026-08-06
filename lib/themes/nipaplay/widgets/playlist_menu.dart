@@ -159,7 +159,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               .toList();
 
           // 按文件名自然排序，避免 1、15、2 这类字典序播放顺序。
-          videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+          videoFiles.sort((a, b) => WebDAVFileSorter.playlistCompare(
                 p.basename(a.path),
                 p.basename(b.path),
               ));
@@ -330,7 +330,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .toList();
 
       playableEntries
-          .sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+          .sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = playableEntries.map((entry) {
         final streamUrl =
@@ -400,7 +400,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (aEpisodeId != bEpisodeId) {
             return aEpisodeId.compareTo(bEpisodeId);
           }
-          return WebDAVFileSorter.naturalCompare(a.title, b.title);
+          return WebDAVFileSorter.playlistCompare(a.title, b.title);
         });
 
       final animeName = (_currentAnimeTitle?.trim().isNotEmpty ?? false)
@@ -489,7 +489,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               !entry.isDirectory &&
               WebDAVService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+        ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final filePath = MediaSourceUtils.buildWebDavPath(
@@ -543,7 +543,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .where((entry) =>
               !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+        ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final filePath =

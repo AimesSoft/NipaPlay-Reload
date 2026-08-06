@@ -294,8 +294,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _currentActualPlayUrl = resolvedActualPlayUrl; // 存储实际播放URL
     _currentPlaybackSession = resolvedSession;
     print('historyItem: $historyItem');
-    _animeTitle = historyItem?.animeName ?? resolvedDetailContext.title;
-    _episodeTitle = historyItem?.episodeTitle ?? resolvedDetailContext.subtitle;
+    // 仅当 historyItem 已被识别（有 animeId）时，其 animeName 才是可信的番剧名。
+    // WebDAV/SMB 的 _loadWebDavEpisodes/_loadSmbEpisodes 创建的占位记录中
+    // animeName 是文件名，animeId 为空。此时应使用 resolvedDetailContext 的 title。
+    _animeTitle = (historyItem != null && historyItem.animeId != null
+            ? historyItem.animeName
+            : null) ??
+        resolvedDetailContext.title;
+    _episodeTitle = (historyItem != null && historyItem.animeId != null
+            ? historyItem.episodeTitle
+            : null) ??
+        resolvedDetailContext.subtitle;
     _episodeId = historyItem?.episodeId; // 保存从历史记录传入的 episodeId
     _animeId = historyItem?.animeId ?? resolvedDetailContext.animeId;
     String message = '正在初始化播放器: ${p.basename(videoPath)}';

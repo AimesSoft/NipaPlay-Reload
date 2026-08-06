@@ -44,7 +44,9 @@ class PlaybackSourceService {
     PlayableItem item,
   ) async {
     final supplied = item.detailContext;
-    if (supplied != null) return supplied;
+    if (supplied != null) {
+      return supplied;
+    }
 
     final path = item.videoPath;
     final animeId = item.animeId ?? item.historyItem?.animeId;
@@ -198,7 +200,7 @@ class PlaybackSourceService {
             final idCompare = (a.episodeId ?? 0).compareTo(b.episodeId ?? 0);
             return idCompare != 0
                 ? idCompare
-                : WebDAVFileSorter.naturalCompare(a.title, b.title);
+                : WebDAVFileSorter.playlistCompare(a.title, b.title);
           });
         final playable = sorted
             .where((episode) =>
@@ -318,7 +320,7 @@ class PlaybackSourceService {
         .where((entry) =>
             !entry.isDirectory && provider.isRemoteFilePlayable(entry))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     return playableEntries.map((entry) {
       final streamUrl =
@@ -394,7 +396,7 @@ class PlaybackSourceService {
         final idCompare = (a.episodeId ?? 0).compareTo(b.episodeId ?? 0);
         return idCompare != 0
             ? idCompare
-            : WebDAVFileSorter.naturalCompare(a.name, b.name);
+            : WebDAVFileSorter.playlistCompare(a.name, b.name);
       });
 
     final mapped = group
@@ -581,14 +583,16 @@ class PlaybackSourceService {
     if (resolved == null) throw Exception('无法识别 WebDAV 连接: $path');
 
     final animeId = item.animeId ?? item.historyItem?.animeId;
+    final resolvedTitle = _resolvedTitle(item);
+    final resolvedSubtitle = item.subtitle ?? item.historyItem?.episodeTitle;
 
     return PlaybackDetailContext(
       sourceKind: PlaybackSourceKind.webDav,
       sourceLabel: resolved.connection.name,
       sourceKey:
           'webdav:${resolved.connection.name}:${p.posix.dirname(resolved.relativePath)}',
-      title: _resolvedTitle(item),
-      subtitle: item.subtitle ?? item.historyItem?.episodeTitle,
+      title: resolvedTitle,
+      subtitle: resolvedSubtitle,
       imageUrl: item.historyItem?.thumbnailPath,
       animeId: animeId,
       isIdentified: animeId != null && animeId > 0,
@@ -608,7 +612,7 @@ class PlaybackSourceService {
             !entry.isDirectory &&
             WebDAVService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     return videos.map((entry) {
       final mediaPath = MediaSourceUtils.buildWebDavPath(
@@ -708,7 +712,7 @@ class PlaybackSourceService {
         .where((entry) =>
             !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     return videos.map((entry) {
       final mediaPath =
@@ -751,7 +755,7 @@ class PlaybackSourceService {
               (extension) => file.path.toLowerCase().endsWith(extension),
             ))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(
             p.basename(a.path),
             p.basename(b.path),
           ));
