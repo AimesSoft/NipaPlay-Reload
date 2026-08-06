@@ -615,10 +615,15 @@ class PlaybackSourceService {
       ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     return videos.map((entry) {
+      // WebDAV 服务器可能返回 URL 编码的路径（中文 → %E7..., [ → %5B 等），
+      // 需要解码为原始字符后再构建 mediaPath，确保路径在整个系统中保持一致，
+      // 否则 WatchHistoryManager 按路径查不到记录，续播时只能显示文件名且无弹幕。
+      final decodedPath = _decodeWebDavPath(entry.path);
       final mediaPath = MediaSourceUtils.buildWebDavPath(
         resolved.connection.name,
-        entry.path,
+        decodedPath,
       );
+      // getFileUrl 用于实际 HTTP 请求，保留服务器原始编码。
       final url = WebDAVService.instance.getFileUrl(
         resolved.connection,
         entry.path,
@@ -634,7 +639,7 @@ class PlaybackSourceService {
         lastWatchTime: DateTime.now(),
       );
       return PlaybackDetailEpisode(
-        id: entry.path,
+        id: decodedPath,
         videoPath: mediaPath,
         title: title,
         subtitle: resolved.connection.name,
@@ -642,6 +647,24 @@ class PlaybackSourceService {
         actualPlayUrl: url,
       );
     }).toList();
+  }
+
+  /// 安全解码 WebDAV 路径中的 URL 编码字符。
+  /// 保留原始路径中的 '/'，只解码非分隔符的编码字符。
+  static String _decodeWebDavPath(String path) {
+    try {
+      // 逐段解码，保留 '/' 作为路径分隔符。
+      return path.split('/').map((segment) {
+        if (segment.isEmpty) return segment;
+        try {
+          return Uri.decodeComponent(segment);
+        } catch (_) {
+          return segment;
+        }
+      }).join('/');
+    } catch (_) {
+      return path;
+    }
   }
 
   static String _webDavParentDirectory(WebDAVResolvedFile resolved) {

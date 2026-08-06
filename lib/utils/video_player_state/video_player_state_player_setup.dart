@@ -1003,20 +1003,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         debugPrint(
           'VideoPlayerState: Final check - Player IS NOT PLAYING. Current _status: $_status, player.state: ${player.state}',
         );
-        // 如果意图是播放 (无论是从头还是恢复)，但播放器最终没有播放，则设为暂停
+        // play() 通过 playDirectly() 异步启动播放器，底层状态转换需要时间。
+        // _status == ready 表示刚完成初始化、play() 已调用但异步结果尚未返回，
+        // 此时 player.state 可能在 paused/ready/stopped 之间，强制暂停会取消
+        // 正在进行的 playDirectly()，导致画面卡在第一帧、时间为 00:00。
+        // 只应在 _status 明确为 playing（即 play() 回调已确认播放在进行）而
+        // player.state 却未反映时才纠正。
         if (_status == PlayerStatus.playing) {
-          // 如果我们之前的意图是播放
+          // play() 的 .then() 已触发但底层状态未同步，强制暂停以保持一致
           player.state = PlaybackState.paused;
           _setStatus(PlayerStatus.paused, message: '已暂停 (播放失败后同步)');
           debugPrint(
             'VideoPlayerState: Corrected to PAUSED (sync after play attempt failed)',
           );
-        } else if (_status != PlayerStatus.paused) {
-          // 对于其他非播放且非暂停的意外状态，也强制为暂停
-          player.state = PlaybackState.paused;
-          _setStatus(PlayerStatus.paused, message: '已暂停 (状态同步)');
-          //debugPrint('VideoPlayerState: Corrected to PAUSED (general sync)');
         }
+        // _status 为 ready 时：play() 异步尚未完成，不干预，让底层自然过渡到播放。
+        // 若底层最终未进入播放，Ticker 的异常检测会捕获并设置 error 状态。
       }
     } catch (e) {
       if (_isDisposed || initializationGeneration != _playbackGeneration) {

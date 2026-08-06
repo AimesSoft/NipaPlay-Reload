@@ -243,9 +243,35 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     var normalized = value.replaceAll('\\', '/');
     normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
     if (!normalized.startsWith('/')) normalized = '/$normalized';
+    // URI-decode to handle server-side URL encoding of special characters
+    // (e.g. %5B → [, %20 → space, %23 → #). WebDAV servers may return
+    // encoded paths while the current video path uses raw characters, or
+    // vice versa. Decode after slash normalization so that any %2F in the
+    // path is decoded to / and then caught by a second normalization pass.
+    try {
+      normalized = Uri.decodeComponent(normalized);
+    } catch (_) {
+      // If the path isn't valid percent-encoding, keep it as-is.
+    }
+    // Re-normalize in case decoded characters introduced slashes.
+    normalized = normalized.replaceAll('\\', '/');
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
     return normalized.length > 1 && normalized.endsWith('/')
         ? normalized.substring(0, normalized.length - 1)
         : normalized;
+  }
+
+  /// 将 WebDAV 路径编码为 URL 安全格式，作为 DB 查找的回退。
+  /// 对路径段逐段 encodeComponent，保留 webdav://连接名 前缀和 '/' 分隔符。
+  String _encodeWebDavPath(String rawPath) {
+    final parsed = MediaSourceUtils.parseWebDavPath(rawPath);
+    if (parsed == null) return rawPath;
+    final encodedRelative = parsed.relativePath
+        .split('/')
+        .map((s) => s.isEmpty ? s : Uri.encodeComponent(s))
+        .join('/');
+    return MediaSourceUtils.buildWebDavPath(
+        parsed.connectionName, encodedRelative);
   }
 
   // 播放下一话
@@ -284,12 +310,21 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // 优先查询数据库中的真实观看记录，因为 WebDAV/SMB 的 episodeLoader
     // 创建的占位 historyItem 中 animeName/episodeTitle 都是文件名，没有
     // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
-    var historyItem = await WatchHistoryManager.getHistoryItemByPath(episode.videoPath) ??
-        episode.historyItem;
+    var historyItem = await WatchHistoryManager.getHistoryItemByPath(episode.videoPath);
+    // WebDAV 路径可能存在 URL 编码差异（服务器返回编码 vs DB 存储原始），
+    // 直接查找失败时尝试用编码后的路径再查一次。
+    if (historyItem == null && episode.videoPath.startsWith('webdav://')) {
+      final encodedPath = _encodeWebDavPath(episode.videoPath);
+      if (encodedPath != episode.videoPath) {
+        historyItem = await WatchHistoryManager.getHistoryItemByPath(encodedPath);
+      }
+    }
     final detailContext = _playbackDetailContext;
 
     // 播放列表中的本地文件项通常只保存路径。切集前补回媒体库中的匹配记录，
     // 并用播放列表元数据兜底，避免 initializePlayer 将下一话当作裸文件载入。
+    // episode.historyItem（占位 history，无 animeId）放到最后兜底，
+    // 否则 historyItem 永远非 null，导致此分支不会执行。
     if (historyItem == null &&
         detailContext != null &&
         detailContext.isIdentified) {
@@ -306,9 +341,23 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         thumbnailPath: detailContext.imageUrl,
       );
     }
+    historyItem ??= episode.historyItem;
     if (historyItem != null &&
         WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
-      historyItem = await _tryAutoMatchForNavigation(historyItem);
+      // WebDAV/SMB 等远程路径优先使用 episode.actualPlayUrl（服务器返回的
+      // 原始编码路径构建的 HTTP URL），避免 _resolveMatchablePath 从解码后
+      // 的路径重新编码时与服务器预期编码不一致，导致 hash 下载 404。
+      final matchableUrl = (episode.actualPlayUrl?.isNotEmpty == true)
+          ? episode.actualPlayUrl
+          : await _resolveMatchablePath(historyItem.filePath);
+      if (matchableUrl != null && matchableUrl.isNotEmpty) {
+        historyItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
+          _context!,
+          historyItem,
+          matchablePath: matchableUrl,
+          onMatched: (msg) => BlurSnackBar.show(_context!, msg),
+        );
+      }
     }
 
     PlaybackSession? playbackSession = episode.playbackSession;
@@ -577,6 +626,20 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         episodeId,
         forceDirectPlay: true,
       );
+    }
+    // WebDAV/SMB 新格式路径需解析为 HTTP URL，否则自动匹配系统会因
+    // "路径不可用"（非本地文件也非 HTTP URL）而跳过，导致续播无弹幕。
+    if (MediaSourceUtils.isNewWebDavPath(filePath)) {
+      try {
+        final url = MediaSourceUtils.resolveWebDavPathToUrl(filePath);
+        if (url != null && url.isNotEmpty) return url;
+      } catch (_) {}
+    }
+    if (MediaSourceUtils.isNewSmbPath(filePath)) {
+      try {
+        final url = MediaSourceUtils.resolveSmbPathToUrl(filePath);
+        if (url != null && url.isNotEmpty) return url;
+      } catch (_) {}
     }
     return filePath;
   }
