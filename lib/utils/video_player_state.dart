@@ -1461,6 +1461,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+
+    // 关闭播放器时立即取消自动续播倒计时，避免倒计时在后台继续运行。
+    try {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] dispose时取消自动续播失败: $e');
+    }
+
     PlayerRemoteControlBridge.instance.detach(this);
     _detachPluginDanmakuFilter();
 

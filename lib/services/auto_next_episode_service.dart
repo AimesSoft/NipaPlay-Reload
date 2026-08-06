@@ -26,6 +26,8 @@ class AutoNextEpisodeService {
   PlaybackDetailEpisode? _nextEpisode;
   bool _isCancelled = false;
   bool _autoPlayEnabled = true;
+  // 标记上一轮是否显示过续播倒计时，用于抑制退出后的"全部看完"误报。
+  bool _countdownWasActive = false;
 
   // 开始自动播放下一话的倒计时
   Future<void> startAutoNextEpisode(
@@ -75,6 +77,7 @@ class AutoNextEpisodeService {
   void cancelAutoNext() {
     debugPrint(
         '[AutoNext] cancelAutoNext called, _isCountingDown=$_isCountingDown');
+    final wasCountingDown = _isCountingDown;
     _isCancelled = true;
     if (_countdownTimer != null) {
       _countdownTimer!.cancel();
@@ -85,6 +88,14 @@ class AutoNextEpisodeService {
 
     // 隐藏倒计时通知
     CountdownSnackBar.hide();
+
+    // 仅在倒计时未活跃时清除 _countdownWasActive 标记。
+    // 用户退出播放器时 _isCountingDown=true，标记保留以抑制后续的
+    // "已经全部看完了"误报；新视频手动载入时 _isCountingDown=false，
+    // 标记清除以恢复干净状态。
+    if (!wasCountingDown) {
+      _countdownWasActive = false;
+    }
 
     debugPrint('[自动播放] 已取消自动播放下一话');
   }
@@ -115,6 +126,8 @@ class AutoNextEpisodeService {
         '[AutoNext] _startCountdown called, _countdownSeconds=$_countdownSeconds');
     _countdownSeconds = _countdownDurationSeconds;
     _isCancelled = false;
+    // 倒计时正式开始，标记本轮已显示过续播提示。
+    _countdownWasActive = true;
 
     if (_countdownSeconds <= 0) {
       debugPrint('[AutoNext] 倒计时设置为0秒，直接播放下一话');
@@ -170,6 +183,13 @@ class AutoNextEpisodeService {
 
   // 显示没有下一话的消息
   void _showNoNextEpisodeMessage(BuildContext context) {
+    // 如果上一轮显示过续播倒计时（说明存在下一话，用户只是手动退出），
+    // 不弹出"已经全部看完了"以免误报。
+    if (_countdownWasActive) {
+      debugPrint('[AutoNext] 上一轮存在续播倒计时，跳过"全部看完"提示');
+      _countdownWasActive = false;
+      return;
+    }
     final canComment = BangumiCommentPromptController.isAvailable;
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     BlurSnackBar.show(
@@ -194,13 +214,22 @@ class AutoNextEpisodeService {
   // 播放下一话
   Future<void> _playNextEpisode(BuildContext context) async {
     debugPrint('[AutoNext] _playNextEpisode called');
+    // 如果倒计时已被取消（退出播放器等场景），直接返回，不播放也不显示提示。
+    if (_isCancelled) {
+      debugPrint('[AutoNext] _playNextEpisode: 倒计时已取消，跳过');
+      return;
+    }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     // 倒计时期间播放列表可能变化，播放前必须以当前列表重新判定。
     final nextEpisode = await videoState.nextPlaylistEpisode();
     if (!context.mounted) return;
     if (nextEpisode == null) {
       _nextEpisode = null;
-      if (context.mounted) {
+      // 只有在倒计时未被取消的情况下才显示"没有下一话"提示。
+      // 退出播放器等场景会先调用 cancelAutoNext() 设置 _isCancelled=true，
+      // 若 _currentVideoPath 已被清空则 nextPlaylistEpisode() 返回 null，
+      // 此时不应误报"已经全部看完了"。
+      if (!_isCancelled && context.mounted) {
         _showNoNextEpisodeMessage(context);
       }
       return;

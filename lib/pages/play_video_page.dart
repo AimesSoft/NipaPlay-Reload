@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
@@ -111,6 +112,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   @override
   void dispose() {
+    // 关闭播放器页面时立即取消续播倒计时，避免 snackbar 残留和后续误报。
+    try {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+    } catch (e) {
+      debugPrint('[PlayVideoPage] dispose中取消续播失败: $e');
+    }
     _uiLockButtonTimer?.cancel();
     _largeScreenPlayPauseFocusNode.dispose();
     super.dispose();
@@ -118,6 +125,13 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   // 处理系统返回键事件
   Future<bool> _handleWillPop() async {
+    // 用户按返回键时立即取消续播倒计时，避免倒计时在退出流程中继续运行。
+    try {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+    } catch (e) {
+      debugPrint('[PlayVideoPage] _handleWillPop中取消续播失败: $e');
+    }
+
     if (DesktopMultiWindow.isSecondaryWindow(context)) {
       await DesktopPlayerWindowService.instance.returnPlayerToMain();
       return false;
