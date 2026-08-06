@@ -6,12 +6,13 @@ NipaPlay 提供多种播放器内核，各有特点：
 
 ### 内核对比
 
-- **Erika（自研内核，macOS/iOS）**：
+- **Erika（自研内核）**：
   - ✅ NipaPlay 自研播放内核，Rust 实现
   - ✅ 硬件解码 (VideoToolbox) + 零拷贝 Metal 渲染
   - ✅ 原生 HDR/EDR 支持，PQ (BT.2020) tone mapping
   - ✅ AI 超分 (ArtCNN 2x)、弹幕 GPU 原生渲染
-  - ⚠️ 目前仅支持 macOS/iOS，仍在快速迭代中
+  - ✅ 代码和 Flutter 集成覆盖 macOS、iOS、Windows、Android、HarmonyOS；tvOS 构建会强制使用 Erika
+  - ⚠️ 各平台的 HDR、硬解、surface 合成和真机验证状态不同，请查看 [平台能力矩阵](platform-matrix.md)
   - 🔬 需在 设置 → 实验室 中开启
 
 - **Libmpv（推荐，全平台）**：
@@ -32,7 +33,8 @@ NipaPlay 提供多种播放器内核，各有特点：
 
 ### 切换建议
 
-- **macOS/iOS 用户**：可在实验室功能中尝试 Erika 内核，体验 HDR 和 AI 超分
+- **macOS/iOS 用户**：可在实验室功能中尝试 Erika 内核，体验 HDR/EDR 和 AI 超分
+- **Windows/Android/HarmonyOS/tvOS 用户**：Erika 的可用性取决于当前构建和设备；若选项不可用，使用默认内核或参考平台矩阵中的回退路径
 - **全平台首选**：Libmpv（性能和兼容性最佳）
 - **问题排查**：如遇播放问题，可尝试切换到其他内核进行对比
 - **性能考虑**：低配置设备务必使用 Libmpv 以获得硬件解码支持
@@ -109,7 +111,7 @@ NipaPlay 提供多种弹幕渲染引擎，可在 设置 → 弹幕设置 中切�
 
 设置 → 实验室 中提供了一些正在开发中的实验性功能：
 
-- **Erika 播放器内核**：启用自研 Erika 播放器（仅 macOS/iOS）
+- **Erika 播放器内核**：启用自研 Erika 播放器。平台可用性、HDR 路径和回退行为见 [平台能力矩阵](platform-matrix.md)
 - **Next2 弹幕内核**：启用 Next2 弹幕渲染引擎
 - **Next++ 激进优化**：启用 NipaPlay Next++ 弹幕引擎
 - **大屏幕模式**：针对平板/电视等大屏设备优化布局

@@ -12,7 +12,7 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/aimessoft/nipaplay-reload?style=flat-square&color=blue)
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
-![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
+![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20tvOS%20%7C%20HarmonyOS-lightgrey?style=flat-square)
 ![License](https://img.shields.io/github/license/aimessoft/nipaplay-reload?style=flat-square)
 
 <br>
@@ -25,7 +25,7 @@
     一个现代化的跨平台视频播放器应用
   </h3>
   <p>
-    支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统。
+    支持 Windows、macOS、Linux、Android、iOS，并提供 tvOS 与 HarmonyOS 构建。
     <br>
     打造您的个人媒体中心，享受极致的追番体验。
   </p>
@@ -89,7 +89,7 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
 ## 下载安装
 
-支持 **Windows (x64)**、**Linux (amd64/arm64)**、**macOS (Intel/Apple Silicon)**、**Android** 和 **iOS**。
+支持 **Windows (x64)**、**Linux (amd64/arm64)**、**macOS (Intel/Apple Silicon)**、**Android** 和 **iOS**；Windows ARM64、tvOS 和 HarmonyOS 的可用构建状态请查看 [平台矩阵](Documentation/platform-matrix.md)。
 
 ### 快速下载
 
@@ -130,7 +130,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ### 播放体验
 
-* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust/Metal，macOS/iOS）、FVP (libmdk)、Media Kit、Video Player、libmpv，多内核可切换。
+* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust，按平台使用 Metal、D3D11、WGPU 或 Vulkan）、FVP (libmdk)、Media Kit、Video Player、libmpv，多内核可切换。Erika 的可用性和 HDR/硬解能力因平台而异，详见 [平台矩阵](Documentation/platform-matrix.md) 与 [播放器内核说明](Documentation/player-kernels.md)。
 * **视频支持**：本地播放、Emby/Jellyfin/SMB 流媒体、WebDAV 挂载。
 * **画质增强**：支持 Anime4K 超分、CRT 着色器效果。
 * **音频控制**：多音轨切换、倍速播放。
@@ -192,7 +192,8 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 - [ ] 补帧功能 (SVP/Other)
 - [x] macOS HDR 支持（Erika 内核 EDR 原生 + Media Kit）
 - [ ] 跨平台 HDR 和杜比视界支持（Windows/Linux/Android）
-- [ ] 鸿蒙 OS / Vision Pro 移植
+- [ ] Vision Pro 移植
+- [ ] HarmonyOS 商店发行版
 - [x] Apple TV（tvOS）开发者预览构建
 
 ## 赞助与鸣谢
