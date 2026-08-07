@@ -611,9 +611,9 @@ jobs:
         env:
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_ios_for_review }}
         run: |
+          mkdir -p metadata
           fastlane deliver \
             --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
-            --ipa "$SIGNED_IPA" \
             --skip_binary_upload true \
             --build_number "$APP_BUILD_NUMBER" \
             --app_identifier "$APP_BUNDLE_ID" \
@@ -839,9 +839,9 @@ jobs:
         env:
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_ios_for_review }}
         run: |
+          mkdir -p metadata
           fastlane deliver \
             --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
-            --ipa "$SIGNED_IPA" \
             --skip_binary_upload true \
             --build_number "$APP_BUILD_NUMBER" \
             --app_identifier "$APP_BUNDLE_ID" \
