@@ -31,6 +31,10 @@ mkdir -p %{buildroot}%{_datadir}/icons/hicolor/512x512/apps
 # We will define _sourcedir appropriately in the rpmbuild command or setup
 cp -r %{_sourcedir}/bundle/* %{buildroot}/opt/%{name}/
 
+# Copy launcher script (the .desktop file and /usr/bin symlink point to it)
+cp %{_sourcedir}/launcher.sh %{buildroot}/opt/%{name}/launcher.sh
+chmod +x %{buildroot}/opt/%{name}/launcher.sh
+
 # Copy .desktop file
 # The .desktop file should also be copied to _sourcedir
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{_sourcedir}/io.github.MCDFsteve.NipaPlay-Reload.desktop
