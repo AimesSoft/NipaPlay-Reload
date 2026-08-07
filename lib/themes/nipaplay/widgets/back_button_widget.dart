@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'blur_snackbar.dart';
@@ -41,6 +42,9 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
   }
 
   Future<void> _handleBackAction() async {
+    // 返回按钮直接绑定续播倒计时取消，确保退出时 snackbar 立即消失。
+    AutoNextEpisodeService.instance.cancelAutoNext();
+
     if (mounted) {
       setState(() => _isBackButtonPressed = false);
     }

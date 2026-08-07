@@ -236,7 +236,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
           ),
         )
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(
             p.basename(a.path),
             p.basename(b.path),
           ));
@@ -267,7 +267,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         .where((entry) =>
             !entry.isDirectory && provider.isRemoteFilePlayable(entry))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     _episodes = playableEntries.map((entry) {
       final streamUrl =
@@ -311,7 +311,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         final aId = a.episodeId ?? 0;
         final bId = b.episodeId ?? 0;
         if (aId != bId) return aId.compareTo(bId);
-        return WebDAVFileSorter.naturalCompare(a.title, b.title);
+        return WebDAVFileSorter.playlistCompare(a.title, b.title);
       });
 
     _episodes = sorted
@@ -372,7 +372,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
             !entry.isDirectory &&
             WebDAVService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     _episodes = videoEntries.map((entry) {
       final filePath = MediaSourceUtils.buildWebDavPath(
@@ -414,7 +414,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         .where((entry) =>
             !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+      ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     _episodes = videoEntries.map((entry) {
       final filePath =

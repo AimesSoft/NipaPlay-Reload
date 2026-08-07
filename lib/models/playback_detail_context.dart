@@ -43,6 +43,23 @@ class PlaybackDetailEpisode {
 typedef PlaybackDetailEpisodeLoader = Future<List<PlaybackDetailEpisode>>
     Function();
 
+class PlaybackPlaylist {
+  const PlaybackPlaylist._();
+
+  static PlaybackDetailEpisode? next(
+    List<PlaybackDetailEpisode> episodes,
+    String currentPath, {
+    bool Function(String candidate, String current)? isSamePath,
+  }) {
+    final matches = isSamePath ?? (candidate, current) => candidate == current;
+    final currentIndex = episodes.indexWhere(
+      (episode) => matches(episode.videoPath, currentPath),
+    );
+    if (currentIndex < 0 || currentIndex >= episodes.length - 1) return null;
+    return episodes[currentIndex + 1];
+  }
+}
+
 class PlaybackDetailContext {
   const PlaybackDetailContext({
     required this.sourceKind,

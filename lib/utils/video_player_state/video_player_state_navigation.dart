@@ -2,6 +2,18 @@ part of video_player_state;
 
 const bool _enablePlaybackDiagnostics = false;
 
+@visibleForTesting
+bool shouldTreatMdkPositionAsEnded({
+  required int remainingMs,
+  required int movementMs,
+  required int stalledDurationMs,
+}) {
+  return remainingMs >= 0 &&
+      remainingMs <= 1500 &&
+      movementMs.abs() <= 20 &&
+      stalledDurationMs >= 750;
+}
+
 void _playbackDiag(String Function() messageBuilder) {
   if (!_enablePlaybackDiagnostics) {
     return;
@@ -186,8 +198,235 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
   }
 
+  /// Returns the item immediately following the current item in the same
+  /// playlist used by the player UI.
+  Future<PlaybackDetailEpisode?> nextPlaylistEpisode() async {
+    final currentPath = _currentVideoPath;
+    final detailContext = _playbackDetailContext;
+    if (currentPath == null || detailContext == null) return null;
+
+    try {
+      final episodes = await detailContext.episodeLoader();
+      return PlaybackPlaylist.next(
+        episodes,
+        currentPath,
+        isSamePath: _isSamePlaylistPath,
+      );
+    } catch (e) {
+      debugPrint('[播放列表] 获取下一项失败: $e');
+      return null;
+    }
+  }
+
+  bool _isSamePlaylistPath(String a, String b) {
+    if (a == b) return true;
+
+    final smbA = MediaSourceUtils.parseSmbMediaPath(a);
+    final smbB = MediaSourceUtils.parseSmbMediaPath(b);
+    if (smbA != null && smbB != null) {
+      return smbA.connectionName == smbB.connectionName &&
+          _normalizePlaylistPath(smbA.relativePath) ==
+              _normalizePlaylistPath(smbB.relativePath);
+    }
+
+    final webDavA = WebDAVService.instance.resolveMediaPath(a);
+    final webDavB = WebDAVService.instance.resolveMediaPath(b);
+    if (webDavA != null && webDavB != null) {
+      return webDavA.connection.name == webDavB.connection.name &&
+          _normalizePlaylistPath(webDavA.relativePath) ==
+              _normalizePlaylistPath(webDavB.relativePath);
+    }
+    return false;
+  }
+
+  String _normalizePlaylistPath(String value) {
+    var normalized = value.replaceAll('\\', '/');
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    if (!normalized.startsWith('/')) normalized = '/$normalized';
+    // URI-decode to handle server-side URL encoding of special characters
+    // (e.g. %5B → [, %20 → space, %23 → #). WebDAV servers may return
+    // encoded paths while the current video path uses raw characters, or
+    // vice versa. Decode after slash normalization so that any %2F in the
+    // path is decoded to / and then caught by a second normalization pass.
+    try {
+      normalized = Uri.decodeComponent(normalized);
+    } catch (_) {
+      // If the path isn't valid percent-encoding, keep it as-is.
+    }
+    // Re-normalize in case decoded characters introduced slashes.
+    normalized = normalized.replaceAll('\\', '/');
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    return normalized.length > 1 && normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
+  }
+
+  /// 将 WebDAV 路径编码为 URL 安全格式，作为 DB 查找的回退。
+  /// 对路径段逐段 encodeComponent，保留 webdav://连接名 前缀和 '/' 分隔符。
+  /// 将 WebDAV 路径重新编码为 URL 安全格式，作为 DB 查找的回退。
+  /// 注意：不使用裸 Uri.encodeComponent，因为部分 WebDAV 服务器（如 alist）
+  /// 不会编码路径中的 + 号，而 encodeComponent 会把 + 变成 %2B，
+  /// 导致与 DB 中存储的路径（含字面量 +）不匹配。
+  String _encodeWebDavPath(String rawPath) {
+    final parsed = MediaSourceUtils.parseWebDavPath(rawPath);
+    if (parsed == null) return rawPath;
+    final encodedRelative = parsed.relativePath
+        .split('/')
+        .map((s) => s.isEmpty ? s : _encodePathSegmentForWebDav(s))
+        .join('/');
+    return MediaSourceUtils.buildWebDavPath(
+        parsed.connectionName, encodedRelative);
+  }
+
+  /// 编码路径段，保留 WebDAV 服务器通常不编码的字符。
+  /// Uri.encodeComponent 遵循 RFC 3986 编码所有非保留字符，
+  /// 但部分服务器在路径中不编码 + ! ' ( ) * 等字符。
+  static String _encodePathSegmentForWebDav(String segment) {
+    var encoded = Uri.encodeComponent(segment);
+    // 部分 WebDAV 服务器（alist 等）路径中保留 + 为字面量，
+    // 而 encodeComponent 将其编码为 %2B。
+    encoded = encoded.replaceAll('%2B', '+');
+    return encoded;
+  }
+
   // 播放下一话
-  Future<void> playNextEpisode() async {
+  Future<void> playNextEpisode({
+    PlaybackDetailEpisode? verifiedPlaylistEpisode,
+  }) async {
+    if (_playbackDetailContext == null) {
+      await _playNextEpisodeUsingLegacyNavigation();
+      return;
+    }
+
+    final nextEpisode = verifiedPlaylistEpisode ?? await nextPlaylistEpisode();
+    if (nextEpisode == null) {
+      debugPrint('[下一话] 当前播放列表已经是最后一项');
+      _showEpisodeNotFoundMessage('下一话');
+      return;
+    }
+
+    if (_isEpisodeNavigating) {
+      _showNavigationBusyMessage('下一话');
+      return;
+    }
+    _isEpisodeNavigating = true;
+    try {
+      await _playPlaylistEpisode(nextEpisode);
+    } catch (e) {
+      debugPrint('[下一话] 播放列表切换失败: $e');
+      _showEpisodeErrorMessage('下一话', e.toString());
+      rethrow;
+    } finally {
+      _isEpisodeNavigating = false;
+    }
+  }
+
+  Future<void> _playPlaylistEpisode(PlaybackDetailEpisode episode) async {
+    // 优先查询数据库中的真实观看记录，因为 WebDAV/SMB 的 episodeLoader
+    // 创建的占位 historyItem 中 animeName/episodeTitle 都是文件名，没有
+    // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
+    var historyItem = await WatchHistoryManager.getHistoryItemByPath(episode.videoPath);
+    // WebDAV 路径可能存在 URL 编码差异（服务器返回编码 vs DB 存储原始），
+    // 直接查找失败时尝试用编码后的路径再查一次。
+    if (historyItem == null && episode.videoPath.startsWith('webdav://')) {
+      final encodedPath = _encodeWebDavPath(episode.videoPath);
+      if (encodedPath != episode.videoPath) {
+        historyItem = await WatchHistoryManager.getHistoryItemByPath(encodedPath);
+      }
+    }
+    final detailContext = _playbackDetailContext;
+
+    // 播放列表中的本地文件项通常只保存路径。切集前补回媒体库中的匹配记录，
+    // 并用播放列表元数据兜底，避免 initializePlayer 将下一话当作裸文件载入。
+    // episode.historyItem（占位 history，无 animeId）放到最后兜底，
+    // 否则 historyItem 永远非 null，导致此分支不会执行。
+    if (historyItem == null &&
+        detailContext != null &&
+        detailContext.isIdentified) {
+      historyItem = WatchHistoryItem(
+        filePath: episode.videoPath,
+        animeName: detailContext.title,
+        episodeTitle: episode.title,
+        animeId: episode.animeId ?? detailContext.animeId,
+        episodeId: episode.episodeId,
+        watchProgress: episode.progress ?? 0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+        thumbnailPath: detailContext.imageUrl,
+      );
+    }
+    historyItem ??= episode.historyItem;
+    if (historyItem != null &&
+        WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
+      // WebDAV/SMB 等远程路径优先使用 episode.actualPlayUrl（服务器返回的
+      // 原始编码路径构建的 HTTP URL），避免 _resolveMatchablePath 从解码后
+      // 的路径重新编码时与服务器预期编码不一致，导致 hash 下载 404。
+      final matchableUrl = (episode.actualPlayUrl?.isNotEmpty == true)
+          ? episode.actualPlayUrl
+          : await _resolveMatchablePath(historyItem.filePath);
+      if (matchableUrl != null && matchableUrl.isNotEmpty) {
+        historyItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
+          _context!,
+          historyItem,
+          matchablePath: matchableUrl,
+          onMatched: (msg) => BlurSnackBar.show(_context!, msg),
+        );
+      }
+    }
+
+    PlaybackSession? playbackSession = episode.playbackSession;
+    if (episode.videoPath.startsWith('jellyfin://')) {
+      playbackSession ??= await JellyfinService.instance.createPlaybackSession(
+        itemId: episode.videoPath.replaceFirst('jellyfin://', ''),
+      );
+    } else if (episode.videoPath.startsWith('emby://')) {
+      final rawPath = episode.videoPath.replaceFirst('emby://', '');
+      playbackSession ??= await EmbyService.instance.createPlaybackSession(
+        itemId: rawPath.split('/').last,
+      );
+    }
+
+    final actualPlayUrl = episode.actualPlayUrl ??
+        (MediaSourceUtils.isNewWebDavPath(episode.videoPath) ||
+                MediaSourceUtils.isNewSmbPath(episode.videoPath)
+            ? MediaSourceUtils.resolveRemotePathToUrl(episode.videoPath)
+            : null);
+
+    // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
+    // 将上下文的番剧名写回 historyItem。否则 initializePlayer 会优先读取
+    // historyItem.animeName（WebDAV/SMB 的 _loadXxxEpisodes 创建的占位记录中
+    // animeName 是文件名），导致 resolvedDetailContext.title 的正确番剧名被忽略。
+    final bool historyWasUnidentified =
+        historyItem != null && historyItem.animeId == null;
+    if (historyWasUnidentified &&
+        detailContext != null &&
+        detailContext.isIdentified) {
+      historyItem = historyItem.copyWith(
+        animeName: detailContext.title,
+      );
+    }
+
+    final playableItem = PlayableItem(
+      videoPath: episode.videoPath,
+      title: historyItem?.animeName ?? detailContext?.title ?? episode.subtitle,
+      subtitle: historyItem?.episodeTitle ?? episode.title,
+      animeId:
+          historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
+      episodeId: historyItem?.episodeId ?? episode.episodeId,
+      historyItem: historyItem,
+      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
+      // 不传入旧的 detailContext，否则 PlaybackSourceService.resolve() 会
+      // 直接复用上一集的上下文（subtitle 是上一集的剧集名），导致新一集显示旧标题。
+    );
+
+    // 与番剧详情页点击剧集使用同一个正式入口。该入口会完整传递
+    // PlayableItem 的番剧/剧集元数据并统一解析播放来源。
+    await PlaybackService().play(playableItem);
+  }
+
+  Future<void> _playNextEpisodeUsingLegacyNavigation() async {
     if (!canPlayNextEpisode || _currentVideoPath == null) {
       debugPrint('[下一话] 无法播放下一话：检查条件不满足');
       return;
@@ -402,6 +641,20 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         episodeId,
         forceDirectPlay: true,
       );
+    }
+    // WebDAV/SMB 新格式路径需解析为 HTTP URL，否则自动匹配系统会因
+    // "路径不可用"（非本地文件也非 HTTP URL）而跳过，导致续播无弹幕。
+    if (MediaSourceUtils.isNewWebDavPath(filePath)) {
+      try {
+        final url = MediaSourceUtils.resolveWebDavPathToUrl(filePath);
+        if (url != null && url.isNotEmpty) return url;
+      } catch (_) {}
+    }
+    if (MediaSourceUtils.isNewSmbPath(filePath)) {
+      try {
+        final url = MediaSourceUtils.resolveSmbPathToUrl(filePath);
+        if (url != null && url.isNotEmpty) return url;
+      } catch (_) {}
     }
     return filePath;
   }
@@ -1068,8 +1321,36 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               _updateWatchHistory();
             }
 
-            // 检测播放结束
-            if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
+            // 检测播放结束。MDK 在部分文件的 EOF 不会切换为 paused/stopped，
+            // position 也可能停在容器 duration 前数百毫秒，因此额外识别
+            // “已接近末尾且位置持续停滞”，避免单纯扩大阈值而截断片尾。
+            final remainingMs = playerDuration - playerPosition;
+            final reachedExactEnd = remainingMs <= 100;
+            var reachedMdkStalledEnd = false;
+            if (player.getPlayerKernelName() == 'MDK' &&
+                remainingMs >= 0 &&
+                remainingMs <= 1500) {
+              final positionIsStalled = _mdkNearEndLastPositionMs >= 0 &&
+                  (playerPosition - _mdkNearEndLastPositionMs).abs() <= 20;
+              if (positionIsStalled) {
+                _mdkNearEndStalledSinceMs = _mdkNearEndStalledSinceMs == 0
+                    ? nowTime
+                    : _mdkNearEndStalledSinceMs;
+                reachedMdkStalledEnd = shouldTreatMdkPositionAsEnded(
+                  remainingMs: remainingMs,
+                  movementMs: playerPosition - _mdkNearEndLastPositionMs,
+                  stalledDurationMs: nowTime - _mdkNearEndStalledSinceMs,
+                );
+              } else {
+                _mdkNearEndStalledSinceMs = 0;
+              }
+              _mdkNearEndLastPositionMs = playerPosition;
+            } else {
+              _mdkNearEndLastPositionMs = -1;
+              _mdkNearEndStalledSinceMs = 0;
+            }
+
+            if (reachedExactEnd || reachedMdkStalledEnd) {
               player.state = PlaybackState.paused;
               _setStatus(PlayerStatus.paused, message: '播放结束');
               if (_currentVideoPath != null) {

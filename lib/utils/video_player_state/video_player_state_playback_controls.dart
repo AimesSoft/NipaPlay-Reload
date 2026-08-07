@@ -378,7 +378,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     switch (_playbackEndAction) {
       case PlaybackEndAction.autoNext:
         if (_context != null && _context!.mounted) {
-          AutoNextEpisodeService.instance.startAutoNextEpisode(
+          await AutoNextEpisodeService.instance.startAutoNextEpisode(
             _context!,
             _currentVideoPath!,
           );
@@ -687,6 +687,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _lastRawPlayerMs = -1; // 重置，让下次 ticker 走首帧锚定
     _anchorSetBySeek = false;
     _pausedPlaybackTimeMs = null; // 清理旧集暂停保存值，避免新集 play() 误用
+    _mdkNearEndLastPositionMs = -1;
+    _mdkNearEndStalledSinceMs = 0;
     if (!kReleaseMode) {
       debugPrint('[EP-SWITCH-DIAG] _clearPreviousVideoState ANCHOR RESET: '
           'ptm=0.0 smoothAnchorMs=0.0 smoothAnchorElapsedUs=$_smoothAnchorElapsedUs '

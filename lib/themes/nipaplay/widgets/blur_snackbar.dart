@@ -32,6 +32,7 @@ class BlurSnackBar {
     String content, {
     String? actionText,
     VoidCallback? onAction,
+    Color? actionColor,
     Duration? duration,
   }) {
     if (_currentOverlayEntry != null) {
@@ -123,10 +124,10 @@ class BlurSnackBar {
         final textColor = isDark
             ? Colors.white.withValues(alpha: 0.92)
             : Colors.black.withValues(alpha: 0.86);
-        final actionForeground = textColor;
+        final actionForeground = actionColor ?? textColor;
         final shadowColor = isDark
-            ? Colors.black.withOpacity(0.45)
-            : Colors.black.withOpacity(0.16);
+            ? Colors.black.withValues(alpha: 0.45)
+            : Colors.black.withValues(alpha: 0.16);
         final radius = BorderRadius.circular(12);
 
         final body = Container(
@@ -159,7 +160,7 @@ class BlurSnackBar {
                 ),
               ),
               if (actionText != null && onAction != null) ...[
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 TextButton(
                   onPressed: () {
                     dismiss();
@@ -178,11 +179,11 @@ class BlurSnackBar {
                   child: Text(actionText),
                 ),
               ],
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               IconButton(
                 icon: Icon(
                   Icons.close,
-                  color: textColor.withOpacity(0.75),
+                  color: textColor.withValues(alpha: 0.75),
                   size: 20,
                 ),
                 onPressed: dismiss,
