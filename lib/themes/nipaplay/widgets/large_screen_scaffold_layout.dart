@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_scope.dart';
@@ -307,6 +308,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
   }
 
   Future<void> _exitPlaybackFromPlayerMenu() async {
+    // 退出播放时取消续播倒计时。
+    AutoNextEpisodeService.instance.cancelAutoNext();
+
     final videoState = context.read<VideoPlayerState>();
     _closePlayerMenu();
     final shouldExit = await videoState.handleBackButton();

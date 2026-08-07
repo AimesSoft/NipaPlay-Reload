@@ -159,7 +159,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               .toList();
 
           // 按文件名自然排序，避免 1、15、2 这类字典序播放顺序。
-          videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+          videoFiles.sort((a, b) => WebDAVFileSorter.playlistCompare(
                 p.basename(a.path),
                 p.basename(b.path),
               ));
@@ -263,10 +263,40 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       normalized = '/$normalized';
     }
     normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    // URI-decode to handle server-side URL encoding of special characters
+    // (e.g. %5B → [, %20 → space, %E7... → 中). WebDAV servers may return
+    // encoded entry paths, and _currentFilePath from history may also be
+    // encoded. Decode so both sides are compared in raw format.
+    try {
+      normalized = Uri.decodeComponent(normalized);
+    } catch (_) {
+      // Keep as-is if decoding fails.
+    }
+    // Re-normalize in case decoded characters introduced slashes (%2F → /).
+    normalized = normalized.replaceAll('\\', '/');
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
     if (normalized.length > 1 && normalized.endsWith('/')) {
       normalized = normalized.substring(0, normalized.length - 1);
     }
     return normalized;
+  }
+
+  /// 解码 WebDAV 路径中每个路径段的 URI 编码字符。
+  /// 例如 "/%E7%A6%BB%E7%BA%BF%E7%BC%93%E5%AD%98/%5BDBD-Raws%5D%20..."
+  /// → "/离线缓存/[DBD-Raws] ..."
+  static String _decodeWebDavPath(String path) {
+    try {
+      return path.split('/').map((segment) {
+        if (segment.isEmpty) return segment;
+        try {
+          return Uri.decodeComponent(segment);
+        } catch (_) {
+          return segment;
+        }
+      }).join('/');
+    } catch (_) {
+      return path;
+    }
   }
 
   String _dirnameSmbPath(String smbPath) {
@@ -330,7 +360,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .toList();
 
       playableEntries
-          .sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+          .sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = playableEntries.map((entry) {
         final streamUrl =
@@ -400,7 +430,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (aEpisodeId != bEpisodeId) {
             return aEpisodeId.compareTo(bEpisodeId);
           }
-          return WebDAVFileSorter.naturalCompare(a.title, b.title);
+          return WebDAVFileSorter.playlistCompare(a.title, b.title);
         });
 
       final animeName = (_currentAnimeTitle?.trim().isNotEmpty ?? false)
@@ -489,12 +519,16 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               !entry.isDirectory &&
               WebDAVService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+        ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
+        // 解码 entry.path 中的 URI 编码字符（%E7...、%5B 等），
+        // 确保生成的路径与 history DB 中的路径格式一致，以便
+        // 播放列表正确高亮当前播放的剧集。
+        final decodedPath = _decodeWebDavPath(entry.path);
         final filePath = MediaSourceUtils.buildWebDavPath(
           resolved.connection.name,
-          entry.path,
+          decodedPath,
         );
         _remoteDisplayNameCache[filePath] =
             p.basenameWithoutExtension(entry.name);
@@ -543,7 +577,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .where((entry) =>
               !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
+        ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final filePath =
