@@ -102,6 +102,8 @@ fi
 
 cp "assets/linux/${DESKTOP_FILE_NAME}" "${APPDIR}/"
 cp assets/images/logo512.png "${APPDIR}/${ICON_NAME}"
+cp "assets/linux/launcher.sh" "${APPDIR}/launcher.sh"
+chmod +x "${APPDIR}/launcher.sh"
 chmod +x "${APPDIR}/${APP_NAME}"
 
 echo "--- linuxdeployqt (bundle dependencies) ---"

@@ -11,6 +11,8 @@ PACKAGE_DIR="build/linux/NipaPlay-${VERSION}-Linux-arm64"
 mkdir -p "${PACKAGE_DIR}"/{DEBIAN,opt/nipaplay,usr/share/applications,usr/share/icons/hicolor/512x512/apps}
 
 cp -r build/linux/*/release/bundle/* "${PACKAGE_DIR}/opt/nipaplay/"
+cp assets/linux/launcher.sh "${PACKAGE_DIR}/opt/nipaplay/launcher.sh"
+chmod +x "${PACKAGE_DIR}/opt/nipaplay/launcher.sh"
 cp -r assets/linux/DEBIAN/* "${PACKAGE_DIR}/DEBIAN/"
 chmod 0755 "${PACKAGE_DIR}/DEBIAN/postinst"
 chmod 0755 "${PACKAGE_DIR}/DEBIAN/postrm"
