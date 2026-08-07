@@ -1,3 +1,4 @@
+
 // lib/services/external_player_service.dart
 // 掌管外部播放器启动, 弹幕导出和参数注入的服务
 
@@ -21,15 +22,19 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 
 /// 外部播放器功能的持久化配置.
 ///
@@ -178,20 +183,30 @@ class ExternalPlayerService {
   /// 2. 非空的 [actualPlayUrl];
   /// 3. 原始 [videoPath].
   ///
-  /// 返回值可以是本地文件路径, 也可以是播放器能够访问的网络 URL.
-  static String resolveMediaPath({
-    required String videoPath,
-    String? actualPlayUrl,
-    PlaybackSession? playbackSession,
-  }) {
+  /// 新格式 WebDAV/SMB 持久化路径会在返回前转换为播放器能够访问的 HTTP URL.
+  /// 找不到连接或 SMB 本地代理启动失败时返回 `null`.
+  static Future<String?> resolveMediaPath({
+    required String videoPath, // 原始视频文件路径, 可能是本地文件或远程 URL
+    String? actualPlayUrl, // 实际播放地址, 可能是远程 URL 或 WebDAV/SMB 持久化路径
+    PlaybackSession? playbackSession, // 媒体服务器播放会话, 可能包含流地址
+  }) async {
+
     final sessionUrl = playbackSession?.streamUrl;
-    if (sessionUrl != null && sessionUrl.trim().isNotEmpty) {
-      return sessionUrl;
+    String finalPath; // 最终用于启动外部播放器的媒体地址
+    if      (sessionUrl != null && sessionUrl.trim().isNotEmpty)       { finalPath = sessionUrl; }
+    else if (actualPlayUrl != null && actualPlayUrl.trim().isNotEmpty) { finalPath = actualPlayUrl; }
+    else                                                               { finalPath = videoPath; }
+
+    if (MediaSourceUtils.isNewWebDavPath(finalPath)) {
+      await WebDAVService.instance.initialize();
+      return MediaSourceUtils.resolveWebDavPathToUrl(finalPath);
     }
-    if (actualPlayUrl != null && actualPlayUrl.trim().isNotEmpty) {
-      return actualPlayUrl;
+    if (MediaSourceUtils.isNewSmbPath(finalPath)) {
+      await SMBProxyService.instance.initialize();
+      if (!SMBProxyService.instance.isRunning) return null;
+      return MediaSourceUtils.resolveSmbPathToUrl(finalPath);
     }
-    return videoPath;
+    return finalPath;
   }
 
   /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
@@ -201,9 +216,9 @@ class ExternalPlayerService {
   /// 模式启动; macOS 的 mpv.app 直接执行包内主程序; Linux 播放器以 detached
   /// 模式启动. mpv 在所有桌面平台都会额外启用 JSON IPC 和弹幕控制台能力.
   ///
-  /// 成功派生进程时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
-  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. 返回非空
-  /// Session 仅表示启动命令执行成功, 不保证播放器已经完成媒体加载.
+  /// 成功启动时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
+  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. mpv 还必须
+  /// 在启动期限内通过 JSON IPC 报告已经加载媒体; 其他播放器只能确认进程已派生.
   static Future<ExternalPlayerLaunchSession?> launch({
     required String playerPath,
     required String mediaPath,
@@ -213,7 +228,8 @@ class ExternalPlayerService {
     Duration position = Duration.zero,
   }) async {
     debugPrint('[ExtPlayer] launch: playerPath="$playerPath", '
-        'mediaPath="$mediaPath", extraArgs=$extraArgs');
+        'mediaPath="$mediaPath", '
+        'extraArgCount=${extraArgs.length}');
     if (!isSupportedPlatform) {
       debugPrint('[ExtPlayer] launch: 平台不支持');
       return null;
@@ -358,15 +374,29 @@ class ExternalPlayerService {
           '若弹幕不显示, 请在设置里改选实际的 .exe 路径后再试. ');
     }
 
-    final mediaPath = resolveMediaPath(
-      videoPath: item.videoPath,
-      actualPlayUrl: item.actualPlayUrl,
-      playbackSession: item.playbackSession,
-    );
+    String? mediaPath;
+    try {
+      mediaPath = await resolveMediaPath(
+        videoPath: item.videoPath,
+        actualPlayUrl: item.actualPlayUrl,
+        playbackSession: item.playbackSession,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[ExtPlayer] 解析远程媒体路径失败: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+    if (!context.mounted) return true;
+    if (mediaPath == null || mediaPath.isEmpty) {
+      debugPrint('[ExtPlayer] 无法将媒体路径解析为外部播放器可访问的地址');
+      _safeSnack(context, '无法解析远程媒体路径，请检查连接配置');
+      return true;
+    }
     final episodeId = item.episodeId?.toString() ?? '';
     final animeId = item.animeId?.toString() ?? '';
-    debugPrint('[ExtPlayer] mediaPath="$mediaPath", '
-        'episodeId="$episodeId", animeId="$animeId"');
+    debugPrint(
+      '[ExtPlayer] mediaPath="$mediaPath", '
+      'episodeId="$episodeId", animeId="$animeId"',
+    );
 
     // 弹幕外挂: 仅当开关开启且有 episodeId 时尝试（无 ID 的本地文件跳过）
     List<String> extraArgs = const [];
@@ -425,7 +455,9 @@ class ExternalPlayerService {
     }
 
     debugPrint(
-        '[ExtPlayer] 调用 launch: path="$playerPath", media="$mediaPath", extraArgs=$extraArgs');
+        '[ExtPlayer] 调用 launch: path="$playerPath", '
+        'media="$mediaPath", '
+        'extraArgCount=${extraArgs.length}');
 
     // 如有已存在的外部播放器会话, 则先关闭它, 避免新播放器启动失败
     if (ExternalPlayerConsoleService.isSupportedPlatform &&
