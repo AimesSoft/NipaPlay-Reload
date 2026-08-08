@@ -218,7 +218,8 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
                           isActive ? Colors.white : inactiveColor;
 
                       return NipaplayLargeScreenSidePanelItem(
-                        isSelected: isActive,
+                        isSelected: isSelectedByTab,
+                        isFocused: isSelectedByFocus,
                         activeColor: activeColor,
                         inactiveColor: inactiveColor,
                         onTap: () {
@@ -241,7 +242,8 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
                       final Color itemColor =
                           isFocused ? Colors.white : inactiveColor;
                       return NipaplayLargeScreenSidePanelItem(
-                        isSelected: isFocused,
+                        isSelected: false,
+                        isFocused: isFocused,
                         activeColor: activeColor,
                         inactiveColor: inactiveColor,
                         onTap: () {

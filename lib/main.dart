@@ -55,6 +55,7 @@ import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
+import 'package:universal_gamepad/universal_gamepad.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'services/file_picker_service.dart';
@@ -1101,6 +1102,7 @@ class MainPageState extends State<MainPage>
   bool _showSplash = true;
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
+  StreamSubscription<GamepadEvent>? _guideButtonSubscription;
   StreamSubscription<String>? _androidFileAssociationSubscription;
   DownloaderSettingsProvider? _downloaderSettingsProvider;
   SettingsProvider? _settingsProvider;
@@ -1206,7 +1208,22 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
+  /// 仅当当前不在大屏幕模式时按下进入大屏幕模式。
+  /// 进入大屏幕模式后由 NipaplayLargeScreenScaffoldLayout
+  /// 接管手柄输入，此处不再响应。
+  void _initGuideButtonListener() {
+    _guideButtonSubscription = Gamepad.instance.events.listen((event) {
+      if (!mounted) return;
+      if (event is! GamepadButtonEvent) return;
+      if (event.button != GamepadButton.guide || !event.pressed) return;
+      if (_useLargeScreenLayout) return;
+      _toggleLargeScreenLayout();
+    });
   }
 
   Future<void> _initialize() async {
@@ -1500,6 +1517,7 @@ class MainPageState extends State<MainPage>
     );
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
+    _guideButtonSubscription?.cancel();
     _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
