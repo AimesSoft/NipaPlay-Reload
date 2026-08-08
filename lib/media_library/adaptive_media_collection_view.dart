@@ -251,6 +251,10 @@ class _AdaptiveMediaCollectionViewState
       hasMissingFiles: false,
     );
 
+    // 在导航到详情页前记录当前焦点（用户选中的作品卡片），
+    // 以便从详情页返回后恢复焦点到该卡片，而非分区栏按钮。
+    final previousFocus = material.FocusManager.instance.primaryFocus;
+
     final result = await ThemedAnimeDetail.show(
       context,
       item.animeId!,
@@ -286,6 +290,22 @@ class _AdaptiveMediaCollectionViewState
         );
       },
     );
+
+    // 从详情页返回后，将焦点恢复到此前选中的作品卡片。
+    // 详情页是透明路由，卡片节点仍存活；但路由弹出后 Flutter 的
+    // 焦点重解析会落到分区栏（阅读顺序中靠前的可聚焦项），故需显式恢复。
+    if (mounted &&
+        previousFocus != null &&
+        previousFocus.canRequestFocus &&
+        result == null) {
+      material.WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            previousFocus.canRequestFocus) {
+          previousFocus.requestFocus();
+        }
+      });
+    }
+
     if (result != null) widget.onPlayEpisode(result);
   }
 
