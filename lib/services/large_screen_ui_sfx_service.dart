@@ -38,6 +38,21 @@ enum LargeScreenUiSfx {
 /// 使用懒加载的播放器池：每种音效类型对应一个独立的 [AudioPlayer]，
 /// 避免快速连续触发时互相打断（如连续方向键导航）。
 class LargeScreenUiSfxService with ChangeNotifier {
+  LargeScreenUiSfxService() {
+    // 设置全局 AudioContext：使用 mixWithOthers 确保与其他音频源共存。
+    // 注意：macOS 上 AudioContext 是 no-op，不影响播放。
+    try {
+      AudioPlayer.global.setAudioContext(
+        AudioContextConfig(
+          focus: AudioContextConfigFocus.mixWithOthers,
+        ).build(),
+      );
+      debugPrint('LargeScreenUiSfxService: 全局 AudioContext 已设置');
+    } catch (e) {
+      debugPrint('LargeScreenUiSfxService: 设置 AudioContext 失败 (可忽略): $e');
+    }
+  }
+
   /// 枚举值到 asset 路径（相对于 assets/ 目录）的映射。
   static const Map<LargeScreenUiSfx, String> _assetPaths = {
     LargeScreenUiSfx.focusChange: 'sfx/focus_change.ogg',
@@ -62,6 +77,7 @@ class LargeScreenUiSfxService with ChangeNotifier {
   set largeScreenModeActive(bool value) {
     if (_largeScreenModeActive == value) return;
     _largeScreenModeActive = value;
+    debugPrint('LargeScreenUiSfxService: largeScreenModeActive = $value');
     notifyListeners();
   }
 
@@ -77,7 +93,14 @@ class LargeScreenUiSfxService with ChangeNotifier {
   /// 获取或创建指定音效类型对应的播放器。
   AudioPlayer _playerFor(LargeScreenUiSfx sfx) {
     return _players.putIfAbsent(sfx, () {
-      final player = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+      final player = AudioPlayer();
+      player.setReleaseMode(ReleaseMode.stop);
+      player.onPlayerStateChanged.listen((state) {
+        debugPrint('LargeScreenUiSfxService: 播放器状态 ($sfx): $state');
+      });
+      player.onLog.listen((msg) {
+        debugPrint('LargeScreenUiSfxService: 播放器日志 ($sfx): $msg');
+      });
       return player;
     });
   }
@@ -88,15 +111,23 @@ class LargeScreenUiSfxService with ChangeNotifier {
   /// 同一音效类型的连续播放会打断前一次（如快速连续方向键），
   /// 不同音效类型互不影响。
   Future<void> play(LargeScreenUiSfx sfx) async {
-    if (!_largeScreenModeActive || !_enabled) return;
+    if (!_largeScreenModeActive || !_enabled) {
+      debugPrint(
+        'LargeScreenUiSfxService: 跳过播放 ($sfx) — '
+        'largeScreenModeActive=$_largeScreenModeActive, enabled=$_enabled',
+      );
+      return;
+    }
     final assetPath = _assetPaths[sfx];
-    if (assetPath == null) return;
+    if (assetPath == null) {
+      debugPrint('LargeScreenUiSfxService: 未知音效类型 $sfx，无路径映射');
+      return;
+    }
+    debugPrint('LargeScreenUiSfxService: 播放音效 $sfx (路径: $assetPath)');
     try {
       final player = _playerFor(sfx);
-      await player.stop();
-      await player.play(AssetSource(assetPath));
+      await player.play(AssetSource(assetPath), volume: 1.0);
     } catch (e) {
-      // 音效播放失败不应影响 UI 交互，静默处理。
       debugPrint('LargeScreenUiSfxService: 播放音效失败 ($sfx): $e');
     }
   }
