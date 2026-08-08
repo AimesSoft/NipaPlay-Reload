@@ -18,7 +18,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({
@@ -182,7 +182,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
 
     try {
       final playableItem = PlayableItem(videoPath: rawInput);
-      if (await ExternalPlayerService.tryHandlePlayback(
+      if (await PlaybackService().tryPlayExternally(
         context,
         playableItem,
       )) {
@@ -235,7 +235,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
           videoPath: fileName,
           actualPlayUrl: url,
         );
-        if (await ExternalPlayerService.tryHandlePlayback(
+        if (await PlaybackService().tryPlayExternally(
           context,
           playableItem,
         )) {
@@ -365,7 +365,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                 // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
 
                 final playableItem = PlayableItem(videoPath: filePath);
-                if (await ExternalPlayerService.tryHandlePlayback(
+                if (await PlaybackService().tryPlayExternally(
                   context,
                   playableItem,
                 )) {
@@ -414,7 +414,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
           // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
 
           final playableItem = PlayableItem(videoPath: filePath);
-          if (await ExternalPlayerService.tryHandlePlayback(
+          if (await PlaybackService().tryPlayExternally(
             context,
             playableItem,
           )) {
@@ -457,7 +457,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         }
 
         final playableItem = PlayableItem(videoPath: picked.path);
-        if (await ExternalPlayerService.tryHandlePlayback(
+        if (await PlaybackService().tryPlayExternally(
           context,
           playableItem,
         )) {

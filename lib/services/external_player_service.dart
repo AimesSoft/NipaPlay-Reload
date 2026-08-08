@@ -49,12 +49,7 @@ class ExternalPlayerService {
 
   // 单例访问
   ExternalPlayerService._();
-  static final instance = ExternalPlayerService._();
-
-  /// 当前运行平台是否支持由本服务启动外部播放器.
-  ///
-  /// Web, 移动端以及未显式支持的桌面平台均返回 `false`.
-  static bool get isSupportedPlatform => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  static final _ins = ExternalPlayerService._(); // ignore: unused_field
 
 
   /// 按当前设置尝试接管 [item] 的播放请求.
@@ -75,6 +70,11 @@ class ExternalPlayerService {
     BuildContext context,
     PlayableItem item,
   ) async {
+
+    // 当前运行平台是否支持由本服务启动外部播放器.
+    // Web, 移动端以及未显式支持的桌面平台均返回 `false`.
+    bool isSupportedPlatform = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _printLog('tryHandlePlayback 触发: '
         'useExternalPlayer=${settings.useExternalPlayer}, '
@@ -283,10 +283,6 @@ class ExternalPlayerService {
     Duration position = Duration.zero,
   }) async {
     _printLog('launch: playerPath="$playerPath", mediaPath="$mediaPath", extraArgCount=${extraArgs.length}');
-    if (!isSupportedPlatform) {
-      _printLog('launch: 平台不支持');
-      return null;
-    }
 
     final resolvedPath = await _resolvePlayerPath(playerPath.trim());
     _printLog('launch: resolvedPath="$resolvedPath"');
