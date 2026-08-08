@@ -1,10 +1,10 @@
 # 欢迎来到 NipaPlay 文档
 
-![GitHub release](https://img.shields.io/github/v/release/AimesSoft/NipaPlay-Reload?style=flat-square&color=blue) ![GitHub downloads](https://img.shields.io/github/downloads/AimesSoft/NipaPlay-Reload/total?style=flat-square&color=green) ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square) ![License](https://img.shields.io/github/license/AimesSoft/NipaPlay-Reload?style=flat-square)
+![GitHub release](https://img.shields.io/github/v/release/AimesSoft/NipaPlay-Reload?style=flat-square&color=blue) ![GitHub downloads](https://img.shields.io/github/downloads/AimesSoft/NipaPlay-Reload/total?style=flat-square&color=green) ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20tvOS%20%7C%20HarmonyOS-lightgrey?style=flat-square) ![License](https://img.shields.io/github/license/AimesSoft/NipaPlay-Reload?style=flat-square)
 
 NipaPlay-Reload 是一个现代化的跨平台视频播放器，致力于为用户提供流畅、美观且功能丰富的观影体验。它支持本地视频播放、弹幕显示、多格式字幕、多轨道音视频，并可无缝整合 Emby 和 Jellyfin 媒体服务器。
 
-我们的目标是打造一个开源、社区驱动的播放器，让每个人都能享受到最好的观影乐趣。无论你是想要播放本地收藏，还是连接家庭媒体中心，NipaPlay 都能满足你的需求。
+我们的目标是打造一个开源、社区驱动的播放器，让每个人都能享受到最好的观影乐趣。无论你是想要播放本地收藏，还是连接家庭媒体中心，NipaPlay 都能满足你的需求。不同平台的安装方式、内核和实验性能力并不完全相同，请先查看 [平台能力矩阵](platform-matrix.md)。
 
 ## 文档导航
 
@@ -20,6 +20,13 @@ NipaPlay-Reload 是一个现代化的跨平台视频播放器，致力于为用�
 
 - [使用指南](user-guide.md) - 界面操作和功能介绍
 - [媒体服务器整合](server-integration.md) - Emby/Jellyfin 连接指南
+- [播放器内核](player-kernels.md) - Erika、MDK、Media Kit、Video Player 和 libmpv 的选择建议
+- [平台能力矩阵](platform-matrix.md) - 各平台的安装、播放、HDR、弹幕和远程能力
+- [数据与安全](data-and-security.md) - 凭据、日志、网络请求和远程访问边界
+- [种子下载](torrent-download.md) - 添加、管理和清理下载任务
+- [远程访问](remote-access.md) - 局域网共享、Web server 和远程控制
+- [AI 防剧透](spoiler-ai.md) - 配置服务、隐私和调试注意事项
+- [插件使用与安全](plugins.md) - 插件安装、权限与问题处理
 
 ### 进阶篇
 

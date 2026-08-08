@@ -28,11 +28,13 @@ NipaPlay-Reload 是一个功能强大的视频播放器，旨在提供流畅、�
 *   **[4. 代码风格指南](04-Coding-Style.md)**: 介绍一些简单的代码编写规则，以保持项目代码的整洁和一致。
 *   **[5. 实战教程：添加一个"贡献者名单"页面](05-Example-Add-A-New-Page.md)**: 通过一个完整的实例，手把手教你如何为应用添加一个新功能。
 *   **[6. 常见问题解答 (FAQ)](06-FAQ.md)**: 汇总了贡献过程中可能会遇到的问题和解决方案。
+*   **[7. 测试与验证](07-Testing-and-Validation.md)**: 说明静态检查、格式、单元测试、平台 smoke test 和测试报告要求。
 
 ### 进阶主题
 *   **[8. (进阶) 如何添加新的播放器内核](08-Adding-a-New-Player-Kernel.md)**: 学习如何为应用集成新的视频播放器。当前重点方向是自研 [Erika](https://github.com/AimesSoft/Erika) 内核的开发。
 *   **[9. (进阶) 如何添加新的弹幕内核](09-Adding-a-New-Danmaku-Kernel.md)**: 学习如何接入新的弹幕源或创建新的渲染器。
 *   **[10. (进阶) 如何进行平台特定开发](10-Platform-Specific-Development.md)**: 学习如何编写和测试针对特定操作系统的功能。
+*   **[13. Erika 跨仓库开发](13-Erika-Cross-Repository-Development.md)**: 说明 Erika commit pin、预构建 tag、跨仓库验证和发布同步。
 
 ### 非技术贡献
 *   **[11. 非代码贡献：同样重要！](11-Non-Coding-Contributions.md)**: **不擅长编程？没问题！** 这里介绍了你可以通过哪些同样重要的方式来帮助项目成长。

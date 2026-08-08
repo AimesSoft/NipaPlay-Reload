@@ -6,7 +6,7 @@ NipaPlay-Reload 的核心优势之一是其灵活的播放器架构，它允许�
 
 > **当前重点方向：Erika 自研内核**
 >
-> NipaPlay 正在开发自研播放内核 [Erika](https://github.com/AimesSoft/Erika)（Rust 实现），目前已在 macOS/iOS 上实现了硬件解码、Metal 渲染、HDR/EDR、AI 超分、弹幕等完整能力。如果你对底层音视频开发感兴趣，非常欢迎直接参与 Erika 的开发——这比接入第三方内核更有长期价值。详见 [悬赏板块](12-Bounty-Board.md) 和 [Erika 仓库](https://github.com/AimesSoft/Erika)。
+> [Erika](https://github.com/AimesSoft/Erika) 是 Rust 实现的自研播放内核。NipaPlay 通过固定的 Erika release pin 接入它；桌面上的 Erika 仓库可能领先于 NipaPlay 当前集成版本。Erika 的代码和 Flutter glue 覆盖 macOS、iOS、Windows、Android、HarmonyOS，tvOS 构建会强制使用 Erika，但 HDR、硬解和真机验收状态按平台不同。开始跨仓库工作前请阅读 [Erika 跨仓库开发](13-Erika-Cross-Repository-Development.md) 和 [平台能力矩阵](../Documentation/platform-matrix.md)。
 
 ## 播放器抽象层架构解析
 
