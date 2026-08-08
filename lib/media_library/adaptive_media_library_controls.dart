@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
+import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
@@ -146,29 +147,130 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
                 horizontal: 8,
                 vertical: 8,
               ),
-              child: material.SizedBox(
-                height: 58,
-                child: material.ListView.separated(
-                  scrollDirection: material.Axis.horizontal,
-                  physics: const material.ClampingScrollPhysics(),
-                  itemCount: sections.length,
-                  separatorBuilder: (_, __) =>
-                      const material.SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final section = sections[index];
-                    return _TelevisionMediaLibrarySectionButton(
-                      section: section,
-                      selected: section.id == selectedSection.id,
-                      autofocus: section.id == selectedSection.id,
-                      onPressed: () => onSectionSelected(section.id),
-                    );
-                  },
-                ),
+              child: _TelevisionMediaLibrarySectionBar(
+                sections: sections,
+                selectedSection: selectedSection,
+                onSectionSelected: onSectionSelected,
               ),
             ),
             const material.SizedBox(height: 16),
-            material.Expanded(child: child),
+            // 将搜索框行和媒体项放在同一个遍历组中，
+            // 确保从媒体项向上导航时先到达搜索框行，而不是跳到分区栏。
+            material.Expanded(
+              child: material.FocusTraversalGroup(
+                policy: material.ReadingOrderTraversalPolicy(),
+                child: child,
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 媒体库分区选择栏：整体可聚焦，焦点在上时左右直接切换分区，
+/// 按上/下/Enter退出分区栏焦点。无焦点框，仅高亮当前选中分区。
+class _TelevisionMediaLibrarySectionBar extends material.StatefulWidget {
+  const _TelevisionMediaLibrarySectionBar({
+    required this.sections,
+    required this.selectedSection,
+    required this.onSectionSelected,
+  });
+
+  final List<UnifiedMediaLibrarySection> sections;
+  final UnifiedMediaLibrarySection selectedSection;
+  final material.ValueChanged<String> onSectionSelected;
+
+  @override
+  material.State<_TelevisionMediaLibrarySectionBar> createState() =>
+      _TelevisionMediaLibrarySectionBarState();
+}
+
+class _TelevisionMediaLibrarySectionBarState
+    extends material.State<_TelevisionMediaLibrarySectionBar> {
+  late final material.FocusNode _focusNode;
+  final material.ScrollController _scrollController = material.ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = material.FocusNode(debugLabel: 'media-library-section-bar');
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    // 焦点进入分区栏时不需要额外操作
+  }
+
+  void _stepSection(int step) {
+    final sections = widget.sections;
+    if (sections.length <= 1) return;
+    final currentIndex = sections.indexWhere(
+      (s) => s.id == widget.selectedSection.id,
+    );
+    var targetIndex = currentIndex + step;
+    if (targetIndex < 0) targetIndex = sections.length - 1;
+    if (targetIndex >= sections.length) targetIndex = 0;
+    widget.onSectionSelected(sections[targetIndex].id);
+  }
+
+  material.KeyEventResult _handleKeyEvent(
+      material.FocusNode node, material.KeyEvent event) {
+    if (event is! KeyDownEvent) return material.KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _stepSection(-1);
+      return material.KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _stepSection(1);
+      return material.KeyEventResult.handled;
+    }
+    // 上/下/Enter：让焦点离开分区栏，进入内容区
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select) {
+      return material.KeyEventResult.ignored;
+    }
+    return material.KeyEventResult.ignored;
+  }
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    return material.SizedBox(
+      height: 58,
+      child: material.Focus(
+        focusNode: _focusNode,
+        onKeyEvent: _handleKeyEvent,
+        // 子控件不可单独聚焦，整个分区栏作为一个焦点单元
+        descendantsAreFocusable: false,
+        child: material.ListView.separated(
+          controller: _scrollController,
+          scrollDirection: material.Axis.horizontal,
+          physics: const material.ClampingScrollPhysics(),
+          itemCount: widget.sections.length,
+          separatorBuilder: (_, __) =>
+              const material.SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final section = widget.sections[index];
+            final selected = section.id == widget.selectedSection.id;
+            return _TelevisionMediaLibrarySectionButton(
+              section: section,
+              selected: selected,
+              onPressed: () => widget.onSectionSelected(section.id),
+            );
+          },
         ),
       ),
     );
@@ -179,13 +281,11 @@ class _TelevisionMediaLibrarySectionButton extends material.StatelessWidget {
   const _TelevisionMediaLibrarySectionButton({
     required this.section,
     required this.selected,
-    required this.autofocus,
     required this.onPressed,
   });
 
   final UnifiedMediaLibrarySection section;
   final bool selected;
-  final bool autofocus;
   final material.VoidCallback onPressed;
 
   @override
@@ -195,36 +295,33 @@ class _TelevisionMediaLibrarySectionButton extends material.StatelessWidget {
         : material.Theme.of(context).colorScheme.onSurface;
     final background =
         selected ? AppAccentColors.current : material.Colors.transparent;
-    return NipaplayLargeScreenFocusableAction(
-      key: material.ValueKey<String>(
-        'large-screen-media-library-tab-${section.id}',
-      ),
-      autofocus: autofocus,
-      onActivate: onPressed,
-      borderRadius: material.BorderRadius.circular(9),
-      focusScale: 1.035,
-      padding: const material.EdgeInsets.symmetric(horizontal: 18),
-      style: NipaplayLargeScreenFocusableStyle(
-        idleBackgroundDark: background,
-        idleBackgroundLight: background,
-        contentColorDark: foreground,
-        contentColorLight: foreground,
-        focusStrokeColor:
-            selected ? material.Colors.white : AppAccentColors.current,
-      ),
-      child: material.Row(
-        mainAxisSize: material.MainAxisSize.min,
-        children: [
-          material.Icon(_mediaLibrarySectionIcon(section), size: 21),
-          const material.SizedBox(width: 9),
-          material.Text(
-            section.label,
-            style: const material.TextStyle(
-              fontSize: 15,
-              fontWeight: material.FontWeight.w800,
+    // 不使用 NipaplayLargeScreenFocusableAction，避免焦点框。
+    // 分区栏整体可聚焦，焦点在上时左右键直接切换。
+    return material.GestureDetector(
+      onTap: onPressed,
+      child: material.AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const material.EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: material.BoxDecoration(
+          color: background,
+          borderRadius: material.BorderRadius.circular(9),
+        ),
+        child: material.Row(
+          mainAxisSize: material.MainAxisSize.min,
+          children: [
+            material.Icon(_mediaLibrarySectionIcon(section),
+                size: 21, color: foreground),
+            const material.SizedBox(width: 9),
+            material.Text(
+              section.label,
+              style: material.TextStyle(
+                fontSize: 15,
+                fontWeight: material.FontWeight.w800,
+                color: foreground,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

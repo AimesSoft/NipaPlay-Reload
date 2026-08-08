@@ -1090,6 +1090,9 @@ class MainPage extends StatefulWidget {
 class MainPageState extends State<MainPage>
     with TickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
+  // 记录进入全屏（大屏幕模式）前窗口是否最大化，
+  // 以便退出全屏时恢复正确的最大化状态。
+  bool _wasMaximizedBeforeFullScreen = false;
   TabController? globalTabController;
   bool _showSplash = true;
   bool _isThemeRevealRunning = false;
@@ -1572,7 +1575,16 @@ class MainPageState extends State<MainPage>
     try {
       final isFullScreen = await windowManager.isFullScreen();
       if (isFullScreen != shouldUseFullScreen) {
+        if (shouldUseFullScreen) {
+          // 进入全屏前记录当前最大化状态
+          _wasMaximizedBeforeFullScreen = await windowManager.isMaximized();
+        }
         await windowManager.setFullScreen(shouldUseFullScreen);
+        if (!shouldUseFullScreen && _wasMaximizedBeforeFullScreen) {
+          // 退出全屏后等待 OS 完成窗口状态切换，再恢复最大化
+          await Future.delayed(const Duration(milliseconds: 150));
+          await windowManager.maximize();
+        }
       }
     } catch (e) {
       debugPrint('[MainPageState] 切换大屏幕模式全屏状态失败: $e');
@@ -1745,6 +1757,8 @@ class MainPageState extends State<MainPage>
                   shouldShowAppBar: shouldShowAppBar,
                   tabController: globalTabController,
                   useLargeScreenLayout: isLargeScreenLayoutActive,
+                  currentPageId: _selectedPageId,
+                  pageIds: _pageDefinitions.map((p) => p.id).toList(growable: false),
                   onToggleLargeScreen: allowLargeScreenControls
                       ? _toggleLargeScreenLayout
                       : null,
