@@ -26,7 +26,7 @@ class PlaybackService {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (!settings.useExternalPlayer) return false;
 
-    await ExternalPlayerService.play(context, item);
+    await ExternalPlayerService.play(settings, item);
     return true;
   }
 

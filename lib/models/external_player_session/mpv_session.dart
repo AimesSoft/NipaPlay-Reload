@@ -9,7 +9,6 @@ import 'package:dart_ipc/dart_ipc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
-import 'package:nipaplay/utils/danmaku/assets.dart';
 
 /// 掌管外部播放器会话的神
 ///
@@ -26,7 +25,8 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     required this.duration,
     this.position = Duration.zero,
     this.isPaused = false,
-    this.danmakuAssets,
+    this.assFilePath,
+    this.luaFilePath,
     Future<int>? processExitCode,
     bool monitorProcess = true,
   }) : _processExitCode = processExitCode {
@@ -38,9 +38,10 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     required String playerPath,
     required String mediaPath,
     required List<String> extraArgs,
-    DanmakuLaunchAssets? danmakuAssets,
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
+    String? assFilePath,
+    String? luaFilePath,
   }) async {
     final ipcPath = _createMpvIpcPath();
     final launchArgs = [
@@ -87,8 +88,9 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
       ipcPath: ipcPath,
       duration: duration,
       position: position,
-      danmakuAssets: danmakuAssets,
       processExitCode: processExitCode,
+      assFilePath: assFilePath,
+      luaFilePath: luaFilePath,
     );
   }
 
@@ -103,7 +105,9 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   final int processId; // 外部播放器进程 ID
   @override
   final String? ipcPath; // 外部播放器的 IPC 通道路径
-  DanmakuLaunchAssets? danmakuAssets; // 启动时加载的弹幕文件和导出设置
+
+  final String? assFilePath; // mpv 弹幕 ASS 文件路径
+  final String? luaFilePath; // mpv 弹幕 Lua 脚本路径
 
   // 播放相关
   @override

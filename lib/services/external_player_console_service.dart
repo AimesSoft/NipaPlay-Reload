@@ -31,11 +31,12 @@ class EpisodeMetaData {
 
 /// 控制台状态
 class ConsoleState {
+
   final ExternalPlayerLaunchSession session; // 外部播放器会话
-  final EpisodeMetaData? episodeMetaData; // 番剧元数据
-  final List<DanmakuItem>? danmakuList; // 弹幕列表
-  final DanmakuStyle? danmakuStyle; // 弹幕样式
-  final bool shrinkMainWindow; // 播放期间是否将主窗口缩至当前屏幕半宽
+  final EpisodeMetaData? episodeMetaData;    // 番剧元数据
+  final List<DanmakuItem>? danmakuList;      // 弹幕列表
+  final DanmakuStyle? danmakuStyle;          // 弹幕样式
+  final bool shrinkMainWindow;               // 播放期间是否将主窗口缩至当前屏幕半宽
 
   const ConsoleState({
     required this.session,
@@ -76,13 +77,13 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static String? _episodeTitle; // 剧集标题
   static int? _episodeId; // 剧集 ID
 
+
   // 弹幕资产相关
   // ------------------------------------------------------------------------ //
 
   // 弹幕列表和屏蔽规则
-  static List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
-  static List<DisplayDanmakuItem> _displayDanmakuList =
-      const []; // 弹幕列表, 包含源数据和显示状态
+  static List<BlockedDanmakuItem> _blockedItems       = const []; // 弹幕屏蔽项目列表
+  static List<DisplayDanmakuItem> _displayDanmakuList = const []; // 弹幕列表, 包含源数据和显示状态
 
   /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
   static final DanmakuStyle _danmakuStyle = DanmakuStyle();
@@ -271,7 +272,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
     if (currentSession is! MpvSession ||
         currentSession.ipcPath == null ||
-        currentSession.danmakuAssets == null ||
         _displayDanmakuList.isEmpty) {
       return;
     }
@@ -285,27 +285,33 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       if (_configurationHasChanged(timestamp)) return;
 
       // 参数检查
-      final assets = currentSession.danmakuAssets;
-      if (assets == null) return;
-      final assPath = assets.assPath;
-      final luaPath = assets.luaPath;
+      final assPath = currentSession.assFilePath;
+      final luaPath = currentSession.luaFilePath;
 
       // 将当前弹幕样式应用到 ASS 导出设置
-      final outlineStyle =
-          assets.assSettings.outlineStyle == AssOutlineStyle.none
-              ? AssOutlineStyle.stroke
-              : assets.assSettings.outlineStyle;
-      final AssExportSettings settings = assets.assSettings.copyWith(
+      final outlineStyle = style.outlineEnabled ? AssOutlineStyle.uniform : AssOutlineStyle.none;
+      final AssExportSettings settings = AssExportSettings(
         fontSize: style.danmakuFontSize,
         opacity: style.opacity,
+        // displayArea: style.displayArea,
+        // scrollDurationSeconds: style.scrollDurationSeconds,
         timeOffsetSeconds: style.danmakuOffset,
-        outlineStyle:
-            style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
+        // mergeDuplicates: style.mergeDuplicates,
+        // fontFamily: style.fontFamily,
+        outlineStyle: outlineStyle,
         outlineWidth: style.outlineWidth,
       );
 
       File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
       try {
+
+        if (assPath == null || luaPath == null) {
+          debugPrint(
+            '[ExternalPlayerConsoleService] Cannot refresh danmaku, assPath or luaPath is null',
+          );
+          return;
+        }
+
         // 生成 ASS 内容
         final assStr = await generateExternalPlayerDanmakuAss(
           _displayDanmakuList
@@ -435,11 +441,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         _displayDanmakuList.map((item) => item.item).toList(growable: false);
 
     final position = _session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
-    final currentSession = _session;
-    final configuredScrollSeconds = currentSession is MpvSession
-        ? currentSession.danmakuAssets?.assSettings.scrollDurationSeconds ??
-            10.0
-        : 10.0;
+    const configuredScrollSeconds = 10;
     final scrollDuration =
         configuredScrollSeconds.isFinite && configuredScrollSeconds > 0
             ? Duration(
