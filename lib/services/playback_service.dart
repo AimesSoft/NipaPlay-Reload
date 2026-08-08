@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
@@ -19,8 +20,14 @@ class PlaybackService {
   PlaybackService._internal();
 
   /// 尝试使用外部播放器播放 [item], 如果成功则返回 true, 否则返回 false.
-  Future<bool> tryPlayExternally(BuildContext context, PlayableItem item) {
-    return ExternalPlayerService.tryHandlePlayback(context, item);
+  Future<bool> tryPlayExternally(BuildContext context, PlayableItem item) async {
+
+    // 检查设置是否允许使用外部播放器
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (!settings.useExternalPlayer) return false;
+
+    await ExternalPlayerService.play(context, item);
+    return true;
   }
 
   /// 播放 [item], 如果设置了使用外部播放器则尝试使用外部播放器播放, 否则使用内置播放器播放.

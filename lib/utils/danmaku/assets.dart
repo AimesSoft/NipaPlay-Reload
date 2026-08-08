@@ -12,6 +12,7 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 /// 弹幕轨设为次字幕的脚本. 并非所有播放器都会使用其中的全部文件.
 class DanmakuLaunchAssets {
 
+  final List<String> extraArgs; // 额外的播放器启动参数
   final String assPath; // 临时 ASS 弹幕字幕文件路径
   final String luaPath; // 临时 mpv Lua 脚本文件路径
   final double opacity; // 生成 ASS 时采用的弹幕不透明度
@@ -22,6 +23,7 @@ class DanmakuLaunchAssets {
 
   /// 创建一组已生成的弹幕启动产物.
   const DanmakuLaunchAssets({
+    this.extraArgs = const [],
     required this.assPath,
     required this.luaPath,
     required this.opacity,
