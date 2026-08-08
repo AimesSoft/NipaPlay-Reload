@@ -1,8 +1,10 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 class NipaplayLargeScreenEditableSlider extends StatefulWidget {
   const NipaplayLargeScreenEditableSlider({
@@ -62,6 +64,10 @@ class _NipaplayLargeScreenEditableSliderState
     final nextValue = (widget.value + (increase ? step : -step))
         .clamp(widget.min, widget.max)
         .toDouble();
+    // 仅在大屏幕模式下播放滑动条音效，每次步进播放一次以产生刻度感。
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      context.read<LargeScreenUiSfxService>().playSliderChange();
+    }
     widget.onChangeStart?.call(widget.value);
     widget.onChanged?.call(nextValue);
     widget.onChangeEnd?.call(nextValue);

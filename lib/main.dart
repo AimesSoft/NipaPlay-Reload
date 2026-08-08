@@ -55,6 +55,7 @@ import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
+import 'package:universal_gamepad/universal_gamepad.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'services/file_picker_service.dart';
@@ -91,6 +92,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
@@ -617,6 +619,9 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
           ChangeNotifierProvider.value(
               value: ServiceProvider.dandanplayRemoteProvider),
+          ChangeNotifierProvider(
+            create: (_) => LargeScreenUiSfxService(),
+          ),
         ],
         child: DesktopMultiWindowHost(
           child: NipaPlayApp(launchFilePath: launchFilePath),
@@ -1090,10 +1095,14 @@ class MainPage extends StatefulWidget {
 class MainPageState extends State<MainPage>
     with TickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
+  // 记录进入全屏（大屏幕模式）前窗口是否最大化，
+  // 以便退出全屏时恢复正确的最大化状态。
+  bool _wasMaximizedBeforeFullScreen = false;
   TabController? globalTabController;
   bool _showSplash = true;
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
+  StreamSubscription<GamepadEvent>? _guideButtonSubscription;
   StreamSubscription<String>? _androidFileAssociationSubscription;
   DownloaderSettingsProvider? _downloaderSettingsProvider;
   SettingsProvider? _settingsProvider;
@@ -1199,7 +1208,22 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
+  /// 仅当当前不在大屏幕模式时按下进入大屏幕模式。
+  /// 进入大屏幕模式后由 NipaplayLargeScreenScaffoldLayout
+  /// 接管手柄输入，此处不再响应。
+  void _initGuideButtonListener() {
+    _guideButtonSubscription = Gamepad.instance.events.listen((event) {
+      if (!mounted) return;
+      if (event is! GamepadButtonEvent) return;
+      if (event.button != GamepadButton.guide || !event.pressed) return;
+      if (_useLargeScreenLayout) return;
+      _toggleLargeScreenLayout();
+    });
   }
 
   Future<void> _initialize() async {
@@ -1493,6 +1517,7 @@ class MainPageState extends State<MainPage>
     );
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
+    _guideButtonSubscription?.cancel();
     _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
@@ -1572,7 +1597,16 @@ class MainPageState extends State<MainPage>
     try {
       final isFullScreen = await windowManager.isFullScreen();
       if (isFullScreen != shouldUseFullScreen) {
+        if (shouldUseFullScreen) {
+          // 进入全屏前记录当前最大化状态
+          _wasMaximizedBeforeFullScreen = await windowManager.isMaximized();
+        }
         await windowManager.setFullScreen(shouldUseFullScreen);
+        if (!shouldUseFullScreen && _wasMaximizedBeforeFullScreen) {
+          // 退出全屏后等待 OS 完成窗口状态切换，再恢复最大化
+          await Future.delayed(const Duration(milliseconds: 150));
+          await windowManager.maximize();
+        }
       }
     } catch (e) {
       debugPrint('[MainPageState] 切换大屏幕模式全屏状态失败: $e');
@@ -1732,7 +1766,9 @@ class MainPageState extends State<MainPage>
       onSelectPage: _selectPage,
       child: NipaplayLargeScreenModeScope(
         isActive: isLargeScreenLayoutActive,
-        child: Stack(
+        child: _LargeScreenModeSfxSync(
+          isActive: isLargeScreenLayoutActive,
+          child: Stack(
           children: [
             // 使用 Selector 只监听需要的状态
             Selector<VideoPlayerState, bool>(
@@ -1745,6 +1781,8 @@ class MainPageState extends State<MainPage>
                   shouldShowAppBar: shouldShowAppBar,
                   tabController: globalTabController,
                   useLargeScreenLayout: isLargeScreenLayoutActive,
+                  currentPageId: _selectedPageId,
+                  pageIds: _pageDefinitions.map((p) => p.id).toList(growable: false),
                   onToggleLargeScreen: allowLargeScreenControls
                       ? _toggleLargeScreenLayout
                       : null,
@@ -1820,6 +1858,7 @@ class MainPageState extends State<MainPage>
             ),
           ],
         ),
+        ),
       ),
     );
 
@@ -1840,6 +1879,45 @@ Widget _buildGlobalAppOverlay(
       if (isDragging) const DragDropOverlay(),
     ],
   );
+}
+
+/// 将大屏幕模式状态同步到 [LargeScreenUiSfxService]，
+/// 使其仅在大屏幕模式激活时播放 UI 音效。
+class _LargeScreenModeSfxSync extends StatefulWidget {
+  const _LargeScreenModeSfxSync({
+    required this.isActive,
+    required this.child,
+  });
+
+  final bool isActive;
+  final Widget child;
+
+  @override
+  State<_LargeScreenModeSfxSync> createState() => _LargeScreenModeSfxSyncState();
+}
+
+class _LargeScreenModeSfxSyncState extends State<_LargeScreenModeSfxSync> {
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LargeScreenModeSfxSync oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _sync();
+    }
+  }
+
+  void _sync() {
+    context.read<LargeScreenUiSfxService>().largeScreenModeActive =
+        widget.isActive;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _SystemResourceOverlay extends StatelessWidget {

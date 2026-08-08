@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 class NipaplayLargeScreenFocusableStyle {
   const NipaplayLargeScreenFocusableStyle({
@@ -121,6 +123,9 @@ class _NipaplayLargeScreenFocusableActionState
         setState(() {
           _isFocused = value;
         });
+        if (value) {
+          context.read<LargeScreenUiSfxService>().playFocusChange();
+        }
       },
       onShowHoverHighlight: (value) {
         if (_isHovered == value) return;

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_pane_host.dart';
@@ -147,6 +148,7 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     return Focus(
       focusNode: widget.initialFocusNode,
       descendantsAreFocusable: false,
+      onKeyEvent: _handleKeyEvent,
       onFocusChange: (focused) {
         if (focused && _isContentFocused && mounted) {
           setState(() => _isContentFocused = false);
@@ -268,6 +270,7 @@ class _NipaplayLargeScreenPlayerMenuPanelState
               node: _contentFocusScope,
               canRequestFocus: _isContentFocused,
               descendantsAreFocusable: _isContentFocused,
+              onKeyEvent: _handleKeyEvent,
               child: selectedEntry.paneId == null
                   ? _PlayerMenuActionsPane(
                       videoState: videoState,
@@ -340,6 +343,9 @@ class _NipaplayLargeScreenPlayerMenuPanelState
           _setContentFocused(true);
         }
         return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.previousTab:
+      case NipaplayLargeScreenInputCommand.nextTab:
+        return KeyEventResult.ignored;
     }
   }
 
@@ -355,18 +361,23 @@ class _NipaplayLargeScreenPlayerMenuPanelState
       _selectedPaneId = _latestEntries[next].paneId;
       _lastContentFocusNode = null;
     });
+    context.read<LargeScreenUiSfxService>().playTabSwitch();
     _revealFocusedTab();
   }
 
   void _selectTab(int index) {
     if (_latestEntries.isEmpty) return;
     final next = index.clamp(0, _latestEntries.length - 1);
+    final didChange = next != _focusedTabIndex;
     setState(() {
       _focusedTabIndex = next;
       _selectedPaneId = _latestEntries[next].paneId;
       _isContentFocused = false;
       _lastContentFocusNode = null;
     });
+    if (didChange) {
+      context.read<LargeScreenUiSfxService>().playTabSwitch();
+    }
     widget.initialFocusNode.requestFocus();
     _revealFocusedTab();
   }
@@ -412,8 +423,10 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     }
     setState(() => _isContentFocused = value);
     if (value) {
+      context.read<LargeScreenUiSfxService>().playOpenSubPage();
       _requestContentFocusAfterFrame();
     } else {
+      context.read<LargeScreenUiSfxService>().playCloseSubPage();
       widget.initialFocusNode.requestFocus();
     }
   }

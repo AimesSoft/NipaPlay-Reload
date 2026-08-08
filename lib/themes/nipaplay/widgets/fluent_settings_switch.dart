@@ -1,6 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 class FluentSettingsSwitch extends StatelessWidget {
   final bool value;
@@ -13,6 +16,18 @@ class FluentSettingsSwitch extends StatelessWidget {
     required this.value,
     required this.onChanged,
   });
+
+  void _handleChanged(BuildContext context, bool newValue) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      final sfx = context.read<LargeScreenUiSfxService>();
+      if (newValue) {
+        sfx.playSwitchOn();
+      } else {
+        sfx.playSwitchOff();
+      }
+    }
+    onChanged?.call(newValue);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +57,9 @@ class FluentSettingsSwitch extends StatelessWidget {
       data: theme,
       child: fluent.ToggleSwitch(
         checked: value,
-        onChanged: onChanged,
+        onChanged: onChanged != null
+            ? (v) => _handleChanged(context, v)
+            : null,
       ),
     );
   }

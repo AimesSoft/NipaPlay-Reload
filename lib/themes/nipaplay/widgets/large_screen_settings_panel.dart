@@ -5,7 +5,9 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 const double kNipaplayLargeScreenSettingsPanelWidth = 900;
 const double _kNipaplayLargeScreenSettingsMenuWidth = 230;
@@ -102,6 +104,14 @@ class _NipaplayLargeScreenSettingsPanelState
       _moveContentVerticalFocus(reverse: false);
       return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      // 内容区已聚焦时，先尝试将左键交给当前焦点控件处理（如滑块调节）。
+      // 若控件消费了该事件则不执行面板级导航；否则退回左侧设置大类。
+      if (!_dispatchArrowToFocused(LogicalKeyboardKey.arrowLeft)) {
+        _setContentFocused(false);
+      }
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -175,15 +185,16 @@ class _NipaplayLargeScreenSettingsPanelState
                       itemCount: _entries.length,
                       itemBuilder: (context, index) {
                         final entry = _entries[index];
-                        final bool isSelectedByFocus = !_isContentFocused &&
+                        final bool isFocusedByMenu = !_isContentFocused &&
                             index == normalizedFocusedIndex;
                         final bool isSelectedByPage = index == _selectedIndex;
                         final bool isActive =
-                            isSelectedByFocus || isSelectedByPage;
+                            isFocusedByMenu || isSelectedByPage;
                         final Color itemColor =
                             isActive ? Colors.white : inactiveColor;
                         return NipaplayLargeScreenSidePanelItem(
-                          isSelected: isActive,
+                          isSelected: isSelectedByPage,
+                          isFocused: isFocusedByMenu,
                           activeColor: _kNipaplayLargeScreenActiveColor,
                           inactiveColor: inactiveColor,
                           onTap: () {
@@ -350,6 +361,11 @@ class _NipaplayLargeScreenSettingsPanelState
     if (!_isContentFocused || BlurDropdown.isAnyExpanded) {
       return;
     }
+    // 内容区已聚焦时，先尝试将左键交给当前焦点控件处理（如滑块调节）。
+    // 若控件消费了该事件则不执行面板级导航；否则退回左侧菜单。
+    if (_dispatchArrowToFocused(LogicalKeyboardKey.arrowLeft)) {
+      return;
+    }
     _setContentFocused(false);
   }
 
@@ -360,13 +376,44 @@ class _NipaplayLargeScreenSettingsPanelState
     if (!_isContentFocused) {
       _selectIndex(widget.focusedIndex);
       _setContentFocused(true);
+      return;
     }
+    // 内容区已聚焦时，先尝试将右键交给当前焦点控件处理（如滑块调节）。
+    if (_dispatchArrowToFocused(LogicalKeyboardKey.arrowRight)) {
+      return;
+    }
+  }
+
+  /// 将方向键事件分发给当前焦点控件，返回控件是否消费了该事件。
+  ///
+  /// 手柄输入绕过 Focus 树，滑块等控件无法收到左右键。
+  /// 此方法模拟键盘事件让控件自行处理，若控件返回 handled 则面板
+  /// 不执行默认的左右导航逻辑。
+  ///
+  /// 仅检查当前焦点节点自身的 onKeyEvent，不遍历 ancestors，
+  /// 避免外层 FocusScope 的处理器误判消费导致焦点卡住。
+  bool _dispatchArrowToFocused(LogicalKeyboardKey key) {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null || !_isFocusInsideContentScope(focused)) {
+      return false;
+    }
+    final physical = key == LogicalKeyboardKey.arrowLeft
+        ? PhysicalKeyboardKey.arrowLeft
+        : PhysicalKeyboardKey.arrowRight;
+    final event = KeyDownEvent(
+      physicalKey: physical,
+      logicalKey: key,
+      timeStamp: Duration.zero,
+    );
+    final result = focused.onKeyEvent?.call(focused, event);
+    return result == KeyEventResult.handled;
   }
 
   void _moveMenuFocus(int delta) {
     if (_entries.isEmpty) return;
     final next = (widget.focusedIndex + delta).clamp(0, _entries.length - 1);
     if (next == widget.focusedIndex) return;
+    context.read<LargeScreenUiSfxService>().playFocusChange();
     widget.onFocusedIndexChanged?.call(next);
     _selectIndex(next);
   }
