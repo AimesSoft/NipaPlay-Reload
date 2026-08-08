@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_gamepad/universal_gamepad.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
@@ -145,16 +146,18 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (_isPlayerMenuVisible) {
       _closePlayerMenu();
     }
+    final bool willOpen = !_isTabPanelVisible;
     setState(() {
-      final bool nextVisible = !_isTabPanelVisible;
-      _isTabPanelVisible = nextVisible;
-      if (nextVisible) {
+      _isTabPanelVisible = willOpen;
+      if (willOpen) {
         _focusedMenuIndex = _clampMenuIndex(widget.currentIndex);
       }
     });
-    if (_isTabPanelVisible) {
+    if (willOpen) {
+      context.read<LargeScreenUiSfxService>().playMenuOpen();
       _inputFocusNode.requestFocus();
     } else {
+      context.read<LargeScreenUiSfxService>().playMenuClose();
       _ensureContentFocus();
     }
   }
@@ -163,6 +166,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (!_isTabPanelVisible) {
       return;
     }
+    context.read<LargeScreenUiSfxService>().playMenuClose();
     setState(() {
       _isTabPanelVisible = false;
     });
@@ -383,12 +387,14 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (count <= 0) {
       return;
     }
-    setState(() {
-      _focusedMenuIndex = (_focusedMenuIndex + delta) % count;
-      if (_focusedMenuIndex < 0) {
-        _focusedMenuIndex += count;
-      }
-    });
+    final int newIndex = (_focusedMenuIndex + delta) % count;
+    final int adjustedIndex = newIndex < 0 ? newIndex + count : newIndex;
+    if (_focusedMenuIndex != adjustedIndex) {
+      context.read<LargeScreenUiSfxService>().playFocusChange();
+      setState(() {
+        _focusedMenuIndex = adjustedIndex;
+      });
+    }
   }
 
   void _activateFocusedMenuItem() {
@@ -704,6 +710,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       if (_isMediaLibraryContext) {
         final step =
             command == NipaplayLargeScreenInputCommand.nextTab ? 1 : -1;
+        context.read<LargeScreenUiSfxService>().playTabSwitch();
         context.read<TabChangeNotifier>().stepMediaLibrarySection(step);
       }
       return;
@@ -723,10 +730,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
         !_isPlayerMenuVisible &&
         !isSubPageActive) {
       if (command == NipaplayLargeScreenInputCommand.navigateLeft) {
+        context.read<LargeScreenUiSfxService>().playTabSwitch();
         context.read<TabChangeNotifier>().stepMediaLibrarySection(-1);
         return;
       }
       if (command == NipaplayLargeScreenInputCommand.navigateRight) {
+        context.read<LargeScreenUiSfxService>().playTabSwitch();
         context.read<TabChangeNotifier>().stepMediaLibrarySection(1);
         return;
       }
@@ -765,6 +774,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
 
     if (_isSettingsPanelVisible) {
+      // 当下拉菜单展开时，手柄输入由下拉菜单自身处理，不拦截。
+      if (BlurDropdown.isAnyExpanded) {
+        return;
+      }
       switch (command) {
         case NipaplayLargeScreenInputCommand.toggleMenu:
         case NipaplayLargeScreenInputCommand.back:
@@ -902,6 +915,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
 
     if (_isSettingsPanelVisible) {
+      // 当下拉菜单展开时，按键由下拉菜单自身处理，不拦截。
+      if (BlurDropdown.isAnyExpanded) {
+        return KeyEventResult.ignored;
+      }
       switch (command) {
         case NipaplayLargeScreenInputCommand.toggleMenu:
         case NipaplayLargeScreenInputCommand.back:
