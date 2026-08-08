@@ -6,29 +6,22 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/utils/app_platform.dart';
 import 'package:nipaplay/utils/color.dart';
-import 'package:nipaplay/utils/danmaku/assets.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:provider/provider.dart';
 
 
 /// 项目里掌管协调桌面端外部播放器启动, 播放参数注入和弹幕导出的神.
@@ -65,13 +58,12 @@ class ExternalPlayerService {
   ///
   /// [context] 必须能够读取 [SettingsProvider]; 若需要导出弹幕, 还必须能够读取
   /// [VideoPlayerState]. 异步操作期间会在使用界面前检查 `context.mounted`.
-  static Future<void> play(BuildContext context, PlayableItem item) async {
+  static Future<void> play(SettingsProvider settings, PlayableItem item) async {
 
     // 当前运行平台是否支持由本服务启动外部播放器.
     // Web, 移动端以及未显式支持的桌面平台均返回 `false`.
     final platform            = AppPlatform.current;
     final isSupportedPlatform = platform.supportsExternalPlayer;
-    final settings            = Provider.of<SettingsProvider>(context, listen: false);
     final playerPath          = settings.externalPlayerPath.trim();
     final playerType          = detectExternalPlayerType(playerPath);
     final episodeId = item.episodeId?.toString() ?? '';
@@ -84,13 +76,11 @@ class ExternalPlayerService {
     // 若平台不支持, 则直接提示用户并返回.
     if (!isSupportedPlatform) {
       _printLog('tryHandlePlayback: 平台不支持外部播放器');
-      safeShowSnack(context, '外部播放器仅支持桌面端', log: _printLog);
       return;
     }
     // 若未配置外部播放器路径, 则提示用户并返回.
     if (playerPath.isEmpty) {
       _printLog('tryHandlePlayback: externalPlayerPath 为空');
-      safeShowSnack(context, '请先选择外部播放器', log: _printLog);
       return;
     }
     if (playerPath.toLowerCase().endsWith('.lnk')) {
@@ -107,10 +97,8 @@ class ExternalPlayerService {
       _printLog('tryHandlePlayback: 解析远程媒体路径失败: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
-    if (!context.mounted) return; // 异步期间 context 可能被卸载, 需检查
     if (mediaPath == null || mediaPath.isEmpty) {
       _printLog('tryHandlePlayback: 无法将媒体路径解析为外部播放器可访问的地址');
-      safeShowSnack(context, '无法解析远程媒体路径，请检查连接配置', log: _printLog);
       return;
     }
     final resolvedMediaPath = mediaPath;
@@ -124,7 +112,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.mpv:
           case ExternalPlayerType.mpvNet:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -137,7 +124,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.vlc:
           case ExternalPlayerType.generic:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -154,7 +140,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.mpv:
           case ExternalPlayerType.mpvNet:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -167,7 +152,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.vlc:
           case ExternalPlayerType.generic:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -184,7 +168,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.mpv:
           case ExternalPlayerType.mpvNet:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -197,7 +180,6 @@ class ExternalPlayerService {
           case ExternalPlayerType.vlc:
           case ExternalPlayerType.generic:
             await _launchPlayer(
-              context: context,
               item: item,
               settings: settings,
               playerPath: playerPath,
@@ -228,7 +210,6 @@ class ExternalPlayerService {
   /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. mpv 还必须
   /// 在启动期限内通过 JSON IPC 报告已经加载媒体; 其他播放器只能确认进程已派生.
   static Future<void> _launchPlayer({
-    required BuildContext context,
     required PlayableItem item,
     required SettingsProvider settings,
     required String playerPath,
@@ -236,64 +217,33 @@ class ExternalPlayerService {
     required ExternalPlayerType playerType,
     required bool includeSmoothArgs,
   }) async {
-    DanmakuLaunchAssets? danmakuAssets;
+
     final mergedArgs = <String>[];
+
+    String? assFilePath;
+    String? luaFilePath;
+    Set<DanmakuItem>? danmakuItemSet;
 
     if (settings.externalPlayerDanmakuOverlay && item.episodeId != null) {
       _printLog('tryHandlePlayback: 弹幕外挂开启, 开始准备弹幕…');
-      safeShowSnack(context, '正在准备弹幕…', log: _printLog);
 
       final t0 = DateTime.now();
       try {
         /// 取过滤后弹幕 → 生成 ASS → 写临时文件 + Lua 脚本, 返回产物; 失败返回 null.
         _printLog('tryHandlePlayback: _prepareDanmakuAss: episodeId=${item.episodeId}, animeId=${item.animeId ?? 0}');
-        final vps = Provider.of<VideoPlayerState>(context, listen: false);
-        final list = await vps.buildFilteredDanmakuForExport(
-          episodeId: item.episodeId!.toString(),
-          animeId: (item.animeId ?? 0).toString(),
-        );
-        _printLog('tryHandlePlayback: 过滤后弹幕 ${list.length} 条');
-        if (list.isEmpty) {
+        // final vps = Provider.of<VideoPlayerState>(context, listen: false);
+
+        // 通过剧集 ID 获取弹幕
+        danmakuItemSet = await DanmakuService.getDanmakuFromEpisodeId(item.episodeId!);
+
+        if (danmakuItemSet == null || danmakuItemSet.isEmpty) {
           _printLog('tryHandlePlayback: 弹幕为空, 跳过 ASS 生成');
-          danmakuAssets = null;
         } else {
-          /// 从 [VideoPlayerState] 当前渲染设置构造 ASS 导出设置.
-          final assSettings = AssExportSettings(
-            fontSize: vps.actualDanmakuFontSize,
-            opacity: vps.danmakuOpacity,
-            displayArea: vps.danmakuDisplayArea,
-            scrollDurationSeconds: vps.danmakuScrollDurationSeconds,
-            timeOffsetSeconds: vps.manualDanmakuOffset + vps.autoDanmakuOffset,
-            mergeDuplicates: vps.mergeDanmaku,
-            fontFamily: vps.danmakuFontFamily,
-            outlineStyle: switch (vps.danmakuOutlineStyle) {
-              DanmakuOutlineStyle.none => AssOutlineStyle.none,
-              DanmakuOutlineStyle.stroke => AssOutlineStyle.stroke,
-              DanmakuOutlineStyle.uniform => AssOutlineStyle.uniform,
-            },
-            outlineWidth: vps.next2DanmakuOutlineWidth,
-            shadowStyle: switch (vps.danmakuShadowStyle) {
-              DanmakuShadowStyle.none => AssShadowStyle.none,
-              DanmakuShadowStyle.soft => AssShadowStyle.soft,
-              DanmakuShadowStyle.medium => AssShadowStyle.medium,
-              DanmakuShadowStyle.strong => AssShadowStyle.strong,
-            },
-          );
-          final danmakuList = List<DanmakuItem>.unmodifiable(
-            list.map(DanmakuItem.fromMap),
-          );
-          _printLog('tryHandlePlayback: ASS 设置: fontSize=${assSettings.fontSize}, '
-              'opacity=${assSettings.opacity}, displayArea=${assSettings.displayArea}, '
-              'scrollDur=${assSettings.scrollDurationSeconds}, '
-              'offset=${assSettings.timeOffsetSeconds}, merge=${assSettings.mergeDuplicates}');
-          // 优先用 DFM+ 内核布局层预算运动参数（碰撞/追赶规避）, 失败回退经典算法.
-          final ass = await generateExternalPlayerDanmakuAss(
-            danmakuList,
-            assSettings,
-            allowStacking: vps.danmakuStacking,
-          );
-          _printLog('tryHandlePlayback: ASS 生成完成: ${ass.length} 字符');
-          _printLog('tryHandlePlayback: 会话弹幕 ${danmakuList.length} 条');
+          _printLog('tryHandlePlayback: 过滤后弹幕 ${danmakuItemSet.length} 条');
+
+          final assString = await DanmakuService.getDanmakuAssStringFromDanmakuItemSet(danmakuItemSet);
+          _printLog('tryHandlePlayback: ASS 生成完成: ${assString.length} 字符');
+          _printLog('tryHandlePlayback: 会话弹幕 ${danmakuItemSet.length} 条');
           /// 写 ASS 到临时目录, 并清理 >1 天的旧文件. 返回绝对路径.
           final dir = Directory(
               '${Directory.systemTemp.path}${Platform.pathSeparator}nipaplay_danmaku');
@@ -319,9 +269,9 @@ class ExternalPlayerService {
           final ts = DateTime.now().millisecondsSinceEpoch;
           final assFile = File(
               '${dir.path}${Platform.pathSeparator}danmaku_${item.episodeId!}_$ts.ass');
-          await assFile.writeAsString(ass, encoding: utf8);
-          final assPath = assFile.path;
-          final assBasename = assPath.split(Platform.pathSeparator).last;
+          await assFile.writeAsString(assString, encoding: utf8);
+          assFilePath = assFile.path;
+          final assBasename = assFilePath.split(Platform.pathSeparator).last;
 
           /// 写 mpv / mpv.net 用的 Lua 脚本: file-loaded 时把目标弹幕轨设为 secondary-sid.
           ///
@@ -425,113 +375,85 @@ end)
 ''';
           final luaFile = File('${dir.path}${Platform.pathSeparator}nipaplay_danmaku_$ts.lua');
           luaFile.writeAsStringSync(lua, encoding: utf8);
-          final luaPath = luaFile.path;
-          _printLog('tryHandlePlayback: ASS 已写入临时文件: $assPath '
+          luaFilePath = luaFile.path;
+          assFilePath = assFile.path;
+          _printLog('tryHandlePlayback: ASS 已写入临时文件: $assFilePath '
               '(${assFile.lengthSync()} 字节)');
-          _printLog('tryHandlePlayback: Lua 脚本已写入: $luaPath');
-          _printLog('tryHandlePlayback: ASS 首行: ${ass.split('\n').first}');
-          danmakuAssets = DanmakuLaunchAssets(
-            extraArgs: const [],
-            assPath: assPath,
-            luaPath: luaPath,
-            opacity: assSettings.opacity,
-            outlineWidth: switch (assSettings.outlineStyle) {
-              AssOutlineStyle.none => 0.0,
-              AssOutlineStyle.stroke =>
-                  assSettings.outlineWidth.clamp(0.0, 8.0).toDouble(),
-              AssOutlineStyle.uniform =>
-                  (assSettings.outlineWidth * 1.5).clamp(0.0, 8.0).toDouble(),
-            },
-            danmakuList: danmakuList,
-            assSettings: assSettings,
-            allowStacking: vps.danmakuStacking,
-          );
+          _printLog('tryHandlePlayback: Lua 脚本已写入: $luaFilePath');
+          _printLog('tryHandlePlayback: ASS 首行: ${assString.split('\n').first}');
+
         }
       } catch (e, st) {
         _printLog('tryHandlePlayback: _prepareDanmakuAss 顶层异常: $e');
         debugPrintStack(stackTrace: st);
-        danmakuAssets = null;
       }
 
       final dt = DateTime.now().difference(t0).inMilliseconds;
       _printLog('tryHandlePlayback: 弹幕准备完成: '
-          'assPath=${danmakuAssets?.assPath}, luaPath=${danmakuAssets?.luaPath}, 耗时=${dt}ms');
+          'assFilePath=$assFilePath, luaFilePath=$luaFilePath, 耗时=${dt}ms');
 
-      if (danmakuAssets != null) {
-        final assets = danmakuAssets;
 
-        /// 按播放器类型构造弹幕字幕参数.
+      /// 按播放器类型构造弹幕字幕参数.
+      ///
+      /// mpv / mpv.net: `--sub-file=` 加载弹幕轨 + `--script=` 一个 Lua 脚本把该轨
+      /// 设为 `secondary-sid`（次字幕）. mpv.net 6.0.3.2 不支持 `--secondary-sub-file`
+      /// CLI 选项, 但 `secondary-sid` 属性经 Lua 可设. 这样弹幕作次字幕始终显示,
+      /// 不抢占视频自带的主字幕（内嵌/外挂）.
+      ///
+      /// 次字幕的 ASS 渲染开关（关键）: 原版 mpv 默认 `secondary-sub-ass-override=strip`
+      /// （剥离 ASS 样式 → 纯白文本）, 必须显式设 `no` 才按 ASS 渲染弹幕的 \move/\pos/颜色;
+      /// mpv.net 无该选项, 用其自有 `secondary-sub-override`（no = 弹幕模式）.
+      final builtArgs = switch (playerType) {
+        ExternalPlayerType.potPlayer => ['/sub=$assFilePath'],
+        ExternalPlayerType.mpv => [
+            '--sub-file=$assFilePath',
+            '--script=$luaFilePath',
+            '--secondary-sub-ass-override=no',
+          ],
+        ExternalPlayerType.mpvNet => [
+            '--sub-file=$assFilePath',
+            '--script=$luaFilePath',
+            '--secondary-sub-override=no',
+          ],
+        ExternalPlayerType.vlc || ExternalPlayerType.generic => [
+            '--sub-file=$assFilePath',
+          ],
+      };
+      mergedArgs.addAll(builtArgs);
+
+      if (includeSmoothArgs) {
+        /// 按播放器类型构造弹幕平滑参数（仅原版 mpv）.
         ///
-        /// mpv / mpv.net: `--sub-file=` 加载弹幕轨 + `--script=` 一个 Lua 脚本把该轨
-        /// 设为 `secondary-sid`（次字幕）. mpv.net 6.0.3.2 不支持 `--secondary-sub-file`
-        /// CLI 选项, 但 `secondary-sid` 属性经 Lua 可设. 这样弹幕作次字幕始终显示,
-        /// 不抢占视频自带的主字幕（内嵌/外挂）.
+        /// 两个配套参数, 缺一不可:
+        /// - `--blend-subtitles=video`: 把弹幕混入视频层. 是下面 vf 滤镜让弹幕
+        ///   按 60fps 重新定位的前提——若字幕留在 OSD 层, vf 不影响其刷新率.
+        ///   通过 CLI 强制设值, 不依赖用户外部 mpv 的 mpv.conf 已配置此项.
+        /// - `--vf-add=lavfi=[fps=fps=60:round=down]`: 把视频复制帧到 60fps,
+        ///   混入视频层的弹幕随之按 60fps 重新计算 \move 位置 → 滚动清晰不卡顿
+        ///   （mpv 字幕刷新率随视频帧率, 24fps 视频下弹幕步进大, 看不清）.
         ///
-        /// 次字幕的 ASS 渲染开关（关键）: 原版 mpv 默认 `secondary-sub-ass-override=strip`
-        /// （剥离 ASS 样式 → 纯白文本）, 必须显式设 `no` 才按 ASS 渲染弹幕的 \move/\pos/颜色;
-        /// mpv.net 无该选项, 用其自有 `secondary-sub-override`（no = 弹幕模式）.
-        final builtArgs = switch (playerType) {
-          ExternalPlayerType.potPlayer => ['/sub=${assets.assPath}'],
+        /// 仅原版 mpv 需要: mpv.net 原生弹幕渲染已足够平滑, 无需此滤镜.
+        /// `--vf-add` 追加而非 `--vf=` 覆盖, 避免冲掉用户 mpv.conf 已有的 vf
+        /// 滤镜. PotPlayer/VLC/未知播放器不认这些选项, 跳过.
+        final smoothArgs = switch (playerType) {
           ExternalPlayerType.mpv => [
-              '--sub-file=${assets.assPath}',
-              '--script=${assets.luaPath}',
-              '--secondary-sub-ass-override=no',
+              '--blend-subtitles=video',
+              '--vf-add=lavfi=[fps=fps=60:round=down]',
             ],
-          ExternalPlayerType.mpvNet => [
-              '--sub-file=${assets.assPath}',
-              '--script=${assets.luaPath}',
-              '--secondary-sub-override=no',
-            ],
-          ExternalPlayerType.vlc || ExternalPlayerType.generic => [
-              '--sub-file=${assets.assPath}',
-            ],
+          ExternalPlayerType.mpvNet ||
+          ExternalPlayerType.potPlayer ||
+          ExternalPlayerType.vlc ||
+          ExternalPlayerType.generic => const <String>[],
         };
-        mergedArgs.addAll(builtArgs);
-
-        if (includeSmoothArgs) {
-          /// 按播放器类型构造弹幕平滑参数（仅原版 mpv）.
-          ///
-          /// 两个配套参数, 缺一不可:
-          /// - `--blend-subtitles=video`: 把弹幕混入视频层. 是下面 vf 滤镜让弹幕
-          ///   按 60fps 重新定位的前提——若字幕留在 OSD 层, vf 不影响其刷新率.
-          ///   通过 CLI 强制设值, 不依赖用户外部 mpv 的 mpv.conf 已配置此项.
-          /// - `--vf-add=lavfi=[fps=fps=60:round=down]`: 把视频复制帧到 60fps,
-          ///   混入视频层的弹幕随之按 60fps 重新计算 \move 位置 → 滚动清晰不卡顿
-          ///   （mpv 字幕刷新率随视频帧率, 24fps 视频下弹幕步进大, 看不清）.
-          ///
-          /// 仅原版 mpv 需要: mpv.net 原生弹幕渲染已足够平滑, 无需此滤镜.
-          /// `--vf-add` 追加而非 `--vf=` 覆盖, 避免冲掉用户 mpv.conf 已有的 vf
-          /// 滤镜. PotPlayer/VLC/未知播放器不认这些选项, 跳过.
-          final smoothArgs = switch (playerType) {
-            ExternalPlayerType.mpv => [
-                '--blend-subtitles=video',
-                '--vf-add=lavfi=[fps=fps=60:round=down]',
-              ],
-            ExternalPlayerType.mpvNet ||
-            ExternalPlayerType.potPlayer ||
-            ExternalPlayerType.vlc ||
-            ExternalPlayerType.generic => const <String>[],
-          };
-          if (smoothArgs.isNotEmpty) {
-            mergedArgs.addAll(smoothArgs);
-            _printLog('tryHandlePlayback: 注入弹幕平滑参数: $smoothArgs');
-          }
+        if (smoothArgs.isNotEmpty) {
+          mergedArgs.addAll(smoothArgs);
+          _printLog('tryHandlePlayback: 注入弹幕平滑参数: $smoothArgs');
         }
 
         _printLog('tryHandlePlayback: 注入弹幕参数: extraArgs=$mergedArgs, playerType=$playerType');
-        danmakuAssets = DanmakuLaunchAssets(
-          extraArgs: mergedArgs,
-          assPath: assets.assPath,
-          luaPath: assets.luaPath,
-          opacity: assets.opacity,
-          outlineWidth: assets.outlineWidth,
-          danmakuList: assets.danmakuList,
-          assSettings: assets.assSettings,
-          allowStacking: assets.allowStacking,
-        );
+
       } else {
         _printLog('tryHandlePlayback: 弹幕为空/失败, 将无弹幕启动');
-        if (context.mounted) safeShowSnack(context, '弹幕加载失败, 将无弹幕启动', log: _printLog);
       }
     } else {
       _printLog('tryHandlePlayback: 跳过弹幕外挂 '
@@ -571,18 +493,12 @@ end)
     final platform = AppPlatform.current;
     if (!platform.supportsExternalPlayer) {
       _printLog('launch: 平台不支持');
-      if (context.mounted) {
-        safeShowSnack(context, '外部播放器平台不支持', log: _printLog);
-      }
       return;
     }
 
     final trimmedPlayerPath = playerPath.trim();
     if (trimmedPlayerPath.isEmpty) {
       _printLog('launch: resolvedPath 为空, 中止');
-      if (context.mounted) {
-        safeShowSnack(context, '外部播放器路径为空', log: _printLog);
-      }
       return;
     }
 
@@ -597,9 +513,6 @@ end)
     _printLog('launch: 文件存在=$exists ($resolvedPlayerPath)');
     if (!exists) {
       _printLog('launch: 外部播放器不存在: $resolvedPlayerPath');
-      if (context.mounted) {
-        safeShowSnack(context, '外部播放器不存在', log: _printLog);
-      }
       return;
     }
 
@@ -613,9 +526,10 @@ end)
           playerPath: resolvedPlayerPath,
           mediaPath: resolvedMediaPath,
           extraArgs: mergedArgs,
-          danmakuAssets: danmakuAssets,
           duration: Duration(milliseconds: history?.duration ?? 0),
           position: Duration(milliseconds: history?.lastPosition ?? 0),
+          assFilePath: assFilePath,
+          luaFilePath: luaFilePath,
         );
       } else {
         final (
@@ -712,42 +626,22 @@ end)
         episodeTitle: history?.episodeTitle ?? item.subtitle,
         episodeId: item.episodeId,
       );
-      final assets = session.danmakuAssets;
 
       final consoleState = ConsoleState(
         session: session,
         shrinkMainWindow: settings.externalPlayerShrinkWindow,
         episodeMetaData: episodeMetaData,
-        danmakuList: assets?.danmakuList,
-        danmakuStyle: assets == null
-            ? null
-            : DanmakuStyle(
-                opacity: assets.opacity,
-                outlineWidth: assets.outlineWidth,
-                danmakuFontSize: assets.assSettings.fontSize,
-                danmakuOffset: assets.assSettings.timeOffsetSeconds,
-                danmakuAllowStacking: assets.allowStacking,
-              ),
+        danmakuList: danmakuItemSet?.toList()
       );
       ExternalPlayerConsoleService.setState(consoleState);
 
       if (settings.externalPlayerConsoleWindowMode) {
         await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
-      } else if (settings.externalPlayerAutoSwitchToDanmakuConsole &&
-          context.mounted) {
-        Provider.of<TabChangeNotifier>(context, listen: false)
-            .changePage(AppPageIds.externalPlayerConsole);
-      }
-    }
+      } 
 
-    if (context.mounted) {
-      safeShowSnack(
-        context,
-        launched
-            ? (mergedArgs.isEmpty ? '已通过外部播放器打开' : '已通过外部播放器打开(含弹幕)')
-            : '外部播放器启动失败',
-        log: _printLog,
-      );
+      // else if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {
+      //   Provider.of<TabChangeNotifier>(context, listen: false).changePage(AppPageIds.externalPlayerConsole);
+      // }
     }
   }
 
