@@ -91,6 +91,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
@@ -617,6 +618,9 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
           ChangeNotifierProvider.value(
               value: ServiceProvider.dandanplayRemoteProvider),
+          ChangeNotifierProvider(
+            create: (_) => LargeScreenUiSfxService(),
+          ),
         ],
         child: DesktopMultiWindowHost(
           child: NipaPlayApp(launchFilePath: launchFilePath),
@@ -1744,7 +1748,9 @@ class MainPageState extends State<MainPage>
       onSelectPage: _selectPage,
       child: NipaplayLargeScreenModeScope(
         isActive: isLargeScreenLayoutActive,
-        child: Stack(
+        child: _LargeScreenModeSfxSync(
+          isActive: isLargeScreenLayoutActive,
+          child: Stack(
           children: [
             // 使用 Selector 只监听需要的状态
             Selector<VideoPlayerState, bool>(
@@ -1834,6 +1840,7 @@ class MainPageState extends State<MainPage>
             ),
           ],
         ),
+        ),
       ),
     );
 
@@ -1854,6 +1861,45 @@ Widget _buildGlobalAppOverlay(
       if (isDragging) const DragDropOverlay(),
     ],
   );
+}
+
+/// 将大屏幕模式状态同步到 [LargeScreenUiSfxService]，
+/// 使其仅在大屏幕模式激活时播放 UI 音效。
+class _LargeScreenModeSfxSync extends StatefulWidget {
+  const _LargeScreenModeSfxSync({
+    required this.isActive,
+    required this.child,
+  });
+
+  final bool isActive;
+  final Widget child;
+
+  @override
+  State<_LargeScreenModeSfxSync> createState() => _LargeScreenModeSfxSyncState();
+}
+
+class _LargeScreenModeSfxSyncState extends State<_LargeScreenModeSfxSync> {
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LargeScreenModeSfxSync oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _sync();
+    }
+  }
+
+  void _sync() {
+    context.read<LargeScreenUiSfxService>().largeScreenModeActive =
+        widget.isActive;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _SystemResourceOverlay extends StatelessWidget {

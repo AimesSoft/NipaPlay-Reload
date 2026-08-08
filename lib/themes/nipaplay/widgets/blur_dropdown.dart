@@ -6,9 +6,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 class _BlurDropdownGlobalState {
   static int expandedCount = 0;
@@ -460,6 +462,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     if (_isDropdownOpen || _animationController.isAnimating) {
       return;
     }
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      context.read<LargeScreenUiSfxService>().playOpenSubPage();
+    }
     _removeOverlay();
 
     final overlay = Overlay.maybeOf(context);
@@ -655,6 +660,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     if (!_isDropdownOpen ||
         (_animationController.status == AnimationStatus.reverse)) {
       return;
+    }
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      context.read<LargeScreenUiSfxService>().playCloseSubPage();
     }
     _animationController.reverse().then((_) {
       _removeOverlay();

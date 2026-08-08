@@ -11,6 +11,8 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
+import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveSlider, AdaptiveSwitch;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -655,18 +657,28 @@ class AdaptiveSettingsSwitch extends material.StatelessWidget {
   final bool value;
   final material.ValueChanged<bool>? onChanged;
 
+  void _handleChanged(material.BuildContext context, bool newValue) {
+    final sfx = context.read<LargeScreenUiSfxService>();
+    if (newValue) {
+      sfx.playSwitchOn();
+    } else {
+      sfx.playSwitchOff();
+    }
+    onChanged?.call(newValue);
+  }
+
   @override
   material.Widget build(material.BuildContext context) {
     if (AdaptiveSettingsScope.isPhoneLayout(context)) {
       return AdaptiveSwitch(
         value: value,
-        onChanged: onChanged,
+        onChanged: onChanged != null ? (v) => _handleChanged(context, v) : null,
       );
     }
 
     return FluentSettingsSwitch(
       value: value,
-      onChanged: onChanged,
+      onChanged: onChanged != null ? (v) => _handleChanged(context, v) : null,
     );
   }
 }

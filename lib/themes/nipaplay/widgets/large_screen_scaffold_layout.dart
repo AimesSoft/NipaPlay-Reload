@@ -18,6 +18,7 @@ import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:provider/provider.dart';
 
 enum NipaplayLargeScreenPlayerMenuTarget { revealControls, openPlayerMenu }
@@ -175,12 +176,18 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (_isPlayerMenuVisible) {
       _closePlayerMenu();
     }
+    final willOpen = !_isSettingsPanelVisible;
     setState(() {
       _isSettingsPanelVisible = !_isSettingsPanelVisible;
       if (_isSettingsPanelVisible) {
         _focusedSettingsIndex = _clampSettingsIndex(_focusedSettingsIndex);
       }
     });
+    if (willOpen) {
+      context.read<LargeScreenUiSfxService>().playOpenSubPage();
+    } else {
+      context.read<LargeScreenUiSfxService>().playCloseSubPage();
+    }
     if (_isSettingsPanelVisible) {
       _inputFocusNode.requestFocus();
     } else {
@@ -192,6 +199,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (!_isSettingsPanelVisible) {
       return;
     }
+    context.read<LargeScreenUiSfxService>().playCloseSubPage();
     setState(() {
       _isSettingsPanelVisible = false;
     });
@@ -297,6 +305,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (!videoState.hasVideo) {
       return;
     }
+    context.read<LargeScreenUiSfxService>().playMenuOpen();
     setState(() {
       _isPlayerMenuVisible = true;
     });
@@ -316,6 +325,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       return;
     }
     if (mounted) {
+      context.read<LargeScreenUiSfxService>().playMenuClose();
       setState(() {
         _isPlayerMenuVisible = false;
       });

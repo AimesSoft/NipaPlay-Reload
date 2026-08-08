@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/directional_focus_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_navigation_intents.dart';
+import 'package:provider/provider.dart';
 
 class NipaplayLargeScreenContentPage extends StatelessWidget {
   const NipaplayLargeScreenContentPage({
@@ -41,6 +43,7 @@ class NipaplayLargeScreenContentPage extends StatelessWidget {
     if (!Navigator.of(context).canPop()) {
       return KeyEventResult.ignored;
     }
+    context.read<LargeScreenUiSfxService>().playCloseSubPage();
     Navigator.of(context).maybePop();
     return KeyEventResult.handled;
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
@@ -54,6 +55,7 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
           onTap: () {
             if (tabController.index != index) {
               tabController.animateTo(index);
+              context.read<LargeScreenUiSfxService>().playTabSwitch();
             }
             onTabActivated?.call();
           },
