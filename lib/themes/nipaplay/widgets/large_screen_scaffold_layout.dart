@@ -498,6 +498,60 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
   }
 
+  /// 手柄输入绕过 Focus 树，将手柄命令转换为键盘事件并分发给当前
+  /// 焦点节点。事件会沿 Focus 树冒泡（模拟 Flutter 的按键分发），
+  /// 由对应面板的 onKeyEvent 处理。用于下拉菜单展开时和播放器菜单
+  /// 可见时的手柄导航。
+  void _dispatchGamepadToFocusedNode(
+      NipaplayLargeScreenInputCommand command) {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null) return;
+
+    final mapping = <NipaplayLargeScreenInputCommand, LogicalKeyboardKey>{
+      NipaplayLargeScreenInputCommand.navigateUp: LogicalKeyboardKey.arrowUp,
+      NipaplayLargeScreenInputCommand.navigateDown:
+          LogicalKeyboardKey.arrowDown,
+      NipaplayLargeScreenInputCommand.navigateLeft:
+          LogicalKeyboardKey.arrowLeft,
+      NipaplayLargeScreenInputCommand.navigateRight:
+          LogicalKeyboardKey.arrowRight,
+      NipaplayLargeScreenInputCommand.activate: LogicalKeyboardKey.enter,
+      NipaplayLargeScreenInputCommand.back: LogicalKeyboardKey.escape,
+      NipaplayLargeScreenInputCommand.toggleMenu: LogicalKeyboardKey.escape,
+    };
+    final key = mapping[command];
+    if (key == null) return;
+
+    final physical = switch (key) {
+      LogicalKeyboardKey.arrowUp => PhysicalKeyboardKey.arrowUp,
+      LogicalKeyboardKey.arrowDown => PhysicalKeyboardKey.arrowDown,
+      LogicalKeyboardKey.arrowLeft => PhysicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowRight => PhysicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.enter => PhysicalKeyboardKey.enter,
+      LogicalKeyboardKey.escape => PhysicalKeyboardKey.escape,
+      _ => PhysicalKeyboardKey.enter,
+    };
+
+    final event = KeyDownEvent(
+      physicalKey: physical,
+      logicalKey: key,
+      timeStamp: Duration.zero,
+    );
+
+    // 模拟 Flutter 按键分发：从当前焦点节点开始，沿 parent 链向上
+    // 调用每个节点的 onKeyEvent，直到某个节点返回 handled 为止。
+    // 这样播放器菜单的 _contentFocusScope / initialFocusNode 上的
+    // onKeyEvent 能收到方向键事件（即使焦点在内容区的子控件上）。
+    FocusNode? node = focused;
+    while (node != null) {
+      final result = node.onKeyEvent?.call(node, event);
+      if (result == KeyEventResult.handled) {
+        return;
+      }
+      node = node.parent;
+    }
+  }
+
   bool _handleTvOSRootPopRoute() {
     final videoState = context.read<VideoPlayerState>();
     if (_isPlayerPlaybackContext(videoState)) {
@@ -716,29 +770,30 @@ class _NipaplayLargeScreenScaffoldLayoutState
       return;
     }
 
-    // 媒体库页面：十字键/摇杆左右也切换分区（第二种操作方式）
-    // 但子页面打开时不拦截，让左右键作用于子页面内容
+    // 子页面（详情页、对话框等）是否处于激活状态。
     final isSubPageActive = !_isTabPanelVisible &&
         !_isSettingsPanelVisible &&
         !_isPlayerMenuVisible &&
         Navigator.of(context).canPop();
 
+    // 媒体库页面：将手柄方向键通过 Focus 树分发，与键盘行为保持
+    // 一致。焦点在分区栏时，分区栏的 onKeyEvent 处理左右键切换
+    // 分区；焦点在媒体卡片上时，事件冒泡到 scaffold 的
+    // _handleInputKeyEvent 执行卡片间导航。
+    // 这避免了手柄事件绕过 Focus 树时，因 debugLabel 判断不可靠
+    // （如详情页退出后焦点恢复时机窗口）导致的误触发分区切换。
     if (_isMediaLibraryContext &&
         !isPlayerPlaybackContext &&
         !_isTabPanelVisible &&
         !_isSettingsPanelVisible &&
         !_isPlayerMenuVisible &&
-        !isSubPageActive) {
-      if (command == NipaplayLargeScreenInputCommand.navigateLeft) {
-        context.read<LargeScreenUiSfxService>().playTabSwitch();
-        context.read<TabChangeNotifier>().stepMediaLibrarySection(-1);
-        return;
-      }
-      if (command == NipaplayLargeScreenInputCommand.navigateRight) {
-        context.read<LargeScreenUiSfxService>().playTabSwitch();
-        context.read<TabChangeNotifier>().stepMediaLibrarySection(1);
-        return;
-      }
+        !isSubPageActive &&
+        (command == NipaplayLargeScreenInputCommand.navigateUp ||
+            command == NipaplayLargeScreenInputCommand.navigateDown ||
+            command == NipaplayLargeScreenInputCommand.navigateLeft ||
+            command == NipaplayLargeScreenInputCommand.navigateRight)) {
+      _dispatchGamepadToFocusedNode(command);
+      return;
     }
 
     // 当子页面（详情页、对话框等）处于激活状态时，手柄输入应
@@ -774,8 +829,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
 
     if (_isSettingsPanelVisible) {
-      // 当下拉菜单展开时，手柄输入由下拉菜单自身处理，不拦截。
+      // 当下拉菜单展开时，手柄输入需转发给下拉菜单自身处理
+      // （手柄输入绕过 Focus 树，下拉菜单的 onKeyEvent 收不到事件）。
       if (BlurDropdown.isAnyExpanded) {
+        _dispatchGamepadToFocusedNode(command);
         return;
       }
       switch (command) {
@@ -814,6 +871,16 @@ class _NipaplayLargeScreenScaffoldLayoutState
         case NipaplayLargeScreenInputCommand.toggleMenu:
         case NipaplayLargeScreenInputCommand.back:
           _closePlayerMenu();
+        case NipaplayLargeScreenInputCommand.navigateUp:
+        case NipaplayLargeScreenInputCommand.navigateDown:
+        case NipaplayLargeScreenInputCommand.navigateLeft:
+        case NipaplayLargeScreenInputCommand.navigateRight:
+        case NipaplayLargeScreenInputCommand.activate:
+          // 手柄输入绕过 Focus 树，播放器菜单的 _panelFocusNode
+          // 收不到方向键/确认键。将手柄命令转为键盘事件分发给当前
+          // 焦点节点（播放器菜单内部节点），事件冒泡到 _panelFocusNode
+          // 的 onKeyEvent 由其自行处理导航逻辑。
+          _dispatchGamepadToFocusedNode(command);
         default:
           break;
       }

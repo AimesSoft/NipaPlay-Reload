@@ -29,6 +29,9 @@ enum LargeScreenUiSfx {
 
   /// 设置中滑动条类设置项的值变化（左右键调节）
   sliderChange,
+
+  /// 启动播放器（点击剧集开始播放）
+  launchPlayer,
 }
 
 /// 大屏幕模式 UI 音效服务。
@@ -64,9 +67,12 @@ class LargeScreenUiSfxService with ChangeNotifier {
     LargeScreenUiSfx.menuClose: 'sfx/menu_close.wav',
     LargeScreenUiSfx.tabSwitch: 'sfx/tab_switch.wav',
     LargeScreenUiSfx.sliderChange: 'sfx/slider_change.wav',
+    LargeScreenUiSfx.launchPlayer: 'sfx/launch_player.wav',
   };
 
   final Map<LargeScreenUiSfx, AudioPlayer> _players = {};
+  // 每种音效类型对应的播放锁，防止 stop+play 排队阻塞。
+  final Map<LargeScreenUiSfx, bool> _playingLock = {};
 
   bool _largeScreenModeActive = false;
   bool _enabled = true;
@@ -78,6 +84,10 @@ class LargeScreenUiSfxService with ChangeNotifier {
     if (_largeScreenModeActive == value) return;
     _largeScreenModeActive = value;
     debugPrint('LargeScreenUiSfxService: largeScreenModeActive = $value');
+    if (value) {
+      // 进入大屏幕模式时预加载所有播放器，避免首次播放延迟。
+      _preloadPlayers();
+    }
     notifyListeners();
   }
 
@@ -105,6 +115,20 @@ class LargeScreenUiSfxService with ChangeNotifier {
     });
   }
 
+  /// 预加载所有音效播放器并预热 audio source，避免首次播放延迟。
+  void _preloadPlayers() {
+    for (final sfx in _assetPaths.keys) {
+      final player = _playerFor(sfx);
+      // setSource 预加载 asset 到播放器，不实际播放。
+      try {
+        player.setSource(AssetSource(_assetPaths[sfx]!));
+        debugPrint('LargeScreenUiSfxService: 预加载 $sfx');
+      } catch (e) {
+        debugPrint('LargeScreenUiSfxService: 预加载失败 ($sfx): $e');
+      }
+    }
+  }
+
   /// 播放指定类型的 UI 音效。
   ///
   /// 如果大屏幕模式未激活或音效被禁用，则静默返回。
@@ -123,16 +147,25 @@ class LargeScreenUiSfxService with ChangeNotifier {
       debugPrint('LargeScreenUiSfxService: 未知音效类型 $sfx，无路径映射');
       return;
     }
+    // 防重入锁：如果上一次 stop+play 还在进行中，直接跳过本次，
+    // 避免快速连续触发时多次 stop+play 排队阻塞。
+    // 被跳过的触发由下一次完成的播放覆盖，听感上无影响。
+    if (_playingLock[sfx] == true) {
+      return;
+    }
+    _playingLock[sfx] = true;
     debugPrint('LargeScreenUiSfxService: 播放音效 $sfx (路径: $assetPath)');
     try {
       final player = _playerFor(sfx);
-      // 先停止当前播放，再重新播放，确保快速连续触发时可打断。
+      // 先停止当前播放再重新播放，确保可打断。
       // 在 Windows Media Foundation 上，直接再次调用 play() 不会重启，
       // 必须显式 stop() 才能从头播放。
       await player.stop();
       await player.play(AssetSource(assetPath), volume: 1.0);
     } catch (e) {
       debugPrint('LargeScreenUiSfxService: 播放音效失败 ($sfx): $e');
+    } finally {
+      _playingLock[sfx] = false;
     }
   }
 
@@ -162,6 +195,9 @@ class LargeScreenUiSfxService with ChangeNotifier {
 
   /// 便捷方法：滑动条值变化
   Future<void> playSliderChange() => play(LargeScreenUiSfx.sliderChange);
+
+  /// 便捷方法：启动播放器
+  Future<void> playLaunchPlayer() => play(LargeScreenUiSfx.launchPlayer);
 
   @override
   void dispose() {

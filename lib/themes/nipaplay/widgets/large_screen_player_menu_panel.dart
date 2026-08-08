@@ -148,6 +148,7 @@ class _NipaplayLargeScreenPlayerMenuPanelState
     return Focus(
       focusNode: widget.initialFocusNode,
       descendantsAreFocusable: false,
+      onKeyEvent: _handleKeyEvent,
       onFocusChange: (focused) {
         if (focused && _isContentFocused && mounted) {
           setState(() => _isContentFocused = false);
@@ -269,6 +270,7 @@ class _NipaplayLargeScreenPlayerMenuPanelState
               node: _contentFocusScope,
               canRequestFocus: _isContentFocused,
               descendantsAreFocusable: _isContentFocused,
+              onKeyEvent: _handleKeyEvent,
               child: selectedEntry.paneId == null
                   ? _PlayerMenuActionsPane(
                       videoState: videoState,

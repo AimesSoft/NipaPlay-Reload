@@ -37,9 +37,18 @@ class NipaplayLargeScreenSidePanelItem extends StatefulWidget {
     required this.inactiveColor,
     required this.onTap,
     required this.child,
+    this.isFocused = false,
   });
 
+  /// 当前页是否选中（焦点可能在内容区）。
   final bool isSelected;
+
+  /// 焦点是否在此菜单项上（菜单列激活且此项是焦点项）。
+  /// 与 [isSelected] 区分：isFocused=true 时背景更亮（0.92 alpha），
+  /// isSelected=true 但 isFocused=false 时背景较暗（0.5 alpha），
+  /// 用于提示用户焦点在菜单列还是在内容区。
+  final bool isFocused;
+
   final Color activeColor;
   final Color inactiveColor;
   final VoidCallback onTap;
@@ -72,8 +81,23 @@ class _NipaplayLargeScreenSidePanelItemState
   @override
   Widget build(BuildContext context) {
     final bool isInteractiveActive = _isHovered || _isPressed;
-    final bool isActive = widget.isSelected || isInteractiveActive;
+    final bool isFocused = widget.isFocused || isInteractiveActive;
+    final bool isSelected = widget.isSelected;
+    final bool isActive = isSelected || isFocused;
     final Color itemColor = isActive ? Colors.white : widget.inactiveColor;
+
+    // 三种视觉态：
+    // - 焦点在此项（菜单列激活）：activeColor @ 0.92
+    // - 选中但焦点在内容区：activeColor @ 0.5
+    // - 既未选中也未聚焦：透明
+    final Color backgroundColor;
+    if (isFocused) {
+      backgroundColor = widget.activeColor.withValues(alpha: 0.92);
+    } else if (isSelected) {
+      backgroundColor = widget.activeColor.withValues(alpha: 0.5);
+    } else {
+      backgroundColor = Colors.transparent;
+    }
 
     return Material(
       color: Colors.transparent,
@@ -95,7 +119,7 @@ class _NipaplayLargeScreenSidePanelItemState
             vertical: 10,
           ),
           decoration: BoxDecoration(
-            color: isActive ? widget.activeColor : Colors.transparent,
+            color: backgroundColor,
             border: Border(
               left: BorderSide(
                 color: isActive ? widget.activeColor : Colors.transparent,
