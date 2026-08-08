@@ -108,8 +108,8 @@ class LargeScreenUiSfxService with ChangeNotifier {
   /// 播放指定类型的 UI 音效。
   ///
   /// 如果大屏幕模式未激活或音效被禁用，则静默返回。
-  /// 同一音效类型的连续播放会打断前一次（如快速连续方向键），
-  /// 不同音效类型互不影响。
+  /// 同一音效类型的连续播放会打断前一次（如快速连续方向键、
+  /// 滑块连续步进），不同音效类型互不影响。
   Future<void> play(LargeScreenUiSfx sfx) async {
     if (!_largeScreenModeActive || !_enabled) {
       debugPrint(
@@ -126,6 +126,10 @@ class LargeScreenUiSfxService with ChangeNotifier {
     debugPrint('LargeScreenUiSfxService: 播放音效 $sfx (路径: $assetPath)');
     try {
       final player = _playerFor(sfx);
+      // 先停止当前播放，再重新播放，确保快速连续触发时可打断。
+      // 在 Windows Media Foundation 上，直接再次调用 play() 不会重启，
+      // 必须显式 stop() 才能从头播放。
+      await player.stop();
       await player.play(AssetSource(assetPath), volume: 1.0);
     } catch (e) {
       debugPrint('LargeScreenUiSfxService: 播放音效失败 ($sfx): $e');

@@ -312,6 +312,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
           setState(() {
             _isControlFocused = focused;
           });
+          if (focused && NipaplayLargeScreenModeScope.isActiveOf(context)) {
+            context.read<LargeScreenUiSfxService>().playFocusChange();
+          }
         },
         onKeyEvent: _handleControlKeyEvent,
         descendantsAreFocusable: false,

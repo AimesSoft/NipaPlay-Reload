@@ -5,7 +5,9 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 
 const double kNipaplayLargeScreenSettingsPanelWidth = 900;
 const double _kNipaplayLargeScreenSettingsMenuWidth = 230;
@@ -367,6 +369,7 @@ class _NipaplayLargeScreenSettingsPanelState
     if (_entries.isEmpty) return;
     final next = (widget.focusedIndex + delta).clamp(0, _entries.length - 1);
     if (next == widget.focusedIndex) return;
+    context.read<LargeScreenUiSfxService>().playFocusChange();
     widget.onFocusedIndexChanged?.call(next);
     _selectIndex(next);
   }

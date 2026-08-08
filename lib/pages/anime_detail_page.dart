@@ -41,6 +41,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
@@ -101,6 +102,7 @@ class AnimeDetailPage extends StatefulWidget {
   }) {
     if (NipaplayLargeScreenModeScope.isActiveOf(context) &&
         playbackDetailContext == null) {
+      context.read<LargeScreenUiSfxService>().playOpenSubPage();
       return Navigator.of(context).push<WatchHistoryItem>(
         NipaplayLargeScreenWindowPageRoute<WatchHistoryItem>(
           enableAnimation: true,
@@ -113,7 +115,12 @@ class AnimeDetailPage extends StatefulWidget {
             sharedSourceLabel: sharedSourceLabel,
           ),
         ),
-      );
+      ).then((result) {
+        if (context.mounted) {
+          context.read<LargeScreenUiSfxService>().playCloseSubPage();
+        }
+        return result;
+      });
     }
 
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {

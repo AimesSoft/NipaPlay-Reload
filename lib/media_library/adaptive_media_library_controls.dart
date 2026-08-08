@@ -25,7 +25,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/widgets/in_view_dialog.dart';
+import 'package:provider/provider.dart';
 
 class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
   const AdaptiveMediaLibraryScaffold({
@@ -229,10 +231,12 @@ class _TelevisionMediaLibrarySectionBarState
 
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowLeft) {
+      context.read<LargeScreenUiSfxService>().playTabSwitch();
       _stepSection(-1);
       return material.KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
+      context.read<LargeScreenUiSfxService>().playTabSwitch();
       _stepSection(1);
       return material.KeyEventResult.handled;
     }
