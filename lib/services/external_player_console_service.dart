@@ -297,6 +297,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         // scrollDurationSeconds: style.scrollDurationSeconds,
         timeOffsetSeconds: style.danmakuOffset,
         // mergeDuplicates: style.mergeDuplicates,
+        allowStacking: style.danmakuAllowStacking,
         // fontFamily: style.fontFamily,
         outlineStyle: outlineStyle,
         outlineWidth: style.outlineWidth,
@@ -319,7 +320,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
               .map((item) => item.item)
               .toList(growable: false),
           settings,
-          allowStacking: style.danmakuAllowStacking,
         );
 
         // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务

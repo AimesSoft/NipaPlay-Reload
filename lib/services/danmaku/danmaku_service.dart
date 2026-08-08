@@ -63,6 +63,7 @@ class DanmakuService {
       scrollDurationSeconds: vps.danmakuScrollDurationSeconds,
       timeOffsetSeconds: vps.manualDanmakuOffset + vps.autoDanmakuOffset,
       mergeDuplicates: vps.mergeDanmaku,
+      allowStacking: vps.danmakuStacking,
       fontFamily: vps.danmakuFontFamily,
       outlineStyle: switch (vps.danmakuOutlineStyle) {
         DanmakuOutlineStyle.none => AssOutlineStyle.none,
@@ -78,10 +79,6 @@ class DanmakuService {
       },
     );
 
-    return generateExternalPlayerDanmakuAss(
-      danmakuItemSet.toList(growable: false),
-      assSettings,
-      allowStacking: vps.danmakuStacking,
-    );
+    return generateExternalPlayerDanmakuAss(danmakuItemSet.toList(growable: false), assSettings);
   }
 }
