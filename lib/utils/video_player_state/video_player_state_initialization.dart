@@ -202,9 +202,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
         _initialDragVolume = initialVolume;
         player.volume = initialVolume;
       }
-      //debugPrint("Initial volume loaded: $_currentVolume (saved: ${savedVolume != null})");
     } catch (e) {
-      //debugPrint("Failed to get initial system volume from player: $e");
       _currentVolume = 0.5; // Fallback
       _initialDragVolume = _currentVolume;
     }
