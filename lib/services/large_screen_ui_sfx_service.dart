@@ -55,15 +55,15 @@ class LargeScreenUiSfxService with ChangeNotifier {
 
   /// 枚举值到 asset 路径（相对于 assets/ 目录）的映射。
   static const Map<LargeScreenUiSfx, String> _assetPaths = {
-    LargeScreenUiSfx.focusChange: 'sfx/focus_change.ogg',
-    LargeScreenUiSfx.switchOn: 'sfx/switch_on.ogg',
-    LargeScreenUiSfx.switchOff: 'sfx/switch_off.ogg',
-    LargeScreenUiSfx.openSubPage: 'sfx/open_sub_page.ogg',
-    LargeScreenUiSfx.closeSubPage: 'sfx/close_sub_page.ogg',
-    LargeScreenUiSfx.menuOpen: 'sfx/menu_open.ogg',
-    LargeScreenUiSfx.menuClose: 'sfx/menu_close.ogg',
-    LargeScreenUiSfx.tabSwitch: 'sfx/tab_switch.ogg',
-    LargeScreenUiSfx.sliderChange: 'sfx/slider_change.ogg',
+    LargeScreenUiSfx.focusChange: 'sfx/focus_change.wav',
+    LargeScreenUiSfx.switchOn: 'sfx/switch_on.wav',
+    LargeScreenUiSfx.switchOff: 'sfx/switch_off.wav',
+    LargeScreenUiSfx.openSubPage: 'sfx/open_sub_page.wav',
+    LargeScreenUiSfx.closeSubPage: 'sfx/close_sub_page.wav',
+    LargeScreenUiSfx.menuOpen: 'sfx/menu_open.wav',
+    LargeScreenUiSfx.menuClose: 'sfx/menu_close.wav',
+    LargeScreenUiSfx.tabSwitch: 'sfx/tab_switch.wav',
+    LargeScreenUiSfx.sliderChange: 'sfx/slider_change.wav',
   };
 
   final Map<LargeScreenUiSfx, AudioPlayer> _players = {};
