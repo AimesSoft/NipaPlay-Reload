@@ -5,16 +5,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
-import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/mpv_utils.dart';
@@ -160,114 +157,6 @@ void main() {
 
     expect(detected, fakeMpv.path);
   });
-
-  test('launches a generic Unix player without opening the console', () async {
-    ExternalPlayerConsoleService.closePlayerAndConsole();
-    final session = await ExternalPlayerService.launch(
-      playerPath: '/bin/sleep',
-      mediaPath: '30',
-    );
-    if (session == null) fail('Expected the generic player to start');
-    addTearDown(session.terminate);
-
-    expect(session, isA<OtherSession>());
-    expect(session.type, ExternalPlayerType.generic);
-    expect(session.mediaPath, '30');
-    expect(session.ipcPath, isNull);
-    expect(ExternalPlayerConsoleService.hasActiveSession, isFalse);
-  });
-
-  test(
-    'launches mpv with a JSON IPC socket on supported Unix desktops',
-    () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'nipaplay_mpv_launch_test_',
-      );
-      final fakeMpv = File('${tempDir.path}/fake-mpv');
-      final argsFile = File('${fakeMpv.path}.args');
-      await fakeMpv.writeAsString(r'''#!/bin/sh
-printf '%s\n' "$@" > "${0}.args"
-exec /bin/sleep 30
-''');
-      final chmod = await Process.run('/bin/chmod', ['+x', fakeMpv.path]);
-      expect(chmod.exitCode, 0);
-
-      MpvSession? session;
-      addTearDown(() async {
-        session?.terminate();
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
-      });
-
-      final launched = await ExternalPlayerService.launch(
-        playerPath: fakeMpv.path,
-        mediaPath: '/tmp/test-video.mkv',
-        extraArgs: const ['--pause=yes'],
-      );
-      expect(launched, isA<MpvSession>());
-      session = launched! as MpvSession;
-      await _waitUntil(argsFile.existsSync);
-
-      final args = await argsFile.readAsLines();
-      expect(args, contains('/tmp/test-video.mkv'));
-      expect(args, contains('--pause=yes'));
-      expect(
-        args,
-        contains('--input-ipc-server=${session.ipcPath}'),
-      );
-      if (Platform.isMacOS) {
-        expect(utf8.encode(session.ipcPath!).length, lessThanOrEqualTo(103));
-      }
-    },
-    skip: !(Platform.isLinux || Platform.isMacOS),
-  );
-
-  test(
-    'launches a macOS mpv app through its bundled executable',
-    () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'nipaplay_mpv_app_launch_test_',
-      );
-      final appBundle = Directory('${tempDir.path}/fake-mpv.app');
-      final executable = File(
-        '${appBundle.path}/Contents/MacOS/mpv',
-      );
-      final argsFile = File('${executable.path}.args');
-      await executable.parent.create(recursive: true);
-      await executable.writeAsString(r'''#!/bin/sh
-printf '%s\n' "$@" > "${0}.args"
-exec /bin/sleep 30
-''');
-      final chmod = await Process.run('/bin/chmod', ['+x', executable.path]);
-      expect(chmod.exitCode, 0);
-
-      MpvSession? session;
-      addTearDown(() async {
-        session?.terminate();
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
-      });
-
-      final launched = await ExternalPlayerService.launch(
-        playerPath: appBundle.path,
-        mediaPath: '/tmp/test-video.mkv',
-        extraArgs: const ['--pause=yes'],
-      );
-      expect(launched, isA<MpvSession>());
-      session = launched! as MpvSession;
-      await _waitUntil(argsFile.existsSync);
-
-      final args = await argsFile.readAsLines();
-      expect(args, contains('/tmp/test-video.mkv'));
-      expect(args, contains('--pause=yes'));
-      expect(
-        args,
-        contains('--input-ipc-server=${session.ipcPath}'),
-      );
-      expect(utf8.encode(session.ipcPath!).length, lessThanOrEqualTo(103));
-    },
-    skip: !Platform.isMacOS,
-  );
 
   test('uses the supplied process exit future for lifecycle monitoring',
       () async {

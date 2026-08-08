@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_prompt_controller.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/countdown_snackbar.dart';
@@ -249,15 +250,19 @@ class AutoNextEpisodeService {
         _nextEpisode = null;
         return;
       }
-      ExternalPlayerService.launch(
-              playerPath: playerPath, mediaPath: nextEpisode.videoPath)
-          .then((session) {
-        if (!context.mounted) return;
-        BlurSnackBar.show(
-          context,
-          session != null ? '已通过外部播放器打开下一话' : '外部播放器启动失败',
-        );
-      });
+      await ExternalPlayerService.tryHandlePlayback(
+        context,
+        PlayableItem(
+          videoPath: nextEpisode.videoPath,
+          title: nextEpisode.title,
+          subtitle: nextEpisode.subtitle,
+          animeId: nextEpisode.animeId,
+          episodeId: nextEpisode.episodeId,
+          historyItem: nextEpisode.historyItem,
+          actualPlayUrl: nextEpisode.actualPlayUrl,
+          playbackSession: nextEpisode.playbackSession,
+        ),
+      );
       _nextEpisode = null;
       return;
     }

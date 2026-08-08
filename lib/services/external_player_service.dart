@@ -57,101 +57,6 @@ class ExternalPlayerService {
   static bool get isSupportedPlatform => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
 
-  /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
-  ///
-  /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
-  /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
-  /// 模式启动; macOS 的 mpv.app 直接执行包内主程序; Linux 播放器以 detached
-  /// 模式启动. mpv 在所有桌面平台都会额外启用 JSON IPC 和弹幕控制台能力.
-  ///
-  /// 成功启动时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
-  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. mpv 还必须
-  /// 在启动期限内通过 JSON IPC 报告已经加载媒体; 其他播放器只能确认进程已派生.
-  static Future<ExternalPlayerLaunchSession?> launch({
-    required String playerPath,
-    required String mediaPath,
-    List<String> extraArgs = const [],
-    DanmakuLaunchAssets? danmakuAssets,
-    Duration duration = Duration.zero,
-    Duration position = Duration.zero,
-  }) async {
-    _printLog('launch: playerPath="$playerPath", mediaPath="$mediaPath", extraArgCount=${extraArgs.length}');
-    if (!isSupportedPlatform) {
-      _printLog('launch: 平台不支持');
-      return null;
-    }
-
-    final resolvedPath = await _resolvePlayerPath(playerPath.trim());
-    _printLog('launch: resolvedPath="$resolvedPath"');
-    if (resolvedPath == null || resolvedPath.isEmpty) {
-      _printLog('launch: resolvedPath 为空, 中止');
-      return null;
-    }
-
-    final exists = await FileSystemEntity.type(resolvedPath) !=
-        FileSystemEntityType.notFound;
-    _printLog('launch: 文件存在=$exists ($resolvedPath)');
-    if (!exists) {
-      _printLog('launch: 外部播放器不存在: $resolvedPath');
-      return null;
-    }
-
-    try {
-      final type = _detectPlayer(resolvedPath);
-      // mpv 和 mpv.net 都支持 --input-ipc-server, 走 MpvSession 路径以启用控制台
-      if ((type == ExternalPlayerType.mpv ||
-              type == ExternalPlayerType.mpvNet) &&
-          !kIsWeb) {
-        return await MpvSession.launch(
-          playerPath: resolvedPath,
-          mediaPath: mediaPath,
-          extraArgs: extraArgs,
-          danmakuAssets: danmakuAssets,
-          duration: duration,
-          position: position,
-        );
-      }
-      late final Process process;
-      var monitorProcess = false;
-
-      if (Platform.isWindows) {
-        final isShortcut = resolvedPath.toLowerCase().endsWith('.lnk');
-        process = isShortcut
-            ? await Process.start(
-                'cmd', ['/c', 'start', '', resolvedPath, mediaPath, ...extraArgs],
-                runInShell: true)
-            : await Process.start(resolvedPath, [mediaPath, ...extraArgs],
-                mode: ProcessStartMode.detached);
-      } else if (Platform.isMacOS) {
-        final isAppBundle = resolvedPath.toLowerCase().endsWith('.app');
-        process = isAppBundle
-            ? await Process.start('open', ['-a', resolvedPath, mediaPath])
-            : await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
-      } else {
-        process = await Process.start(
-          resolvedPath,
-          [mediaPath, ...extraArgs],
-          mode: ProcessStartMode.detached,
-        );
-        monitorProcess = true;
-      }
-
-      return OtherSession.attach(
-        type: type,
-        playerPath: resolvedPath,
-        mediaPath: mediaPath,
-        processId: process.pid,
-        duration: duration,
-        position: position,
-        monitorProcess: monitorProcess,
-      );
-    } catch (e, st) {
-      _printLog('launch: 启动异常: $e');
-      debugPrintStack(stackTrace: st);
-      return null;
-    }
-  }
-
   /// 按当前设置尝试接管 [item] 的播放请求.
   ///
   /// 本方法是外部播放器功能的主要入口. 它从 [context] 读取
@@ -294,7 +199,7 @@ class ExternalPlayerService {
 
     // 启动外部播放器, 并获取启动结果
     final history = item.historyItem;
-    final session = await launch(
+    final session = await _launch(
       playerPath: playerPath,
       mediaPath: mediaPath,
       extraArgs: extraArgs,
@@ -354,9 +259,105 @@ class ExternalPlayerService {
     return true;
   }
 
+
   // ===========================================================================
   // =============================== 内部方法 ==================================
   // ===========================================================================
+
+  /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
+  ///
+  /// 启动前会解析 macOS security bookmark, 并检查播放器路径是否存在.
+  /// Windows 快捷方式通过 `cmd /c start` 打开, 普通可执行文件以 detached
+  /// 模式启动; macOS 的 mpv.app 直接执行包内主程序; Linux 播放器以 detached
+  /// 模式启动. mpv 在所有桌面平台都会额外启用 JSON IPC 和弹幕控制台能力.
+  ///
+  /// 成功启动时返回对应的 [ExternalPlayerLaunchSession]. 不支持的平台, 空路径,
+  /// 文件不存在或进程派生异常均返回 `null`, 且异常不会向调用方抛出. mpv 还必须
+  /// 在启动期限内通过 JSON IPC 报告已经加载媒体; 其他播放器只能确认进程已派生.
+  static Future<ExternalPlayerLaunchSession?> _launch({
+    required String playerPath,
+    required String mediaPath,
+    List<String> extraArgs = const [],
+    DanmakuLaunchAssets? danmakuAssets,
+    Duration duration = Duration.zero,
+    Duration position = Duration.zero,
+  }) async {
+    _printLog('launch: playerPath="$playerPath", mediaPath="$mediaPath", extraArgCount=${extraArgs.length}');
+    if (!isSupportedPlatform) {
+      _printLog('launch: 平台不支持');
+      return null;
+    }
+
+    final resolvedPath = await _resolvePlayerPath(playerPath.trim());
+    _printLog('launch: resolvedPath="$resolvedPath"');
+    if (resolvedPath == null || resolvedPath.isEmpty) {
+      _printLog('launch: resolvedPath 为空, 中止');
+      return null;
+    }
+
+    final exists = await FileSystemEntity.type(resolvedPath) !=
+        FileSystemEntityType.notFound;
+    _printLog('launch: 文件存在=$exists ($resolvedPath)');
+    if (!exists) {
+      _printLog('launch: 外部播放器不存在: $resolvedPath');
+      return null;
+    }
+
+    try {
+      final type = _detectPlayer(resolvedPath);
+      // mpv 和 mpv.net 都支持 --input-ipc-server, 走 MpvSession 路径以启用控制台
+      if ((type == ExternalPlayerType.mpv ||
+              type == ExternalPlayerType.mpvNet) &&
+          !kIsWeb) {
+        return await MpvSession.launch(
+          playerPath: resolvedPath,
+          mediaPath: mediaPath,
+          extraArgs: extraArgs,
+          danmakuAssets: danmakuAssets,
+          duration: duration,
+          position: position,
+        );
+      }
+      late final Process process;
+      var monitorProcess = false;
+
+      if (Platform.isWindows) {
+        final isShortcut = resolvedPath.toLowerCase().endsWith('.lnk');
+        process = isShortcut
+            ? await Process.start(
+                'cmd', ['/c', 'start', '', resolvedPath, mediaPath, ...extraArgs],
+                runInShell: true)
+            : await Process.start(resolvedPath, [mediaPath, ...extraArgs],
+                mode: ProcessStartMode.detached);
+      } else if (Platform.isMacOS) {
+        final isAppBundle = resolvedPath.toLowerCase().endsWith('.app');
+        process = isAppBundle
+            ? await Process.start('open', ['-a', resolvedPath, mediaPath])
+            : await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
+      } else {
+        process = await Process.start(
+          resolvedPath,
+          [mediaPath, ...extraArgs],
+          mode: ProcessStartMode.detached,
+        );
+        monitorProcess = true;
+      }
+
+      return OtherSession.attach(
+        type: type,
+        playerPath: resolvedPath,
+        mediaPath: mediaPath,
+        processId: process.pid,
+        duration: duration,
+        position: position,
+        monitorProcess: monitorProcess,
+      );
+    } catch (e, st) {
+      _printLog('launch: 启动异常: $e');
+      debugPrintStack(stackTrace: st);
+      return null;
+    }
+  }
 
   /// 按 [path] 最后一段文件名推断外部播放器类型.
   ///
