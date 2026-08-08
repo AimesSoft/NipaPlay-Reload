@@ -9,53 +9,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
-import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/color.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
-import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-
-/// 外部播放器功能的持久化配置.
-///
-/// 配置是否真正可用由 [isReady] 判断: 除了启用功能外, 还必须提供非空的
-/// 播放器可执行文件路径. 路径是否存在及当前平台是否受支持由启动流程检查.
-class ExternalPlayerConfig {
-  /// 是否优先使用外部播放器处理播放请求.
-  final bool enabled;
-
-  /// 外部播放器的可执行文件, 快捷方式或 macOS 应用包路径.
-  final String playerPath;
-
-  /// 创建一份外部播放器配置.
-  const ExternalPlayerConfig({
-    required this.enabled,
-    required this.playerPath,
-  });
-
-  /// 配置是否已启用且包含非空的播放器路径.
-  bool get isReady => enabled && playerPath.trim().isNotEmpty;
-}
 
 /// 项目里掌管协调桌面端外部播放器启动, 播放参数注入和弹幕导出的神.
 ///
@@ -71,6 +46,7 @@ class ExternalPlayerConfig {
 ///
 /// 此服务只负责发起启动, 无法保证外部播放器最终成功解码或播放媒体.
 class ExternalPlayerService {
+
   // 单例访问
   ExternalPlayerService._();
   static final instance = ExternalPlayerService._();
@@ -78,136 +54,8 @@ class ExternalPlayerService {
   /// 当前运行平台是否支持由本服务启动外部播放器.
   ///
   /// Web, 移动端以及未显式支持的桌面平台均返回 `false`.
-  static bool get isSupportedPlatform =>
-      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  static bool get isSupportedPlatform => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
-  /// 查找当前系统中已安装的 mpv.
-  ///
-  /// macOS 优先使用应用包, 随后检查 Homebrew、Intel Homebrew 和 MacPorts
-  /// 的常见可执行文件位置；Linux 会检查常见系统路径；Windows 会检查常见安装
-  /// 路径和 PATH。最后再搜索 PATH。
-  /// [candidatePaths] 仅用于测试或调用方需要限定搜索范围的场景。
-  static Future<String?> detectInstalledMpv({
-    Iterable<String>? candidatePaths,
-  }) async {
-    if (kIsWeb || !(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) return null;
-
-    final candidates = candidatePaths ?? _defaultMpvCandidatePaths();
-    for (final candidate in candidates) {
-      final path = candidate.trim();
-      if (path.isEmpty) continue;
-      final type = await FileSystemEntity.type(path);
-      if (type == FileSystemEntityType.file ||
-          type == FileSystemEntityType.link ||
-          (Platform.isMacOS &&
-              type == FileSystemEntityType.directory &&
-              path.toLowerCase().endsWith('.app'))) {
-        return path;
-      }
-    }
-    return null;
-  }
-
-  static Iterable<String> _defaultMpvCandidatePaths() sync* {
-    if (Platform.isMacOS) {
-      yield '/Applications/mpv.app';
-      final home = Platform.environment['HOME'];
-      if (home != null && home.isNotEmpty) {
-        yield '$home/Applications/mpv.app';
-      }
-      yield '/opt/homebrew/bin/mpv';
-      yield '/usr/local/bin/mpv';
-      yield '/opt/local/bin/mpv';
-    } else if (Platform.isLinux) {
-      yield '/usr/bin/mpv';
-      yield '/usr/local/bin/mpv';
-      yield '/snap/bin/mpv';
-    } else if (Platform.isWindows) {
-      // Windows 常见 mpv 安装位置
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      if (localAppData != null && localAppData.isNotEmpty) {
-        yield '$localAppData\\mpv\\mpv.exe';
-        yield '$localAppData\\mpv.net\\mpvnet.exe';
-      }
-      final programFiles = Platform.environment['ProgramFiles'];
-      if (programFiles != null && programFiles.isNotEmpty) {
-        yield '$programFiles\\mpv\\mpv.exe';
-        yield '$programFiles\\mpv.net\\mpvnet.exe';
-      }
-      final programFilesX86 = Platform.environment['ProgramFiles(x86)'];
-      if (programFilesX86 != null && programFilesX86.isNotEmpty) {
-        yield '$programFilesX86\\mpv\\mpv.exe';
-        yield '$programFilesX86\\mpv.net\\mpvnet.exe';
-      }
-      // scoop 安装路径
-      final home = Platform.environment['USERPROFILE'];
-      if (home != null && home.isNotEmpty) {
-        yield '$home\\scoop\\shims\\mpv.exe';
-        yield '$home\\scoop\\shims\\mpvnet.exe';
-        yield '$home\\scoop\\apps\\mpv\\current\\mpv.exe';
-        yield '$home\\scoop\\apps\\mpv.net\\current\\mpvnet.exe';
-      }
-    }
-
-    final path = Platform.environment['PATH'];
-    if (path == null || path.isEmpty) return;
-    final separator = Platform.isWindows ? ';' : ':';
-    final executables = Platform.isWindows
-        ? ['mpv.exe', 'mpvnet.exe']
-        : ['mpv'];
-    for (final directory in path.split(separator)) {
-      if (directory.isEmpty) continue;
-      for (final executable in executables) {
-        yield '$directory${Platform.pathSeparator}$executable';
-      }
-    }
-  }
-
-  /// 从持久化设置中读取外部播放器配置.
-  ///
-  /// 未保存过的开关和路径分别按 `false` 与空字符串处理. 本方法不校验平台,
-  /// 文件是否存在或播放器是否能够执行; 调用方可先使用
-  /// [ExternalPlayerConfig.isReady] 做基本检查.
-  static Future<ExternalPlayerConfig> loadConfig() async {
-    final prefs = await SharedPreferences.getInstance();
-    final enabled = prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
-    final path = prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
-    return ExternalPlayerConfig(enabled: enabled, playerPath: path);
-  }
-
-  /// 解析应交给外部播放器的媒体地址.
-  ///
-  /// 地址按以下优先级选择:
-  ///
-  /// 1. [playbackSession] 中非空的流地址;
-  /// 2. 非空的 [actualPlayUrl];
-  /// 3. 原始 [videoPath].
-  ///
-  /// 新格式 WebDAV/SMB 持久化路径会在返回前转换为播放器能够访问的 HTTP URL.
-  /// 找不到连接或 SMB 本地代理启动失败时返回 `null`.
-  static Future<String?> resolveMediaPath({
-    required String videoPath, // 原始视频文件路径, 可能是本地文件或远程 URL
-    String? actualPlayUrl, // 实际播放地址, 可能是远程 URL 或 WebDAV/SMB 持久化路径
-    PlaybackSession? playbackSession, // 媒体服务器播放会话, 可能包含流地址
-  }) async {
-
-    final sessionUrl = playbackSession?.streamUrl;
-    String finalPath; // 最终用于启动外部播放器的媒体地址
-    if      (sessionUrl != null && sessionUrl.trim().isNotEmpty)       { finalPath = sessionUrl; }
-    else if (actualPlayUrl != null && actualPlayUrl.trim().isNotEmpty) { finalPath = actualPlayUrl; }
-    else                                                               { finalPath = videoPath; }
-
-    if (MediaSourceUtils.isNewWebDavPath(finalPath)) {
-      await WebDAVService.instance.initialize();
-      return MediaSourceUtils.resolveWebDavPathToUrl(finalPath);
-    }
-    if (MediaSourceUtils.isNewSmbPath(finalPath)) {
-      await SMBProxyService.instance.initialize();
-      if (!SMBProxyService.instance.isRunning) return null;
-      return MediaSourceUtils.resolveSmbPathToUrl(finalPath);
-    }
-    return finalPath;
-  }
 
   /// 使用 [playerPath] 启动外部播放器打开 [mediaPath], 并附加 [extraArgs].
   ///
@@ -227,26 +75,24 @@ class ExternalPlayerService {
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
   }) async {
-    debugPrint('[ExtPlayer] launch: playerPath="$playerPath", '
-        'mediaPath="$mediaPath", '
-        'extraArgCount=${extraArgs.length}');
+    _printLog('launch: playerPath="$playerPath", mediaPath="$mediaPath", extraArgCount=${extraArgs.length}');
     if (!isSupportedPlatform) {
-      debugPrint('[ExtPlayer] launch: 平台不支持');
+      _printLog('launch: 平台不支持');
       return null;
     }
 
     final resolvedPath = await _resolvePlayerPath(playerPath.trim());
-    debugPrint('[ExtPlayer] launch: resolvedPath="$resolvedPath"');
+    _printLog('launch: resolvedPath="$resolvedPath"');
     if (resolvedPath == null || resolvedPath.isEmpty) {
-      debugPrint('[ExtPlayer] launch: resolvedPath 为空, 中止');
+      _printLog('launch: resolvedPath 为空, 中止');
       return null;
     }
 
     final exists = await FileSystemEntity.type(resolvedPath) !=
         FileSystemEntityType.notFound;
-    debugPrint('[ExtPlayer] launch: 文件存在=$exists ($resolvedPath)');
+    _printLog('launch: 文件存在=$exists ($resolvedPath)');
     if (!exists) {
-      debugPrint('[ExtPlayer] launch: 外部播放器不存在: $resolvedPath');
+      _printLog('launch: 外部播放器不存在: $resolvedPath');
       return null;
     }
 
@@ -265,64 +111,45 @@ class ExternalPlayerService {
           position: position,
         );
       }
-      return await _launchOtherSession(
+      late final Process process;
+      var monitorProcess = false;
+
+      if (Platform.isWindows) {
+        final isShortcut = resolvedPath.toLowerCase().endsWith('.lnk');
+        process = isShortcut
+            ? await Process.start(
+                'cmd', ['/c', 'start', '', resolvedPath, mediaPath, ...extraArgs],
+                runInShell: true)
+            : await Process.start(resolvedPath, [mediaPath, ...extraArgs],
+                mode: ProcessStartMode.detached);
+      } else if (Platform.isMacOS) {
+        final isAppBundle = resolvedPath.toLowerCase().endsWith('.app');
+        process = isAppBundle
+            ? await Process.start('open', ['-a', resolvedPath, mediaPath])
+            : await Process.start(resolvedPath, [mediaPath, ...extraArgs]);
+      } else {
+        process = await Process.start(
+          resolvedPath,
+          [mediaPath, ...extraArgs],
+          mode: ProcessStartMode.detached,
+        );
+        monitorProcess = true;
+      }
+
+      return OtherSession.attach(
         type: type,
         playerPath: resolvedPath,
         mediaPath: mediaPath,
-        extraArgs: extraArgs,
+        processId: process.pid,
         duration: duration,
         position: position,
+        monitorProcess: monitorProcess,
       );
     } catch (e, st) {
-      debugPrint('[ExtPlayer] launch: 启动异常: $e');
+      _printLog('launch: 启动异常: $e');
       debugPrintStack(stackTrace: st);
       return null;
     }
-  }
-
-  /// 启动 mpv 以外的播放器进程.
-  static Future<OtherSession> _launchOtherSession({
-    required ExternalPlayerType type,
-    required String playerPath,
-    required String mediaPath,
-    required List<String> extraArgs,
-    required Duration duration,
-    required Duration position,
-  }) async {
-    late final Process process;
-    var monitorProcess = false;
-
-    if (Platform.isWindows) {
-      final isShortcut = playerPath.toLowerCase().endsWith('.lnk');
-      process = isShortcut
-          ? await Process.start(
-              'cmd', ['/c', 'start', '', playerPath, mediaPath, ...extraArgs],
-              runInShell: true)
-          : await Process.start(playerPath, [mediaPath, ...extraArgs],
-              mode: ProcessStartMode.detached);
-    } else if (Platform.isMacOS) {
-      final isAppBundle = playerPath.toLowerCase().endsWith('.app');
-      process = isAppBundle
-          ? await Process.start('open', ['-a', playerPath, mediaPath])
-          : await Process.start(playerPath, [mediaPath, ...extraArgs]);
-    } else {
-      process = await Process.start(
-        playerPath,
-        [mediaPath, ...extraArgs],
-        mode: ProcessStartMode.detached,
-      );
-      monitorProcess = true;
-    }
-
-    return OtherSession.attach(
-      type: type,
-      playerPath: playerPath,
-      mediaPath: mediaPath,
-      processId: process.pid,
-      duration: duration,
-      position: position,
-      monitorProcess: monitorProcess,
-    );
   }
 
   /// 按当前设置尝试接管 [item] 的播放请求.
@@ -344,57 +171,57 @@ class ExternalPlayerService {
     PlayableItem item,
   ) async {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    debugPrint('[ExtPlayer] tryHandlePlayback 触发: '
+    _printLog('tryHandlePlayback 触发: '
         'useExternalPlayer=${settings.useExternalPlayer}, '
         'danmakuOverlay=${settings.externalPlayerDanmakuOverlay}, '
         'platformSupported=$isSupportedPlatform, '
         'title=${item.title}');
 
     if (!settings.useExternalPlayer) {
-      debugPrint('[ExtPlayer] useExternalPlayer=false, 交还内置播放器');
+      _printLog('tryHandlePlayback: useExternalPlayer=false, 交还内置播放器');
       return false;
     }
 
     if (!isSupportedPlatform) {
-      debugPrint('[ExtPlayer] 平台不支持外部播放器');
+      _printLog('tryHandlePlayback: 平台不支持外部播放器');
       _safeSnack(context, '外部播放器仅支持桌面端');
       return true;
     }
 
     final playerPath = settings.externalPlayerPath.trim();
     if (playerPath.isEmpty) {
-      debugPrint('[ExtPlayer] externalPlayerPath 为空');
+      _printLog('tryHandlePlayback: externalPlayerPath 为空');
       _safeSnack(context, '请先选择外部播放器');
       return true;
     }
-    debugPrint('[ExtPlayer] playerPath="$playerPath"');
+    _printLog('tryHandlePlayback: playerPath="$playerPath"');
     if (playerPath.toLowerCase().endsWith('.lnk')) {
-      debugPrint('[ExtPlayer] ⚠️ playerPath 是 .lnk 快捷方式. '
+      _printLog('tryHandlePlayback: ⚠️ playerPath 是 .lnk 快捷方式. '
           '部分播放器通过快捷方式启动时 --sub-file 等参数可能不会透传到目标 exe. '
           '若弹幕不显示, 请在设置里改选实际的 .exe 路径后再试. ');
     }
 
     String? mediaPath;
     try {
-      mediaPath = await resolveMediaPath(
+      mediaPath = await resolveExternalPlayerMediaPath(
         videoPath: item.videoPath,
         actualPlayUrl: item.actualPlayUrl,
         playbackSession: item.playbackSession,
       );
     } catch (error, stackTrace) {
-      debugPrint('[ExtPlayer] 解析远程媒体路径失败: $error');
+      _printLog('tryHandlePlayback: 解析远程媒体路径失败: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
     if (!context.mounted) return true;
     if (mediaPath == null || mediaPath.isEmpty) {
-      debugPrint('[ExtPlayer] 无法将媒体路径解析为外部播放器可访问的地址');
+      _printLog('tryHandlePlayback: 无法将媒体路径解析为外部播放器可访问的地址');
       _safeSnack(context, '无法解析远程媒体路径，请检查连接配置');
       return true;
     }
     final episodeId = item.episodeId?.toString() ?? '';
     final animeId = item.animeId?.toString() ?? '';
-    debugPrint(
-      '[ExtPlayer] mediaPath="$mediaPath", '
+    _printLog(
+      'tryHandlePlayback: mediaPath="$mediaPath", '
       'episodeId="$episodeId", animeId="$animeId"',
     );
 
@@ -403,7 +230,7 @@ class ExternalPlayerService {
     final danmakuEnabled = settings.externalPlayerDanmakuOverlay;
     DanmakuLaunchAssets? danmakuAssets; // ASS + Lua 脚本产物
     if (danmakuEnabled && episodeId.isNotEmpty) {
-      debugPrint('[ExtPlayer] 弹幕外挂开启, 开始准备弹幕…');
+      _printLog('tryHandlePlayback: 弹幕外挂开启, 开始准备弹幕…');
       _safeSnack(context, '正在准备弹幕…');
 
       // 获取弹幕
@@ -411,14 +238,14 @@ class ExternalPlayerService {
       try {
         danmakuAssets = await _prepareDanmakuAss(context, episodeId, animeId);
       } catch (e, st) {
-        debugPrint('[ExtPlayer] _prepareDanmakuAss 顶层异常: $e');
+        _printLog('tryHandlePlayback: _prepareDanmakuAss 顶层异常: $e');
         debugPrintStack(stackTrace: st);
         danmakuAssets = null;
       }
 
       // 计算弹幕准备耗时
       final dt = DateTime.now().difference(t0).inMilliseconds;
-      debugPrint('[ExtPlayer] 弹幕准备完成: '
+      _printLog('tryHandlePlayback: 弹幕准备完成: '
           'assPath=${danmakuAssets?.assPath}, luaPath=${danmakuAssets?.luaPath}, 耗时=${dt}ms');
 
       // 若弹幕产物不为空, 则注入 ASS + Lua 脚本参数; 否则提示弹幕加载失败
@@ -434,16 +261,16 @@ class ExternalPlayerService {
         // 若平滑参数不为空, 注入到 extraArgs
         if (smoothArgs.isNotEmpty) {
           extraArgs = [...extraArgs, ...smoothArgs];
-          debugPrint('[ExtPlayer] 注入弹幕平滑参数: $smoothArgs');
+          _printLog('tryHandlePlayback: 注入弹幕平滑参数: $smoothArgs');
         }
-        debugPrint(
-            '[ExtPlayer] 注入弹幕参数: extraArgs=$extraArgs, playerType=${_detectPlayer(playerPath)}');
+        _printLog(
+            'tryHandlePlayback: 注入弹幕参数: extraArgs=$extraArgs, playerType=${_detectPlayer(playerPath)}');
       } else {
-        debugPrint('[ExtPlayer] 弹幕为空/失败, 将无弹幕启动');
+        _printLog('tryHandlePlayback: 弹幕为空/失败, 将无弹幕启动');
         if (context.mounted) _safeSnack(context, '弹幕加载失败, 将无弹幕启动');
       }
     } else {
-      debugPrint('[ExtPlayer] 跳过弹幕外挂 '
+      _printLog('tryHandlePlayback: 跳过弹幕外挂 '
           '(enabled=$danmakuEnabled, episodeId="$episodeId")');
     }
 
@@ -451,11 +278,11 @@ class ExternalPlayerService {
     final uaArgs = _buildUAArgs(playerPath);
     if (uaArgs.isNotEmpty) {
       extraArgs = [...extraArgs, ...uaArgs];
-      debugPrint('[ExtPlayer] 注入自定义 UA 参数: $uaArgs');
+      _printLog('tryHandlePlayback: 注入自定义 UA 参数: $uaArgs');
     }
 
-    debugPrint(
-        '[ExtPlayer] 调用 launch: path="$playerPath", '
+    _printLog(
+        'tryHandlePlayback: 调用 launch: path="$playerPath", '
         'media="$mediaPath", '
         'extraArgCount=${extraArgs.length}');
 
@@ -477,7 +304,7 @@ class ExternalPlayerService {
     );
 
     final launched = session != null;
-    debugPrint('[ExtPlayer] launch 返回: $launched');
+    _printLog('tryHandlePlayback: launch 返回: $launched');
 
     // 若 mpv 会话启动成功, 则在控制台显示会话信息
     if (session is MpvSession) {
@@ -642,7 +469,7 @@ class ExternalPlayerService {
       if (!context.mounted) return;
       BlurSnackBar.show(context, msg);
     } catch (e) {
-      debugPrint('[ExtPlayer] snackbar 显示失败(忽略): $e');
+      _printLog('tryHandlePlayback: snackbar 显示失败(忽略): $e');
     }
   }
 
@@ -652,24 +479,23 @@ class ExternalPlayerService {
     String episodeId,
     String animeId,
   ) async {
-    debugPrint(
-        '[ExtPlayer] _prepareDanmakuAss: episodeId=$episodeId, animeId=$animeId');
+    _printLog('tryHandlePlayback: _prepareDanmakuAss: episodeId=$episodeId, animeId=$animeId');
     try {
       final vps = Provider.of<VideoPlayerState>(context, listen: false);
       final list = await vps.buildFilteredDanmakuForExport(
         episodeId: episodeId,
         animeId: animeId,
       );
-      debugPrint('[ExtPlayer] 过滤后弹幕 ${list.length} 条');
+      _printLog('tryHandlePlayback: 过滤后弹幕 ${list.length} 条');
       if (list.isEmpty) {
-        debugPrint('[ExtPlayer] 弹幕为空, 跳过 ASS 生成');
+        _printLog('tryHandlePlayback: 弹幕为空, 跳过 ASS 生成');
         return null;
       }
       final assSettings = _buildAssSettings(vps);
       final danmakuList = List<DanmakuItem>.unmodifiable(
         list.map(DanmakuItem.fromMap),
       );
-      debugPrint('[ExtPlayer] ASS 设置: fontSize=${assSettings.fontSize}, '
+      _printLog('tryHandlePlayback: ASS 设置: fontSize=${assSettings.fontSize}, '
           'opacity=${assSettings.opacity}, displayArea=${assSettings.displayArea}, '
           'scrollDur=${assSettings.scrollDurationSeconds}, '
           'offset=${assSettings.timeOffsetSeconds}, merge=${assSettings.mergeDuplicates}');
@@ -679,15 +505,15 @@ class ExternalPlayerService {
         assSettings,
         allowStacking: vps.danmakuStacking,
       );
-      debugPrint('[ExtPlayer] ASS 生成完成: ${ass.length} 字符');
-      debugPrint('[ExtPlayer] 会话弹幕 ${danmakuList.length} 条');
+      _printLog('tryHandlePlayback: ASS 生成完成: ${ass.length} 字符');
+      _printLog('tryHandlePlayback: 会话弹幕 ${danmakuList.length} 条');
       final assPath = await _writeAssTempFile(ass, episodeId);
       final assBasename = assPath.split(Platform.pathSeparator).last;
       final luaPath = _writeDanmakuLuaScript(assBasename);
-      debugPrint('[ExtPlayer] ASS 已写入临时文件: $assPath '
+      _printLog('tryHandlePlayback: ASS 已写入临时文件: $assPath '
           '(${File(assPath).lengthSync()} 字节)');
-      debugPrint('[ExtPlayer] Lua 脚本已写入: $luaPath');
-      debugPrint('[ExtPlayer] ASS 首行: ${ass.split('\n').first}');
+      _printLog('tryHandlePlayback: Lua 脚本已写入: $luaPath');
+      _printLog('tryHandlePlayback: ASS 首行: ${ass.split('\n').first}');
       return DanmakuLaunchAssets(
         assPath: assPath,
         luaPath: luaPath,
@@ -698,7 +524,7 @@ class ExternalPlayerService {
         allowStacking: vps.danmakuStacking,
       );
     } catch (e, st) {
-      debugPrint('[ExtPlayer] _prepareDanmakuAss 异常: $e');
+      _printLog('tryHandlePlayback: _prepareDanmakuAss 异常: $e');
       debugPrintStack(stackTrace: st);
       return null;
     }
@@ -880,7 +706,7 @@ end)
         '${Directory.systemTemp.path}${Platform.pathSeparator}nipaplay_danmaku');
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);
-      debugPrint('[ExtPlayer] 创建临时目录: ${dir.path}');
+      _printLog('tryHandlePlayback: 创建临时目录: ${dir.path}');
     }
     return dir;
   }
@@ -908,7 +734,7 @@ end)
         }
       }
     } catch (e) {
-      debugPrint('[ExtPlayer] 清理旧临时文件失败: $e');
+      _printLog('tryHandlePlayback: 清理旧临时文件失败: $e');
     }
   }
 
@@ -919,5 +745,13 @@ end)
       return resolved ?? path;
     }
     return path;
+  }
+
+  /// 打印日志信息
+  static void _printLog(String msg) {
+
+    final String debugPrintLabel = color('[ExtPlayer]', ColorCode.blue);
+
+    debugPrint('$debugPrintLabel $msg');
   }
 }
