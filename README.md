@@ -107,6 +107,13 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
   </a>
 
+- **Linux（Spark Store 星火应用商店）**
+
+  <a href="https://spk-resolv.spark-app.store/?spk=spk://store/video/nipaplay" target="_blank"  rel="noopener noreferrer">
+  <img src="http://spk-json.spark-app.store/install-from-spark-store.png" width="200"/>
+  </a>
+
+  
 ### 包管理器安装
 
 #### macOS (Homebrew)
