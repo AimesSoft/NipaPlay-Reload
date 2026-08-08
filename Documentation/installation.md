@@ -37,9 +37,20 @@
 
 ## HarmonyOS
 
-HarmonyOS 版本目前需要从源码构建 HAP，并使用 DevEco Studio 配置开发者签名。
-开发者请参考
+HarmonyOS 当前主要面向开发者和测试用户，需要从源码构建 HAP，并使用 DevEco Studio 配置开发者签名；这不是 GitHub Release 中的通用安装包。开发者请参考
 [HarmonyOS 依赖与构建说明](../docs/HARMONYOS_MIGRATION_STATUS.md#harmonyos-依赖启用与恢复)。
+
+安装前请确认：
+
+- 已安装与仓库说明匹配的 OpenHarmony Native SDK 和 DevEco Studio。
+- 设备允许开发者模式和调试签名，且应用包的签名证书与设备匹配。
+- 当前构建可能缺少商店分发、自动更新和全部硬件能力；遇到播放问题请先切换内核并保留日志。
+
+## tvOS
+
+tvOS 当前是开发者预览路径，不提供面向普通用户的 App Store 安装包。需要 macOS、Xcode、tvOS 设备或模拟器以及项目指定的 tvOS Flutter fork。
+
+构建和签名说明见 [Apple TV 开发指南](../docs/TVOS_DEVELOPMENT.md)。真机安装需要 Apple Developer 签名；模拟器只能验证 UI 和部分播放流程，不能代表所有硬解、HDR 或遥控器行为。
 
 ## iOS
 

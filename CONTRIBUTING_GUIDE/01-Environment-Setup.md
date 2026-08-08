@@ -38,12 +38,31 @@ Git 是一个版本控制系统，你可以把它想象成一个可以记录你�
 Flutter 是我们用来开发 NipaPlay-Reload 的框架，它允许我们用一套代码构建在不同平台（如手机、电脑、网页）上运行的应用。Flutter SDK (软件开发工具包) 就是包含了所有开发所需工具的集合。
 
 *   **如何安装**:
-    1.  访问 [Flutter 官网](https://flutter.dev/docs/get-started/install) 下载对应你操作系统的最新稳定版 SDK。
+    1.  先阅读仓库根目录的 `.fvmrc`、`.flutter-version-linux` 和 `.flutter-version-tvos`。贡献 NipaPlay 时不要无条件安装“最新 Flutter”；不同平台使用不同版本或 fork，必须按目标平台选择工具链。
     2.  将下载的压缩包解压到一个你喜欢的位置，例如 `C:\flutter` (Windows) 或者 `~/development/flutter` (macOS/Linux)。**注意：不要把 Flutter SDK 放在需要管理员权限才能访问的目录**，比如 `C:\Program Files\`。
     3.  配置环境变量：这一步是为了让你的电脑能够在任何地方都能找到并使用 Flutter 的命令。
         *   **Windows**: 搜索“编辑系统环境变量”，打开后点击“环境变量”，在“用户变量”下的 "Path" 变量里，新建一个条目，值为你解压的 Flutter SDK 文件夹里的 `bin` 目录的完整路径 (例如 `C:\flutter\bin`)。
         *   **macOS/Linux**: 打开终端，编辑你的 shell 配置文件（通常是 `~/.zshrc`, `~/.bash_profile` 或 `~/.bashrc`）。在文件末尾添加一行：`export PATH="$PATH:[你解压的Flutter路径]/flutter/bin"`。保存文件后，执行 `source ~/.zshrc` (或者相应的配置文件) 来让改动生效。
-    4.  运行 `flutter doctor`：打开一个新的终端窗口，输入 `flutter doctor` 命令。这个命令会检查你的环境是否完整，并告诉你还需要安装哪些依赖（比如 Android Studio 或者 Xcode）。根据它的提示完成剩余的设置。
+    4.  运行与目标平台匹配的 `flutter doctor`，并记录 Flutter、Dart、Xcode/Android SDK 或 DevEco Studio 版本。平台切换和依赖覆盖文件的操作见下文。
+
+### 1.2.1 项目实际工具链
+
+| 目标 | 工具链要求 | 依赖切换 |
+|---|---|---|
+| macOS、iOS、Windows、Android 主线 | `.fvmrc` 指定的 Flutter 3.44.6 | `dart run tool/configure_flutter_dependencies.dart mainline` |
+| Linux | `.flutter-version-linux` 指定的 Flutter 3.47 | `dart run tool/configure_flutter_dependencies.dart linux` |
+| tvOS | `.flutter-version-tvos` 指定的 Flutter fork 3.44.8 | `./tool/flutter_tvos.sh`，使用 `pubspec_overrides.tvos.yaml` |
+| HarmonyOS | 仓库记录的 OpenHarmony Flutter 3.35 工具链 | 按 `docs/HARMONYOS_MIGRATION_STATUS.md` 启用 OHOS 覆盖 |
+
+切回主线平台前，执行 `dart run tool/configure_flutter_dependencies.dart mainline`，避免把平台专属 override 留在工作树中。
+
+### 1.2.2 原生依赖
+
+- Android：Android Studio、SDK、NDK、CMake 和对应 ABI；版本以 `android/` 与 CI workflow 为准。
+- Apple：Xcode、CocoaPods、对应平台 SDK；tvOS 还需要有效开发者签名。
+- Windows：Visual Studio/MSVC、Windows SDK、CMake；构建 Erika 时还需要 Rust 和 FFmpeg 原生依赖。
+- HarmonyOS：DevEco Studio、OpenHarmony Native SDK、签名配置和 `OHOS_NDK_HOME`/`OHOS_SDK_NATIVE`。
+- Erika：请同时准备 Rust stable（核心开发）和 tvOS 所需 nightly + `rust-src`；完整依赖见 Erika 仓库的 `docs/building.zh.md`。
 
 ### 1.3 一个好的代码编辑器：VS Code + Codex
 
