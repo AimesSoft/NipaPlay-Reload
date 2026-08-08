@@ -18,6 +18,12 @@ class PlaybackService {
 
   PlaybackService._internal();
 
+  /// 尝试使用外部播放器播放 [item], 如果成功则返回 true, 否则返回 false.
+  Future<bool> tryPlayExternally(BuildContext context, PlayableItem item) {
+    return ExternalPlayerService.tryHandlePlayback(context, item);
+  }
+
+  /// 播放 [item], 如果设置了使用外部播放器则尝试使用外部播放器播放, 否则使用内置播放器播放.
   Future<void> play(PlayableItem item) async {
     // 关闭可能存在的番剧详情页
     AnimeDetailPage.popIfOpen();
@@ -28,7 +34,7 @@ class PlaybackService {
       return;
     }
 
-    if (await ExternalPlayerService.tryHandlePlayback(context, item)) {
+    if (await tryPlayExternally(context, item)) {
       return;
     }
     if (!context.mounted) return;

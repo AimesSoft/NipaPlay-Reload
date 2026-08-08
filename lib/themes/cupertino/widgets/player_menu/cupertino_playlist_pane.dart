@@ -15,7 +15,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -667,7 +667,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
           playbackSession: playbackSession,
         );
         if (!mounted) return;
-        if (await ExternalPlayerService.tryHandlePlayback(
+        if (await PlaybackService().tryPlayExternally(
             context, playableItem)) {
           return;
         }

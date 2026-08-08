@@ -8,7 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/countdown_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 
 class AutoNextEpisodeService {
   static AutoNextEpisodeService? _instance;
@@ -239,18 +239,7 @@ class AutoNextEpisodeService {
     final settingsProvider =
         Provider.of<SettingsProvider>(context, listen: false);
     if (settingsProvider.useExternalPlayer) {
-      if (!ExternalPlayerService.isSupportedPlatform) {
-        BlurSnackBar.show(context, '外部播放器仅支持桌面端');
-        _nextEpisode = null;
-        return;
-      }
-      final playerPath = settingsProvider.externalPlayerPath.trim();
-      if (playerPath.isEmpty) {
-        BlurSnackBar.show(context, '请先选择外部播放器');
-        _nextEpisode = null;
-        return;
-      }
-      await ExternalPlayerService.tryHandlePlayback(
+      await PlaybackService().tryPlayExternally(
         context,
         PlayableItem(
           videoPath: nextEpisode.videoPath,
