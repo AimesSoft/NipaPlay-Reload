@@ -13,13 +13,11 @@ import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 /// 优先复用 DFM+ 布局能力; 初始化或布局失败时回退到经典 ASS 算法.
 Future<String> generateExternalPlayerDanmakuAss(
   List<DanmakuItem> danmakuList,
-  AssExportSettings settings, {
-  required bool allowStacking,
-}) async {
+  AssExportSettings settings,
+) async {
   final dfmConversion = await _generateAssViaDfmLayout(
     danmakuList,
     settings,
-    allowStacking: allowStacking,
   );
   if (dfmConversion != null) return dfmConversion;
   return convertDanmakuItemsToAss(danmakuList, settings);
@@ -27,9 +25,8 @@ Future<String> generateExternalPlayerDanmakuAss(
 
 Future<String?> _generateAssViaDfmLayout(
   List<DanmakuItem> danmakuList,
-  AssExportSettings settings, {
-  required bool allowStacking,
-}) async {
+  AssExportSettings settings,
+) async {
   rust_dfm.DfmPlusPreparedLayout? prepared;
   try {
     final rawItems = <rust_dfm.DfmPlusRawDanmakuItem>[];
@@ -54,7 +51,7 @@ Future<String?> _generateAssViaDfmLayout(
       fontSize: mappedFont,
       displayArea: settings.displayArea,
       scrollDurationSeconds: settings.scrollDurationSeconds,
-      allowStacking: allowStacking,
+      allowStacking: settings.allowStacking,
       mergeDanmaku: settings.mergeDuplicates,
       trackGapRatio: 0.15,
       outlineWidth: settings.outlineWidth,
