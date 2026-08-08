@@ -69,6 +69,10 @@ class PlayerKernelManager {
       await videoPlayerState.applyPrecacheBufferSettings();
       if (videoPlayerState.isDisposed) return;
       await videoPlayerState.applySubtitleStylePreference();
+      // 恢复音量到新播放器，避免默认 1.0 导致下次播放音量异常
+      if (!(Platform.isAndroid || Platform.isIOS)) {
+        videoPlayerState.player.volume = currentVolume;
+      }
       debugPrint('[PlayerKernelManager] 已创建新的空播放器实例');
       return;
     }

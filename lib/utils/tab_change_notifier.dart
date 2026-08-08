@@ -6,11 +6,13 @@ class TabChangeNotifier extends ChangeNotifier {
   int? _targetMediaLibrarySubTabIndex;
   String? _targetPageId;
   String? _targetMediaLibrarySectionId;
+  int? _mediaLibrarySectionStep; // -1 = 上一个, 1 = 下一个
 
   int? get targetTabIndex => _targetTabIndex;
   int? get targetMediaLibrarySubTabIndex => _targetMediaLibrarySubTabIndex;
   String? get targetPageId => _targetPageId;
   String? get targetMediaLibrarySectionId => _targetMediaLibrarySectionId;
+  int? get mediaLibrarySectionStep => _mediaLibrarySectionStep;
 
   void changePage(String pageId) {
     if (_targetPageId == pageId && _targetMediaLibrarySectionId == null) {
@@ -73,7 +75,23 @@ class TabChangeNotifier extends ChangeNotifier {
     debugPrint('[TabChangeNotifier] 只清除子标签索引');
     _targetMediaLibrarySubTabIndex = null;
     _targetMediaLibrarySectionId = null;
+    _mediaLibrarySectionStep = null;
     notifyListeners();
+  }
+
+  /// 请求媒体库分区步进切换：step=-1 切到上一个，step=1 切到下一个。
+  void stepMediaLibrarySection(int step) {
+    _targetPageId = AppPageIds.mediaLibrary;
+    _targetTabIndex = null;
+    _targetMediaLibrarySectionId = null;
+    _targetMediaLibrarySubTabIndex = null;
+    _mediaLibrarySectionStep = step;
+    debugPrint('[TabChangeNotifier] 请求媒体库分区步进: $step');
+    notifyListeners();
+  }
+
+  void clearSectionStep() {
+    _mediaLibrarySectionStep = null;
   }
 
   void clear() {
@@ -81,5 +99,6 @@ class TabChangeNotifier extends ChangeNotifier {
     _targetMediaLibrarySubTabIndex = null;
     _targetPageId = null;
     _targetMediaLibrarySectionId = null;
+    _mediaLibrarySectionStep = null;
   }
 }

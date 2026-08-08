@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -11,6 +12,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
@@ -435,6 +437,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
         sharedEpisode.fileExists;
 
     if (sharedPlayableAvailable) {
+      context.read<LargeScreenUiSfxService>().playLaunchPlayer();
       await PlaybackService().play(sharedPlayable);
       if (!mounted) return;
       Navigator.of(context).maybePop();
@@ -456,6 +459,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
       historyItem: history,
     );
 
+    context.read<LargeScreenUiSfxService>().playLaunchPlayer();
     await PlaybackService().play(playableItem);
     if (!mounted) return;
     Navigator.of(context).maybePop();
@@ -656,6 +660,9 @@ class _NipaplayLargeScreenAnimeDetailPageState
       case NipaplayLargeScreenInputCommand.activate:
         _activateCurrentSelection();
         return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.previousTab:
+      case NipaplayLargeScreenInputCommand.nextTab:
+        return KeyEventResult.ignored;
     }
   }
 

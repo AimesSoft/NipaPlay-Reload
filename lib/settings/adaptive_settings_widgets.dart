@@ -664,6 +664,7 @@ class AdaptiveSettingsSwitch extends material.StatelessWidget {
       );
     }
 
+    // 桌面模式走 FluentSettingsSwitch，其内部已集成大屏幕开关音效。
     return FluentSettingsSwitch(
       value: value,
       onChanged: onChanged,

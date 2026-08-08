@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show pow;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
@@ -325,6 +326,12 @@ class MediaKitPlayerAdapter
 
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
+
+  // 标记是否需要在 AO 就绪后重新同步音量。
+  // 在 Windows 上，WASAPI AO 可能在首次播放开始时才完全就绪，
+  // 导致此前下发的音量未生效。此标志在 setMedia 时置 true，
+  // 在首次 playing 事件触发后执行音量同步并置 false。
+  bool _volumeResyncNeeded = false;
   final bool _mpvDiagnosticsEnabled;
   final bool _enableHardwareAcceleration;
   final bool _prefersPlatformVideoSurface;
@@ -982,6 +989,15 @@ class MediaKitPlayerAdapter
         _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
         if (_ticker != null && !_ticker!.isActive) {
           _ticker!.start();
+        }
+        // 首次播放开始时重新同步音量。
+        // Windows WASAPI AO 可能在 play() 调用时才完全就绪，
+        // 导致此前 open() 后的音量设置未生效。在 playing 事件
+        // 触发时 AO 已确定就绪，此时重新写入音量可确保生效。
+        if (_volumeResyncNeeded) {
+          _volumeResyncNeeded = false;
+          final mpvValue = pow(_requestedVolume, 1.0 / 3.0) * 100.0;
+          unawaited(_player.setVolume(mpvValue));
         }
       } else {
         _ticker?.stop();
@@ -1871,13 +1887,27 @@ class MediaKitPlayerAdapter
     }
   }
 
+  // mpv 使用三次方音量缩放：gain = (volume/100)^3。
+  // 这意味着 mpv volume=45 时实际增益只有 0.45^3 ≈ 9%，
+  // 而 MDK 等内核的 volume=0.45 直接对应 45% 增益。
+  // 为使各内核音量感知一致，setter 中对用户值取立方根再传给 mpv
+  // （逆向补偿），getter 中对 mpv 值取三次方还原用户值。
+  //
+  // 映射关系：
+  //   用户值 0.45 → mpv volume = 0.45^(1/3)*100 ≈ 76.6 → gain = 0.45
+  //   用户值 1.0  → mpv volume = 100 → gain = 1.0
   @override
-  double get volume => _player.state.volume / 100.0;
+  double get volume {
+    final mpvLinear = _player.state.volume / 100.0;
+    return pow(mpvLinear, 3.0).toDouble().clamp(0.0, 1.0);
+  }
 
   @override
   set volume(double value) {
     _requestedVolume = value.clamp(0.0, 1.0).toDouble();
-    _player.setVolume(_requestedVolume * 100.0);
+    // 对用户值取立方根，补偿 mpv 的三次方缩放
+    final mpvValue = pow(_requestedVolume, 1.0 / 3.0) * 100.0;
+    _player.setVolume(mpvValue);
   }
 
   // 添加播放速度属性实现
@@ -2228,6 +2258,8 @@ class MediaKitPlayerAdapter
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
     _isDisposed = false;
+    // 标记需要在 AO 就绪后重新同步音量（首次 playing 事件时执行）
+    _volumeResyncNeeded = true;
     // 递增代数计数器，使旧的延迟加载操作作废
     _mediaLoadGeneration++;
     _resetMediaLoadState(preserveRetryAttempt: false);
@@ -2342,11 +2374,11 @@ class MediaKitPlayerAdapter
           // Windows 的 WASAPI 输出会在媒体打开时才完成初始化。首次播放前
           // 下发的音量可能因此没有应用到新建的音频输出；内核热切换之所以
           // 能恢复正常，是因为切换流程会在媒体就绪后再次写入音量。
+          final mpvValue = pow(_requestedVolume, 1.0 / 3.0) * 100.0;
           try {
-            await _player.setVolume(_requestedVolume * 100.0);
-          } catch (error) {
+            await _player.setVolume(mpvValue);
+          } catch (_) {
             // 音量同步失败不应把已经成功打开的媒体标记成载入失败。
-            debugPrint('MediaKit: Windows 音频输出初始化后同步音量失败: $error');
           }
           if (_isDisposed || openGeneration != _mediaLoadGeneration) {
             return;

@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:provider/provider.dart';
@@ -620,6 +621,7 @@ class NipaplayWindow {
 
     Future<T?> result;
     if (useLargeScreenSubPage) {
+      context.read<LargeScreenUiSfxService>().playOpenSubPage();
       result = Navigator.of(context).push<T>(
         NipaplayLargeScreenWindowPageRoute<T>(
           builder: (_) => NipaplayLargeScreenContentPage(
@@ -630,6 +632,11 @@ class NipaplayWindow {
           dismissible: barrierDismissible,
         ),
       );
+      result.then((_) {
+        if (context.mounted) {
+          context.read<LargeScreenUiSfxService>().playCloseSubPage();
+        }
+      });
     } else {
       final bool usePhoneBottomSheetLayout =
           globals.isPhone && !globals.isTablet;
