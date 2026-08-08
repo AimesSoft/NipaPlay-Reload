@@ -710,11 +710,18 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
 
     // 媒体库页面：十字键/摇杆左右也切换分区（第二种操作方式）
+    // 但子页面打开时不拦截，让左右键作用于子页面内容
+    final isSubPageActive = !_isTabPanelVisible &&
+        !_isSettingsPanelVisible &&
+        !_isPlayerMenuVisible &&
+        Navigator.of(context).canPop();
+
     if (_isMediaLibraryContext &&
         !isPlayerPlaybackContext &&
         !_isTabPanelVisible &&
         !_isSettingsPanelVisible &&
-        !_isPlayerMenuVisible) {
+        !_isPlayerMenuVisible &&
+        !isSubPageActive) {
       if (command == NipaplayLargeScreenInputCommand.navigateLeft) {
         context.read<TabChangeNotifier>().stepMediaLibrarySection(-1);
         return;
@@ -728,11 +735,6 @@ class _NipaplayLargeScreenScaffoldLayoutState
     // 当子页面（详情页、对话框等）处于激活状态时，手柄输入应
     // 作用于子页面而非外层 scaffold。键盘事件通过 Focus 树自
     // 动实现这一路由；手柄事件绕过了 Focus 树，需手动检测。
-    final isSubPageActive = !_isTabPanelVisible &&
-        !_isSettingsPanelVisible &&
-        !_isPlayerMenuVisible &&
-        Navigator.of(context).canPop();
-
     if (isSubPageActive) {
       switch (command) {
         case NipaplayLargeScreenInputCommand.toggleMenu:
