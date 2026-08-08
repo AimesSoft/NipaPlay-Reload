@@ -183,12 +183,80 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   }
 
   void _handleRequestedSection() {
-    final requested = _tabChangeNotifier?.targetMediaLibrarySectionId;
+    final notifier = _tabChangeNotifier;
+
+    // 处理分区步进切换（LB/RB 手柄按钮）
+    final step = notifier?.mediaLibrarySectionStep;
+    if (step != null) {
+      notifier?.clearSectionStep();
+      final sections = _buildCurrentSections();
+      if (sections.length > 1) {
+        final currentIndex = mediaLibrarySectionIndexById(
+          sections,
+          _selectedSectionId,
+        );
+        var targetIndex = currentIndex + step;
+        if (targetIndex < 0) targetIndex = sections.length - 1;
+        if (targetIndex >= sections.length) targetIndex = 0;
+        final targetId = sections[targetIndex].id;
+        if (targetId != _selectedSectionId && mounted) {
+          _selectSection(targetId);
+        }
+      }
+      return;
+    }
+
+    final requested = notifier?.targetMediaLibrarySectionId;
     if (requested == null) return;
-    _tabChangeNotifier?.clearSubTabIndex();
+    notifier?.clearSubTabIndex();
     if (requested != _selectedSectionId && mounted) {
       _selectSection(requested);
     }
+  }
+
+  /// 构建当前可用的媒体库分区列表（与 build() 中逻辑一致）。
+  List<UnifiedMediaLibrarySection> _buildCurrentSections() {
+    // 需要从 Provider 读取状态，这里用与 build 相同的 Consumer 逻辑
+    // 但由于 _handleRequestedSection 不在 build 中，需要从 context 读取
+    final jellyfinProvider = context.read<JellyfinProvider>();
+    final embyProvider = context.read<EmbyProvider>();
+    final sharedProvider = context.read<SharedRemoteLibraryProvider>();
+    final dandanProvider = context.read<DandanplayRemoteProvider>();
+    final watchHistoryProvider = context.read<WatchHistoryProvider>();
+
+    return applyMediaLibrarySectionOrder(
+      buildUnifiedMediaLibrarySections(
+        MediaLibraryAvailability(
+          showLocal: shouldExposeLocalMediaLibrary(
+            isWeb: kIsWeb,
+            isTelevision: globals.isTelevision,
+          ),
+          showWebDAVLibrary: watchHistoryProvider.isLoaded &&
+              mediaLibraryHasItemsForSource(
+                watchHistoryProvider.history,
+                UnifiedMediaLibrarySource.webdav,
+              ),
+          showWebDAVManagement: kIsWeb
+              ? sharedProvider.webdavConnections.isNotEmpty
+              : _connectionsInitialized &&
+                  WebDAVService.instance.connections.isNotEmpty,
+          showSMBLibrary: watchHistoryProvider.isLoaded &&
+              mediaLibraryHasItemsForSource(
+                watchHistoryProvider.history,
+                UnifiedMediaLibrarySource.smb,
+              ),
+          showSMBManagement: kIsWeb
+              ? sharedProvider.smbConnections.isNotEmpty
+              : _connectionsInitialized &&
+                  SMBService.instance.connections.isNotEmpty,
+          showShared: sharedProvider.hasReachableActiveHost || kIsWeb,
+          showDandanplay: dandanProvider.isConnected,
+          showJellyfin: jellyfinProvider.isConnected,
+          showEmby: embyProvider.isConnected,
+        ),
+      ),
+      _sectionOrderStore.sectionIds,
+    );
   }
 
   @override

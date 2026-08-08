@@ -340,6 +340,9 @@ class _NipaplayLargeScreenPlayerMenuPanelState
           _setContentFocused(true);
         }
         return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.previousTab:
+      case NipaplayLargeScreenInputCommand.nextTab:
+        return KeyEventResult.ignored;
     }
   }
 

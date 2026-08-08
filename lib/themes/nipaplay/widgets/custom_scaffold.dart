@@ -19,6 +19,8 @@ class CustomScaffold extends StatefulWidget {
   final bool shouldShowAppBar;
   final TabController? tabController;
   final bool useLargeScreenLayout;
+  final String currentPageId;
+  final List<String> pageIds;
   final VoidCallback? onToggleLargeScreen;
   final Future<void> Function(Offset globalOrigin)? onToggleThemeFromOrigin;
   final VoidCallback? onOpenSettings;
@@ -31,6 +33,8 @@ class CustomScaffold extends StatefulWidget {
     required this.shouldShowAppBar,
     this.tabController,
     this.useLargeScreenLayout = false,
+    this.currentPageId = '',
+    this.pageIds = const [],
     this.onToggleLargeScreen,
     this.onToggleThemeFromOrigin,
     this.onOpenSettings,
@@ -251,6 +255,8 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         child: useLargeScreenLayout
             ? NipaplayLargeScreenScaffoldLayout(
                 currentIndex: currentIndex,
+                currentPageId: widget.currentPageId,
+                pageIds: widget.pageIds,
                 isDarkMode: isDarkMode,
                 tabPage: widget.tabPage,
                 tabController: widget.tabController!,

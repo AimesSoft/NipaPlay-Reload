@@ -8,6 +8,8 @@ enum NipaplayLargeScreenInputCommand {
   navigateLeft,
   navigateRight,
   activate,
+  previousTab,
+  nextTab,
 }
 
 class NipaplayLargeScreenInputControls {

@@ -656,6 +656,9 @@ class _NipaplayLargeScreenAnimeDetailPageState
       case NipaplayLargeScreenInputCommand.activate:
         _activateCurrentSelection();
         return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.previousTab:
+      case NipaplayLargeScreenInputCommand.nextTab:
+        return KeyEventResult.ignored;
     }
   }
 
