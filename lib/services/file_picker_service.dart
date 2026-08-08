@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
 import 'android_saf_service.dart';
 import 'security_bookmark_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/utils/mpv_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
 
@@ -579,7 +579,7 @@ class FilePickerService {
       // Homebrew formula 不会创建 mpv.app。首次选择时直接打开已检测到的 mpv
       // 所在目录，避免用户必须手动输入隐藏的 /opt 路径。
       if (io.Platform.isMacOS && initialDirectory == null) {
-        final detected = await ExternalPlayerService.detectInstalledMpv();
+        final detected = await detectInstalledMpv();
         if (detected != null) initialDirectory = p.dirname(detected);
       }
 

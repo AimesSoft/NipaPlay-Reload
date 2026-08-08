@@ -10,6 +10,7 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/mpv_utils.dart';
 import 'package:provider/provider.dart';
 
 class ExternalPlayerSettingsContent extends StatelessWidget {
@@ -227,7 +228,7 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
 
     if (value) {
       if (settingsProvider.externalPlayerPath.trim().isEmpty) {
-        final detected = await ExternalPlayerService.detectInstalledMpv();
+        final detected = await detectInstalledMpv();
         final picked = detected ??
             await FilePickerService().pickExternalPlayerExecutable();
         if (picked == null || picked.trim().isEmpty) {

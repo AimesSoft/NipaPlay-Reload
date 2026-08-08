@@ -17,6 +17,7 @@ import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
+import 'package:nipaplay/utils/mpv_utils.dart';
 
 MpvSession _session(
   Process process, {
@@ -150,7 +151,7 @@ void main() {
     await fakeMpv.writeAsString('fake mpv');
     addTearDown(() => tempDir.delete(recursive: true));
 
-    final detected = await ExternalPlayerService.detectInstalledMpv(
+    final detected = await detectInstalledMpv(
       candidatePaths: [
         '${tempDir.path}/missing-mpv',
         fakeMpv.path,
