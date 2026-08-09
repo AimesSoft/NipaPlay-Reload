@@ -427,6 +427,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _smoothAnchorElapsedUs = _lastElapsedUs;
       _seekTargetMs = 0.0; // 启用 seek 保护，而非清除
       _anchorSetBySeek = true; // 标记锚点由 seek/loop 设置
+      _seekRevision++;
       // [LOOP-RESTART-DIAG] 诊断：记录重置后的锚点状态
       if (!kReleaseMode) {
         debugPrint('[LOOP-RESTART-DIAG] AFTER RESET: '
@@ -853,6 +854,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _smoothAnchorElapsedUs = _lastElapsedUs;
       _seekTargetMs = _position.inMilliseconds.toDouble();
       _anchorSetBySeek = true; // 标记锚点由 seek 设置
+      _seekRevision++;
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }
