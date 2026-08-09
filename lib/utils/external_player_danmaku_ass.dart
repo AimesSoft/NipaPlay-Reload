@@ -15,12 +15,23 @@ Future<String> generateExternalPlayerDanmakuAss(
   List<DanmakuItem> danmakuList,
   AssExportSettings settings,
 ) async {
+
+  debugPrint("\x1b[36m[ExternalPlayerDanmakuAss]\x1b[0m Generating ASS with following settings:\n${settings.toString()}");
+
   final dfmConversion = await _generateAssViaDfmLayout(
     danmakuList,
     settings,
   );
-  if (dfmConversion != null) return dfmConversion;
-  return convertDanmakuItemsToAss(danmakuList, settings);
+  if (dfmConversion != null) {
+    debugPrint("\x1b[36m[ExternalPlayerDanmakuAss]\x1b[0m DFM+ layout succeeded, using DFM+ ASS conversion.");
+    return dfmConversion;
+  }
+
+  final res = convertDanmakuItemsToAss(danmakuList, settings);
+
+  debugPrint("\x1b[36m[ExternalPlayerDanmakuAss]\x1b[0m DFM+ layout failed, using classic ASS conversion.");
+
+  return res;
 }
 
 Future<String?> _generateAssViaDfmLayout(

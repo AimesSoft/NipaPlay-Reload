@@ -30,7 +30,7 @@ class DanmakuStyle {
     double  outlineWidth           = 1.0,
     double  danmakuFontSize        = DanmakuStyle.defDanmakuFontSize,
     double  danmakuOffset          = 0.0,
-    bool    danmakuAllowStacking   = true,
+    bool    danmakuAllowStacking   = false,
   }) :
   _opacity                = _normalizeOpacity(opacity),
   _outlineWidth           = _normalizeOutlineWidth(outlineWidth),

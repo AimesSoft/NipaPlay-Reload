@@ -6,6 +6,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 
 
@@ -56,6 +58,9 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   bool get isClosed => _closed;
 
   @override
+  Future<void> launch() async {}
+
+  @override
   void togglePause() {}
 
   @override
@@ -65,7 +70,10 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   bool seekToPosition(Duration target) => false;
 
   @override
-  Future<bool> refreshDanmaku(String assPath, String luaPath) async => false;
+  Future<bool> refreshDanmaku(
+    DanmakuItemSet danmakuSet,
+    DanmakuStyle style,
+  ) async => false;
 
   @override
   void terminate() {

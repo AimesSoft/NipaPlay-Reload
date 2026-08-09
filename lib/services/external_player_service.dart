@@ -2,7 +2,6 @@
 // lib/services/external_player_service.dart
 // 掌管外部播放器启动, 弹幕导出和参数注入的服务
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -220,8 +219,6 @@ class ExternalPlayerService {
 
     final mergedArgs = <String>[];
 
-    String? assFilePath;
-    String? luaFilePath;
     Set<DanmakuItem>? danmakuItemSet;
 
     if (settings.externalPlayerDanmakuOverlay && item.episodeId != null) {
@@ -241,147 +238,7 @@ class ExternalPlayerService {
         } else {
           _printLog('tryHandlePlayback: 过滤后弹幕 ${danmakuItemSet.length} 条');
 
-          final assString = await DanmakuService.getDanmakuAssStringFromDanmakuItemSet(danmakuItemSet);
-          _printLog('tryHandlePlayback: ASS 生成完成: ${assString.length} 字符');
           _printLog('tryHandlePlayback: 会话弹幕 ${danmakuItemSet.length} 条');
-          /// 写 ASS 到临时目录, 并清理 >1 天的旧文件. 返回绝对路径.
-          final dir = Directory(
-              '${Directory.systemTemp.path}${Platform.pathSeparator}nipaplay_danmaku');
-          if (!dir.existsSync()) {
-            dir.createSync(recursive: true);
-            _printLog('tryHandlePlayback: 创建临时目录: ${dir.path}');
-          }
-          try {
-            final cutoff = DateTime.now().subtract(const Duration(days: 1));
-            for (final ent in dir.listSync()) {
-              if (ent is File) {
-                final lower = ent.path.toLowerCase();
-                if (lower.endsWith('.ass') || lower.endsWith('.lua')) {
-                  if (ent.statSync().modified.isBefore(cutoff)) {
-                    ent.deleteSync();
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            _printLog('tryHandlePlayback: 清理旧临时文件失败: $e');
-          }
-          final ts = DateTime.now().millisecondsSinceEpoch;
-          final assFile = File(
-              '${dir.path}${Platform.pathSeparator}danmaku_${item.episodeId!}_$ts.ass');
-          await assFile.writeAsString(assString, encoding: utf8);
-          assFilePath = assFile.path;
-          final assBasename = assFilePath.split(Platform.pathSeparator).last;
-
-          /// 写 mpv / mpv.net 用的 Lua 脚本: file-loaded 时把目标弹幕轨设为 secondary-sid.
-          ///
-          /// mpv.net 6.0.3.2 不支持 `--secondary-sub-file` CLI, 但 `secondary-sid` 属性
-          /// 经 Lua `mp.set_property` 可设. 脚本逻辑:
-          /// 1. 在 track-list 中按文件名找到 NipaPlay 生成的弹幕轨;
-          /// 2. 若该轨被自动选为主字幕(sid), 先把主字幕切到另一条 sub 轨;
-          /// 3. 把弹幕轨设为 secondary-sid（次字幕, 始终显示, 不抢占主字幕）.
-          /// 若视频除弹幕外没有其它字幕轨, 则弹幕作为主字幕显示, 跳过 secondary 设置.
-          final lua = '''-- NipaPlay 弹幕外挂脚本: 把弹幕字幕轨设为次字幕(secondary-sid)
--- 由 NipaPlay 自动生成; 目标弹幕文件名: $assBasename
--- 不抢占主字幕（内嵌/外挂）, 弹幕作为次字幕始终显示.
-local TARGET = "$assBasename"
-local function find_danmaku_track()
-    local tracks = mp.get_property_native("track-list")
-    if not tracks then return nil end
-    local did = nil
-    for _, t in ipairs(tracks) do
-        if t.type == "sub" and t.external and t.title
-           and string.find(t.title, TARGET, 1, true) then
-            did = t.id
-        end
-    end
-    return did, tracks
-end
-
-local function select_danmaku_track()
-    local did, tracks = find_danmaku_track()
-    if not did then return end
-    local cur = mp.get_property("sid")
-    if cur and tonumber(cur) == did then
-        local switched = false
-        for _, t in ipairs(tracks) do
-            if t.type == "sub" and t.id ~= did then
-                mp.set_property("sid", tostring(t.id))
-                switched = true
-                break
-            end
-        end
-        if not switched then
-            -- 没有其它字幕轨, 弹幕作为主字幕显示即可
-            return
-        end
-    end
-    mp.set_property("secondary-sid", tostring(did))
-end
-
-mp.register_event("file-loaded", select_danmaku_track)
-
-local reload_timer = nil
-
-local function restore_primary_track(primary)
-    -- sub-reload 会选中重载后的轨道, 但不会同步 sid 选项值.
-    -- 先显式取消主字幕, 再恢复原主字幕, 避免相同 sid 被 mpv 当作无变化.
-    mp.set_property("sid", "no")
-    if primary and primary ~= "no" then
-        mp.set_property("sid", primary)
-    end
-end
-
-local function reload_danmaku_track()
-    reload_timer = nil
-    local did = find_danmaku_track()
-    if not did then return end
-    local primary = mp.get_property("sid")
-    local was_primary = tonumber(primary) == did
-    local was_secondary = tonumber(mp.get_property("secondary-sid")) == did
-    mp.commandv("sub-reload", tostring(did))
-
-    mp.add_timeout(0, function()
-        local reloaded_did = find_danmaku_track()
-        if not reloaded_did then
-            restore_primary_track(primary)
-            return
-        end
-
-        if was_secondary then
-            restore_primary_track(primary)
-            mp.add_timeout(0, function()
-                local current_did = find_danmaku_track()
-                if current_did then
-                    mp.set_property("secondary-sid", tostring(current_did))
-                end
-            end)
-        elseif was_primary then
-            mp.set_property("sid", tostring(reloaded_did))
-        else
-            restore_primary_track(primary)
-        end
-    end)
-end
-
-mp.register_script_message("nipaplay-danmaku-reload", function(ass_path)
-    if ass_path and ass_path ~= "" then
-        local ass_name = string.match(ass_path, "([^/\\\\]+)\$")
-        if ass_name then TARGET = ass_name end
-    end
-    if reload_timer then reload_timer:kill() end
-    reload_timer = mp.add_timeout(0.05, reload_danmaku_track)
-end)
-''';
-          final luaFile = File('${dir.path}${Platform.pathSeparator}nipaplay_danmaku_$ts.lua');
-          luaFile.writeAsStringSync(lua, encoding: utf8);
-          luaFilePath = luaFile.path;
-          assFilePath = assFile.path;
-          _printLog('tryHandlePlayback: ASS 已写入临时文件: $assFilePath '
-              '(${assFile.lengthSync()} 字节)');
-          _printLog('tryHandlePlayback: Lua 脚本已写入: $luaFilePath');
-          _printLog('tryHandlePlayback: ASS 首行: ${assString.split('\n').first}');
-
         }
       } catch (e, st) {
         _printLog('tryHandlePlayback: _prepareDanmakuAss 顶层异常: $e');
@@ -390,36 +247,8 @@ end)
 
       final dt = DateTime.now().difference(t0).inMilliseconds;
       _printLog('tryHandlePlayback: 弹幕准备完成: '
-          'assFilePath=$assFilePath, luaFilePath=$luaFilePath, 耗时=${dt}ms');
+          'hasDanmaku=${danmakuItemSet?.isNotEmpty == true}, 耗时=${dt}ms');
 
-
-      /// 按播放器类型构造弹幕字幕参数.
-      ///
-      /// mpv / mpv.net: `--sub-file=` 加载弹幕轨 + `--script=` 一个 Lua 脚本把该轨
-      /// 设为 `secondary-sid`（次字幕）. mpv.net 6.0.3.2 不支持 `--secondary-sub-file`
-      /// CLI 选项, 但 `secondary-sid` 属性经 Lua 可设. 这样弹幕作次字幕始终显示,
-      /// 不抢占视频自带的主字幕（内嵌/外挂）.
-      ///
-      /// 次字幕的 ASS 渲染开关（关键）: 原版 mpv 默认 `secondary-sub-ass-override=strip`
-      /// （剥离 ASS 样式 → 纯白文本）, 必须显式设 `no` 才按 ASS 渲染弹幕的 \move/\pos/颜色;
-      /// mpv.net 无该选项, 用其自有 `secondary-sub-override`（no = 弹幕模式）.
-      final builtArgs = switch (playerType) {
-        ExternalPlayerType.potPlayer => ['/sub=$assFilePath'],
-        ExternalPlayerType.mpv => [
-            '--sub-file=$assFilePath',
-            '--script=$luaFilePath',
-            '--secondary-sub-ass-override=no',
-          ],
-        ExternalPlayerType.mpvNet => [
-            '--sub-file=$assFilePath',
-            '--script=$luaFilePath',
-            '--secondary-sub-override=no',
-          ],
-        ExternalPlayerType.vlc || ExternalPlayerType.generic => [
-            '--sub-file=$assFilePath',
-          ],
-      };
-      mergedArgs.addAll(builtArgs);
 
       if (includeSmoothArgs) {
         /// 按播放器类型构造弹幕平滑参数（仅原版 mpv）.
@@ -522,15 +351,16 @@ end)
       _printLog('launch: platform=$platform, playerType=$type');
 
       if (type == ExternalPlayerType.mpv || type == ExternalPlayerType.mpvNet) {
-        session = await MpvSession.launch(
-          playerPath: resolvedPlayerPath,
-          mediaPath: resolvedMediaPath,
+        final mpvSession = MpvSession(
+          resolvedPlayerPath,
+          resolvedMediaPath,
           extraArgs: mergedArgs,
           duration: Duration(milliseconds: history?.duration ?? 0),
           position: Duration(milliseconds: history?.lastPosition ?? 0),
-          assFilePath: assFilePath,
-          luaFilePath: luaFilePath,
+          isMpvNet: type == ExternalPlayerType.mpvNet,
         );
+        await mpvSession.launch();
+        session = mpvSession;
       } else {
         final (
           executable: executable,
@@ -642,6 +472,7 @@ end)
       // else if (settings.externalPlayerAutoSwitchToDanmakuConsole && context.mounted) {
       //   Provider.of<TabChangeNotifier>(context, listen: false).changePage(AppPageIds.externalPlayerConsole);
       // }
+      ExternalPlayerConsoleService.queueDanmakuRefresh();
     }
   }
 

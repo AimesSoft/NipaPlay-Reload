@@ -101,6 +101,24 @@ class AssExportSettings {
       shadowStyle: shadowStyle ?? this.shadowStyle,
     );
   }
+
+  @override
+  String toString() {
+    final res = 'AssExportSettings{\n'
+        'fontSize: $fontSize \n'
+        'opacity: $opacity \n'
+        'displayArea: $displayArea \n'
+        'scrollDurationSeconds: $scrollDurationSeconds \n'
+        'timeOffsetSeconds: $timeOffsetSeconds \n'
+        'mergeDuplicates: $mergeDuplicates \n'
+        'allowStacking: $allowStacking \n'
+        'fontFamily: $fontFamily \n'
+        'outlineStyle: $outlineStyle \n'
+        'outlineWidth: $outlineWidth \n'
+        'shadowStyle: $shadowStyle \n'
+        '}';
+    return res;
+  }
 }
 
 /// 把过滤后的弹幕列表转换为 ASS 字幕文本。
