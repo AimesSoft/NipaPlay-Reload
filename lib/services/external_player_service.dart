@@ -51,7 +51,7 @@ abstract final class ExternalPlayerService {
       return;
     }
 
-    final playerType = detectExternalPlayerType(playerPath);
+    final playerType = settings.externalPlayerType;
     if (playerPath.toLowerCase().endsWith('.lnk')) {
       _log(
         'play: playerPath 是 .lnk 快捷方式；若启动参数未透传，'

@@ -1,14 +1,15 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/mpv_utils.dart';
 import 'package:provider/provider.dart';
@@ -95,6 +96,32 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
             ),
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<ExternalPlayerType>.dropdown(
+                  title: _text(
+                    context,
+                    '播放器类型',
+                    '播放器類型',
+                    'Player Type',
+                  ),
+                  subtitle: _text(
+                    context,
+                    '请选择与可执行文件对应的播放器类型',
+                    '請選擇與執行檔對應的播放器類型',
+                    'Select the type that matches the executable.',
+                  ),
+                  icon: Ionicons.apps_outline,
+                  phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
+                  enabled: externalSupported,
+                  items: _externalPlayerTypeItems(
+                    context,
+                    settingsProvider.externalPlayerType,
+                  ),
+                  onChanged: settingsProvider.setExternalPlayerType,
+                );
+              },
+            ),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
                 final path = settingsProvider.externalPlayerPath.trim();
                 final subtitle = !externalSupported
                     ? context.l10n.desktopOnlySupported
@@ -123,9 +150,9 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                   subtitle: externalSupported
                       ? _text(
                           context,
-                          '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net / PotPlayer）',
-                          '在外部播放器中注入 ASS 形式的彈幕作為次字幕（支援 mpv / mpv.net / PotPlayer）',
-                          'Inject danmaku as an ASS secondary subtitle in external players (mpv, mpv.net, PotPlayer).',
+                          '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net）',
+                          '在外部播放器中注入 ASS 形式的彈幕作為次字幕（支援 mpv / mpv.net）',
+                          'Inject danmaku as an ASS secondary subtitle in external players (mpv and mpv.net).',
                         )
                       : context.l10n.desktopOnlySupported,
                   icon: Ionicons.chatbubbles_outline,
@@ -260,6 +287,29 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
       message: l10n.externalPlayerDisabled,
       type: AdaptiveSnackBarType.success,
     );
+  }
+
+  static List<DropdownMenuItemData<ExternalPlayerType>>
+      _externalPlayerTypeItems(
+    BuildContext context,
+    ExternalPlayerType selectedType,
+  ) {
+    String title(ExternalPlayerType type) => switch (type) {
+      ExternalPlayerType.mpv => 'mpv',
+      ExternalPlayerType.mpvNet => 'mpv.net',
+      ExternalPlayerType.potPlayer => 'PotPlayer',
+      ExternalPlayerType.vlc => 'VLC',
+      ExternalPlayerType.generic =>
+        _text(context, '其他/通用', '其他/通用', 'Other / Generic'),
+    };
+
+    return ExternalPlayerType.values.map((type) {
+      return DropdownMenuItemData<ExternalPlayerType>(
+        title: title(type),
+        value: type,
+        isSelected: type == selectedType,
+      );
+    }).toList(growable: false);
   }
 
   Future<void> _selectExternalPlayer(
