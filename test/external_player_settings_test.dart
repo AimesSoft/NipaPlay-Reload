@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,5 +32,23 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(provider.externalPlayerShrinkWindow, isTrue);
     expect(prefs.getBool(SettingsKeys.externalPlayerShrinkWindow), isTrue);
+  });
+
+  test('external player type loads and persists', () async {
+    SharedPreferences.setMockInitialValues({
+      SettingsKeys.externalPlayerType: ExternalPlayerType.vlc.name,
+    });
+    final provider = SettingsProvider();
+    await _waitForInitialLoad(provider);
+
+    expect(provider.externalPlayerType, ExternalPlayerType.vlc);
+
+    await provider.setExternalPlayerType(ExternalPlayerType.mpvNet);
+    final prefs = await SharedPreferences.getInstance();
+    expect(provider.externalPlayerType, ExternalPlayerType.mpvNet);
+    expect(
+      prefs.getString(SettingsKeys.externalPlayerType),
+      ExternalPlayerType.mpvNet.name,
+    );
   });
 }
