@@ -10,6 +10,7 @@ import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay/models/external_player_session/vlc_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -170,6 +171,19 @@ abstract final class ExternalPlayerService {
           mediaPath,
           extraArgs: extraArgs,
           isMpvNet: playerType == ExternalPlayerType.mpvNet,
+        );
+        await session.launch();
+      break;
+
+      // Linux VLC
+      case ExternalPlayerType.vlc:
+        _log('launch: 启动 Linux VLC');
+        session = VlcSession(
+          playerPath: resolvedPlayerPath,
+          mediaPath: mediaPath,
+          duration: Duration(milliseconds: history?.duration ?? 0),
+          position: Duration(milliseconds: history?.lastPosition ?? 0),
+          extraArgs: extraArgs,
         );
         await session.launch();
       break;
