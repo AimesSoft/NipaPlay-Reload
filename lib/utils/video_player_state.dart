@@ -33,6 +33,10 @@ import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/emby_media_source_selection.dart';
+import 'package:nipaplay/services/emby_media_preference_store.dart';
+import 'package:nipaplay/services/emby_media_selection_resolver.dart';
+import 'package:nipaplay/services/emby_player_menu_selection.dart';
+import 'package:nipaplay/services/emby_track_application.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
@@ -49,6 +53,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/models/emby_media_selection.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
@@ -292,6 +297,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentVideoPath;
   String? _currentActualPlayUrl; // 存储实际播放URL，用于判断转码状态
   PlaybackSession? _currentPlaybackSession;
+  EmbyResolvedTrackBundle? _currentEmbyTrackSelection;
+  String? _currentEmbyAccountKey;
   int _lastPlaybackStartMs = 0; // 播放开始时间（用于流媒体缓冲期容错）
   static const int _streamingInvalidDataGraceMs = 8000; // 流媒体无效时长容错期
   final Map<String, int?> _jellyfinServerSubtitleSelections = {};
@@ -1288,6 +1295,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
+  EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>
+      _currentEmbyTrackSelection;
   String get danmakuOverlayKey => _danmakuOverlayKey; // 弹幕覆盖层的稳定key
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter

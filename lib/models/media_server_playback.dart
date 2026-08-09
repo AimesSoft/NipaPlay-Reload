@@ -47,6 +47,9 @@ class PlaybackSession {
 
 class PlaybackMediaSource {
   final String id;
+  final String? name;
+  final int? size;
+  final int? bitRate;
   final String? container;
   final String? path;
   final String? directStreamUrl;
@@ -60,6 +63,9 @@ class PlaybackMediaSource {
 
   const PlaybackMediaSource({
     required this.id,
+    this.name,
+    this.size,
+    this.bitRate,
     this.container,
     this.path,
     this.directStreamUrl,
@@ -84,6 +90,9 @@ class PlaybackMediaSource {
     }
     return PlaybackMediaSource(
       id: json['Id']?.toString() ?? '',
+      name: json['Name']?.toString(),
+      size: _parseInteger(json['Size']),
+      bitRate: _parseInteger(json['Bitrate']),
       container: json['Container']?.toString(),
       path: json['Path']?.toString(),
       directStreamUrl: json['DirectStreamUrl']?.toString(),
@@ -96,6 +105,11 @@ class PlaybackMediaSource {
       mediaStreams: parsedStreams,
     );
   }
+}
+
+int? _parseInteger(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
 }
 
 class DeviceProfile {
@@ -154,8 +168,10 @@ class DirectPlayProfile {
     return {
       'Type': type,
       if (container != null && container!.isNotEmpty) 'Container': container,
-      if (videoCodec != null && videoCodec!.isNotEmpty) 'VideoCodec': videoCodec,
-      if (audioCodec != null && audioCodec!.isNotEmpty) 'AudioCodec': audioCodec,
+      if (videoCodec != null && videoCodec!.isNotEmpty)
+        'VideoCodec': videoCodec,
+      if (audioCodec != null && audioCodec!.isNotEmpty)
+        'AudioCodec': audioCodec,
     };
   }
 }
@@ -192,8 +208,10 @@ class TranscodingProfile {
       'Type': type,
       'Container': container,
       'Protocol': protocol,
-      if (videoCodec != null && videoCodec!.isNotEmpty) 'VideoCodec': videoCodec,
-      if (audioCodec != null && audioCodec!.isNotEmpty) 'AudioCodec': audioCodec,
+      if (videoCodec != null && videoCodec!.isNotEmpty)
+        'VideoCodec': videoCodec,
+      if (audioCodec != null && audioCodec!.isNotEmpty)
+        'AudioCodec': audioCodec,
       if (maxAudioChannels != null) 'MaxAudioChannels': maxAudioChannels,
       if (minSegments != null) 'MinSegments': minSegments,
       if (breakOnNonKeyFrames != null)
@@ -240,8 +258,10 @@ class ResponseProfile {
     return {
       'Type': type,
       'Container': container,
-      if (videoCodec != null && videoCodec!.isNotEmpty) 'VideoCodec': videoCodec,
-      if (audioCodec != null && audioCodec!.isNotEmpty) 'AudioCodec': audioCodec,
+      if (videoCodec != null && videoCodec!.isNotEmpty)
+        'VideoCodec': videoCodec,
+      if (audioCodec != null && audioCodec!.isNotEmpty)
+        'AudioCodec': audioCodec,
     };
   }
 }
