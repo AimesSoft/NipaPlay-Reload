@@ -1,35 +1,39 @@
 // lib/models/external_player_session/session.dart
 // 外部播放器启动会话的公共接口
 
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:flutter/foundation.dart';
 
 
 /// 外部播放器启动后返回给调用方的公共会话接口
-abstract interface class ExternalPlayerLaunchSession {
+abstract interface class ExternalPlayerLaunchSession extends ChangeNotifier {
 
   ExternalPlayerType get type;
 
-  String    get playerPath; // 外部播放器的可执行文件路径
-  String    get mediaPath;  // 当前播放的媒体路径
-  int       get processId;  // 外部播放器进程的 PID
-  String?   get ipcPath;    // 外部播放器的 IPC 通信路径
-  Duration  get duration;   // 外部播放器的总时长
-  Duration? get position;   // 外部播放器的当前播放位置
-  bool?     get isPaused;   // 外部播放器是否处于暂停状态
-  double?   get fraction;   // 外部播放器的播放进度百分比
-  bool      get isClosed;   // 外部播放器会话是否已关闭
+  String    get playerPath;
+  String    get mediaPath;
+  int       get processId;
+  String?   get ipcPath;
+  Duration  get duration;
+  Duration? get position;
+  bool?     get isPaused;
+  double?   get fraction;
+  bool      get isClosed;
 
-  set duration(Duration  value); // 设置总时长
-  set position(Duration? value); // 设置当前播放位置
-  set isPaused(bool    ? value); // 设置是否处于暂停状态
+  // 生命周期管理
+  // ---------------------------------------------------------------------------
+  Future<void> launch();    // 启动外部播放器
+  void terminate(); // 终止外部播放器
 
-  void terminate();
+  // 播放器操控相关
+  // ---------------------------------------------------------------------------
   void togglePause();
   void seekToFraction(double fraction);
   bool seekToPosition(Duration target);
-  Future<bool> refreshDanmaku(String assPath, String luaPath);
-  void addListener(VoidCallback listener);
-  void removeListener(VoidCallback listener);
-  void dispose();
+
+  // 弹幕操控相关
+  // ---------------------------------------------------------------------------
+  Future<bool> refreshDanmaku(DanmakuItemSet danmakuSet, DanmakuStyle style);
 }

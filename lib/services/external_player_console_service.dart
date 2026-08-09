@@ -2,7 +2,6 @@
 // Linux/macOS/Windows 外部播放器控制台服务
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,8 +11,6 @@ import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/services/external_player_window_service.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/utils.dart';
 
 /// 番剧元数据
@@ -284,60 +281,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       // 如果在队列等待期间状态发生变化, 则跳过当前任务
       if (_configurationHasChanged(timestamp)) return;
 
-      // 参数检查
-      final assPath = currentSession.assFilePath;
-      final luaPath = currentSession.luaFilePath;
-
-      // 将当前弹幕样式应用到 ASS 导出设置
-      final outlineStyle = style.outlineEnabled ? AssOutlineStyle.uniform : AssOutlineStyle.none;
-      final AssExportSettings settings = AssExportSettings(
-        fontSize: style.danmakuFontSize,
-        opacity: style.opacity,
-        // displayArea: style.displayArea,
-        // scrollDurationSeconds: style.scrollDurationSeconds,
-        timeOffsetSeconds: style.danmakuOffset,
-        // mergeDuplicates: style.mergeDuplicates,
-        allowStacking: style.danmakuAllowStacking,
-        // fontFamily: style.fontFamily,
-        outlineStyle: outlineStyle,
-        outlineWidth: style.outlineWidth,
-      );
-
-      File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
       try {
-
-        if (assPath == null || luaPath == null) {
-          debugPrint(
-            '[ExternalPlayerConsoleService] Cannot refresh danmaku, assPath or luaPath is null',
-          );
-          return;
-        }
-
-        // 生成 ASS 内容
-        final assStr = await generateExternalPlayerDanmakuAss(
-          _displayDanmakuList
-              .where((item) => !item.isBlocked)
-              .map((item) => item.item)
-              .toList(growable: false),
-          settings,
-        );
-
-        // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
+        final danmakuSet = _displayDanmakuList
+            .where((item) => !item.isBlocked)
+            .map((item) => item.item)
+            .toSet();
+        final refreshed =
+            await currentSession.refreshDanmaku(danmakuSet, style);
         if (_configurationHasChanged(timestamp)) return;
-
-        // 写入临时文件
-        temporaryFile = File('$assPath.nipaplay.tmp');
-        await temporaryFile.writeAsString(assStr, encoding: utf8, flush: true);
-
-        // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
-        if (_configurationHasChanged(timestamp)) return;
-
-        // 将临时文件重命名为目标 ASS 文件路径, 覆盖原文件
-        temporaryFile.renameSync(assPath);
-        temporaryFile = null;
-
-        // 刷新 mpv 弹幕
-        final refreshed = await currentSession.refreshDanmaku(assPath, luaPath);
         if (!refreshed) {
           debugPrint(
             '[ExternalPlayerConsoleService] Failed to refresh danmaku',
@@ -346,9 +297,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       } catch (error) {
         debugPrint(
             '[ExternalPlayerConsoleService] Failed to regenerate ASS: $error');
-      } finally {
-        // 删除临时文件, 如果存在的话
-        if (temporaryFile?.existsSync() == true) temporaryFile?.deleteSync();
       }
     }
 
