@@ -45,18 +45,15 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   Future<int>? _processExitCode;
 
   // 构造函数
-  MpvSession(String playerPath, String mediaPath, {
-    List<String> extraArgs = const <String>[],
-    bool isMpvNet = false,
-    Duration duration = Duration.zero,
-    Duration position = Duration.zero,
-  }) :
+  MpvSession(
+    String playerPath,
+    String mediaPath,
+    { List<String> extraArgs = const <String>[], bool isMpvNet = false }
+  ) :
   _playerPath = playerPath,
   _mediaPath = mediaPath,
   _extraArgs = extraArgs,
   _isMpvNet = isMpvNet,
-  _duration = duration,
-  _position = position,
   _isPaused = false;
 
 
