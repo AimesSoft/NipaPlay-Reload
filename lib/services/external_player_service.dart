@@ -155,100 +155,50 @@ abstract final class ExternalPlayerService {
 
     // 尝试启动外部播放器
     final history = item.historyItem;
-    ExternalPlayerLaunchSession? session;
+    late final ExternalPlayerLaunchSession session;
+
+    // 根据播放器类型选择不同的启动方式
     try {
-      if (_usesMpvSession(playerType)) {
+      switch (playerType) {
+
+      // mpv/mpv.net
+      case ExternalPlayerType.mpv:
+      case ExternalPlayerType.mpvNet:
+        _log('launch: 启动 mpv/mpv.net');
         session = MpvSession(
           resolvedPlayerPath,
           mediaPath,
           extraArgs: extraArgs,
-          duration: Duration(milliseconds: history?.duration ?? 0),
-          position: Duration(milliseconds: history?.lastPosition ?? 0),
           isMpvNet: playerType == ExternalPlayerType.mpvNet,
         );
         await session.launch();
-      } else {
-        final config = switch (platform) {
-          AppPlatform.windows => resolvedPlayerPath.toLowerCase().endsWith('.lnk')
-              ? (
-                  executable: 'cmd',
-                  arguments: [
-                    '/c',
-                    'start',
-                    '',
-                    resolvedPlayerPath,
-                    mediaPath,
-                    ...extraArgs,
-                  ],
-                  mode: ProcessStartMode.normal,
-                  runInShell: true,
-                  monitorProcess: false,
-                )
-              : (
-                  executable: resolvedPlayerPath,
-                  arguments: [mediaPath, ...extraArgs],
-                  mode: ProcessStartMode.detached,
-                  runInShell: false,
-                  monitorProcess: false,
-                ),
-          AppPlatform.macOS => resolvedPlayerPath.toLowerCase().endsWith('.app')
-              ? (
-                  executable: 'open',
-                  arguments: [
-                    '-a',
-                    resolvedPlayerPath,
-                    mediaPath,
-                    if (extraArgs.isNotEmpty) '--args',
-                    ...extraArgs,
-                  ],
-                  mode: ProcessStartMode.normal,
-                  runInShell: false,
-                  monitorProcess: false,
-                )
-              : (
-                  executable: resolvedPlayerPath,
-                  arguments: [mediaPath, ...extraArgs],
-                  mode: ProcessStartMode.normal,
-                  runInShell: false,
-                  monitorProcess: false,
-                ),
-          AppPlatform.linux => (
-              executable: resolvedPlayerPath,
-              arguments: [mediaPath, ...extraArgs],
-              mode: ProcessStartMode.detached,
-              runInShell: false,
-              monitorProcess: true,
-            ),
-          AppPlatform.web ||
-          AppPlatform.android ||
-          AppPlatform.iOS ||
-          AppPlatform.unknown => throw StateError('不支持的平台: $platform'),
-        };
-        final process = await Process.start(
-          config.executable,
-          config.arguments,
-          mode: config.mode,
-          runInShell: config.runInShell,
-        );
+      break;
 
-        session = OtherSession.attach(
+      // 其他播放器
+      default:
+        _log('launch: 启动其他播放器: $playerType');
+        session = OtherSession(
           type: playerType,
           playerPath: resolvedPlayerPath,
           mediaPath: mediaPath,
-          processId: process.pid,
           duration: Duration(milliseconds: history?.duration ?? 0),
           position: Duration(milliseconds: history?.lastPosition ?? 0),
-          monitorProcess: config.monitorProcess,
+          extraArgs: extraArgs,
+          platform: platform,
         );
+        await session.launch();
+      break;
       }
     } catch (error, stackTrace) {
       _log('launch: 启动异常: $error');
       debugPrintStack(stackTrace: stackTrace);
+      return;
     }
 
-    _log('launch: 启动成功=${session != null}');
-    if (session is! MpvSession) return;
 
+    _log('launch: 启动成功, pid=${session.processId}');
+
+    // 控制台服务接管会话
     ExternalPlayerConsoleService.setState(
       ConsoleState(
         session: session,
@@ -261,11 +211,12 @@ abstract final class ExternalPlayerService {
         danmakuList: danmakuSet?.toList(growable: false),
       ),
     );
+    ExternalPlayerConsoleService.queueDanmakuRefresh();
 
+    // 弹出控制台窗口
     if (settings.externalPlayerConsoleWindowMode) {
       await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
     }
-    ExternalPlayerConsoleService.queueDanmakuRefresh();
   }
 
   static bool _usesMpvSession(ExternalPlayerType playerType) =>

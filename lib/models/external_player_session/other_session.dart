@@ -9,21 +9,23 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay/utils/app_platform.dart';
 
 
 /// 管理未启用 mpv JSON IPC 的外部播放器进程的轻量会话.
 class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
-  OtherSession.attach({
+  OtherSession({
     required this.type,
     required this.playerPath,
     required this.mediaPath,
-    required this.processId,
     required this.duration,
     this.position = Duration.zero,
     this.isPaused = false,
-    bool monitorProcess = false,
-  }) { if (monitorProcess) _startLifecycleMonitoring(); }
+    List<String> extraArgs = const <String>[],
+    AppPlatform? platform,
+  }) : _extraArgs = extraArgs,
+       _platform = platform ?? AppPlatform.current;
 
   @override
   final ExternalPlayerType type;
@@ -32,7 +34,7 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   final String mediaPath;
   @override
-  final int processId;
+  int get processId => _processId ?? 0;
   @override
   String? get ipcPath => null;
 
@@ -42,6 +44,10 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   Duration? position;
   @override
   bool? isPaused;
+
+  final List<String> _extraArgs;
+  final AppPlatform _platform;
+  int? _processId;
 
   static const Duration _processPollingInterval = Duration(milliseconds: 250);
   Timer? _processPollingTimer;
@@ -58,7 +64,76 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   bool get isClosed => _closed;
 
   @override
-  Future<void> launch() async {}
+  Future<void> launch() async {
+    if (_disposed) throw StateError('OtherSession 已释放');
+    if (_processId != null) throw StateError('OtherSession 已启动');
+
+    final config = switch (_platform) {
+      AppPlatform.windows => playerPath.toLowerCase().endsWith('.lnk')
+          ? (
+              executable: 'cmd',
+              arguments: [
+                '/c',
+                'start',
+                '',
+                playerPath,
+                mediaPath,
+                ..._extraArgs,
+              ],
+              mode: ProcessStartMode.normal,
+              runInShell: true,
+              monitorProcess: false,
+            )
+          : (
+              executable: playerPath,
+              arguments: [mediaPath, ..._extraArgs],
+              mode: ProcessStartMode.detached,
+              runInShell: false,
+              monitorProcess: false,
+            ),
+      AppPlatform.macOS => playerPath.toLowerCase().endsWith('.app')
+          ? (
+              executable: 'open',
+              arguments: [
+                '-a',
+                playerPath,
+                mediaPath,
+                if (_extraArgs.isNotEmpty) '--args',
+                ..._extraArgs,
+              ],
+              mode: ProcessStartMode.normal,
+              runInShell: false,
+              monitorProcess: false,
+            )
+          : (
+              executable: playerPath,
+              arguments: [mediaPath, ..._extraArgs],
+              mode: ProcessStartMode.normal,
+              runInShell: false,
+              monitorProcess: false,
+            ),
+      AppPlatform.linux => (
+          executable: playerPath,
+          arguments: [mediaPath, ..._extraArgs],
+          mode: ProcessStartMode.detached,
+          runInShell: false,
+          monitorProcess: true,
+        ),
+      AppPlatform.web ||
+      AppPlatform.android ||
+      AppPlatform.iOS ||
+      AppPlatform.unknown => throw StateError('不支持的平台: $_platform'),
+    };
+
+    final process = await Process.start(
+      config.executable,
+      config.arguments,
+      mode: config.mode,
+      runInShell: config.runInShell,
+    );
+    _processId = process.pid;
+    if (config.monitorProcess) _startLifecycleMonitoring();
+  }
 
   @override
   void togglePause() {}
@@ -78,6 +153,11 @@ class OtherSession extends ChangeNotifier implements ExternalPlayerLaunchSession
   @override
   void terminate() {
     if (_closed) return;
+    final processId = _processId;
+    if (processId == null) {
+      _close();
+      return;
+    }
     try {
       if (Platform.isWindows) {
         Process.runSync('taskkill', ['/PID', '$processId', '/T', '/F']);
