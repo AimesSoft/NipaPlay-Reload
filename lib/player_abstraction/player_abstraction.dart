@@ -5,6 +5,7 @@ export './abstract_player.dart'
     show
         AbstractPlayer,
         AsyncDisposablePlayer,
+        AsyncExternalSubtitlePlayer,
         AsyncSeekPlayer,
         MediaLoadAwarePlayer;
 export './player_factory.dart'
@@ -37,7 +38,7 @@ enum MediaType { unknown, video, audio, subtitle }
 /// The main player class that client code (like VideoPlayerState) will interact with.
 /// It instantiates to `Player()` and delegates all operations to an internal `AbstractPlayer` instance
 /// obtained from the `PlayerFactory`.
-class Player {
+class Player implements core_player.AsyncExternalSubtitlePlayer {
   final core_player.AbstractPlayer _delegate;
   Future<void>? _disposeFuture;
   bool _disposeErrorHandlerAttached = false;
@@ -134,6 +135,17 @@ class Player {
         break;
     }
     _delegate.setMedia(path, coreType);
+  }
+
+  @override
+  Future<void> setExternalSubtitleAsync(String path) async {
+    final delegate = _delegate;
+    if (delegate is core_player.AsyncExternalSubtitlePlayer) {
+      await (delegate as core_player.AsyncExternalSubtitlePlayer)
+          .setExternalSubtitleAsync(path);
+      return;
+    }
+    delegate.setMedia(path, core_enums.PlayerMediaType.subtitle);
   }
 
   Future<void> prepare() => _delegate.prepare();

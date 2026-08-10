@@ -7,9 +7,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? historyFilePath,
     String? actualPlayUrl,
     PlaybackSession? playbackSession,
+    EmbyResolvedTrackBundle? embyTrackSelection,
     PlaybackDetailContext? playbackDetailContext,
     bool resetManualDanmakuOffset = true,
+    bool preserveEmbyAccountKey = false,
   }) async {
+    final isRequestedEmbyStream = videoPath.startsWith('emby://');
+    final requestedEmbyAccountKey = isRequestedEmbyStream
+        ? (preserveEmbyAccountKey
+            ? _currentEmbyAccountKey
+            : embyAccountKey(
+                EmbyService.instance.currentProfile,
+                EmbyService.instance.userId,
+              ))
+        : null;
     var mediaPrepareStarted = false;
     var mediaPrepareCompleted = false;
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
@@ -51,6 +62,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     }
 
     _clearPreviousVideoState(); // 清理旧状态
+    _currentEmbyTrackSelection = embyTrackSelection;
     final initializationGeneration = _playbackGeneration;
     _playbackDetailContext = resolvedDetailContext;
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
@@ -293,6 +305,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _currentVideoPath = videoPath;
     _currentActualPlayUrl = resolvedActualPlayUrl; // 存储实际播放URL
     _currentPlaybackSession = resolvedSession;
+    _currentEmbyAccountKey = requestedEmbyAccountKey;
     print('historyItem: $historyItem');
     // 仅当 historyItem 已被识别（有 animeId）时，其 animeName 才是可信的番剧名。
     // WebDAV/SMB 的 _loadWebDavEpisodes/_loadSmbEpisodes 创建的占位记录中
@@ -787,7 +800,65 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         await _loadJellyfinExternalSubtitles(videoPath);
       }
       if (isEmbyStream) {
-        await _loadEmbyExternalSubtitles(videoPath);
+        final trackSelection = _currentEmbyTrackSelection;
+        final isTranscoding = _currentPlaybackSession?.isTranscoding ?? false;
+        if (trackSelection == null) {
+          if (!isTranscoding) {
+            await _loadEmbyExternalSubtitles(
+              videoPath,
+              const EmbyExternalSubtitleAction.followDefault(),
+            );
+          }
+        } else {
+          await applyEmbyTracksForVideoPath(
+            videoPath: videoPath,
+            isTranscoding: isTranscoding,
+            applyEmby: () async {
+              bool isCurrentPlayback() =>
+                  !_isDisposed &&
+                  initializationGeneration == _playbackGeneration &&
+                  _currentVideoPath == videoPath;
+              if (!isCurrentPlayback()) return;
+              await applyEmbyResolvedTracksAfterOpen(
+                mediaInfo: player.mediaInfo,
+                bundle: trackSelection,
+                setActiveAudio: (indexes) {
+                  if (isCurrentPlayback()) {
+                    player.activeAudioTracks = indexes;
+                  }
+                },
+                setActiveSubtitle: (indexes) {
+                  if (isCurrentPlayback()) {
+                    player.activeSubtitleTracks = indexes;
+                  }
+                },
+                clearExternal: () async {
+                  if (isCurrentPlayback()) {
+                    final activeEmbeddedTracks =
+                        List<int>.of(player.activeSubtitleTracks);
+                    await _subtitleManager.activateEmbyExternalSubtitle(
+                      '',
+                      isManualSetting: false,
+                    );
+                    if (activeEmbeddedTracks.isNotEmpty &&
+                        isCurrentPlayback()) {
+                      player.activeSubtitleTracks = activeEmbeddedTracks;
+                    }
+                  }
+                },
+                loadExternal: (action) async {
+                  if (isCurrentPlayback()) {
+                    await _loadEmbyExternalSubtitles(videoPath, action);
+                  }
+                },
+              );
+              if (isCurrentPlayback()) {
+                _subtitleManager.updateAllSubtitleTracksInfo();
+                _subtitleManager.onSubtitleTrackChanged();
+              }
+            },
+          );
+        }
       }
 
       //debugPrint('10. 开始识别视频和加载弹幕...');
@@ -969,7 +1040,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
 
       // 尝试自动检测和加载字幕
-      if (!isAndroidContentUri) {
+      final shouldAutoDetectSubtitle = !isEmbyStream ||
+          _currentEmbyTrackSelection == null ||
+          _currentEmbyTrackSelection!.subtitle.mode ==
+              EmbyResolvedTrackMode.followDefault;
+      if (!isAndroidContentUri && shouldAutoDetectSubtitle) {
         await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
       }
 

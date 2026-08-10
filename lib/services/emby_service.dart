@@ -191,6 +191,49 @@ class EmbyService extends MediaServerServiceBase
     }
   }
 
+  /// Fetches source metadata for the selection UI without creating playback.
+  Future<List<PlaybackMediaSource>> getPlaybackMediaSources(
+    String itemId,
+  ) async {
+    if (!_isConnected || _userId == null) {
+      throw StateError('Not connected to an Emby server.');
+    }
+
+    final response = await _makeAuthenticatedRequest(
+      '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId',
+    );
+    if (response.statusCode != 200) {
+      throw StateError(
+        'Unable to load Emby media sources (HTTP ${response.statusCode}).',
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) return const <PlaybackMediaSource>[];
+    final rawSources = decoded['MediaSources'];
+    if (rawSources is! List) return const <PlaybackMediaSource>[];
+    return <PlaybackMediaSource>[
+      for (final rawSource in rawSources)
+        if (rawSource is Map)
+          _metadataOnlyMediaSource(
+            PlaybackMediaSource.fromJson(
+              Map<String, dynamic>.from(rawSource),
+            ),
+          ),
+    ];
+  }
+
+  PlaybackMediaSource _metadataOnlyMediaSource(PlaybackMediaSource source) =>
+      PlaybackMediaSource(
+        id: source.id,
+        name: source.name,
+        size: source.size,
+        bitRate: source.bitRate,
+        container: source.container,
+        path: source.path,
+        mediaStreams: source.mediaStreams,
+      );
+
   // Getters
   @override
   bool get isConnected => _isConnected;
