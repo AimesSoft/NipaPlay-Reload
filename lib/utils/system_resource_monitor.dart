@@ -59,7 +59,7 @@ class SystemResourceMonitor {
   String get danmakuKernelType => _danmakuKernelType;
 
   static Future<void> initialize() async {
-    if (!kIsWeb && !globals.isTelevision) {
+    if (!kIsWeb && !globals.isTvOS) {
       _instance._initMdkVersion();
       _instance._updatePlayerKernelType();
       _instance._updateDanmakuKernelType();
@@ -71,7 +71,7 @@ class SystemResourceMonitor {
       _instance._activeDecoder = '浏览器解码';
       _instance._gpuUsage = null;
     } else {
-      // Television devices are locked to Erika by PlayerFactory. Keep the
+      // tvOS devices are locked to Erika by PlayerFactory. Keep the
       // diagnostics panel in sync with the actual factory policy.
       _instance._updatePlayerKernelType();
       _instance._danmakuKernelType = 'DFM+';

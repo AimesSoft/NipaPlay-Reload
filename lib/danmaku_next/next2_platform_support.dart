@@ -8,7 +8,7 @@ class Next2PlatformSupport {
   /// Web is intentionally excluded because the current Rust runtime is not
   /// packaged as a wasm module for the Flutter web target.
   static bool get isKernelSupported {
-    if (kIsWeb || globals.isTelevision) return false;
+    if (kIsWeb || globals.isTvOS) return false;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
       case TargetPlatform.iOS:
@@ -27,7 +27,7 @@ class Next2PlatformSupport {
 
   /// Native texture rendering is required on every non-web platform.
   static bool get isNativeTextureSupported {
-    if (kIsWeb || globals.isTelevision) return false;
+    if (kIsWeb || globals.isTvOS) return false;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
       case TargetPlatform.iOS:
