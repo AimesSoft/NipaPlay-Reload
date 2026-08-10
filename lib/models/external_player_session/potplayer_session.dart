@@ -125,8 +125,8 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
     }
     _windowHandle = await _waitForPlayerWindow(processId);
     if (_windowHandle == 0) {
-      debugPrint('[PotPlayerSession] 找不到 PotPlayer 窗口: pid=$processId');
-      return;
+      terminate();
+      throw StateError('找不到 PotPlayer 窗口: pid=$processId');
     }
     if (initialDanmakuSet != null && initialDanmakuSet.isNotEmpty) {
       await _selectOriginalSubtitleAsSecondary();
@@ -261,6 +261,12 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
       return;
     }
     final api = _WindowsPotPlayerApi.instance;
+    if (api.isWindow(_windowHandle) == 0) {
+      _windowHandle = 0;
+      _deleteAssFile();
+      _close();
+      return;
+    }
     final nextDuration = api.sendMessage(
       _windowHandle,
       _wmUser,
@@ -401,6 +407,8 @@ typedef _SendMessageNative = IntPtr Function(IntPtr, Uint32, IntPtr, IntPtr);
 typedef _SendMessageDart = int Function(int, int, int, int);
 typedef _PostMessageNative = Int32 Function(IntPtr, Uint32, IntPtr, IntPtr);
 typedef _PostMessageDart = int Function(int, int, int, int);
+typedef _IsWindowNative = Int32 Function(IntPtr);
+typedef _IsWindowDart = int Function(int);
 typedef _IsWindowVisibleNative = Int32 Function(IntPtr);
 typedef _IsWindowVisibleDart = int Function(int);
 typedef _GetClassNameNative = Int32 Function(IntPtr, Pointer<Uint16>, Int32);
@@ -446,6 +454,9 @@ class _WindowsPotPlayerApi {
     postMessage = user32.lookupFunction<_PostMessageNative, _PostMessageDart>(
       'PostMessageW',
     );
+    isWindow = user32.lookupFunction<_IsWindowNative, _IsWindowDart>(
+      'IsWindow',
+    );
     isWindowVisible =
         user32.lookupFunction<_IsWindowVisibleNative, _IsWindowVisibleDart>(
       'IsWindowVisible',
@@ -472,6 +483,7 @@ class _WindowsPotPlayerApi {
   late final _GetWindowThreadProcessIdDart getWindowThreadProcessId;
   late final _SendMessageDart sendMessage;
   late final _PostMessageDart postMessage;
+  late final _IsWindowDart isWindow;
   late final _IsWindowVisibleDart isWindowVisible;
   late final _GetClassNameDart getClassName;
   late final _GetForegroundWindowDart getForegroundWindow;
