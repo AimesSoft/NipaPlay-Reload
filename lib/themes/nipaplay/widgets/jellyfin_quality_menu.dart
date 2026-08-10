@@ -12,6 +12,9 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay/services/emby_player_menu_selection.dart';
+import 'package:nipaplay/services/emby_media_source_selection.dart';
 import 'package:nipaplay/widgets/emby_media_source_selector.dart';
 
 class JellyfinQualityMenu extends StatefulWidget {
@@ -229,37 +232,86 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       final path = vp.currentVideoPath;
       if (path != null && path.startsWith('jellyfin://')) {
         final itemId = path.replaceFirst('jellyfin://', '');
-        vp.setJellyfinServerSubtitleSelection(
-          itemId,
-          _selectedServerSubtitleIndex,
-          burnIn: _burnIn,
-        );
-        await vp.reloadCurrentJellyfinStream(
-          quality: _currentQuality!,
-          serverSubtitleIndex: _selectedServerSubtitleIndex,
-          burnInSubtitle: _burnIn,
+        await runMediaServerMenuSelection(
+          MediaServerMenuSurface.nipaplaySource,
+          false,
+          () async {
+            vp.setJellyfinServerSubtitleSelection(
+              itemId,
+              _selectedServerSubtitleIndex,
+              burnIn: _burnIn,
+            );
+            await vp.reloadCurrentJellyfinStream(
+              quality: _currentQuality!,
+              serverSubtitleIndex: _selectedServerSubtitleIndex,
+              burnInSubtitle: _burnIn,
+            );
+          },
+          () async => false,
         );
       } else if (path != null && path.startsWith('emby://')) {
         final itemId = path.replaceFirst('emby://', '').split('/').last;
-        final sourceChanged =
-            vp.currentPlaybackSession?.mediaSourceId != _selectedMediaSourceId;
-        final audioStreamIndex =
-            sourceChanged ? null : vp.getEmbyServerAudioSelection(itemId);
-        await vp.reloadCurrentEmbyStream(
-          quality: _currentQuality!,
-          serverSubtitleIndex: _selectedServerSubtitleIndex,
-          burnInSubtitle: _burnIn,
-          mediaSourceId: _selectedMediaSourceId,
-          audioStreamIndex: audioStreamIndex,
-        );
-        vp.setEmbyServerSubtitleSelection(
-          itemId,
-          _selectedServerSubtitleIndex,
-          burnIn: _burnIn,
-        );
-        if (sourceChanged) {
-          vp.setEmbyServerAudioSelection(itemId, null);
+        final normalizedSourceId = _selectedMediaSourceId?.trim();
+        final selectedSourceId =
+            normalizedSourceId?.isNotEmpty == true ? normalizedSourceId : null;
+        final sourceChanged = selectedSourceId?.isNotEmpty == true &&
+            vp.currentPlaybackSession?.mediaSourceId != selectedSourceId;
+        final selectedSource = sourceChanged
+            ? vp.embyMediaSourceDescriptor(selectedSourceId)
+            : vp.embyMediaSourceDescriptor();
+        if (sourceChanged && selectedSource == null) {
+          throw StateError(
+              'Selected Emby media source is no longer available.');
         }
+        final resolvedTracks = sourceChanged && selectedSource != null
+            ? await vp.resolveCurrentEmbyTracksForSource(selectedSource)
+            : vp.currentEmbyTrackSelection;
+        final resolvedAudioIndex =
+            resolvedTracks?.audio.mode == EmbyResolvedTrackMode.track
+                ? resolvedTracks!.audio.sourceIndex
+                : null;
+        final resolvedSubtitleIndex =
+            resolvedTracks?.subtitle.mode == EmbyResolvedTrackMode.track
+                ? resolvedTracks!.subtitle.sourceIndex
+                : null;
+        final audioStreamIndex = sourceChanged
+            ? resolvedAudioIndex
+            : vp.getEmbyServerAudioSelection(itemId);
+        final subtitleStreamIndex = sourceChanged
+            ? resolvedSubtitleIndex
+            : _selectedServerSubtitleIndex;
+        final burnInSubtitle = _burnIn ||
+            (resolvedTracks != null &&
+                requiresEmbySubtitleBurnIn(resolvedTracks.subtitle));
+        await runMediaServerMenuSelection(
+          MediaServerMenuSurface.nipaplaySource,
+          true,
+          () async {
+            await vp.reloadCurrentEmbyStream(
+              quality: _currentQuality!,
+              serverSubtitleIndex: subtitleStreamIndex,
+              burnInSubtitle: burnInSubtitle,
+              mediaSourceId: selectedSourceId,
+              audioStreamIndex: audioStreamIndex,
+              embyTrackSelection: resolvedTracks,
+            );
+            vp.setEmbyServerSubtitleSelection(
+              itemId,
+              subtitleStreamIndex,
+              burnIn: burnInSubtitle,
+            );
+            if (sourceChanged) {
+              vp.setEmbyServerAudioSelection(itemId, audioStreamIndex);
+            }
+          },
+          () async {
+            if (!sourceChanged || selectedSource == null) return false;
+            return vp.persistCurrentEmbyManualPatch(
+              EmbyManualSelectionPatch(source: selectedSource),
+              currentSource: selectedSource,
+            );
+          },
+        );
       }
 
       if (mounted) {

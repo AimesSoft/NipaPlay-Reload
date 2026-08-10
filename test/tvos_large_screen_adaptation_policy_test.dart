@@ -38,7 +38,7 @@ void main() {
 
     expect(
       scaffold,
-      contains('globals.isTelevision ? null : widget.onToggleLargeScreen'),
+      contains('globals.isTvOS ? null : widget.onToggleLargeScreen'),
     );
     expect(
       scaffold,

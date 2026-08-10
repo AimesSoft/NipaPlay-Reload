@@ -14,6 +14,12 @@ abstract interface class AsyncSeekPlayer {
   Future<void> seekAndWait({required int position});
 }
 
+/// Optional capability for backends whose external subtitle replacement is
+/// completed through an asynchronous platform bridge.
+abstract interface class AsyncExternalSubtitlePlayer {
+  Future<void> setExternalSubtitleAsync(String path);
+}
+
 /// Optional capability for backends that can distinguish an accepted play
 /// command from a media source that has actually produced usable metadata.
 abstract interface class MediaLoadAwarePlayer {

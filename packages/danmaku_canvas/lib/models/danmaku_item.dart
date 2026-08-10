@@ -23,6 +23,12 @@ class DanmakuItem {
   /// 上次绘制时间
   int? lastDrawTick;
 
+  /// 顶部/底部弹幕剩余的视频时间。滚动与高级弹幕不使用。
+  double? remainingDurationSeconds;
+
+  /// 上次更新剩余生命周期时的墙钟 tick。
+  int? lastLifetimeTick;
+
   /// 弹幕布局缓存
   ui.Paragraph? paragraph;
   ui.Paragraph? strokeParagraph;
@@ -37,5 +43,7 @@ class DanmakuItem {
     this.paragraph,
     this.strokeParagraph,
     this.lastDrawTick,
+    this.remainingDurationSeconds,
+    this.lastLifetimeTick,
   });
 }

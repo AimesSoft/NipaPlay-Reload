@@ -551,7 +551,11 @@ class _NipaplayErikaWindowOverlayVideoViewState
 }
 
 class ErikaPlayerAdapter
-    implements AbstractPlayer, AsyncDisposablePlayer, AsyncSeekPlayer {
+    implements
+        AbstractPlayer,
+        AsyncDisposablePlayer,
+        AsyncSeekPlayer,
+        AsyncExternalSubtitlePlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
@@ -616,6 +620,7 @@ class ErikaPlayerAdapter
   List<int> _activeSubtitleTracks = const <int>[];
   final Set<int> _externalSubtitleTrackIds = <int>{};
   int _externalSubtitleGeneration = 0;
+  Future<void> _externalSubtitleOperation = Future<void>.value();
 
   static const bool _subtitleTraceEnabled = bool.fromEnvironment(
     'NIPAPLAY_ERIKA_SUBTITLE_TRACE',
@@ -1023,63 +1028,81 @@ class ErikaPlayerAdapter
     if (!_isSupported || _disposed) {
       return;
     }
+    unawaited(
+      setExternalSubtitleAsync(path).catchError(
+        (Object error, StackTrace stackTrace) {
+          debugPrint('Erika: set external subtitle failed: $error');
+        },
+      ),
+    );
+  }
+
+  @override
+  Future<void> setExternalSubtitleAsync(String path) {
+    if (!_isSupported || _disposed) {
+      return Future<void>.value();
+    }
     final generation = ++_externalSubtitleGeneration;
+    final previousOperation = _externalSubtitleOperation;
+    final operation = () async {
+      try {
+        await previousOperation;
+      } catch (_) {
+        // A failed replacement must not block a newer subtitle request.
+      }
+      await _replaceExternalSubtitle(path, generation);
+    }();
+    _externalSubtitleOperation = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return operation;
+  }
+
+  Future<void> _replaceExternalSubtitle(String path, int generation) async {
+    if (_disposed || generation != _externalSubtitleGeneration) return;
     final oldTrackIds = Set<int>.from(_externalSubtitleTrackIds);
-    _externalSubtitleTrackIds.clear();
     _subtitleTrace(
       'setExternalSubtitle generation=$generation '
       'path=${_describeSubtitlePath(path)} old_track_ids=$oldTrackIds',
     );
 
     for (final trackId in oldTrackIds) {
-      unawaited(
-        _player.removeSubtitleTrack(trackId).catchError((Object error) {
-          debugPrint('Erika: remove external subtitle failed: $error');
-        }),
-      );
+      await _player.removeSubtitleTrack(trackId);
+      _externalSubtitleTrackIds.remove(trackId);
+      if (_disposed || generation != _externalSubtitleGeneration) return;
     }
 
     if (path.trim().isEmpty) {
       _activeSubtitleTracks = const <int>[];
-      unawaited(_selectSubtitleTrack(null, reason: 'clear external subtitle'));
+      await _player.selectSubtitleTrack(null);
       return;
     }
 
-    unawaited(_addAndSelectExternalSubtitle(path, generation));
-  }
-
-  Future<void> _addAndSelectExternalSubtitle(
-    String path,
-    int generation,
-  ) async {
-    try {
-      final addWatch = Stopwatch()..start();
+    final addWatch = Stopwatch()..start();
+    _subtitleTrace(
+      'addExternalSubtitle begin generation=$generation '
+      'path=${_describeSubtitlePath(path)}',
+    );
+    final trackId = await _player.addExternalSubtitle(path);
+    addWatch.stop();
+    _subtitleTrace(
+      'addExternalSubtitle ok generation=$generation track_id=$trackId '
+      'elapsed_ms=${addWatch.elapsedMilliseconds}',
+    );
+    if (_disposed || generation != _externalSubtitleGeneration) {
+      await _player.removeSubtitleTrack(trackId);
       _subtitleTrace(
-        'addExternalSubtitle begin generation=$generation '
-        'path=${_describeSubtitlePath(path)}',
+        'addExternalSubtitle stale generation=$generation '
+        'current=$_externalSubtitleGeneration removed track_id=$trackId',
       );
-      final trackId = await _player.addExternalSubtitle(path);
-      addWatch.stop();
-      _subtitleTrace(
-        'addExternalSubtitle ok generation=$generation track_id=$trackId '
-        'elapsed_ms=${addWatch.elapsedMilliseconds}',
-      );
-      if (_disposed || generation != _externalSubtitleGeneration) {
-        await _player.removeSubtitleTrack(trackId);
-        _subtitleTrace(
-          'addExternalSubtitle stale generation=$generation '
-          'current=$_externalSubtitleGeneration removed track_id=$trackId',
-        );
-        return;
-      }
-      _externalSubtitleTrackIds.add(trackId);
-      await _selectSubtitleTrack(trackId, reason: 'after addExternalSubtitle');
-    } catch (error) {
-      debugPrint('Erika: add external subtitle failed: $error');
-      _subtitleTrace(
-        'addExternalSubtitle failed generation=$generation '
-        'path=${_describeSubtitlePath(path)} error=$error',
-      );
+      return;
+    }
+    _externalSubtitleTrackIds.add(trackId);
+    await _player.selectSubtitleTrack(trackId);
+    if (_disposed || generation != _externalSubtitleGeneration) {
+      await _player.removeSubtitleTrack(trackId);
+      _externalSubtitleTrackIds.remove(trackId);
     }
   }
 

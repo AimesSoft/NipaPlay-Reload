@@ -9,6 +9,7 @@ void main() {
       shouldOfferLargeScreenModeControl(
         isDesktopOrTablet: true,
         isTelevisionSurface: false,
+        isTvOS: false,
       ),
       isTrue,
     );
@@ -16,6 +17,7 @@ void main() {
       shouldOfferLargeScreenModeControl(
         isDesktopOrTablet: false,
         isTelevisionSurface: false,
+        isTvOS: false,
       ),
       isFalse,
     );
@@ -23,8 +25,17 @@ void main() {
       shouldOfferLargeScreenModeControl(
         isDesktopOrTablet: true,
         isTelevisionSurface: true,
+        isTvOS: true,
       ),
       isFalse,
+    );
+    expect(
+      shouldOfferLargeScreenModeControl(
+        isDesktopOrTablet: true,
+        isTelevisionSurface: true,
+        isTvOS: false,
+      ),
+      isTrue,
     );
   });
 

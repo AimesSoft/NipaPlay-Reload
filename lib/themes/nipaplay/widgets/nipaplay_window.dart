@@ -27,6 +27,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
     this.topRightAction,
     this.maxWidth = 850,
     this.maxHeightFactor = 0.8,
+    this.respectMaxSizeInFilledScreen = false,
     this.showCloseButton = true,
     this.embedded = false,
   });
@@ -44,6 +45,9 @@ class NipaplayWindowScaffold extends StatefulWidget {
   final Widget? topRightAction;
   final double maxWidth;
   final double maxHeightFactor;
+
+  /// Keeps [maxWidth] and [maxHeightFactor] active in filled-screen mode.
+  final bool respectMaxSizeInFilledScreen;
   final bool showCloseButton;
   final bool embedded;
 
@@ -270,12 +274,21 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final double bottomMargin = useFilledScreenLayout
         ? safePadding.bottom + _filledScreenMargin
         : _windowedMargin;
+    final double filledScreenMaxWidth =
+        (screenSize.width - horizontalMargin * 2).clamp(0.0, screenSize.width);
+    final double filledScreenMaxHeight =
+        (screenSize.height - topMargin - bottomMargin)
+            .clamp(0.0, screenSize.height);
     final double effectiveMaxWidth = useFilledScreenLayout
-        ? (screenSize.width - horizontalMargin * 2).clamp(0.0, screenSize.width)
+        ? (widget.respectMaxSizeInFilledScreen
+            ? widget.maxWidth.clamp(0.0, filledScreenMaxWidth)
+            : filledScreenMaxWidth)
         : widget.maxWidth;
     final double effectiveMaxHeight = useFilledScreenLayout
-        ? (screenSize.height - topMargin - bottomMargin)
-            .clamp(0.0, screenSize.height)
+        ? (widget.respectMaxSizeInFilledScreen
+            ? (screenSize.height * widget.maxHeightFactor)
+                .clamp(0.0, filledScreenMaxHeight)
+            : filledScreenMaxHeight)
         : screenSize.height * widget.maxHeightFactor;
     final double windowControlPadding =
         globals.isTablet ? _windowControlPadding + 3 : _windowControlPadding;

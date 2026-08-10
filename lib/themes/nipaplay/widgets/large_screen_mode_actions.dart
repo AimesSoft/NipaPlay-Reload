@@ -10,8 +10,9 @@ const double kNipaplayWindowCaptionHeight = WindowControlButtons.buttonHeight;
 bool shouldOfferLargeScreenModeControl({
   required bool isDesktopOrTablet,
   required bool isTelevisionSurface,
+  required bool isTvOS,
 }) {
-  return isDesktopOrTablet && !isTelevisionSurface;
+  return isDesktopOrTablet && !(isTelevisionSurface && isTvOS);
 }
 
 class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {

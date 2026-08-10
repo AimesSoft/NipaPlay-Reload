@@ -209,34 +209,138 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   }
 
   /// 加载Emby外挂字幕
-  Future<void> _loadEmbyExternalSubtitles(String videoPath) async {
+  Future<void> _loadEmbyExternalSubtitles(
+    String videoPath,
+    EmbyExternalSubtitleAction action,
+  ) async {
+    final generation = _playbackGeneration;
+    bool isCurrentPlayback() =>
+        !_isDisposed &&
+        generation == _playbackGeneration &&
+        _currentVideoPath == videoPath;
+    if (!isCurrentPlayback()) return;
+
+    final itemId = embyItemIdFromVideoPath(videoPath);
+    final mediaSourceId = _currentPlaybackSession?.mediaSourceId;
+    if (action.kind == EmbyExternalSubtitleActionKind.select &&
+        (mediaSourceId == null || mediaSourceId.isEmpty)) {
+      throw StateError('The selected Emby media source is unavailable.');
+    }
+
+    await applyEmbyExternalSubtitleAction(
+      action: action,
+      videoPath: videoPath,
+      itemId: itemId,
+      mediaSourceId: mediaSourceId ?? '',
+      download: (
+        selectedItemId,
+        selectedMediaSourceId,
+        streamIndex,
+        codec,
+      ) async {
+        if (!isCurrentPlayback()) return null;
+        final path = await EmbyService.instance.downloadSubtitleFile(
+          selectedItemId,
+          streamIndex,
+          codec,
+          mediaSourceId: selectedMediaSourceId,
+        );
+        return isCurrentPlayback() ? path : null;
+      },
+      cache: (path, subtitlePath, streamIndex, codec) async {
+        if (!isCurrentPlayback()) return false;
+        final fingerprint = action.fingerprint!;
+        final subtitleInfo = <String, dynamic>{
+          'path': subtitlePath,
+          'name': _buildStreamingSubtitleName(
+            <String, dynamic>{
+              'title': fingerprint.normalizedTitle,
+              'language': fingerprint.language,
+              'codec': codec,
+            },
+            subtitlePath,
+          ),
+          'type': codec,
+          'addTime': DateTime.now().millisecondsSinceEpoch,
+          'isActive': true,
+          'remoteSource': 'Emby',
+          'serverSubtitleIndex': streamIndex,
+          'language': fingerprint.language,
+          'title': fingerprint.normalizedTitle,
+          'isDefault': false,
+          'isForced': false,
+        };
+        return SubtitleService().addExternalSubtitles(
+          path,
+          <Map<String, dynamic>>[subtitleInfo],
+          activePath: subtitlePath,
+        );
+      },
+      activate: (subtitlePath, _) async {
+        if (!isCurrentPlayback()) {
+          throw StateError(
+              'The Emby playback changed while loading subtitles.');
+        }
+        await _subtitleManager.activateEmbyExternalSubtitle(
+          subtitlePath,
+          isManualSetting: false,
+        );
+      },
+      followDefault: () async {
+        if (isCurrentPlayback()) {
+          await _loadDefaultEmbyExternalSubtitles(videoPath);
+        }
+      },
+    );
+  }
+
+  Future<void> _loadDefaultEmbyExternalSubtitles(String videoPath) async {
+    final generation = _playbackGeneration;
+    bool isCurrentPlayback() =>
+        !_isDisposed &&
+        generation == _playbackGeneration &&
+        _currentVideoPath == videoPath;
     try {
       final itemId = embyItemIdFromVideoPath(videoPath);
       final mediaSourceId = _currentPlaybackSession?.mediaSourceId;
       debugPrint('[Emby字幕] 开始加载外挂字幕，itemId: $itemId');
-      final subtitleTracks = await EmbyService.instance
-          .getSubtitleTracks(itemId, mediaSourceId: mediaSourceId);
-      if (subtitleTracks.isEmpty) {
-        debugPrint('[Emby字幕] 未找到字幕轨道');
-        return;
-      }
-      final externalSubtitles = subtitleTracks
-          .where((track) => track['type'] == 'external')
-          .map((track) => Map<String, dynamic>.from(track))
-          .toList();
-      if (externalSubtitles.isEmpty) {
-        debugPrint('[Emby字幕] 未找到外挂字幕轨道');
-        return;
-      }
-      await _loadStreamingExternalSubtitles(
-        videoPath: videoPath,
-        sourceLabel: 'Emby字幕',
-        itemId: itemId,
-        externalSubtitles: externalSubtitles,
-        subtitleDownloader: (subtitleIndex, subtitleCodec) => EmbyService
-            .instance
-            .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec,
-                mediaSourceId: mediaSourceId),
+      await loadDefaultEmbyExternalSubtitles(
+        getTracks: () => EmbyService.instance.getSubtitleTracks(
+          itemId,
+          mediaSourceId: mediaSourceId,
+        ),
+        download: (subtitleIndex, subtitleCodec) =>
+            EmbyService.instance.downloadSubtitleFile(
+          itemId,
+          subtitleIndex,
+          subtitleCodec,
+          mediaSourceId: mediaSourceId,
+        ),
+        cache: (downloaded, activePath) async {
+          final subtitleInfos = downloaded.map((track) {
+            final subtitlePath = track['path'] as String;
+            return <String, dynamic>{
+              ...track,
+              'name': _buildStreamingSubtitleName(track, subtitlePath),
+              'addTime': DateTime.now().millisecondsSinceEpoch,
+              'isActive': subtitlePath == activePath,
+              'remoteSource': 'Emby字幕',
+              'isDefault': track['isDefault'] == true,
+              'isForced': track['isForced'] == true,
+            };
+          }).toList();
+          return SubtitleService().addExternalSubtitles(
+            videoPath,
+            subtitleInfos,
+            activePath: activePath,
+          );
+        },
+        activate: (subtitlePath, _) =>
+            _subtitleManager.activateEmbyExternalSubtitle(
+          subtitlePath,
+          isManualSetting: false,
+        ),
+        isCurrent: isCurrentPlayback,
       );
     } catch (e) {
       debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
@@ -625,14 +729,103 @@ extension JellyfinQualitySwitch on VideoPlayerState {
 
 // ==== Emby 清晰度切换：平滑重载当前流 ====
 extension EmbyQualitySwitch on VideoPlayerState {
+  EmbySelectionContext? get currentEmbySelectionContext {
+    final path = _currentVideoPath;
+    if (path == null || !path.startsWith('emby://')) return null;
+    final seriesId = embySeriesIdFromSourceKey(
+      _playbackDetailContext?.sourceKey,
+    );
+    if (seriesId == null) return null;
+    final episodeId = path.replaceFirst('emby://', '').split('/').last.trim();
+    final accountKey = _currentEmbyAccountKey;
+    if (episodeId.isEmpty ||
+        accountKey == null ||
+        _currentPlaybackSession?.itemId != episodeId) {
+      return null;
+    }
+    return EmbySelectionContext(
+      accountKey: accountKey,
+      seriesId: seriesId,
+      episodeId: episodeId,
+    );
+  }
+
+  EmbyMediaSourceDescriptor? embyMediaSourceDescriptor([String? sourceId]) {
+    final session = _currentPlaybackSession;
+    if (session == null) return null;
+    final targetId = sourceId ?? session.mediaSourceId;
+    for (final entry in session.mediaSources.asMap().entries) {
+      if (entry.value.id == targetId) {
+        return describeEmbyMediaSource(entry.value, ordinal: entry.key);
+      }
+    }
+    if (sourceId != null) return null;
+    final selected = session.selectedSource;
+    if (selected == null) return null;
+    final ordinal = session.mediaSources.indexOf(selected);
+    return describeEmbyMediaSource(
+      selected,
+      ordinal: ordinal < 0 ? 0 : ordinal,
+    );
+  }
+
+  Future<EmbyPlayerMenuSelectionService>
+      _embyPlayerMenuSelectionService() async {
+    final preferences = await SharedPreferences.getInstance();
+    return EmbyPlayerMenuSelectionService(
+      store: EmbyMediaPreferenceStore(preferences),
+      resolver: DefaultEmbyMediaSelectionResolver(),
+    );
+  }
+
+  Future<EmbyResolvedTrackBundle> resolveCurrentEmbyTracksForSource(
+    EmbyMediaSourceDescriptor source,
+  ) async {
+    final context = currentEmbySelectionContext;
+    if (context == null) {
+      return DefaultEmbyMediaSelectionResolver()
+          .resolve(
+            sources: <EmbyMediaSourceDescriptor>[source],
+            preferences: const EmbyPreferenceLayers(),
+          )
+          .candidates
+          .first
+          .tracks;
+    }
+    final service = await _embyPlayerMenuSelectionService();
+    return service.resolveTracksForSource(
+      context: context,
+      currentSource: source,
+    );
+  }
+
+  Future<bool> persistCurrentEmbyManualPatch(
+    EmbyManualSelectionPatch patch, {
+    EmbyMediaSourceDescriptor? currentSource,
+  }) async {
+    final source = currentSource ?? embyMediaSourceDescriptor();
+    if (source == null) return false;
+    final context = currentEmbySelectionContext;
+    if (context == null) return false;
+    final service = await _embyPlayerMenuSelectionService();
+    return service.persistCurrentManualPatch(
+      context: context,
+      currentSource: source,
+      patch: patch,
+    );
+  }
+
   Future<void> reloadCurrentEmbyStream({
     required JellyfinVideoQuality quality,
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
     int? audioStreamIndex,
     String? mediaSourceId,
+    EmbyResolvedTrackBundle? embyTrackSelection,
   }) async {
     final previousSession = _currentPlaybackSession;
+    final previousTrackSelection = _currentEmbyTrackSelection;
+    final previousAccountKey = _currentEmbyAccountKey;
     if (_currentVideoPath == null ||
         !_currentVideoPath!.startsWith('emby://')) {
       return;
@@ -645,6 +838,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
     final currentVolume = player.volume;
     final currentPlaybackRate = _playbackRate;
     final wasPlaying = _status == PlayerStatus.playing;
+    final currentDetailContext = _playbackDetailContext;
 
     final historyItem = WatchHistoryItem(
       filePath: currentPath,
@@ -658,10 +852,34 @@ extension EmbyQualitySwitch on VideoPlayerState {
       lastWatchTime: DateTime.now(),
     );
 
+    Future<void> restorePlaybackState() async {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+      } else {
+        player.volume = currentVolume;
+      }
+      if (currentPlaybackRate != 1.0) {
+        player.setPlaybackRate(currentPlaybackRate);
+      }
+      seekTo(currentPosition);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (wasPlaying) {
+        play();
+      } else {
+        pause();
+      }
+    }
+
     try {
       final embyPath = currentPath.replaceFirst('emby://', '');
       final parts = embyPath.split('/');
       final itemId = parts.isNotEmpty ? parts.last : embyPath;
+      final sourceChanged = mediaSourceId != null &&
+          mediaSourceId != previousSession?.mediaSourceId;
+      final nextTrackSelection = sourceChanged
+          ? embyTrackSelection
+          : embyTrackSelection ?? previousTrackSelection;
       final newSession = await EmbyService.instance.createPlaybackSession(
         itemId: itemId,
         quality: quality,
@@ -672,20 +890,46 @@ extension EmbyQualitySwitch on VideoPlayerState {
         playSessionId: _currentPlaybackSession?.playSessionId,
         mediaSourceId: mediaSourceId ?? _currentPlaybackSession?.mediaSourceId,
       );
-      await initializePlayer(
-        currentPath,
-        historyItem: historyItem,
-        playbackSession: newSession,
-        playbackDetailContext: _playbackDetailContext,
-        resetManualDanmakuOffset: false,
+      const defaultTrackSelection = EmbyResolvedTrackBundle(
+        audio: EmbyResolvedTrackSelection.followDefault(),
+        subtitle: EmbyResolvedTrackSelection.followDefault(),
       );
-      if (_error != null || !hasVideo) {
-        throw StateError(_error ?? 'Emby 播放器初始化失败');
-      }
-      _currentPlaybackSession = newSession;
-      EmbyPlaybackSyncService().updatePlaybackSession(newSession);
+      final coordinator = EmbyPlaybackStateCoordinator(
+        currentPlayback: previousSession == null
+            ? null
+            : EmbyResolvedPlayback(
+                session: previousSession,
+                reason: EmbySelectionReason.embyDefault,
+                didFallback: false,
+                tracks: previousTrackSelection ?? defaultTrackSelection,
+              ),
+        restorePlaybackState: restorePlaybackState,
+        initializePlayer: (session, tracks) async {
+          await initializePlayer(
+            currentPath,
+            historyItem: historyItem,
+            playbackSession: session,
+            embyTrackSelection: tracks,
+            playbackDetailContext: currentDetailContext,
+            resetManualDanmakuOffset: false,
+            preserveEmbyAccountKey: true,
+          );
+          ensureEmbyPlayerOpened(_error, hasVideo);
+          EmbyPlaybackSyncService().updatePlaybackSession(session);
+        },
+      );
+      await coordinator.reload(
+        EmbyResolvedPlayback(
+          session: newSession,
+          reason: EmbySelectionReason.embyDefault,
+          didFallback: false,
+          tracks: nextTrackSelection ?? defaultTrackSelection,
+        ),
+      );
     } catch (e) {
       _currentPlaybackSession = previousSession;
+      _currentEmbyTrackSelection = previousTrackSelection;
+      _currentEmbyAccountKey = previousAccountKey;
       if (previousSession != null) {
         EmbyPlaybackSyncService().updatePlaybackSession(previousSession);
       }
@@ -694,22 +938,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
     }
 
     try {
-      await Future.delayed(const Duration(milliseconds: 150));
-      if (_useSystemVolume) {
-        _ensurePlayerVolumeMatchesPlatformPolicy();
-      } else {
-        player.volume = currentVolume;
-      }
-      if (currentPlaybackRate != 1.0) {
-        player.setPlaybackRate(currentPlaybackRate);
-      }
-      seekTo(currentPosition);
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (wasPlaying) {
-        play();
-      } else {
-        pause();
-      }
+      await restorePlaybackState();
     } catch (e) {
       debugPrint('Emby 切源后恢复播放状态失败: $e');
     }
