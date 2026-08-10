@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/playback_source_service.dart';
 
@@ -26,7 +27,15 @@ class PlaybackService {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (!settings.useExternalPlayer) return false;
 
-    await ExternalPlayerService.play(settings, item);
+    final launched = await ExternalPlayerService.play(settings, item);
+    if (!launched) return false;
+    if (settings.externalPlayerConsoleWindowMode) {
+      await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
+    } else if (settings.externalPlayerAutoSwitchToDanmakuConsole &&
+        context.mounted) {
+      Provider.of<TabChangeNotifier>(context, listen: false)
+          .changePage(AppPageIds.externalPlayerConsole);
+    }
     return true;
   }
 

@@ -17,7 +17,6 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
-import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/utils/app_platform.dart';
 import 'package:nipaplay/utils/color.dart';
@@ -32,7 +31,8 @@ abstract final class ExternalPlayerService {
   /// 使用当前外部播放器设置播放 [item].
   ///
   /// 不支持的平台, 无效配置和启动失败会写入调试日志并结束本次请求.
-  static Future<void> play(SettingsProvider settings, PlayableItem item) async {
+  /// 返回值表示是否成功启动外部播放器.
+  static Future<bool> play(SettingsProvider settings, PlayableItem item) async {
 
     final platform = AppPlatform.current;                   // 当前平台
     final playerPath = settings.externalPlayerPath.trim();  // 外部播放器路径
@@ -46,15 +46,15 @@ abstract final class ExternalPlayerService {
     );
     if (!platform.supportsExternalPlayer) {
       _log('play: 当前平台不支持外部播放器');
-      return;
+      return false;
     }
     if (playerPath.isEmpty) {
       _log('play: externalPlayerPath 为空');
-      return;
+      return false;
     }
     if (playerType == ExternalPlayerType.unset) {
       _log('play: 外部播放器类型未设置');
-      return;
+      return false;
     }
     if (playerPath.toLowerCase().endsWith('.lnk')) {
       _log(
@@ -75,7 +75,7 @@ abstract final class ExternalPlayerService {
       debugPrintStack(stackTrace: stackTrace);
       mediaPath = null;
     }
-    if (mediaPath == null) return;
+    if (mediaPath == null) return false;
 
     // 尝试获取弹幕
     DanmakuItemSet? danmakuSet;
@@ -142,12 +142,12 @@ abstract final class ExternalPlayerService {
           FileSystemEntityType.notFound;
       if (!exists) {
         _log('launch: 外部播放器不存在: $resolvedPlayerPath');
-        return;
+        return false;
       }
     } catch (error, stackTrace) {
       _log('launch: 解析外部播放器路径失败: $error');
       debugPrintStack(stackTrace: stackTrace);
-      return;
+      return false;
     }
     _log(
       'launch: playerPath="$resolvedPlayerPath", mediaPath="$mediaPath", '
@@ -228,7 +228,7 @@ abstract final class ExternalPlayerService {
     } catch (error, stackTrace) {
       _log('launch: 启动异常: $error');
       debugPrintStack(stackTrace: stackTrace);
-      return;
+      return false;
     }
     _log('launch: 启动成功, pid=${session.processId}');
 
@@ -247,10 +247,7 @@ abstract final class ExternalPlayerService {
     );
     ExternalPlayerConsoleService.queueDanmakuRefresh(); // 立即刷新弹幕
 
-    // 弹出控制台窗口
-    if (settings.externalPlayerConsoleWindowMode) {
-      await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
-    }
+    return true;
   }
 
   static void _log(String message) {
