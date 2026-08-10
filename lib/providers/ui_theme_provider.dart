@@ -48,7 +48,7 @@ class UIThemeProvider extends ChangeNotifier {
         isWeb: kIsWeb,
         isIOS: !kIsWeb && Platform.isIOS,
         isTablet: globals.isTablet,
-        isTelevision: globals.isTelevision,
+        isTelevision: globals.isTvOS,
       );
 
   Future<void> _loadTheme() async {

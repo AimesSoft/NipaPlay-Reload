@@ -969,7 +969,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
               isWeb: kIsWeb,
               isIOS: !kIsWeb && Platform.isIOS,
               isTablet: globals.isTablet,
-              isTelevision: globals.isTelevision,
+              isTelevision: globals.isTvOS,
             );
             Widget overlayBuilder(Widget child) {
               return _buildGlobalAppOverlay(child, isDragging: _isDragging);
@@ -1568,7 +1568,7 @@ class MainPageState extends State<MainPage>
   }
 
   void _syncLargeScreenHotkeySuppression() {
-    final isLargeScreenModeActive = globals.isTelevision ||
+    final isLargeScreenModeActive = globals.isTvOS ||
         (globals.isDesktopOrTablet && _useLargeScreenLayout);
     HotkeyService().setLargeScreenModeActive(isLargeScreenModeActive);
   }
@@ -1751,8 +1751,10 @@ class MainPageState extends State<MainPage>
     final bool allowLargeScreenControls = shouldOfferLargeScreenModeControl(
       isDesktopOrTablet: globals.isDesktopOrTablet,
       isTelevisionSurface: isTelevisionSurface,
+      isTvOS: globals.isTvOS,
     );
-    final bool isLargeScreenLayoutActive = isTelevisionSurface ||
+    final bool isLargeScreenLayoutActive =
+        (isTelevisionSurface && globals.isTvOS) ||
         (canUseLargeScreenLayout && _useLargeScreenLayout);
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;

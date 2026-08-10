@@ -219,7 +219,7 @@ class PlayerKernelManager {
     if (kIsWeb) {
       // Web平台只支持特定内核
       return ['Video Player'];
-    } else if (globals.isTelevision) {
+    } else if (globals.isTvOS) {
       return ['Erika'];
     } else if (PlayerFactory.isHarmonyOS) {
       return ['FVP', 'Erika'];
@@ -246,14 +246,14 @@ class PlayerKernelManager {
 
   /// 获取当前播放器内核
   static Future<String> getCurrentPlayerKernel() async {
-    if (globals.isTelevision) return 'Erika';
+    if (globals.isTvOS) return 'Erika';
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('player_kernel') ?? 'FVP';
   }
 
   /// 设置播放器内核
   static Future<void> setPlayerKernel(String kernel) async {
-    final resolvedKernel = globals.isTelevision ? 'Erika' : kernel;
+    final resolvedKernel = globals.isTvOS ? 'Erika' : kernel;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('player_kernel', resolvedKernel);
 
