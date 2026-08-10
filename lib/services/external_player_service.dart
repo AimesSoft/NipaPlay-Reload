@@ -52,6 +52,10 @@ abstract final class ExternalPlayerService {
       _log('play: externalPlayerPath 为空');
       return;
     }
+    if (playerType == ExternalPlayerType.unset) {
+      _log('play: 外部播放器类型未设置');
+      return;
+    }
     if (playerPath.toLowerCase().endsWith('.lnk')) {
       _log(
         'play: playerPath 是 .lnk 快捷方式；若启动参数未透传，'
@@ -114,6 +118,7 @@ abstract final class ExternalPlayerService {
     final userAgent = PlayerFactory.getCustomPlayerUA();
     if (userAgent.isNotEmpty) {
       final userAgentArg = switch (playerType) {
+        ExternalPlayerType.unset => null,
         ExternalPlayerType.mpv || ExternalPlayerType.mpvNet =>
           '--user-agent=$userAgent',
         ExternalPlayerType.vlc => '--http-user-agent=$userAgent',

@@ -4,6 +4,7 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SettingsProvider with ChangeNotifier {
@@ -28,7 +29,7 @@ class SettingsProvider with ChangeNotifier {
   // 外部播放器设置
   bool _useExternalPlayer = false;
   String _externalPlayerPath = '';
-  ExternalPlayerType _externalPlayerType = ExternalPlayerType.mpv;
+  ExternalPlayerType _externalPlayerType = ExternalPlayerType.unset;
   bool _externalPlayerDanmakuOverlay = true; // 弹幕外挂默认开启
   bool _externalPlayerAutoSwitchToDanmakuConsole = true;
   bool _externalPlayerShrinkWindow = false;
@@ -109,10 +110,20 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
     final savedExternalPlayerType =
         _prefs.getString(SettingsKeys.externalPlayerType);
-    _externalPlayerType = ExternalPlayerType.values.firstWhere(
-      (type) => type.name == savedExternalPlayerType,
-      orElse: () => ExternalPlayerType.mpv,
-    );
+    if (savedExternalPlayerType == null) {
+      _externalPlayerType = _externalPlayerPath.isEmpty
+          ? ExternalPlayerType.unset
+          : detectExternalPlayerType(_externalPlayerPath);
+      await _prefs.setString(
+        SettingsKeys.externalPlayerType,
+        _externalPlayerType.name,
+      );
+    } else {
+      _externalPlayerType = ExternalPlayerType.values.firstWhere(
+        (type) => type.name == savedExternalPlayerType,
+        orElse: () => ExternalPlayerType.unset,
+      );
+    }
     _externalPlayerDanmakuOverlay =
         _prefs.getBool(SettingsKeys.externalPlayerDanmakuOverlay) ?? true;
     _externalPlayerAutoSwitchToDanmakuConsole =
