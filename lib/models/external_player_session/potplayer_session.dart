@@ -178,7 +178,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
     DanmakuItemSet danmakuSet,
     DanmakuStyle style,
   ) async {
-    if (isClosed || danmakuSet.isEmpty) return false;
+    if (isClosed) return false;
     try {
       await _writeDanmakuAss(danmakuSet, style);
 
