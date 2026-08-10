@@ -88,9 +88,7 @@ abstract final class ExternalPlayerService {
     } else {
       final stopwatch = Stopwatch()..start();
       try {
-        danmakuSet = await DanmakuService.getDanmakuFromEpisodeId(
-          item.episodeId!,
-        );
+        danmakuSet = await DanmakuService.getFilteredDanmakuFromEpisodeIdAndAnimeId(item.episodeId!, item.animeId!);
         if (danmakuSet == null) {
           _log('danmaku: 获取失败');
         } else {
