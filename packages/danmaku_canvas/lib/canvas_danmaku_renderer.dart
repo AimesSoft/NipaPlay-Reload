@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'danmaku_screen.dart';
 import 'danmaku_controller.dart';
+import 'danmaku_timeline.dart';
 import 'models/danmaku_option.dart';
 import 'models/danmaku_content_item.dart' as canvas_models;
 
@@ -23,6 +24,9 @@ class CanvasDanmakuManager {
     required bool isPlaying,
     required double playbackRate,
     required double scrollDurationSeconds,
+    int seekRevision = -1,
+    int danmakuListVersion = 0,
+    double timeOffsetSeconds = 0,
   }) {
     return CanvasDanmakuRenderer(
       fontSize: fontSize,
@@ -40,6 +44,9 @@ class CanvasDanmakuManager {
       isPlaying: isPlaying,
       playbackRate: playbackRate,
       scrollDurationSeconds: scrollDurationSeconds,
+      seekRevision: seekRevision,
+      danmakuListVersion: danmakuListVersion,
+      timeOffsetSeconds: timeOffsetSeconds,
     );
   }
 }
@@ -61,6 +68,9 @@ class CanvasDanmakuRenderer extends StatefulWidget {
   final bool isPlaying;
   final double playbackRate;
   final double scrollDurationSeconds;
+  final int seekRevision;
+  final int danmakuListVersion;
+  final double timeOffsetSeconds;
 
   const CanvasDanmakuRenderer({
     super.key,
@@ -79,6 +89,9 @@ class CanvasDanmakuRenderer extends StatefulWidget {
     required this.isPlaying,
     required this.playbackRate,
     required this.scrollDurationSeconds,
+    this.seekRevision = -1,
+    this.danmakuListVersion = 0,
+    this.timeOffsetSeconds = 0,
   });
 
   @override
@@ -87,29 +100,39 @@ class CanvasDanmakuRenderer extends StatefulWidget {
 
 class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
   DanmakuController? _controller;
-  List<Map<String, dynamic>> _lastProcessedDanmakuList = [];
-  double _lastCurrentTime = 0;
+  List<Map<String, dynamic>>? _lastDanmakuList;
+  int _lastDanmakuListVersion = -1;
+  int _lastDanmakuListLength = -1;
+  double _lastCurrentTime = double.nan;
   DanmakuScreen? _danmakuScreen;
   DanmakuOption? _currentOption;
 
   // 添加已添加弹幕的跟踪集合，避免重复添加
-  final Set<String> _addedDanmakuKeys = {};
+  final Map<Map<String, dynamic>, double> _addedDanmakuTimes = Map.identity();
+  // 时间线恢复期因轨道冲突被丢弃的弹幕的重试次数（身份去重）
+  final Map<Map<String, dynamic>, int> _restorationRetryCounts =
+      Map.identity();
+  List<Map<String, dynamic>> _pendingRestoration = const [];
+  int _pendingRestorationIndex = 0;
+  int _restorationGeneration = 0;
+  bool _restorationDrainScheduled = false;
+  bool _forceTimelineRestore = true;
+  // 时间线恢复锚定的目标时刻：分批排空期间 currentTime 仍在推进，
+  // 若逐条读取实时 currentTime，同一批内较老的弹幕会被误判为"已过
+  // 窗口"而在进入画面前被过滤，导致 seek 后弹幕播完即不再显示。
+  double? _restorationTime;
   static const double _historyWindowSeconds = 5.0;
-  static const double _historyWindowAfterJumpSeconds = 1.0;
   static const double _scrollLeadTimeSeconds = 1.0;
   static const double _staticLeadTimeSeconds = 0.0;
-  static const double _timeJumpLeadBonusSeconds = 0.5;
+  static const int _restorationBatchSize = 20;
+  // 恢复期同一条弹幕最多重试几次（等待已上屏弹幕离屏腾出轨道），
+  // 超限直接放弃，避免暂停状态下轨道永不腾空导致排空死循环。
+  static const int _maxRestorationRetries = 3;
 
   @override
   void initState() {
     super.initState();
     _initializeDanmakuScreen();
-
-    // 初始化时处理弹幕
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _processAndAddDanmaku(widget.danmakuList, widget.currentTime);
-    });
   }
 
   int _effectiveScrollDurationSeconds() {
@@ -146,10 +169,28 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       key: ValueKey(_currentOption.hashCode),
       option: _currentOption!,
       createdController: (controller) {
-        //print('Canvas弹幕: DanmakuController已创建');
         _controller = controller;
+        if (!widget.isPlaying) {
+          controller.pause();
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !identical(_controller, controller)) return;
+          _processAndAddDanmaku(widget.danmakuList, widget.currentTime);
+        });
       },
     );
+  }
+
+  void _prepareForScreenRecreation() {
+    _restorationGeneration++;
+    _pendingRestoration = const [];
+    _pendingRestorationIndex = 0;
+    _restorationDrainScheduled = false;
+    _addedDanmakuTimes.clear();
+    _restorationRetryCounts.clear();
+    _restorationTime = null;
+    _forceTimelineRestore = true;
+    _controller = null;
   }
 
   bool _needsScreenRecreation() {
@@ -162,8 +203,23 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
         _currentOption!.hideBottom != widget.blockBottomDanmaku ||
         _currentOption!.hideScroll != widget.blockScrollDanmaku ||
         _currentOption!.massiveMode != widget.stacking ||
-        _currentOption!.playbackRate != widget.playbackRate ||
+        // 注意：playbackRate 不在此处参与重建判断——倍速变化应只更新动画时长，
+        // 否则长按倍速/松手时整块 DanmakuScreen 被重建（ValueKey 变），
+        // 已上屏弹幕全部清空重加。倍速同步走 _syncPlaybackRateOnly()。
         _currentOption!.duration != _effectiveScrollDurationSeconds();
+  }
+
+  /// 仅同步倍速：只更新动画控制器时长（ScrollDanmakuPainter 用
+  /// duration/playbackRate 计算每 tick 位移），不重建 DanmakuScreen、不清空弹幕。
+  /// 已上屏弹幕从当前位置平滑加速/减速，不瞬移不重载。
+  void _syncPlaybackRateOnly() {
+    if (_controller == null || _currentOption == null) return;
+    if ((_currentOption!.playbackRate - widget.playbackRate).abs() < 0.0001) {
+      return;
+    }
+    _currentOption =
+        _currentOption!.copyWith(playbackRate: widget.playbackRate);
+    _controller!.updateOption(_currentOption!);
   }
 
   @override
@@ -172,9 +228,13 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       return const SizedBox.shrink();
     }
 
-    // 如果配置发生变化，重新创建DanmakuScreen
+    // 如果配置发生变化，重新创建DanmakuScreen；仅倍速变化则只同步动画时长，
+    // 不重建屏幕（避免长按倍速/松手时弹幕闪没重滑入）。
     if (_needsScreenRecreation()) {
+      _prepareForScreenRecreation();
       _initializeDanmakuScreen();
+    } else {
+      _syncPlaybackRateOnly();
     }
 
     // 确保弹幕播放状态与视频播放状态同步
@@ -194,14 +254,31 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
   @override
   void dispose() {
     _controller?.clear();
+    _restorationGeneration++;
     _controller = null;
-    _addedDanmakuKeys.clear(); // 清理弹幕键值缓存
+    _addedDanmakuTimes.clear();
+    _restorationRetryCounts.clear();
+    _restorationTime = null;
     super.dispose();
   }
 
   @override
   void didUpdateWidget(CanvasDanmakuRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (!widget.visible && oldWidget.visible) {
+      _restorationGeneration++;
+      _pendingRestoration = const [];
+      _pendingRestorationIndex = 0;
+      _restorationDrainScheduled = false;
+      _addedDanmakuTimes.clear();
+      _restorationRetryCounts.clear();
+      _restorationTime = null;
+      _controller = null;
+    } else if (widget.visible && !oldWidget.visible) {
+      _prepareForScreenRecreation();
+      _initializeDanmakuScreen();
+    }
 
     // 处理播放/暂停状态变化
     if (widget.isPlaying != oldWidget.isPlaying && _controller != null) {
@@ -213,18 +290,29 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       }
     }
 
-    // 检测时间轴大幅变化（用户拖拽进度条）
-    double timeDiff = (widget.currentTime - oldWidget.currentTime).abs();
-    if (timeDiff > 2.0 && _controller != null) {
-      //print('Canvas弹幕: didUpdateWidget检测到时间跳跃 ${timeDiff}秒，强制重新处理弹幕');
-      // 重置时间记录，确保下次_processAndAddDanmaku能检测到变化
-      _lastCurrentTime = widget.currentTime - 10.0; // 设置一个明显不同的值
+    final seekDetected = CanvasDanmakuTimeline.didSeek(
+      previousRevision: oldWidget.seekRevision,
+      currentRevision: widget.seekRevision,
+      previousTime: oldWidget.currentTime,
+      currentTime: widget.currentTime,
+    );
+    final listReplaced = !identical(widget.danmakuList, oldWidget.danmakuList);
+    final timelineShifted =
+        (widget.timeOffsetSeconds - oldWidget.timeOffsetSeconds).abs() > 0.0001;
+    if (seekDetected || listReplaced || timelineShifted) {
+      _forceTimelineRestore = true;
+      _restorationGeneration++;
+      _pendingRestoration = const [];
+      _pendingRestorationIndex = 0;
+      _restorationDrainScheduled = false;
     }
 
     // 只在时间变化、播放状态变化或其他重要属性变化时处理弹幕
     bool shouldProcessDanmaku = widget.currentTime != oldWidget.currentTime ||
         widget.danmakuList != oldWidget.danmakuList ||
-        widget.danmakuList.length != oldWidget.danmakuList.length ||
+        widget.danmakuListVersion != oldWidget.danmakuListVersion ||
+        widget.seekRevision != oldWidget.seekRevision ||
+        widget.timeOffsetSeconds != oldWidget.timeOffsetSeconds ||
         widget.isPlaying != oldWidget.isPlaying ||
         widget.fontSize != oldWidget.fontSize ||
         widget.opacity != oldWidget.opacity ||
@@ -242,140 +330,233 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     }
   }
 
-  // 处理并添加弹幕到Canvas渲染器
   void _processAndAddDanmaku(
       List<Map<String, dynamic>> danmakuList, double currentTime) {
     if (_controller == null) return;
 
-    //print('Canvas弹幕: _processAndAddDanmaku 被调用, 当前时间=$currentTime, 弹幕总数=${danmakuList.length}');
+    final hasPreviousTime = !_lastCurrentTime.isNaN;
+    final timeDiff = hasPreviousTime
+        ? (currentTime - _lastCurrentTime).abs()
+        : 0.0;
+    final timeChanged = !hasPreviousTime || timeDiff > 0.1;
+    final dataChanged = widget.danmakuListVersion != _lastDanmakuListVersion ||
+        _lastDanmakuListLength != danmakuList.length;
+    final entriesRemoved = _lastDanmakuListLength >= 0 &&
+        danmakuList.length < _lastDanmakuListLength;
+    final listReplaced = _lastDanmakuList != null &&
+        !identical(_lastDanmakuList, danmakuList);
+    final fallbackSeek = widget.seekRevision < 0 &&
+        hasPreviousTime &&
+        timeDiff > CanvasDanmakuTimeline.fallbackSeekThresholdSeconds;
+    final shouldRestore = _forceTimelineRestore ||
+        listReplaced ||
+        entriesRemoved ||
+        fallbackSeek;
 
-    // 检查是否需要重新处理弹幕列表
-    double timeDiff = (currentTime - _lastCurrentTime).abs();
-    bool timeChanged = timeDiff > 0.1; // 普通时间变化阈值
-    bool timeJumped = timeDiff > 2.0; // 时间跳跃阈值（切换时间轴）
-    bool dataChanged = _lastProcessedDanmakuList.length != danmakuList.length;
-    bool forceProcess = _lastProcessedDanmakuList.isEmpty; // 第一次强制处理
+    _lastDanmakuList = danmakuList;
+    _lastDanmakuListVersion = widget.danmakuListVersion;
+    _lastDanmakuListLength = danmakuList.length;
 
-    // 如果发生时间跳跃，清空当前弹幕并强制重新处理
-    if (timeJumped) {
-      //print('Canvas弹幕: 检测到时间跳跃 ${timeDiff}秒，清空当前弹幕并重新处理');
-      _controller!.clear();
-      _addedDanmakuKeys.clear(); // 清空已添加弹幕的跟踪
-      forceProcess = true;
-    }
-
-    if (!timeChanged && !dataChanged && !forceProcess) {
-      //print('Canvas弹幕: 跳过处理，时间变化=${timeDiff}, 数据变化=$dataChanged');
+    // 注意：_lastCurrentTime 只在"真正处理"时更新（见下方两处），
+    // 不能放在函数开头提前 return 之前更新，否则 timeDiff 永远只有
+    // 上一帧的增量（<0.1s），timeChanged 恒为 false，正常播放时
+    // 窗口处理被跳过，seek 恢复填充的弹幕播完后就不会再有新弹幕了。
+    if (shouldRestore) {
+      _lastCurrentTime = currentTime;
+      _forceTimelineRestore = false;
+      _beginTimelineRestoration(danmakuList, currentTime);
       return;
     }
 
-    //print('Canvas弹幕: 开始处理弹幕，时间变化=${timeDiff}, 数据变化=$dataChanged, 强制处理=$forceProcess, 时间跳跃=$timeJumped');
+    if (_pendingRestorationIndex < _pendingRestoration.length) {
+      _scheduleRestorationDrain(_restorationGeneration);
+      return;
+    }
+    if (!timeChanged && !dataChanged) return;
 
-    _lastProcessedDanmakuList = List.from(danmakuList);
     _lastCurrentTime = currentTime;
-
-    // 获取弹幕显示的时间窗口
-    // 如果发生时间跳跃，使用较小的前置窗口以快速响应
-    final windowStart = currentTime -
-        (timeJumped
-            ? _historyWindowAfterJumpSeconds
-            : _historyWindowSeconds);
-    final windowEnd = currentTime + _forwardWindowSeconds(timeJumped);
-
-    //print('Canvas弹幕: 时间窗口 $windowStart ~ $windowEnd (时间跳跃: $timeJumped)');
-
-    int processedCount = 0;
-    int addedCount = 0;
-
-    for (var danmakuData in danmakuList) {
-      final time = (danmakuData['time'] as num?)?.toDouble() ?? 0.0;
-      processedCount++;
-
-      // 处理时间窗口内的弹幕
-      if (time < windowStart || time > windowEnd) {
-        if (processedCount <= 3) {
-          // 只打印前3条的详细信息
-          //print('Canvas弹幕: 跳过弹幕 时间=$time (超出窗口)');
-        }
-        continue;
-      }
-
-      // 正确的弹幕文本字段是'content'
-      final text = danmakuData['content']?.toString() ?? '';
-
-      if (processedCount <= 5) {
-        //print('Canvas弹幕: 弹幕数据 时间=$time, 内容="$text", 类型=${danmakuData['type']}');
-      }
-
-      if (text.isEmpty) {
-        if (processedCount <= 10) {
-          //print('Canvas弹幕: 跳过空文本弹幕 (所有字段都为空)');
-        }
-        continue;
-      }
-
-      if (_shouldBlockDanmaku(text)) {
-        //print('Canvas弹幕: 跳过被屏蔽弹幕: "$text"');
-        continue;
-      }
-
-      // 创建弹幕唯一标识符，用于去重
-      final danmakuKey =
-          '${time.toStringAsFixed(1)}_${text}_${danmakuData['type']}';
-      if (_addedDanmakuKeys.contains(danmakuKey)) {
-        //print('Canvas弹幕: 跳过重复弹幕: "$text" 时间=$time');
-        continue;
-      }
-
-      // 将抽象弹幕模型转换为Canvas弹幕模型
-      final canvasDanmaku = _convertToCanvasDanmaku(danmakuData, text);
-      if (canvasDanmaku != null) {
-        // 仅在允许的提前量内才真正显示，防止提前十几秒
-        if (!_isDanmakuReadyToDisplay(
-            canvasDanmaku, time, currentTime, timeJumped)) {
-          continue;
-        }
-        //print('Canvas弹幕: 准备添加弹幕 "$text" 时间=$time 类型=${canvasDanmaku.type}');
-        _controller!.addDanmaku(canvasDanmaku);
-        _addedDanmakuKeys.add(danmakuKey); // 记录已添加的弹幕
-        addedCount++;
-      } else {
-        //print('Canvas弹幕: 转换失败的弹幕: "$text"');
-      }
-
-      // 限制添加数量，避免一次添加太多
-      // 如果发生时间跳跃，允许添加更多弹幕以快速显示内容
-      if (addedCount >= (timeJumped ? 20 : 10)) {
-        //print('Canvas弹幕: 达到单次添加上限，停止处理 (时间跳跃模式: $timeJumped)');
-        break;
-      }
-    }
-
-    //print('Canvas弹幕: 处理完成，处理了 $processedCount 条，添加了 $addedCount 条弹幕');
-
-    // 定期清理过期的弹幕键值（超过30秒的弹幕键值），避免内存泄漏
-    if (_addedDanmakuKeys.length > 1000) {
-      _addedDanmakuKeys.clear();
-      //print('Canvas弹幕: 清理弹幕键值缓存，避免内存泄漏');
-    }
+    _processNormalWindow(danmakuList, currentTime);
   }
 
-  double _forwardWindowSeconds(bool timeJumped) {
-    return _scrollLeadTimeSeconds +
-        (timeJumped ? _timeJumpLeadBonusSeconds : 0.0);
+  void _beginTimelineRestoration(
+      List<Map<String, dynamic>> danmakuList, double currentTime) {
+    _restorationGeneration++;
+    final generation = _restorationGeneration;
+    _restorationDrainScheduled = false;
+    _controller!.clear();
+    _addedDanmakuTimes.clear();
+    _restorationRetryCounts.clear();
+    _pendingRestoration = CanvasDanmakuTimeline.activeEntries(
+      danmakuList,
+      timeOf: _danmakuTime,
+      currentTime: currentTime,
+      lookBackSeconds: _effectiveScrollDurationSeconds().toDouble(),
+    );
+    _pendingRestorationIndex = 0;
+    _restorationTime = currentTime;
+    _drainTimelineRestoration(generation);
+  }
+
+  void _drainTimelineRestoration(int generation) {
+    if (!mounted ||
+        generation != _restorationGeneration ||
+        _controller == null) {
+      return;
+    }
+
+    // 用锚定时刻而非实时 currentTime 计算每条弹幕的初始位置，
+    // 保证同批恢复的弹幕处于同一时间基准，不会因排空期间的推进被丢弃。
+    final anchorTime = _restorationTime;
+    if (anchorTime == null) {
+      _pendingRestoration = const [];
+      _pendingRestorationIndex = 0;
+      return;
+    }
+
+    var processed = 0;
+    while (_pendingRestorationIndex < _pendingRestoration.length &&
+        processed < _restorationBatchSize) {
+      final data = _pendingRestoration[_pendingRestorationIndex++];
+      final added = _tryAddDanmaku(data, anchorTime, isRestoration: true);
+      if (!added) {
+        final retries = (_restorationRetryCounts[data] ?? 0) + 1;
+        if (retries <= _maxRestorationRetries) {
+          _restorationRetryCounts[data] = retries;
+          // 轨道冲突被丢弃：放回队尾稍后重试，等已上屏弹幕离屏腾出轨道
+          _pendingRestoration.add(data);
+        } else {
+          _restorationRetryCounts.remove(data);
+        }
+      } else {
+        _restorationRetryCounts.remove(data);
+      }
+      processed++;
+    }
+
+    if (_pendingRestorationIndex < _pendingRestoration.length) {
+      _scheduleRestorationDrain(generation);
+      return;
+    }
+
+    _pendingRestoration = const [];
+    _pendingRestorationIndex = 0;
+    _restorationTime = null;
+
+    // 排空完成后清理跟踪表，避免排空期间已过期的弹幕占用去重窗口，
+    // 导致其后续正常进入窗口时被误判为已添加而不再显示。
+    _pruneAddedDanmakuTimes(widget.currentTime);
+    _processNormalWindow(widget.danmakuList, widget.currentTime);
+  }
+
+  void _scheduleRestorationDrain(int generation) {
+    if (_restorationDrainScheduled) return;
+    _restorationDrainScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (generation != _restorationGeneration) return;
+      _restorationDrainScheduled = false;
+      _drainTimelineRestoration(generation);
+    });
+  }
+
+  void _processNormalWindow(
+      List<Map<String, dynamic>> danmakuList, double currentTime) {
+    // 弹幕列表按 time 升序（上游 _updateMergedDanmakuList 保证），
+    // 用二分定位窗口起点，避免每帧从列表头扫描整个弹幕列表。
+    final windowStart = currentTime - _historyWindowSeconds;
+    final windowEnd = currentTime + _scrollLeadTimeSeconds;
+    final startIndex = CanvasDanmakuTimeline.lowerBound(
+      danmakuList,
+      windowStart,
+      timeOf: _danmakuTime,
+    );
+    var addedCount = 0;
+
+    for (int i = startIndex; i < danmakuList.length; i++) {
+      final danmakuData = danmakuList[i];
+      final time = _danmakuTime(danmakuData);
+      if (time > windowEnd) break;
+      if (_tryAddDanmaku(danmakuData, currentTime,
+          isRestoration: false)) {
+        addedCount++;
+        if (addedCount >= 10) break;
+      }
+    }
+    _pruneAddedDanmakuTimes(currentTime);
+  }
+
+  bool _tryAddDanmaku(
+    Map<String, dynamic> danmakuData,
+    double currentTime, {
+    required bool isRestoration,
+  }) {
+    final time = _danmakuTime(danmakuData);
+    final text = danmakuData['content']?.toString() ?? '';
+    if (text.isEmpty || _shouldBlockDanmaku(text)) return false;
+
+    if (_addedDanmakuTimes.containsKey(danmakuData)) return false;
+
+    final canvasDanmaku = _convertToCanvasDanmaku(danmakuData, text);
+    if (canvasDanmaku == null) return false;
+    if (!isRestoration &&
+        !_isDanmakuReadyToDisplay(canvasDanmaku, time, currentTime)) {
+      return false;
+    }
+
+    final duration = _effectiveScrollDurationSeconds().toDouble();
+    final elapsedSeconds = (currentTime - time).clamp(0.0, duration);
+    var initialProgress = 0.0;
+    if (canvasDanmaku.type == canvas_models.DanmakuItemType.scroll) {
+      initialProgress = CanvasDanmakuTimeline.scrollProgress(
+        scheduledTime: time,
+        currentTime: currentTime,
+        durationSeconds: duration,
+      );
+      if (initialProgress >= 1.0) return false;
+    } else {
+      final remaining = CanvasDanmakuTimeline.remainingLifetime(
+        scheduledTime: time,
+        currentTime: currentTime,
+        durationSeconds: duration,
+      );
+      if (remaining <= 0) return false;
+    }
+
+    // 只有真正上屏（轨道可用、类型未隐藏）才记录到跟踪表，
+    // 避免被丢弃的弹幕占用去重窗口，导致其后续重放缺失。
+    final added = _controller!.addDanmaku(
+      canvasDanmaku,
+      initialProgress: initialProgress,
+      elapsedSeconds: elapsedSeconds,
+    );
+    if (!added) return false;
+
+    _addedDanmakuTimes[danmakuData] = time;
+    return true;
+  }
+
+  double _danmakuTime(Map<String, dynamic> data) =>
+      (data['time'] as num?)?.toDouble() ?? 0.0;
+
+  void _pruneAddedDanmakuTimes(double currentTime) {
+    final duration = _effectiveScrollDurationSeconds();
+    final retainSeconds = duration > _historyWindowSeconds
+        ? duration.toDouble()
+        : _historyWindowSeconds;
+    final cutoff = currentTime - retainSeconds - 1.0;
+    _addedDanmakuTimes.removeWhere(
+      (_, scheduledTime) => scheduledTime < cutoff,
+    );
   }
 
   bool _isDanmakuReadyToDisplay(
     canvas_models.DanmakuContentItem danmaku,
     double scheduledTime,
     double currentTime,
-    bool timeJumped,
   ) {
     final baseLead = danmaku.type == canvas_models.DanmakuItemType.scroll
         ? _scrollLeadTimeSeconds
         : _staticLeadTimeSeconds;
-    final allowedLead = baseLead + (timeJumped ? _timeJumpLeadBonusSeconds : 0.0);
-    return scheduledTime - currentTime <= allowedLead;
+    return scheduledTime - currentTime <= baseLead;
   }
 
   // 检查弹幕是否应该被屏蔽
