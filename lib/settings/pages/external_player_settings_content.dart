@@ -298,6 +298,8 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     ExternalPlayerType selectedType,
   ) {
     String title(ExternalPlayerType type) => switch (type) {
+      ExternalPlayerType.unset =>
+        _text(context, '未设置', '未設定', 'Not configured'),
       ExternalPlayerType.mpv => 'mpv',
       ExternalPlayerType.mpvNet => 'mpv.net',
       ExternalPlayerType.potPlayer => 'PotPlayer',
