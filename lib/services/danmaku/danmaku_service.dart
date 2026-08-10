@@ -3,6 +3,7 @@
 // 处理弹幕相关的服务, 包括弹幕的加载, 保存, 导出等功能.
 
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
@@ -19,6 +20,26 @@ class DanmakuService {
   DanmakuService._();
   static final DanmakuService _ins = DanmakuService._();
   static DanmakuService get instance => _ins;
+
+
+  /// 获取用户当前弹幕设置
+  static DanmakuStyle getCurrentDanmakuStyle() {
+
+    DanmakuStyle danmakuStyle = DanmakuStyle();
+    final context = globals.navigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      try {
+        final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+        danmakuStyle.opacity = videoPlayerState.danmakuOpacity;
+        danmakuStyle.outlineWidth = videoPlayerState.next2DanmakuOutlineWidth;
+        danmakuStyle.danmakuFontSize = videoPlayerState.actualDanmakuFontSize;
+        danmakuStyle.danmakuOffset = videoPlayerState.manualDanmakuOffset + videoPlayerState.autoDanmakuOffset;
+        danmakuStyle.danmakuAllowStacking = videoPlayerState.danmakuStacking;
+      }
+      catch (_) {}
+    }
+    return danmakuStyle;
+  }
 
 
   /// 通过弹弹play剧集 ID 获取弹幕.

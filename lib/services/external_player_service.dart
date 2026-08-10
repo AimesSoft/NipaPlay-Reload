@@ -231,6 +231,7 @@ abstract final class ExternalPlayerService {
     _log('launch: 启动成功, pid=${session.processId}');
 
     // 控制台服务接管会话
+    final style = DanmakuService.getCurrentDanmakuStyle(); // 应用用户弹幕设置
     ExternalPlayerConsoleService.setState(
       ConsoleState(
         session: session,
@@ -241,6 +242,7 @@ abstract final class ExternalPlayerService {
           episodeId: item.episodeId,
         ),
         danmakuList: danmakuSet?.toList(growable: false),
+        danmakuStyle: style,
       ),
     );
     ExternalPlayerConsoleService.queueDanmakuRefresh(); // 立即刷新弹幕
