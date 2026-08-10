@@ -9,6 +9,7 @@ import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
+import 'package:nipaplay/models/external_player_session/potplayer_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/models/external_player_session/vlc_session.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -79,7 +80,7 @@ abstract final class ExternalPlayerService {
       _log('danmaku: 弹幕外挂未启用');
     } else if (item.episodeId == null) {
       _log('danmaku: 缺少 episodeId，跳过弹幕获取');
-    } else if (!_usesMpvSession(playerType)) {
+    } else if (!_supportsDanmakuOverlay(playerType)) {
       _log('danmaku: $playerType 暂不支持运行时弹幕刷新，跳过弹幕获取');
     } else {
       final stopwatch = Stopwatch()..start();
@@ -117,7 +118,8 @@ abstract final class ExternalPlayerService {
         ExternalPlayerType.mpv || ExternalPlayerType.mpvNet =>
           '--user-agent=$userAgent',
         ExternalPlayerType.vlc => '--http-user-agent=$userAgent',
-        ExternalPlayerType.potPlayer || ExternalPlayerType.generic => null,
+        ExternalPlayerType.potPlayer => '/user_agent=$userAgent',
+        ExternalPlayerType.generic => null,
       };
       if (userAgentArg != null) {
         extraArgs.add(userAgentArg);
@@ -186,6 +188,23 @@ abstract final class ExternalPlayerService {
           extraArgs: extraArgs,
         );
         await session.launch();
+        break;
+
+        // Windows PotPlayer
+        case ExternalPlayerType.potPlayer:
+          if (platform != AppPlatform.windows) {
+            throw UnsupportedError('PotPlayer 外部播放仅支持 Windows');
+          }
+          _log('launch: 启动 Windows PotPlayer');
+          session = PotPlayerSession(
+            playerPath: resolvedPlayerPath,
+            mediaPath: mediaPath,
+            duration: Duration(milliseconds: history?.duration ?? 0),
+            position: Duration(milliseconds: history?.lastPosition ?? 0),
+            extraArgs: extraArgs,
+            initialDanmakuSet: danmakuSet,
+          );
+        await session.launch();
       break;
 
       // 其他播放器
@@ -233,9 +252,7 @@ abstract final class ExternalPlayerService {
     }
   }
 
-  static bool _usesMpvSession(ExternalPlayerType playerType) =>
-      playerType == ExternalPlayerType.mpv ||
-      playerType == ExternalPlayerType.mpvNet;
+  static bool _supportsDanmakuOverlay(ExternalPlayerType playerType) => playerType == ExternalPlayerType.mpv || playerType == ExternalPlayerType.mpvNet || playerType == ExternalPlayerType.potPlayer;
 
   static void _log(String message) {
     final label = color('[ExtPlayer]', ColorCode.blue);

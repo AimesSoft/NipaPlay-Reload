@@ -9,6 +9,7 @@ import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
+import 'package:nipaplay/models/external_player_session/potplayer_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/services/external_player_window_service.dart';
 import 'package:nipaplay/utils/utils.dart';
@@ -82,7 +83,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static List<BlockedDanmakuItem> _blockedItems       = const []; // 弹幕屏蔽项目列表
   static List<DisplayDanmakuItem> _displayDanmakuList = const []; // 弹幕列表, 包含源数据和显示状态
 
-  /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
+  /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到播放器.
   static final DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
@@ -267,9 +268,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 记录当前状态
     final currentSession = _session;
     // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
-    if (currentSession is! MpvSession ||
-        currentSession.ipcPath == null ||
-        _displayDanmakuList.isEmpty) {
+    if (currentSession == null || (currentSession is! MpvSession && currentSession is! PotPlayerSession) || currentSession.ipcPath == null || _displayDanmakuList.isEmpty) {
       return;
     }
 
