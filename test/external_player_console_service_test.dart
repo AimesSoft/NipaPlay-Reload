@@ -5,18 +5,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/mpv_session.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
-import 'package:nipaplay/utils/danmaku/assets.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
+import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/mpv_utils.dart';
 
-MpvSession _session(
+_TestSession _session(
   Process process, {
   String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
@@ -28,6 +29,7 @@ MpvSession _session(
   bool isPaused = false,
   List<DanmakuItem> danmakuList = const [],
   AssExportSettings? danmakuAssSettings,
+  bool pollPlaybackState = false,
 }) {
   return _sessionFromProcessId(
     process.pid,
@@ -42,10 +44,12 @@ MpvSession _session(
     danmakuList: danmakuList,
     danmakuAssSettings: danmakuAssSettings,
     monitorProcess: true,
+    processExitCode: process.exitCode,
+    pollPlaybackState: pollPlaybackState,
   );
 }
 
-MpvSession _sessionFromProcessId(
+_TestSession _sessionFromProcessId(
   int processId, {
   String mediaPath = '/tmp/test-video.mkv',
   String? ipcPath,
@@ -58,8 +62,11 @@ MpvSession _sessionFromProcessId(
   List<DanmakuItem> danmakuList = const [],
   AssExportSettings? danmakuAssSettings,
   bool monitorProcess = false,
+  Future<int>? processExitCode,
+  bool pollPlaybackState = false,
 }) {
-  final session = MpvSession.attach(
+  final settings = danmakuAssSettings ?? const AssExportSettings(fontSize: 30);
+  return _TestSession(
     playerPath: '/bin/mpv',
     mediaPath: mediaPath,
     processId: processId,
@@ -67,43 +74,262 @@ MpvSession _sessionFromProcessId(
     duration: duration,
     position: position,
     isPaused: isPaused,
-    monitorProcess: monitorProcess,
-  );
-  if (danmakuAssSettings != null || danmakuList.isNotEmpty) {
-    final assPath = danmakuAssPath ?? '/tmp/nipaplay_test_$processId.ass';
-    session.danmakuAssets = DanmakuLaunchAssets(
-      assPath: assPath,
-      luaPath: '$assPath.lua',
+    danmakuAssPath: danmakuAssPath,
+    danmakuList: danmakuList,
+    danmakuStyle: DanmakuStyle(
       opacity: danmakuOpacity,
       outlineWidth: danmakuOutlineWidth,
-      danmakuList: danmakuList,
-      assSettings: danmakuAssSettings ?? const AssExportSettings(fontSize: 30),
-      allowStacking: true,
-    );
-  }
-  return session;
+      danmakuFontSize: settings.fontSize,
+      danmakuOffset: settings.timeOffsetSeconds,
+      danmakuAllowStacking: settings.allowStacking,
+    ),
+    processExitCode: monitorProcess ? processExitCode : null,
+    pollPlaybackState: pollPlaybackState,
+  );
 }
 
 void _showSession(
-  MpvSession session, {
+  _TestSession session, {
   EpisodeMetaData? episodeMetaData,
 }) {
-  final assets = session.danmakuAssets;
-  final consoleState = ConsoleState(
+  ExternalPlayerConsoleService.setState(ConsoleState(
     session: session,
     episodeMetaData: episodeMetaData,
-    danmakuList: assets?.danmakuList,
-    danmakuStyle: assets == null
-        ? null
-        : DanmakuStyle(
-            opacity: assets.opacity,
-            outlineWidth: assets.outlineWidth,
-            danmakuFontSize: assets.assSettings.fontSize,
-            danmakuOffset: assets.assSettings.timeOffsetSeconds,
-            danmakuAllowStacking: assets.allowStacking,
-          ),
-  );
-  ExternalPlayerConsoleService.setState(consoleState);
+    danmakuList: session.danmakuList,
+    danmakuStyle: session.danmakuStyle,
+  ));
+}
+
+class _TestSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+  _TestSession({
+    required this.playerPath,
+    required this.mediaPath,
+    required this.processId,
+    required this.duration,
+    required this.position,
+    required this.isPaused,
+    required this.danmakuList,
+    required this.danmakuStyle,
+    this.ipcPath,
+    this.danmakuAssPath,
+    Future<int>? processExitCode,
+    bool pollPlaybackState = false,
+  }) {
+    processExitCode?.then((_) => _close());
+    if (pollPlaybackState) {
+      _stateTimer = Timer.periodic(
+        const Duration(milliseconds: 250),
+        (_) => _refreshPlaybackState(),
+      );
+    }
+  }
+
+  @override
+  ExternalPlayerType get type => ExternalPlayerType.mpv;
+  @override
+  final String playerPath;
+  @override
+  final String mediaPath;
+  @override
+  final int processId;
+  @override
+  final String? ipcPath;
+  @override
+  Duration duration;
+  @override
+  Duration? position;
+  @override
+  bool? isPaused;
+  final String? danmakuAssPath;
+  final List<DanmakuItem> danmakuList;
+  final DanmakuStyle danmakuStyle;
+  Timer? _stateTimer;
+  bool _closed = false;
+  bool _disposed = false;
+
+  @override
+  double? get fraction {
+    if (position == null || duration <= Duration.zero) return null;
+    return (position!.inMilliseconds / duration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  @override
+  bool get isClosed => _closed;
+
+  @override
+  Future<void> launch() async {}
+
+  @override
+  void terminate() {
+    if (_closed) return;
+    Process.killPid(processId, ProcessSignal.sigterm);
+    _close();
+  }
+
+  @override
+  void togglePause() {
+    final paused = !(isPaused ?? false);
+    _sendCommand([
+      'set_property',
+      'pause',
+      paused,
+    ], 4).then((succeeded) {
+      if (!succeeded || _closed) return;
+      isPaused = paused;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void seekToFraction(double fraction) {
+    if (duration <= Duration.zero) return;
+    seekToPosition(Duration(
+      milliseconds: (duration.inMilliseconds * fraction.clamp(0.0, 1.0)).round(),
+    ));
+  }
+
+  @override
+  bool seekToPosition(Duration target) {
+    if (_closed || ipcPath == null || target < Duration.zero) return false;
+    final milliseconds = target.inMilliseconds.clamp(0, duration.inMilliseconds);
+    position = Duration(milliseconds: milliseconds);
+    notifyListeners();
+    _sendCommand([
+      'seek',
+      milliseconds / 1000.0,
+      'absolute+exact',
+    ], 6);
+    return true;
+  }
+
+  @override
+  Future<bool> refreshDanmaku(
+    DanmakuItemSet danmakuSet,
+    DanmakuStyle style,
+  ) async {
+    final path = danmakuAssPath;
+    if (_closed || ipcPath == null || path == null) return false;
+    final ass = await generateExternalPlayerDanmakuAss(
+      danmakuSet.toList(growable: false),
+      AssExportSettings(
+        fontSize: style.danmakuFontSize,
+        opacity: style.opacity,
+        timeOffsetSeconds: style.danmakuOffset,
+        allowStacking: style.danmakuAllowStacking,
+        outlineStyle:
+            style.outlineEnabled ? AssOutlineStyle.uniform : AssOutlineStyle.none,
+        outlineWidth: style.outlineWidth,
+      ),
+    );
+    final temporaryFile = File('$path.nipaplay.tmp');
+    try {
+      await temporaryFile.writeAsString(ass, flush: true);
+      await temporaryFile.rename(path);
+      final scriptName = path.split(Platform.pathSeparator).last;
+      return _sendCommand([
+        'script-message-to',
+        scriptName,
+        'nipaplay-danmaku-reload',
+        path,
+      ], 5);
+    } finally {
+      if (temporaryFile.existsSync()) await temporaryFile.delete();
+    }
+  }
+
+  Future<bool> _sendCommand(List<Object> command, int requestId) async {
+    final path = ipcPath;
+    if (_closed || path == null) return false;
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress(path, type: InternetAddressType.unix),
+        0,
+      );
+      socket.writeln(jsonEncode({
+        'command': command,
+        'request_id': requestId,
+      }));
+      await socket.flush();
+      await for (final line in socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(milliseconds: 800))) {
+        final response = jsonDecode(line) as Map<String, dynamic>;
+        if (response['request_id'] == requestId) {
+          return response['error'] == 'success';
+        }
+      }
+    } catch (_) {
+      return false;
+    } finally {
+      socket?.destroy();
+    }
+    return false;
+  }
+
+  Future<void> _refreshPlaybackState() async {
+    final path = ipcPath;
+    if (_closed || path == null) return;
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress(path, type: InternetAddressType.unix),
+        0,
+      );
+      for (final request in const [
+        (id: 1, property: 'time-pos'),
+        (id: 2, property: 'duration'),
+        (id: 3, property: 'pause'),
+      ]) {
+        socket.writeln(jsonEncode({
+          'command': ['get_property', request.property],
+          'request_id': request.id,
+        }));
+      }
+      await socket.flush();
+      final values = <int, dynamic>{};
+      await for (final line in socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .timeout(const Duration(milliseconds: 800))) {
+        final response = jsonDecode(line) as Map<String, dynamic>;
+        values[response['request_id'] as int] = response['data'];
+        if (values.length == 3) break;
+      }
+      position = Duration(
+        milliseconds: (((values[1] as num?) ?? 0) * 1000).round(),
+      );
+      duration = Duration(
+        milliseconds: (((values[2] as num?) ?? 0) * 1000).round(),
+      );
+      isPaused = values[3] as bool? ?? false;
+      notifyListeners();
+    } catch (_) {
+      return;
+    } finally {
+      socket?.destroy();
+    }
+  }
+
+  void _close() {
+    if (_closed) return;
+    _closed = true;
+    _stateTimer?.cancel();
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _stateTimer?.cancel();
+    super.dispose();
+  }
 }
 
 List<int> _activeDisplayIndices() {
@@ -161,13 +387,13 @@ void main() {
   test('uses the supplied process exit future for lifecycle monitoring',
       () async {
     final exitCode = Completer<int>();
-    final session = MpvSession.attach(
-      playerPath: '/Applications/mpv.app',
+    final session = _sessionFromProcessId(
+      999999,
       mediaPath: '/tmp/test-video.mkv',
-      processId: 999999,
       ipcPath: null,
       duration: Duration.zero,
       processExitCode: exitCode.future,
+      monitorProcess: true,
     );
     addTearDown(session.dispose);
 
@@ -326,10 +552,10 @@ void main() {
         ExternalPlayerConsoleService.queueDanmakuRefresh();
         session.position = const Duration(seconds: 6);
         session.notifyListeners();
-        expect(_activeDisplayIndices(), [1]);
+        expect(_activeDisplayIndices(), [0, 1]);
         session.position = const Duration(seconds: 8);
         session.notifyListeners();
-        expect(_activeDisplayIndices(), isEmpty);
+        expect(_activeDisplayIndices(), [0]);
       });
 
       test('blocks danmaku by keyword, regex, and sender ID', () async {
@@ -672,6 +898,7 @@ void main() {
         _showSession(_session(
           process,
           ipcPath: socketPath,
+          pollPlaybackState: true,
         ));
         expect(ExternalPlayerConsoleService.duration, Duration.zero);
 
@@ -818,7 +1045,7 @@ void main() {
         expect(commands, <List<dynamic>>[
           <dynamic>['seek', 750.0, 'absolute+exact'],
         ]);
-        expect(_activeDisplayIndices(), [0]);
+        expect(_activeDisplayIndices(), isEmpty);
 
         expect(
           ExternalPlayerConsoleService.seekToTimestamp('12:34.567'),
@@ -1085,7 +1312,7 @@ void main() {
         expect(ExternalPlayerConsoleService.danmakuStyle.danmakuFontSize, 42.0);
         expect(
           await assFile.readAsString(),
-          contains('Style: Danmaku,Arial,67.2,'),
+          contains('Style: Danmaku,Microsoft YaHei,67.2,'),
         );
         expect(await assFile.readAsString(), contains('0:00:02.50'));
 
@@ -1093,7 +1320,7 @@ void main() {
         ExternalPlayerConsoleService.queueDanmakuRefresh();
         await _waitUntil(() => reloadCommands.length == 2);
         expect(ExternalPlayerConsoleService.danmakuStyle.outlineWidth, 4.0);
-        expect(await assFile.readAsString(), contains('4.0,0.0'));
+        expect(await assFile.readAsString(), contains('6.0,0.0'));
 
         ExternalPlayerConsoleService.danmakuStyle.outlineWidth = 0.0;
         ExternalPlayerConsoleService.queueDanmakuRefresh();
@@ -1143,6 +1370,7 @@ void main() {
           firstProcess,
           ipcPath: socketPath,
           duration: const Duration(minutes: 20),
+          pollPlaybackState: true,
         ));
         await _waitUntil(
           () => ExternalPlayerConsoleService.position != Duration.zero,

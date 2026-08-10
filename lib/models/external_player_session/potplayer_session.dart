@@ -1,3 +1,5 @@
+
+// lib/models/external_player_session/potplayer_session.dart
 // Windows PotPlayer 外部播放器会话
 
 import 'dart:async';
@@ -9,18 +11,19 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/other_session.dart';
-import 'package:nipaplay/utils/app_platform.dart';
+import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 
-/// 使用 PotPlayer 的 Windows 消息接口管理播放状态，并用 ASS 文件承载弹幕。
-class PotPlayerSession extends OtherSession {
+
+/// 使用 PotPlayer 的 Windows 消息接口管理播放状态, 并用 ASS 文件承载弹幕.
+class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+
   factory PotPlayerSession({
     required String playerPath,
     required String mediaPath,
     required Duration duration,
-    Duration position = Duration.zero,
+    Duration initialPosition = Duration.zero,
     List<String> extraArgs = const <String>[],
     DanmakuItemSet? initialDanmakuSet,
   }) {
@@ -28,43 +31,52 @@ class PotPlayerSession extends OtherSession {
       playerPath: playerPath,
       mediaPath: mediaPath,
       duration: duration,
-      position: position,
+      initialPosition: initialPosition,
       extraArgs: extraArgs,
       assFilePath: _createAssFilePath(),
       initialDanmakuSet: initialDanmakuSet,
     );
   }
 
-  // The explicit values are also used to build PotPlayer-specific arguments.
-  // ignore: use_super_parameters
   PotPlayerSession._({
-    required String playerPath,
-    required String mediaPath,
-    required Duration duration,
-    required Duration position,
+    required this.playerPath,
+    required this.mediaPath,
+    required this.duration,
+    required Duration initialPosition,
     required List<String> extraArgs,
     required String assFilePath,
     required DanmakuItemSet? initialDanmakuSet,
   })  : _assFilePath = assFilePath,
         _initialDanmakuSet = initialDanmakuSet,
-        super(
-          type: ExternalPlayerType.potPlayer,
-          playerPath: playerPath,
-          mediaPath: mediaPath,
-          duration: duration,
-          position: position,
-          extraArgs: buildExtraArgs(
-            position,
-            extraArgs,
-            assFilePath: assFilePath,
-          ),
-          platform: AppPlatform.windows,
+        position = initialPosition,
+        _extraArgs = buildExtraArgs(
+          initialPosition,
+          extraArgs,
+          assFilePath: assFilePath,
         );
+
+  @override
+  ExternalPlayerType get type => ExternalPlayerType.potPlayer;
+  @override
+  final String playerPath;
+  @override
+  final String mediaPath;
+  @override
+  int get processId => _processId ?? 0;
+  @override
+  Duration duration;
+  @override
+  Duration? position;
+  @override
+  bool? isPaused = false;
 
   final String _assFilePath;
   final DanmakuItemSet? _initialDanmakuSet;
+  final List<String> _extraArgs;
+  int? _processId;
   int _windowHandle = 0;
   Timer? _stateTimer;
+  bool _closed = false;
   bool _potPlayerDisposed = false;
 
   static const int _wmCommand = 0x0111;
@@ -79,17 +91,38 @@ class PotPlayerSession extends OtherSession {
   String? get ipcPath => _windowHandle == 0 ? null : 'hwnd:$_windowHandle';
 
   @override
+  double? get fraction {
+    if (position == null || duration <= Duration.zero) return null;
+    return (position!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
+  }
+
+  @override
+  bool get isClosed => _closed;
+
+  @override
   Future<void> launch() async {
     if (!Platform.isWindows) {
       throw UnsupportedError('PotPlayerSession 仅支持 Windows 平台');
     }
+    if (_potPlayerDisposed) throw StateError('PotPlayerSession 已释放');
+    if (_processId != null) throw StateError('PotPlayerSession 已启动');
     final initialDanmakuSet = _initialDanmakuSet;
-    if (initialDanmakuSet != null && initialDanmakuSet.isNotEmpty) {
-      await _writeDanmakuAss(initialDanmakuSet, DanmakuStyle());
-    } else {
-      await File(_assFilePath).create(recursive: true);
+    try {
+      if (initialDanmakuSet != null && initialDanmakuSet.isNotEmpty) {
+        await _writeDanmakuAss(initialDanmakuSet, DanmakuStyle());
+      } else {
+        await File(_assFilePath).create(recursive: true);
+      }
+      final process = await Process.start(
+        playerPath,
+        [mediaPath, ..._extraArgs],
+        mode: ProcessStartMode.detached,
+      );
+      _processId = process.pid;
+    } catch (_) {
+      _deleteAssFile();
+      rethrow;
     }
-    await super.launch();
     _windowHandle = await _waitForPlayerWindow(processId);
     if (_windowHandle == 0) {
       debugPrint('[PotPlayerSession] 找不到 PotPlayer 窗口: pid=$processId');
@@ -271,9 +304,19 @@ class PotPlayerSession extends OtherSession {
 
   @override
   void terminate() {
+    if (_closed) return;
     _stateTimer?.cancel();
-    _deleteAssFile();
-    super.terminate();
+    final processId = _processId;
+    try {
+      if (processId != null) {
+        Process.runSync('taskkill', ['/PID', '$processId', '/T', '/F']);
+      }
+    } catch (error) {
+      debugPrint('[PotPlayerSession] 关闭播放器失败: $error');
+    } finally {
+      _deleteAssFile();
+      _close();
+    }
   }
 
   @override
@@ -281,8 +324,15 @@ class PotPlayerSession extends OtherSession {
     if (_potPlayerDisposed) return;
     _potPlayerDisposed = true;
     _stateTimer?.cancel();
-    _deleteAssFile();
+    if (!_closed) terminate();
     super.dispose();
+  }
+
+  void _close() {
+    if (_closed) return;
+    _closed = true;
+    _stateTimer?.cancel();
+    if (!_potPlayerDisposed) notifyListeners();
   }
 
   void _deleteAssFile() {
