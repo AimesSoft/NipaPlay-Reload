@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_offset_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
@@ -67,13 +68,22 @@ class _FakePlayer implements Player {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+Widget _testApp({required Widget home}) {
+  return ChangeNotifierProvider<LargeScreenUiSfxService>(
+    create: (_) => LargeScreenUiSfxService(),
+    child: MaterialApp(
+      theme: ThemeData.dark(),
+      home: home,
+    ),
+  );
+}
+
 void main() {
   testWidgets('large screen player menu switch renders a Fluent UI toggle',
       (tester) async {
     var value = false;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
+      _testApp(
         home: NipaplayLargeScreenModeScope(
           isActive: true,
           child: StatefulBuilder(
@@ -109,8 +119,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<VideoPlayerState>.value(
         value: videoState,
-        child: MaterialApp(
-          theme: ThemeData.dark(),
+        child: _testApp(
           home: NipaplayLargeScreenModeScope(
             isActive: true,
             child: Align(
@@ -157,8 +166,7 @@ void main() {
     var horizontalBubbleCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
+      _testApp(
         home: NipaplayLargeScreenModeScope(
           isActive: true,
           child: StatefulBuilder(
@@ -248,8 +256,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<VideoPlayerState>.value(
         value: videoState,
-        child: MaterialApp(
-          theme: ThemeData.dark(),
+        child: _testApp(
           home: const NipaplayLargeScreenModeScope(
             isActive: true,
             child: CupertinoDanmakuOffsetPane(),

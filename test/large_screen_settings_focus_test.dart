@@ -2,10 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_settings_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:provider/provider.dart';
+
+Widget _testApp({ThemeData? theme, required Widget home}) {
+  return ChangeNotifierProvider<LargeScreenUiSfxService>(
+    create: (_) => LargeScreenUiSfxService(),
+    child: MaterialApp(theme: theme, home: home),
+  );
+}
 
 void main() {
   testWidgets('moving from settings content to tabs releases content focus',
@@ -21,7 +30,7 @@ void main() {
     var contentActivationCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Scaffold(
           body: SizedBox(
             width: kNipaplayLargeScreenSettingsPanelWidth,
@@ -99,7 +108,7 @@ void main() {
     var sliderValue = 0.5;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         theme: ThemeData.dark(),
         home: NipaplayLargeScreenModeScope(
           isActive: true,
@@ -187,7 +196,7 @@ void main() {
     var selectedColor = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         theme: ThemeData.dark(),
         home: NipaplayLargeScreenModeScope(
           isActive: true,
