@@ -4,10 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
+import 'package:provider/provider.dart';
+
+Widget _testApp({required Widget home}) {
+  return ChangeNotifierProvider<LargeScreenUiSfxService>(
+    create: (_) => LargeScreenUiSfxService(),
+    child: MaterialApp(home: home),
+  );
+}
 
 void main() {
   test('tvOS platform keeps remote input enabled when an overlay loses scope',
@@ -38,7 +47,7 @@ void main() {
     var changedValue = '';
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -77,7 +86,7 @@ void main() {
     TvOSRemoteTextInputTarget? requestedTarget;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -116,7 +125,7 @@ void main() {
     TvOSRemoteTextInputTarget? requestedTarget;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -152,7 +161,7 @@ void main() {
     TvOSRemoteTextInputTarget? requestedTarget;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -195,7 +204,7 @@ void main() {
     TvOSRemoteTextInputTarget? requestedTarget;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -263,7 +272,7 @@ void main() {
     TvOSRemoteTextInputTarget? requestedTarget;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             requestedTarget = target;
@@ -315,7 +324,7 @@ void main() {
     var remoteInputCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: TvOSRemoteTextInputScope(
           onRemoteInputRequested: (context, target) async {
             remoteInputCount += 1;

@@ -4,10 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+Widget _testApp({required Widget home}) {
+  return ChangeNotifierProvider<LargeScreenUiSfxService>(
+    create: (_) => LargeScreenUiSfxService(),
+    child: MaterialApp(home: home),
+  );
+}
 
 void main() {
   testWidgets('mouse tap activates once when child also handles the tap',
@@ -16,7 +25,7 @@ void main() {
     void activate() => activationCount++;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Center(
           child: NipaplayLargeScreenFocusableAction(
             onActivate: activate,
@@ -62,7 +71,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Center(
           child: SizedBox(
             width: 220,
@@ -114,7 +123,7 @@ void main() {
     var activationCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Center(
           child: NipaplayLargeScreenFocusableAction(
             autofocus: true,
@@ -139,7 +148,7 @@ void main() {
     var decreaseCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: NipaplayLargeScreenFocusableAction(
           child: Row(
             children: [
@@ -172,7 +181,7 @@ void main() {
     var lowerActivationCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -229,7 +238,7 @@ void main() {
     addTearDown(otherFocusNode.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Scaffold(
           body: Column(
             children: [
@@ -277,7 +286,7 @@ void main() {
 
   testWidgets('default action has no selection semantics', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: NipaplayLargeScreenFocusableAction(
           onActivate: () {},
           child: const Text('Regular action'),
@@ -296,7 +305,7 @@ void main() {
     addTearDown(scrollController.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Scaffold(
           body: SizedBox(
             height: 180,
