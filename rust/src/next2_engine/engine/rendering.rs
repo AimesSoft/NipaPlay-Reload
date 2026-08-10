@@ -408,11 +408,7 @@ impl MsdfWorkerPool {
                 .spawn(move || msdf_worker_loop(task_rx, fonts, async_tx));
             workers.push(WorkerHandle { task_tx });
         }
-        Self {
-            workers,
-            next: 0,
-            async_rx,
-        }
+        Self { workers, next: 0, async_rx }
     }
 
     /// Synchronous: dispatch and block until the worker returns (2s timeout).
@@ -422,11 +418,7 @@ impl MsdfWorkerPool {
             return None;
         }
         let (tx, rx) = std::sync::mpsc::channel();
-        let task = MsdfTask {
-            ch,
-            quantized_size,
-            reply: Some(tx),
-        };
+        let task = MsdfTask { ch, quantized_size, reply: Some(tx) };
         if self.dispatch(task).is_err() {
             return None;
         }
@@ -442,11 +434,7 @@ impl MsdfWorkerPool {
         if self.workers.is_empty() {
             return;
         }
-        let task = MsdfTask {
-            ch,
-            quantized_size,
-            reply: None,
-        };
+        let task = MsdfTask { ch, quantized_size, reply: None };
         let _ = self.dispatch(task);
     }
 
@@ -478,9 +466,7 @@ fn msdf_worker_loop(
         let px = task.quantized_size as f32;
         let data = rasterize_glyph_on_face(fonts.as_slice(), task.ch, px);
         match task.reply {
-            Some(reply) => {
-                let _ = reply.send(data);
-            }
+            Some(reply) => { let _ = reply.send(data); }
             None => {
                 let _ = async_tx.send(PrefetchResult {
                     ch: task.ch,
@@ -663,7 +649,8 @@ impl Next2GlyphAtlas {
         });
 
         // Merge adjacent free rects to reduce fragmentation.
-        self.free_list.sort_unstable_by_key(|r| (r.y, r.x));
+        self.free_list
+            .sort_unstable_by_key(|r| (r.y, r.x));
         let mut i = 0;
         while i < self.free_list.len() {
             let mut merged = false;
@@ -813,8 +800,7 @@ impl Next2GlyphAtlas {
             .max(1);
 
         // Try free_list first (recycled space from evicted entries).
-        let (atlas_x, atlas_y) = if let Some((x, y, _)) = self.alloc_atlas_space(padded_w, padded_h)
-        {
+        let (atlas_x, atlas_y) = if let Some((x, y, _)) = self.alloc_atlas_space(padded_w, padded_h) {
             (x, y)
         } else {
             // Fall back to cursor-based allocation.
@@ -1216,10 +1202,6 @@ struct Next2Renderer {
     height: u32,
     shadow_mask_texture: wgpu::Texture,
     shadow_blur_texture: wgpu::Texture,
-    shadow_mask_view: wgpu::TextureView,
-    shadow_blur_view: wgpu::TextureView,
-    shadow_mask_bind_group: wgpu::BindGroup,
-    shadow_blur_bind_group: wgpu::BindGroup,
     shadow_width: u32,
     shadow_height: u32,
     /// Offscreen frame buffer: all rendering (shadow + glyphs) completes here
@@ -1231,8 +1213,6 @@ struct Next2Renderer {
     /// passed to draw_to_view so that pipeline color target formats align
     /// with the attachment view format (required by wgpu validation).
     frame_texture_format: wgpu::TextureFormat,
-    frame_texture_view: wgpu::TextureView,
-    frame_blit_bind_group: wgpu::BindGroup,
     #[cfg(target_os = "android")]
     surface_format: Option<wgpu::TextureFormat>,
     #[cfg(target_os = "android")]

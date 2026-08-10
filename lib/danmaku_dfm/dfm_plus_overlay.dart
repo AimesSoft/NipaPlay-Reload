@@ -4,6 +4,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
+import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:provider/provider.dart';
@@ -620,7 +621,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         //   x = width - speed * (interpolatedTime - item.time)
         // We submit every vsync frame — the Rust engine's 16ms tick loop
         // drains its mpsc queue and always renders the latest submission.
+        final layoutStartUs = _wallClock.elapsedMicroseconds;
         final frame = _bridge.layout(interpolatedTime);
+        final layoutMs =
+            (_wallClock.elapsedMicroseconds - layoutStartUs) / 1000.0;
 
         // Lookahead prefetch: dispatch chars from danmaku entering the screen
         // in the next few seconds to the Rust MSDF workers (async), so glyphs
@@ -634,10 +638,17 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final String? prefetchChars =
             _bridge.prefetchChars(_displayMediaTime, prefetchLookahead);
 
+        final submitStartUs = _wallClock.elapsedMicroseconds;
         await _tryUpdateTexture(
           frame,
           prefetchChars: prefetchChars,
           isInitialPrefetch: isInitialPrefetch,
+        );
+        final submitMs =
+            (_wallClock.elapsedMicroseconds - submitStartUs) / 1000.0;
+        SystemResourceMonitor().recordDfmFrameTimings(
+          layoutMs: layoutMs,
+          submitMs: submitMs,
         );
         _initialPrefetchDone = true;
         widget.onLayoutCalculated?.call(frame);
@@ -825,7 +836,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleY: heightScale,
       fontScale: fontScale,
       playbackRate: widget.playbackRate,
-      frameJson: prepared.frameJson,
+      framePayload: prepared.toJson(),
     );
 
     if (pushed) {

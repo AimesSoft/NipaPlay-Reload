@@ -1,27 +1,4 @@
 impl Next2Renderer {
-    fn create_screen_bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
-        texture_view: &wgpu::TextureView,
-        label: &'static str,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(label),
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-            ],
-        })
-    }
-
     fn create_pipeline(
         device: &wgpu::Device,
         atlas_bind_group_layout: &wgpu::BindGroupLayout,
@@ -268,56 +245,48 @@ impl Next2Renderer {
         // transparent → zero), which is essential for the final blit
         // from offscreen frame_texture to the shared DXGI texture when
         // using LoadOp::Load to avoid flicker.
-        let copy_shader = ctx
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("next2 copy shader"),
-                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
-                    NEXT2_SCREEN_COPY_WGSL,
-                )),
-            });
-        let copy_pipeline_layout =
-            ctx.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("next2 copy pipeline layout"),
-                    bind_group_layouts: &[&screen_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-        let copy_pipeline = ctx
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("next2 copy pipeline"),
-                layout: Some(&copy_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &copy_shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &copy_shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
-                        blend: None, // ← NO blending — overwrite every pixel
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview: None,
-                cache: None,
-            });
+        let copy_shader = ctx.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("next2 copy shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(NEXT2_SCREEN_COPY_WGSL)),
+        });
+        let copy_pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("next2 copy pipeline layout"),
+            bind_group_layouts: &[&screen_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let copy_pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("next2 copy pipeline"),
+            layout: Some(&copy_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &copy_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &copy_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: None,  // ← NO blending — overwrite every pixel
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        });
 
         let screen_sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("next2 screen sampler"),
@@ -376,32 +345,6 @@ impl Next2Renderer {
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             frame_texture_format,
         );
-        let shadow_mask_view =
-            shadow_mask_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let shadow_blur_view =
-            shadow_blur_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let frame_texture_view = frame_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let shadow_mask_bind_group = Self::create_screen_bind_group(
-            ctx.device.as_ref(),
-            &screen_bind_group_layout,
-            &screen_sampler,
-            &shadow_mask_view,
-            "next2 shadow mask sampling bg",
-        );
-        let shadow_blur_bind_group = Self::create_screen_bind_group(
-            ctx.device.as_ref(),
-            &screen_bind_group_layout,
-            &screen_sampler,
-            &shadow_blur_view,
-            "next2 shadow blur sampling bg",
-        );
-        let frame_blit_bind_group = Self::create_screen_bind_group(
-            ctx.device.as_ref(),
-            &screen_bind_group_layout,
-            &screen_sampler,
-            &frame_texture_view,
-            "next2 frame blit bg",
-        );
 
         Ok(Self {
             ctx,
@@ -434,16 +377,10 @@ impl Next2Renderer {
             height: height.max(1),
             shadow_mask_texture,
             shadow_blur_texture,
-            shadow_mask_view,
-            shadow_blur_view,
-            shadow_mask_bind_group,
-            shadow_blur_bind_group,
             shadow_width,
             shadow_height,
             frame_texture,
             frame_texture_format,
-            frame_texture_view,
-            frame_blit_bind_group,
             #[cfg(target_os = "android")]
             surface_format: None,
             #[cfg(target_os = "android")]
@@ -483,36 +420,6 @@ impl Next2Renderer {
             Some("next2 frame buffer texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             self.frame_texture_format,
-        );
-        self.shadow_mask_view = self
-            .shadow_mask_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.shadow_blur_view = self
-            .shadow_blur_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.frame_texture_view = self
-            .frame_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.shadow_mask_bind_group = Self::create_screen_bind_group(
-            self.ctx.device.as_ref(),
-            &self.screen_bind_group_layout,
-            &self.screen_sampler,
-            &self.shadow_mask_view,
-            "next2 shadow mask sampling bg",
-        );
-        self.shadow_blur_bind_group = Self::create_screen_bind_group(
-            self.ctx.device.as_ref(),
-            &self.screen_bind_group_layout,
-            &self.screen_sampler,
-            &self.shadow_blur_view,
-            "next2 shadow blur sampling bg",
-        );
-        self.frame_blit_bind_group = Self::create_screen_bind_group(
-            self.ctx.device.as_ref(),
-            &self.screen_bind_group_layout,
-            &self.screen_sampler,
-            &self.frame_texture_view,
-            "next2 frame blit bg",
         );
         true
     }
@@ -693,43 +600,40 @@ impl Next2Renderer {
                 self.width = texture_target.width.max(1);
                 self.height = texture_target.height.max(1);
                 let target_format = texture_target.format();
-                let (glyph_pipeline, screen_pipeline) =
-                    if target_format == wgpu::TextureFormat::Bgra8Unorm {
-                        (
-                            self.offscreen_pipeline.clone(),
-                            self.screen_pipeline.clone(),
-                        )
-                    } else {
-                        if self.texture_format != target_format
-                            || self.texture_pipeline.is_none()
-                            || self.texture_screen_pipeline.is_none()
-                        {
-                            self.texture_pipeline = Some(Self::create_pipeline(
-                                self.ctx.device.as_ref(),
-                                &self.atlas_bind_group_layout,
-                                target_format,
-                                "next2 texture render pipeline",
-                            ));
-                            self.texture_screen_pipeline = Some(Self::create_screen_pipeline(
-                                self.ctx.device.as_ref(),
-                                &self.screen_bind_group_layout,
-                                target_format,
-                                NEXT2_SCREEN_COPY_WGSL,
-                                "next2 texture composite pipeline",
-                            ));
-                            self.texture_format = target_format;
-                        }
-                        (
-                            self.texture_pipeline.as_ref().unwrap().clone(),
-                            self.texture_screen_pipeline.as_ref().unwrap().clone(),
-                        )
-                    };
-                self.draw_to_view(
-                    texture_target.render_texture_view(),
-                    &glyph_pipeline,
-                    &screen_pipeline,
-                    target_format,
+                let (glyph_pipeline, screen_pipeline) = if target_format == wgpu::TextureFormat::Bgra8Unorm {
+                    (self.offscreen_pipeline.clone(), self.screen_pipeline.clone())
+                } else {
+                    if self.texture_format != target_format
+                        || self.texture_pipeline.is_none()
+                        || self.texture_screen_pipeline.is_none()
+                    {
+                        self.texture_pipeline = Some(Self::create_pipeline(
+                            self.ctx.device.as_ref(),
+                            &self.atlas_bind_group_layout,
+                            target_format,
+                            "next2 texture render pipeline",
+                        ));
+                        self.texture_screen_pipeline = Some(Self::create_screen_pipeline(
+                            self.ctx.device.as_ref(),
+                            &self.screen_bind_group_layout,
+                            target_format,
+                            NEXT2_SCREEN_COPY_WGSL,
+                            "next2 texture composite pipeline",
+                        ));
+                        self.texture_format = target_format;
+                    }
+                    (
+                        self.texture_pipeline.as_ref().unwrap().clone(),
+                        self.texture_screen_pipeline.as_ref().unwrap().clone(),
+                    )
+                };
+                let view = texture_target.render_texture().create_view(
+                    &wgpu::TextureViewDescriptor {
+                        format: Some(target_format),
+                        ..Default::default()
+                    },
                 );
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, target_format);
             }
         }
     }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/mock_mdk.dart'
     if (dart.library.io) 'package:fvp/mdk.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -13,6 +14,9 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 /// 系统资源监控类
 /// 提供真实的 CPU / 内存 / GPU / FPS 指标。
 class SystemResourceMonitor {
+  static const MethodChannel _performanceChannel =
+      MethodChannel('nipaplay/performance');
+
   static final SystemResourceMonitor _instance =
       SystemResourceMonitor._internal();
 
@@ -24,6 +28,9 @@ class SystemResourceMonitor {
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
   double? _gpuUsage;
+  String _thermalState = 'N/A';
+  double? _dfmLayoutMs;
+  double? _dfmSubmitMs;
 
   String _activeDecoder = '未知';
   String _mdkVersion = '未知';
@@ -49,11 +56,15 @@ class SystemResourceMonitor {
   static const int _gpuSampleIntervalMs = 1500;
   bool _gpuSamplingSupported = true;
   String? _lastGpuSamplingError;
+  bool _thermalSamplingSupported = true;
 
   double get cpuUsage => _cpuUsage;
   double get memoryUsageMB => _memoryUsageMB;
   double get fps => _fps;
   double? get gpuUsage => _gpuUsage;
+  String get thermalState => _thermalState;
+  double? get dfmLayoutMs => _dfmLayoutMs;
+  double? get dfmSubmitMs => _dfmSubmitMs;
 
   String get activeDecoder => _activeDecoder;
   String get mdkVersion => _mdkVersion;
@@ -235,6 +246,8 @@ class SystemResourceMonitor {
       return;
     }
 
+    await _updateThermalState();
+
     if (!_rustPerformanceAvailable) {
       _cpuUsage = 0.0;
       _memoryUsageMB = 0.0;
@@ -243,6 +256,43 @@ class SystemResourceMonitor {
     }
 
     await _updateFromRustSamples();
+  }
+
+  Future<void> _updateThermalState() async {
+    final supportsThermalState = !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        !globals.isTvOS;
+    if (!supportsThermalState || !_thermalSamplingSupported) {
+      _thermalState = 'N/A';
+      return;
+    }
+
+    try {
+      _thermalState =
+          await _performanceChannel.invokeMethod<String>('getThermalState') ??
+              'unknown';
+    } on MissingPluginException {
+      _thermalSamplingSupported = false;
+      _thermalState = 'N/A';
+    } on PlatformException catch (e) {
+      debugPrint('读取 iOS thermalState 失败: $e');
+      _thermalState = 'N/A';
+    }
+  }
+
+  void recordDfmFrameTimings({
+    required double layoutMs,
+    required double submitMs,
+  }) {
+    const alpha = 0.15;
+    _dfmLayoutMs = _smoothedMetric(_dfmLayoutMs, layoutMs, alpha);
+    _dfmSubmitMs = _smoothedMetric(_dfmSubmitMs, submitMs, alpha);
+  }
+
+  double _smoothedMetric(double? previous, double sample, double alpha) {
+    if (!sample.isFinite || sample < 0) return previous ?? 0.0;
+    if (previous == null) return sample;
+    return previous + (sample - previous) * alpha;
   }
 
   Future<void> _updateFromRustSamples() async {

@@ -60,8 +60,7 @@ pub(crate) enum PresentTarget {
 }
 
 pub(crate) struct PresentTextureTarget {
-    _render_texture: wgpu::Texture,
-    render_texture_view: wgpu::TextureView,
+    render_texture: wgpu::Texture,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) format: wgpu::TextureFormat,
@@ -69,29 +68,8 @@ pub(crate) struct PresentTextureTarget {
 }
 
 impl PresentTextureTarget {
-    fn new(
-        render_texture: wgpu::Texture,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-        bytes_per_row: u32,
-    ) -> Self {
-        let render_texture_view = render_texture.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(format),
-            ..Default::default()
-        });
-        Self {
-            _render_texture: render_texture,
-            render_texture_view,
-            width,
-            height,
-            format,
-            _bytes_per_row: bytes_per_row,
-        }
-    }
-
-    pub(crate) fn render_texture_view(&self) -> &wgpu::TextureView {
-        &self.render_texture_view
+    pub(crate) fn render_texture(&self) -> &wgpu::Texture {
+        &self.render_texture
     }
 
     pub(crate) fn format(&self) -> wgpu::TextureFormat {
@@ -327,13 +305,13 @@ pub(crate) fn attach_present_texture(
         };
 
         let texture = unsafe { device.create_texture_from_hal::<Metal>(hal_texture, &desc) };
-        return Some(PresentTarget::Texture(PresentTextureTarget::new(
-            texture,
+        return Some(PresentTarget::Texture(PresentTextureTarget {
+            render_texture: texture,
             width,
             height,
-            wgpu::TextureFormat::Bgra8Unorm,
-            bytes_per_row,
-        )));
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            _bytes_per_row: bytes_per_row,
+        }));
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     {
@@ -441,13 +419,13 @@ pub(crate) fn create_dx12_shared_present_texture(
     };
     let texture = unsafe { device.create_texture_from_hal::<Dx12>(hal_texture, &desc) };
     Some((
-        PresentTarget::Texture(PresentTextureTarget::new(
-            texture,
+        PresentTarget::Texture(PresentTextureTarget {
+            render_texture: texture,
             width,
             height,
-            wgpu::TextureFormat::Bgra8Unorm,
-            0,
-        )),
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            _bytes_per_row: 0,
+        }),
         shared_handle.0 as usize,
     ))
 }
@@ -503,7 +481,11 @@ pub(crate) fn attach_present_gl_texture(
     };
 
     let texture = unsafe { device.create_texture_from_hal::<Gles>(hal_texture, &desc) };
-    Some(PresentTarget::Texture(PresentTextureTarget::new(
-        texture, width, height, format, 0,
-    )))
+    Some(PresentTarget::Texture(PresentTextureTarget {
+        render_texture: texture,
+        width,
+        height,
+        format,
+        _bytes_per_row: 0,
+    }))
 }

@@ -20,16 +20,6 @@ impl Next2Renderer {
                 target_format,
             );
             self.frame_texture_format = target_format;
-            self.frame_texture_view = self
-                .frame_texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-            self.frame_blit_bind_group = Self::create_screen_bind_group(
-                self.ctx.device.as_ref(),
-                &self.screen_bind_group_layout,
-                &self.screen_sampler,
-                &self.frame_texture_view,
-                "next2 frame blit bg",
-            );
         }
         if self.shadow_mask_texture.size().width != self.shadow_width
             || self.shadow_mask_texture.size().height != self.shadow_height
@@ -60,11 +50,17 @@ impl Next2Renderer {
         // invisible to the compositor.  This eliminates the flickering caused
         // by ALLOW_SIMULTANEOUS_ACCESS on the shared DXGI texture.
 
-        let frame_view = &self.frame_texture_view;
+        let frame_view = self
+            .frame_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         if !self.shadow_vertices.is_empty() {
-            let shadow_mask_view = &self.shadow_mask_view;
-            let shadow_blur_view = &self.shadow_blur_view;
+            let shadow_mask_view = self
+                .shadow_mask_texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let shadow_blur_view = self
+                .shadow_blur_texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
 
             let shadow_bytes = bytemuck::cast_slice(self.shadow_vertices.as_slice());
             self.ctx
@@ -74,7 +70,7 @@ impl Next2Renderer {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("next2 shadow mask pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: shadow_mask_view,
+                        view: &shadow_mask_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -97,23 +93,47 @@ impl Next2Renderer {
             let blur_pipeline_horizontal = self.blur_pipeline_horizontal.clone();
             let blur_pipeline_vertical = self.blur_pipeline_vertical.clone();
             Self::blit_screen_texture(
+                self.ctx.device.as_ref(),
+                &self.screen_bind_group_layout,
+                &self.screen_sampler,
                 &mut encoder,
-                &self.shadow_mask_bind_group,
-                shadow_blur_view,
+                &shadow_mask_view,
+                &shadow_blur_view,
                 &blur_pipeline_horizontal,
             );
             Self::blit_screen_texture(
+                self.ctx.device.as_ref(),
+                &self.screen_bind_group_layout,
+                &self.screen_sampler,
                 &mut encoder,
-                &self.shadow_blur_bind_group,
-                shadow_mask_view,
+                &shadow_blur_view,
+                &shadow_mask_view,
                 &blur_pipeline_vertical,
             );
 
             {
+                let blur_bind_group =
+                    self.ctx
+                        .device
+                        .create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("next2 shadow composite bg"),
+                            layout: &self.screen_bind_group_layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: wgpu::BindingResource::TextureView(&shadow_mask_view),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::Sampler(&self.screen_sampler),
+                                },
+                            ],
+                        });
+
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("next2 shadow composite pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: frame_view,
+                        view: &frame_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -132,7 +152,7 @@ impl Next2Renderer {
                 });
 
                 pass.set_pipeline(screen_pipeline);
-                pass.set_bind_group(0, &self.shadow_mask_bind_group, &[]);
+                pass.set_bind_group(0, &blur_bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
         }
@@ -149,7 +169,7 @@ impl Next2Renderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("next2 main glyph pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: frame_view,
+                    view: &frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -182,6 +202,24 @@ impl Next2Renderer {
         // A single draw call makes the window where ALLOW_SIMULTANEOUS_ACCESS
         // could expose an intermediate state negligibly short.
         {
+            let frame_blit_bg = self
+                .ctx
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("next2 frame blit bg"),
+                    layout: &self.screen_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&frame_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.screen_sampler),
+                        },
+                    ],
+                });
+
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("next2 frame blit pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -215,7 +253,7 @@ impl Next2Renderer {
                 }
                 self.texture_copy_pipeline.as_ref().unwrap()
             });
-            pass.set_bind_group(0, &self.frame_blit_bind_group, &[]);
+            pass.set_bind_group(0, &frame_blit_bg, &[]);
             pass.draw(0..3, 0..1);
         }
 
@@ -275,11 +313,29 @@ impl Next2Renderer {
     }
 
     fn blit_screen_texture(
+        device: &wgpu::Device,
+        screen_bind_group_layout: &wgpu::BindGroupLayout,
+        screen_sampler: &wgpu::Sampler,
         encoder: &mut wgpu::CommandEncoder,
-        source_bind_group: &wgpu::BindGroup,
+        source_view: &wgpu::TextureView,
         target_view: &wgpu::TextureView,
         pipeline: &wgpu::RenderPipeline,
     ) {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("next2 screen bg"),
+            layout: screen_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(screen_sampler),
+                },
+            ],
+        });
+
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("next2 screen blit pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -297,7 +353,7 @@ impl Next2Renderer {
         });
 
         pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, source_bind_group, &[]);
+        pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
 
@@ -377,13 +433,17 @@ impl Next2Renderer {
         // absolute positions are already smooth on their own. ema == 0
         // (startup, not yet converged) skips this gate and falls through to
         // the conservative 50ms + scroll-item checks below.
-        if self.submit_interval_ema > 0.0 && self.submit_interval_ema <= 0.020 {
+        if self.submit_interval_ema > 0.0
+            && self.submit_interval_ema <= 0.020
+        {
             return false;
         }
         if self.submit_instant.elapsed().as_secs_f32() >= 0.050 {
             return false;
         }
-        self.frame_items.iter().any(|item| item.scroll_speed != 0.0)
+        self.frame_items
+            .iter()
+            .any(|item| item.scroll_speed != 0.0)
     }
 
     fn build_vertices(&mut self) {
@@ -406,7 +466,8 @@ impl Next2Renderer {
         // Vec plus every token's String on every frame.
         let frame_items = std::mem::take(&mut self.frame_items);
         for item in &frame_items {
-            let outline_px = super::resolve_danmaku_outline_px(item.font_size, item.outline_width);
+            let outline_px =
+                super::resolve_danmaku_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
             let outline_color = stroke_color(fill_color);
@@ -1178,12 +1239,7 @@ mod tests {
     #[test]
     fn parallel_msdf_generation_matches_serial_generation() {
         let fonts = std::sync::Arc::new(load_font_chain(None).expect("load test fonts"));
-        let cases = [
-            ('医', 50.0_f32),
-            ('院', 50.0_f32),
-            ('弹', 36.0_f32),
-            ('幕', 36.0_f32),
-        ];
+        let cases = [('医', 50.0_f32), ('院', 50.0_f32), ('弹', 36.0_f32), ('幕', 36.0_f32)];
 
         let serial: Vec<_> = cases
             .iter()
@@ -1213,8 +1269,8 @@ mod tests {
     #[test]
     fn thick_outline_keeps_the_mtsdf_quad_border_transparent() {
         let fonts = load_font_chain(None).expect("load test fonts");
-        let glyph =
-            rasterize_glyph_on_face(fonts.as_slice(), '医', 50.0).expect("rasterize test glyph");
+        let glyph = rasterize_glyph_on_face(fonts.as_slice(), '医', 50.0)
+            .expect("rasterize test glyph");
         let outline_px = crate::next2_engine::resolve_danmaku_outline_px(256.0, 2.0);
         let antialias_px = 1.0_f32;
 
