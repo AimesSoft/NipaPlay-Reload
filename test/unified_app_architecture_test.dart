@@ -522,7 +522,10 @@ void main() {
     );
     expect(notification, contains('const Color(0xF2252527)'));
     expect(notification, contains('const Color(0xFAF7F7F8)'));
-    expect(notification, contains('final actionForeground = textColor'));
+    expect(
+      notification,
+      contains('final actionForeground = actionColor ?? textColor'),
+    );
     expect(notification, isNot(contains('AppAccentColors.current')));
   });
 

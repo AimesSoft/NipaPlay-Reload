@@ -11,6 +11,7 @@ import 'package:nipaplay/media_library/media_source_option.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
@@ -35,6 +36,16 @@ const _sections = <UnifiedMediaLibrarySection>[
     source: UnifiedMediaLibrarySource.local,
   ),
 ];
+
+Widget _testApp({required Widget home, ThemeData? theme}) {
+  return ChangeNotifierProvider<LargeScreenUiSfxService>(
+    create: (_) => LargeScreenUiSfxService(),
+    child: MaterialApp(
+      theme: theme,
+      home: home,
+    ),
+  );
+}
 
 void main() {
   setUp(() {
@@ -90,12 +101,12 @@ void main() {
       contains('local_folder'),
     );
   });
-  testWidgets('television media library uses remote-first navigation',
+  testWidgets('television media library shows controls and selects sections',
       (tester) async {
     String? selectedId;
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: AppDisplaySurfaceScope(
           surface: AppDisplaySurface.television,
           child: AdaptiveMediaLibraryScaffold(
@@ -121,9 +132,7 @@ void main() {
       findsWidgets,
     );
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.tap(find.text('本地库管理'));
     await tester.pump();
     expect(selectedId, MediaLibrarySectionIds.localManagement);
   });
@@ -131,7 +140,7 @@ void main() {
   testWidgets('desktop large screen mode opts into television media layout',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: AppDisplaySurfaceScope(
           surface: AppDisplaySurface.desktopTablet,
           child: NipaplayLargeScreenModeScope(
@@ -164,7 +173,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
         value: provider,
-        child: MaterialApp(
+        child: _testApp(
           home: NipaplayLargeScreenModeScope(
             isActive: true,
             child: Builder(
@@ -216,7 +225,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<AppearanceSettingsProvider>(
         create: (_) => AppearanceSettingsProvider(),
-        child: MaterialApp(
+        child: _testApp(
           theme: lightTheme,
           home: AppDisplaySurfaceScope(
             surface: AppDisplaySurface.desktopTablet,
@@ -265,11 +274,11 @@ void main() {
   testWidgets('large screen secondary content has a dedicated container',
       (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      _testApp(
         home: NipaplayLargeScreenViewContainer(
           title: '设置',
           subtitle: '遥控器操作',
-          child: Center(child: Text('内容区域')),
+          child: const Center(child: Text('内容区域')),
         ),
       ),
     );
@@ -290,7 +299,7 @@ void main() {
     expect(lightDecoration.color, const Color(0xFFF5F5F5));
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Theme(
           data: ThemeData.dark(),
           child: const NipaplayLargeScreenViewContainer(
