@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'models/danmaku_item.dart';
 import 'utils/utils.dart';
+import 'danmaku_timeline.dart';
 
 class ScrollDanmakuPainter extends CustomPainter {
   final double progress;
   final List<DanmakuItem> scrollDanmakuItems;
-  final int danmakuDurationInSeconds;
+  final double danmakuDurationInSeconds;
+  final double playbackRate;
   final double fontSize;
   final int fontWeight;
   final bool showStroke;
@@ -15,7 +17,6 @@ class ScrollDanmakuPainter extends CustomPainter {
   final int tick;
   final int batchThreshold;
 
-  final double totalDuration;
   final Paint selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
@@ -25,6 +26,7 @@ class ScrollDanmakuPainter extends CustomPainter {
     this.progress,
     this.scrollDanmakuItems,
     this.danmakuDurationInSeconds,
+    this.playbackRate,
     this.fontSize,
     this.fontWeight,
     this.showStroke,
@@ -32,7 +34,7 @@ class ScrollDanmakuPainter extends CustomPainter {
     this.running,
     this.tick, {
     this.batchThreshold = 10, // 默认值为10，可以自行调整
-  }) : totalDuration = danmakuDurationInSeconds * 1000;
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -45,10 +47,15 @@ class ScrollDanmakuPainter extends CustomPainter {
 
       for (var item in scrollDanmakuItems) {
         item.lastDrawTick ??= item.creationTime;
-        final endPosition = -item.width;
-        final distance = startPosition - endPosition;
-        item.xPosition = item.xPosition +
-            (((item.lastDrawTick! - tick) / totalDuration) * distance);
+        item.xPosition = CanvasDanmakuTimeline.advanceScrollX(
+          currentX: item.xPosition,
+          previousTick: item.lastDrawTick!,
+          currentTick: tick,
+          viewWidth: startPosition,
+          danmakuWidth: item.width,
+          durationSeconds: danmakuDurationInSeconds,
+          playbackRate: playbackRate,
+        );
 
         if (item.xPosition < -item.width || item.xPosition > size.width) {
           continue;
@@ -82,10 +89,15 @@ class ScrollDanmakuPainter extends CustomPainter {
       // 弹幕数量较少时直接绘制 (节约创建 canvas 的开销)
       for (var item in scrollDanmakuItems) {
         item.lastDrawTick ??= item.creationTime;
-        final endPosition = -item.width;
-        final distance = startPosition - endPosition;
-        item.xPosition = item.xPosition +
-            (((item.lastDrawTick! - tick) / totalDuration) * distance);
+        item.xPosition = CanvasDanmakuTimeline.advanceScrollX(
+          currentX: item.xPosition,
+          previousTick: item.lastDrawTick!,
+          currentTick: tick,
+          viewWidth: startPosition,
+          danmakuWidth: item.width,
+          durationSeconds: danmakuDurationInSeconds,
+          playbackRate: playbackRate,
+        );
 
         if (item.xPosition < -item.width || item.xPosition > size.width) {
           continue;

@@ -132,6 +132,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             isPlaying: widget.isPlaying,
             playbackRate: videoState.effectivePlaybackRate,
             scrollDurationSeconds: scrollDuration,
+            seekRevision: videoState.seekRevision,
+            danmakuListVersion: videoState.danmakuListVersion,
+            timeOffsetSeconds: combinedTimeOffset,
           );
         }
 

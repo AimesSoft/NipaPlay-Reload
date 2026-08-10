@@ -188,6 +188,44 @@ jobs:
               raise SystemExit('Unexpected Erika v0.1.5 tvOS podspec layout')
           PY
 
+          python3 - "$podspec" <<'PY'
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding='utf-8')
+          old = (
+              '      if [ -n "${SLICE:-}" ] && [ -f "$SLICE/liberika_capi.a" ]; then\n'
+              '        PREBUILT_LIB="$SLICE/liberika_capi.a"\n'
+              '        echo "Erika: using prebuilt $PREBUILT_TAG -> $PREBUILT_LIB"\n'
+              '      fi\n'
+          )
+          new = (
+              '      if [ -n "${SLICE:-}" ]; then\n'
+              '        # The tvOS release names the simulator archive\n'
+              '        # `liberika_capi-sim.a`, while the device slice uses\n'
+              '        # `liberika_capi.a`. Both are valid static libraries for the\n'
+              '        # corresponding XCFramework slice.\n'
+              '        if [ -f "$SLICE/liberika_capi.a" ]; then\n'
+              '          PREBUILT_LIB="$SLICE/liberika_capi.a"\n'
+              '        elif [ -f "$SLICE/liberika_capi-sim.a" ]; then\n'
+              '          PREBUILT_LIB="$SLICE/liberika_capi-sim.a"\n'
+              '        fi\n'
+              '        if [ -n "$PREBUILT_LIB" ]; then\n'
+              '          echo "Erika: using prebuilt $PREBUILT_TAG -> $PREBUILT_LIB"\n'
+              '        fi\n'
+              '      fi\n'
+          )
+          old_count = source.count(old)
+          new_count = source.count(new)
+          if old_count == 1 and new_count == 0:
+              path.write_text(source.replace(old, new), encoding='utf-8')
+          elif old_count == 0 and new_count == 1:
+              print('Erika v0.1.5 tvOS prebuilt slice-name patch is already applied.')
+          else:
+              raise SystemExit('Unexpected Erika v0.1.5 tvOS prebuilt slice layout')
+          PY
+
       - name: Build tvOS simulator application
         if: github.event_name == 'pull_request'
         shell: bash

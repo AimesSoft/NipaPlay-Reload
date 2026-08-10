@@ -1424,7 +1424,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   double _sanitizeNext2DanmakuOutlineWidth(double? value) {
     return normalizeDanmakuOutlineWidthLevel(
       value,
-      fallback: globals.isTelevision
+      fallback: globals.isTvOS
           ? defaultTvOSErikaDanmakuOutlineWidthLevel
           : defaultDanmakuOutlineWidthLevel,
     );
@@ -1506,7 +1506,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadDanmakuDisplayEffectSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final migrateTvOSErikaOutlineDefault = globals.isTelevision &&
+    final migrateTvOSErikaOutlineDefault = globals.isTvOS &&
         !(prefs.getBool(
               SettingsKeys.tvOSErikaDanmakuOutlineDefaultMigrated,
             ) ??

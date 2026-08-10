@@ -9,6 +9,7 @@ import 'subtitle_parser.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
+import 'package:nipaplay/services/emby_track_application.dart' as emby_tracks;
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/subtitle_language_utils.dart';
@@ -306,21 +307,26 @@ class SubtitleManager extends ChangeNotifier {
   }
 
   // 清空外部字幕状态，同时通知播放器关闭外挂轨道
-  void _clearExternalSubtitleState({bool resetManualFlag = true}) {
-    try {
-      if (_player.supportsExternalSubtitles) {
-        _player.setMedia("", MediaType.subtitle);
+  void _clearExternalSubtitleState({
+    bool resetManualFlag = true,
+    bool clearPlayer = true,
+  }) {
+    if (clearPlayer) {
+      try {
+        if (_player.supportsExternalSubtitles) {
+          _player.setMedia("", MediaType.subtitle);
+        }
+      } catch (e) {
+        debugPrint('SubtitleManager: 清除播放器外部字幕失败: $e');
       }
-    } catch (e) {
-      debugPrint('SubtitleManager: 清除播放器外部字幕失败: $e');
-    }
 
-    try {
-      if (_player.activeSubtitleTracks.isNotEmpty) {
-        _player.activeSubtitleTracks = [];
+      try {
+        if (_player.activeSubtitleTracks.isNotEmpty) {
+          _player.activeSubtitleTracks = [];
+        }
+      } catch (e) {
+        debugPrint('SubtitleManager: 重置字幕轨道选择失败: $e');
       }
-    } catch (e) {
-      debugPrint('SubtitleManager: 重置字幕轨道选择失败: $e');
     }
 
     _currentExternalSubtitlePath = null;
@@ -434,6 +440,51 @@ class SubtitleManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('设置外部字幕失败: $e');
     }
+  }
+
+  Future<void> activateEmbyExternalSubtitle(
+    String path, {
+    bool isManualSetting = false,
+  }) async {
+    if (_player.getPlayerKernelName() != 'Erika') {
+      setExternalSubtitle(path, isManualSetting: isManualSetting);
+      return;
+    }
+
+    final loadToken = ++_subtitleLoadToken;
+    if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
+      throw StateError(
+        'The current player does not support external subtitles.',
+      );
+    }
+    if (path.isNotEmpty && !File(path).existsSync()) {
+      throw FileSystemException('Subtitle file does not exist.', path);
+    }
+
+    await emby_tracks.activateEmbyExternalSubtitle(
+      player: _player,
+      subtitlePath: path,
+    );
+    if (loadToken != _subtitleLoadToken) return;
+
+    if (path.isEmpty) {
+      _clearExternalSubtitleState(clearPlayer: false);
+    } else {
+      _currentExternalSubtitlePath = path;
+      updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
+        'path': path,
+        'title': p.basename(path),
+        'isActive': true,
+        'isManualSet': isManualSetting,
+      });
+      unawaited(preloadSubtitleFile(path));
+      if (isManualSetting && _currentVideoPath != null) {
+        saveVideoSubtitleMapping(_currentVideoPath!, path);
+      }
+    }
+
+    onSubtitleTrackChanged();
+    notifyListeners();
   }
 
   bool _isMdkKernel() => _player.getPlayerKernelName() == 'MDK';

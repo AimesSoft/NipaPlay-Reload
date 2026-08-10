@@ -736,10 +736,10 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isErikaPlayerKernel = globals.isTelevision ||
+    final isErikaPlayerKernel = globals.isTvOS ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final showNextPlusPlusToggle = !globals.isTelevision &&
+    final showNextPlusPlusToggle = !globals.isTvOS &&
         _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
     final showRendererSupersample = !isErikaPlayerKernel &&
         (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||

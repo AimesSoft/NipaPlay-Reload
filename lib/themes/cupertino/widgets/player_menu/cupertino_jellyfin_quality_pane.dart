@@ -5,9 +5,12 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/models/emby_media_selection.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/emby_media_source_selection.dart';
+import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
@@ -153,36 +156,77 @@ class _CupertinoJellyfinQualityPaneState
     setState(() => _isLoading = true);
 
     try {
-      final path = widget.videoState.currentVideoPath;
+      final videoState = widget.videoState;
+      final path = videoState.currentVideoPath;
       if (path != null && path.startsWith('emby://')) {
-        final itemId = path.replaceFirst('emby://', '').split('/').last;
-        final sourceChanged =
-            widget.videoState.currentPlaybackSession?.mediaSourceId !=
-                _selectedMediaSourceId;
-        final audioStreamIndex = sourceChanged
-            ? null
-            : widget.videoState.getEmbyServerAudioSelection(itemId);
         final provider =
             Provider.of<EmbyTranscodeProvider>(context, listen: false);
+        final itemId = path.replaceFirst('emby://', '').split('/').last;
+        final normalizedSourceId = _selectedMediaSourceId?.trim();
+        final selectedSourceId =
+            normalizedSourceId?.isNotEmpty == true ? normalizedSourceId : null;
+        final sourceChanged = selectedSourceId != null &&
+            videoState.currentPlaybackSession?.mediaSourceId !=
+                selectedSourceId;
+        final selectedSource = sourceChanged
+            ? videoState.embyMediaSourceDescriptor(selectedSourceId)
+            : videoState.embyMediaSourceDescriptor();
+        if (sourceChanged && selectedSource == null) {
+          throw StateError(
+              'Selected Emby media source is no longer available.');
+        }
+        final resolvedTracks = sourceChanged && selectedSource != null
+            ? await videoState.resolveCurrentEmbyTracksForSource(selectedSource)
+            : videoState.currentEmbyTrackSelection;
+        final resolvedAudioIndex =
+            resolvedTracks?.audio.mode == EmbyResolvedTrackMode.track
+                ? resolvedTracks!.audio.sourceIndex
+                : null;
+        final resolvedSubtitleIndex =
+            resolvedTracks?.subtitle.mode == EmbyResolvedTrackMode.track
+                ? resolvedTracks!.subtitle.sourceIndex
+                : null;
+        final audioStreamIndex = sourceChanged
+            ? resolvedAudioIndex
+            : videoState.getEmbyServerAudioSelection(itemId);
+        final subtitleStreamIndex =
+            sourceChanged ? resolvedSubtitleIndex : _selectedServerSubtitle;
+        final burnInSubtitle = _burnIn ||
+            (resolvedTracks != null &&
+                requiresEmbySubtitleBurnIn(resolvedTracks.subtitle));
         await provider.setDefaultVideoQuality(_currentQuality!);
         if (_currentQuality! != JellyfinVideoQuality.original) {
           await provider.setTranscodeEnabled(true);
         }
-        await widget.videoState.reloadCurrentEmbyStream(
-          quality: _currentQuality!,
-          serverSubtitleIndex: _selectedServerSubtitle,
-          burnInSubtitle: _burnIn,
-          mediaSourceId: _selectedMediaSourceId,
-          audioStreamIndex: audioStreamIndex,
+        await runMediaServerMenuSelection(
+          MediaServerMenuSurface.cupertinoSource,
+          true,
+          () async {
+            await videoState.reloadCurrentEmbyStream(
+              quality: _currentQuality!,
+              serverSubtitleIndex: subtitleStreamIndex,
+              burnInSubtitle: burnInSubtitle,
+              mediaSourceId: selectedSourceId,
+              audioStreamIndex: audioStreamIndex,
+              embyTrackSelection: resolvedTracks,
+            );
+            videoState.setEmbyServerSubtitleSelection(
+              itemId,
+              subtitleStreamIndex,
+              burnIn: burnInSubtitle,
+            );
+            if (sourceChanged) {
+              videoState.setEmbyServerAudioSelection(itemId, audioStreamIndex);
+            }
+          },
+          () async {
+            if (!sourceChanged || selectedSource == null) return false;
+            return videoState.persistCurrentEmbyManualPatch(
+              EmbyManualSelectionPatch(source: selectedSource),
+              currentSource: selectedSource,
+            );
+          },
         );
-        widget.videoState.setEmbyServerSubtitleSelection(
-          itemId,
-          _selectedServerSubtitle,
-          burnIn: _burnIn,
-        );
-        if (sourceChanged) {
-          widget.videoState.setEmbyServerAudioSelection(itemId, null);
-        }
       } else {
         final provider =
             Provider.of<JellyfinTranscodeProvider>(context, listen: false);
@@ -190,10 +234,15 @@ class _CupertinoJellyfinQualityPaneState
         if (_currentQuality! != JellyfinVideoQuality.original) {
           await provider.setTranscodeEnabled(true);
         }
-        await widget.videoState.reloadCurrentJellyfinStream(
-          quality: _currentQuality!,
-          serverSubtitleIndex: _selectedServerSubtitle,
-          burnInSubtitle: _burnIn,
+        await runMediaServerMenuSelection(
+          MediaServerMenuSurface.cupertinoSource,
+          false,
+          () => videoState.reloadCurrentJellyfinStream(
+            quality: _currentQuality!,
+            serverSubtitleIndex: _selectedServerSubtitle,
+            burnInSubtitle: _burnIn,
+          ),
+          () async => false,
         );
       }
 
