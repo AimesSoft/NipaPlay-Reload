@@ -43,6 +43,25 @@ class DanmakuService {
     catch (_) { return null; }
   }
 
+  static Future<DanmakuItemSet?> getFilteredDanmakuFromEpisodeIdAndAnimeId(int episodeId, int animeId) async {
+
+    if (episodeId <= 0) return null;
+
+    final context = globals.navigatorKey.currentContext;
+    if (context == null) return null;
+
+    try {
+      final vps = Provider.of<VideoPlayerState>(context, listen: false);
+      final filtered = await vps.buildFilteredDanmakuForExport(
+        episodeId: episodeId.toString(),
+        animeId: animeId.toString(),
+      );
+      return filtered.map(DanmakuItem.fromMap).toSet();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 将强类型弹幕转换为 ASS 字幕文本.
   ///
   /// 优先使用 DFM+ 布局生成轨道与运动参数; 布局不可用时由
