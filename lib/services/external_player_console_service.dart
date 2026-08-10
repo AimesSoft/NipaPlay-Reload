@@ -1,3 +1,4 @@
+
 // lib/services/external_player_console_service.dart
 // Linux/macOS/Windows 外部播放器控制台服务
 
@@ -5,14 +6,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/mpv_session.dart';
-import 'package:nipaplay/models/external_player_session/potplayer_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/services/external_player_window_service.dart';
 import 'package:nipaplay/utils/utils.dart';
+
 
 /// 番剧元数据
 class EpisodeMetaData {
@@ -52,12 +53,11 @@ class ConsoleState {
 class ExternalPlayerConsoleService extends ChangeNotifier {
   // 单例
   ExternalPlayerConsoleService._();
-  static final ExternalPlayerConsoleService _instance =
-      ExternalPlayerConsoleService._();
+  static final ExternalPlayerConsoleService _instance = ExternalPlayerConsoleService._();
 
   // 平台支持
-  static bool get isSupportedPlatform =>
-      !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+  static bool get isSupportedPlatform => !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+
 
   // ======================================================================== //
   // =========================== 内部状态字段 =============================== //
@@ -66,11 +66,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static int _stateTimestamp = 0; // 配置变更时间戳, 用于检测异步任务是否已过期
 
   static ExternalPlayerLaunchSession? _session; // 外部播放器会话
-  static final ValueNotifier<bool> _sessionAvailability =
-      ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> _sessionAvailability = ValueNotifier<bool>(false);
 
   // 动漫元数据相关
   // ------------------------------------------------------------------------ //
+
   static String? _animeTitle; // 番剧标题
   static String? _episodeTitle; // 剧集标题
   static int? _episodeId; // 剧集 ID
@@ -88,6 +88,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
   static Future<void> _danmakuStyleUpdateQueue = Future<void>.value();
+
 
   // ======================================================================== //
   // ========================= Getters & Setters ============================ //
@@ -268,9 +269,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 记录当前状态
     final currentSession = _session;
     // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
-    if (currentSession == null || (currentSession is! MpvSession && currentSession is! PotPlayerSession) || currentSession.ipcPath == null || _displayDanmakuList.isEmpty) {
-      return;
-    }
+    if (currentSession == null || (
+      currentSession.type != ExternalPlayerType.mpv    &&
+      currentSession.type != ExternalPlayerType.mpvNet &&
+      currentSession.type != ExternalPlayerType.potPlayer
+    ) || currentSession.ipcPath == null || _displayDanmakuList.isEmpty) { return; }
 
     // 保留当前样式和时间戳, 以便在异步任务中检查状态是否已过期
     final style = danmakuStyle.copyWith();
@@ -434,9 +437,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       }
 
       // 判断弹幕是否在当前播放位置显示
-      final isInRange = position != null &&
-          position >= displayTime &&
-          position < displayTime + duration;
+      final isInRange = position != null && position >= displayTime && position < displayTime + duration;
       final isActive = !isBlocked && isInRange;
 
       // 创建用于显示的弹幕数据项
@@ -450,7 +451,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       );
     }
 
-    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(
-        sourceItems.indexed.map(function));
+    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(sourceItems.indexed.map(function));
   }
 }

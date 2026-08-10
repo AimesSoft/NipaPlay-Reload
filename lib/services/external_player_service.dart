@@ -34,8 +34,9 @@ abstract final class ExternalPlayerService {
   /// 不支持的平台, 无效配置和启动失败会写入调试日志并结束本次请求.
   static Future<void> play(SettingsProvider settings, PlayableItem item) async {
 
-    final platform = AppPlatform.current;
-    final playerPath = settings.externalPlayerPath.trim();
+    final platform = AppPlatform.current;                   // 当前平台
+    final playerPath = settings.externalPlayerPath.trim();  // 外部播放器路径
+    final playerType = settings.externalPlayerType;         // 外部播放器类型
 
     _log(
       '${color('play 触发', ColorCode.boldGreen)}: '
@@ -43,7 +44,6 @@ abstract final class ExternalPlayerService {
       'platform=$platform, title=${item.title}, '
       'episodeId=${item.episodeId}, animeId=${item.animeId}',
     );
-
     if (!platform.supportsExternalPlayer) {
       _log('play: 当前平台不支持外部播放器');
       return;
@@ -52,8 +52,6 @@ abstract final class ExternalPlayerService {
       _log('play: externalPlayerPath 为空');
       return;
     }
-
-    final playerType = settings.externalPlayerType;
     if (playerPath.toLowerCase().endsWith('.lnk')) {
       _log(
         'play: playerPath 是 .lnk 快捷方式；若启动参数未透传，'
@@ -75,12 +73,13 @@ abstract final class ExternalPlayerService {
     }
     if (mediaPath == null) return;
 
+    // 尝试获取弹幕
     DanmakuItemSet? danmakuSet;
     if (!settings.externalPlayerDanmakuOverlay) {
       _log('danmaku: 弹幕外挂未启用');
     } else if (item.episodeId == null) {
       _log('danmaku: 缺少 episodeId，跳过弹幕获取');
-    } else if (!_supportsDanmakuOverlay(playerType)) {
+    } else if (playerType != ExternalPlayerType.mpv && playerType != ExternalPlayerType.mpvNet && playerType != ExternalPlayerType.potPlayer) {
       _log('danmaku: $playerType 暂不支持运行时弹幕刷新，跳过弹幕获取');
     } else {
       final stopwatch = Stopwatch()..start();
@@ -102,6 +101,7 @@ abstract final class ExternalPlayerService {
       }
     }
 
+    // 注入额外参数
     final extraArgs = <String>[];
     if (danmakuSet?.isNotEmpty == true && playerType == ExternalPlayerType.mpv) {
       const smoothArgs = [
@@ -111,7 +111,6 @@ abstract final class ExternalPlayerService {
       extraArgs.addAll(smoothArgs);
       _log('launch: 注入弹幕平滑参数: $smoothArgs');
     }
-
     final userAgent = PlayerFactory.getCustomPlayerUA();
     if (userAgent.isNotEmpty) {
       final userAgentArg = switch (playerType) {
@@ -127,6 +126,7 @@ abstract final class ExternalPlayerService {
       }
     }
 
+    // 解析播放器路径, macOS 需要通过安全书签解析
     String? resolvedPlayerPath;
     try {
       resolvedPlayerPath = platform == AppPlatform.macOS
@@ -144,24 +144,22 @@ abstract final class ExternalPlayerService {
       debugPrintStack(stackTrace: stackTrace);
       return;
     }
-
-    if (ExternalPlayerConsoleService.isSupportedPlatform &&
-        ExternalPlayerConsoleService.hasActiveSession) {
-      ExternalPlayerConsoleService.closePlayerAndConsole();
-    }
-
     _log(
       'launch: playerPath="$resolvedPlayerPath", mediaPath="$mediaPath", '
       'playerType=$playerType, extraArgCount=${extraArgs.length}',
     );
 
+    // 如果当前有外部播放器控制台会话, 则关闭它以避免冲突
+    if (ExternalPlayerConsoleService.isSupportedPlatform &&
+        ExternalPlayerConsoleService.hasActiveSession) {
+      ExternalPlayerConsoleService.closePlayerAndConsole();
+    }
 
     // 尝试启动外部播放器
     final history = item.historyItem;
     late final ExternalPlayerLaunchSession session;
-
-    // 根据播放器类型选择不同的启动方式
     try {
+      // 根据播放器类型选择不同的启动方式
       switch (playerType) {
 
       // mpv/mpv.net
@@ -200,7 +198,7 @@ abstract final class ExternalPlayerService {
             playerPath: resolvedPlayerPath,
             mediaPath: mediaPath,
             duration: Duration(milliseconds: history?.duration ?? 0),
-            position: Duration(milliseconds: history?.lastPosition ?? 0),
+            initialPosition: Duration(milliseconds: history?.lastPosition ?? 0),
             extraArgs: extraArgs,
             initialDanmakuSet: danmakuSet,
           );
@@ -227,8 +225,6 @@ abstract final class ExternalPlayerService {
       debugPrintStack(stackTrace: stackTrace);
       return;
     }
-
-
     _log('launch: 启动成功, pid=${session.processId}');
 
     // 控制台服务接管会话
@@ -244,15 +240,13 @@ abstract final class ExternalPlayerService {
         danmakuList: danmakuSet?.toList(growable: false),
       ),
     );
-    ExternalPlayerConsoleService.queueDanmakuRefresh();
+    ExternalPlayerConsoleService.queueDanmakuRefresh(); // 立即刷新弹幕
 
     // 弹出控制台窗口
     if (settings.externalPlayerConsoleWindowMode) {
       await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
     }
   }
-
-  static bool _supportsDanmakuOverlay(ExternalPlayerType playerType) => playerType == ExternalPlayerType.mpv || playerType == ExternalPlayerType.mpvNet || playerType == ExternalPlayerType.potPlayer;
 
   static void _log(String message) {
     final label = color('[ExtPlayer]', ColorCode.blue);
