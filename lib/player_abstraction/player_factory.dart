@@ -87,7 +87,7 @@ class PlayerFactory {
         _erikaAndroidOutputModeKey,
       );
 
-      if (globals.isTelevision) {
+      if (globals.isTvOS) {
         _cachedKernelType = PlayerKernelType.erika;
         await prefs.setInt(
           _playerKernelTypeKey,
@@ -106,9 +106,9 @@ class PlayerFactory {
           '${_defaultKernelType.name}',
         );
       }
-      if (globals.isTelevision) {
+      if (globals.isTvOS) {
         debugPrint(
-          '[PlayerFactory] 电视设备强制使用 Erika 播放内核',
+          '[PlayerFactory] tvOS 强制使用 Erika 播放内核',
         );
       }
       _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
@@ -218,23 +218,23 @@ class PlayerFactory {
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    if (globals.isTelevision) {
+    if (globals.isTvOS) {
       return PlayerKernelType.erika;
     }
     return _cachedKernelType ?? _defaultKernelType;
   }
 
   static PlayerKernelType get _defaultKernelType =>
-      globals.isTelevision ? PlayerKernelType.erika : PlayerKernelType.mdk;
+      globals.isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
 
   static bool _isKernelSupportedOnCurrentPlatform(PlayerKernelType type) {
     if (kIsWeb) return type == PlayerKernelType.videoPlayer;
-    if (globals.isTelevision) return isKernelSupportedOnTelevision(type);
+    if (globals.isTvOS) return isKernelSupportedOnTvOS(type);
     return true;
   }
 
   @visibleForTesting
-  static bool isKernelSupportedOnTelevision(PlayerKernelType type) =>
+  static bool isKernelSupportedOnTvOS(PlayerKernelType type) =>
       type == PlayerKernelType.erika;
 
   /// 获取自定义播放器 User-Agent（空字符串 = 用内核默认 UA）。
