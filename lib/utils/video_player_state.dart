@@ -347,6 +347,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isControlsHovered = false;
   bool _controlsVisibilityLocked = false;
   bool _isSeeking = false;
+  int _seekRevision = 0;
   int _mdkNearEndLastPositionMs = -1;
   int _mdkNearEndStalledSinceMs = 0;
   final FocusNode _focusNode = FocusNode();
@@ -1457,6 +1458,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get effectivePlaybackRate =>
       _isSpeedBoostActive ? _speedBoostRate : _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
+  int get seekRevision => _seekRevision;
   double get speedBoostRate => _speedBoostRate;
 
   // 跳过时间的getter
