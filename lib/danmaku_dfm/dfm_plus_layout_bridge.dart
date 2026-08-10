@@ -52,6 +52,7 @@ class DfmPlusLayoutBridge {
   /// items on the next frame (one cheap Color/object allocation each).
   int _lastPruneTimestampMs = 0;
   static const int _pruneIntervalMs = 30000;
+  final Stopwatch _pruneClock = Stopwatch()..start();
 
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
@@ -261,7 +262,7 @@ class DfmPlusLayoutBridge {
     // videos (P2-8). Clears only when caches hold far more than the current
     // window AND at least 30s since the last prune — putIfAbsent rebuilds
     // visible items next frame, so this is invisible to the user.
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final nowMs = _pruneClock.elapsedMilliseconds;
     if (nowMs - _lastPruneTimestampMs >= _pruneIntervalMs) {
       _lastPruneTimestampMs = nowMs;
       final windowSize = endIdx - startIdx;

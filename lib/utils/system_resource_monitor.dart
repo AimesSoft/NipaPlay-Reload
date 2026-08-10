@@ -34,10 +34,12 @@ class SystemResourceMonitor {
   Timer? _fpsTimer;
   bool _started = false;
   int _consumerCount = 0;
+  int _monitoringGeneration = 0;
 
   int _frameCount = 0;
-  late DateTime _lastFpsUpdateTime;
-  Ticker? _ticker;
+  final Stopwatch _fpsClock = Stopwatch();
+  int _lastFpsSampleUs = 0;
+  TimingsCallback? _timingsCallback;
 
   bool _rustPerformanceAvailable = false;
   int _lastCpuTimestampMs = 0;
@@ -161,37 +163,61 @@ class SystemResourceMonitor {
 
   Future<void> _startMonitoring() async {
     if (_started) return;
+    _started = true;
+    final generation = ++_monitoringGeneration;
 
     if (!_rustPerformanceAvailable && !kIsWeb) {
       await _initRustProbe();
     }
 
+    // The HUD may have been hidden while the asynchronous Rust probe was
+    // starting. Do not install timers/callbacks for a stale monitoring run.
+    if (!_started ||
+        generation != _monitoringGeneration ||
+        _consumerCount == 0) {
+      return;
+    }
+
     _initFpsMeasurement();
     _startResourceMonitoring();
-    _started = true;
   }
 
   void _initFpsMeasurement() {
-    _lastFpsUpdateTime = DateTime.now();
+    _removeFpsTimingsCallback();
     _frameCount = 0;
+    _fps = 0.0;
+    _fpsClock
+      ..reset()
+      ..start();
+    _lastFpsSampleUs = 0;
 
-    _ticker?.dispose();
-    _ticker = Ticker((Duration elapsed) {
-      _frameCount++;
-    });
-    _ticker?.start();
+    // Count frames that actually completed the Flutter rendering pipeline.
+    // A dedicated Ticker would continuously request frames itself, inflating
+    // the reported FPS and adding load to the workload being measured.
+    _timingsCallback = (List<FrameTiming> timings) {
+      _frameCount += timings.length;
+    };
+    SchedulerBinding.instance.addTimingsCallback(_timingsCallback!);
 
     _fpsTimer?.cancel();
     _fpsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final now = DateTime.now();
-      final elapsed = now.difference(_lastFpsUpdateTime).inMilliseconds;
+      final nowUs = _fpsClock.elapsedMicroseconds;
+      final elapsedUs = nowUs - _lastFpsSampleUs;
 
-      if (elapsed > 0) {
-        _fps = _frameCount * 1000 / elapsed;
+      if (elapsedUs > 0) {
+        _fps = _frameCount * 1000000 / elapsedUs;
         _frameCount = 0;
-        _lastFpsUpdateTime = now;
+        _lastFpsSampleUs = nowUs;
       }
     });
+  }
+
+  void _removeFpsTimingsCallback() {
+    final callback = _timingsCallback;
+    if (callback != null) {
+      SchedulerBinding.instance.removeTimingsCallback(callback);
+      _timingsCallback = null;
+    }
   }
 
   void _startResourceMonitoring() {
@@ -290,6 +316,8 @@ class SystemResourceMonitor {
 
   void _stopMonitoring() {
     if (!_started) return;
+    _started = false;
+    _monitoringGeneration++;
 
     _resourceTimer?.cancel();
     _resourceTimer = null;
@@ -297,14 +325,14 @@ class SystemResourceMonitor {
     _fpsTimer?.cancel();
     _fpsTimer = null;
 
-    _ticker?.stop();
-    _ticker?.dispose();
-    _ticker = null;
+    _removeFpsTimingsCallback();
+    _fpsClock.stop();
+    _frameCount = 0;
+    _lastFpsSampleUs = 0;
+    _fps = 0.0;
 
     _lastCpuTimestampMs = 0;
     _lastCpuMicros = 0;
-
-    _started = false;
   }
 
   void setActiveDecoder(String decoder) {

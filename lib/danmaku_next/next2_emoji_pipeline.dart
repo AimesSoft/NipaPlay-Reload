@@ -9,25 +9,20 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 
 class Next2PreparedFramePayload {
   const Next2PreparedFramePayload({
-    required this.items,
-    required this.emojiGlyphs,
-    this.prefetchChars,
+    required this.frameJson,
   });
 
-  final List<Map<String, dynamic>> items;
-  final List<Map<String, dynamic>> emojiGlyphs;
+  /// Fully encoded native frame payload.
+  ///
+  /// The renderer submits this string directly to the platform channel. This
+  /// avoids rebuilding a nested Map/List object graph and then walking it a
+  /// second time in jsonEncode on every display frame.
+  final String frameJson;
 
-  /// Delta chars to prefetch-rasterize asynchronously on the Rust side
-  /// (lookahead pre-warming). Null/empty = no prefetch this frame.
-  final String? prefetchChars;
-
+  /// Compatibility/debug representation. The hot rendering path uses
+  /// [frameJson] directly and therefore does not pay this decode cost.
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items,
-      if (emojiGlyphs.isNotEmpty) 'emoji_glyphs': emojiGlyphs,
-      if (prefetchChars != null && prefetchChars!.isNotEmpty)
-        'prefetch_chars': prefetchChars,
-    };
+    return jsonDecode(frameJson) as Map<String, dynamic>;
   }
 }
 
@@ -39,44 +34,29 @@ class Next2EmojiPipeline {
 
   bool _forceGlyphResend = true;
 
-  /// Cache of tokenize results for plain (emoji-free) text. _tokenize is a
-  /// pure function of (text, fontSize) when the text contains no emoji
-  /// clusters — the result is a single {'k':'t','t':text} token and no
-  /// pending emoji registration. The vast majority of danmaku are plain
-  /// text, so this skips re-splitting + re-allocating the token list every
-  /// frame for repeated/long-lived items. Emoji-bearing text bypasses the
-  /// cache (it must re-register pending emoji each frame). LRU-bounded.
+  /// LRU cache of tokenized and JSON-escaped static text fragments. Both
+  /// plain and emoji-bearing text are cacheable: emoji build requests are
+  /// retained beside the token JSON and re-registered while their bitmap is
+  /// still absent. This removes the grapheme scan and token Map allocations
+  /// from steady-state frames.
   static const int _tokenCacheLimit = 2000;
-  final LinkedHashMap<String, List<Map<String, dynamic>>> _plainTokenCache =
-      LinkedHashMap<String, List<Map<String, dynamic>>>();
+  final LinkedHashMap<String, _CachedTokenization> _tokenCache =
+      LinkedHashMap<String, _CachedTokenization>();
 
-  /// Returns cached tokenize result for emoji-free text, or null if the text
-  /// contains emoji clusters (caller falls back to full _tokenize which
-  /// registers pending emoji builds). Key folds in quantized fontSize.
-  List<Map<String, dynamic>>? _cachedPlainTokens(String text, double fontSize) {
-    if (text.isEmpty) return const <Map<String, dynamic>>[];
-    // Quick emoji presence check without iterating unless likely.
-    for (final cluster in text.characters) {
-      if (isEmojiCluster(cluster)) {
-        return null; // has emoji → not cacheable here
-      }
-    }
+  _CachedTokenization _tokenizeCached(String text, double fontSize) {
     final key = '${fontSize.round().clamp(8, 256)}\u0000$text';
-    final cached = _plainTokenCache[key];
+    final cached = _tokenCache.remove(key);
     if (cached != null) {
-      // LRU touch
-      _plainTokenCache.remove(key);
-      _plainTokenCache[key] = cached;
+      _tokenCache[key] = cached;
       return cached;
     }
-    final tokens = <Map<String, dynamic>>[
-      <String, dynamic>{'k': 't', 't': text},
-    ];
-    _plainTokenCache[key] = tokens;
-    if (_plainTokenCache.length > _tokenCacheLimit) {
-      _plainTokenCache.remove(_plainTokenCache.keys.first);
+
+    final tokenization = _tokenize(text, fontSize);
+    _tokenCache[key] = tokenization;
+    if (_tokenCache.length > _tokenCacheLimit) {
+      _tokenCache.remove(_tokenCache.keys.first);
     }
-    return tokens;
+    return tokenization;
   }
 
   void markAtlasDirty() {
@@ -97,9 +77,10 @@ class Next2EmojiPipeline {
     double playbackRate = 1.0,
     String? prefetchChars,
   }) async {
-    final List<Map<String, dynamic>> encodedItems = <Map<String, dynamic>>[];
+    final itemsJson = StringBuffer('[');
     final Map<String, _EmojiBuildRequest> pending =
         <String, _EmojiBuildRequest>{};
+    var firstItem = true;
 
     for (final item in items) {
       final renderedFontSize =
@@ -107,43 +88,67 @@ class Next2EmojiPipeline {
               .clamp(8.0, 256.0)
               .toDouble();
 
-      // Plain-text (emoji-free) tokenize results are cached: _tokenize is
-      // pure for emoji-free text and the result doesn't depend on x/y. Most
-      // danmaku hit this path, avoiding per-frame re-split + token list
-      // allocation. Emoji-bearing text falls back to full _tokenize (which
-      // registers pending emoji builds).
-      var tokens = _cachedPlainTokens(item.content.text, renderedFontSize);
-      tokens ??= _tokenize(item.content.text, renderedFontSize, pending);
+      final textTokens = _tokenizeCached(
+        item.content.text,
+        renderedFontSize,
+      );
+      _registerPending(textTokens, pending);
+
+      _CachedTokenization? countTokens;
       if (item.content.countText case final countText?) {
-        final countTokens = _cachedPlainTokens(' $countText', renderedFontSize);
-        if (countTokens != null) {
-          tokens = List<Map<String, dynamic>>.from(tokens)..addAll(countTokens);
-        } else {
-          final fresh = _tokenize(' $countText', renderedFontSize, pending);
-          if (fresh.isNotEmpty) {
-            tokens = List<Map<String, dynamic>>.from(tokens)..addAll(fresh);
-          }
-        }
+        countTokens = _tokenizeCached(' $countText', renderedFontSize);
+        _registerPending(countTokens, pending);
       }
 
-      encodedItems.add(<String, dynamic>{
-        'text': item.content.text,
-        'count_text': item.content.countText,
-        'x': item.x * scaleX,
-        'y': item.y * scaleY,
-        'color_argb': item.content.color.toARGB32().toSigned(32),
-        'font_size_multiplier': item.content.fontSizeMultiplier,
-        'is_me': item.content.isMe,
-        'width': item.width * scaleX,
-        // Signed scroll velocity in TEXTURE px/s (RL<0, LR>0, static=0).
-        // Lets the native renderer interpolate `x_render = x + scroll_speed*dt`
-        // between Dart submissions, so 30fps submits yield smooth 60/120fps
-        // motion. scaleX maps layout px/s → texture px/s, matching how `x`
-        // is scaled above. Non-DFM sources leave typeCode=0 → 0 (no interp).
-        'scroll_speed': _signedScrollSpeed(item, scaleX, playbackRate),
-        if (tokens.isNotEmpty) 'tokens': tokens,
-      });
+      if (!firstItem) {
+        itemsJson.write(',');
+      }
+      firstItem = false;
+      itemsJson
+        ..write('{"text":')
+        ..write(textTokens.sourceJson)
+        ..write(',"count_text":')
+        ..write(
+          item.content.countText == null
+              ? 'null'
+              : jsonEncode(item.content.countText),
+        )
+        ..write(',"x":')
+        ..write(_finiteJsonNumber(item.x * scaleX))
+        ..write(',"y":')
+        ..write(_finiteJsonNumber(item.y * scaleY))
+        ..write(',"color_argb":')
+        ..write(item.content.color.toARGB32().toSigned(32))
+        ..write(',"font_size_multiplier":')
+        ..write(_finiteJsonNumber(item.content.fontSizeMultiplier))
+        ..write(',"is_me":')
+        ..write(item.content.isMe)
+        ..write(',"width":')
+        ..write(_finiteJsonNumber(item.width * scaleX))
+        ..write(',"scroll_speed":')
+        ..write(
+          _finiteJsonNumber(
+            _signedScrollSpeed(item, scaleX, playbackRate),
+          ),
+        );
+
+      if (textTokens.tokenEntriesJson.isNotEmpty ||
+          (countTokens?.tokenEntriesJson.isNotEmpty ?? false)) {
+        itemsJson.write(',"tokens":[');
+        if (textTokens.tokenEntriesJson.isNotEmpty) {
+          itemsJson.write(textTokens.tokenEntriesJson);
+        }
+        if (countTokens != null && countTokens.tokenEntriesJson.isNotEmpty) {
+          if (textTokens.tokenEntriesJson.isNotEmpty) {
+            itemsJson.write(',');
+          }
+          itemsJson.write(countTokens.tokenEntriesJson);
+        }
+        itemsJson.write(']');
+      }
+      itemsJson.write('}');
     }
+    itemsJson.write(']');
 
     final cachedVisibleGlyphs = <_EmojiGlyphRaster>[];
     final newVisibleGlyphs = <_EmojiGlyphRaster>[];
@@ -171,21 +176,55 @@ class Next2EmojiPipeline {
       generated++;
     }
 
-    final visibleGlyphs = <Map<String, dynamic>>[];
+    final visibleGlyphs = <_EmojiGlyphRaster>[];
     if (_forceGlyphResend || newVisibleGlyphs.isNotEmpty) {
-      for (final glyph in cachedVisibleGlyphs) {
-        visibleGlyphs.add(glyph.toJson());
-      }
+      visibleGlyphs.addAll(cachedVisibleGlyphs);
     }
-    for (final glyph in newVisibleGlyphs) {
-      visibleGlyphs.add(glyph.toJson());
-    }
+    visibleGlyphs.addAll(newVisibleGlyphs);
 
     return Next2PreparedFramePayload(
-      items: encodedItems,
-      emojiGlyphs: visibleGlyphs,
-      prefetchChars: prefetchChars,
+      frameJson: _encodeFrameJson(
+        itemsJson: itemsJson,
+        emojiGlyphs: visibleGlyphs,
+        prefetchChars: prefetchChars,
+      ),
     );
+  }
+
+  static void _registerPending(
+    _CachedTokenization tokenization,
+    Map<String, _EmojiBuildRequest> pending,
+  ) {
+    for (final request in tokenization.emojiRequests) {
+      pending.putIfAbsent(request.key, () => request);
+    }
+  }
+
+  static String _encodeFrameJson({
+    required StringBuffer itemsJson,
+    required List<_EmojiGlyphRaster> emojiGlyphs,
+    required String? prefetchChars,
+  }) {
+    final out = StringBuffer('{"items":')..write(itemsJson);
+    if (emojiGlyphs.isNotEmpty) {
+      out.write(',"emoji_glyphs":[');
+      for (var i = 0; i < emojiGlyphs.length; i++) {
+        if (i > 0) out.write(',');
+        out.write(emojiGlyphs[i].toJsonString());
+      }
+      out.write(']');
+    }
+    if (prefetchChars != null && prefetchChars.isNotEmpty) {
+      out
+        ..write(',"prefetch_chars":')
+        ..write(jsonEncode(prefetchChars));
+    }
+    out.write('}');
+    return out.toString();
+  }
+
+  static String _finiteJsonNumber(double value) {
+    return value.isFinite ? value.toString() : '0.0';
   }
 
   /// Signed scroll velocity in texture px/s for native interpolation.
@@ -215,48 +254,57 @@ class Next2EmojiPipeline {
     }
   }
 
-  List<Map<String, dynamic>> _tokenize(
+  _CachedTokenization _tokenize(
     String text,
     double fontSize,
-    Map<String, _EmojiBuildRequest> pending,
   ) {
     if (text.isEmpty) {
-      return const <Map<String, dynamic>>[];
+      return const _CachedTokenization(
+        sourceJson: '""',
+        tokenEntriesJson: '',
+        emojiRequests: <_EmojiBuildRequest>[],
+      );
     }
 
-    final out = <Map<String, dynamic>>[];
+    final out = <String>[];
+    final emojiRequests = <_EmojiBuildRequest>[];
     final plainBuffer = StringBuffer();
 
     for (final cluster in text.characters) {
       if (isEmojiCluster(cluster)) {
         if (plainBuffer.isNotEmpty) {
-          out.add(<String, dynamic>{'k': 't', 't': plainBuffer.toString()});
+          out.add(
+            '{"k":"t","t":${jsonEncode(plainBuffer.toString())}}',
+          );
           plainBuffer.clear();
         }
 
         final int quantizedSize = fontSize.round().clamp(8, 256);
         final key = _emojiKey(cluster, quantizedSize);
 
-        pending.putIfAbsent(
-          key,
-          () => _EmojiBuildRequest(
+        emojiRequests.add(
+          _EmojiBuildRequest(
             key: key,
             cluster: cluster,
             fontSize: quantizedSize.toDouble(),
           ),
         );
 
-        out.add(<String, dynamic>{'k': 'e', 'id': key});
+        out.add('{"k":"e","id":${jsonEncode(key)}}');
       } else {
         plainBuffer.write(cluster);
       }
     }
 
     if (plainBuffer.isNotEmpty) {
-      out.add(<String, dynamic>{'k': 't', 't': plainBuffer.toString()});
+      out.add('{"k":"t","t":${jsonEncode(plainBuffer.toString())}}');
     }
 
-    return out;
+    return _CachedTokenization(
+      sourceJson: jsonEncode(text),
+      tokenEntriesJson: out.join(','),
+      emojiRequests: List<_EmojiBuildRequest>.unmodifiable(emojiRequests),
+    );
   }
 
   Future<_EmojiGlyphRaster?> _buildEmojiGlyph(
@@ -410,8 +458,23 @@ class _EmojiBuildRequest {
   double get estimatedAdvance => fontSize;
 }
 
+class _CachedTokenization {
+  const _CachedTokenization({
+    required this.sourceJson,
+    required this.tokenEntriesJson,
+    required this.emojiRequests,
+  });
+
+  /// JSON string literal for the original source text.
+  final String sourceJson;
+
+  /// Comma-separated token object fragments, without surrounding brackets.
+  final String tokenEntriesJson;
+  final List<_EmojiBuildRequest> emojiRequests;
+}
+
 class _EmojiGlyphRaster {
-  const _EmojiGlyphRaster({
+  _EmojiGlyphRaster({
     required this.key,
     required this.width,
     required this.height,
@@ -429,6 +492,8 @@ class _EmojiGlyphRaster {
   final double offsetY;
   final Uint8List rgba;
 
+  String? _jsonCache;
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': key,
@@ -439,5 +504,12 @@ class _EmojiGlyphRaster {
       'oy': offsetY,
       'rgba_b64': base64Encode(rgba),
     };
+  }
+
+  /// Emoji rasters can be resent after a native atlas rebuild. Cache their
+  /// base64/JSON representation so a resend does not re-encode the bitmap on
+  /// the UI isolate.
+  String toJsonString() {
+    return _jsonCache ??= jsonEncode(toJson());
   }
 }

@@ -244,9 +244,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     // ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final supersample = context
-        .read<SettingsProvider>()
-        .danmakuSupersample;
+    final supersample = context.read<SettingsProvider>().danmakuSupersample;
     // True supersampling: texture = backing × supersample (backing = layout ×
     // dpr). Flutter downsamples on display → anti-aliased edges. Must be
     // dpr × supersample (NOT max) or 1.5x/2x silently no-op on DPR≥2 devices.
@@ -338,7 +336,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
-      framePayload: prepared.toJson(),
+      frameJson: prepared.frameJson,
     );
 
     if (pushed) {

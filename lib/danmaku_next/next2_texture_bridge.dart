@@ -95,6 +95,7 @@ class Next2TextureBridge {
     double fontScale = 1.0,
     double playbackRate = 1.0,
     Map<String, dynamic>? framePayload,
+    String? frameJson,
   }) async {
     if (!isSupported) {
       return false;
@@ -105,25 +106,28 @@ class Next2TextureBridge {
       return false;
     }
 
-    final payload = framePayload ??
-        <String, dynamic>{
-          'items': items
-              .map(
-                (item) => _itemToJson(
-                  item,
-                  scaleX: scaleX,
-                  scaleY: scaleY,
-                  playbackRate: playbackRate,
-                ),
-              )
-              .toList(growable: false),
-        };
+    final encodedFrame = frameJson ??
+        jsonEncode(
+          framePayload ??
+              <String, dynamic>{
+                'items': items
+                    .map(
+                      (item) => _itemToJson(
+                        item,
+                        scaleX: scaleX,
+                        scaleY: scaleY,
+                        playbackRate: playbackRate,
+                      ),
+                    )
+                    .toList(growable: false),
+              },
+        );
 
     final ok = await _channel.invokeMethod<bool>(
       'setFrame',
       <String, dynamic>{
         'engineHandle': engineHandle,
-        'frameJson': jsonEncode(payload),
+        'frameJson': encodedFrame,
         'fontSize': fontSize * fontScale,
         'outlineWidth': outlineWidth,
         'shadowStyle': _shadowStyleCode(shadowStyle),

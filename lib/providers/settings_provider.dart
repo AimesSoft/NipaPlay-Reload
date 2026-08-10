@@ -36,7 +36,7 @@ class SettingsProvider with ChangeNotifier {
   String _githubProxyUrl = '';
 
   // 弹幕超采样设置：0.0=关闭, 1.5=1.5x, 2.0=2x
-  double _danmakuSupersample = 2.0; // 默认值在 _loadSettings 中根据设备类型决定
+  double _danmakuSupersample = 0.0;
 
   // --- Getters ---
   double get blurPower => _blurPower;
@@ -59,6 +59,10 @@ class SettingsProvider with ChangeNotifier {
   double get danmakuSupersample => _danmakuSupersample;
 
   SettingsProvider() {
+    // SharedPreferences loads asynchronously. Expose the correct platform
+    // default immediately so iPad does not create a transient 2x texture and
+    // rebuild it at 1.5x moments later during player startup.
+    _danmakuSupersample = _defaultDanmakuSupersample();
     _loadSettings();
   }
 
@@ -114,13 +118,10 @@ class SettingsProvider with ChangeNotifier {
     _externalPlayerConsoleWindowMode =
         _prefs.getBool(SettingsKeys.externalPlayerConsoleWindowMode) ?? false;
     _githubProxyUrl = _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
-    // 弹幕超采样：默认对平板和低 DPR 桌面设备开启 2x
-    final defaultSupersample =
-        globals.isTablet || (globals.isDesktop && _defaultDprBelow2())
-            ? 2.0
-            : 0.0;
-    _danmakuSupersample =
-        _prefs.getDouble(SettingsKeys.danmakuSupersample) ?? defaultSupersample;
+    // 弹幕超采样：iPad 默认 1.5x；其他平板和低 DPR 桌面设备维持 2x。
+    // 已保存过设置的用户继续使用其现有值，仅影响首次默认值。
+    _danmakuSupersample = _prefs.getDouble(SettingsKeys.danmakuSupersample) ??
+        _defaultDanmakuSupersample();
     notifyListeners();
   }
 
@@ -135,6 +136,16 @@ class SettingsProvider with ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  static double _defaultDanmakuSupersample() {
+    if (globals.isIPad) {
+      return 1.5;
+    }
+    if (globals.isTablet || (globals.isDesktop && _defaultDprBelow2())) {
+      return 2.0;
+    }
+    return 0.0;
   }
 
   /// Toggles the background blur effect.
