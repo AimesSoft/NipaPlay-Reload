@@ -1,0 +1,7 @@
+name: universal_gamepad
+description: No-op universal_gamepad replacement for NipaPlay's HarmonyOS build.
+version: 1.5.8+ohos.1
+publish_to: none
+
+environment:
+  sdk: '>=3.5.3 <4.0.0'

@@ -109,7 +109,10 @@ dependencies:
     path: packages/wakelock_plus_ohos
   screen_brightness: ^2.1.3
   volume_controller: ^3.4.0
-  universal_gamepad: ^1.5.8
+  universal_gamepad:
+    git:
+      url: https://github.com/makabaka11/universal_gamepad.git
+      ref: main
   sqflite: ^2.3.2
   sqflite_tvos:
     git:
