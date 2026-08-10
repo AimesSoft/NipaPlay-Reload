@@ -1,4 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:flutter/foundation.dart';
@@ -230,7 +232,7 @@ class _CupertinoSubtitleTracksPaneState
       filePath: filePath,
       index: index,
     );
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _applyExternalSubtitleCore({
@@ -243,19 +245,55 @@ class _CupertinoSubtitleTracksPaneState
     videoState.forceSetExternalSubtitle(filePath);
   }
 
-  Future<void> _switchToEmbeddedSubtitle(int trackIndex) async {
-    final path = widget.videoState.currentVideoPath;
-    if (path != null) {
-      await _subtitleService.setExternalSubtitleActive(path, -1, false);
+  Future<bool> _switchToEmbeddedSubtitle(
+    int trackIndex, {
+    bool persistEmbyPreference = true,
+  }) async {
+    final videoState = widget.videoState;
+    final currentPath = videoState.currentVideoPath ?? '';
+    final isEmby = currentPath.startsWith('emby://');
+    final source = isEmby ? videoState.embyMediaSourceDescriptor() : null;
+    final tracks = videoState.player.mediaInfo.subtitle;
+    if (trackIndex >= 0 && (tracks == null || trackIndex >= tracks.length)) {
+      return false;
     }
+    final preference = trackIndex < 0
+        ? const EmbyTrackPreference.disabled()
+        : preferenceForEmbyNativeSubtitle(tracks![trackIndex]);
+    var didApply = false;
 
-    widget.videoState.setExternalSubtitle("");
-    if (trackIndex >= 0) {
-      widget.videoState.player.activeSubtitleTracks = [trackIndex];
-    } else {
-      widget.videoState.player.activeSubtitleTracks = [];
+    try {
+      await runMediaServerMenuSelection(
+        MediaServerMenuSurface.cupertinoSubtitle,
+        isEmby,
+        () async {
+          final path = videoState.currentVideoPath;
+          if (path != null) {
+            await _subtitleService.setExternalSubtitleActive(path, -1, false);
+          }
+
+          videoState.setExternalSubtitle("");
+          if (trackIndex >= 0) {
+            videoState.player.activeSubtitleTracks = [trackIndex];
+          } else {
+            videoState.player.activeSubtitleTracks = [];
+          }
+          if (mounted) setState(() {});
+          didApply = true;
+        },
+        () async {
+          if (!persistEmbyPreference || source == null) return false;
+          return videoState.persistCurrentEmbyManualPatch(
+            EmbyManualSelectionPatch(subtitle: preference),
+            currentSource: source,
+          );
+        },
+      );
+      return didApply;
+    } catch (error) {
+      _showMessage('切换字幕失败：$error');
+      return false;
     }
-    setState(() {});
   }
 
   Future<void> _removeExternalSubtitle(int index) async {
@@ -266,7 +304,10 @@ class _CupertinoSubtitleTracksPaneState
     final subtitle = _externalSubtitles[index];
     final bool isActive = subtitle['isActive'] == true;
     if (isActive) {
-      await _switchToEmbeddedSubtitle(-1);
+      await _switchToEmbeddedSubtitle(
+        -1,
+        persistEmbyPreference: false,
+      );
     }
 
     await _subtitleService.removeExternalSubtitle(path, index);
@@ -393,11 +434,22 @@ class _CupertinoSubtitleTracksPaneState
               ),
               onTap: () async {
                 if (isActive) {
-                  await _switchToEmbeddedSubtitle(-1);
+                  await _switchToEmbeddedSubtitle(
+                    -1,
+                    persistEmbyPreference: false,
+                  );
                 } else {
-                  await _applyExternalSubtitle(data['path'] as String, index);
+                  await runMediaServerMenuSelection(
+                    MediaServerMenuSurface.cupertinoSubtitle,
+                    false,
+                    () => _applyExternalSubtitle(
+                      data['path'] as String,
+                      index,
+                    ),
+                    () async => false,
+                  );
                 }
-                setState(() {});
+                if (mounted) setState(() {});
               },
             );
           }).toList(),

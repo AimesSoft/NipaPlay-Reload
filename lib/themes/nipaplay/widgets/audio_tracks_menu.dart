@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
+import 'blur_snackbar.dart';
 
 class AudioTracksMenu extends StatelessWidget {
   final VoidCallback onClose;
@@ -101,14 +103,20 @@ class AudioTracksMenu extends StatelessWidget {
       final jellyfinProvider =
           Provider.of<JellyfinTranscodeProvider>(context, listen: false);
       await jellyfinProvider.initialize();
-      videoState.setJellyfinServerAudioSelection(itemId, track.index);
-      await videoState.reloadCurrentJellyfinStream(
-        quality: jellyfinProvider.currentVideoQuality,
-        serverSubtitleIndex: videoState.getJellyfinServerSubtitleSelection(
-          itemId,
-        ),
-        burnInSubtitle: videoState.getJellyfinServerSubtitleBurnIn(itemId),
-        audioStreamIndex: track.index,
+      await runMediaServerMenuSelection(
+        MediaServerMenuSurface.nipaplayAudio,
+        false,
+        () async {
+          videoState.setJellyfinServerAudioSelection(itemId, track.index);
+          await videoState.reloadCurrentJellyfinStream(
+            quality: jellyfinProvider.currentVideoQuality,
+            serverSubtitleIndex:
+                videoState.getJellyfinServerSubtitleSelection(itemId),
+            burnInSubtitle: videoState.getJellyfinServerSubtitleBurnIn(itemId),
+            audioStreamIndex: track.index,
+          );
+        },
+        () async => false,
       );
       return;
     }
@@ -119,12 +127,28 @@ class AudioTracksMenu extends StatelessWidget {
       final embyProvider =
           Provider.of<EmbyTranscodeProvider>(context, listen: false);
       await embyProvider.initialize();
-      videoState.setEmbyServerAudioSelection(itemId, track.index);
-      await videoState.reloadCurrentEmbyStream(
-        quality: embyProvider.currentVideoQuality,
-        serverSubtitleIndex: videoState.getEmbyServerSubtitleSelection(itemId),
-        burnInSubtitle: videoState.getEmbyServerSubtitleBurnIn(itemId),
-        audioStreamIndex: track.index,
+      final source = videoState.embyMediaSourceDescriptor();
+      final preference = source == null
+          ? null
+          : preferenceForEmbyServerAudio(source, track.index);
+      if (source == null || preference == null) return;
+      await runMediaServerMenuSelection(
+        MediaServerMenuSurface.nipaplayAudio,
+        true,
+        () async {
+          await videoState.reloadCurrentEmbyStream(
+            quality: embyProvider.currentVideoQuality,
+            serverSubtitleIndex:
+                videoState.getEmbyServerSubtitleSelection(itemId),
+            burnInSubtitle: videoState.getEmbyServerSubtitleBurnIn(itemId),
+            audioStreamIndex: track.index,
+          );
+          videoState.setEmbyServerAudioSelection(itemId, track.index);
+        },
+        () => videoState.persistCurrentEmbyManualPatch(
+          EmbyManualSelectionPatch(audio: preference),
+          currentSource: source,
+        ),
       );
     }
   }
@@ -140,7 +164,8 @@ class AudioTracksMenu extends StatelessWidget {
         final isServerStream = isJellyfin || isEmby;
         final useServerTracks =
             (isJellyfin && JellyfinService.instance.isTranscodeEnabled) ||
-                (isEmby && EmbyService.instance.isTranscodeEnabled);
+                (isEmby &&
+                    videoState.currentPlaybackSession?.isTranscoding == true);
         final serverTracks = useServerTracks
             ? _getServerAudioTracks(videoState)
             : <_ServerAudioTrack>[];
@@ -188,11 +213,17 @@ class AudioTracksMenu extends StatelessWidget {
                   child: InkWell(
                     onTap: () async {
                       if (isActive) return;
-                      await _switchServerAudioTrack(
-                        context: context,
-                        videoState: videoState,
-                        track: track,
-                      );
+                      try {
+                        await _switchServerAudioTrack(
+                          context: context,
+                          videoState: videoState,
+                          track: track,
+                        );
+                      } catch (error) {
+                        if (context.mounted) {
+                          BlurSnackBar.show(context, '切换音轨失败: $error');
+                        }
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -315,12 +346,42 @@ class AudioTracksMenu extends StatelessWidget {
                   return Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
+                      onTap: () async {
                         if (isActive) {
                           // 不允许取消选择音频轨道
                           return;
                         } else {
-                          videoState.player.activeAudioTracks = [index];
+                          final source = isEmby
+                              ? videoState.embyMediaSourceDescriptor()
+                              : null;
+                          final preference = isEmby
+                              ? preferenceForEmbyNativeAudio(track)
+                              : null;
+                          try {
+                            await runMediaServerMenuSelection(
+                              MediaServerMenuSurface.nipaplayAudio,
+                              isEmby,
+                              () async {
+                                videoState.player.activeAudioTracks = [index];
+                              },
+                              () async {
+                                if (source == null || preference == null) {
+                                  return false;
+                                }
+                                return videoState.persistCurrentEmbyManualPatch(
+                                  EmbyManualSelectionPatch(audio: preference),
+                                  currentSource: source,
+                                );
+                              },
+                            );
+                          } catch (error) {
+                            if (context.mounted) {
+                              BlurSnackBar.show(
+                                context,
+                                '切换音轨失败: $error',
+                              );
+                            }
+                          }
                         }
                       },
                       child: Container(
