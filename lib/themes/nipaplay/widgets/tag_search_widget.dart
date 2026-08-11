@@ -5,7 +5,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -370,7 +370,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
       historyItem: historyItem,
     );
 
-    if (await ExternalPlayerService.tryHandlePlayback(context, playableItem)) {
+    if (await PlaybackService().tryPlayExternally(context, playableItem)) {
       return;
     }
 

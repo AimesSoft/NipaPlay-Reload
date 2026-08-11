@@ -26,7 +26,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 
 class NewSeriesPage extends StatefulWidget {
@@ -784,7 +784,7 @@ class _NewSeriesPageState extends State<NewSeriesPage>
       historyItem: historyItem,
     );
 
-    if (await ExternalPlayerService.tryHandlePlayback(context, playableItem)) {
+    if (await PlaybackService().tryPlayExternally(context, playableItem)) {
       if (mounted) {
         setState(() {
           _isLoadingVideoFromDetail = false;

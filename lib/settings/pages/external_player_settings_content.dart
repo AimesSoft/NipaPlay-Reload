@@ -1,15 +1,18 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';
-import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/external_player_utils.dart';
+import 'package:nipaplay/utils/mpv_utils.dart';
 import 'package:provider/provider.dart';
 
 class ExternalPlayerSettingsContent extends StatelessWidget {
@@ -24,12 +27,10 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     const String titleEnglish = 'Open Danmaku Console Automatically';
     const String subtitleSimplified = '开始外部播放后，主程序自动切换到弹幕控制台页面';
     const String subtitleTraditional = '開始外部播放後，主程式自動切換到彈幕控制台頁面';
-    const String subtitleEnglish =
-        'Switch to the Danmaku Console after external playback starts.';
-    const String subtitleUnsupportedSimplified = '弹幕控制台目前仅支持 mpv 播放器';
-    const String subtitleUnsupportedTraditional = '彈幕控制台目前僅支援 mpv 播放器';
-    const String subtitleUnsupportedEnglish =
-        'The Danmaku Console is currently available for mpv only.';
+    const String subtitleEnglish = 'Switch to the Danmaku Console after external playback starts.';
+    const String subtitleUnsupportedSimplified = '弹幕控制台支持 mpv 和 Windows PotPlayer';
+    const String subtitleUnsupportedTraditional = '彈幕控制台支援 mpv 和 Windows PotPlayer';
+    const String subtitleUnsupportedEnglish = 'The Danmaku Console supports mpv and PotPlayer on Windows.';
     const String subtitleWindowModeSimplified = '独立窗口模式下，外部播放开始后会直接打开控制台窗口';
     const String subtitleWindowModeTraditional = '獨立視窗模式下，外部播放開始後會直接開啟控制台視窗';
     const String subtitleWindowModeEnglish =
@@ -94,6 +95,32 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
             ),
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile<ExternalPlayerType>.dropdown(
+                  title: _text(
+                    context,
+                    '播放器类型',
+                    '播放器類型',
+                    'Player Type',
+                  ),
+                  subtitle: _text(
+                    context,
+                    '请选择与可执行文件对应的播放器类型',
+                    '請選擇與執行檔對應的播放器類型',
+                    'Select the type that matches the executable.',
+                  ),
+                  icon: Ionicons.apps_outline,
+                  phoneIcon: cupertino.CupertinoIcons.square_grid_2x2,
+                  enabled: externalSupported,
+                  items: _externalPlayerTypeItems(
+                    context,
+                    settingsProvider.externalPlayerType,
+                  ),
+                  onChanged: settingsProvider.setExternalPlayerType,
+                );
+              },
+            ),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
                 final path = settingsProvider.externalPlayerPath.trim();
                 final subtitle = !externalSupported
                     ? context.l10n.desktopOnlySupported
@@ -122,9 +149,9 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
                   subtitle: externalSupported
                       ? _text(
                           context,
-                          '在外部播放器中注入ASS形式的弹幕作为次字幕（支持 mpv / mpv.net / PotPlayer）',
-                          '在外部播放器中注入 ASS 形式的彈幕作為次字幕（支援 mpv / mpv.net / PotPlayer）',
-                          'Inject danmaku as an ASS secondary subtitle in external players (mpv, mpv.net, PotPlayer).',
+                          '在外部播放器中注入 ASS 弹幕（支持 mpv / mpv.net / Windows PotPlayer）',
+                          '在外部播放器中注入 ASS 彈幕（支援 mpv / mpv.net / Windows PotPlayer）',
+                          'Inject ASS danmaku in mpv, mpv.net, and PotPlayer on Windows.',
                         )
                       : context.l10n.desktopOnlySupported,
                   icon: Ionicons.chatbubbles_outline,
@@ -227,7 +254,7 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
 
     if (value) {
       if (settingsProvider.externalPlayerPath.trim().isEmpty) {
-        final detected = await ExternalPlayerService.detectInstalledMpv();
+        final detected = await detectInstalledMpv();
         final picked = detected ??
             await FilePickerService().pickExternalPlayerExecutable();
         if (picked == null || picked.trim().isEmpty) {
@@ -241,6 +268,10 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
           return;
         }
         await settingsProvider.setExternalPlayerPath(picked);
+
+        // 如果用户选择了一个新的播放器路径，尝试检测播放器类型并更新设置
+        await settingsProvider.setExternalPlayerType(detectExternalPlayerType(picked));
+
       }
       await settingsProvider.setUseExternalPlayer(true);
       if (!context.mounted) return;
@@ -259,6 +290,31 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
       message: l10n.externalPlayerDisabled,
       type: AdaptiveSnackBarType.success,
     );
+  }
+
+  static List<DropdownMenuItemData<ExternalPlayerType>>
+      _externalPlayerTypeItems(
+    BuildContext context,
+    ExternalPlayerType selectedType,
+  ) {
+    String title(ExternalPlayerType type) => switch (type) {
+      ExternalPlayerType.unset =>
+        _text(context, '未设置', '未設定', 'Not configured'),
+      ExternalPlayerType.mpv => 'mpv',
+      ExternalPlayerType.mpvNet => 'mpv.net',
+      ExternalPlayerType.potPlayer => 'PotPlayer',
+      ExternalPlayerType.vlc => 'VLC',
+      ExternalPlayerType.generic =>
+        _text(context, '其他/通用', '其他/通用', 'Other / Generic'),
+    };
+
+    return ExternalPlayerType.values.map((type) {
+      return DropdownMenuItemData<ExternalPlayerType>(
+        title: title(type),
+        value: type,
+        isSelected: type == selectedType,
+      );
+    }).toList(growable: false);
   }
 
   Future<void> _selectExternalPlayer(
@@ -280,6 +336,8 @@ class ExternalPlayerSettingsContent extends StatelessWidget {
     }
 
     await settingsProvider.setExternalPlayerPath(picked);
+    await settingsProvider.setExternalPlayerType(detectExternalPlayerType(picked));
+
     if (!context.mounted) return;
     AdaptiveSnackBar.show(
       context,

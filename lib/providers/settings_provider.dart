@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SettingsProvider with ChangeNotifier {
@@ -27,6 +29,7 @@ class SettingsProvider with ChangeNotifier {
   // 外部播放器设置
   bool _useExternalPlayer = false;
   String _externalPlayerPath = '';
+  ExternalPlayerType _externalPlayerType = ExternalPlayerType.unset;
   bool _externalPlayerDanmakuOverlay = true; // 弹幕外挂默认开启
   bool _externalPlayerAutoSwitchToDanmakuConsole = true;
   bool _externalPlayerShrinkWindow = false;
@@ -50,6 +53,7 @@ class SettingsProvider with ChangeNotifier {
   bool get fastPlaybackStartup => _fastPlaybackStartup;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
+  ExternalPlayerType get externalPlayerType => _externalPlayerType;
   bool get externalPlayerDanmakuOverlay => _externalPlayerDanmakuOverlay;
   bool get externalPlayerAutoSwitchToDanmakuConsole =>
       _externalPlayerAutoSwitchToDanmakuConsole;
@@ -104,6 +108,22 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
     _externalPlayerPath =
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
+    final savedExternalPlayerType =
+        _prefs.getString(SettingsKeys.externalPlayerType);
+    if (savedExternalPlayerType == null) {
+      _externalPlayerType = _externalPlayerPath.isEmpty
+          ? ExternalPlayerType.unset
+          : detectExternalPlayerType(_externalPlayerPath);
+      await _prefs.setString(
+        SettingsKeys.externalPlayerType,
+        _externalPlayerType.name,
+      );
+    } else {
+      _externalPlayerType = ExternalPlayerType.values.firstWhere(
+        (type) => type.name == savedExternalPlayerType,
+        orElse: () => ExternalPlayerType.unset,
+      );
+    }
     _externalPlayerDanmakuOverlay =
         _prefs.getBool(SettingsKeys.externalPlayerDanmakuOverlay) ?? true;
     _externalPlayerAutoSwitchToDanmakuConsole =
@@ -227,6 +247,13 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.externalPlayerPath,
       _externalPlayerPath,
     );
+    notifyListeners();
+  }
+
+  Future<void> setExternalPlayerType(ExternalPlayerType type) async {
+    if (_externalPlayerType == type) return;
+    _externalPlayerType = type;
+    await _prefs.setString(SettingsKeys.externalPlayerType, type.name);
     notifyListeners();
   }
 

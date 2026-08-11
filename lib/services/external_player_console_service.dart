@@ -1,20 +1,19 @@
+
 // lib/services/external_player_console_service.dart
 // Linux/macOS/Windows 外部播放器控制台服务
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/services/external_player_window_service.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/utils.dart';
+
 
 /// 番剧元数据
 class EpisodeMetaData {
@@ -31,11 +30,12 @@ class EpisodeMetaData {
 
 /// 控制台状态
 class ConsoleState {
+
   final ExternalPlayerLaunchSession session; // 外部播放器会话
-  final EpisodeMetaData? episodeMetaData; // 番剧元数据
-  final List<DanmakuItem>? danmakuList; // 弹幕列表
-  final DanmakuStyle? danmakuStyle; // 弹幕样式
-  final bool shrinkMainWindow; // 播放期间是否将主窗口缩至当前屏幕半宽
+  final EpisodeMetaData? episodeMetaData;    // 番剧元数据
+  final List<DanmakuItem>? danmakuList;      // 弹幕列表
+  final DanmakuStyle? danmakuStyle;          // 弹幕样式
+  final bool shrinkMainWindow;               // 播放期间是否将主窗口缩至当前屏幕半宽
 
   const ConsoleState({
     required this.session,
@@ -53,12 +53,11 @@ class ConsoleState {
 class ExternalPlayerConsoleService extends ChangeNotifier {
   // 单例
   ExternalPlayerConsoleService._();
-  static final ExternalPlayerConsoleService _instance =
-      ExternalPlayerConsoleService._();
+  static final ExternalPlayerConsoleService _instance = ExternalPlayerConsoleService._();
 
   // 平台支持
-  static bool get isSupportedPlatform =>
-      !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+  static bool get isSupportedPlatform => !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+
 
   // ======================================================================== //
   // =========================== 内部状态字段 =============================== //
@@ -67,28 +66,29 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static int _stateTimestamp = 0; // 配置变更时间戳, 用于检测异步任务是否已过期
 
   static ExternalPlayerLaunchSession? _session; // 外部播放器会话
-  static final ValueNotifier<bool> _sessionAvailability =
-      ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> _sessionAvailability = ValueNotifier<bool>(false);
 
   // 动漫元数据相关
   // ------------------------------------------------------------------------ //
+
   static String? _animeTitle; // 番剧标题
   static String? _episodeTitle; // 剧集标题
   static int? _episodeId; // 剧集 ID
+
 
   // 弹幕资产相关
   // ------------------------------------------------------------------------ //
 
   // 弹幕列表和屏蔽规则
-  static List<BlockedDanmakuItem> _blockedItems = const []; // 弹幕屏蔽项目列表
-  static List<DisplayDanmakuItem> _displayDanmakuList =
-      const []; // 弹幕列表, 包含源数据和显示状态
+  static List<BlockedDanmakuItem> _blockedItems       = const []; // 弹幕屏蔽项目列表
+  static List<DisplayDanmakuItem> _displayDanmakuList = const []; // 弹幕列表, 包含源数据和显示状态
 
-  /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到 mpv.
+  /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到播放器.
   static final DanmakuStyle _danmakuStyle = DanmakuStyle();
   // 弹幕样式更新队列
   // 由于 ASS 样式更新可能涉及文件写入和 mpv IPC 通信, 为避免并发冲突, 使用队列顺序执行样式更新任务
   static Future<void> _danmakuStyleUpdateQueue = Future<void>.value();
+
 
   // ======================================================================== //
   // ========================= Getters & Setters ============================ //
@@ -269,12 +269,11 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
     // 记录当前状态
     final currentSession = _session;
     // 没有完整弹幕资产或 IPC 时只更新控制台状态, 无需生成 ASS
-    if (currentSession is! MpvSession ||
-        currentSession.ipcPath == null ||
-        currentSession.danmakuAssets == null ||
-        _displayDanmakuList.isEmpty) {
-      return;
-    }
+    if (currentSession == null || (
+      currentSession.type != ExternalPlayerType.mpv    &&
+      currentSession.type != ExternalPlayerType.mpvNet &&
+      currentSession.type != ExternalPlayerType.potPlayer
+    ) || currentSession.ipcPath == null || _displayDanmakuList.isEmpty) { return; }
 
     // 保留当前样式和时间戳, 以便在异步任务中检查状态是否已过期
     final style = danmakuStyle.copyWith();
@@ -284,54 +283,14 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       // 如果在队列等待期间状态发生变化, 则跳过当前任务
       if (_configurationHasChanged(timestamp)) return;
 
-      // 参数检查
-      final assets = currentSession.danmakuAssets;
-      if (assets == null) return;
-      final assPath = assets.assPath;
-      final luaPath = assets.luaPath;
-
-      // 将当前弹幕样式应用到 ASS 导出设置
-      final outlineStyle =
-          assets.assSettings.outlineStyle == AssOutlineStyle.none
-              ? AssOutlineStyle.stroke
-              : assets.assSettings.outlineStyle;
-      final AssExportSettings settings = assets.assSettings.copyWith(
-        fontSize: style.danmakuFontSize,
-        opacity: style.opacity,
-        timeOffsetSeconds: style.danmakuOffset,
-        outlineStyle:
-            style.outlineEnabled ? outlineStyle : AssOutlineStyle.none,
-        outlineWidth: style.outlineWidth,
-      );
-
-      File? temporaryFile; // 临时文件, 用于在写入 ASS 文件时避免覆盖原文件
       try {
-        // 生成 ASS 内容
-        final assStr = await generateExternalPlayerDanmakuAss(
-          _displayDanmakuList
-              .where((item) => !item.isBlocked)
-              .map((item) => item.item)
-              .toList(growable: false),
-          settings,
-          allowStacking: style.danmakuAllowStacking,
-        );
-
-        // 如果在生成 ASS 期间状态发生变化, 则跳过当前任务
+        final danmakuSet = _displayDanmakuList
+            .where((item) => !item.isBlocked)
+            .map((item) => item.item)
+            .toSet();
+        final refreshed =
+            await currentSession.refreshDanmaku(danmakuSet, style);
         if (_configurationHasChanged(timestamp)) return;
-
-        // 写入临时文件
-        temporaryFile = File('$assPath.nipaplay.tmp');
-        await temporaryFile.writeAsString(assStr, encoding: utf8, flush: true);
-
-        // 如果在写入临时文件期间状态发生变化, 则跳过当前任务
-        if (_configurationHasChanged(timestamp)) return;
-
-        // 将临时文件重命名为目标 ASS 文件路径, 覆盖原文件
-        temporaryFile.renameSync(assPath);
-        temporaryFile = null;
-
-        // 刷新 mpv 弹幕
-        final refreshed = await currentSession.refreshDanmaku(assPath, luaPath);
         if (!refreshed) {
           debugPrint(
             '[ExternalPlayerConsoleService] Failed to refresh danmaku',
@@ -340,9 +299,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       } catch (error) {
         debugPrint(
             '[ExternalPlayerConsoleService] Failed to regenerate ASS: $error');
-      } finally {
-        // 删除临时文件, 如果存在的话
-        if (temporaryFile?.existsSync() == true) temporaryFile?.deleteSync();
       }
     }
 
@@ -435,11 +391,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         _displayDanmakuList.map((item) => item.item).toList(growable: false);
 
     final position = _session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
-    final currentSession = _session;
-    final configuredScrollSeconds = currentSession is MpvSession
-        ? currentSession.danmakuAssets?.assSettings.scrollDurationSeconds ??
-            10.0
-        : 10.0;
+    const configuredScrollSeconds = 10;
     final scrollDuration =
         configuredScrollSeconds.isFinite && configuredScrollSeconds > 0
             ? Duration(
@@ -485,9 +437,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       }
 
       // 判断弹幕是否在当前播放位置显示
-      final isInRange = position != null &&
-          position >= displayTime &&
-          position < displayTime + duration;
+      final isInRange = position != null && position >= displayTime && position < displayTime + duration;
       final isActive = !isBlocked && isInRange;
 
       // 创建用于显示的弹幕数据项
@@ -501,7 +451,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       );
     }
 
-    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(
-        sourceItems.indexed.map(function));
+    _displayDanmakuList = List<DisplayDanmakuItem>.unmodifiable(sourceItems.indexed.map(function));
   }
 }
