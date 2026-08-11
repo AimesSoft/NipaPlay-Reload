@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_prompt_controller.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/countdown_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 
 class AutoNextEpisodeService {
   static AutoNextEpisodeService? _instance;
@@ -238,26 +239,19 @@ class AutoNextEpisodeService {
     final settingsProvider =
         Provider.of<SettingsProvider>(context, listen: false);
     if (settingsProvider.useExternalPlayer) {
-      if (!ExternalPlayerService.isSupportedPlatform) {
-        BlurSnackBar.show(context, '外部播放器仅支持桌面端');
-        _nextEpisode = null;
-        return;
-      }
-      final playerPath = settingsProvider.externalPlayerPath.trim();
-      if (playerPath.isEmpty) {
-        BlurSnackBar.show(context, '请先选择外部播放器');
-        _nextEpisode = null;
-        return;
-      }
-      ExternalPlayerService.launch(
-              playerPath: playerPath, mediaPath: nextEpisode.videoPath)
-          .then((session) {
-        if (!context.mounted) return;
-        BlurSnackBar.show(
-          context,
-          session != null ? '已通过外部播放器打开下一话' : '外部播放器启动失败',
-        );
-      });
+      await PlaybackService().tryPlayExternally(
+        context,
+        PlayableItem(
+          videoPath: nextEpisode.videoPath,
+          title: nextEpisode.title,
+          subtitle: nextEpisode.subtitle,
+          animeId: nextEpisode.animeId,
+          episodeId: nextEpisode.episodeId,
+          historyItem: nextEpisode.historyItem,
+          actualPlayUrl: nextEpisode.actualPlayUrl,
+          playbackSession: nextEpisode.playbackSession,
+        ),
+      );
       _nextEpisode = null;
       return;
     }

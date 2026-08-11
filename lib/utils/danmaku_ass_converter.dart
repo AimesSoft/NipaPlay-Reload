@@ -44,6 +44,9 @@ class AssExportSettings {
   /// 是否合并相同内容 + 小时间窗的重复弹幕。
   final bool mergeDuplicates;
 
+  /// 轨道已满时是否允许弹幕堆叠显示。
+  final bool allowStacking;
+
   /// 字体族名（需系统已安装）；为空则用默认。
   final String? fontFamily;
 
@@ -63,6 +66,7 @@ class AssExportSettings {
     this.scrollDurationSeconds = 10.0,
     this.timeOffsetSeconds = 0.0,
     this.mergeDuplicates = false,
+    this.allowStacking = false,
     this.fontFamily,
     this.outlineStyle = AssOutlineStyle.stroke,
     this.outlineWidth = 1.0,
@@ -76,6 +80,7 @@ class AssExportSettings {
     double? scrollDurationSeconds,
     double? timeOffsetSeconds,
     bool? mergeDuplicates,
+    bool? allowStacking,
     String? fontFamily,
     AssOutlineStyle? outlineStyle,
     double? outlineWidth,
@@ -89,11 +94,30 @@ class AssExportSettings {
           scrollDurationSeconds ?? this.scrollDurationSeconds,
       timeOffsetSeconds: timeOffsetSeconds ?? this.timeOffsetSeconds,
       mergeDuplicates: mergeDuplicates ?? this.mergeDuplicates,
+      allowStacking: allowStacking ?? this.allowStacking,
       fontFamily: fontFamily ?? this.fontFamily,
       outlineStyle: outlineStyle ?? this.outlineStyle,
       outlineWidth: outlineWidth ?? this.outlineWidth,
       shadowStyle: shadowStyle ?? this.shadowStyle,
     );
+  }
+
+  @override
+  String toString() {
+    final res = 'AssExportSettings{\n'
+        'fontSize: $fontSize \n'
+        'opacity: $opacity \n'
+        'displayArea: $displayArea \n'
+        'scrollDurationSeconds: $scrollDurationSeconds \n'
+        'timeOffsetSeconds: $timeOffsetSeconds \n'
+        'mergeDuplicates: $mergeDuplicates \n'
+        'allowStacking: $allowStacking \n'
+        'fontFamily: $fontFamily \n'
+        'outlineStyle: $outlineStyle \n'
+        'outlineWidth: $outlineWidth \n'
+        'shadowStyle: $shadowStyle \n'
+        '}';
+    return res;
   }
 }
 

@@ -31,6 +31,7 @@ const Set<String> fontExtensions = {
 /// 外部播放器类型,
 /// 决定弹幕 ASS 字幕的注入参数
 enum ExternalPlayerType {
+  unset,
   mpv,
   mpvNet,
   potPlayer,

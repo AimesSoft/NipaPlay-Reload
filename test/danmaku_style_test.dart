@@ -9,7 +9,7 @@ void main() {
     expect(style.outlineWidth, 1.0);
     expect(style.outlineEnabled, isTrue);
     expect(style.danmakuOffset, 0.0);
-    expect(style.danmakuAllowStacking, isTrue);
+    expect(style.danmakuAllowStacking, isFalse);
   });
 
   test('copyWith only replaces the selected danmaku style fields', () {

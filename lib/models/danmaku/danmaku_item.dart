@@ -350,3 +350,7 @@ class DisplayDanmakuItem {
     required this.isActive,
   });
 }
+
+
+/// 别名 DanmakuItemSet
+typedef DanmakuItemSet = Set<DanmakuItem>;

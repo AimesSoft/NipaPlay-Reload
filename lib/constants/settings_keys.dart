@@ -20,6 +20,7 @@ class SettingsKeys {
   static const String useExternalPlayer =
       'external_player_enabled'; // 是否启用外部播放器
   static const String externalPlayerPath = 'external_player_path'; // 外部播放器路径
+  static const String externalPlayerType = 'external_player_type'; // 外部播放器类型
   static const String externalPlayerDanmakuOverlay =
       'external_player_danmaku_overlay'; // 外部播放器弹幕外挂开关 (ASS 字幕注入)
   static const String externalPlayerAutoSwitchToDanmakuConsole =
