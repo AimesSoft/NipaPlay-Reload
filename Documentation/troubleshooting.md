@@ -110,7 +110,7 @@
 
 **解决方案**：
 
-1. 在 设置 → 实验室 中关闭 Erika 内核，切换回 Libmpv
+1. 在非 tvOS 平台，可在 设置 → 实验室 中关闭 Erika 内核，切换到 Media Kit（Libmpv）或 MDK；tvOS 固定使用 Erika，应保留日志后反馈
 2. 如果问题可复现，请在 [Erika 仓库](https://github.com/AimesSoft/Erika/issues) 提交 Issue，附上视频格式信息和日志
 
 ## Linux 常见问题

@@ -20,7 +20,7 @@ NipaPlay-Reload 是一个现代化的跨平台视频播放器，致力于为用�
 
 - [使用指南](user-guide.md) - 界面操作和功能介绍
 - [媒体服务器整合](server-integration.md) - Emby/Jellyfin 连接指南
-- [播放器内核](player-kernels.md) - Erika、MDK、Media Kit、Video Player 和 libmpv 的选择建议
+- [播放器内核](player-kernels.md) - Erika、MDK、Media Kit（libmpv）和 Video Player 的选择建议
 - [平台能力矩阵](platform-matrix.md) - 各平台的安装、播放、HDR、弹幕和远程能力
 - [数据与安全](data-and-security.md) - 凭据、日志、网络请求和远程访问边界
 - [种子下载](torrent-download.md) - 添加、管理和清理下载任务

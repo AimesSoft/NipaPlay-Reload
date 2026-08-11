@@ -152,7 +152,7 @@ SMB/WebDAV 凭据属于敏感数据。当前版本部分服务配置仍保存在
 
 **解决方案**：
 
-- 尝试切换播放器内核（Libmpv/MDK/Video Player）
+- 除 tvOS 外，尝试切换播放器内核（Erika、Media Kit（Libmpv）、MDK、Video Player）
 - 检查服务器转码设置
 - 确认网络带宽是否足够
 - 对 SMB/WebDAV，确认服务器支持 Range 请求、账号有文件读取权限、反向代理没有截断响应
