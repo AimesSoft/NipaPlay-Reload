@@ -24,10 +24,10 @@
 
 ### 高级播放体验
 
-- **播放器内核**：可按平台和媒体兼容性选择 Erika、libmpv、MDK、Media Kit 或 Video Player；选择建议见 [播放器内核](player-kernels.md)。
+- **播放器内核**：可按平台和媒体兼容性选择 Erika、MDK、Media Kit（libmpv）或 Video Player；Media Kit 与 libmpv 不是两套独立选项。Linux 不支持 Erika，tvOS 则固定使用 Erika；选择建议见 [播放器内核](player-kernels.md)。
 - **画质和 HDR**：部分平台提供 HDR/EDR、Anime4K、ArtCNN 或原生 GPU 路径。能力受显示器、驱动、内核和当前构建影响，不支持时应回退到 SDR。
 - **外部播放器与多窗口**：桌面平台可按设置使用外部播放器或独立播放窗口；关闭窗口前先停止播放，避免同时争用同一媒体源。
-- **大屏幕与 tvOS**：大屏模式会调整布局和焦点操作。tvOS 是开发者预览，遥控器、HDR 和硬解应以真机验收结果为准。
+- **大屏幕与 tvOS**：大屏模式会调整布局和焦点操作。tvOS 固定使用 Erika；遥控器、HDR 和硬解应以真机验收结果为准。
 
 ## 下载与离线媒体
 
