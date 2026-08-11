@@ -27,7 +27,7 @@
 
 ## 播放器内核
 
-- 可在设置中切换不同播放器内核（如 FVP（MDK）、Media Kit（Libmpv）、Video Player），以获得更佳兼容性或性能。
+- 可在设置中切换不同播放器内核（如 Erika、FVP（MDK）、Media Kit（Libmpv）、Video Player），以获得更佳兼容性或性能。Media Kit 与 Libmpv 指同一内核选项；Linux 不支持 Erika，tvOS 则固定使用 Erika。
 
 ## 账号设置（可选）
 
