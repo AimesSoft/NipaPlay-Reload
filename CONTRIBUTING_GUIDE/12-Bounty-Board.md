@@ -11,9 +11,9 @@
 
 ## 当前核心方向：Erika 自研内核
 
-**[Erika](https://github.com/AimesSoft/Erika)** 是 NipaPlay 的自研播放内核，Rust 实现，目标是从解码到渲染完全自主可控。虽然目前还不完整，但已经在 macOS/iOS 上跑通了硬件解码、Metal 渲染、HDR/EDR、AI 超分、弹幕等完整链路。
+**[Erika](https://github.com/AimesSoft/Erika)** 是 NipaPlay 的自研播放内核，Rust 实现，目标是从解码到渲染完全自主可控。它已经覆盖 macOS、iOS、Windows、Android、HarmonyOS 和 tvOS；当前原生客户端中只有 Linux 尚未支持 Erika。tvOS/电视设备固定使用 Erika。
 
-**我们需要大家团结一致，把 Erika 做到全平台可用。** 这是当前最有价值的贡献方向——不管你擅长 Rust、Metal/wgpu、音视频还是跨平台构建，Erika 都有你能发力的地方。具体参见下方问题列表。
+**当前重点是 Linux 支持、现有平台的稳定性与能力完善。** 不管你擅长 Rust、Metal/wgpu、音视频还是跨平台构建，Erika 都有你能发力的地方。具体参见下方问题列表。
 
 ## 最近已经完成的里程碑
 
@@ -30,19 +30,18 @@
 
 ### 🔥 高优先级问题
 
-#### 1. Erika 内核完善与跨平台推进 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
+#### 1. Erika Linux 支持与跨平台能力完善 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
 
-**问题描述**: [Erika](https://github.com/AimesSoft/Erika) 是 NipaPlay 的自研播放内核（Rust），目前已在 macOS/iOS 上实现硬件解码 (VideoToolbox)、零拷贝 Metal 渲染、HDR/EDR、AI 超分 (ArtCNN)、弹幕 GPU 渲染等能力。但离全平台可用还有距离，以下是最需要帮助的方向：
+**问题描述**: [Erika](https://github.com/AimesSoft/Erika) 已在除 Linux 外的原生客户端平台提供解码、渲染、音频和 Flutter 接入。当前缺口是 Linux 路径，以及各平台的性能、硬解回退、HDR 和稳定性一致性。以下是最需要帮助的方向：
 
-*   **wgpu 渲染后端**：让 Erika 的渲染管线跑在 Windows/Linux/Android 上（基础架构已就绪，需要补全平台适配）
-*   **跨平台硬件解码**：接入 DXVA2/D3D11VA (Windows)、VAAPI/VDPAU (Linux)、MediaCodec (Android)
-*   **跨平台音频输出**：接入 WASAPI (Windows)、PulseAudio/PipeWire (Linux)、AAudio/OpenSL ES (Android)
-*   **Flutter 插件跨平台扩展**：目前 Flutter 插件仅支持 macOS + iOS，需要扩展到其他平台
-*   **C ABI 与宿主集成**：完善 C ABI 导出，确保各平台 FFI 调用稳定
+*   **Linux 渲染与 surface**：完成 Linux wgpu/surface 路径和可发布的宿主集成。
+*   **Linux 解码与音频**：选择并接入 Linux 的硬解、软件回退与音频输出方案。
+*   **现有平台稳定性**：完善 Windows D3D11、Android/HarmonyOS Vulkan、Apple Metal 路径的错误回退和真机覆盖。
+*   **C ABI 与宿主集成**：保持 C ABI、Flutter glue 和预编译包在所有已支持平台同步演进。
 
 **技术领域**: Rust、wgpu/Metal、音视频解码、跨平台构建、Flutter 原生插件
 **相关仓库**: [AimesSoft/Erika](https://github.com/AimesSoft/Erika)
-**期望结果**: Erika 能在 Windows/Linux/Android 上运行基本的解码-渲染-音频链路
+**期望结果**: Erika 补齐 Linux 的解码-渲染-音频链路，并持续提高现有平台的稳定性和能力一致性
 **备注**: 这是当前项目最核心的长期方向。即使只完成其中一个平台的一个模块，也是极有价值的贡献。
 
 ---
@@ -58,13 +57,13 @@
 
 ---
 
-#### 3. Erika macOS/iOS 稳定性与 Bug 修复 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 3. Erika 跨平台稳定性与 Bug 修复 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 
-**问题描述**: Erika 内核已经接入 NipaPlay 并可在 macOS/iOS 上使用，但作为尚在快速迭代的自研内核，仍存在各类稳定性问题和边界情况 Bug。需要社区帮助发现、复现和修复这些问题。
+**问题描述**: Erika 已接入 macOS、iOS、tvOS、Windows、Android 和 HarmonyOS，但作为尚在快速迭代的自研内核，仍可能出现稳定性问题和边界情况 Bug。需要社区帮助发现、复现和修复这些问题。
 
-**技术领域**: Rust、Metal、VideoToolbox、CoreAudio/AudioQueue、Flutter 原生插件
+**技术领域**: Rust、Metal、D3D11、wgpu/Vulkan、平台硬解、音频输出、Flutter 原生插件
 **相关仓库**: [AimesSoft/Erika](https://github.com/AimesSoft/Erika)
-**期望结果**: 在 macOS/iOS 上达到日常可用的稳定性
+**期望结果**: 在所有已支持平台达到日常可用的稳定性
 **备注**: 测试 + 提 Issue 也是极有价值的贡献。如果能附上复现步骤和日志，对修复速度帮助很大。
 
 ---
