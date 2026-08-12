@@ -744,10 +744,8 @@ local function select_danmaku_track()
     mp.set_property("secondary-sid", tostring(did))
 end
 
-mp.register_event("file-loaded", select_danmaku_track)
-
 local reload_timer = nil
-local reload_path = nil
+local reload_pending = false
 
 local function restore_primary_track(primary)
     -- sub-reload 会选中重载后的轨道, 但不会同步 sid 选项值.
@@ -762,10 +760,7 @@ local function reload_danmaku_track()
     reload_timer = nil
     local did = find_danmaku_track()
     if not did then
-        if reload_path and reload_path ~= "" then
-            mp.commandv("sub-add", reload_path, "auto", TARGET)
-            mp.add_timeout(0, select_danmaku_track)
-        end
+        reload_pending = true
         return
     end
     local primary = mp.get_property("sid")
@@ -796,9 +791,16 @@ local function reload_danmaku_track()
     end)
 end
 
+mp.register_event("file-loaded", function()
+    select_danmaku_track()
+    if not reload_pending then return end
+    reload_pending = false
+    if reload_timer then reload_timer:kill() end
+    reload_timer = mp.add_timeout(0, reload_danmaku_track)
+end)
+
 mp.register_script_message("nipaplay-danmaku-reload", function(ass_path)
     if ass_path and ass_path ~= "" then
-        reload_path = ass_path
         local ass_name = string.match(ass_path, "([^/\\]+)$")
         if ass_name then TARGET = ass_name end
     end
