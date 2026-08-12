@@ -126,6 +126,31 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static List<DisplayDanmakuItem> get displayDanmakuList => _displayDanmakuList;
   static List<BlockedDanmakuItem> get blockedItems => _blockedItems;
 
+  /// 获取当前控制台样式快照.
+  ///
+  /// 返回副本而不是引用, 避免调用方误改内部状态.
+  static DanmakuStyle getDanmakuStyleSnapshot() {
+    return _danmakuStyle.copyWith();
+  }
+
+  /// 应用一组样式到控制台.
+  ///
+  /// 默认为 `refresh=true`, 以便外部播放器立即重载 ASS.
+  static void applyDanmakuStyle(DanmakuStyle style, {bool refresh = true}) {
+    _danmakuStyle.opacity = style.opacity;
+    _danmakuStyle.outlineWidth = style.outlineWidth;
+    _danmakuStyle.danmakuFontSize = style.danmakuFontSize;
+    _danmakuStyle.danmakuOffset = style.danmakuOffset;
+    _danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
+
+    if (refresh) {
+      queueDanmakuRefresh();
+      return;
+    }
+
+    _instance.notifyListeners();
+  }
+
   // ======================================================================== //
   // ============================== 主要方法 ================================ //
   // ======================================================================== //
@@ -156,11 +181,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
 
     // 更新弹幕样式, 如果未提供则保持现有样式
     final style = danmakuStyle ?? DanmakuStyle();
-    _danmakuStyle.opacity = style.opacity;
-    _danmakuStyle.outlineWidth = style.outlineWidth;
-    _danmakuStyle.danmakuFontSize = style.danmakuFontSize;
-    _danmakuStyle.danmakuOffset = style.danmakuOffset;
-    _danmakuStyle.danmakuAllowStacking = style.danmakuAllowStacking;
+    applyDanmakuStyle(style, refresh: false);
 
     // 按照时间戳排序弹幕列表, 并创建初始显示项目
     final sorted = List<DanmakuItem>.of(danmakuList ?? const []);

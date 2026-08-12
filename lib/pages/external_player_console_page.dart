@@ -5,11 +5,14 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
 
 /// 桌面端 mpv 外部播放会话控制台。
 enum ExternalPlayerConsolePane {
@@ -146,6 +149,73 @@ class _ConsoleWorkspace extends StatelessWidget {
   final DanmakuStyle danmakuStyle;
   final List<BlockedDanmakuItem> blockedItems;
   final ExternalPlayerConsolePane pane;
+
+  Future<void> _writeBackUserDanmakuStyle(BuildContext context) async {
+    final style = ExternalPlayerConsoleService.getDanmakuStyleSnapshot();
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+
+    try {
+      await videoState.setDanmakuOpacity(style.opacity);
+      await videoState.setDanmakuFontSize(style.danmakuFontSize, commit: true);
+      await videoState.setNext2DanmakuOutlineWidth(style.outlineWidth);
+      await videoState.setDanmakuStacking(style.danmakuAllowStacking);
+      videoState.setManualDanmakuOffset(style.danmakuOffset);
+      ExternalPlayerConsoleService.queueDanmakuRefresh();
+      if (!context.mounted) return;
+      _showSyncMessage(
+        context,
+        _localized(
+          context,
+          '已将控制台样式写回用户设置',
+          '已將控制台樣式寫回使用者設定',
+          'Console style has been written back to user settings',
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      _showSyncMessage(
+        context,
+        _localized(
+          context,
+          '写回用户设置失败',
+          '寫回使用者設定失敗',
+          'Failed to write style back to user settings',
+        ),
+      );
+    }
+  }
+
+  void _reapplyUserDanmakuStyle(BuildContext context) {
+    try {
+      final style = DanmakuService.getCurrentDanmakuStyle();
+      ExternalPlayerConsoleService.applyDanmakuStyle(style);
+      _showSyncMessage(
+        context,
+        _localized(
+          context,
+          '已重新应用用户弹幕样式',
+          '已重新套用使用者彈幕樣式',
+          'User danmaku style has been reapplied',
+        ),
+      );
+    } catch (_) {
+      _showSyncMessage(
+        context,
+        _localized(
+          context,
+          '重新应用用户设置失败',
+          '重新套用使用者設定失敗',
+          'Failed to reapply user settings',
+        ),
+      );
+    }
+  }
+
+  void _showSyncMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -362,6 +432,55 @@ class _ConsoleWorkspace extends StatelessWidget {
               danmakuStyle.outlineWidth = value;
               ExternalPlayerConsoleService.queueDanmakuRefresh();
             },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _localized(context, '弹幕堆叠', '彈幕堆疊', 'Danmaku Stacking'),
+                  style: _sectionLabelStyle(context),
+                ),
+              ),
+              Switch.adaptive(
+                value: danmakuStyle.danmakuAllowStacking,
+                onChanged: (value) {
+                  danmakuStyle.danmakuAllowStacking = value;
+                  ExternalPlayerConsoleService.queueDanmakuRefresh();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              NipaplayLargeScreenActionButton(
+                icon: Icons.save_outlined,
+                label: _localized(
+                  context,
+                  '写回用户设置',
+                  '寫回使用者設定',
+                  'Write Back User Settings',
+                ),
+                onPressed: () {
+                  _writeBackUserDanmakuStyle(context);
+                },
+                compact: true,
+              ),
+              NipaplayLargeScreenActionButton(
+                icon: Icons.refresh_rounded,
+                label: _localized(
+                  context,
+                  '重新应用用户设置',
+                  '重新套用使用者設定',
+                  'Reapply User Settings',
+                ),
+                onPressed: () => _reapplyUserDanmakuStyle(context),
+                compact: true,
+              ),
+            ],
           ),
         ],
       ),

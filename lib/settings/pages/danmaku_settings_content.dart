@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -856,6 +857,34 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
 
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                final currentFontSize = videoState.danmakuFontSize <= 0
+                    ? videoState.actualDanmakuFontSize
+                    : videoState.danmakuFontSize;
+                return AdaptiveSettingsTile.slider(
+                  title: context.l10n.danmakuFontSizeTitle,
+                  subtitle: '调整弹幕文字大小，轨道间距会自动适配',
+                  icon: Icons.format_size,
+                  value: currentFontSize.clamp(
+                    DanmakuStyle.minDanmakuFontSize,
+                    DanmakuStyle.maxDanmakuFontSize,
+                  ),
+                  min: DanmakuStyle.minDanmakuFontSize,
+                  max: DanmakuStyle.maxDanmakuFontSize,
+                  divisions: 96,
+                  onChanged: (value) {
+                    videoState.setDanmakuFontSize(value, commit: true);
+                  },
+                  labelFormatter: (value) => '${value.toStringAsFixed(1)}px',
+                );
+              },
+            ),
+
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
+
             // 弹幕描边粗细
             Consumer<VideoPlayerState>(
               builder: (context, videoState, child) {
@@ -894,6 +923,30 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                           ? context.l10n.rememberDanmakuOffsetEnabled
                           : context.l10n.rememberDanmakuOffsetDisabled,
                     );
+                  },
+                );
+              },
+            ),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile.slider(
+                  title: '手动弹幕偏移',
+                  subtitle: '调整弹幕与视频时间的对齐，负值提前，正值延后',
+                  icon: Icons.schedule,
+                  value: videoState.manualDanmakuOffset.clamp(-10.0, 10.0),
+                  min: -10.0,
+                  max: 10.0,
+                  divisions: 200,
+                  onChanged: (value) {
+                    videoState.setManualDanmakuOffset(value);
+                  },
+                  labelFormatter: (value) {
+                    if (value.abs() < 0.0001) return '0s';
+                    final sign = value > 0 ? '+' : '';
+                    return '${sign}${value.toStringAsFixed(1)}s';
                   },
                 );
               },
