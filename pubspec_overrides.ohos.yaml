@@ -8,6 +8,11 @@
 # Pub treats this section as a replacement rather than a per-package merge, so
 # the shared overrides from pubspec.yaml are repeated below the OHOS entries.
 dependency_overrides:
+  # universal_gamepad has no HarmonyOS native implementation and requires a
+  # newer Dart SDK than the pinned OpenHarmony Flutter toolchain. Replace it
+  # with a no-op API-compatible package so OHOS never registers or calls it.
+  universal_gamepad:
+    path: packages/universal_gamepad_ohos_stub
   # The OpenHarmony Flutter fork is currently based on Flutter 3.35 and does
   # not expose the private same-engine windowing APIs added in Flutter 3.44.
   desktop_multi_window:

@@ -32,6 +32,7 @@ pub struct RustGpuSample {
 #[flutter_rust_bridge::frb(sync)]
 pub fn is_performance_probe_available() -> bool {
     cfg!(any(
+        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "windows"
@@ -84,9 +85,9 @@ fn sample_process_cpu() -> Result<RustCpuSample, String> {
     {
         return sample_process_cpu_linux();
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     {
-        return sample_process_cpu_macos();
+        return sample_process_cpu_apple();
     }
     #[cfg(target_os = "windows")]
     {
@@ -101,9 +102,9 @@ fn sample_process_memory() -> Result<RustMemorySample, String> {
     {
         return sample_process_memory_linux();
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     {
-        return sample_process_memory_macos();
+        return sample_process_memory_apple();
     }
     #[cfg(target_os = "windows")]
     {
@@ -193,8 +194,8 @@ fn sample_process_memory_linux() -> Result<RustMemorySample, String> {
     })
 }
 
-#[cfg(target_os = "macos")]
-fn sample_process_cpu_macos() -> Result<RustCpuSample, String> {
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn sample_process_cpu_apple() -> Result<RustCpuSample, String> {
     let cpu_micros = unsafe {
         let mut usage: libc::rusage = std::mem::zeroed();
         if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {
@@ -215,8 +216,8 @@ fn sample_process_cpu_macos() -> Result<RustCpuSample, String> {
     })
 }
 
-#[cfg(target_os = "macos")]
-fn sample_process_memory_macos() -> Result<RustMemorySample, String> {
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn sample_process_memory_apple() -> Result<RustMemorySample, String> {
     let rss_bytes = unsafe {
         let mut info: libc::mach_task_basic_info = std::mem::zeroed();
         let mut count = libc::MACH_TASK_BASIC_INFO_COUNT;

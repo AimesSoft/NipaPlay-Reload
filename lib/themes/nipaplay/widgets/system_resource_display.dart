@@ -27,6 +27,9 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
   double? _gpuUsage;
+  String _thermalState = 'N/A';
+  double? _dfmLayoutMs;
+  double? _dfmSubmitMs;
   String _activeDecoder = '未知';
   String _playerKernelType = '未知';
   String _danmakuKernelType = '未知';
@@ -83,6 +86,9 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
         _fps = SystemResourceMonitor().fps;
         _gpuUsage = SystemResourceMonitor().gpuUsage;
+        _thermalState = SystemResourceMonitor().thermalState;
+        _dfmLayoutMs = SystemResourceMonitor().dfmLayoutMs;
+        _dfmSubmitMs = SystemResourceMonitor().dfmSubmitMs;
         _activeDecoder = SystemResourceMonitor().activeDecoder;
         _playerKernelType = SystemResourceMonitor().playerKernelType;
         _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
@@ -212,6 +218,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         const memBase = Color(0xFFD89A1C);
         const gpuBase = Color(0xFF9A67FF);
         const fpsBase = Color(0xFF46D27A);
+        const thermalBase = Color(0xFFFF6D7A);
+        const timingBase = Color(0xFF7FD9C4);
         const decBase = Color(0xFFFF9850);
         const playerBase = Color(0xFF5E9BFF);
         const danmakuBase = Color(0xFFFF6EBF);
@@ -239,6 +247,12 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                     ? Color.lerp(fpsBase, const Color(0xFFFFC35A), 0.5)!
                     : const Color(0xFFFF6D7A)))
             : const Color(0xFFB7BEC7);
+        final thermalColor = switch (_thermalState) {
+          'nominal' => const Color(0xFF46D27A),
+          'fair' => const Color(0xFFFFC35A),
+          'serious' || 'critical' => const Color(0xFFFF6D7A),
+          _ => const Color(0xFFB7BEC7),
+        };
 
         final screenWidth = MediaQuery.sizeOf(context).width;
         final narrowScreen = screenWidth < 720;
@@ -284,6 +298,26 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             baseStyle: baseTextStyle,
             compact: compact,
           ),
+          _segment(
+            label: 'THERM',
+            value: _thermalState.toUpperCase(),
+            labelColor: _shade(thermalBase, 0.28),
+            valueColor: thermalColor,
+            baseStyle: baseTextStyle,
+            compact: true,
+          ),
+          if (_danmakuKernelType == 'DFM+' &&
+              _dfmLayoutMs != null &&
+              _dfmSubmitMs != null)
+            _segment(
+              label: 'DFM L/S',
+              value:
+                  '${_dfmLayoutMs!.toStringAsFixed(2)}/${_dfmSubmitMs!.toStringAsFixed(2)}ms',
+              labelColor: _shade(timingBase, 0.28),
+              valueColor: _shade(timingBase, 0.04),
+              baseStyle: baseTextStyle,
+              compact: true,
+            ),
           if (showDetail)
             _segment(
               label: 'DEC',
@@ -322,6 +356,41 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                 for (int i = 0; i < items.length; i++) ...[
                   items[i],
                   if (i != items.length - 1) const SizedBox(height: 2),
+                ],
+              ],
+            ),
+          );
+        }
+
+        // Tablet / medium-width layouts cannot fit every metric on one line.
+        // Keep the four headline metrics on the first line and put thermal +
+        // DFM timings on a second visible line instead of clipping them inside
+        // the non-interactive horizontal viewport.
+        if (!showDetail) {
+          final primaryItems = items.take(4).toList(growable: false);
+          final diagnosticItems = items.skip(4).toList(growable: false);
+
+          Widget metricRow(List<Widget> metrics) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < metrics.length; i++) ...[
+                  if (i > 0) SizedBox(width: compact ? 8 : 10),
+                  metrics[i],
+                ],
+              ],
+            );
+          }
+
+          return IgnorePointer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                metricRow(primaryItems),
+                if (diagnosticItems.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  metricRow(diagnosticItems),
                 ],
               ],
             ),

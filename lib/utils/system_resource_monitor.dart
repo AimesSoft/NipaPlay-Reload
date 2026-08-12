@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/mock_mdk.dart'
     if (dart.library.io) 'package:fvp/mdk.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -13,6 +14,9 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 /// 系统资源监控类
 /// 提供真实的 CPU / 内存 / GPU / FPS 指标。
 class SystemResourceMonitor {
+  static const MethodChannel _performanceChannel =
+      MethodChannel('nipaplay/performance');
+
   static final SystemResourceMonitor _instance =
       SystemResourceMonitor._internal();
 
@@ -24,6 +28,9 @@ class SystemResourceMonitor {
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
   double? _gpuUsage;
+  String _thermalState = 'N/A';
+  double? _dfmLayoutMs;
+  double? _dfmSubmitMs;
 
   String _activeDecoder = '未知';
   String _mdkVersion = '未知';
@@ -34,10 +41,12 @@ class SystemResourceMonitor {
   Timer? _fpsTimer;
   bool _started = false;
   int _consumerCount = 0;
+  int _monitoringGeneration = 0;
 
   int _frameCount = 0;
-  late DateTime _lastFpsUpdateTime;
-  Ticker? _ticker;
+  final Stopwatch _fpsClock = Stopwatch();
+  int _lastFpsSampleUs = 0;
+  TimingsCallback? _timingsCallback;
 
   bool _rustPerformanceAvailable = false;
   int _lastCpuTimestampMs = 0;
@@ -47,11 +56,15 @@ class SystemResourceMonitor {
   static const int _gpuSampleIntervalMs = 1500;
   bool _gpuSamplingSupported = true;
   String? _lastGpuSamplingError;
+  bool _thermalSamplingSupported = true;
 
   double get cpuUsage => _cpuUsage;
   double get memoryUsageMB => _memoryUsageMB;
   double get fps => _fps;
   double? get gpuUsage => _gpuUsage;
+  String get thermalState => _thermalState;
+  double? get dfmLayoutMs => _dfmLayoutMs;
+  double? get dfmSubmitMs => _dfmSubmitMs;
 
   String get activeDecoder => _activeDecoder;
   String get mdkVersion => _mdkVersion;
@@ -161,37 +174,61 @@ class SystemResourceMonitor {
 
   Future<void> _startMonitoring() async {
     if (_started) return;
+    _started = true;
+    final generation = ++_monitoringGeneration;
 
     if (!_rustPerformanceAvailable && !kIsWeb) {
       await _initRustProbe();
     }
 
+    // The HUD may have been hidden while the asynchronous Rust probe was
+    // starting. Do not install timers/callbacks for a stale monitoring run.
+    if (!_started ||
+        generation != _monitoringGeneration ||
+        _consumerCount == 0) {
+      return;
+    }
+
     _initFpsMeasurement();
     _startResourceMonitoring();
-    _started = true;
   }
 
   void _initFpsMeasurement() {
-    _lastFpsUpdateTime = DateTime.now();
+    _removeFpsTimingsCallback();
     _frameCount = 0;
+    _fps = 0.0;
+    _fpsClock
+      ..reset()
+      ..start();
+    _lastFpsSampleUs = 0;
 
-    _ticker?.dispose();
-    _ticker = Ticker((Duration elapsed) {
-      _frameCount++;
-    });
-    _ticker?.start();
+    // Count frames that actually completed the Flutter rendering pipeline.
+    // A dedicated Ticker would continuously request frames itself, inflating
+    // the reported FPS and adding load to the workload being measured.
+    _timingsCallback = (List<FrameTiming> timings) {
+      _frameCount += timings.length;
+    };
+    SchedulerBinding.instance.addTimingsCallback(_timingsCallback!);
 
     _fpsTimer?.cancel();
     _fpsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final now = DateTime.now();
-      final elapsed = now.difference(_lastFpsUpdateTime).inMilliseconds;
+      final nowUs = _fpsClock.elapsedMicroseconds;
+      final elapsedUs = nowUs - _lastFpsSampleUs;
 
-      if (elapsed > 0) {
-        _fps = _frameCount * 1000 / elapsed;
+      if (elapsedUs > 0) {
+        _fps = _frameCount * 1000000 / elapsedUs;
         _frameCount = 0;
-        _lastFpsUpdateTime = now;
+        _lastFpsSampleUs = nowUs;
       }
     });
+  }
+
+  void _removeFpsTimingsCallback() {
+    final callback = _timingsCallback;
+    if (callback != null) {
+      SchedulerBinding.instance.removeTimingsCallback(callback);
+      _timingsCallback = null;
+    }
   }
 
   void _startResourceMonitoring() {
@@ -209,6 +246,8 @@ class SystemResourceMonitor {
       return;
     }
 
+    await _updateThermalState();
+
     if (!_rustPerformanceAvailable) {
       _cpuUsage = 0.0;
       _memoryUsageMB = 0.0;
@@ -217,6 +256,43 @@ class SystemResourceMonitor {
     }
 
     await _updateFromRustSamples();
+  }
+
+  Future<void> _updateThermalState() async {
+    final supportsThermalState = !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        !globals.isTvOS;
+    if (!supportsThermalState || !_thermalSamplingSupported) {
+      _thermalState = 'N/A';
+      return;
+    }
+
+    try {
+      _thermalState =
+          await _performanceChannel.invokeMethod<String>('getThermalState') ??
+              'unknown';
+    } on MissingPluginException {
+      _thermalSamplingSupported = false;
+      _thermalState = 'N/A';
+    } on PlatformException catch (e) {
+      debugPrint('读取 iOS thermalState 失败: $e');
+      _thermalState = 'N/A';
+    }
+  }
+
+  void recordDfmFrameTimings({
+    required double layoutMs,
+    required double submitMs,
+  }) {
+    const alpha = 0.15;
+    _dfmLayoutMs = _smoothedMetric(_dfmLayoutMs, layoutMs, alpha);
+    _dfmSubmitMs = _smoothedMetric(_dfmSubmitMs, submitMs, alpha);
+  }
+
+  double _smoothedMetric(double? previous, double sample, double alpha) {
+    if (!sample.isFinite || sample < 0) return previous ?? 0.0;
+    if (previous == null) return sample;
+    return previous + (sample - previous) * alpha;
   }
 
   Future<void> _updateFromRustSamples() async {
@@ -290,6 +366,8 @@ class SystemResourceMonitor {
 
   void _stopMonitoring() {
     if (!_started) return;
+    _started = false;
+    _monitoringGeneration++;
 
     _resourceTimer?.cancel();
     _resourceTimer = null;
@@ -297,14 +375,14 @@ class SystemResourceMonitor {
     _fpsTimer?.cancel();
     _fpsTimer = null;
 
-    _ticker?.stop();
-    _ticker?.dispose();
-    _ticker = null;
+    _removeFpsTimingsCallback();
+    _fpsClock.stop();
+    _frameCount = 0;
+    _lastFpsSampleUs = 0;
+    _fps = 0.0;
 
     _lastCpuTimestampMs = 0;
     _lastCpuMicros = 0;
-
-    _started = false;
   }
 
   void setActiveDecoder(String decoder) {

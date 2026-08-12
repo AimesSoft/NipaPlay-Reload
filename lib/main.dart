@@ -1217,6 +1217,7 @@ class MainPageState extends State<MainPage>
   /// 进入大屏幕模式后由 NipaplayLargeScreenScaffoldLayout
   /// 接管手柄输入，此处不再响应。
   void _initGuideButtonListener() {
+    if (!globals.supportsGamepadInput) return;
     _guideButtonSubscription = Gamepad.instance.events.listen((event) {
       if (!mounted) return;
       if (event is! GamepadButtonEvent) return;

@@ -581,6 +581,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
   Timer? _stickYRepeatTimer;
 
   void _initGamepadListener() {
+    if (!globals.supportsGamepadInput) return;
     _gamepadSubscription = Gamepad.instance.events.listen(_onGamepadEvent);
   }
 
