@@ -137,7 +137,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ### 播放体验
 
-* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust，按平台使用 Metal、D3D11、WGPU 或 Vulkan）、FVP (libmdk)、Media Kit（libmpv）和 Video Player。Media Kit 是 NipaPlay 对 libmpv 的 Flutter 接入，不是另一套独立内核。Erika 覆盖所有当前原生客户端平台，只有 Linux 尚未支持；tvOS 则强制使用 Erika。详见 [平台矩阵](Documentation/platform-matrix.md) 与 [播放器内核说明](Documentation/player-kernels.md)。
+* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust，按平台使用 Metal、D3D11、WGPU 或 Vulkan）、FVP (libmdk)、Media Kit（libmpv）和 Video Player。详见 [平台矩阵](Documentation/platform-matrix.md) 与 [播放器内核说明](Documentation/player-kernels.md)。
 * **视频支持**：本地播放、Emby/Jellyfin/SMB 流媒体、WebDAV 挂载。
 * **画质增强**：支持 Anime4K 超分、CRT 着色器效果。
 * **音频控制**：多音轨切换、倍速播放。
