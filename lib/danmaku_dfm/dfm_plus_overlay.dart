@@ -4,6 +4,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
+import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:provider/provider.dart';
@@ -91,6 +92,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   bool _textureReady = false;
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
+  double _danmakuSupersample = 0.0;
+  Locale? _danmakuLocale;
 
   /// Tracks whether the native scene is currently empty. Lets us skip the
   /// per-vsync JSON-encode + MethodChannel hop when there are no visible
@@ -372,9 +375,21 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           }
         }
 
-        final dpr =
-            MediaQuery.maybeOf(context)?.devicePixelRatio ??
+        final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+        final supersample =
+            context.watch<SettingsProvider>().danmakuSupersample;
+        final locale = Localizations.maybeLocaleOf(context);
+
+        if (_danmakuSupersample != supersample) {
+          _danmakuSupersample = supersample;
+          _queueUpdate();
+        }
+        if (_danmakuLocale != locale) {
+          _danmakuLocale = locale;
+          _forceLayout = true;
+          _queueUpdate();
+        }
 
         // ── Detect display refresh rate for submit-rate throttling (P1-4) ──
         // On >60Hz panels we cap Dart layout+setFrame at 60Hz (native renderer
@@ -398,17 +413,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           _queueUpdate();
         }
 
-        final hasTexture =
-            _textureReady &&
+        final hasTexture = _textureReady &&
             _textureId != null &&
             Next2TextureBridge.isSupported;
 
-        final needsSupersample = context
-            .watch<SettingsProvider>()
-            .danmakuSupersample;
-        final filterQuality = needsSupersample > 0.0
-            ? FilterQuality.low
-            : FilterQuality.none;
+        final filterQuality =
+            supersample > 0.0 ? FilterQuality.low : FilterQuality.none;
         final Widget content = hasTexture
             ? Texture(textureId: _textureId!, filterQuality: filterQuality)
             : const SizedBox.expand();
@@ -555,7 +565,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           if (!mounted) {
             return;
           }
-          final locale = Localizations.maybeLocaleOf(context);
           final contentHotReload = _contentHotReload;
           _contentHotReload = false;
           _forceLayout = false;
@@ -574,7 +583,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
             outlineWidth: widget.outlineWidth,
             customFontFamily: widget.customFontFamily,
             customFontFilePath: widget.customFontFilePath,
-            locale: locale,
+            locale: _danmakuLocale,
             blockWords: widget.blockWords,
           );
           if (!mounted) {
@@ -612,7 +621,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         //   x = width - speed * (interpolatedTime - item.time)
         // We submit every vsync frame — the Rust engine's 16ms tick loop
         // drains its mpsc queue and always renders the latest submission.
+        final layoutStartUs = _wallClock.elapsedMicroseconds;
         final frame = _bridge.layout(interpolatedTime);
+        final layoutMs =
+            (_wallClock.elapsedMicroseconds - layoutStartUs) / 1000.0;
 
         // Lookahead prefetch: dispatch chars from danmaku entering the screen
         // in the next few seconds to the Rust MSDF workers (async), so glyphs
@@ -626,10 +638,17 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final String? prefetchChars =
             _bridge.prefetchChars(_displayMediaTime, prefetchLookahead);
 
+        final submitStartUs = _wallClock.elapsedMicroseconds;
         await _tryUpdateTexture(
           frame,
           prefetchChars: prefetchChars,
           isInitialPrefetch: isInitialPrefetch,
+        );
+        final submitMs =
+            (_wallClock.elapsedMicroseconds - submitStartUs) / 1000.0;
+        SystemResourceMonitor().recordDfmFrameTimings(
+          layoutMs: layoutMs,
+          submitMs: submitMs,
         );
         _initialPrefetchDone = true;
         widget.onLayoutCalculated?.call(frame);
@@ -651,17 +670,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       return false;
     }
 
-    final locale = Localizations.maybeLocaleOf(context);
-
     // Use cached DPR from build() instead of reading platformDispatcher.views
     // directly. On Windows, DPR can micro-jitter when the window loses focus,
     // causing pixelWidth/pixelHeight to oscillate by ±1 pixel, which triggers
     // needsNewTexture → ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final supersample = context
-        .read<SettingsProvider>()
-        .danmakuSupersample;
+    final supersample = _danmakuSupersample;
     // True supersampling: texture pixels = backing × supersample, where
     // backing = layout × dpr. Flutter downsamples the texture to the backing
     // store on display, which is what produces the anti-aliased edges (the
@@ -677,14 +692,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     final ss = supersample > 0.0 ? supersample : 1.0;
     final double pixelRatio = (baseDpr * ss).clamp(1.0, 6.0);
 
-    final int pixelWidth = (_layoutSize.width * pixelRatio)
-        .round()
-        .clamp(1, 16384)
-        .toInt();
-    final int pixelHeight = (_layoutSize.height * pixelRatio)
-        .round()
-        .clamp(1, 16384)
-        .toInt();
+    final int pixelWidth =
+        (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
+    final int pixelHeight =
+        (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
     // Optimized: only re-acquire texture if size changed (avoids redundant
     // ensureTexture await on every frame when texture ID is already stable).
@@ -694,8 +705,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     // Only rebuild when the pixel size change is significant (>=2 pixels).
     final int pwDelta = (pixelWidth - _lastTextureWidth).abs();
     final int phDelta = (pixelHeight - _lastTextureHeight).abs();
-    bool needsNewTexture =
-        _textureId == null ||
+    bool needsNewTexture = _textureId == null ||
         (pwDelta >= 2) ||
         (phDelta >= 2) ||
         _surfaceId != _lastTextureSurfaceId;
@@ -766,12 +776,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     }
 
     final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
-    final heightScale = pixelHeight > 0
-        ? pixelHeight / _layoutSize.height
-        : 1.0;
-    final fontScale = ((widthScale + heightScale) * 0.5)
-        .clamp(0.25, 8.0)
-        .toDouble();
+    final heightScale =
+        pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
+    final fontScale =
+        ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 
     // 优化1（首播）：texture 就绪 + fontScale 已算，立即投递首屏预热给 worker，
     // 然后等 worker 算几帧再继续首帧 draw。首帧 draw 时部分首屏字符已 drain 填入
@@ -811,7 +819,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
-      locale: locale,
+      locale: _danmakuLocale,
       playbackRate: widget.playbackRate,
       prefetchChars: effectivePrefetch,
     );
