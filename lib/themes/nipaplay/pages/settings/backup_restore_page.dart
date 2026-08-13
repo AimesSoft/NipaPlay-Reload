@@ -649,7 +649,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               title: '说明',
               subtitle: '全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息\n'
                   '全量恢复：从 .npb 文件恢复，支持选择性恢复各类数据\n'
-                  '增量同步：使用 Git 原理实现数据增量同步，通过比较文件差异来实现。\n'
+                  '增量同步：使用类 Git 原理进行数据同步，通过比较文件差异来实现，。\n'
                   '冲突规则：观看历史保留最近观看记录，其余数据保留本轮明确修改\n'
                   'Web 端暂不支持本地增量索引',
               icon: Icons.info_outline,
@@ -726,6 +726,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   late int _intervalMinutes;
   bool _obscurePassword = true;
   bool _testing = false;
+  String? _testMessage;
 
   static const _intervalOptions = [5, 15, 30, 60, 180, 360];
 
@@ -772,10 +773,13 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   Future<void> _testConnection() async {
     final validationError = _validationError();
     if (validationError != null) {
-      BlurSnackBar.show(context, validationError);
+      setState(() => _testMessage = validationError);
       return;
     }
-    setState(() => _testing = true);
+    setState(() {
+      _testing = true;
+      _testMessage = null;
+    });
     try {
       await AutoSyncService.instance.testConnection(
         serverUrl: _serverController.text.trim(),
@@ -783,11 +787,9 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
         password: _passwordController.text,
         remotePath: _normalizedRemotePath,
       );
-      if (mounted) {
-        BlurSnackBar.show(context, '连接成功，远端同步目录可访问');
-      }
+      if (mounted) setState(() => _testMessage = '连接成功，远端目录可访问');
     } catch (error) {
-      if (mounted) BlurSnackBar.show(context, '连接失败：$error');
+      if (mounted) setState(() => _testMessage = '连接失败：$error');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -808,7 +810,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   void _submit() {
     final validationError = _validationError();
     if (validationError != null) {
-      BlurSnackBar.show(context, validationError);
+      setState(() => _testMessage = validationError);
       return;
     }
     Navigator.of(context).pop(_SyncSettingsValue(
@@ -957,6 +959,20 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                           },
                         );
                       }),
+                      if (_testMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _testMessage!,
+                            style: TextStyle(
+                              color: _testMessage!.startsWith('连接成功')
+                                  ? Colors.green
+                                  : colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
