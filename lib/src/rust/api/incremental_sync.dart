@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_operations`, `json_error`, `sha256_hex`
+// These functions are ignored because they are not marked as `pub`: `apply_operations`, `copy_optional_i64`, `copy_optional_string`, `json_error`, `normalize_array_batches`, `normalize_episode_match_record`, `normalize_watch_history_record`, `selected_object_bytes`, `sha256_hex`, `value_as_i64`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SyncOperation`, `SyncPatch`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Parses arbitrary JSON and emits the stable, key-sorted encoding used by
 /// incremental sync v1. Keeping this in Rust avoids building a second Dart
@@ -20,6 +20,26 @@ Future<RustSyncBlob> syncCanonicalizeJson(
 
 Future<String> syncSha256Bytes({required List<int> input}) =>
     RustLib.instance.api.crateApiIncrementalSyncSyncSha256Bytes(input: input);
+
+/// Parses a full backup exactly once, keeps only the requested categories and
+/// emits large record collections as bounded JSON batches. This avoids
+/// materializing the entire `.npb` object graph in Dart before restoration.
+Future<RustBackupRestorePlan> backupPrepareRestore(
+        {required List<int> input,
+        required bool includePreferences,
+        required bool includeMediaLibraries,
+        required bool includeWatchHistory,
+        required bool includeEpisodeMatches,
+        required bool includeAccounts,
+        required PlatformInt64 batchSize}) =>
+    RustLib.instance.api.crateApiIncrementalSyncBackupPrepareRestore(
+        input: input,
+        includePreferences: includePreferences,
+        includeMediaLibraries: includeMediaLibraries,
+        includeWatchHistory: includeWatchHistory,
+        includeEpisodeMatches: includeEpisodeMatches,
+        includeAccounts: includeAccounts,
+        batchSize: batchSize);
 
 /// Builds an entity-level diff between two flattened sync states.
 Future<Uint8List> syncDiffStates(
@@ -62,6 +82,61 @@ Future<RustSyncPatchChainResult> syncApplyPatchChain(
         stateJson: stateJson,
         patches: patches,
         maximumSnapshotVersion: maximumSnapshotVersion);
+
+class RustBackupRestorePlan {
+  final PlatformInt64 version;
+  final String timestamp;
+  final String appVersion;
+  final Uint8List preferencesJson;
+  final Uint8List mediaLibrariesJson;
+  final Uint8List accountsJson;
+  final List<Uint8List> watchHistoryBatches;
+  final List<Uint8List> episodeMatchBatches;
+  final PlatformInt64 invalidWatchHistoryCount;
+  final PlatformInt64 invalidEpisodeMatchCount;
+
+  const RustBackupRestorePlan({
+    required this.version,
+    required this.timestamp,
+    required this.appVersion,
+    required this.preferencesJson,
+    required this.mediaLibrariesJson,
+    required this.accountsJson,
+    required this.watchHistoryBatches,
+    required this.episodeMatchBatches,
+    required this.invalidWatchHistoryCount,
+    required this.invalidEpisodeMatchCount,
+  });
+
+  @override
+  int get hashCode =>
+      version.hashCode ^
+      timestamp.hashCode ^
+      appVersion.hashCode ^
+      preferencesJson.hashCode ^
+      mediaLibrariesJson.hashCode ^
+      accountsJson.hashCode ^
+      watchHistoryBatches.hashCode ^
+      episodeMatchBatches.hashCode ^
+      invalidWatchHistoryCount.hashCode ^
+      invalidEpisodeMatchCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustBackupRestorePlan &&
+          runtimeType == other.runtimeType &&
+          version == other.version &&
+          timestamp == other.timestamp &&
+          appVersion == other.appVersion &&
+          preferencesJson == other.preferencesJson &&
+          mediaLibrariesJson == other.mediaLibrariesJson &&
+          accountsJson == other.accountsJson &&
+          watchHistoryBatches == other.watchHistoryBatches &&
+          episodeMatchBatches == other.episodeMatchBatches &&
+          invalidWatchHistoryCount == other.invalidWatchHistoryCount &&
+          invalidEpisodeMatchCount == other.invalidEpisodeMatchCount;
+}
 
 class RustSyncBlob {
   final Uint8List bytes;

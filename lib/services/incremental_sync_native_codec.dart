@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:nipaplay/services/incremental_sync_repository.dart';
+import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/src/rust/api/incremental_sync.dart' as rust_sync;
 import 'package:nipaplay/src/rust/rust_init.dart';
 
@@ -39,6 +40,34 @@ class IncrementalSyncNativePatchResult {
 
   final IncrementalSyncState state;
   final List<String> appliedPatchIds;
+  final bool usedRust;
+}
+
+class FullBackupNativeRestorePlan {
+  const FullBackupNativeRestorePlan({
+    required this.version,
+    required this.timestamp,
+    required this.appVersion,
+    required this.preferencesJson,
+    required this.mediaLibrariesJson,
+    required this.accountsJson,
+    required this.watchHistoryBatches,
+    required this.episodeMatchBatches,
+    required this.invalidWatchHistoryCount,
+    required this.invalidEpisodeMatchCount,
+    required this.usedRust,
+  });
+
+  final int version;
+  final String timestamp;
+  final String appVersion;
+  final Uint8List preferencesJson;
+  final Uint8List mediaLibrariesJson;
+  final Uint8List accountsJson;
+  final List<Uint8List> watchHistoryBatches;
+  final List<Uint8List> episodeMatchBatches;
+  final int invalidWatchHistoryCount;
+  final int invalidEpisodeMatchCount;
   final bool usedRust;
 }
 
@@ -97,6 +126,68 @@ class IncrementalSyncNativeCodec {
       return compute(_decodeJsonMap, result.bytes);
     }
     return compute(_decodeJsonMap, bytes);
+  }
+
+  static Future<List<dynamic>> decodeJsonList(Uint8List bytes) =>
+      compute(_decodeJsonList, bytes);
+
+  /// Parses and filters a full backup in Rust. Large history collections cross
+  /// the FFI boundary in bounded byte batches instead of as thousands of Dart
+  /// objects, so the UI isolate only materializes the batch being committed.
+  static Future<FullBackupNativeRestorePlan> prepareFullBackupRestore({
+    required Uint8List bytes,
+    required Set<BackupCategory> categories,
+    int batchSize = 500,
+  }) async {
+    final request = (
+      input: bytes,
+      includePreferences: categories.contains(BackupCategory.preferences),
+      includeMediaLibraries: categories.contains(BackupCategory.mediaLibraries),
+      includeWatchHistory: categories.contains(BackupCategory.watchHistory),
+      includeEpisodeMatches: categories.contains(BackupCategory.episodeMatches),
+      includeAccounts: categories.contains(BackupCategory.accounts),
+      batchSize: batchSize,
+    );
+    if (await _canUseRust()) {
+      final result = await rust_sync.backupPrepareRestore(
+        input: request.input,
+        includePreferences: request.includePreferences,
+        includeMediaLibraries: request.includeMediaLibraries,
+        includeWatchHistory: request.includeWatchHistory,
+        includeEpisodeMatches: request.includeEpisodeMatches,
+        includeAccounts: request.includeAccounts,
+        batchSize: request.batchSize,
+      );
+      return FullBackupNativeRestorePlan(
+        version: result.version,
+        timestamp: result.timestamp,
+        appVersion: result.appVersion,
+        preferencesJson: result.preferencesJson,
+        mediaLibrariesJson: result.mediaLibrariesJson,
+        accountsJson: result.accountsJson,
+        watchHistoryBatches: result.watchHistoryBatches,
+        episodeMatchBatches: result.episodeMatchBatches,
+        invalidWatchHistoryCount: result.invalidWatchHistoryCount,
+        invalidEpisodeMatchCount: result.invalidEpisodeMatchCount,
+        usedRust: true,
+      );
+    }
+    final fallback = await compute(_prepareFullBackupRestoreDart, request);
+    return FullBackupNativeRestorePlan(
+      version: fallback['version'] as int,
+      timestamp: fallback['timestamp'] as String,
+      appVersion: fallback['appVersion'] as String,
+      preferencesJson: fallback['preferencesJson'] as Uint8List,
+      mediaLibrariesJson: fallback['mediaLibrariesJson'] as Uint8List,
+      accountsJson: fallback['accountsJson'] as Uint8List,
+      watchHistoryBatches:
+          (fallback['watchHistoryBatches'] as List).cast<Uint8List>(),
+      episodeMatchBatches:
+          (fallback['episodeMatchBatches'] as List).cast<Uint8List>(),
+      invalidWatchHistoryCount: fallback['invalidWatchHistoryCount'] as int,
+      invalidEpisodeMatchCount: fallback['invalidEpisodeMatchCount'] as int,
+      usedRust: false,
+    );
   }
 
   static Future<List<IncrementalSyncOperation>> diff({
@@ -269,6 +360,95 @@ Map<String, dynamic> _decodeJsonMap(Uint8List input) {
 
 List<dynamic> _decodeJsonList(Uint8List input) {
   return jsonDecode(utf8.decode(input)) as List<dynamic>;
+}
+
+Map<String, dynamic> _prepareFullBackupRestoreDart(
+  ({
+    Uint8List input,
+    bool includePreferences,
+    bool includeMediaLibraries,
+    bool includeWatchHistory,
+    bool includeEpisodeMatches,
+    bool includeAccounts,
+    int batchSize,
+  }) request,
+) {
+  final root = _decodeJsonMap(request.input);
+  final version = (root['version'] as num?)?.toInt() ?? 0;
+  if (version > 2) {
+    throw FormatException('不支持的备份格式版本: $version');
+  }
+  Uint8List objectBytes(String key, bool selected) {
+    if (!selected || !root.containsKey(key)) return Uint8List(0);
+    final value = root[key];
+    if (value is! Map) throw FormatException('备份字段 $key 必须是 JSON 对象');
+    return Uint8List.fromList(utf8.encode(jsonEncode(value)));
+  }
+
+  ({List<Uint8List> batches, int invalid}) arrayBatches(
+    String key,
+    bool selected,
+    bool Function(Map<String, dynamic>) valid,
+  ) {
+    if (!selected || !root.containsKey(key)) return (batches: [], invalid: 0);
+    final value = root[key];
+    if (value is! List) throw FormatException('备份字段 $key 必须是 JSON 数组');
+    final records = <Map<String, dynamic>>[];
+    var invalid = 0;
+    for (final raw in value) {
+      if (raw is Map) {
+        final record = Map<String, dynamic>.from(raw);
+        if (valid(record)) {
+          records.add(record);
+          continue;
+        }
+      }
+      invalid++;
+    }
+    final size = request.batchSize.clamp(1, 2000);
+    final batches = <Uint8List>[];
+    if (records.isEmpty && value.isEmpty) {
+      batches.add(Uint8List.fromList(const [91, 93]));
+    }
+    for (var offset = 0; offset < records.length; offset += size) {
+      final end = (offset + size).clamp(0, records.length);
+      batches.add(Uint8List.fromList(
+        utf8.encode(jsonEncode(records.sublist(offset, end))),
+      ));
+    }
+    return (batches: batches, invalid: invalid);
+  }
+
+  final history = arrayBatches(
+    'watchHistory',
+    request.includeWatchHistory,
+    (record) =>
+        record['filePath'] is String &&
+        (record['filePath'] as String).isNotEmpty &&
+        record['lastWatchTime'] is String,
+  );
+  final matches = arrayBatches(
+    'episodeMatches',
+    request.includeEpisodeMatches,
+    (record) =>
+        record['filePath'] is String &&
+        (record['filePath'] as String).isNotEmpty &&
+        record['animeId'] is num &&
+        record['episodeId'] is num,
+  );
+  return {
+    'version': version,
+    'timestamp': root['timestamp'] as String? ?? '',
+    'appVersion': root['appVersion'] as String? ?? '',
+    'preferencesJson': objectBytes('preferences', request.includePreferences),
+    'mediaLibrariesJson':
+        objectBytes('mediaLibraries', request.includeMediaLibraries),
+    'accountsJson': objectBytes('accounts', request.includeAccounts),
+    'watchHistoryBatches': history.batches,
+    'episodeMatchBatches': matches.batches,
+    'invalidWatchHistoryCount': history.invalid,
+    'invalidEpisodeMatchCount': matches.invalid,
+  };
 }
 
 IncrementalSyncState _stateFromJsonMap(Map<String, dynamic> raw) {

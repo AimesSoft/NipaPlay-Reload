@@ -115,6 +115,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       dynamic raw);
 
   @protected
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
+
+  @protected
   List<double> dco_decode_list_prim_f_64_loose(dynamic raw);
 
   @protected
@@ -188,6 +191,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustAssExportSettings dco_decode_rust_ass_export_settings(dynamic raw);
+
+  @protected
+  RustBackupRestorePlan dco_decode_rust_backup_restore_plan(dynamic raw);
 
   @protected
   RustCpuSample dco_decode_rust_cpu_sample(dynamic raw);
@@ -369,6 +375,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+      SseDeserializer deserializer);
+
+  @protected
   List<double> sse_decode_list_prim_f_64_loose(SseDeserializer deserializer);
 
   @protected
@@ -452,6 +462,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustAssExportSettings sse_decode_rust_ass_export_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  RustBackupRestorePlan sse_decode_rust_backup_restore_plan(
       SseDeserializer deserializer);
 
   @protected
@@ -651,6 +665,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<DfmPlusRawDanmakuItem> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_list_prim_u_8_strict(
+      List<Uint8List> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_f_64_loose(
       List<double> self, SseSerializer serializer);
 
@@ -739,6 +757,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_rust_ass_export_settings(
       RustAssExportSettings self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_backup_restore_plan(
+      RustBackupRestorePlan self, SseSerializer serializer);
 
   @protected
   void sse_encode_rust_cpu_sample(RustCpuSample self, SseSerializer serializer);

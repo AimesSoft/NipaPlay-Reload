@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1209700360;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1091244362;
 
 // Section: executor
 
@@ -114,6 +114,53 @@ fn wire__crate__api__ass_converter__ass_resolve_font_size_impl(
                 )?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__incremental_sync__backup_prepare_restore_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "backup_prepare_restore",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_input = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_include_preferences = <bool>::sse_decode(&mut deserializer);
+            let api_include_media_libraries = <bool>::sse_decode(&mut deserializer);
+            let api_include_watch_history = <bool>::sse_decode(&mut deserializer);
+            let api_include_episode_matches = <bool>::sse_decode(&mut deserializer);
+            let api_include_accounts = <bool>::sse_decode(&mut deserializer);
+            let api_batch_size = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::incremental_sync::backup_prepare_restore(
+                        api_input,
+                        api_include_preferences,
+                        api_include_media_libraries,
+                        api_include_watch_history,
+                        api_include_episode_matches,
+                        api_include_accounts,
+                        api_batch_size,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -2202,6 +2249,18 @@ impl SseDecode for Vec<crate::api::dfm_plus::DfmPlusRawDanmakuItem> {
     }
 }
 
+impl SseDecode for Vec<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Vec<u8>>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<f64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2498,6 +2557,34 @@ impl SseDecode for crate::api::ass_converter::RustAssExportSettings {
             outline_style: var_outlineStyle,
             outline_width: var_outlineWidth,
             shadow_style: var_shadowStyle,
+        };
+    }
+}
+
+impl SseDecode for crate::api::incremental_sync::RustBackupRestorePlan {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_version = <i64>::sse_decode(deserializer);
+        let mut var_timestamp = <String>::sse_decode(deserializer);
+        let mut var_appVersion = <String>::sse_decode(deserializer);
+        let mut var_preferencesJson = <Vec<u8>>::sse_decode(deserializer);
+        let mut var_mediaLibrariesJson = <Vec<u8>>::sse_decode(deserializer);
+        let mut var_accountsJson = <Vec<u8>>::sse_decode(deserializer);
+        let mut var_watchHistoryBatches = <Vec<Vec<u8>>>::sse_decode(deserializer);
+        let mut var_episodeMatchBatches = <Vec<Vec<u8>>>::sse_decode(deserializer);
+        let mut var_invalidWatchHistoryCount = <i64>::sse_decode(deserializer);
+        let mut var_invalidEpisodeMatchCount = <i64>::sse_decode(deserializer);
+        return crate::api::incremental_sync::RustBackupRestorePlan {
+            version: var_version,
+            timestamp: var_timestamp,
+            app_version: var_appVersion,
+            preferences_json: var_preferencesJson,
+            media_libraries_json: var_mediaLibrariesJson,
+            accounts_json: var_accountsJson,
+            watch_history_batches: var_watchHistoryBatches,
+            episode_match_batches: var_episodeMatchBatches,
+            invalid_watch_history_count: var_invalidWatchHistoryCount,
+            invalid_episode_match_count: var_invalidEpisodeMatchCount,
         };
     }
 }
@@ -2933,135 +3020,141 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        6 => {
+        3 => wire__crate__api__incremental_sync__backup_prepare_restore_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        7 => {
             wire__crate__api__dfm_plus__dfm_plus_drop_layout_impl(port, ptr, rust_vec_len, data_len)
         }
-        7 => wire__crate__api__dfm_plus__dfm_plus_font_metrics_impl(
+        8 => wire__crate__api__dfm_plus__dfm_plus_font_metrics_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__dfm_plus__dfm_plus_layout_frame_impl(
+        9 => wire__crate__api__dfm_plus__dfm_plus_layout_frame_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__dfm_plus__dfm_plus_measure_text_width_impl(
+        10 => wire__crate__api__dfm_plus__dfm_plus_measure_text_width_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => wire__crate__api__dfm_plus__dfm_plus_measure_text_widths_impl(
+        11 => wire__crate__api__dfm_plus__dfm_plus_measure_text_widths_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__dfm_plus__dfm_plus_prepare_layout_impl(
+        12 => wire__crate__api__dfm_plus__dfm_plus_prepare_layout_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__dfm_plus__dfm_plus_prepare_layout_full_impl(
+        13 => wire__crate__api__dfm_plus__dfm_plus_prepare_layout_full_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        13 => wire__crate__api__file_scan__diff_video_files_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__media_probe__hash_file_head_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__next2__next2_layout_frame_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__next2__next2_prepare_layout_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__media_probe__probe_remote_media_impl(
+        14 => wire__crate__api__file_scan__diff_video_files_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__media_probe__hash_file_head_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__next2__next2_layout_frame_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__next2__next2_prepare_layout_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__media_probe__probe_remote_media_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        26 => wire__crate__api__performance__sample_cpu_counters_impl(
+        27 => wire__crate__api__performance__sample_cpu_counters_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        27 => wire__crate__api__performance__sample_gpu_percent_impl(
+        28 => wire__crate__api__performance__sample_gpu_percent_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__performance__sample_memory_rss_mb_impl(
+        29 => wire__crate__api__performance__sample_memory_rss_mb_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__performance__sample_performance_impl(
+        30 => wire__crate__api__performance__sample_performance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__incremental_sync__sync_apply_operations_impl(
+        31 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__incremental_sync__sync_apply_operations_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__incremental_sync__sync_apply_patch_chain_impl(
+        38 => wire__crate__api__incremental_sync__sync_apply_patch_chain_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        38 => wire__crate__api__incremental_sync__sync_canonicalize_json_impl(
+        39 => wire__crate__api__incremental_sync__sync_canonicalize_json_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__incremental_sync__sync_decode_snapshot_state_impl(
+        40 => wire__crate__api__incremental_sync__sync_decode_snapshot_state_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__incremental_sync__sync_diff_states_impl(
+        41 => wire__crate__api__incremental_sync__sync_diff_states_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__incremental_sync__sync_sha256_bytes_impl(
+        42 => wire__crate__api__incremental_sync__sync_sha256_bytes_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
-        47 => {
+        43 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
+        48 => {
             wire__crate__api__torrent__torrent_init_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        48 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__torrent__torrent_preview_magnet_impl(
+        49 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__torrent__torrent_preview_magnet_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        51 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3078,63 +3171,63 @@ fn pde_ffi_dispatcher_sync_impl(
         2 => {
             wire__crate__api__ass_converter__ass_resolve_font_size_impl(ptr, rust_vec_len, data_len)
         }
-        3 => wire__crate__api__ass_converter__convert_danmaku_to_ass_impl(
+        4 => wire__crate__api__ass_converter__convert_danmaku_to_ass_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        4 => wire__crate__api__ass_converter__convert_prepared_danmaku_to_ass_impl(
+        5 => wire__crate__api__ass_converter__convert_prepared_danmaku_to_ass_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__danmaku_analytics__density_stats_impl(ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__danmaku_analytics__find_peak_segments_impl(
+        6 => wire__crate__api__danmaku_analytics__density_stats_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__danmaku_analytics__find_peak_segments_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        17 => wire__crate__api__performance__is_performance_probe_available_impl(
+        18 => wire__crate__api__performance__is_performance_probe_available_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => {
+        19 => {
             wire__crate__api__torrent__is_torrent_engine_available_impl(ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__media_metadata__media_base_name_without_extension_impl(
+        20 => wire__crate__api__media_metadata__media_base_name_without_extension_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__api__media_metadata__media_extract_anime_title_keyword_impl(
+        21 => wire__crate__api__media_metadata__media_extract_anime_title_keyword_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__crate__api__media_metadata__natural_compare_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__media_metadata__natural_compare_case_sensitive_impl(
+        22 => wire__crate__api__media_metadata__natural_compare_impl(ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__media_metadata__natural_compare_case_sensitive_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => wire__crate__api__danmaku_analytics__smooth_density_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__media_metadata__subtitle_compute_match_score_impl(
+        32 => wire__crate__api__danmaku_analytics__smooth_density_impl(ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__media_metadata__subtitle_compute_match_score_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        33 => wire__crate__api__media_metadata__subtitle_extract_match_tokens_impl(
+        34 => wire__crate__api__media_metadata__subtitle_extract_match_tokens_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__crate__api__media_metadata__subtitle_normalize_match_name_impl(
+        35 => wire__crate__api__media_metadata__subtitle_normalize_match_name_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        35 => wire__crate__api__media_metadata__subtitle_pick_likely_episode_number_impl(
+        36 => wire__crate__api__media_metadata__subtitle_pick_likely_episode_number_impl(
             ptr,
             rust_vec_len,
             data_len,
@@ -3466,6 +3559,39 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::ass_converter::RustAssExportS
     for crate::api::ass_converter::RustAssExportSettings
 {
     fn into_into_dart(self) -> crate::api::ass_converter::RustAssExportSettings {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::incremental_sync::RustBackupRestorePlan {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.version.into_into_dart().into_dart(),
+            self.timestamp.into_into_dart().into_dart(),
+            self.app_version.into_into_dart().into_dart(),
+            self.preferences_json.into_into_dart().into_dart(),
+            self.media_libraries_json.into_into_dart().into_dart(),
+            self.accounts_json.into_into_dart().into_dart(),
+            self.watch_history_batches.into_into_dart().into_dart(),
+            self.episode_match_batches.into_into_dart().into_dart(),
+            self.invalid_watch_history_count
+                .into_into_dart()
+                .into_dart(),
+            self.invalid_episode_match_count
+                .into_into_dart()
+                .into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::incremental_sync::RustBackupRestorePlan
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::incremental_sync::RustBackupRestorePlan>
+    for crate::api::incremental_sync::RustBackupRestorePlan
+{
+    fn into_into_dart(self) -> crate::api::incremental_sync::RustBackupRestorePlan {
         self
     }
 }
@@ -4205,6 +4331,16 @@ impl SseEncode for Vec<crate::api::dfm_plus::DfmPlusRawDanmakuItem> {
     }
 }
 
+impl SseEncode for Vec<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Vec<u8>>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<f64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4427,6 +4563,22 @@ impl SseEncode for crate::api::ass_converter::RustAssExportSettings {
         <i32>::sse_encode(self.outline_style, serializer);
         <f64>::sse_encode(self.outline_width, serializer);
         <i32>::sse_encode(self.shadow_style, serializer);
+    }
+}
+
+impl SseEncode for crate::api::incremental_sync::RustBackupRestorePlan {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.version, serializer);
+        <String>::sse_encode(self.timestamp, serializer);
+        <String>::sse_encode(self.app_version, serializer);
+        <Vec<u8>>::sse_encode(self.preferences_json, serializer);
+        <Vec<u8>>::sse_encode(self.media_libraries_json, serializer);
+        <Vec<u8>>::sse_encode(self.accounts_json, serializer);
+        <Vec<Vec<u8>>>::sse_encode(self.watch_history_batches, serializer);
+        <Vec<Vec<u8>>>::sse_encode(self.episode_match_batches, serializer);
+        <i64>::sse_encode(self.invalid_watch_history_count, serializer);
+        <i64>::sse_encode(self.invalid_episode_match_count, serializer);
     }
 }
 

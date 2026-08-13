@@ -12,6 +12,7 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/incremental_sync_native_codec.dart';
+import 'package:nipaplay/services/incremental_sync_data_filter.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/services/incremental_sync_transport.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
@@ -41,12 +42,16 @@ typedef IncrementalSyncTransportFactory = IncrementalSyncTransport Function({
   required String username,
   required String password,
 });
+typedef AutoSyncRunner = Future<AutoSyncRunResult> Function();
 
 class AutoSyncService extends ChangeNotifier {
   static const int _patchesBeforeSnapshotCompaction = 64;
 
-  AutoSyncService._({IncrementalSyncTransportFactory? transportFactory})
-      : _transportFactory = transportFactory ??
+  AutoSyncService._({
+    IncrementalSyncTransportFactory? transportFactory,
+    AutoSyncRunner? syncRunner,
+  })  : _syncRunner = syncRunner,
+        _transportFactory = transportFactory ??
             (({
               required serverUrl,
               required username,
@@ -58,13 +63,24 @@ class AutoSyncService extends ChangeNotifier {
                   password: password,
                 ));
 
+  @visibleForTesting
+  AutoSyncService.forTesting({
+    required IncrementalSyncTransportFactory transportFactory,
+    AutoSyncRunner? syncRunner,
+  }) : this._(
+          transportFactory: transportFactory,
+          syncRunner: syncRunner,
+        );
+
   static AutoSyncService? _instance;
   static AutoSyncService get instance => _instance ??= AutoSyncService._();
 
   final IncrementalSyncTransportFactory _transportFactory;
+  final AutoSyncRunner? _syncRunner;
   final FullBackupService _backupService = FullBackupService();
 
   Timer? _syncTimer;
+  Future<AutoSyncRunResult>? _activeSync;
   bool _isInitialized = false;
   bool _isSyncing = false;
   AutoSyncPhase _phase = AutoSyncPhase.idle;
@@ -109,16 +125,6 @@ class AutoSyncService extends ChangeNotifier {
 
   Future<AutoSyncRunResult> manualSync() => _performSync();
 
-  Future<void> syncOnPlaybackEnd() async {
-    if (_isSyncing || !await AutoSyncSettings.isEnabled()) return;
-    final lastSyncAt = await AutoSyncSettings.getLastSyncAt();
-    if (lastSyncAt != null &&
-        DateTime.now().difference(lastSyncAt).inMinutes < 2) {
-      return;
-    }
-    await _performSync();
-  }
-
   Future<void> reloadSchedule() async {
     if (await AutoSyncSettings.isEnabled()) {
       await _startAutoSync();
@@ -136,6 +142,10 @@ class AutoSyncService extends ChangeNotifier {
       username: username,
       password: password,
     );
+    final manifestBytes = await transport.read(
+      _remoteJoin(remotePath, incrementalSyncManifestFile),
+    );
+    if (manifestBytes != null) return true;
     await transport.ensureDirectory(remotePath);
     await transport.listFileNames(remotePath);
     return true;
@@ -156,14 +166,18 @@ class AutoSyncService extends ChangeNotifier {
   }
 
   Future<AutoSyncRunResult> _performSync() async {
-    if (_isSyncing) {
-      return const AutoSyncRunResult(
-        downloadedPatches: 0,
-        uploadedOperations: 0,
-        restoredOperations: 0,
-        createdRepository: false,
-      );
+    final active = _activeSync;
+    if (active != null) return active;
+    final future = _performSyncOnce();
+    _activeSync = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_activeSync, future)) _activeSync = null;
     }
+  }
+
+  Future<AutoSyncRunResult> _performSyncOnce() async {
     if (!await AutoSyncSettings.isEnabled()) {
       throw StateError('自动同步未启用');
     }
@@ -172,7 +186,7 @@ class AutoSyncService extends ChangeNotifier {
     _isSyncing = true;
     notifyListeners();
     try {
-      final result = await _synchronizeRepository();
+      final result = await (_syncRunner?.call() ?? _synchronizeRepository());
       await AutoSyncSettings.recordSyncSuccess(DateTime.now());
       _lastError = null;
       _completedRunCount++;
@@ -204,18 +218,24 @@ class AutoSyncService extends ChangeNotifier {
       password: password,
     );
 
-    await transport.ensureDirectory(remoteRoot);
-    final localBackup = await _backupService.collectBackupData(
-      categories: categories,
-      // Thumbnails are device-local cache artifacts. Excluding them keeps the
-      // baseline and per-record hashes small enough for frequent sync.
-      includeWatchHistoryThumbnails: false,
+    final manifestPath = _remoteJoin(remoteRoot, incrementalSyncManifestFile);
+    // A number of hosted WebDAV gateways allow GET/PUT but return 503 for
+    // PROPFIND on iOS. An existing repository has a canonical manifest, so
+    // probe it directly and avoid making directory listing a prerequisite.
+    final manifestBytes = await transport.read(manifestPath);
+    if (manifestBytes == null) {
+      await transport.ensureDirectory(remoteRoot);
+    }
+    final localBackup = IncrementalSyncDataFilter.sanitizeBackup(
+      await _backupService.collectBackupData(
+        categories: categories,
+        // Thumbnails and local media paths are device-bound cache/library
+        // artifacts and must never enter the cross-device repository.
+        includeWatchHistoryThumbnails: false,
+      ),
     );
     final localState =
         IncrementalSyncCodec.flattenBackup(localBackup, categories);
-    final manifestPath = _remoteJoin(remoteRoot, incrementalSyncManifestFile);
-    final manifestBytes = await transport.read(manifestPath);
-
     if (manifestBytes == null) {
       return _createRepository(
         transport: transport,
@@ -292,11 +312,19 @@ class AutoSyncService extends ChangeNotifier {
 
     _setPhase(AutoSyncPhase.merging);
     final selectedNames = categories.map(backupCategoryWireName).toSet();
-    final selectedRemoteState = _selectCategories(remoteState, selectedNames);
+    final selectedRemoteStateRaw =
+        _selectCategories(remoteState, selectedNames);
+    final selectedRemoteState = _selectCategories(
+      IncrementalSyncDataFilter.sanitizeState(remoteState),
+      selectedNames,
+    );
     final mergedSelectedState = synchronizationBase == null
         ? _mergeFirstSync(selectedRemoteState, localState)
         : await _mergeChangedStates(
-            base: _selectCategories(synchronizationBase, selectedNames),
+            base: _selectCategories(
+              IncrementalSyncDataFilter.sanitizeState(synchronizationBase),
+              selectedNames,
+            ),
             remote: selectedRemoteState,
             local: localState,
           );
@@ -316,7 +344,9 @@ class AutoSyncService extends ChangeNotifier {
 
     _setPhase(AutoSyncPhase.pushing);
     final operationsForRemote = await IncrementalSyncNativeCodec.diff(
-      previous: selectedRemoteState,
+      // Compare with the unsanitized remote state so legacy local-media
+      // entries are published as deletions and disappear after compaction.
+      previous: selectedRemoteStateRaw,
       current: mergedSelectedState,
       modifiedAt: DateTime.now().toUtc(),
       deviceId: deviceId,
@@ -489,7 +519,22 @@ class AutoSyncService extends ChangeNotifier {
     final byFile = <String, IncrementalSyncPatchEntry>{
       for (final entry in manifest.patches) entry.file: entry,
     };
-    final names = await transport.listFileNames(remoteRoot);
+    List<String> names;
+    try {
+      names = await transport.listFileNames(remoteRoot);
+    } on WebDavSyncException catch (error) {
+      final statusCode = error.statusCode;
+      if (statusCode == null || statusCode < 500) rethrow;
+      // manifest.version is the authoritative patch index. Directory listing
+      // only recovers immutable patches uploaded immediately before a writer
+      // could publish its manifest, so a gateway-level PROPFIND failure should
+      // not prevent normal pull/push from continuing.
+      debugPrint(
+        'WebDAV 目录枚举不可用（HTTP $statusCode），'
+        '本次使用 manifest.version 中的补丁索引继续同步',
+      );
+      names = const [];
+    }
     for (final name in names.where(
       (name) => name.startsWith('patch_v') && name.endsWith('.diff'),
     )) {

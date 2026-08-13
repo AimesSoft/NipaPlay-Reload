@@ -29,6 +29,20 @@ pub struct RustSyncDecodedSnapshot {
     pub sha256: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct RustBackupRestorePlan {
+    pub version: i64,
+    pub timestamp: String,
+    pub app_version: String,
+    pub preferences_json: Vec<u8>,
+    pub media_libraries_json: Vec<u8>,
+    pub accounts_json: Vec<u8>,
+    pub watch_history_batches: Vec<Vec<u8>>,
+    pub episode_match_batches: Vec<Vec<u8>>,
+    pub invalid_watch_history_count: i64,
+    pub invalid_episode_match_count: i64,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SyncOperation {
@@ -72,6 +86,74 @@ pub fn sync_canonicalize_json(input: Vec<u8>, pretty: bool) -> Result<RustSyncBl
 
 pub fn sync_sha256_bytes(input: Vec<u8>) -> String {
     sha256_hex(&input)
+}
+
+/// Parses a full backup exactly once, keeps only the requested categories and
+/// emits large record collections as bounded JSON batches. This avoids
+/// materializing the entire `.npb` object graph in Dart before restoration.
+pub fn backup_prepare_restore(
+    input: Vec<u8>,
+    include_preferences: bool,
+    include_media_libraries: bool,
+    include_watch_history: bool,
+    include_episode_matches: bool,
+    include_accounts: bool,
+    batch_size: i64,
+) -> Result<RustBackupRestorePlan, String> {
+    let root: Value = serde_json::from_slice(&input).map_err(json_error)?;
+    let object = root
+        .as_object()
+        .ok_or_else(|| "备份文件根节点必须是 JSON 对象".to_owned())?;
+    let version = object.get("version").and_then(Value::as_i64).unwrap_or(0);
+    if version > 2 {
+        return Err(format!("不支持的备份格式版本: {version}"));
+    }
+    let actual_batch_size = batch_size.clamp(1, 2_000) as usize;
+
+    let preferences_json = selected_object_bytes(object, "preferences", include_preferences)?;
+    let media_libraries_json =
+        selected_object_bytes(object, "mediaLibraries", include_media_libraries)?;
+    let accounts_json = selected_object_bytes(object, "accounts", include_accounts)?;
+
+    let (watch_history_batches, invalid_watch_history_count) = if include_watch_history {
+        normalize_array_batches(
+            object.get("watchHistory"),
+            actual_batch_size,
+            normalize_watch_history_record,
+        )?
+    } else {
+        (Vec::new(), 0)
+    };
+    let (episode_match_batches, invalid_episode_match_count) = if include_episode_matches {
+        normalize_array_batches(
+            object.get("episodeMatches"),
+            actual_batch_size,
+            normalize_episode_match_record,
+        )?
+    } else {
+        (Vec::new(), 0)
+    };
+
+    Ok(RustBackupRestorePlan {
+        version,
+        timestamp: object
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        app_version: object
+            .get("appVersion")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        preferences_json,
+        media_libraries_json,
+        accounts_json,
+        watch_history_batches,
+        episode_match_batches,
+        invalid_watch_history_count,
+        invalid_episode_match_count,
+    })
 }
 
 /// Builds an entity-level diff between two flattened sync states.
@@ -215,6 +297,156 @@ fn apply_operations(state: &mut SyncState, operations: Vec<SyncOperation>) {
     }
 }
 
+fn selected_object_bytes(
+    root: &serde_json::Map<String, Value>,
+    key: &str,
+    selected: bool,
+) -> Result<Vec<u8>, String> {
+    if !selected {
+        return Ok(Vec::new());
+    }
+    match root.get(key) {
+        Some(value) if value.is_object() => serde_json::to_vec(value).map_err(json_error),
+        Some(_) => Err(format!("备份字段 {key} 必须是 JSON 对象")),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn normalize_array_batches(
+    value: Option<&Value>,
+    batch_size: usize,
+    normalize: fn(&Value) -> Option<Value>,
+) -> Result<(Vec<Vec<u8>>, i64), String> {
+    let Some(value) = value else {
+        return Ok((Vec::new(), 0));
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| "备份记录集合必须是 JSON 数组".to_owned())?;
+    if values.is_empty() {
+        return Ok((vec![b"[]".to_vec()], 0));
+    }
+    let mut normalized = Vec::with_capacity(batch_size.min(values.len()));
+    let mut batches = Vec::new();
+    let mut invalid_count = 0;
+    for value in values {
+        if let Some(record) = normalize(value) {
+            normalized.push(record);
+            if normalized.len() == batch_size {
+                batches.push(serde_json::to_vec(&normalized).map_err(json_error)?);
+                normalized.clear();
+            }
+        } else {
+            invalid_count += 1;
+        }
+    }
+    if !normalized.is_empty() {
+        batches.push(serde_json::to_vec(&normalized).map_err(json_error)?);
+    }
+    Ok((batches, invalid_count))
+}
+
+fn normalize_watch_history_record(value: &Value) -> Option<Value> {
+    let source = value.as_object()?;
+    let file_path = source.get("filePath")?.as_str()?.trim();
+    if file_path.is_empty() {
+        return None;
+    }
+    let last_watch_time = source.get("lastWatchTime")?.as_str()?.trim();
+    if last_watch_time.is_empty() {
+        return None;
+    }
+    let anime_name = source
+        .get("animeName")
+        .and_then(Value::as_str)
+        .filter(|name| !name.is_empty())
+        .unwrap_or(file_path);
+    let mut record = serde_json::Map::new();
+    record.insert("filePath".to_owned(), Value::String(file_path.to_owned()));
+    record.insert("animeName".to_owned(), Value::String(anime_name.to_owned()));
+    copy_optional_string(source, &mut record, "episodeTitle");
+    copy_optional_i64(source, &mut record, "episodeId");
+    copy_optional_i64(source, &mut record, "animeId");
+    record.insert(
+        "watchProgress".to_owned(),
+        Value::from(
+            source
+                .get("watchProgress")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0),
+        ),
+    );
+    record.insert(
+        "lastPosition".to_owned(),
+        Value::from(value_as_i64(source.get("lastPosition")).unwrap_or(0)),
+    );
+    record.insert(
+        "duration".to_owned(),
+        Value::from(value_as_i64(source.get("duration")).unwrap_or(0)),
+    );
+    record.insert(
+        "lastWatchTime".to_owned(),
+        Value::String(last_watch_time.to_owned()),
+    );
+    record.insert(
+        "isFromScan".to_owned(),
+        Value::Bool(
+            source
+                .get("isFromScan")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        ),
+    );
+    copy_optional_string(source, &mut record, "videoHash");
+    copy_optional_string(source, &mut record, "thumbnailBase64");
+    Some(Value::Object(record))
+}
+
+fn normalize_episode_match_record(value: &Value) -> Option<Value> {
+    let source = value.as_object()?;
+    let file_path = source.get("filePath")?.as_str()?.trim();
+    let anime_id = value_as_i64(source.get("animeId"))?;
+    let episode_id = value_as_i64(source.get("episodeId"))?;
+    if file_path.is_empty() {
+        return None;
+    }
+    let mut record = serde_json::Map::new();
+    record.insert("filePath".to_owned(), Value::String(file_path.to_owned()));
+    record.insert("animeId".to_owned(), Value::from(anime_id));
+    record.insert("episodeId".to_owned(), Value::from(episode_id));
+    copy_optional_string(source, &mut record, "animeName");
+    copy_optional_string(source, &mut record, "episodeTitle");
+    copy_optional_string(source, &mut record, "videoHash");
+    Some(Value::Object(record))
+}
+
+fn value_as_i64(value: Option<&Value>) -> Option<i64> {
+    let value = value?;
+    value
+        .as_i64()
+        .or_else(|| value.as_f64().map(|number| number as i64))
+}
+
+fn copy_optional_i64(
+    source: &serde_json::Map<String, Value>,
+    target: &mut serde_json::Map<String, Value>,
+    key: &str,
+) {
+    if let Some(value) = value_as_i64(source.get(key)) {
+        target.insert(key.to_owned(), Value::from(value));
+    }
+}
+
+fn copy_optional_string(
+    source: &serde_json::Map<String, Value>,
+    target: &mut serde_json::Map<String, Value>,
+    key: &str,
+) {
+    if let Some(value) = source.get(key).and_then(Value::as_str) {
+        target.insert(key.to_owned(), Value::String(value.to_owned()));
+    }
+}
+
 fn sha256_hex(input: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
@@ -325,5 +557,33 @@ mod tests {
         let rebuilt_value: Value = serde_json::from_slice(&rebuilt).expect("rebuilt JSON");
         let after_value: Value = serde_json::from_slice(after).expect("target JSON");
         assert_eq!(rebuilt_value, after_value);
+    }
+
+    #[test]
+    fn full_backup_restore_plan_filters_normalizes_and_batches() {
+        let input = br#"{
+          "version":2,
+          "preferences":{"settings":{"theme":"dark"}},
+          "watchHistory":[
+            {"filePath":"/a.mkv","animeName":"A","lastWatchTime":"2026-08-13T00:00:00Z","episodeId":1.0},
+            {"filePath":"","lastWatchTime":"2026-08-13T00:00:00Z"},
+            {"filePath":"/b.mkv","animeName":"B","lastWatchTime":"2026-08-13T00:00:01Z"}
+          ],
+          "episodeMatches":[
+            {"filePath":"/a.mkv","animeId":10.0,"episodeId":1},
+            {"filePath":"/bad.mkv","animeId":10}
+          ]
+        }"#;
+        let plan = backup_prepare_restore(input.to_vec(), true, false, true, true, false, 1)
+            .expect("restore plan");
+        assert_eq!(plan.version, 2);
+        assert_eq!(plan.watch_history_batches.len(), 2);
+        assert_eq!(plan.invalid_watch_history_count, 1);
+        assert_eq!(plan.episode_match_batches.len(), 1);
+        assert_eq!(plan.invalid_episode_match_count, 1);
+        assert!(!plan.preferences_json.is_empty());
+        assert!(plan.accounts_json.is_empty());
+        let first: Value = serde_json::from_slice(&plan.watch_history_batches[0]).unwrap();
+        assert_eq!(first[0]["episodeId"], 1);
     }
 }

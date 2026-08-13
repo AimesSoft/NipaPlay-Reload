@@ -1369,13 +1369,6 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   _handleEmbyPlaybackEnd(_currentVideoPath!);
                 }
 
-                // 播放结束时触发自动云同步
-                try {
-                  await AutoSyncService.instance.syncOnPlaybackEnd();
-                } catch (e) {
-                  debugPrint('播放结束时云同步失败: $e');
-                }
-
                 // 根据用户设置处理播放结束行为
                 await _handlePlaybackEndAction();
               }

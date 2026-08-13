@@ -47,6 +47,12 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   String? _lastSyncError;
 
   bool get _useIosDocumentExporter => !kIsWeb && Platform.isIOS;
+  bool get _hasSyncConfiguration =>
+      _syncServerUrl.trim().isNotEmpty &&
+      _syncRemotePath.trim().isNotEmpty &&
+      _syncCategories.isNotEmpty;
+  bool get _canManualSync =>
+      _autoSyncEnabled && _hasSyncConfiguration && !_isProcessing;
 
   Future<String> _createIosBackupExportPath(String fileName) async {
     final temporaryDirectory = await getTemporaryDirectory();
@@ -608,15 +614,13 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               onTap: _showSyncSettingsDialog,
               icon: Icons.cloud_outlined,
             ),
-            if (_autoSyncEnabled) ...[
-              AdaptiveSettingsTile<void>.card(
-                title: '立即同步',
-                subtitle: _buildSyncStatusSubtitle(),
-                enabled: !_isProcessing,
-                onTap: _manualSync,
-                icon: Icons.sync,
-              ),
-            ],
+            AdaptiveSettingsTile<void>.card(
+              title: '立即同步',
+              subtitle: _buildSyncStatusSubtitle(),
+              enabled: _canManualSync,
+              onTap: _manualSync,
+              icon: Icons.sync,
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -645,8 +649,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               title: '说明',
               subtitle: '全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息\n'
                   '全量恢复：从 .npb 文件恢复，支持选择性恢复各类数据\n'
-                  '增量同步：远端使用 manifest.version、snap_vN 基准快照和 patch_vN_*.diff 补丁\n'
-                  '同步规则：定时拉取索引，只下载和导入尚未应用的补丁；远端对象会进行 SHA-256 校验\n'
+                  '增量同步：使用 Git 原理实现数据增量同步，通过比较文件差异来实现。\n'
                   '冲突规则：观看历史保留最近观看记录，其余数据保留本轮明确修改\n'
                   'Web 端暂不支持本地增量索引',
               icon: Icons.info_outline,
@@ -673,6 +676,8 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   }
 
   String _buildSyncStatusSubtitle() {
+    if (!_hasSyncConfiguration) return '请先配置 WebDAV 服务器和同步内容';
+    if (!_autoSyncEnabled) return '开启多端增量同步后可手动同步';
     if (_lastSyncError != null && _lastSyncError!.isNotEmpty) {
       return '上次同步失败：$_lastSyncError';
     }
@@ -721,7 +726,6 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   late int _intervalMinutes;
   bool _obscurePassword = true;
   bool _testing = false;
-  String? _testMessage;
 
   static const _intervalOptions = [5, 15, 30, 60, 180, 360];
 
@@ -768,13 +772,10 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   Future<void> _testConnection() async {
     final validationError = _validationError();
     if (validationError != null) {
-      setState(() => _testMessage = validationError);
+      BlurSnackBar.show(context, validationError);
       return;
     }
-    setState(() {
-      _testing = true;
-      _testMessage = null;
-    });
+    setState(() => _testing = true);
     try {
       await AutoSyncService.instance.testConnection(
         serverUrl: _serverController.text.trim(),
@@ -782,9 +783,11 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
         password: _passwordController.text,
         remotePath: _normalizedRemotePath,
       );
-      if (mounted) setState(() => _testMessage = '连接成功，远端目录可访问');
+      if (mounted) {
+        BlurSnackBar.show(context, '连接成功，远端同步目录可访问');
+      }
     } catch (error) {
-      if (mounted) setState(() => _testMessage = '连接失败：$error');
+      if (mounted) BlurSnackBar.show(context, '连接失败：$error');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -805,7 +808,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   void _submit() {
     final validationError = _validationError();
     if (validationError != null) {
-      setState(() => _testMessage = validationError);
+      BlurSnackBar.show(context, validationError);
       return;
     }
     Navigator.of(context).pop(_SyncSettingsValue(
@@ -846,10 +849,14 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                     children: [
                       TextField(
                         controller: _serverController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'WebDAV 服务器地址',
                           hintText: 'https://dav.example.com/',
-                          prefixIcon: Icon(Icons.cloud_outlined),
+                          hintStyle: TextStyle(
+                            color:
+                                colorScheme.onSurface.withValues(alpha: 0.35),
+                          ),
+                          prefixIcon: const Icon(Icons.cloud_outlined),
                         ),
                         keyboardType: TextInputType.url,
                       ),
@@ -950,20 +957,6 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                           },
                         );
                       }),
-                      if (_testMessage != null) ...[
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            _testMessage!,
-                            style: TextStyle(
-                              color: _testMessage!.startsWith('连接成功')
-                                  ? Colors.green
-                                  : colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -1005,7 +998,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
 
   String _categorySubtitle(BackupCategory category) => switch (category) {
         BackupCategory.preferences => '语言、弹幕、播放器等软件设置',
-        BackupCategory.mediaLibraries => '本地、在线、WebDAV、SMB 与共享服务',
+        BackupCategory.mediaLibraries => '在线、WebDAV、SMB 与共享服务（不含本地媒体库）',
         BackupCategory.watchHistory => '观看进度与历史记录',
         BackupCategory.episodeMatches => '文件和动画剧集的匹配关系',
         BackupCategory.accounts => '包含访问令牌，请仅同步到可信 WebDAV',

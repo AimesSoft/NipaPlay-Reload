@@ -680,6 +680,7 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
     this.remoteInputTitle,
     this.remoteInputFieldId,
     this.remoteInputRequired = false,
+    this.showClearButton = false,
   });
 
   final material.TextEditingController controller;
@@ -699,6 +700,7 @@ class AdaptiveMediaTextField extends material.StatefulWidget {
   final String? remoteInputTitle;
   final String? remoteInputFieldId;
   final bool remoteInputRequired;
+  final bool showClearButton;
 
   @override
   material.State<AdaptiveMediaTextField> createState() =>
@@ -736,6 +738,17 @@ class _AdaptiveMediaTextFieldState
     if (mounted) setState(() {});
   }
 
+  void _handleChanged(String value) {
+    if (mounted) setState(() {});
+    widget.onChanged?.call(value);
+  }
+
+  void _clear() {
+    widget.controller.clear();
+    _handleChanged('');
+    _focusNode.requestFocus();
+  }
+
   @override
   void dispose() {
     _focusNode.removeListener(_handleFocusChanged);
@@ -761,9 +774,27 @@ class _AdaptiveMediaTextFieldState
         obscureText: widget.obscureText,
         textInputAction: widget.textInputAction,
         textAlign: widget.textAlign,
-        onChanged: widget.onChanged,
+        onChanged: _handleChanged,
         onSubmitted: widget.onSubmitted,
         maxLength: widget.maxLength,
+        enableInteractiveSelection: true,
+        prefix: decoration?.prefixIcon,
+        prefixMode: cupertino.OverlayVisibilityMode.always,
+        suffix: widget.showClearButton
+            ? cupertino.CupertinoButton(
+                padding: const material.EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const material.Size(36, 36),
+                onPressed: _clear,
+                child: const cupertino.Icon(
+                  cupertino.CupertinoIcons.xmark_circle_fill,
+                  size: 18,
+                  color: cupertino.CupertinoColors.tertiaryLabel,
+                ),
+              )
+            : decoration?.suffixIcon,
+        suffixMode: widget.showClearButton
+            ? cupertino.OverlayVisibilityMode.editing
+            : cupertino.OverlayVisibilityMode.always,
         padding: decoration?.contentPadding ??
             const material.EdgeInsets.symmetric(
               horizontal: 12,
@@ -794,6 +825,40 @@ class _AdaptiveMediaTextFieldState
     final borderRadius = activeBorder is material.OutlineInputBorder
         ? activeBorder.borderRadius
         : material.BorderRadius.circular(8);
+
+    if (!isTelevision) {
+      return material.TextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        style: style,
+        cursorColor: widget.cursorColor,
+        keyboardType: widget.keyboardType,
+        minLines: widget.minLines,
+        maxLines: widget.maxLines,
+        obscureText: widget.obscureText,
+        textInputAction: widget.textInputAction,
+        textAlign: widget.textAlign,
+        onChanged: _handleChanged,
+        onSubmitted: widget.onSubmitted,
+        maxLength: widget.maxLength,
+        enableInteractiveSelection: true,
+        decoration: (decoration ?? const material.InputDecoration()).copyWith(
+          suffixIcon: widget.showClearButton &&
+                  widget.controller.text.isNotEmpty
+              ? material.IconButton(
+                  tooltip: '清空',
+                  onPressed: _clear,
+                  icon: material.Icon(
+                    material.Icons.close_rounded,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                  ),
+                )
+              : decoration?.suffixIcon,
+        ),
+      );
+    }
+
     final field = material.Container(
       padding: decoration?.contentPadding ??
           const material.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -829,10 +894,7 @@ class _AdaptiveMediaTextFieldState
             textInputAction: widget.textInputAction,
             textAlign: widget.textAlign,
             readOnly: isTelevision,
-            onChanged: (value) {
-              setState(() {});
-              widget.onChanged?.call(value);
-            },
+            onChanged: _handleChanged,
             onSubmitted: widget.onSubmitted,
             inputFormatters: widget.maxLength == null
                 ? null
@@ -845,7 +907,6 @@ class _AdaptiveMediaTextFieldState
         ],
       ),
     );
-    if (!isTelevision) return field;
     return TvOSRemoteTextInputControl(
       focusNode: _focusNode,
       title: widget.remoteInputTitle ?? placeholder,

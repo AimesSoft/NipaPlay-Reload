@@ -77,17 +77,6 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         );
       }
 
-      // 云同步异步执行，不阻塞退出流程
-      // 云同步不依赖播放器状态，独立读取 WatchHistoryManager 数据
-      // dispose() 中有备份调用，双重保险
-      if (_currentVideoPath != null) {
-        unawaited(
-          AutoSyncService.instance.syncOnPlaybackEnd().catchError((e) {
-            debugPrint('退出云同步失败: $e');
-          }),
-        );
-      }
-
       _logMacOSHdrExitTrace(
         'handleBackButton done path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
