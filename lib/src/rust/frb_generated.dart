@@ -7,6 +7,7 @@ import 'api/ass_converter.dart';
 import 'api/danmaku_analytics.dart';
 import 'api/dfm_plus.dart';
 import 'api/file_scan.dart';
+import 'api/incremental_sync.dart';
 import 'api/media_metadata.dart';
 import 'api/media_probe.dart';
 import 'api/next2.dart';
@@ -78,7 +79,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 2084496947;
+  int get rustContentHash => 1209700360;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -217,6 +218,33 @@ abstract class RustLibApi extends BaseApi {
 
   String? crateApiMediaMetadataSubtitlePickLikelyEpisodeNumber(
       {required List<String> numbers});
+
+  Future<Uint8List> crateApiIncrementalSyncSyncApplyOperations(
+      {required List<int> stateJson, required List<int> operationsJson});
+
+  Future<RustSyncPatchChainResult> crateApiIncrementalSyncSyncApplyPatchChain(
+      {required List<int> stateJson,
+      required List<RustSyncPatchInput> patches,
+      required PlatformInt64 maximumSnapshotVersion});
+
+  Future<RustSyncBlob> crateApiIncrementalSyncSyncCanonicalizeJson(
+      {required List<int> input, required bool pretty});
+
+  Future<RustSyncDecodedSnapshot>
+      crateApiIncrementalSyncSyncDecodeSnapshotState(
+          {required List<int> snapshotBytes,
+          required String expectedSha256,
+          required String expectedRepositoryId,
+          required PlatformInt64 expectedSnapshotVersion});
+
+  Future<Uint8List> crateApiIncrementalSyncSyncDiffStates(
+      {required List<int> previousJson,
+      required List<int> currentJson,
+      required String modifiedAt,
+      required String deviceId});
+
+  Future<String> crateApiIncrementalSyncSyncSha256Bytes(
+      {required List<int> input});
 
   Future<String> crateApiTorrentTorrentAddFile(
       {required String torrentFilePath,
@@ -1260,6 +1288,191 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
 
   @override
+  Future<Uint8List> crateApiIncrementalSyncSyncApplyOperations(
+      {required List<int> stateJson, required List<int> operationsJson}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(stateJson, serializer);
+        sse_encode_list_prim_u_8_loose(operationsJson, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 36, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_prim_u_8_strict,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncApplyOperationsConstMeta,
+      argValues: [stateJson, operationsJson],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncApplyOperationsConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_apply_operations",
+        argNames: ["stateJson", "operationsJson"],
+      );
+
+  @override
+  Future<RustSyncPatchChainResult> crateApiIncrementalSyncSyncApplyPatchChain(
+      {required List<int> stateJson,
+      required List<RustSyncPatchInput> patches,
+      required PlatformInt64 maximumSnapshotVersion}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(stateJson, serializer);
+        sse_encode_list_rust_sync_patch_input(patches, serializer);
+        sse_encode_i_64(maximumSnapshotVersion, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 37, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_sync_patch_chain_result,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncApplyPatchChainConstMeta,
+      argValues: [stateJson, patches, maximumSnapshotVersion],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncApplyPatchChainConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_apply_patch_chain",
+        argNames: ["stateJson", "patches", "maximumSnapshotVersion"],
+      );
+
+  @override
+  Future<RustSyncBlob> crateApiIncrementalSyncSyncCanonicalizeJson(
+      {required List<int> input, required bool pretty}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(input, serializer);
+        sse_encode_bool(pretty, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 38, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_sync_blob,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncCanonicalizeJsonConstMeta,
+      argValues: [input, pretty],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncCanonicalizeJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_canonicalize_json",
+        argNames: ["input", "pretty"],
+      );
+
+  @override
+  Future<RustSyncDecodedSnapshot>
+      crateApiIncrementalSyncSyncDecodeSnapshotState(
+          {required List<int> snapshotBytes,
+          required String expectedSha256,
+          required String expectedRepositoryId,
+          required PlatformInt64 expectedSnapshotVersion}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(snapshotBytes, serializer);
+        sse_encode_String(expectedSha256, serializer);
+        sse_encode_String(expectedRepositoryId, serializer);
+        sse_encode_i_64(expectedSnapshotVersion, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 39, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_sync_decoded_snapshot,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncDecodeSnapshotStateConstMeta,
+      argValues: [
+        snapshotBytes,
+        expectedSha256,
+        expectedRepositoryId,
+        expectedSnapshotVersion
+      ],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncDecodeSnapshotStateConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_decode_snapshot_state",
+        argNames: [
+          "snapshotBytes",
+          "expectedSha256",
+          "expectedRepositoryId",
+          "expectedSnapshotVersion"
+        ],
+      );
+
+  @override
+  Future<Uint8List> crateApiIncrementalSyncSyncDiffStates(
+      {required List<int> previousJson,
+      required List<int> currentJson,
+      required String modifiedAt,
+      required String deviceId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(previousJson, serializer);
+        sse_encode_list_prim_u_8_loose(currentJson, serializer);
+        sse_encode_String(modifiedAt, serializer);
+        sse_encode_String(deviceId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 40, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_prim_u_8_strict,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncDiffStatesConstMeta,
+      argValues: [previousJson, currentJson, modifiedAt, deviceId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncDiffStatesConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_diff_states",
+        argNames: ["previousJson", "currentJson", "modifiedAt", "deviceId"],
+      );
+
+  @override
+  Future<String> crateApiIncrementalSyncSyncSha256Bytes(
+      {required List<int> input}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_prim_u_8_loose(input, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 41, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiIncrementalSyncSyncSha256BytesConstMeta,
+      argValues: [input],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiIncrementalSyncSyncSha256BytesConstMeta =>
+      const TaskConstMeta(
+        debugName: "sync_sha256_bytes",
+        argNames: ["input"],
+      );
+
+  @override
   Future<String> crateApiTorrentTorrentAddFile(
       {required String torrentFilePath,
       required String downloadDir,
@@ -1271,7 +1484,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 36, port: port_);
+            funcId: 42, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1301,7 +1514,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 37, port: port_);
+            funcId: 43, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1326,7 +1539,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 38, port: port_);
+            funcId: 44, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1351,7 +1564,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 39, port: port_);
+            funcId: 45, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1376,7 +1589,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 40, port: port_);
+            funcId: 46, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1402,7 +1615,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 41, port: port_);
+            funcId: 47, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1427,7 +1640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 42, port: port_);
+            funcId: 48, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1451,7 +1664,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 43, port: port_);
+            funcId: 49, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1478,7 +1691,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(magnetUri, serializer);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 44, port: port_);
+            funcId: 50, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1503,7 +1716,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 45, port: port_);
+            funcId: 51, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1531,7 +1744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(fileId, serializer);
         sse_encode_String(filename, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 46, port: port_);
+            funcId: 52, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1832,6 +2045,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as List<int>;
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
@@ -1908,6 +2127,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
         .map(dco_decode_rust_prepared_danmaku_input)
+        .toList();
+  }
+
+  @protected
+  List<RustSyncPatchInput> dco_decode_list_rust_sync_patch_input(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_rust_sync_patch_input)
         .toList();
   }
 
@@ -2290,6 +2517,56 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustSyncBlob dco_decode_rust_sync_blob(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustSyncBlob(
+      bytes: dco_decode_list_prim_u_8_strict(arr[0]),
+      sha256: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  RustSyncDecodedSnapshot dco_decode_rust_sync_decoded_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustSyncDecodedSnapshot(
+      stateJson: dco_decode_list_prim_u_8_strict(arr[0]),
+      sha256: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  RustSyncPatchChainResult dco_decode_rust_sync_patch_chain_result(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustSyncPatchChainResult(
+      stateJson: dco_decode_list_prim_u_8_strict(arr[0]),
+      appliedPatchIds: dco_decode_list_String(arr[1]),
+    );
+  }
+
+  @protected
+  RustSyncPatchInput dco_decode_rust_sync_patch_input(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return RustSyncPatchInput(
+      bytes: dco_decode_list_prim_u_8_strict(arr[0]),
+      expectedSha256: dco_decode_String(arr[1]),
+      expectedId: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -2653,6 +2930,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
@@ -2785,6 +3069,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <RustPreparedDanmakuInput>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_rust_prepared_danmaku_input(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RustSyncPatchInput> sse_decode_list_rust_sync_patch_input(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RustSyncPatchInput>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_rust_sync_patch_input(deserializer));
     }
     return ans_;
   }
@@ -3225,6 +3522,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustSyncBlob sse_decode_rust_sync_blob(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bytes = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_sha256 = sse_decode_String(deserializer);
+    return RustSyncBlob(bytes: var_bytes, sha256: var_sha256);
+  }
+
+  @protected
+  RustSyncDecodedSnapshot sse_decode_rust_sync_decoded_snapshot(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_stateJson = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_sha256 = sse_decode_String(deserializer);
+    return RustSyncDecodedSnapshot(
+        stateJson: var_stateJson, sha256: var_sha256);
+  }
+
+  @protected
+  RustSyncPatchChainResult sse_decode_rust_sync_patch_chain_result(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_stateJson = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_appliedPatchIds = sse_decode_list_String(deserializer);
+    return RustSyncPatchChainResult(
+        stateJson: var_stateJson, appliedPatchIds: var_appliedPatchIds);
+  }
+
+  @protected
+  RustSyncPatchInput sse_decode_rust_sync_patch_input(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bytes = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_expectedSha256 = sse_decode_String(deserializer);
+    var var_expectedId = sse_decode_String(deserializer);
+    return RustSyncPatchInput(
+        bytes: var_bytes,
+        expectedSha256: var_expectedSha256,
+        expectedId: var_expectedId);
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -3510,6 +3848,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_prim_u_8_loose(
+      List<int> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer
+        .putUint8List(self is Uint8List ? self : Uint8List.fromList(self));
+  }
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
       Uint8List self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3614,6 +3961,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_rust_prepared_danmaku_input(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_rust_sync_patch_input(
+      List<RustSyncPatchInput> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_rust_sync_patch_input(item, serializer);
     }
   }
 
@@ -3921,6 +4278,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_f_64(self.durationSeconds, serializer);
     sse_encode_bool(self.isScroll, serializer);
     sse_encode_bool(self.isFiltered, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_sync_blob(RustSyncBlob self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.bytes, serializer);
+    sse_encode_String(self.sha256, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_sync_decoded_snapshot(
+      RustSyncDecodedSnapshot self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.stateJson, serializer);
+    sse_encode_String(self.sha256, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_sync_patch_chain_result(
+      RustSyncPatchChainResult self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.stateJson, serializer);
+    sse_encode_list_String(self.appliedPatchIds, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_sync_patch_input(
+      RustSyncPatchInput self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.bytes, serializer);
+    sse_encode_String(self.expectedSha256, serializer);
+    sse_encode_String(self.expectedId, serializer);
   }
 
   @protected

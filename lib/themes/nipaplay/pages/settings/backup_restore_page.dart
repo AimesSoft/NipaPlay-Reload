@@ -37,7 +37,14 @@ class BackupRestorePage extends StatefulWidget {
 class _BackupRestorePageState extends State<BackupRestorePage> {
   bool _isProcessing = false;
   bool _autoSyncEnabled = false;
-  String? _autoSyncPath;
+  String _syncServerUrl = '';
+  String _syncUsername = '';
+  String _syncPassword = '';
+  String _syncRemotePath = AutoSyncSettings.defaultRemotePath;
+  int _syncIntervalMinutes = AutoSyncSettings.defaultIntervalMinutes;
+  Set<BackupCategory> _syncCategories = BackupCategory.values.toSet();
+  DateTime? _lastSyncAt;
+  String? _lastSyncError;
 
   bool get _useIosDocumentExporter => !kIsWeb && Platform.isIOS;
 
@@ -57,12 +64,28 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   }
 
   Future<void> _loadAutoSyncSettings() async {
-    final enabled = await AutoSyncSettings.isEnabled();
-    final path = await AutoSyncSettings.getSyncPath();
-
+    final values = await Future.wait<dynamic>([
+      AutoSyncSettings.isEnabled(),
+      AutoSyncSettings.getServerUrl(),
+      AutoSyncSettings.getUsername(),
+      AutoSyncSettings.getPassword(),
+      AutoSyncSettings.getRemotePath(),
+      AutoSyncSettings.getIntervalMinutes(),
+      AutoSyncSettings.getCategories(),
+      AutoSyncSettings.getLastSyncAt(),
+      AutoSyncSettings.getLastSyncError(),
+    ]);
+    if (!mounted) return;
     setState(() {
-      _autoSyncEnabled = enabled;
-      _autoSyncPath = path;
+      _autoSyncEnabled = values[0] as bool;
+      _syncServerUrl = values[1] as String;
+      _syncUsername = values[2] as String;
+      _syncPassword = values[3] as String;
+      _syncRemotePath = values[4] as String;
+      _syncIntervalMinutes = values[5] as int;
+      _syncCategories = values[6] as Set<BackupCategory>;
+      _lastSyncAt = values[7] as DateTime?;
+      _lastSyncError = values[8] as String?;
     });
   }
 
@@ -72,22 +95,21 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   }
 
   Future<void> _toggleAutoSync(bool enabled) async {
+    if (enabled && _syncServerUrl.trim().isEmpty) {
+      await _showSyncSettingsDialog(enableAfterSave: true);
+      return;
+    }
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      if (enabled && _autoSyncPath == null) {
-        await _selectAutoSyncPath();
-        return;
-      }
-
       if (enabled) {
-        await AutoSyncService.instance.enable(_autoSyncPath!);
-        _showMessage('自动同步已启用');
+        await AutoSyncService.instance.enable();
+        _showMessage('多端增量同步已启用');
       } else {
         await AutoSyncService.instance.disable();
-        _showMessage('自动同步已禁用');
+        _showMessage('多端增量同步已禁用');
       }
 
       await _loadAutoSyncSettings();
@@ -100,30 +122,44 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     }
   }
 
-  Future<void> _selectAutoSyncPath() async {
-    final String? selectedDirectory = await getDirectoryPath(
-      confirmButtonText: '选择同步目录',
+  Future<void> _showSyncSettingsDialog({bool enableAfterSave = false}) async {
+    final result = await NipaplayWindow.show<_SyncSettingsValue>(
+      context: context,
+      child: _SyncSettingsDialog(
+        initialValue: _SyncSettingsValue(
+          serverUrl: _syncServerUrl,
+          username: _syncUsername,
+          password: _syncPassword,
+          remotePath: _syncRemotePath,
+          intervalMinutes: _syncIntervalMinutes,
+          categories: _syncCategories,
+        ),
+      ),
     );
+    if (result == null) return;
 
-    if (selectedDirectory == null) {
-      _showMessage('未选择同步路径');
-      return;
-    }
-
-    setState(() {
-      _isProcessing = true;
-    });
-
+    setState(() => _isProcessing = true);
     try {
-      await AutoSyncService.instance.enable(selectedDirectory);
-      _showMessage('自动同步已启用，路径: $selectedDirectory');
+      await AutoSyncSettings.saveWebDavConfiguration(
+        serverUrl: result.serverUrl,
+        username: result.username,
+        password: result.password,
+        remotePath: result.remotePath,
+        intervalMinutes: result.intervalMinutes,
+        categories: result.categories,
+      );
+      if (enableAfterSave) {
+        await AutoSyncService.instance.enable();
+        _showMessage('WebDAV 配置已保存并启用同步');
+      } else {
+        await AutoSyncService.instance.reloadSchedule();
+        _showMessage('WebDAV 同步设置已保存');
+      }
       await _loadAutoSyncSettings();
     } catch (e) {
-      _showMessage('设置同步路径失败: $e', isError: true);
+      _showMessage('保存同步设置失败: $e', isError: true);
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -133,8 +169,19 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     });
 
     try {
-      await AutoSyncService.instance.manualSync();
-      _showMessage('手动同步完成');
+      final result = await AutoSyncService.instance.manualSync();
+      _showMessage(
+        result.createdRepository
+            ? '同步仓库已创建，基准快照上传完成'
+            : '同步完成：下载 ${result.downloadedPatches} 个补丁，上传 ${result.uploadedOperations} 项变更',
+      );
+      if (mounted && result.restoredOperations > 0) {
+        final watchHistoryProvider =
+            Provider.of<WatchHistoryProvider>(context, listen: false);
+        watchHistoryProvider.clearInvalidPathCache();
+        await watchHistoryProvider.loadHistory();
+      }
+      await _loadAutoSyncSettings();
     } catch (e) {
       _showMessage('手动同步失败: $e', isError: true);
     } finally {
@@ -543,26 +590,28 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         AdaptiveSettingsSection(
           children: [
             AdaptiveSettingsTile<bool>.toggle(
-              title: '启用自动同步',
-              subtitle: _autoSyncEnabled ? '观看进度会自动同步到本地路径或云端' : '启用后可实现多设备同步',
+              title: '启用多端增量同步',
+              subtitle: _autoSyncEnabled
+                  ? '每 $_syncIntervalMinutes 分钟拉取索引并同步变更'
+                  : '通过 WebDAV 在多个设备间同步所选数据',
               enabled: !_isProcessing,
               value: _autoSyncEnabled,
               onChanged: _toggleAutoSync,
               icon: Icons.cloud_sync,
             ),
-            if (_autoSyncEnabled && _autoSyncPath != null) ...[
-              AdaptiveSettingsTile<void>.card(
-                title: '同步路径',
-                subtitle: _autoSyncPath!.length > 50
-                    ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
-                    : _autoSyncPath!,
-                enabled: !_isProcessing,
-                onTap: _selectAutoSyncPath,
-                icon: Icons.folder,
-              ),
+            AdaptiveSettingsTile<void>.card(
+              title: 'WebDAV 与同步内容',
+              subtitle: _syncServerUrl.isEmpty
+                  ? '配置服务器、远端目录、同步周期和数据类型'
+                  : '${Uri.tryParse(_syncServerUrl)?.host ?? _syncServerUrl}$_syncRemotePath · ${_syncCategories.length} 类数据',
+              enabled: !_isProcessing,
+              onTap: _showSyncSettingsDialog,
+              icon: Icons.cloud_outlined,
+            ),
+            if (_autoSyncEnabled) ...[
               AdaptiveSettingsTile<void>.card(
                 title: '立即同步',
-                subtitle: '手动执行一次同步',
+                subtitle: _buildSyncStatusSubtitle(),
                 enabled: !_isProcessing,
                 onTap: _manualSync,
                 icon: Icons.sync,
@@ -596,10 +645,10 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               title: '说明',
               subtitle: '全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息\n'
                   '全量恢复：从 .npb 文件恢复，支持选择性恢复各类数据\n'
-                  '自动同步：启用后观看进度会自动保存到指定路径\n'
-                  '云同步：同步路径可以是 SMB/NFS 等网络位置\n'
-                  '恢复规则：已有数据不会被删除，仅更新或新增\n'
-                  '此功能仅在桌面端可用',
+                  '增量同步：远端使用 manifest.version、snap_vN 基准快照和 patch_vN_*.diff 补丁\n'
+                  '同步规则：定时拉取索引，只下载和导入尚未应用的补丁；远端对象会进行 SHA-256 校验\n'
+                  '冲突规则：观看历史保留最近观看记录，其余数据保留本轮明确修改\n'
+                  'Web 端暂不支持本地增量索引',
               icon: Icons.info_outline,
               onTap: () {},
             ),
@@ -622,6 +671,345 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       ],
     );
   }
+
+  String _buildSyncStatusSubtitle() {
+    if (_lastSyncError != null && _lastSyncError!.isNotEmpty) {
+      return '上次同步失败：$_lastSyncError';
+    }
+    if (_lastSyncAt == null) return '尚未完成首次同步';
+    final value = _lastSyncAt!.toLocal();
+    final formatted =
+        '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')} '
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    return '上次同步：$formatted';
+  }
+}
+
+class _SyncSettingsValue {
+  const _SyncSettingsValue({
+    required this.serverUrl,
+    required this.username,
+    required this.password,
+    required this.remotePath,
+    required this.intervalMinutes,
+    required this.categories,
+  });
+
+  final String serverUrl;
+  final String username;
+  final String password;
+  final String remotePath;
+  final int intervalMinutes;
+  final Set<BackupCategory> categories;
+}
+
+class _SyncSettingsDialog extends StatefulWidget {
+  const _SyncSettingsDialog({required this.initialValue});
+
+  final _SyncSettingsValue initialValue;
+
+  @override
+  State<_SyncSettingsDialog> createState() => _SyncSettingsDialogState();
+}
+
+class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
+  late final TextEditingController _serverController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _passwordController;
+  late final TextEditingController _remotePathController;
+  late Set<BackupCategory> _categories;
+  late int _intervalMinutes;
+  bool _obscurePassword = true;
+  bool _testing = false;
+  String? _testMessage;
+
+  static const _intervalOptions = [5, 15, 30, 60, 180, 360];
+
+  @override
+  void initState() {
+    super.initState();
+    _serverController =
+        TextEditingController(text: widget.initialValue.serverUrl);
+    _usernameController =
+        TextEditingController(text: widget.initialValue.username);
+    _passwordController =
+        TextEditingController(text: widget.initialValue.password);
+    _remotePathController =
+        TextEditingController(text: widget.initialValue.remotePath);
+    _categories = Set<BackupCategory>.from(widget.initialValue.categories);
+    _intervalMinutes =
+        _intervalOptions.contains(widget.initialValue.intervalMinutes)
+            ? widget.initialValue.intervalMinutes
+            : AutoSyncSettings.defaultIntervalMinutes;
+  }
+
+  @override
+  void dispose() {
+    _serverController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _remotePathController.dispose();
+    super.dispose();
+  }
+
+  String? _validationError() {
+    final uri = Uri.tryParse(_serverController.text.trim());
+    if (uri == null ||
+        !uri.hasScheme ||
+        !{'http', 'https'}.contains(uri.scheme.toLowerCase()) ||
+        uri.host.isEmpty) {
+      return '请输入有效的 HTTP/HTTPS WebDAV 地址';
+    }
+    if (_remotePathController.text.trim().isEmpty) return '请输入远端同步目录';
+    if (_categories.isEmpty) return '请至少选择一种同步数据';
+    return null;
+  }
+
+  Future<void> _testConnection() async {
+    final validationError = _validationError();
+    if (validationError != null) {
+      setState(() => _testMessage = validationError);
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _testMessage = null;
+    });
+    try {
+      await AutoSyncService.instance.testConnection(
+        serverUrl: _serverController.text.trim(),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text,
+        remotePath: _normalizedRemotePath,
+      );
+      if (mounted) setState(() => _testMessage = '连接成功，远端目录可访问');
+    } catch (error) {
+      if (mounted) setState(() => _testMessage = '连接失败：$error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  String get _normalizedRemotePath {
+    var value = _remotePathController.text.trim().replaceAll('\\', '/');
+    if (!value.startsWith('/')) value = '/$value';
+    while (value.contains('//')) {
+      value = value.replaceAll('//', '/');
+    }
+    while (value.length > 1 && value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    return value;
+  }
+
+  void _submit() {
+    final validationError = _validationError();
+    if (validationError != null) {
+      setState(() => _testMessage = validationError);
+      return;
+    }
+    Navigator.of(context).pop(_SyncSettingsValue(
+      serverUrl: _serverController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+      remotePath: _normalizedRemotePath,
+      intervalMinutes: _intervalMinutes,
+      categories: _categories,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return NipaplayWindowScaffold(
+      onClose: () => Navigator.of(context).pop(),
+      child: SizedBox(
+        width: 600,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'WebDAV 多端同步',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _serverController,
+                        decoration: const InputDecoration(
+                          labelText: 'WebDAV 服务器地址',
+                          hintText: 'https://dav.example.com/',
+                          prefixIcon: Icon(Icons.cloud_outlined),
+                        ),
+                        keyboardType: TextInputType.url,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _usernameController,
+                              decoration: const InputDecoration(
+                                labelText: '用户名',
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              decoration: InputDecoration(
+                                labelText: '密码',
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _remotePathController,
+                              decoration: const InputDecoration(
+                                labelText: '远端同步目录',
+                                hintText: '/NipaPlay/sync',
+                                prefixIcon: Icon(Icons.folder_outlined),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          DropdownButton<int>(
+                            value: _intervalMinutes,
+                            items: _intervalOptions
+                                .map((minutes) => DropdownMenuItem(
+                                      value: minutes,
+                                      child: Text(minutes < 60
+                                          ? '$minutes 分钟'
+                                          : '${minutes ~/ 60} 小时'),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _intervalMinutes = value);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '同步的数据类型',
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ...BackupCategory.values.map((category) {
+                        return CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(_categoryTitle(category)),
+                          subtitle: Text(_categorySubtitle(category)),
+                          value: _categories.contains(category),
+                          onChanged: (selected) {
+                            setState(() {
+                              if (selected == true) {
+                                _categories.add(category);
+                              } else {
+                                _categories.remove(category);
+                              }
+                            });
+                          },
+                        );
+                      }),
+                      if (_testMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _testMessage!,
+                            style: TextStyle(
+                              color: _testMessage!.startsWith('连接成功')
+                                  ? Colors.green
+                                  : colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  HoverScaleTextButton(
+                    onPressed: _testing ? null : _testConnection,
+                    child: Text(_testing ? '测试中...' : '测试连接'),
+                  ),
+                  const Spacer(),
+                  HoverScaleTextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 16),
+                  HoverScaleTextButton(
+                    onPressed: _testing ? null : _submit,
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _categoryTitle(BackupCategory category) => switch (category) {
+        BackupCategory.preferences => '偏好设置',
+        BackupCategory.mediaLibraries => '添加的媒体库',
+        BackupCategory.watchHistory => '观看历史',
+        BackupCategory.episodeMatches => '剧集匹配',
+        BackupCategory.accounts => '账户绑定',
+      };
+
+  String _categorySubtitle(BackupCategory category) => switch (category) {
+        BackupCategory.preferences => '语言、弹幕、播放器等软件设置',
+        BackupCategory.mediaLibraries => '本地、在线、WebDAV、SMB 与共享服务',
+        BackupCategory.watchHistory => '观看进度与历史记录',
+        BackupCategory.episodeMatches => '文件和动画剧集的匹配关系',
+        BackupCategory.accounts => '包含访问令牌，请仅同步到可信 WebDAV',
+      };
 }
 
 // ==================== 备份选择弹窗 ====================
