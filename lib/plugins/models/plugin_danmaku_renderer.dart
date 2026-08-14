@@ -1,0 +1,92 @@
+import 'package:flutter/foundation.dart';
+
+import 'plugin_external_script.dart';
+
+/// A web-based danmaku renderer declared by an installed plugin.
+///
+/// The plugin control script is still evaluated by the normal plugin runtime;
+/// Its external scripts and [bootstrap] adapter are loaded in an isolated
+/// WebView only while this renderer is selected.
+class PluginDanmakuRenderer {
+  const PluginDanmakuRenderer({
+    required this.pluginId,
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.bootstrap,
+    required this.externalScripts,
+    required this.platforms,
+    this.apiVersion = 1,
+  });
+
+  static const int supportedApiVersion = 1;
+
+  final String pluginId;
+  final String id;
+  final String name;
+  final String description;
+  final String bootstrap;
+  final List<PluginExternalScript> externalScripts;
+  final Set<String> platforms;
+  final int apiVersion;
+
+  String get selectionId => 'plugin:$pluginId/$id';
+
+  bool get isSupportedOnCurrentPlatform {
+    if (kIsWeb || apiVersion != supportedApiVersion) return false;
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      _ => '',
+    };
+    return platform.isNotEmpty && platforms.contains(platform);
+  }
+
+  factory PluginDanmakuRenderer.fromJson({
+    required String pluginId,
+    required List<PluginExternalScript> availableScripts,
+    required Map<String, dynamic> json,
+  }) {
+    final id = (json['id'] ?? '').toString().trim();
+    final name = (json['name'] ?? '').toString().trim();
+    final bootstrap = (json['bootstrap'] ?? '').toString().trim();
+    if (id.isEmpty || name.isEmpty || bootstrap.isEmpty) {
+      throw const FormatException('invalid plugin danmaku renderer');
+    }
+    if (!RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(id)) {
+      throw const FormatException('invalid renderer id');
+    }
+    final rawPlatforms = json['platforms'];
+    final platforms = rawPlatforms is List
+        ? rawPlatforms
+            .map((item) => item.toString().trim().toLowerCase())
+            .where((item) => item == 'android' || item == 'ios')
+            .toSet()
+        : <String>{};
+    final requestedIds = (json['requires'] as List?)
+        ?.map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+    final externalScripts = requestedIds == null
+        ? availableScripts
+        : availableScripts
+            .where((script) => requestedIds.contains(script.id))
+            .toList(growable: false);
+    if (requestedIds != null && externalScripts.length != requestedIds.length) {
+      throw const FormatException(
+        'renderer references an unknown manifest dependency',
+      );
+    }
+
+    return PluginDanmakuRenderer(
+      pluginId: pluginId,
+      id: id,
+      name: name,
+      description: (json['description'] ?? '').toString().trim(),
+      bootstrap: bootstrap,
+      externalScripts: externalScripts,
+      platforms: platforms,
+      apiVersion: (json['apiVersion'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
