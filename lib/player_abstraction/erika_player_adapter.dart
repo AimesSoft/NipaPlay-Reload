@@ -1457,6 +1457,8 @@ class ErikaPlayerAdapter
         return ErikaUpscalerMode.artCnnC4F16;
       case PlayerUpscalerMode.erikaArtCnnC4F32:
         return ErikaUpscalerMode.artCnnC4F32;
+      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
+        return ErikaUpscalerMode.artCnnC4F16Ds;
       case PlayerUpscalerMode.off:
         return ErikaUpscalerMode.off;
     }
@@ -1468,6 +1470,8 @@ class ErikaPlayerAdapter
         return PlayerUpscalerMode.erikaArtCnnC4F16;
       case ErikaUpscalerMode.artCnnC4F32:
         return PlayerUpscalerMode.erikaArtCnnC4F32;
+      case ErikaUpscalerMode.artCnnC4F16Ds:
+        return PlayerUpscalerMode.erikaArtCnnC4F16Ds;
       case ErikaUpscalerMode.off:
         return PlayerUpscalerMode.off;
     }

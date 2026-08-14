@@ -71,7 +71,7 @@ void main() {
 
     expect(
       tvOSOverrides,
-      contains('ref: v0.1.5'),
+      contains('ref: v0.1.6'),
     );
     expect(monitor, contains('_instance._updatePlayerKernelType();'));
     expect(monitor, contains("_instance._activeDecoder = 'Erika（等待媒体）';"));

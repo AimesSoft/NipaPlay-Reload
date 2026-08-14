@@ -298,11 +298,11 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/erika_flutter"
-      ref: "9285a1fe556ffacb490481acfb1195005f1886d9"
-      resolved-ref: "9285a1fe556ffacb490481acfb1195005f1886d9"
+      ref: "0e85ef666de84cbddca02a4bba117eae750d629a"
+      resolved-ref: "0e85ef666de84cbddca02a4bba117eae750d629a"
       url: "https://github.com/AimesSoft/Erika.git"
     source: git
-    version: "0.1.5"
+    version: "0.1.6"
   fake_async:
     dependency: transitive
     description:

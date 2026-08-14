@@ -641,6 +641,9 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       case 'erikaArtCnnC4F32':
       case 'artCnnC4F32':
         return 'ART-CNN C4F32';
+      case 'erikaArtCnnC4F16Ds':
+      case 'artCnnC4F16Ds':
+        return 'ART-CNN C4F16 DS';
       case 'off':
         return '关闭';
       default:
