@@ -32,7 +32,7 @@ concurrency:
 
 env:
   ERIKA_PREBUILT: "1"
-  ERIKA_PREBUILT_TAG: v0.1.5
+  ERIKA_PREBUILT_TAG: v0.1.6
 
 jobs:
   build:
@@ -183,9 +183,9 @@ jobs:
           if old_count == 1 and new_count == 0:
               path.write_text(source.replace(old, new), encoding='utf-8')
           elif old_count == 0 and new_count == 1:
-              print('Erika v0.1.5 tvOS podspec is already patched.')
+              print('Erika v0.1.6 tvOS podspec is already patched.')
           else:
-              raise SystemExit('Unexpected Erika v0.1.5 tvOS podspec layout')
+              raise SystemExit('Unexpected Erika v0.1.6 tvOS podspec layout')
           PY
 
           python3 - "$podspec" <<'PY'
@@ -221,9 +221,9 @@ jobs:
           if old_count == 1 and new_count == 0:
               path.write_text(source.replace(old, new), encoding='utf-8')
           elif old_count == 0 and new_count == 1:
-              print('Erika v0.1.5 tvOS prebuilt slice-name patch is already applied.')
+              print('Erika v0.1.6 tvOS prebuilt slice-name patch is already applied.')
           else:
-              raise SystemExit('Unexpected Erika v0.1.5 tvOS prebuilt slice layout')
+              raise SystemExit('Unexpected Erika v0.1.6 tvOS prebuilt slice layout')
           PY
 
       - name: Build tvOS simulator application
