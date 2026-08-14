@@ -67,7 +67,7 @@ env:
   RUSTUP_TOOLCHAIN: 1.93.0
   FVP_DEPS_LATEST: "0"
   ERIKA_PREBUILT: "1"
-  ERIKA_PREBUILT_TAG: v0.1.5
+  ERIKA_PREBUILT_TAG: v0.1.6
 
 jobs:
   build:
@@ -228,27 +228,26 @@ jobs:
           path = Path(sys.argv[1])
           source = path.read_text(encoding='utf-8')
           replacements = {
-              "    const metadataValue = args.get('metadata');":
+              "    const metadataValue: ESObject = args.get('metadata');":
                   "    const metadataValue: ESObject | undefined = args.get('metadata');",
-              "    const nativeArgs = new Map<string, ESObject>(args);":
-                  "    const nativeArgs: Map<string, ESObject> = new Map<string, ESObject>(args);",
-              "    const metadata = value as Map<string, ESObject>;":
-                  "    const metadata: Map<string, ESObject> = value as Map<string, ESObject>;",
-              "    const titleValue = metadata.get('title');":
+              "    const titleValue: ESObject = metadata.get('title');":
                   "    const titleValue: ESObject | undefined = metadata.get('title');",
-              "    const artist = metadata.get('artist');":
+              "    const artist: ESObject = metadata.get('artist');":
                   "    const artist: ESObject | undefined = metadata.get('artist');",
-              "    const album = metadata.get('album');":
+              "    const album: ESObject = metadata.get('album');":
                   "    const album: ESObject | undefined = metadata.get('album');",
-              "    const artwork = metadata.get('artwork');":
+              "    const artwork: ESObject = metadata.get('artwork');":
                   "    const artwork: ESObject | undefined = metadata.get('artwork');",
-              "    const args = extra ?? new Map<string, ESObject>();":
-                  "    const args: Map<string, ESObject> = extra ?? new Map<string, ESObject>();",
           }
           for old, new in replacements.items():
-              if source.count(old) != 1:
-                  raise SystemExit(f'Unexpected Erika v0.1.5 ArkTS source: {old}')
-              source = source.replace(old, new)
+              old_count = source.count(old)
+              new_count = source.count(new)
+              if old_count == 1 and new_count == 0:
+                  source = source.replace(old, new)
+              elif old_count == 0 and new_count == 1:
+                  continue
+              else:
+                  raise SystemExit(f'Unexpected Erika v0.1.6 ArkTS source: {old}')
           path.write_text(source, encoding='utf-8')
           PY
           python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json

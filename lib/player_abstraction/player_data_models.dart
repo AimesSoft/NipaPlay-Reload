@@ -9,6 +9,7 @@ enum PlayerUpscalerMode {
   off,
   erikaArtCnnC4F16,
   erikaArtCnnC4F32,
+  erikaArtCnnC4F16Ds,
 }
 
 enum PlayerUpscalerBackendStatus {

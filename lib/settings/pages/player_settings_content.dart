@@ -230,6 +230,8 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
         return 'ART-CNN C4F16';
       case PlayerUpscalerMode.erikaArtCnnC4F32:
         return 'ART-CNN C4F32';
+      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
+        return 'ART-CNN C4F16 DS';
     }
   }
 
@@ -241,6 +243,8 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
         return '半精度 ART-CNN，速度优先，推荐日常播放';
       case PlayerUpscalerMode.erikaArtCnnC4F32:
         return '单精度 ART-CNN，画质优先，对 GPU 压力更高';
+      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
+        return '半精度去噪锐化 ART-CNN，适合压缩痕迹明显的动画视频';
     }
   }
 
