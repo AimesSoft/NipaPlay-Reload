@@ -122,6 +122,8 @@ class SettingsKeys {
   static const String danmakuConvertToSimplified =
       'danmaku_convert_to_simplified'; // 简繁转换设置
   static const String danmakuRenderEngine = 'danmaku_render_engine'; // 渲染引擎设置
+  static const String danmakuPluginRenderer =
+      'danmaku_plugin_renderer'; // 插件弹幕渲染器 selectionId
   static const String legacyDanmakuKernel =
       'danmaku_kernel'; // 内核设置（已废弃，保留用于迁移旧设置）
   static const String showDanmakuDensityChart =

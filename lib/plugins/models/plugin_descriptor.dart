@@ -1,4 +1,6 @@
 import 'plugin_manifest.dart';
+import 'plugin_danmaku_renderer.dart';
+import 'plugin_external_script.dart';
 import 'plugin_ui_entry.dart';
 
 class PluginDescriptor {
@@ -11,6 +13,8 @@ class PluginDescriptor {
     required this.errorMessage,
     required this.blockWords,
     required this.uiEntries,
+    this.danmakuRenderers = const <PluginDanmakuRenderer>[],
+    this.externalScripts = const <PluginExternalScript>[],
   });
 
   final PluginManifest manifest;
@@ -21,6 +25,8 @@ class PluginDescriptor {
   final String? errorMessage;
   final List<String> blockWords;
   final List<PluginUiEntry> uiEntries;
+  final List<PluginDanmakuRenderer> danmakuRenderers;
+  final List<PluginExternalScript> externalScripts;
 
   PluginDescriptor copyWith({
     PluginManifest? manifest,
@@ -32,6 +38,8 @@ class PluginDescriptor {
     bool clearErrorMessage = false,
     List<String>? blockWords,
     List<PluginUiEntry>? uiEntries,
+    List<PluginDanmakuRenderer>? danmakuRenderers,
+    List<PluginExternalScript>? externalScripts,
   }) {
     return PluginDescriptor(
       manifest: manifest ?? this.manifest,
@@ -43,6 +51,8 @@ class PluginDescriptor {
           clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       blockWords: blockWords ?? this.blockWords,
       uiEntries: uiEntries ?? this.uiEntries,
+      danmakuRenderers: danmakuRenderers ?? this.danmakuRenderers,
+      externalScripts: externalScripts ?? this.externalScripts,
     );
   }
 }

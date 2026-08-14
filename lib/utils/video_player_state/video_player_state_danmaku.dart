@@ -33,6 +33,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // When true, NipaPlay feeds its merged/filtered danmaku list to the kernel
   // and keeps its own Flutter danmaku overlay empty to avoid drawing twice.
   bool get _erikaNativeDanmaku {
+    if (DanmakuKernelFactory.activePluginRenderer != null) return false;
     try {
       return player.supportsNativeDanmaku;
     } catch (_) {
@@ -44,6 +45,24 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // True when the active player kernel renders danmaku natively (Erika).
   // Public so the kernel hot-swap path can keep the Flutter overlay disabled.
   bool get isNativeDanmakuActive => _erikaNativeDanmaku;
+
+  /// Reconciles native danmaku when switching between a plugin WebView
+  /// renderer and the player's built-in native renderer.
+  void handleDanmakuRendererChanged() {
+    try {
+      if (!player.supportsNativeDanmaku) {
+        _notifyListeners();
+        return;
+      }
+      if (DanmakuKernelFactory.activePluginRenderer != null) {
+        unawaited(player.setNativeDanmakuEnabled(false));
+      } else {
+        _syncErikaDanmakuConfig();
+        unawaited(player.loadNativeDanmaku(_danmakuList));
+      }
+    } catch (_) {}
+    _notifyListeners();
+  }
 
   // Push the current danmaku display settings down to the native kernel.
   // NipaPlay only does spoiler/block pre-filtering before feeding the list;
@@ -759,8 +778,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           '耗时=${DateTime.now().difference(tCache).inMilliseconds}ms');
       if (cached != null && cached.isNotEmpty) {
         final hasSenderMetadata = cached.any((comment) =>
-            comment is Map &&
-            comment['source']?.toString() == 'dandanplay');
+            comment is Map && comment['source']?.toString() == 'dandanplay');
         if (hasSenderMetadata) {
           raw = cached;
         } else {
@@ -821,7 +839,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _pluginService?.updateDanmakuData(null);
       debugPrint('[ExtDanmaku] 插件过滤: $beforePlugin → ${parsed.length} 条');
     } else {
-      debugPrint('[ExtDanmaku] 插件未修改 (pluginService=${_pluginService != null})');
+      debugPrint(
+          '[ExtDanmaku] 插件未修改 (pluginService=${_pluginService != null})');
     }
     parsed = parsed.map((item) {
       final source = item['source']?.toString().trim();
@@ -956,13 +975,17 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
 
     final typeText = typeValue?.toString().toLowerCase();
-    switch (typeText)
-    {
-    case 'top'    : return DanmakuMode.top   .code;
-    case 'bottom' : return DanmakuMode.bottom.code;
-    case 'scroll' : return DanmakuMode.scroll.code;
-    case 'right'  : return DanmakuMode.scroll.code;
-    default       : return DanmakuMode.scroll.code;
+    switch (typeText) {
+      case 'top':
+        return DanmakuMode.top.code;
+      case 'bottom':
+        return DanmakuMode.bottom.code;
+      case 'scroll':
+        return DanmakuMode.scroll.code;
+      case 'right':
+        return DanmakuMode.scroll.code;
+      default:
+        return DanmakuMode.scroll.code;
     }
   }
 
