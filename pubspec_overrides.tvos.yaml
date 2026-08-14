@@ -10,7 +10,7 @@ dependency_overrides:
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/Erika.git
-      ref: v0.1.5
+      ref: v0.1.6
       path: packages/erika_flutter
   # Shared repository overrides. Keep these keys aligned with pubspec.yaml.
   liquid_glass_widgets:
