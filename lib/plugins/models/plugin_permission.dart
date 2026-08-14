@@ -1,6 +1,8 @@
 enum PluginPermission {
   playerControl('player.control', '播放器控制', '允许控制播放器的播放、暂停、跳转等操作'),
   danmakuModify('danmaku.modify', '弹幕修改', '允许修改弹幕显示和过滤规则'),
+  danmakuRenderer('danmaku.renderer', '弹幕渲染器', '允许插件在视频上方创建本地 WebView 弹幕渲染层'),
+  externalScript('script.external', '外部脚本', '允许插件下载并执行声明的 HTTPS 外部脚本'),
   libraryRead('library.read', '媒体库读取', '允许读取媒体库信息'),
   libraryWrite('library.write', '媒体库写入', '允许修改媒体库内容'),
   uiDialog('ui.dialog', '弹窗显示', '允许显示弹窗和提示信息'),

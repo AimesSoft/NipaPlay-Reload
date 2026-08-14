@@ -25,6 +25,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.da
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 
 class DanmakuSettingsContent extends StatefulWidget {
   const DanmakuSettingsContent({super.key});
@@ -35,6 +37,7 @@ class DanmakuSettingsContent extends StatefulWidget {
 
 class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
+  String? _selectedPluginDanmakuRendererId;
 
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
   final GlobalKey _danmakuAutoLoadStrategyDropdownKey = GlobalKey();
@@ -83,6 +86,8 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     if (!mounted) return;
     setState(() {
       _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
+      _selectedPluginDanmakuRendererId =
+          DanmakuKernelFactory.activePluginRenderer?.selectionId;
     });
   }
 
@@ -95,6 +100,18 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
 
     setState(() {
       _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
+      _selectedPluginDanmakuRendererId = null;
+    });
+  }
+
+  Future<void> _savePluginDanmakuRendererSettings(
+    PluginDanmakuRenderer renderer,
+  ) async {
+    await DanmakuKernelFactory.savePluginRenderer(renderer.selectionId);
+    if (!mounted) return;
+    BlurSnackBar.show(context, '弹幕渲染引擎已切换');
+    setState(() {
+      _selectedPluginDanmakuRendererId = renderer.selectionId;
     });
   }
 
@@ -172,36 +189,40 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     }
   }
 
-  List<DropdownMenuItemData<DanmakuRenderEngine>>
-      _buildDanmakuRenderEngineItems({
+  List<DropdownMenuItemData<Object>> _buildDanmakuRenderEngineItems({
     required bool next2Supported,
+    required List<PluginDanmakuRenderer> pluginRenderers,
   }) {
-    final items = <DropdownMenuItemData<DanmakuRenderEngine>>[
+    final hasPluginSelection = _selectedPluginDanmakuRendererId != null;
+    final items = <DropdownMenuItemData<Object>>[
       DropdownMenuItemData(
         title: 'CPU 渲染',
         value: DanmakuRenderEngine.cpu,
-        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+        isSelected: !hasPluginSelection &&
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
         description:
             _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
       ),
       DropdownMenuItemData(
         title: 'GPU 渲染 (实验性)',
         value: DanmakuRenderEngine.gpu,
-        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+        isSelected: !hasPluginSelection &&
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
         description:
             _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
       ),
       DropdownMenuItemData(
         title: 'Canvas 弹幕 (实验性)',
         value: DanmakuRenderEngine.canvas,
-        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
+        isSelected: !hasPluginSelection &&
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
         description:
             _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
       ),
       DropdownMenuItemData(
         title: DanmakuKernelFactory.nipaplayNextDisplayName,
         value: DanmakuRenderEngine.nipaplayNext,
-        isSelected:
+        isSelected: !hasPluginSelection &&
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,
         description: _getDanmakuRenderEngineDescription(
             DanmakuRenderEngine.nipaplayNext),
@@ -213,7 +234,8 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
         DropdownMenuItemData(
           title: 'NipaPlay Next2',
           value: DanmakuRenderEngine.next2,
-          isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+          isSelected: !hasPluginSelection &&
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
           description:
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
         ),
@@ -222,7 +244,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
         DropdownMenuItemData(
           title: 'DFM+',
           value: DanmakuRenderEngine.dfmPlus,
-          isSelected:
+          isSelected: !hasPluginSelection &&
               _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus,
           description:
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.dfmPlus),
@@ -251,6 +273,19 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
           enabled: false,
           description:
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.dfmPlus),
+        ),
+      );
+    }
+
+    for (final renderer in pluginRenderers) {
+      items.add(
+        DropdownMenuItemData<Object>(
+          title: renderer.name,
+          value: renderer,
+          isSelected: renderer.selectionId == _selectedPluginDanmakuRendererId,
+          description: renderer.description.isEmpty
+              ? '由插件 ${renderer.pluginId} 提供的 WebView 弹幕渲染器'
+              : renderer.description,
         ),
       );
     }
@@ -736,31 +771,44 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<PluginService>();
     final colorScheme = Theme.of(context).colorScheme;
     final isErikaPlayerKernel = globals.isTvOS ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final showNextPlusPlusToggle = !globals.isTvOS &&
+    final hasPluginRenderer = DanmakuKernelFactory.activePluginRenderer != null;
+    _selectedPluginDanmakuRendererId =
+        DanmakuKernelFactory.activePluginRenderer?.selectionId;
+    final showNextPlusPlusToggle = !hasPluginRenderer &&
+        !globals.isTvOS &&
         _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
-    final showRendererSupersample = !isErikaPlayerKernel &&
+    final showRendererSupersample = !hasPluginRenderer &&
+        !isErikaPlayerKernel &&
         (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus);
     final renderEngineItems = _buildDanmakuRenderEngineItems(
       next2Supported: next2Supported,
+      pluginRenderers: DanmakuKernelFactory.availablePluginRenderers,
     );
+    final canSelectRenderer = !isErikaPlayerKernel ||
+        DanmakuKernelFactory.availablePluginRenderers.isNotEmpty;
 
     return AdaptiveSettingsPage(
       children: [
         AdaptiveSettingsSection(
           addDividers: false,
           children: [
-            if (!isErikaPlayerKernel) ...[
+            if (canSelectRenderer) ...[
               AdaptiveSettingsTile.dropdown(
                 title: '弹幕渲染引擎',
                 subtitle: '选择弹幕的渲染方式',
                 icon: Ionicons.hardware_chip_outline,
                 items: renderEngineItems,
                 onChanged: (dynamic value) {
+                  if (value is PluginDanmakuRenderer) {
+                    _savePluginDanmakuRendererSettings(value);
+                    return;
+                  }
                   if (value is! DanmakuRenderEngine) return;
                   if (!next2Supported &&
                       (value == DanmakuRenderEngine.next2 ||

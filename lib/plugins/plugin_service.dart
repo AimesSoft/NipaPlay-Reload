@@ -15,6 +15,8 @@ import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/models/plugin_manifest.dart';
 import 'package:nipaplay/plugins/models/plugin_event.dart';
 import 'package:nipaplay/plugins/models/plugin_permission.dart';
+import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
+import 'package:nipaplay/plugins/models/plugin_external_script.dart';
 import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
 import 'package:nipaplay/plugins/models/remote_plugin_info.dart';
 import 'package:nipaplay/plugins/plugin_event_bus.dart';
@@ -23,10 +25,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/github_accel_resolver.dart';
 import 'package:nipaplay/plugins/similarity_ffi_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class PluginService extends ChangeNotifier {
-  PluginService()
-      : _eventBus = PluginEventBus() {
+  PluginService() : _eventBus = PluginEventBus() {
     _initialize();
     _setupEventListeners();
   }
@@ -116,6 +118,18 @@ class PluginService extends ChangeNotifier {
       merged.addAll(plugin.blockWords);
     }
     return merged;
+  }
+
+  List<PluginDanmakuRenderer> get availableDanmakuRenderers => _plugins
+      .where((plugin) => plugin.enabled && plugin.loaded)
+      .expand((plugin) => plugin.danmakuRenderers)
+      .where((renderer) => renderer.isSupportedOnCurrentPlatform)
+      .toList(growable: false);
+
+  void _syncDanmakuRendererRegistry() {
+    DanmakuKernelFactory.setAvailablePluginRenderers(
+      availableDanmakuRenderers,
+    );
   }
 
   bool isPluginEnabled(String pluginId) {
@@ -287,8 +301,9 @@ class PluginService extends ChangeNotifier {
 
       // Try canonical URL first, fall back to mirrors.
       try {
-        final response =
-            await http.get(Uri.parse(_pluginsIndexUrl)).timeout(const Duration(seconds: 10));
+        final response = await http
+            .get(Uri.parse(_pluginsIndexUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode == 200) {
           _processPluginIndexResponse(response);
           return;
@@ -420,21 +435,29 @@ class PluginService extends ChangeNotifier {
         _plugins.any((p) => p.manifest.id == msgPluginId)) {
       pluginId = msgPluginId;
     } else if (msgPluginId != null && msgPluginId.isNotEmpty) {
-      debugPrint('[PluginService] Received invalid pluginId "$msgPluginId" from bridge, ignoring.');
+      debugPrint(
+          '[PluginService] Received invalid pluginId "$msgPluginId" from bridge, ignoring.');
     }
 
     switch (method) {
       // ---- 播放器控制 ----
       case 'playerPlay':
-        try { _playerState?.play(); } catch (_) {}
+        try {
+          _playerState?.play();
+        } catch (_) {}
         return null;
       case 'playerPause':
-        try { _playerState?.pause(); } catch (_) {}
+        try {
+          _playerState?.pause();
+        } catch (_) {}
         return null;
       case 'playerSeek':
         if (callArgs.isNotEmpty) {
           final seconds = (callArgs[0] as num?)?.toDouble() ?? 0;
-          try { _playerState?.seekTo(Duration(milliseconds: (seconds * 1000).round())); } catch (_) {}
+          try {
+            _playerState
+                ?.seekTo(Duration(milliseconds: (seconds * 1000).round()));
+          } catch (_) {}
         }
         return null;
       case 'playerGetState':
@@ -447,26 +470,37 @@ class PluginService extends ChangeNotifier {
             'status': ps.status.toString().split('.').last,
             'hasVideo': ps.hasVideo,
           });
-        } catch (_) { return null; }
+        } catch (_) {
+          return null;
+        }
 
       // ---- 弹幕控制 ----
       case 'danmakuShow':
-        try { _playerState?.setDanmakuVisible(true); } catch (_) {}
+        try {
+          _playerState?.setDanmakuVisible(true);
+        } catch (_) {}
         return null;
       case 'danmakuHide':
-        try { _playerState?.setDanmakuVisible(false); } catch (_) {}
+        try {
+          _playerState?.setDanmakuVisible(false);
+        } catch (_) {}
         return null;
       case 'danmakuSetOpacity':
         if (callArgs.isNotEmpty) {
-          final opacity = (callArgs[0] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
-          try { _playerState?.setDanmakuOpacity(opacity); } catch (_) {}
+          final opacity =
+              (callArgs[0] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
+          try {
+            _playerState?.setDanmakuOpacity(opacity);
+          } catch (_) {}
         }
         return null;
       case 'danmakuAddFilter':
         if (callArgs.length >= 2) {
           final word = callArgs[1]?.toString() ?? '';
           if (word.isNotEmpty) {
-            try { unawaited(_playerState?.addDanmakuBlockWord(word)); } catch (_) {}
+            try {
+              unawaited(_playerState?.addDanmakuBlockWord(word));
+            } catch (_) {}
           }
         }
         return null;
@@ -474,7 +508,9 @@ class PluginService extends ChangeNotifier {
         if (callArgs.isNotEmpty) {
           final word = callArgs[0]?.toString() ?? '';
           if (word.isNotEmpty) {
-            try { unawaited(_playerState?.removeDanmakuBlockWord(word)); } catch (_) {}
+            try {
+              unawaited(_playerState?.removeDanmakuBlockWord(word));
+            } catch (_) {}
           }
         }
         return null;
@@ -483,7 +519,8 @@ class PluginService extends ChangeNotifier {
           try {
             final decoded = json.decode(callArgs[0].toString());
             if (decoded is Map) {
-              final data = Map<String, dynamic>.from(decoded as Map<String, dynamic>);
+              final data =
+                  Map<String, dynamic>.from(decoded as Map<String, dynamic>);
               final comments = data['comments'];
               if (comments is List) {
                 final normalized = comments.whereType<Map>().map((e) {
@@ -573,7 +610,8 @@ class PluginService extends ChangeNotifier {
       // ---- 系统 ----
       case 'systemSetDownloaderEnabled':
         if (callArgs.isNotEmpty) {
-          final enabled = callArgs[0] == true || callArgs[0]?.toString() == 'true';
+          final enabled =
+              callArgs[0] == true || callArgs[0]?.toString() == 'true';
           setForceEnableDownloader(enabled);
           notifyListeners();
         }
@@ -611,7 +649,8 @@ class PluginService extends ChangeNotifier {
         return false;
       case 'pluginSetSwitchSetting':
         if (callArgs.length >= 2) {
-          final value = callArgs[1] == true || callArgs[1]?.toString() == 'true';
+          final value =
+              callArgs[1] == true || callArgs[1]?.toString() == 'true';
           unawaited(setSwitchSettingValue(
             pluginId,
             callArgs[0].toString(),
@@ -659,7 +698,9 @@ class PluginService extends ChangeNotifier {
             final textB = callArgs[1]?.toString() ?? '';
             final usePinyin = callArgs.length < 3 || callArgs[2] != false;
             final score = SimilarityFfiService.instance.pairSimilarity(
-              textA, textB, usePinyin: usePinyin,
+              textA,
+              textB,
+              usePinyin: usePinyin,
             );
             return score.toString();
           } catch (e) {
@@ -698,7 +739,8 @@ class PluginService extends ChangeNotifier {
 
     // 支持通过环境变量传递配置：callArgs[2] 为 Map<String, String>
     // 在当前环境变量基础上追加
-    Map<String, String> environment = Map<String, String>.from(Platform.environment);
+    Map<String, String> environment =
+        Map<String, String>.from(Platform.environment);
     if (callArgs.length >= 3 && callArgs[2] is Map) {
       final envMap = callArgs[2] as Map;
       for (final key in envMap.keys) {
@@ -775,9 +817,8 @@ class PluginService extends ChangeNotifier {
   void _handleDanmakuLoadedEvent(PluginEvent event) {
     final rawDanmaku = event.data['danmaku'];
     if (rawDanmaku is List) {
-      _pendingDanmakuData = rawDanmaku
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      _pendingDanmakuData =
+          rawDanmaku.whereType<Map<String, dynamic>>().toList();
     } else {
       _pendingDanmakuData = null;
     }
@@ -840,6 +881,21 @@ class PluginService extends ChangeNotifier {
 
         _scriptByPluginId[manifest.id] = discovered.script;
         final enabled = enabledIds.contains(manifest.id);
+        final externalScripts = manifest.permissions.contains(
+          PluginPermission.externalScript,
+        )
+            ? manifest.requires
+            : const <PluginExternalScript>[];
+        final renderers = manifest.permissions.contains(
+                  PluginPermission.danmakuRenderer,
+                ) &&
+                manifest.permissions.contains(PluginPermission.externalScript)
+            ? _resolveDanmakuRenderers(
+                manifest.id,
+                parsed.danmakuRendererDeclarations,
+                externalScripts,
+              )
+            : const <PluginDanmakuRenderer>[];
 
         final descriptor = PluginDescriptor(
           manifest: manifest,
@@ -850,12 +906,15 @@ class PluginService extends ChangeNotifier {
           errorMessage: null,
           blockWords: const <String>[],
           uiEntries: parsed.uiEntries,
+          danmakuRenderers: renderers,
+          externalScripts: externalScripts,
         );
         _plugins.add(descriptor);
       } catch (_) {}
     }
 
     if (_plugins.isEmpty) {
+      _syncDanmakuRendererRegistry();
       return;
     }
 
@@ -887,6 +946,7 @@ class PluginService extends ChangeNotifier {
     final existingIds = _plugins.map((e) => e.manifest.id).toSet();
     final sanitizedEnabled = enabledIds.where(existingIds.contains).toList();
     await _saveEnabledIds(sanitizedEnabled);
+    _syncDanmakuRendererRegistry();
   }
 
   Future<List<_DiscoveredPluginScript>> _discoverPlugins() async {
@@ -979,6 +1039,8 @@ class PluginService extends ChangeNotifier {
       await _unloadPluginRuntime(pluginId);
     }
 
+    _syncDanmakuRendererRegistry();
+
     final enabledIds = _plugins
         .where((plugin) => plugin.enabled)
         .map((plugin) => plugin.manifest.id)
@@ -1063,9 +1125,11 @@ class PluginService extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _syncDanmakuRendererRegistry();
   }
 
-  Future<void> _injectPluginApi(PluginJsRuntime runtime, String pluginId) async {
+  Future<void> _injectPluginApi(
+      PluginJsRuntime runtime, String pluginId) async {
     final plugin = _plugins.firstWhere(
       (p) => p.manifest.id == pluginId,
       orElse: () => throw StateError('插件不存在: $pluginId'),
@@ -1337,8 +1401,7 @@ class PluginService extends ChangeNotifier {
       if (existingLocalId != manifest.id) {
         final pluginDir = await _pluginStorage.getPluginDirectoryPath();
         if (pluginDir != null) {
-          await _pluginStorage
-              .deleteScript('$pluginDir/${existingLocalId}.js');
+          await _pluginStorage.deleteScript('$pluginDir/${existingLocalId}.js');
         }
         await removePluginFromIndex(existingLocalId);
         final enabledIds = await _loadEnabledIds();
@@ -1374,8 +1437,7 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<bool> deletePlugin(String pluginId) async {
-    final index =
-        _plugins.indexWhere((p) => p.manifest.id == pluginId);
+    final index = _plugins.indexWhere((p) => p.manifest.id == pluginId);
     if (index < 0) return false;
 
     final plugin = _plugins[index];
@@ -1398,10 +1460,8 @@ class PluginService extends ChangeNotifier {
 
     await removePluginFromIndex(pluginId);
 
-    final enabledIds = _plugins
-        .where((p) => p.enabled)
-        .map((p) => p.manifest.id)
-        .toList();
+    final enabledIds =
+        _plugins.where((p) => p.enabled).map((p) => p.manifest.id).toList();
     await _saveEnabledIds(enabledIds);
 
     notifyListeners();
@@ -1511,9 +1571,12 @@ class PluginService extends ChangeNotifier {
       runtime.evaluate(script);
       final manifest = _extractManifest(runtime);
       final uiEntries = _extractUiEntries(runtime);
+      final danmakuRendererDeclarations =
+          _extractDanmakuRendererDeclarations(runtime);
       return _ParsedPluginMetadata(
         manifest: manifest,
         uiEntries: uiEntries,
+        danmakuRendererDeclarations: danmakuRendererDeclarations,
       );
     } catch (_) {
       rethrow;
@@ -1590,6 +1653,49 @@ class PluginService extends ChangeNotifier {
     }
   }
 
+  List<Map<String, dynamic>> _extractDanmakuRendererDeclarations(
+    PluginJsRuntime runtime,
+  ) {
+    final raw = runtime
+        .evaluate(
+          'JSON.stringify((typeof pluginDanmakuRenderers !== "undefined" && Array.isArray(pluginDanmakuRenderers)) ? pluginDanmakuRenderers : [])',
+        )
+        .trim();
+    if (raw.isEmpty) return const <Map<String, dynamic>>[];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const <Map<String, dynamic>>[];
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  List<PluginDanmakuRenderer> _resolveDanmakuRenderers(
+    String pluginId,
+    List<Map<String, dynamic>> declarations,
+    List<PluginExternalScript> externalScripts,
+  ) {
+    final renderers = <PluginDanmakuRenderer>[];
+    final ids = <String>{};
+    for (final declaration in declarations) {
+      try {
+        final renderer = PluginDanmakuRenderer.fromJson(
+          pluginId: pluginId,
+          availableScripts: externalScripts,
+          json: declaration,
+        );
+        if (ids.add(renderer.id)) renderers.add(renderer);
+      } catch (error) {
+        debugPrint('[Plugin:$pluginId] 忽略无效弹幕渲染器声明: $error');
+      }
+    }
+    return renderers;
+  }
+
   Future<List<String>> _loadEnabledIds() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList(_enabledPluginsKey);
@@ -1622,10 +1728,12 @@ class _ParsedPluginMetadata {
   const _ParsedPluginMetadata({
     required this.manifest,
     required this.uiEntries,
+    required this.danmakuRendererDeclarations,
   });
 
   final PluginManifest manifest;
   final List<PluginUiEntry> uiEntries;
+  final List<Map<String, dynamic>> danmakuRendererDeclarations;
 }
 
 class _DiscoveredPluginScript {

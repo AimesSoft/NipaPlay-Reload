@@ -118,6 +118,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
+  StreamSubscription<void>? _pluginRendererChangeSubscription;
   int? _macosNativeVideoViewId;
 
   bool _isRepeatableShortcut(LogicalKeyboardKey key) {
@@ -135,8 +136,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildDanmakuOverlay(VideoPlayerState videoState) {
-    final isNextKernel = DanmakuKernelFactory.getKernelType() ==
-        DanmakuRenderEngine.nipaplayNext;
+    final isStableKernel = DanmakuKernelFactory.activePluginRenderer != null ||
+        DanmakuKernelFactory.getKernelType() ==
+            DanmakuRenderEngine.nipaplayNext;
     return ValueListenableBuilder<double>(
       valueListenable: videoState.playbackTimeMs,
       child: DanmakuOverlay(
@@ -151,7 +153,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
-        if (isNextKernel && child != null) {
+        if (isStableKernel && child != null) {
           return child;
         }
         return DanmakuOverlay(
@@ -441,6 +443,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _pluginRendererChangeSubscription =
+        DanmakuKernelFactory.onRendererChanged.listen((_) {
+      _videoPlayerStateInstance?.handleDanmakuRendererChanged();
+      if (mounted) setState(() {});
+    });
     // 移除键盘事件处理
     // _focusNode.onKey = _handleKeyEvent;
 
@@ -782,6 +789,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pluginRendererChangeSubscription?.cancel();
     // The window-hosted video surface punches a transparent hole through the
     // Flutter background. Always restore it before this route is removed, even
     // if the native overlay's asynchronous detach races with player disposal.

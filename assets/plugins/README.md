@@ -77,6 +77,36 @@ function pluginHandleUIAction(actionId) {
 - 敏感词建议在 JS 内采用 base64 保存，在运行时再解码为 `pluginBlockWords`。
 - 建议同时提供 `atob` 与 `Buffer` 两种解码分支，提升运行时兼容性。
 
+## 外部脚本与弹幕渲染器
+
+插件可在 `pluginManifest.requires` 中声明 HTTPS 外部脚本。依赖只会在插件已启用、渲染器已被用户选中时下载并加载：
+
+```js
+const pluginManifest = {
+  // ...常规清单字段
+  permissions: ['script.external', 'danmaku.renderer'],
+  requires: [
+    {
+      id: 'engine',
+      url: 'https://example.com/engine.js',
+      sha256: '<64位十六进制摘要>',
+    },
+  ],
+};
+```
+
+清单必须同时申请 `script.external` 与 `danmaku.renderer` 权限。当前 WebView 渲染宿主只在 Android 与 iOS 显示插件引擎；外部脚本仅允许 HTTPS，按声明顺序加载，单文件上限 32 MB。省略 SHA-256 可以运行，但发布插件时强烈建议固定摘要。
+
+`pluginDanmakuRenderers` 可通过 `requires: ['engine']` 选择清单中的依赖。`bootstrap` 是轻量适配层；它应创建 `window.NipaDanmakuRenderer.handle(message)`。宿主发送以下消息：
+
+- `initialize`：宿主 API 版本与插件/渲染器 ID。
+- `load`：标准化弹幕列表及列表版本。
+- `settings`：可见性、透明度、字号、显示区域、滚动时长、屏蔽项及时间偏移。
+- `clock`：播放位置、播放态、倍速和 seek 版本；目前最多每 100 ms 推送一次。
+- `dispose`：释放引擎、DOM 与监听器。
+
+渲染页可通过 `NipaDanmakuHost.postMessage(JSON.stringify(...))` 返回 `ready`、`log` 或 `error`。完整 Titan 适配示例见 `assets/plugins/builtin/titan_danmaku_renderer.js`。
+
 ## 冲突策略
 
 - 如果出现重复 `id`，后加载到的插件会被忽略，并打印日志。

@@ -172,6 +172,8 @@ dependencies:
   # Used on existing platforms. HarmonyOS uses the repository-owned QuickJS
   # FFI bridge because flutter_js has no OHOS implementation.
   flutter_js: ^0.8.0
+  # Optional plugin danmaku renderer host (enabled only on Android/iOS).
+  webview_flutter: ^4.14.1
   audioplayers: ^6.1.0
 
 dev_dependencies:
