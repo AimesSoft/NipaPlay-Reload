@@ -488,11 +488,8 @@ void main(List<String> args) async {
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
 
-    // 初始化自动同步服务（仅桌面端）
-    if (globals.isDesktop)
-      AutoSyncService.instance.initialize()
-    else
-      Future.value(),
+    // 初始化多端增量同步服务（Web 端暂不启用本地索引）
+    if (!kIsWeb) AutoSyncService.instance.initialize() else Future.value(),
 
     // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
     if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
@@ -698,6 +695,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   Brightness _platformBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   String? _lastSystemUiLogSignature;
+  int _handledIncrementalSyncRun = 0;
 
   @override
   void initState() {
@@ -705,6 +703,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    if (!kIsWeb) {
+      AutoSyncService.instance.addListener(_onIncrementalSyncStateChanged);
+    }
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (globals.isDesktop) {
@@ -744,11 +745,31 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
+    if (!kIsWeb) {
+      AutoSyncService.instance.removeListener(_onIncrementalSyncStateChanged);
+    }
     super.dispose();
   }
 
   void _onExternalPlayerConsoleAvailabilityChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onIncrementalSyncStateChanged() {
+    final service = AutoSyncService.instance;
+    if (service.phase != AutoSyncPhase.complete ||
+        service.completedRunCount == _handledIncrementalSyncRun) {
+      return;
+    }
+    _handledIncrementalSyncRun = service.completedRunCount;
+    try {
+      final provider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
+      provider.clearInvalidPathCache();
+      unawaited(provider.loadHistory());
+    } catch (error) {
+      debugPrint('增量同步后刷新观看历史失败: $error');
+    }
   }
 
   @override
@@ -1569,8 +1590,8 @@ class MainPageState extends State<MainPage>
   }
 
   void _syncLargeScreenHotkeySuppression() {
-    final isLargeScreenModeActive = globals.isTvOS ||
-        (globals.isDesktopOrTablet && _useLargeScreenLayout);
+    final isLargeScreenModeActive =
+        globals.isTvOS || (globals.isDesktopOrTablet && _useLargeScreenLayout);
     HotkeyService().setLargeScreenModeActive(isLargeScreenModeActive);
   }
 
@@ -1756,7 +1777,7 @@ class MainPageState extends State<MainPage>
     );
     final bool isLargeScreenLayoutActive =
         (isTelevisionSurface && globals.isTvOS) ||
-        (canUseLargeScreenLayout && _useLargeScreenLayout);
+            (canUseLargeScreenLayout && _useLargeScreenLayout);
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =
@@ -1772,95 +1793,99 @@ class MainPageState extends State<MainPage>
         child: _LargeScreenModeSfxSync(
           isActive: isLargeScreenLayoutActive,
           child: Stack(
-          children: [
-            // 使用 Selector 只监听需要的状态
-            Selector<VideoPlayerState, bool>(
-              selector: (context, videoState) => videoState.shouldShowAppBar(),
-              builder: (context, shouldShowAppBar, child) {
-                return CustomScaffold(
-                  pages: _pages,
-                  tabPage: createUnifiedTabLabels(context, _pageDefinitions),
-                  pageIsHome: true,
-                  shouldShowAppBar: shouldShowAppBar,
-                  tabController: globalTabController,
-                  useLargeScreenLayout: isLargeScreenLayoutActive,
-                  currentPageId: _selectedPageId,
-                  pageIds: _pageDefinitions.map((p) => p.id).toList(growable: false),
-                  onToggleLargeScreen: allowLargeScreenControls
-                      ? _toggleLargeScreenLayout
-                      : null,
-                  onToggleThemeFromOrigin: _handleThemeToggleFromButton,
-                  onOpenSettings: () => unawaited(
-                    UnifiedAppViewPresenter.show<void>(
-                      context,
-                      viewId: AppPageIds.settings,
+            children: [
+              // 使用 Selector 只监听需要的状态
+              Selector<VideoPlayerState, bool>(
+                selector: (context, videoState) =>
+                    videoState.shouldShowAppBar(),
+                builder: (context, shouldShowAppBar, child) {
+                  return CustomScaffold(
+                    pages: _pages,
+                    tabPage: createUnifiedTabLabels(context, _pageDefinitions),
+                    pageIsHome: true,
+                    shouldShowAppBar: shouldShowAppBar,
+                    tabController: globalTabController,
+                    useLargeScreenLayout: isLargeScreenLayoutActive,
+                    currentPageId: _selectedPageId,
+                    pageIds: _pageDefinitions
+                        .map((p) => p.id)
+                        .toList(growable: false),
+                    onToggleLargeScreen: allowLargeScreenControls
+                        ? _toggleLargeScreenLayout
+                        : null,
+                    onToggleThemeFromOrigin: _handleThemeToggleFromButton,
+                    onOpenSettings: () => unawaited(
+                      UnifiedAppViewPresenter.show<void>(
+                        context,
+                        viewId: AppPageIds.settings,
+                      ),
                     ),
+                  );
+                },
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: _showSplash
+                    ? const SplashScreen(key: ValueKey('splash'))
+                    : const SizedBox.shrink(key: ValueKey('no_splash')),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SizedBox(
+                  height: 40,
+                  child: GestureDetector(
+                    onDoubleTap: _toggleWindowSize,
+                    onPanStart: (details) async {
+                      if (globals.isDesktop) {
+                        await windowManager.startDragging();
+                      }
+                    },
                   ),
-                );
-              },
-            ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              child: _showSplash
-                  ? const SplashScreen(key: ValueKey('splash'))
-                  : const SizedBox.shrink(key: ValueKey('no_splash')),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SizedBox(
-                height: 40,
-                child: GestureDetector(
-                  onDoubleTap: _toggleWindowSize,
-                  onPanStart: (details) async {
-                    if (globals.isDesktop) {
-                      await windowManager.startDragging();
-                    }
-                  },
                 ),
               ),
-            ),
-            // 使用 Selector 只监听需要的状态
-            Selector<VideoPlayerState, bool>(
-              selector: (context, videoState) => videoState.shouldShowAppBar(),
-              builder: (context, shouldShowAppBar, child) {
-                if (!globals.isDesktopOrTablet) {
-                  return const SizedBox.shrink();
-                }
-                if (!isLargeScreenLayoutActive && !shouldShowAppBar) {
-                  return const SizedBox.shrink();
-                }
-                return NipaplayLargeScreenModeActionsOverlay(
-                  isDarkMode: isDarkMode,
-                  isLargeScreenLayoutActive: isLargeScreenLayoutActive,
-                  topPadding: topPadding,
-                  rightPadding: rightPadding,
-                  showWindowsButtons: !kIsWeb &&
-                      (Platform.isWindows || Platform.isLinux) &&
-                      !isLargeScreenLayoutActive,
-                  isMaximized: isMaximized,
-                  onToggleLargeScreen: allowLargeScreenControls
-                      ? _toggleLargeScreenLayout
-                      : null,
-                  onToggleThemeFromOrigin: _handleThemeToggleFromButton,
-                  onOpenSettings: () => unawaited(
-                    UnifiedAppViewPresenter.show<void>(
-                      context,
-                      viewId: AppPageIds.settings,
+              // 使用 Selector 只监听需要的状态
+              Selector<VideoPlayerState, bool>(
+                selector: (context, videoState) =>
+                    videoState.shouldShowAppBar(),
+                builder: (context, shouldShowAppBar, child) {
+                  if (!globals.isDesktopOrTablet) {
+                    return const SizedBox.shrink();
+                  }
+                  if (!isLargeScreenLayoutActive && !shouldShowAppBar) {
+                    return const SizedBox.shrink();
+                  }
+                  return NipaplayLargeScreenModeActionsOverlay(
+                    isDarkMode: isDarkMode,
+                    isLargeScreenLayoutActive: isLargeScreenLayoutActive,
+                    topPadding: topPadding,
+                    rightPadding: rightPadding,
+                    showWindowsButtons: !kIsWeb &&
+                        (Platform.isWindows || Platform.isLinux) &&
+                        !isLargeScreenLayoutActive,
+                    isMaximized: isMaximized,
+                    onToggleLargeScreen: allowLargeScreenControls
+                        ? _toggleLargeScreenLayout
+                        : null,
+                    onToggleThemeFromOrigin: _handleThemeToggleFromButton,
+                    onOpenSettings: () => unawaited(
+                      UnifiedAppViewPresenter.show<void>(
+                        context,
+                        viewId: AppPageIds.settings,
+                      ),
                     ),
-                  ),
-                  onMinimize: _minimizeWindow,
-                  onMaximizeRestore: _toggleWindowSize,
-                  onClose: _closeWindow,
-                );
-              },
-            ),
-          ],
-        ),
+                    onMinimize: _minimizeWindow,
+                    onMaximizeRestore: _toggleWindowSize,
+                    onClose: _closeWindow,
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1896,7 +1921,8 @@ class _LargeScreenModeSfxSync extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_LargeScreenModeSfxSync> createState() => _LargeScreenModeSfxSyncState();
+  State<_LargeScreenModeSfxSync> createState() =>
+      _LargeScreenModeSfxSyncState();
 }
 
 class _LargeScreenModeSfxSyncState extends State<_LargeScreenModeSfxSync> {
