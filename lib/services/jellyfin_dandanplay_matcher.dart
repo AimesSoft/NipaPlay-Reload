@@ -732,6 +732,15 @@ class JellyfinDandanplayMatcher {
     }
   }
 
+  /// Runs only DandanPlay's hash-and-filename match endpoint.
+  ///
+  /// Unlike the interactive matcher, this never falls back to selecting the
+  /// first title-search result and is therefore safe for background matching.
+  Future<Map<String, dynamic>> matchVideoInfoExactly(
+      Map<String, dynamic> videoInfo) {
+    return _matchWithDandanPlayAPI(videoInfo);
+  }
+
   Map<String, dynamic> _normalizeMatchApiResult(Map<String, dynamic> raw) {
     final matches = raw['matches'];
     final normalizedMatches = (matches is List)

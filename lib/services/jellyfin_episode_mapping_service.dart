@@ -96,8 +96,14 @@ class JellyfinEpisodeMappingService {
     // 检查是否已存在映射
     final existing = await _database!.query(
       'jellyfin_dandanplay_mapping',
-      where: 'jellyfin_series_id = ? AND jellyfin_season_id = ? AND dandanplay_anime_id = ?',
-      whereArgs: [jellyfinSeriesId, jellyfinSeasonId, dandanplayAnimeId],
+      where:
+          'jellyfin_series_id = ? AND (jellyfin_season_id = ? OR (jellyfin_season_id IS NULL AND ? IS NULL)) AND dandanplay_anime_id = ?',
+      whereArgs: [
+        jellyfinSeriesId,
+        jellyfinSeasonId,
+        jellyfinSeasonId,
+        dandanplayAnimeId,
+      ],
     );
 
     if (existing.isNotEmpty) {
@@ -114,6 +120,9 @@ class JellyfinEpisodeMappingService {
         whereArgs: [mappingId],
       );
       debugPrint('[映射服务] 更新现有动画映射: ID=$mappingId');
+      _animeMappingCache.removeWhere(
+        (key, _) => key.startsWith('${jellyfinSeriesId}_'),
+      );
       return mappingId;
     } else {
       // 创建新映射
@@ -128,6 +137,9 @@ class JellyfinEpisodeMappingService {
         },
       );
       debugPrint('[映射服务] 创建新动画映射: ID=$mappingId');
+      _animeMappingCache.removeWhere(
+        (key, _) => key.startsWith('${jellyfinSeriesId}_'),
+      );
       return mappingId;
     }
   }

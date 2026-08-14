@@ -16,6 +16,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/jellyfin_series_auto_match_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
