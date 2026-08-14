@@ -340,6 +340,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             focusNode: _searchFocusNode,
             remoteInputTitle: '搜索番剧',
             remoteInputFieldId: 'manual_danmaku_search',
+            showClearButton: true,
             cursorColor: _accentColor,
             style: TextStyle(color: _textColor),
             decoration: InputDecoration(

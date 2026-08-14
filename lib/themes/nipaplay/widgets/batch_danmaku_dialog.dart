@@ -743,6 +743,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             focusNode: _searchFocusNode,
             remoteInputTitle: '搜索番剧',
             remoteInputFieldId: 'batch_danmaku_search',
+            showClearButton: true,
             style: TextStyle(color: _textColor),
             decoration: InputDecoration(
               hintText: '搜索番剧（右侧先选番剧再选话数）',

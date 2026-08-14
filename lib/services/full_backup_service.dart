@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
+export 'package:nipaplay/services/backup_category.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,16 +13,9 @@ import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay/services/incremental_sync_native_codec.dart';
+import 'package:nipaplay/services/backup_category.dart';
 import 'package:crypto/crypto.dart';
-
-/// 备份数据类别枚举，支持按需选择导出/导入
-enum BackupCategory {
-  preferences, // 偏好设置（仅软件设置）
-  mediaLibraries, // 添加的媒体库（本地、在线、WebDAV、SMB、DDP远程、共享服务）
-  watchHistory, // 观看历史记录
-  episodeMatches, // 已匹配的所有剧集
-  accounts, // 个人中心已绑定的账户
-}
 
 /// 全量备份服务
 ///
@@ -71,12 +66,16 @@ class FullBackupService {
         appVersion: appVersion,
       );
 
-      // 写入文件（编码前净化 Infinity/NaN 等非法 double，避免备份失败）
-      final sanitized = _sanitizeForJson(backupData);
-      final jsonString =
-          const JsonEncoder.withIndent('  ').convert(sanitized);
+      // Rust 负责最终 JSON 编码、canonical 排序与校验；特殊平台会自动
+      // 回退到后台 Dart isolate。编码前仍净化 Infinity/NaN。
+      final sanitized =
+          Map<String, dynamic>.from(_sanitizeForJson(backupData) as Map);
+      final encoded = await IncrementalSyncNativeCodec.encodeMap(
+        sanitized,
+        pretty: true,
+      );
       final file = File(filePath);
-      await file.writeAsString(jsonString);
+      await file.writeAsBytes(encoded.bytes);
 
       debugPrint('成功导出备份到: $filePath');
       return filePath;
@@ -103,12 +102,19 @@ class FullBackupService {
   Future<Map<String, dynamic>> collectBackupData({
     required Set<BackupCategory> categories,
     String appVersion = '',
+    bool includeWatchHistoryThumbnails = true,
   }) async {
     final backupData = <String, dynamic>{
       'version': _backupFormatVersion,
       'timestamp': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
     };
+
+    List<WatchHistoryItem>? historyItems;
+    if (categories.contains(BackupCategory.watchHistory) ||
+        categories.contains(BackupCategory.episodeMatches)) {
+      historyItems = await WatchHistoryDatabase.instance.getAllWatchHistory();
+    }
 
     if (categories.contains(BackupCategory.preferences)) {
       backupData['preferences'] = await _collectPreferences();
@@ -117,10 +123,13 @@ class FullBackupService {
       backupData['mediaLibraries'] = await _collectMediaLibraries();
     }
     if (categories.contains(BackupCategory.watchHistory)) {
-      backupData['watchHistory'] = await _collectWatchHistory(includeThumbnails: true);
+      backupData['watchHistory'] = await _collectWatchHistory(
+        historyItems!,
+        includeThumbnails: includeWatchHistoryThumbnails,
+      );
     }
     if (categories.contains(BackupCategory.episodeMatches)) {
-      backupData['episodeMatches'] = await _collectEpisodeMatches();
+      backupData['episodeMatches'] = _collectEpisodeMatches(historyItems!);
     }
     if (categories.contains(BackupCategory.accounts)) {
       backupData['accounts'] = await _collectAccounts();
@@ -142,6 +151,8 @@ class FullBackupService {
     // 收集所有 SharedPreferences 中的设置项（排除媒体库和账户相关）
     final allKeys = prefs.getKeys();
     final settingsKeys = allKeys.where((key) =>
+        !key.startsWith('incremental_sync_') && // 同步端点/凭证仅属于本机
+        !key.startsWith('auto_sync_') && // 自动同步开关与旧路径仅属于本机
         !key.startsWith('dandanplay_') && // 账户相关单独处理
         !key.startsWith('server_profiles') && // 服务器配置属于媒体库
         key != 'video_positions' && // 播放位置属于观看历史
@@ -223,10 +234,8 @@ class FullBackupService {
       final webdavService = WebDAVService.instance;
       await webdavService.initialize();
       final webdavConnections = webdavService.connections;
-      if (webdavConnections.isNotEmpty) {
-        result['webdavConnections'] =
-            webdavConnections.map((c) => c.toJson()).toList();
-      }
+      result['webdavConnections'] =
+          webdavConnections.map((c) => c.toJson()).toList();
     } catch (e) {
       debugPrint('收集WebDAV连接配置失败: $e');
     }
@@ -236,10 +245,7 @@ class FullBackupService {
       final smbService = SMBService.instance;
       await smbService.initialize();
       final smbConnections = smbService.connections;
-      if (smbConnections.isNotEmpty) {
-        result['smbConnections'] =
-            smbConnections.map((c) => c.toJson()).toList();
-      }
+      result['smbConnections'] = smbConnections.map((c) => c.toJson()).toList();
     } catch (e) {
       debugPrint('收集SMB连接配置失败: $e');
     }
@@ -256,6 +262,8 @@ class FullBackupService {
           'tokenRequired':
               prefs.getBool('dandanplay_remote_token_required') ?? false,
         };
+      } else {
+        result['dandanplayRemote'] = null;
       }
     } catch (e) {
       debugPrint('收集弹弹play远程服务配置失败: $e');
@@ -294,43 +302,27 @@ class FullBackupService {
   /// 收集观看历史数据
   ///
   /// [includeThumbnails] 是否包含截图的 base64 数据
-  Future<List<Map<String, dynamic>>> _collectWatchHistory({
+  Future<List<Map<String, dynamic>>> _collectWatchHistory(
+    List<WatchHistoryItem> historyItems, {
     bool includeThumbnails = true,
   }) async {
     try {
-      final database = WatchHistoryDatabase.instance;
-      final historyItems = await database.getAllWatchHistory();
-
       final resultList = <Map<String, dynamic>>[];
-      for (final item in historyItems) {
-        final recordData = {
-          'filePath': item.filePath,
-          'animeName': item.animeName,
-          'episodeTitle': item.episodeTitle,
-          'episodeId': item.episodeId,
-          'animeId': item.animeId,
-          'watchProgress': item.watchProgress,
-          'lastPosition': item.lastPosition,
-          'duration': item.duration,
-          'lastWatchTime': item.lastWatchTime.toIso8601String(),
-          'isFromScan': item.isFromScan,
-          'videoHash': item.videoHash,
-        };
-
-        // 读取截图文件
-        if (includeThumbnails && item.thumbnailPath != null) {
-          try {
-            final thumbnailFile = File(item.thumbnailPath!);
-            if (thumbnailFile.existsSync()) {
-              final thumbnailBytes = thumbnailFile.readAsBytesSync();
-              recordData['thumbnailBase64'] = base64Encode(thumbnailBytes);
-            }
-          } catch (e) {
-            debugPrint('读取截图文件失败: ${item.thumbnailPath}, 错误: $e');
-          }
-        }
-
-        resultList.add(recordData);
+      // Limit concurrent file reads so large thumbnail collections do not
+      // block the UI isolate or exhaust file descriptors.
+      const readConcurrency = 8;
+      for (var offset = 0;
+          offset < historyItems.length;
+          offset += readConcurrency) {
+        final end = (offset + readConcurrency).clamp(0, historyItems.length);
+        resultList.addAll(await Future.wait(
+          historyItems
+              .sublist(offset, end)
+              .map((item) => _collectWatchHistoryItem(
+                    item,
+                    includeThumbnail: includeThumbnails,
+                  )),
+        ));
       }
 
       return resultList;
@@ -340,16 +332,45 @@ class FullBackupService {
     }
   }
 
+  Future<Map<String, dynamic>> _collectWatchHistoryItem(
+    WatchHistoryItem item, {
+    required bool includeThumbnail,
+  }) async {
+    final recordData = <String, dynamic>{
+      'filePath': item.filePath,
+      'animeName': item.animeName,
+      'episodeTitle': item.episodeTitle,
+      'episodeId': item.episodeId,
+      'animeId': item.animeId,
+      'watchProgress': item.watchProgress,
+      'lastPosition': item.lastPosition,
+      'duration': item.duration,
+      'lastWatchTime': item.lastWatchTime.toIso8601String(),
+      'isFromScan': item.isFromScan,
+      'videoHash': item.videoHash,
+    };
+    if (includeThumbnail && item.thumbnailPath != null) {
+      try {
+        final thumbnailFile = File(item.thumbnailPath!);
+        if (await thumbnailFile.exists()) {
+          recordData['thumbnailBase64'] =
+              base64Encode(await thumbnailFile.readAsBytes());
+        }
+      } catch (e) {
+        debugPrint('读取截图文件失败: ${item.thumbnailPath}, 错误: $e');
+      }
+    }
+    return recordData;
+  }
+
   // ---------- 剧集匹配数据收集 ----------
 
   /// 收集已匹配的剧集数据
   ///
   /// 从观看历史中提取所有已匹配（有 animeId 和 episodeId）的记录
-  Future<List<Map<String, dynamic>>> _collectEpisodeMatches() async {
+  List<Map<String, dynamic>> _collectEpisodeMatches(
+      List<WatchHistoryItem> historyItems) {
     try {
-      final database = WatchHistoryDatabase.instance;
-      final historyItems = await database.getAllWatchHistory();
-
       // 只收集已匹配的记录（animeId 和 episodeId 都不为空）
       final matchedItems = historyItems
           .where((item) => item.animeId != null && item.episodeId != null)
@@ -360,6 +381,7 @@ class FullBackupService {
                 'episodeId': item.episodeId,
                 'animeId': item.animeId,
                 'videoHash': item.videoHash,
+                'isFromScan': item.isFromScan,
               })
           .toList();
 
@@ -465,45 +487,64 @@ class FullBackupService {
         return result;
       }
 
-      final jsonString = await file.readAsString();
-      final backupData = json.decode(jsonString) as Map<String, dynamic>;
+      final restorePlan =
+          await IncrementalSyncNativeCodec.prepareFullBackupRestore(
+        bytes: await file.readAsBytes(),
+        categories: categories,
+      );
 
-      // 检查版本
-      final version = backupData['version'] as int? ?? 0;
-      if (version > _backupFormatVersion) {
-        debugPrint('不支持的备份格式版本: $version');
+      if (restorePlan.version > _backupFormatVersion) {
+        debugPrint('不支持的备份格式版本: ${restorePlan.version}');
         return result;
       }
 
-      // 按类别恢复
-      if (categories.contains(BackupCategory.preferences) &&
-          backupData.containsKey('preferences')) {
-        result.preferencesResult =
-            await _restorePreferences(backupData['preferences'] as Map<String, dynamic>);
+      if (restorePlan.preferencesJson.isNotEmpty) {
+        result.preferencesResult = await _restorePreferences(
+          await IncrementalSyncNativeCodec.decodeJsonMap(
+              restorePlan.preferencesJson),
+        );
       }
-
-      if (categories.contains(BackupCategory.mediaLibraries) &&
-          backupData.containsKey('mediaLibraries')) {
-        result.mediaLibrariesResult =
-            await _restoreMediaLibraries(backupData['mediaLibraries'] as Map<String, dynamic>);
+      if (restorePlan.mediaLibrariesJson.isNotEmpty) {
+        result.mediaLibrariesResult = await _restoreMediaLibraries(
+          await IncrementalSyncNativeCodec.decodeJsonMap(
+              restorePlan.mediaLibrariesJson),
+        );
       }
-
-      if (categories.contains(BackupCategory.watchHistory) &&
-          backupData.containsKey('watchHistory')) {
-        result.watchHistoryResult =
-            await _restoreWatchHistory(backupData['watchHistory'] as List<dynamic>);
+      if (restorePlan.watchHistoryBatches.isNotEmpty ||
+          restorePlan.invalidWatchHistoryCount > 0) {
+        final aggregate = CategoryRestoreResult()
+          ..success = true
+          ..skippedCount = restorePlan.invalidWatchHistoryCount;
+        for (final batch in restorePlan.watchHistoryBatches) {
+          _mergeCategoryResult(
+            aggregate,
+            await _restoreWatchHistory(
+              await IncrementalSyncNativeCodec.decodeJsonList(batch),
+            ),
+          );
+        }
+        result.watchHistoryResult = aggregate;
       }
-
-      if (categories.contains(BackupCategory.episodeMatches) &&
-          backupData.containsKey('episodeMatches')) {
-        result.episodeMatchesResult =
-            await _restoreEpisodeMatches(backupData['episodeMatches'] as List<dynamic>);
+      if (restorePlan.episodeMatchBatches.isNotEmpty ||
+          restorePlan.invalidEpisodeMatchCount > 0) {
+        final aggregate = CategoryRestoreResult()
+          ..success = true
+          ..skippedCount = restorePlan.invalidEpisodeMatchCount;
+        for (final batch in restorePlan.episodeMatchBatches) {
+          _mergeCategoryResult(
+            aggregate,
+            await _restoreEpisodeMatches(
+              await IncrementalSyncNativeCodec.decodeJsonList(batch),
+            ),
+          );
+        }
+        result.episodeMatchesResult = aggregate;
       }
-
-      if (categories.contains(BackupCategory.accounts) &&
-          backupData.containsKey('accounts')) {
-        result.accountsResult =
-            await _restoreAccounts(backupData['accounts'] as Map<String, dynamic>);
+      if (restorePlan.accountsJson.isNotEmpty) {
+        result.accountsResult = await _restoreAccounts(
+          await IncrementalSyncNativeCodec.decodeJsonMap(
+              restorePlan.accountsJson),
+        );
       }
 
       result.success = true;
@@ -515,6 +556,18 @@ class FullBackupService {
     }
 
     return result;
+  }
+
+  void _mergeCategoryResult(
+    CategoryRestoreResult target,
+    CategoryRestoreResult batch,
+  ) {
+    target.restoredCount += batch.restoredCount;
+    target.skippedCount += batch.skippedCount;
+    if (!batch.success) {
+      target.success = false;
+      target.errorMessage ??= batch.errorMessage;
+    }
   }
 
   /// 从备份数据解析（不读文件），直接恢复
@@ -533,28 +586,28 @@ class FullBackupService {
 
       if (categories.contains(BackupCategory.preferences) &&
           backupData.containsKey('preferences')) {
-        result.preferencesResult =
-            await _restorePreferences(backupData['preferences'] as Map<String, dynamic>);
+        result.preferencesResult = await _restorePreferences(
+            backupData['preferences'] as Map<String, dynamic>);
       }
       if (categories.contains(BackupCategory.mediaLibraries) &&
           backupData.containsKey('mediaLibraries')) {
-        result.mediaLibrariesResult =
-            await _restoreMediaLibraries(backupData['mediaLibraries'] as Map<String, dynamic>);
+        result.mediaLibrariesResult = await _restoreMediaLibraries(
+            backupData['mediaLibraries'] as Map<String, dynamic>);
       }
       if (categories.contains(BackupCategory.watchHistory) &&
           backupData.containsKey('watchHistory')) {
-        result.watchHistoryResult =
-            await _restoreWatchHistory(backupData['watchHistory'] as List<dynamic>);
+        result.watchHistoryResult = await _restoreWatchHistory(
+            backupData['watchHistory'] as List<dynamic>);
       }
       if (categories.contains(BackupCategory.episodeMatches) &&
           backupData.containsKey('episodeMatches')) {
-        result.episodeMatchesResult =
-            await _restoreEpisodeMatches(backupData['episodeMatches'] as List<dynamic>);
+        result.episodeMatchesResult = await _restoreEpisodeMatches(
+            backupData['episodeMatches'] as List<dynamic>);
       }
       if (categories.contains(BackupCategory.accounts) &&
           backupData.containsKey('accounts')) {
-        result.accountsResult =
-            await _restoreAccounts(backupData['accounts'] as Map<String, dynamic>);
+        result.accountsResult = await _restoreAccounts(
+            backupData['accounts'] as Map<String, dynamic>);
       }
 
       result.success = true;
@@ -625,7 +678,8 @@ class FullBackupService {
       final prefs = await SharedPreferences.getInstance();
 
       // 1. 恢复本地媒体库路径
-      final localLibs = mediaLibrariesData['localMediaLibraries'] as List<dynamic>?;
+      final localLibs =
+          mediaLibrariesData['localMediaLibraries'] as List<dynamic>?;
       if (localLibs != null) {
         final folderList = localLibs.cast<String>().toList();
         await prefs.setStringList('nipaplay_scanned_folders', folderList);
@@ -671,8 +725,8 @@ class FullBackupService {
       final embySelectedLibs =
           mediaLibrariesData['embySelectedLibraryIds'] as List<dynamic>?;
       if (embySelectedLibs != null) {
-        await prefs.setStringList(
-            'emby_selected_library_ids', embySelectedLibs.cast<String>().toList());
+        await prefs.setStringList('emby_selected_library_ids',
+            embySelectedLibs.cast<String>().toList());
       }
 
       final jellyfinSelectedLibs =
@@ -704,16 +758,14 @@ class FullBackupService {
           final webdavService = WebDAVService.instance;
           await webdavService.initialize();
           final existingConnections = webdavService.connections;
-          final existingNames =
-              existingConnections.map((c) => c.name).toSet();
+          final existingNames = existingConnections.map((c) => c.name).toSet();
 
           for (final connData in webdavConnectionsData) {
             try {
               final connection =
                   WebDAVConnection.fromJson(connData as Map<String, dynamic>);
               if (existingNames.contains(connection.name)) {
-                await webdavService
-                    .removeConnection(connection.name);
+                await webdavService.removeConnection(connection.name);
               }
               await webdavService.addConnection(connection);
             } catch (e) {
@@ -734,16 +786,14 @@ class FullBackupService {
           final smbService = SMBService.instance;
           await smbService.initialize();
           final existingConnections = smbService.connections;
-          final existingNames =
-              existingConnections.map((c) => c.name).toSet();
+          final existingNames = existingConnections.map((c) => c.name).toSet();
 
           for (final connData in smbConnectionsData) {
             try {
               final connection =
                   SMBConnection.fromJson(connData as Map<String, dynamic>);
               if (existingNames.contains(connection.name)) {
-                await smbService
-                    .updateConnection(connection.name, connection);
+                await smbService.updateConnection(connection.name, connection);
               } else {
                 await smbService.addConnection(connection);
               }
@@ -796,8 +846,7 @@ class FullBackupService {
       if (nipaplayShareData != null) {
         final autoStart = nipaplayShareData['autoStart'] as bool? ?? false;
         final port = nipaplayShareData['port'] as int? ?? 1180;
-        final ipv6Enabled =
-            nipaplayShareData['ipv6Enabled'] as bool? ?? false;
+        final ipv6Enabled = nipaplayShareData['ipv6Enabled'] as bool? ?? false;
 
         await prefs.setBool('web_server_auto_start', autoStart);
         await prefs.setInt('web_server_port', port);
@@ -823,32 +872,26 @@ class FullBackupService {
 
     try {
       final database = WatchHistoryDatabase.instance;
-      int restoredCount = 0;
-      int skippedCount = 0;
+      final items = <WatchHistoryItem>[];
 
       for (final itemData in watchHistoryData) {
         try {
-          final recordData = itemData as Map<String, dynamic>;
+          final recordData = Map<String, dynamic>.from(itemData as Map);
 
           final item = WatchHistoryItem(
             filePath: recordData['filePath'] as String,
             animeName: recordData['animeName'] as String,
             episodeTitle: recordData['episodeTitle'] as String?,
-            episodeId: recordData['episodeId'] as int?,
-            animeId: recordData['animeId'] as int?,
+            episodeId: (recordData['episodeId'] as num?)?.toInt(),
+            animeId: (recordData['animeId'] as num?)?.toInt(),
             watchProgress: (recordData['watchProgress'] ?? 0.0).toDouble(),
-            lastPosition: recordData['lastPosition'] as int? ?? 0,
-            duration: recordData['duration'] as int? ?? 0,
-            lastWatchTime: DateTime.parse(recordData['lastWatchTime'] as String),
+            lastPosition: (recordData['lastPosition'] as num?)?.toInt() ?? 0,
+            duration: (recordData['duration'] as num?)?.toInt() ?? 0,
+            lastWatchTime:
+                DateTime.parse(recordData['lastWatchTime'] as String),
             isFromScan: recordData['isFromScan'] as bool? ?? false,
             videoHash: recordData['videoHash'] as String?,
           );
-
-          // 检查文件是否可访问（本地文件需要存在，远程协议始终视为可访问）
-          if (!await _isFileAccessible(item.filePath)) {
-            // 即使文件不可访问，仍然保存记录（用户可能稍后挂载对应路径）
-            debugPrint('文件当前不可访问，仍保存记录: ${item.animeName}');
-          }
 
           // 恢复截图
           String? restoredThumbnailPath;
@@ -858,49 +901,22 @@ class FullBackupService {
                 await _restoreThumbnail(item.filePath, thumbnailBase64);
           }
 
-          // 更新或插入记录
-          final existingItem =
-              await database.getHistoryByFilePath(item.filePath);
-          if (existingItem != null) {
-            // 已存在：仅当备份记录更新时覆盖
-            if (item.lastWatchTime.isAfter(existingItem.lastWatchTime)) {
-              final finalThumbnailPath =
-                  restoredThumbnailPath ?? existingItem.thumbnailPath;
-              final updatedItem = item.copyWith(
-                  thumbnailPath: finalThumbnailPath);
-              await database.insertOrUpdateWatchHistory(updatedItem);
-              await _updateSharedPreferencesPosition(
-                  item.filePath, item.lastPosition);
-              restoredCount++;
-            } else {
-              // 本地记录更新，保留本地版本但恢复截图
-              if (restoredThumbnailPath != null &&
-                  existingItem.thumbnailPath == null) {
-                final updatedItem = existingItem.copyWith(
-                    thumbnailPath: restoredThumbnailPath);
-                await database.insertOrUpdateWatchHistory(updatedItem);
-              }
-              skippedCount++;
-            }
-          } else {
-            // 不存在：直接插入
-            final finalItem =
-                item.copyWith(thumbnailPath: restoredThumbnailPath);
-            await database.insertOrUpdateWatchHistory(finalItem);
-            await _updateSharedPreferencesPosition(
-                item.filePath, item.lastPosition);
-            restoredCount++;
-          }
+          items.add(item.copyWith(thumbnailPath: restoredThumbnailPath));
         } catch (e) {
           debugPrint('恢复单条观看历史失败: $e');
+          result.skippedCount++;
           continue;
         }
       }
 
-      result.restoredCount = restoredCount;
-      result.skippedCount = skippedCount;
+      final merged = await database.mergeWatchHistoryBatch(items);
+      await _updateSharedPreferencesPositions(merged.restoredPositions);
+
+      result.restoredCount = merged.restoredCount;
+      result.skippedCount += merged.skippedCount;
       result.success = true;
-      debugPrint('观看历史恢复完成: 恢复 $restoredCount 条，跳过 $skippedCount 条');
+      debugPrint(
+          '观看历史恢复完成: 恢复 ${result.restoredCount} 条，跳过 ${result.skippedCount} 条');
     } catch (e) {
       debugPrint('恢复观看历史失败: $e');
       result.success = false;
@@ -918,69 +934,41 @@ class FullBackupService {
 
     try {
       final database = WatchHistoryDatabase.instance;
-      int restoredCount = 0;
-      int skippedCount = 0;
+      final matches = <EpisodeMatchRestoreItem>[];
 
       for (final matchData in episodeMatchesData) {
         try {
-          final recordData = matchData as Map<String, dynamic>;
+          final recordData = Map<String, dynamic>.from(matchData as Map);
           final filePath = recordData['filePath'] as String;
-          final animeId = recordData['animeId'] as int?;
-          final episodeId = recordData['episodeId'] as int?;
+          final animeId = (recordData['animeId'] as num?)?.toInt();
+          final episodeId = (recordData['episodeId'] as num?)?.toInt();
 
-          if (animeId == null || episodeId == null) continue;
-
-          // 查找本地是否有对应文件的历史记录
-          final existingItem =
-              await database.getHistoryByFilePath(filePath);
-
-          if (existingItem != null) {
-            // 已有记录：更新匹配信息
-            if (existingItem.animeId != animeId ||
-                existingItem.episodeId != episodeId) {
-              final updatedItem = existingItem.copyWith(
-                animeId: animeId,
-                episodeId: episodeId,
-                animeName:
-                    recordData['animeName'] as String? ?? existingItem.animeName,
-                episodeTitle: recordData['episodeTitle'] as String? ??
-                    existingItem.episodeTitle,
-                videoHash:
-                    recordData['videoHash'] as String? ?? existingItem.videoHash,
-              );
-              await database.insertOrUpdateWatchHistory(updatedItem);
-              restoredCount++;
-            } else {
-              skippedCount++;
-            }
-          } else {
-            // 没有对应记录：创建一条仅包含匹配信息的记录
-            final newItem = WatchHistoryItem(
-              filePath: filePath,
-              animeName: recordData['animeName'] as String? ?? '未知',
-              episodeTitle: recordData['episodeTitle'] as String?,
-              episodeId: episodeId,
-              animeId: animeId,
-              watchProgress: 0.0,
-              lastPosition: 0,
-              duration: 0,
-              lastWatchTime: DateTime.now(),
-              isFromScan: true,
-              videoHash: recordData['videoHash'] as String?,
-            );
-            await database.insertOrUpdateWatchHistory(newItem);
-            restoredCount++;
+          if (animeId == null || episodeId == null) {
+            result.skippedCount++;
+            continue;
           }
+          matches.add(EpisodeMatchRestoreItem(
+            filePath: filePath,
+            animeId: animeId,
+            episodeId: episodeId,
+            animeName: recordData['animeName'] as String?,
+            episodeTitle: recordData['episodeTitle'] as String?,
+            videoHash: recordData['videoHash'] as String?,
+          ));
         } catch (e) {
           debugPrint('恢复单条剧集匹配失败: $e');
+          result.skippedCount++;
           continue;
         }
       }
 
-      result.restoredCount = restoredCount;
-      result.skippedCount = skippedCount;
+      final merged = await database.mergeEpisodeMatchBatch(matches);
+
+      result.restoredCount = merged.restoredCount;
+      result.skippedCount += merged.skippedCount;
       result.success = true;
-      debugPrint('剧集匹配恢复完成: 恢复 $restoredCount 条，跳过 $skippedCount 条');
+      debugPrint(
+          '剧集匹配恢复完成: 恢复 ${result.restoredCount} 条，跳过 ${result.skippedCount} 条');
     } catch (e) {
       debugPrint('恢复剧集匹配数据失败: $e');
       result.success = false;
@@ -1171,9 +1159,11 @@ class FullBackupService {
     }
   }
 
-  /// 更新 SharedPreferences 中的播放位置
-  Future<void> _updateSharedPreferencesPosition(
-      String filePath, int position) async {
+  /// Batch-updates SharedPreferences playback positions once per restore
+  /// batch instead of decoding and writing the whole map for every row.
+  Future<void> _updateSharedPreferencesPositions(
+      Map<String, int> updates) async {
+    if (updates.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       const String videoPositionsKey = 'video_positions';
@@ -1182,30 +1172,11 @@ class FullBackupService {
       final Map<String, dynamic> positionMap =
           Map<String, dynamic>.from(json.decode(positions));
 
-      positionMap[filePath] = position;
+      positionMap.addAll(updates);
 
       await prefs.setString(videoPositionsKey, json.encode(positionMap));
     } catch (e) {
       debugPrint('更新 SharedPreferences 播放位置失败: $e');
-    }
-  }
-
-  /// 检查文件是否可访问
-  Future<bool> _isFileAccessible(String filePath) async {
-    try {
-      // 远程协议始终视为可访问
-      if (filePath.startsWith('jellyfin://') ||
-          filePath.startsWith('emby://') ||
-          filePath.startsWith('dandanplay://') ||
-          filePath.startsWith('http://') ||
-          filePath.startsWith('https://')) {
-        return true;
-      }
-
-      final file = File(filePath);
-      return await file.exists();
-    } catch (e) {
-      return false;
     }
   }
 
@@ -1229,8 +1200,9 @@ class FullBackupService {
       final file = File(filePath);
       if (!file.existsSync()) return null;
 
-      final jsonString = await file.readAsString();
-      final backupData = json.decode(jsonString) as Map<String, dynamic>;
+      final backupData = await IncrementalSyncNativeCodec.decodeJsonMap(
+        await file.readAsBytes(),
+      );
 
       return BackupPreviewInfo(
         version: backupData['version'] as int? ?? 0,
@@ -1241,24 +1213,22 @@ class FullBackupService {
         hasWatchHistory: backupData.containsKey('watchHistory'),
         hasEpisodeMatches: backupData.containsKey('episodeMatches'),
         hasAccounts: backupData.containsKey('accounts'),
-        watchHistoryCount: (backupData['watchHistory'] as List<dynamic>?)
-                ?.length ??
-            0,
-        episodeMatchCount: (backupData['episodeMatches'] as List<dynamic>?)
-                ?.length ??
-            0,
+        watchHistoryCount:
+            (backupData['watchHistory'] as List<dynamic>?)?.length ?? 0,
+        episodeMatchCount:
+            (backupData['episodeMatches'] as List<dynamic>?)?.length ?? 0,
         serverProfileCount:
             (backupData['mediaLibraries']?['serverProfiles'] as List<dynamic>?)
                     ?.length ??
                 0,
-        localLibraryCount:
-            (backupData['mediaLibraries']?['localMediaLibraries'] as List<dynamic>?)
-                    ?.length ??
-                0,
-        webdavConnectionCount:
-            (backupData['mediaLibraries']?['webdavConnections'] as List<dynamic>?)
-                    ?.length ??
-                0,
+        localLibraryCount: (backupData['mediaLibraries']?['localMediaLibraries']
+                    as List<dynamic>?)
+                ?.length ??
+            0,
+        webdavConnectionCount: (backupData['mediaLibraries']
+                    ?['webdavConnections'] as List<dynamic>?)
+                ?.length ??
+            0,
         smbConnectionCount:
             (backupData['mediaLibraries']?['smbConnections'] as List<dynamic>?)
                     ?.length ??

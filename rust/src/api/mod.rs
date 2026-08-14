@@ -2,6 +2,7 @@ pub mod ass_converter;
 pub mod danmaku_analytics;
 pub mod dfm_plus;
 pub mod file_scan;
+pub mod incremental_sync;
 pub mod media_metadata;
 pub mod media_probe;
 pub mod next2;

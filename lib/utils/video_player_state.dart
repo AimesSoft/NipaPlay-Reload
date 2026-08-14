@@ -29,7 +29,6 @@ import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
-import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/emby_media_source_selection.dart';
@@ -1507,19 +1506,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         syncService.dispose();
       } catch (e) {
         debugPrint('Emby播放销毁同步失败: $e');
-      }
-    }
-
-    // 退出视频播放时触发自动云同步
-    if (_currentVideoPath != null) {
-      try {
-        // 使用Future.microtask在下一个事件循环中异步执行，避免dispose中的异步问题
-        Future.microtask(() async {
-          await AutoSyncService.instance.syncOnPlaybackEnd();
-          debugPrint('退出视频时云同步成功');
-        });
-      } catch (e) {
-        debugPrint('退出视频时云同步失败: $e');
       }
     }
 
