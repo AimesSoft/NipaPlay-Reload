@@ -30,6 +30,8 @@ runs:
         sudo apt-get update
         # Install core build dependencies
         sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+        # audioplayers_linux requires gstreamer-1.0 at build time
+        sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
         # tray_manager needs ayatana-appindicator (or legacy appindicator)
         if apt-cache show libayatana-appindicator3-dev >/dev/null 2>&1; then
           sudo apt-get install -y libayatana-appindicator3-dev
