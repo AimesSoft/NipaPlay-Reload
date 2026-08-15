@@ -173,7 +173,8 @@ dependencies:
   # FFI bridge because flutter_js has no OHOS implementation.
   flutter_js: ^0.8.0
   # Optional plugin danmaku renderer host (enabled only on Android/iOS).
-  webview_flutter: ^4.14.1
+  # 4.14+ requires Dart >=3.10 which the HarmonyOS fork (3.35.8, Dart 3.9.2) cannot resolve.
+  webview_flutter: ^4.13.1
   audioplayers: ^6.1.0
 
 dev_dependencies:
