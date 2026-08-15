@@ -27,6 +27,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 
 class DanmakuSettingsContent extends StatefulWidget {
   const DanmakuSettingsContent({super.key});
@@ -772,11 +773,14 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
   @override
   Widget build(BuildContext context) {
     context.watch<PluginService>();
+    final videoState = context.watch<VideoPlayerState>();
     final colorScheme = Theme.of(context).colorScheme;
     final isErikaPlayerKernel = globals.isTvOS ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
     final hasPluginRenderer = DanmakuKernelFactory.activePluginRenderer != null;
+    final usesTitanSettings =
+        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
     _selectedPluginDanmakuRendererId =
         DanmakuKernelFactory.activePluginRenderer?.selectionId;
     final showNextPlusPlusToggle = !hasPluginRenderer &&
@@ -883,77 +887,364 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),
-
-            // 弹幕透明度滑块
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                return AdaptiveSettingsTile.slider(
-                  title: context.l10n.danmakuOpacityTitle,
-                  subtitle: context.l10n.danmakuOpacitySubtitle,
-                  icon: Icons.opacity,
-                  value: videoState.danmakuOpacity,
-                  min: 0,
-                  max: 1,
-                  divisions: 100,
-                  onChanged: videoState.setDanmakuOpacity,
-                  labelFormatter: (value) => '${(value * 100).round()}%',
-                );
-              },
-            ),
-
+            if (usesTitanSettings)
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 弹幕不透明度',
+                subtitle: '使用 Titan 原生透明度，默认 85%',
+                icon: Icons.opacity,
+                value: videoState.titanDanmakuSettings.opacity,
+                min: 0.2,
+                max: 1.0,
+                divisions: 16,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(opacity: value),
+                  );
+                },
+                labelFormatter: (value) => '${(value * 100).round()}%',
+              )
+            else
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return AdaptiveSettingsTile.slider(
+                    title: context.l10n.danmakuOpacityTitle,
+                    subtitle: context.l10n.danmakuOpacitySubtitle,
+                    icon: Icons.opacity,
+                    value: videoState.danmakuOpacity,
+                    min: 0,
+                    max: 1,
+                    divisions: 100,
+                    onChanged: videoState.setDanmakuOpacity,
+                    labelFormatter: (value) => '${(value * 100).round()}%',
+                  );
+                },
+              ),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                final currentFontSize = videoState.danmakuFontSize <= 0
-                    ? videoState.actualDanmakuFontSize
-                    : videoState.danmakuFontSize;
-                return AdaptiveSettingsTile.slider(
-                  title: context.l10n.danmakuFontSizeTitle,
-                  subtitle: '调整弹幕文字大小，轨道间距会自动适配',
-                  icon: Icons.format_size,
-                  value: currentFontSize.clamp(
-                    DanmakuStyle.minDanmakuFontSize,
-                    DanmakuStyle.maxDanmakuFontSize,
-                  ),
-                  min: DanmakuStyle.minDanmakuFontSize,
-                  max: DanmakuStyle.maxDanmakuFontSize,
-                  divisions: 96,
-                  onChanged: (value) {
-                    videoState.setDanmakuFontSize(value, commit: true);
-                  },
-                  labelFormatter: (value) => '${value.toStringAsFixed(1)}px',
-                );
-              },
-            ),
-
+            if (usesTitanSettings)
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 字号倍率',
+                subtitle: '使用 Titan 原生字号倍率，不改变其他弹幕引擎的像素字号',
+                icon: Icons.format_size,
+                value: videoState.titanDanmakuSettings.fontSize,
+                min: 0.5,
+                max: 2.0,
+                divisions: 30,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(fontSize: value),
+                  );
+                },
+                labelFormatter: (value) => '${value.toStringAsFixed(2)}×',
+              )
+            else
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  final currentFontSize = videoState.danmakuFontSize <= 0
+                      ? videoState.actualDanmakuFontSize
+                      : videoState.danmakuFontSize;
+                  return AdaptiveSettingsTile.slider(
+                    title: context.l10n.danmakuFontSizeTitle,
+                    subtitle: '调整弹幕文字大小，轨道间距会自动适配',
+                    icon: Icons.format_size,
+                    value: currentFontSize.clamp(
+                      DanmakuStyle.minDanmakuFontSize,
+                      DanmakuStyle.maxDanmakuFontSize,
+                    ),
+                    min: DanmakuStyle.minDanmakuFontSize,
+                    max: DanmakuStyle.maxDanmakuFontSize,
+                    divisions: 96,
+                    onChanged: (value) {
+                      videoState.setDanmakuFontSize(value, commit: true);
+                    },
+                    labelFormatter: (value) => '${value.toStringAsFixed(1)}px',
+                  );
+                },
+              ),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-
-            // 弹幕描边粗细
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                return AdaptiveSettingsTile.slider(
-                  title: context.l10n.danmakuOutlineWidthTitle,
-                  subtitle: context.l10n.danmakuOutlineEnabledSubtitle,
-                  icon: Icons.border_color,
-                  value: videoState.next2DanmakuOutlineWidth,
-                  min: 0.0,
-                  max: 2.0,
-                  divisions: 2,
-                  onChanged: videoState.setNext2DanmakuOutlineWidth,
-                  labelFormatter: (value) => value.round().toString(),
-                );
-              },
-            ),
-
+            if (usesTitanSettings) ...[
+              AdaptiveSettingsTile.toggle(
+                title: 'Titan 弹幕加粗',
+                subtitle: '使用 Titan 原生粗体样式',
+                icon: Icons.format_bold,
+                value: videoState.titanDanmakuSettings.bold,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(bold: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.dropdown(
+                title: 'Titan 描边类型',
+                subtitle: '选择重墨、描边或 45° 投影',
+                icon: Icons.border_color,
+                items: <DropdownMenuItemData<int>>[
+                  for (final entry in const <int, String>{
+                    0: '重墨',
+                    1: '描边',
+                    2: '45° 投影',
+                  }.entries)
+                    DropdownMenuItemData<int>(
+                      title: entry.value,
+                      value: entry.key,
+                      isSelected: videoState.titanDanmakuSettings.fontBorder ==
+                          entry.key,
+                    ),
+                ],
+                onChanged: (dynamic value) {
+                  if (value is! int) return;
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(fontBorder: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.dropdown(
+                title: 'Titan 弹幕字体',
+                subtitle: '字体未安装时 WebView 会自动回退到简体中文系统字体',
+                icon: Icons.font_download_outlined,
+                items: <DropdownMenuItemData<String>>[
+                  for (final option in TitanDanmakuSettings.fontOptions)
+                    DropdownMenuItemData<String>(
+                      title: option.label,
+                      value: option.value,
+                      isSelected: videoState.titanDanmakuSettings.fontFamily ==
+                          option.value,
+                    ),
+                ],
+                onChanged: (dynamic value) {
+                  if (value is! String) return;
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(fontFamily: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 滚动速度',
+                subtitle: 'Titan 原生 speedPlus；不改变其他引擎速度',
+                icon: Icons.speed,
+                value: videoState.titanDanmakuSettings.speedPlus,
+                min: 0.25,
+                max: 3.0,
+                divisions: 11,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(speedPlus: value),
+                  );
+                },
+                labelFormatter: (value) => '${value.toStringAsFixed(2)}×',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 弹幕密度',
+                subtitle: '限制同屏轨道占用密度',
+                icon: Icons.density_medium,
+                value: videoState.titanDanmakuSettings.density,
+                min: 0.1,
+                max: 1.0,
+                divisions: 9,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(density: value),
+                  );
+                },
+                labelFormatter: (value) => value.toStringAsFixed(1),
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 基准时长',
+                subtitle: '设置滚动弹幕的基础存活时间',
+                icon: Icons.timer_outlined,
+                value: videoState.titanDanmakuSettings.duration,
+                min: 2.0,
+                max: 12.0,
+                divisions: 20,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(duration: value),
+                  );
+                },
+                labelFormatter: (value) => '${value.toStringAsFixed(1)}s',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 同屏上限',
+                subtitle: '0 表示由引擎决定；最高可设置为 1000',
+                icon: Icons.format_list_numbered,
+                value: videoState.titanDanmakuSettings.limit
+                    .clamp(0, 1000)
+                    .toDouble(),
+                min: 0,
+                max: 1000,
+                divisions: 20,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(limit: value.round()),
+                  );
+                },
+                labelFormatter: (value) => value.round().toString(),
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.toggle(
+                title: 'Titan 防挡字幕',
+                subtitle: '避免弹幕覆盖画面底部的字幕区域',
+                icon: Icons.layers_clear_outlined,
+                value: videoState.titanDanmakuSettings.preventShade,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(preventShade: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 顶部偏移',
+                subtitle: '调整顶部弹幕轨道的像素偏移',
+                icon: Icons.vertical_align_top,
+                value: videoState.titanDanmakuSettings.offsetTop.toDouble(),
+                min: -100,
+                max: 100,
+                divisions: 200,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(offsetTop: value.round()),
+                  );
+                },
+                labelFormatter: (value) => '${value.round()}px',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 底部偏移',
+                subtitle: '调整底部弹幕轨道的像素偏移',
+                icon: Icons.vertical_align_bottom,
+                value: videoState.titanDanmakuSettings.offsetBottom.toDouble(),
+                min: -100,
+                max: 100,
+                divisions: 200,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(offsetBottom: value.round()),
+                  );
+                },
+                labelFormatter: (value) => '${value.round()}px',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 最大长度',
+                subtitle: '限制单条弹幕文字长度；0 表示不限制',
+                icon: Icons.straighten,
+                value: videoState.titanDanmakuSettings.maxLength
+                    .clamp(0, 200)
+                    .toDouble(),
+                min: 0,
+                max: 200,
+                divisions: 20,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(maxLength: value.round()),
+                  );
+                },
+                labelFormatter: (value) => value.round().toString(),
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.toggle(
+                title: 'Titan DOM 回收',
+                subtitle: '复用已经离屏的弹幕 DOM 节点',
+                icon: Icons.recycling,
+                value: videoState.titanDanmakuSettings.isRecyclingDom,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(isRecyclingDom: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.toggle(
+                title: 'Titan 模型回收',
+                subtitle: '复用引擎内部弹幕模型；默认关闭',
+                icon: Icons.memory,
+                value: videoState.titanDanmakuSettings.isRecyclingModel,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(isRecyclingModel: value),
+                  );
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.toggle(
+                title: 'Titan 禁止缩小',
+                subtitle: '轨道拥挤时不自动缩小弹幕文字',
+                icon: Icons.text_decrease,
+                value: videoState.titanDanmakuSettings.forbidShrinkState,
+                hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings
+                        .copyWith(forbidShrinkState: value),
+                  );
+                },
+              ),
+            ] else
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return AdaptiveSettingsTile.slider(
+                    title: context.l10n.danmakuOutlineWidthTitle,
+                    subtitle: context.l10n.danmakuOutlineEnabledSubtitle,
+                    icon: Icons.border_color,
+                    value: videoState.next2DanmakuOutlineWidth,
+                    min: 0.0,
+                    max: 2.0,
+                    divisions: 2,
+                    onChanged: videoState.setNext2DanmakuOutlineWidth,
+                    labelFormatter: (value) => value.round().toString(),
+                  );
+                },
+              ),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-
             Consumer<VideoPlayerState>(
               builder: (context, videoState, child) {
                 return AdaptiveSettingsTile.toggle(

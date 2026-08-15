@@ -124,6 +124,8 @@ class SettingsKeys {
   static const String danmakuRenderEngine = 'danmaku_render_engine'; // 渲染引擎设置
   static const String danmakuPluginRenderer =
       'danmaku_plugin_renderer'; // 插件弹幕渲染器 selectionId
+  static const String titanDanmakuSettings =
+      'titan_danmaku_settings'; // Titan 插件渲染器独立设置
   static const String legacyDanmakuKernel =
       'danmaku_kernel'; // 内核设置（已废弃，保留用于迁移旧设置）
   static const String showDanmakuDensityChart =

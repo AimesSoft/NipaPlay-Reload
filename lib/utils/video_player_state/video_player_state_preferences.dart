@@ -1380,6 +1380,29 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<void> _loadTitanDanmakuSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(SettingsKeys.titanDanmakuSettings);
+    if (encoded == null || encoded.isEmpty) return;
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is Map) {
+        _titanDanmakuSettings = TitanDanmakuSettings.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+        _notifyListeners();
+      }
+    } catch (error) {
+      debugPrint('[VideoPlayerState] 读取 Titan 弹幕设置失败: $error');
+    }
+  }
+
+  void setTitanDanmakuSettings(TitanDanmakuSettings settings) {
+    _titanDanmakuSettings = settings;
+    _notifyListeners();
+    _scheduleTitanDanmakuSettingsPersistence();
+  }
+
   // 设置弹幕字体大小
   Future<void> setDanmakuFontSize(
     double fontSize, {

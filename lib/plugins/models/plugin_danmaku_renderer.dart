@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'plugin_external_script.dart';
+import '../danmaku/titan_danmaku_settings.dart';
 
 /// A web-based danmaku renderer declared by an installed plugin.
 ///
@@ -16,6 +17,7 @@ class PluginDanmakuRenderer {
     required this.bootstrap,
     required this.externalScripts,
     required this.platforms,
+    this.supportsRealtimeAdd = false,
     this.apiVersion = 1,
   });
 
@@ -28,9 +30,26 @@ class PluginDanmakuRenderer {
   final String bootstrap;
   final List<PluginExternalScript> externalScripts;
   final Set<String> platforms;
+  final bool supportsRealtimeAdd;
   final int apiVersion;
 
   String get selectionId => 'plugin:$pluginId/$id';
+
+  bool get usesTitanSettings =>
+      pluginId == titanDanmakuPluginId && id == titanDanmakuRendererId;
+
+  bool shouldUseRealtimeAdd({
+    required bool force,
+    required int listVersion,
+    required int locallySentListVersion,
+    required int locallySentRevision,
+    required int lastLocallySentRevision,
+  }) {
+    return !force &&
+        supportsRealtimeAdd &&
+        listVersion == locallySentListVersion &&
+        locallySentRevision != lastLocallySentRevision;
+  }
 
   bool get isSupportedOnCurrentPlatform {
     if (kIsWeb || apiVersion != supportedApiVersion) return false;
@@ -86,6 +105,7 @@ class PluginDanmakuRenderer {
       bootstrap: bootstrap,
       externalScripts: externalScripts,
       platforms: platforms,
+      supportsRealtimeAdd: json['supportsRealtimeAdd'] == true,
       apiVersion: (json['apiVersion'] as num?)?.toInt() ?? 1,
     );
   }

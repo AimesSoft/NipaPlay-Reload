@@ -32,6 +32,7 @@ class _PluginDanmakuWebViewOverlayState
   bool _rendererReady = false;
   int _lastClockSentAtMs = 0;
   int _lastDanmakuListVersion = -1;
+  int _lastLocallySentDanmakuRevision = -1;
   int _lastSeekRevision = -1;
   String _lastSettingsJson = '';
   String _lastPlaybackState = '';
@@ -157,10 +158,34 @@ class _PluginDanmakuWebViewOverlayState
   }
 
   Future<void> _sendDanmaku({bool force = false}) async {
-    final version = widget.videoState.danmakuListVersion;
+    final state = widget.videoState;
+    final version = state.danmakuListVersion;
+    final localRevision = state.locallySentDanmakuRevision;
+    final isRealtimeLocalSend = widget.renderer.shouldUseRealtimeAdd(
+      force: force,
+      listVersion: version,
+      locallySentListVersion: state.locallySentDanmakuListVersion,
+      locallySentRevision: localRevision,
+      lastLocallySentRevision: _lastLocallySentDanmakuRevision,
+    );
+
+    if (isRealtimeLocalSend) {
+      _lastDanmakuListVersion = version;
+      _lastLocallySentDanmakuRevision = localRevision;
+      final item = state.locallySentDanmaku;
+      if (state.locallySentDanmakuDisplayable && item != null) {
+        await _send(<String, dynamic>{
+          'type': 'add',
+          'item': DanmakuItem.fromMap(item).toMap(),
+        });
+      }
+      return;
+    }
+
     if (!force && version == _lastDanmakuListVersion) return;
     _lastDanmakuListVersion = version;
-    final items = widget.videoState.danmakuList
+    _lastLocallySentDanmakuRevision = localRevision;
+    final items = state.danmakuList
         .map((item) => DanmakuItem.fromMap(item).toMap())
         .toList(growable: false);
     await _send(<String, dynamic>{
@@ -186,6 +211,8 @@ class _PluginDanmakuWebViewOverlayState
       'blockScroll': state.blockScrollDanmaku,
       'blockWords': state.danmakuBlockWords,
       'timeOffsetSeconds': state.manualDanmakuOffset + state.autoDanmakuOffset,
+      if (widget.renderer.usesTitanSettings)
+        'rendererSettings': state.titanDanmakuSettings.toJson(),
     };
     final encoded = jsonEncode(settings);
     if (!force && encoded == _lastSettingsJson) return;
