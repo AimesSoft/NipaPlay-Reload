@@ -617,7 +617,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   // 更新合并后的弹幕列表
-  void _updateMergedDanmakuList({bool preserveOverlay = false}) {
+  void _updateMergedDanmakuList({
+    bool preserveOverlay = false,
+    Map<String, dynamic>? locallySentDanmaku,
+    bool locallySentTrackEnabled = true,
+  }) {
     final List<Map<String, dynamic>> mergedList = [];
 
     // 合并所有启用的轨道
@@ -689,6 +693,16 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     _danmakuList = filteredList;
     _danmakuListVersion++;
+
+    if (locallySentDanmaku != null) {
+      _locallySentDanmaku = Map<String, dynamic>.unmodifiable(
+        _prepareDanmakuForDisplay(locallySentDanmaku),
+      );
+      _locallySentDanmakuDisplayable =
+          locallySentTrackEnabled && !shouldBlockDanmaku(locallySentDanmaku);
+      _locallySentDanmakuListVersion = _danmakuListVersion;
+      _locallySentDanmakuRevision++;
+    }
 
     if (_erikaNativeDanmaku) {
       // Erika composites danmaku into the video frame natively. Feed it the
@@ -1640,7 +1654,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuTracks[trackId]!['count'] = trackDanmaku.length;
 
       // 重新计算合并后的弹幕列表
-      _updateMergedDanmakuList(preserveOverlay: true);
+      _updateMergedDanmakuList(
+        preserveOverlay: true,
+        locallySentDanmaku: localDanmaku,
+        locallySentTrackEnabled: _danmakuTrackEnabled[trackId] == true,
+      );
 
       debugPrint('已将新弹幕添加到轨道 "$trackName": ${localDanmaku['content']}');
     }

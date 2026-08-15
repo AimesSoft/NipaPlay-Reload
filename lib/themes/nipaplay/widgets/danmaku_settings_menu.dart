@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 
 enum _DanmakuExportFormat { json, xml }
 
@@ -457,6 +458,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   Widget _buildDanmakuStyleSection(VideoPlayerState videoState) {
     final isErikaPlayerKernel =
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
+    final usesTitanSettings =
+        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
+    final titan = videoState.titanDanmakuSettings;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
     final showMergeToggle = isErikaPlayerKernel ||
@@ -477,45 +481,152 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
           ),
           const SizedBox(height: 12),
           _buildSliderSection(
-            label: '弹幕不透明度',
-            value: videoState.danmakuOpacity,
-            min: 0,
+            label: usesTitanSettings ? 'Titan 弹幕不透明度' : '弹幕不透明度',
+            value:
+                usesTitanSettings ? titan.opacity : videoState.danmakuOpacity,
+            min: usesTitanSettings ? 0.2 : 0,
             max: 1,
-            step: 0.01,
+            step: usesTitanSettings ? 0.05 : 0.01,
             displayTextBuilder: (value) => '${(value * 100).round()}%',
-            onChanged: videoState.setDanmakuOpacity,
-            hint: '调整弹幕文字透明度',
+            onChanged: usesTitanSettings
+                ? (value) => videoState.setTitanDanmakuSettings(
+                      videoState.titanDanmakuSettings.copyWith(opacity: value),
+                    )
+                : videoState.setDanmakuOpacity,
+            hint: usesTitanSettings ? 'Titan 默认 85%，不改变其他引擎透明度' : '调整弹幕文字透明度',
           ),
-          _buildSliderSection(
-            label: '弹幕字体大小',
-            value: videoState.danmakuFontSize <= 0
-                ? videoState.actualDanmakuFontSize
-                : videoState.danmakuFontSize,
-            min: 12,
-            max: 60,
-            step: 0.5,
-            displayTextBuilder: (value) => '${value.toStringAsFixed(1)}px',
-            onChanged: videoState.setDanmakuFontSize,
-            onChangeEnd: (value) =>
-                videoState.setDanmakuFontSize(value, commit: true),
-            hint: '调整弹幕文字大小，轨道间距会自动适配',
-          ),
-          _buildFontSection(videoState),
-          _buildOutlineSection(
-            videoState,
-            useDiscreteLevels: showBinaryDanmakuEffectToggles,
-          ),
-          if (!isErikaPlayerKernel) _buildShadowSection(videoState),
-          _buildSliderSection(
-            label: '滚动弹幕速度',
-            value: videoState.danmakuSpeedMultiplier,
-            min: 0.5,
-            max: 2,
-            step: 0.05,
-            displayTextBuilder: (value) => '${value.toStringAsFixed(2)}x',
-            onChanged: videoState.setDanmakuSpeedMultiplier,
-            hint: '向左减慢滚动弹幕速度，向右加快',
-          ),
+          if (usesTitanSettings) ...[
+            _buildSliderSection(
+              label: 'Titan 字号倍率',
+              value: titan.fontSize,
+              min: 0.5,
+              max: 2.0,
+              step: 0.05,
+              displayTextBuilder: (value) => '${value.toStringAsFixed(2)}×',
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(fontSize: value),
+              ),
+              hint: '仅调整 Titan，不改变其他引擎的像素字号',
+            ),
+            _buildOptionButtonsSection<String>(
+              title: 'Titan 弹幕字体',
+              description: '未安装的字体会回退到简体中文系统字体',
+              items: TitanDanmakuSettings.fontOptions
+                  .map(
+                    (option) => DropdownMenuItemData<String>(
+                      title: option.label,
+                      value: option.value,
+                      isSelected: titan.fontFamily == option.value,
+                    ),
+                  )
+                  .toList(),
+              onSelected: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(fontFamily: value),
+              ),
+            ),
+            _buildSwitchSection(
+              label: 'Titan 弹幕加粗',
+              value: titan.bold,
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(bold: value),
+              ),
+              hint: '使用 Titan 原生粗体样式',
+            ),
+            _buildOptionButtonsSection<int>(
+              title: 'Titan 描边类型',
+              description: '对应引擎 fontBorder 设置',
+              items: <DropdownMenuItemData<int>>[
+                for (final entry in const <int, String>{
+                  0: '重墨',
+                  1: '描边',
+                  2: '45° 投影',
+                }.entries)
+                  DropdownMenuItemData<int>(
+                    title: entry.value,
+                    value: entry.key,
+                    isSelected: titan.fontBorder == entry.key,
+                  ),
+              ],
+              onSelected: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(fontBorder: value),
+              ),
+            ),
+            _buildSliderSection(
+              label: 'Titan 滚动速度',
+              value: titan.speedPlus,
+              min: 0.25,
+              max: 3.0,
+              step: 0.25,
+              displayTextBuilder: (value) => '${value.toStringAsFixed(2)}×',
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(speedPlus: value),
+              ),
+              hint: '使用 Titan 原生 speedPlus',
+            ),
+            _buildSliderSection(
+              label: 'Titan 弹幕密度',
+              value: titan.density,
+              min: 0.1,
+              max: 1.0,
+              step: 0.1,
+              displayTextBuilder: (value) => value.toStringAsFixed(1),
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(density: value),
+              ),
+              hint: '限制同屏轨道占用密度',
+            ),
+            _buildSliderSection(
+              label: 'Titan 基准时长',
+              value: titan.duration,
+              min: 2.0,
+              max: 12.0,
+              step: 0.5,
+              displayTextBuilder: (value) => '${value.toStringAsFixed(1)}s',
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(duration: value),
+              ),
+              hint: '设置滚动弹幕的基础存活时间',
+            ),
+            _buildSwitchSection(
+              label: 'Titan 防挡字幕',
+              value: titan.preventShade,
+              onChanged: (value) => videoState.setTitanDanmakuSettings(
+                videoState.titanDanmakuSettings.copyWith(preventShade: value),
+              ),
+              hint: '避免弹幕覆盖画面底部的字幕区域',
+            ),
+          ] else ...[
+            _buildSliderSection(
+              label: '弹幕字体大小',
+              value: videoState.danmakuFontSize <= 0
+                  ? videoState.actualDanmakuFontSize
+                  : videoState.danmakuFontSize,
+              min: 12,
+              max: 60,
+              step: 0.5,
+              displayTextBuilder: (value) => '${value.toStringAsFixed(1)}px',
+              onChanged: videoState.setDanmakuFontSize,
+              onChangeEnd: (value) =>
+                  videoState.setDanmakuFontSize(value, commit: true),
+              hint: '调整弹幕文字大小，轨道间距会自动适配',
+            ),
+            _buildFontSection(videoState),
+            _buildOutlineSection(
+              videoState,
+              useDiscreteLevels: showBinaryDanmakuEffectToggles,
+            ),
+            if (!isErikaPlayerKernel) _buildShadowSection(videoState),
+            _buildSliderSection(
+              label: '滚动弹幕速度',
+              value: videoState.danmakuSpeedMultiplier,
+              min: 0.5,
+              max: 2,
+              step: 0.05,
+              displayTextBuilder: (value) => '${value.toStringAsFixed(2)}x',
+              onChanged: videoState.setDanmakuSpeedMultiplier,
+              hint: '向左减慢滚动弹幕速度，向右加快',
+            ),
+          ],
           _buildDisplayAreaSection(videoState),
           if (showMergeToggle)
             _buildSwitchSection(

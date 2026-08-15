@@ -60,6 +60,7 @@ import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
@@ -373,6 +374,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       AutoNextEpisodeService.defaultCountdownSeconds;
   List<Map<String, dynamic>> _danmakuList = [];
   int _danmakuListVersion = 0;
+  int _locallySentDanmakuRevision = 0;
+  int _locallySentDanmakuListVersion = -1;
+  Map<String, dynamic>? _locallySentDanmaku;
+  bool _locallySentDanmakuDisplayable = false;
 
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
@@ -503,6 +508,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _next2DanmakuOutlineWidth = globals.isTvOS
       ? defaultTvOSErikaDanmakuOutlineWidthLevel
       : defaultDanmakuOutlineWidthLevel;
+  TitanDanmakuSettings _titanDanmakuSettings = const TitanDanmakuSettings();
+  Timer? _titanDanmakuSettingsPersistenceTimer;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
   static const double defaultSubtitleScale = 1.0;
@@ -788,6 +795,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
+  void _scheduleTitanDanmakuSettingsPersistence({bool immediate = false}) {
+    _titanDanmakuSettingsPersistenceTimer?.cancel();
+    if (immediate) {
+      _titanDanmakuSettingsPersistenceTimer = null;
+      unawaited(_saveTitanDanmakuSettingsPreference(_titanDanmakuSettings));
+      return;
+    }
+    _titanDanmakuSettingsPersistenceTimer = Timer(
+      const Duration(milliseconds: 250),
+      () {
+        _titanDanmakuSettingsPersistenceTimer = null;
+        unawaited(_saveTitanDanmakuSettingsPreference(_titanDanmakuSettings));
+      },
+    );
+  }
+
+  Future<void> _saveTitanDanmakuSettingsPreference(
+    TitanDanmakuSettings settings,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        SettingsKeys.titanDanmakuSettings,
+        jsonEncode(settings.toJson()),
+      );
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存 Titan 弹幕设置失败: $e');
+    }
+  }
+
   Future<void> _savePlayerVolumePreference(double volume) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -930,6 +967,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
+  int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
+  int get locallySentDanmakuListVersion => _locallySentDanmakuListVersion;
+  Map<String, dynamic>? get locallySentDanmaku => _locallySentDanmaku;
+  bool get locallySentDanmakuDisplayable => _locallySentDanmakuDisplayable;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
   double get controlBarHeight => _controlBarHeight;
@@ -953,6 +994,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
+  TitanDanmakuSettings get titanDanmakuSettings => _titanDanmakuSettings;
   double get subtitleScale => _subtitleScale;
   double get subtitleDelayCustomLimitSeconds {
     final durationSeconds = _duration.inMilliseconds / 1000;
@@ -1513,6 +1555,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _volumePersistenceTimer?.cancel();
     _scheduleDanmakuFontSizePersistence(immediate: true);
     _danmakuFontSizePersistenceTimer?.cancel();
+    _scheduleTitanDanmakuSettingsPersistence(immediate: true);
+    _titanDanmakuSettingsPersistenceTimer?.cancel();
     _systemVolumeSubscription?.cancel();
     _systemVolumeSubscription = null;
     _systemVolumeController?.removeListener();
