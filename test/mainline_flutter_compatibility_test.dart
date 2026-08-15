@@ -18,7 +18,7 @@ void main() {
     expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
     expect(pubspec, contains('package_info_plus: ^10.2.1'));
     expect(pubspec, contains('wakelock_plus: ^1.7.0'));
-    expect(erikaRef, '0e85ef666de84cbddca02a4bba117eae750d629a');
+    expect(erikaRef, 'e1d598d032c69ec53c42fe38d49c1d48503f5a91');
     expect(
       File('.flutter-version-linux').readAsStringSync().trim(),
       '3.47.0-0.3.pre',
