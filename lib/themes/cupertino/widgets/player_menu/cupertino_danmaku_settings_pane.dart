@@ -18,6 +18,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 
 enum _DanmakuExportFormat { json, xml }
 
@@ -306,6 +307,9 @@ class _CupertinoDanmakuSettingsPaneState
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
+    final usesTitanSettings =
+        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
+    final titan = widget.videoState.titanDanmakuSettings;
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
         SliverPadding(
@@ -377,85 +381,207 @@ class _CupertinoDanmakuSettingsPaneState
               children: [
                 _buildSliderTile(
                   context,
-                  title: '透明度',
+                  title: usesTitanSettings ? 'Titan 弹幕不透明度' : '透明度',
                   description:
-                      '${(widget.videoState.danmakuOpacity * 100).round()}%',
-                  value: widget.videoState.danmakuOpacity,
-                  min: 0.0,
+                      '${((usesTitanSettings ? titan.opacity : widget.videoState.danmakuOpacity) * 100).round()}%',
+                  value: usesTitanSettings
+                      ? titan.opacity
+                      : widget.videoState.danmakuOpacity,
+                  min: usesTitanSettings ? 0.2 : 0.0,
                   max: 1.0,
-                  divisions: 20,
-                  onChanged: widget.videoState.setDanmakuOpacity,
+                  divisions: usesTitanSettings ? 16 : 20,
+                  onChanged: usesTitanSettings
+                      ? (value) => widget.videoState.setTitanDanmakuSettings(
+                            widget.videoState.titanDanmakuSettings
+                                .copyWith(opacity: value),
+                          )
+                      : widget.videoState.setDanmakuOpacity,
                 ),
-                _buildSliderTile(
-                  context,
-                  title: '字体大小',
-                  description:
-                      '${(widget.videoState.danmakuFontSize <= 0 ? widget.videoState.actualDanmakuFontSize : widget.videoState.danmakuFontSize).round()}px',
-                  value: widget.videoState.danmakuFontSize <= 0
-                      ? widget.videoState.actualDanmakuFontSize
-                      : widget.videoState.danmakuFontSize,
-                  min: 12.0,
-                  max: 60.0,
-                  divisions: 96,
-                  onChanged: widget.videoState.setDanmakuFontSize,
-                ),
-                if (!isLargeScreen)
-                  AdaptivePlayerMenuTile(
-                    title: const Text('字体选择'),
-                    subtitle: Text('当前字体：${_danmakuFontLabel()}'),
-                    trailing: const Icon(CupertinoIcons.right_chevron),
-                    onTap: _pickDanmakuFontFile,
-                  ),
-                if (!isLargeScreen)
-                  AdaptivePlayerMenuTile(
-                    title: const Text('恢复默认字体'),
-                    subtitle: const Text('使用系统默认弹幕字体'),
-                    trailing: const Icon(CupertinoIcons.refresh),
-                    onTap: _resetDanmakuFont,
-                  ),
-                _buildSliderTile(
-                  context,
-                  title: '滚动速度',
-                  description:
-                      '${widget.videoState.danmakuSpeedMultiplier.toStringAsFixed(2)}x',
-                  value: widget.videoState.danmakuSpeedMultiplier,
-                  min: 0.5,
-                  max: 2.0,
-                  divisions: 15,
-                  onChanged: widget.videoState.setDanmakuSpeedMultiplier,
-                ),
-                if (showBinaryDanmakuEffectToggles)
+                if (usesTitanSettings) ...[
                   _buildSliderTile(
                     context,
-                    title: '弹幕描边',
-                    description: _outlineWidthLevelLabel(
-                      widget.videoState.next2DanmakuOutlineWidth,
-                    ),
-                    value: widget.videoState.next2DanmakuOutlineWidth,
-                    min: 0.0,
+                    title: 'Titan 字号倍率',
+                    description: '${titan.fontSize.toStringAsFixed(2)}×',
+                    value: titan.fontSize,
+                    min: 0.5,
                     max: 2.0,
-                    divisions: 2,
-                    onChanged: widget.videoState.setNext2DanmakuOutlineWidth,
-                  )
-                else
-                  _buildOptionButtonsTile<DanmakuOutlineStyle>(
-                    context,
-                    title: '弹幕描边',
-                    subtitle: '选择弹幕文字外缘的描边方式',
-                    values: DanmakuOutlineStyle.values,
-                    selectedValue: widget.videoState.danmakuOutlineStyle,
-                    labelBuilder: _outlineStyleLabel,
-                    onSelected: widget.videoState.setDanmakuOutlineStyle,
+                    divisions: 30,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(fontSize: value),
+                    ),
                   ),
-                _buildOptionButtonsTile<DanmakuShadowStyle>(
-                  context,
-                  title: '弹幕阴影',
-                  subtitle: '选择弹幕文字的阴影强度',
-                  values: DanmakuShadowStyle.values,
-                  selectedValue: widget.videoState.danmakuShadowStyle,
-                  labelBuilder: _shadowStyleLabel,
-                  onSelected: widget.videoState.setDanmakuShadowStyle,
-                ),
+                  _buildOptionButtonsTile<String>(
+                    context,
+                    title: 'Titan 弹幕字体',
+                    subtitle: '未安装时回退到简体中文系统字体',
+                    values: TitanDanmakuSettings.fontOptions
+                        .map((option) => option.value)
+                        .toList(),
+                    selectedValue: titan.fontFamily,
+                    labelBuilder: (value) => TitanDanmakuSettings.fontOptions
+                        .firstWhere((option) => option.value == value)
+                        .label,
+                    onSelected: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(fontFamily: value),
+                    ),
+                  ),
+                  _buildSwitchTile(
+                    context,
+                    title: 'Titan 弹幕加粗',
+                    subtitle: '使用 Titan 原生粗体样式',
+                    value: titan.bold,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(bold: value),
+                    ),
+                  ),
+                  _buildOptionButtonsTile<int>(
+                    context,
+                    title: 'Titan 描边类型',
+                    subtitle: '重墨、描边或 45° 投影',
+                    values: const <int>[0, 1, 2],
+                    selectedValue: titan.fontBorder,
+                    labelBuilder: (value) => switch (value) {
+                      1 => '描边',
+                      2 => '45° 投影',
+                      _ => '重墨',
+                    },
+                    onSelected: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(fontBorder: value),
+                    ),
+                  ),
+                  _buildSliderTile(
+                    context,
+                    title: 'Titan 滚动速度',
+                    description: '${titan.speedPlus.toStringAsFixed(2)}×',
+                    value: titan.speedPlus,
+                    min: 0.25,
+                    max: 3.0,
+                    divisions: 11,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(speedPlus: value),
+                    ),
+                  ),
+                  _buildSliderTile(
+                    context,
+                    title: 'Titan 弹幕密度',
+                    description: titan.density.toStringAsFixed(1),
+                    value: titan.density,
+                    min: 0.1,
+                    max: 1.0,
+                    divisions: 9,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(density: value),
+                    ),
+                  ),
+                  _buildSliderTile(
+                    context,
+                    title: 'Titan 基准时长',
+                    description: '${titan.duration.toStringAsFixed(1)}s',
+                    value: titan.duration,
+                    min: 2.0,
+                    max: 12.0,
+                    divisions: 20,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(duration: value),
+                    ),
+                  ),
+                  _buildSwitchTile(
+                    context,
+                    title: 'Titan 防挡字幕',
+                    subtitle: '避免弹幕覆盖画面底部的字幕区域',
+                    value: titan.preventShade,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(preventShade: value),
+                    ),
+                  ),
+                ] else ...[
+                  _buildSliderTile(
+                    context,
+                    title: '字体大小',
+                    description:
+                        '${(widget.videoState.danmakuFontSize <= 0 ? widget.videoState.actualDanmakuFontSize : widget.videoState.danmakuFontSize).round()}px',
+                    value: widget.videoState.danmakuFontSize <= 0
+                        ? widget.videoState.actualDanmakuFontSize
+                        : widget.videoState.danmakuFontSize,
+                    min: 12.0,
+                    max: 60.0,
+                    divisions: 96,
+                    onChanged: widget.videoState.setDanmakuFontSize,
+                  ),
+                  if (!isLargeScreen)
+                    AdaptivePlayerMenuTile(
+                      title: const Text('字体选择'),
+                      subtitle: Text('当前字体：${_danmakuFontLabel()}'),
+                      trailing: const Icon(CupertinoIcons.right_chevron),
+                      onTap: _pickDanmakuFontFile,
+                    ),
+                  if (!isLargeScreen)
+                    AdaptivePlayerMenuTile(
+                      title: const Text('恢复默认字体'),
+                      subtitle: const Text('使用系统默认弹幕字体'),
+                      trailing: const Icon(CupertinoIcons.refresh),
+                      onTap: _resetDanmakuFont,
+                    ),
+                  _buildSliderTile(
+                    context,
+                    title: '滚动速度',
+                    description:
+                        '${widget.videoState.danmakuSpeedMultiplier.toStringAsFixed(2)}x',
+                    value: widget.videoState.danmakuSpeedMultiplier,
+                    min: 0.5,
+                    max: 2.0,
+                    divisions: 15,
+                    onChanged: widget.videoState.setDanmakuSpeedMultiplier,
+                  ),
+                  if (showBinaryDanmakuEffectToggles)
+                    _buildSliderTile(
+                      context,
+                      title: '弹幕描边',
+                      description: _outlineWidthLevelLabel(
+                        widget.videoState.next2DanmakuOutlineWidth,
+                      ),
+                      value: widget.videoState.next2DanmakuOutlineWidth,
+                      min: 0.0,
+                      max: 2.0,
+                      divisions: 2,
+                      onChanged: widget.videoState.setNext2DanmakuOutlineWidth,
+                    )
+                  else
+                    _buildOptionButtonsTile<DanmakuOutlineStyle>(
+                      context,
+                      title: '弹幕描边',
+                      subtitle: '选择弹幕文字外缘的描边方式',
+                      values: DanmakuOutlineStyle.values,
+                      selectedValue: widget.videoState.danmakuOutlineStyle,
+                      labelBuilder: _outlineStyleLabel,
+                      onSelected: widget.videoState.setDanmakuOutlineStyle,
+                    ),
+                  _buildOptionButtonsTile<DanmakuShadowStyle>(
+                    context,
+                    title: '弹幕阴影',
+                    subtitle: '选择弹幕文字的阴影强度',
+                    values: DanmakuShadowStyle.values,
+                    selectedValue: widget.videoState.danmakuShadowStyle,
+                    labelBuilder: _shadowStyleLabel,
+                    onSelected: widget.videoState.setDanmakuShadowStyle,
+                  ),
+                ],
                 _buildOptionButtonsTile<double>(
                   context,
                   title: '轨道显示区域',
