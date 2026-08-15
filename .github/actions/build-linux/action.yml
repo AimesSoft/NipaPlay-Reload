@@ -30,8 +30,13 @@ runs:
         sudo apt-get update
         # Install core build dependencies
         sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
-        # audioplayers_linux requires gstreamer-1.0 at build time
+        # audioplayers_linux requires gstreamer-1.0 at build time. On arm64,
+        # the runner's preinstalled LLVM libunwind-14-dev Breaks libunwind-dev
+        # (Ubuntu bug #1989124), so remove it before installing.
+        sudo apt-get remove -y libunwind-14-dev 2>/dev/null || true
         sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+        # universal_gamepad (large-screen gamepad support) requires libevdev
+        sudo apt-get install -y libevdev-dev
         # tray_manager needs ayatana-appindicator (or legacy appindicator)
         if apt-cache show libayatana-appindicator3-dev >/dev/null 2>&1; then
           sudo apt-get install -y libayatana-appindicator3-dev
