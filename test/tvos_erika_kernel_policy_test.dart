@@ -57,8 +57,9 @@ void main() {
     );
     expect(
       danmaku,
-      contains('final showNextPlusPlusToggle = !globals.isTvOS &&'),
+      contains('final showNextPlusPlusToggle = !hasPluginRenderer &&'),
     );
+    expect(danmaku, contains('!globals.isTvOS &&'));
   });
 
   test('tvOS release pins the native Erika plugin and reports Erika', () {

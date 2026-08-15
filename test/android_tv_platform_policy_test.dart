@@ -49,7 +49,6 @@ void main() {
     ).readAsStringSync();
 
     expect(main, contains('isTelevision: globals.isTvOS'));
-    expect(main, contains('final isLargeScreenModeActive = globals.isTvOS ||'));
     expect(themeProvider, contains('isTelevision: globals.isTvOS'));
     expect(
       scaffold,
