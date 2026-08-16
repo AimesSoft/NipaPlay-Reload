@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
@@ -8,6 +9,8 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
@@ -360,6 +363,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
 
     notifyListeners();
+    _scheduleIncrementalSyncAfterChange();
   }
 
   // 根据文件路径获取历史记录
@@ -372,6 +376,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     await _database.deleteHistory(filePath);
     _history.removeWhere((item) => item.filePath == filePath);
     notifyListeners();
+    _scheduleIncrementalSyncAfterChange();
   }
 
   // 删除指定前缀的历史记录
@@ -380,6 +385,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     if (count > 0) {
       _history.removeWhere((item) => item.filePath.startsWith(pathPrefix));
       notifyListeners();
+      _scheduleIncrementalSyncAfterChange();
     }
   }
 
@@ -388,6 +394,12 @@ class WatchHistoryProvider extends ChangeNotifier {
     await _database.clearAllHistory();
     _history.clear();
     notifyListeners();
+    _scheduleIncrementalSyncAfterChange();
+  }
+
+  void _scheduleIncrementalSyncAfterChange() {
+    if (!globals.isDesktop) return;
+    unawaited(AutoSyncService.instance.scheduleSyncAfterLocalChange());
   }
 
   bool _shouldDisplayInContinueWatching(WatchHistoryItem item) {

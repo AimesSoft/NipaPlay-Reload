@@ -46,11 +46,16 @@ typedef AutoSyncRunner = Future<AutoSyncRunResult> Function();
 
 class AutoSyncService extends ChangeNotifier {
   static const int _patchesBeforeSnapshotCompaction = 64;
+  static const int _snapshotGenerationsToKeep = 2;
+  static const int _patchCleanupBatchSize = 4;
+  static const Duration _defaultLocalChangeDebounce = Duration(seconds: 45);
 
   AutoSyncService._({
     IncrementalSyncTransportFactory? transportFactory,
     AutoSyncRunner? syncRunner,
+    Duration localChangeDebounce = _defaultLocalChangeDebounce,
   })  : _syncRunner = syncRunner,
+        _localChangeDebounce = localChangeDebounce,
         _transportFactory = transportFactory ??
             (({
               required serverUrl,
@@ -67,9 +72,11 @@ class AutoSyncService extends ChangeNotifier {
   AutoSyncService.forTesting({
     required IncrementalSyncTransportFactory transportFactory,
     AutoSyncRunner? syncRunner,
+    Duration localChangeDebounce = _defaultLocalChangeDebounce,
   }) : this._(
           transportFactory: transportFactory,
           syncRunner: syncRunner,
+          localChangeDebounce: localChangeDebounce,
         );
 
   static AutoSyncService? _instance;
@@ -77,9 +84,11 @@ class AutoSyncService extends ChangeNotifier {
 
   final IncrementalSyncTransportFactory _transportFactory;
   final AutoSyncRunner? _syncRunner;
+  final Duration _localChangeDebounce;
   final FullBackupService _backupService = FullBackupService();
 
   Timer? _syncTimer;
+  Timer? _localChangeTimer;
   Future<AutoSyncRunResult>? _activeSync;
   bool _isInitialized = false;
   bool _isSyncing = false;
@@ -125,6 +134,34 @@ class AutoSyncService extends ChangeNotifier {
 
   Future<AutoSyncRunResult> manualSync() => _performSync();
 
+  Future<void> scheduleSyncAfterLocalChange() async {
+    if (!await _shouldSyncOnRecordChange()) return;
+    _localChangeTimer?.cancel();
+    _localChangeTimer = Timer(_localChangeDebounce, () {
+      _localChangeTimer = null;
+      unawaited(_ignoreResult(_performSync()));
+    });
+  }
+
+  Future<void> syncOnPlaybackEnd() async {
+    if (!await _shouldSyncOnRecordChange()) return;
+    final lastSyncAt = await AutoSyncSettings.getLastSyncAt();
+    if (lastSyncAt != null &&
+        DateTime.now().difference(lastSyncAt) <= const Duration(minutes: 2)) {
+      return;
+    }
+    await _performSync();
+  }
+
+  Future<bool> _shouldSyncOnRecordChange() async {
+    if (!await AutoSyncSettings.isEnabled() ||
+        !await AutoSyncSettings.getSyncOnRecordChange()) {
+      return false;
+    }
+    return (await AutoSyncSettings.getCategories())
+        .contains(BackupCategory.watchHistory);
+  }
+
   Future<void> reloadSchedule() async {
     if (await AutoSyncSettings.isEnabled()) {
       await _startAutoSync();
@@ -163,9 +200,13 @@ class AutoSyncService extends ChangeNotifier {
   void _stopAutoSync() {
     _syncTimer?.cancel();
     _syncTimer = null;
+    _localChangeTimer?.cancel();
+    _localChangeTimer = null;
   }
 
   Future<AutoSyncRunResult> _performSync() async {
+    _localChangeTimer?.cancel();
+    _localChangeTimer = null;
     final active = _activeSync;
     if (active != null) return active;
     final future = _performSyncOnce();
@@ -428,6 +469,13 @@ class AutoSyncService extends ChangeNotifier {
         appliedPatchIds: appliedPatchIds,
       );
     }
+    updatedManifest = await _cleanupCompactedPatches(
+      transport: transport,
+      remoteRoot: remoteRoot,
+      manifestPath: manifestPath,
+      manifest: updatedManifest,
+      appliedPatchIds: appliedPatchIds,
+    );
 
     await _saveCache(
       IncrementalSyncCache(
@@ -593,7 +641,120 @@ class AutoSyncService extends ChangeNotifier {
       _encodeMap(compacted.toJson()),
       atomic: true,
     );
+    final obsoleteSnapshotVersion = nextVersion - _snapshotGenerationsToKeep;
+    if (obsoleteSnapshotVersion >= 1) {
+      final obsoleteSnapshot = 'snap_v$obsoleteSnapshotVersion.json';
+      try {
+        await transport.delete(_remoteJoin(remoteRoot, obsoleteSnapshot));
+      } catch (error) {
+        // Keep the newly published snapshot authoritative even when the
+        // provider temporarily refuses maintenance DELETE requests.
+        debugPrint('清理旧同步快照失败，将保留该文件: $obsoleteSnapshot: $error');
+      }
+    }
     return compacted;
+  }
+
+  Future<IncrementalSyncManifest> _cleanupCompactedPatches({
+    required IncrementalSyncTransport transport,
+    required String remoteRoot,
+    required String manifestPath,
+    required IncrementalSyncManifest manifest,
+    required Set<String> appliedPatchIds,
+  }) async {
+    final oldestRetainedVersion =
+        manifest.snapshotVersion - _snapshotGenerationsToKeep + 1;
+    if (oldestRetainedVersion <= 1) return manifest;
+
+    final candidates = manifest.patches
+        .where((entry) {
+          final version = _patchSnapshotVersion(entry.file);
+          return version != null &&
+              version < oldestRetainedVersion &&
+              manifest.snapshotPatchIds.contains(entry.id);
+        })
+        .take(_patchCleanupBatchSize)
+        .toList();
+    if (candidates.isEmpty) return manifest;
+
+    final deletedIds = <String>{};
+    for (final entry in candidates) {
+      try {
+        await transport.delete(_remoteJoin(remoteRoot, entry.file));
+        deletedIds.add(entry.id);
+      } catch (error) {
+        // Garbage collection is maintenance work. A provider that temporarily
+        // rejects DELETE must not turn an otherwise successful sync into a
+        // failure; the manifest entry keeps the file queued for a later run.
+        debugPrint('清理已压缩同步补丁失败，将稍后重试: ${entry.file}: $error');
+      }
+    }
+    if (deletedIds.isEmpty) return manifest;
+
+    try {
+      final latestBytes = await transport.read(manifestPath);
+      if (latestBytes == null) return manifest;
+      final latest = IncrementalSyncManifest.fromJson(
+        _decodeMap(latestBytes, expectedHash: null),
+      );
+      if (latest.repositoryId != manifest.repositoryId ||
+          latest.snapshotVersion != manifest.snapshotVersion ||
+          latest.snapshotSha256 != manifest.snapshotSha256) {
+        // Do not let maintenance adopt a snapshot whose state was not pulled
+        // during this run. The next sync will see the version mismatch and
+        // rebuild its cache from that newer snapshot.
+        return manifest;
+      }
+
+      // Only prune IDs that the latest published snapshot still confirms as
+      // included. This preserves patches uploaded by a concurrent device.
+      final safeDeletedIds =
+          deletedIds.where(latest.snapshotPatchIds.contains).toSet();
+      if (safeDeletedIds.isEmpty) return latest;
+      final cleaned = latest.copyWith(
+        patches: latest.patches
+            .where((entry) => !safeDeletedIds.contains(entry.id))
+            .toList(),
+        snapshotPatchIds: latest.snapshotPatchIds.difference(safeDeletedIds),
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await transport.write(
+        manifestPath,
+        _encodeMap(cleaned.toJson()),
+        atomic: true,
+      );
+      appliedPatchIds.removeAll(safeDeletedIds);
+      debugPrint('已清理 ${safeDeletedIds.length} 个过期增量同步补丁');
+      return cleaned;
+    } catch (error) {
+      // Deleted files are already represented by the current snapshot. If the
+      // metadata prune fails, a later run safely retries it (DELETE accepts
+      // 404), while synchronization itself remains successful.
+      debugPrint('更新补丁清理索引失败，将稍后重试: $error');
+      return manifest;
+    }
+  }
+
+  @visibleForTesting
+  Future<IncrementalSyncManifest> cleanupCompactedPatchesForTesting({
+    required IncrementalSyncTransport transport,
+    required String remoteRoot,
+    required String manifestPath,
+    required IncrementalSyncManifest manifest,
+    required Set<String> appliedPatchIds,
+  }) {
+    return _cleanupCompactedPatches(
+      transport: transport,
+      remoteRoot: remoteRoot,
+      manifestPath: manifestPath,
+      manifest: manifest,
+      appliedPatchIds: appliedPatchIds,
+    );
+  }
+
+  static int? _patchSnapshotVersion(String fileName) {
+    final match = RegExp(r'^patch_v(\d+)_').firstMatch(fileName);
+    return match == null ? null : int.tryParse(match.group(1)!);
   }
 
   IncrementalSyncState _mergeFirstSync(

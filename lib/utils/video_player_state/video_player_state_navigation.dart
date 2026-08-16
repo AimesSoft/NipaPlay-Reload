@@ -200,13 +200,41 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
   /// Returns the item immediately following the current item in the same
   /// playlist used by the player UI.
+  Future<void> preloadPlaybackPlaylist() async {
+    final currentPath = _currentVideoPath;
+    final detailContext = _playbackDetailContext;
+    if (currentPath == null || detailContext == null) return;
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      final episodes = await _playbackPlaylistCache.load(
+        sourceKey: detailContext.sourceKey,
+        loader: detailContext.episodeLoader,
+      );
+      if (_currentVideoPath != currentPath ||
+          _playbackDetailContext?.sourceKey != detailContext.sourceKey) {
+        return;
+      }
+      debugPrint(
+        '[播放列表] 后台预加载完成: ${episodes.length} 项, '
+        '${stopwatch.elapsedMilliseconds}ms',
+      );
+    } catch (e) {
+      // 不缓存失败结果，片尾检查时仍可再次加载。
+      debugPrint('[播放列表] 后台预加载失败，将在需要时重试: $e');
+    }
+  }
+
   Future<PlaybackDetailEpisode?> nextPlaylistEpisode() async {
     final currentPath = _currentVideoPath;
     final detailContext = _playbackDetailContext;
     if (currentPath == null || detailContext == null) return null;
 
     try {
-      final episodes = await detailContext.episodeLoader();
+      final episodes = await _playbackPlaylistCache.load(
+        sourceKey: detailContext.sourceKey,
+        loader: detailContext.episodeLoader,
+      );
       return PlaybackPlaylist.next(
         episodes,
         currentPath,
@@ -325,13 +353,15 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // 优先查询数据库中的真实观看记录，因为 WebDAV/SMB 的 episodeLoader
     // 创建的占位 historyItem 中 animeName/episodeTitle 都是文件名，没有
     // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
-    var historyItem = await WatchHistoryManager.getHistoryItemByPath(episode.videoPath);
+    var historyItem =
+        await WatchHistoryManager.getHistoryItemByPath(episode.videoPath);
     // WebDAV 路径可能存在 URL 编码差异（服务器返回编码 vs DB 存储原始），
     // 直接查找失败时尝试用编码后的路径再查一次。
     if (historyItem == null && episode.videoPath.startsWith('webdav://')) {
       final encodedPath = _encodeWebDavPath(episode.videoPath);
       if (encodedPath != episode.videoPath) {
-        historyItem = await WatchHistoryManager.getHistoryItemByPath(encodedPath);
+        historyItem =
+            await WatchHistoryManager.getHistoryItemByPath(encodedPath);
       }
     }
     final detailContext = _playbackDetailContext;
@@ -1358,6 +1388,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
                 await _updateWatchHistory(forceRemoteSync: true);
+                unawaited(
+                  AutoSyncService.instance
+                      .syncOnPlaybackEnd()
+                      .catchError((error) {
+                    debugPrint('播放结束时增量同步失败: $error');
+                  }),
+                );
 
                 // Jellyfin同步：如果是Jellyfin流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('jellyfin://')) {

@@ -18,6 +18,8 @@ class AutoSyncSettings {
   static const String _remotePathKey = 'incremental_sync_remote_path';
   static const String _intervalMinutesKey = 'incremental_sync_interval_minutes';
   static const String _categoriesKey = 'incremental_sync_categories';
+  static const String _syncOnRecordChangeKey =
+      'incremental_sync_on_record_change';
   static const String _deviceIdKey = 'incremental_sync_device_id';
   static const String _lastSyncAtKey = 'incremental_sync_last_sync_at';
   static const String _lastSyncErrorKey = 'incremental_sync_last_error';
@@ -105,6 +107,11 @@ class AutoSyncSettings {
     }
   }
 
+  static Future<bool> getSyncOnRecordChange() async {
+    await _ensureInitialized();
+    return _prefs!.getBool(_syncOnRecordChangeKey) ?? false;
+  }
+
   static Future<void> saveWebDavConfiguration({
     required String serverUrl,
     required String username,
@@ -112,6 +119,7 @@ class AutoSyncSettings {
     required String remotePath,
     required int intervalMinutes,
     required Set<BackupCategory> categories,
+    required bool syncOnRecordChange,
   }) async {
     await _ensureInitialized();
     await Future.wait([
@@ -127,7 +135,13 @@ class AutoSyncSettings {
         _categoriesKey,
         jsonEncode(categories.map((category) => category.name).toList()),
       ),
+      _prefs!.setBool(_syncOnRecordChangeKey, syncOnRecordChange),
     ]);
+  }
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _prefs = null;
   }
 
   static Future<bool> hasWebDavConfiguration() async {

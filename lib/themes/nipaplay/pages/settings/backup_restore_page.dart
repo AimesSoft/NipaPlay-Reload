@@ -43,6 +43,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
   String _syncRemotePath = AutoSyncSettings.defaultRemotePath;
   int _syncIntervalMinutes = AutoSyncSettings.defaultIntervalMinutes;
   Set<BackupCategory> _syncCategories = BackupCategory.values.toSet();
+  bool _syncOnRecordChange = false;
   DateTime? _lastSyncAt;
   String? _lastSyncError;
 
@@ -80,6 +81,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       AutoSyncSettings.getCategories(),
       AutoSyncSettings.getLastSyncAt(),
       AutoSyncSettings.getLastSyncError(),
+      AutoSyncSettings.getSyncOnRecordChange(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -92,6 +94,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       _syncCategories = values[6] as Set<BackupCategory>;
       _lastSyncAt = values[7] as DateTime?;
       _lastSyncError = values[8] as String?;
+      _syncOnRecordChange = values[9] as bool;
     });
   }
 
@@ -139,6 +142,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
           remotePath: _syncRemotePath,
           intervalMinutes: _syncIntervalMinutes,
           categories: _syncCategories,
+          syncOnRecordChange: _syncOnRecordChange,
         ),
       ),
     );
@@ -153,6 +157,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         remotePath: result.remotePath,
         intervalMinutes: result.intervalMinutes,
         categories: result.categories,
+        syncOnRecordChange: result.syncOnRecordChange,
       );
       if (enableAfterSave) {
         await AutoSyncService.instance.enable();
@@ -698,6 +703,7 @@ class _SyncSettingsValue {
     required this.remotePath,
     required this.intervalMinutes,
     required this.categories,
+    required this.syncOnRecordChange,
   });
 
   final String serverUrl;
@@ -706,6 +712,7 @@ class _SyncSettingsValue {
   final String remotePath;
   final int intervalMinutes;
   final Set<BackupCategory> categories;
+  final bool syncOnRecordChange;
 }
 
 class _SyncSettingsDialog extends StatefulWidget {
@@ -724,6 +731,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
   late final TextEditingController _remotePathController;
   late Set<BackupCategory> _categories;
   late int _intervalMinutes;
+  late bool _syncOnRecordChange;
   bool _obscurePassword = true;
   bool _testing = false;
   String? _testMessage;
@@ -742,6 +750,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
     _remotePathController =
         TextEditingController(text: widget.initialValue.remotePath);
     _categories = Set<BackupCategory>.from(widget.initialValue.categories);
+    _syncOnRecordChange = widget.initialValue.syncOnRecordChange;
     _intervalMinutes =
         _intervalOptions.contains(widget.initialValue.intervalMinutes)
             ? widget.initialValue.intervalMinutes
@@ -820,6 +829,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
       remotePath: _normalizedRemotePath,
       intervalMinutes: _intervalMinutes,
       categories: _categories,
+      syncOnRecordChange: _syncOnRecordChange,
     ));
   }
 
@@ -928,6 +938,19 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                             },
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+                      SwitchListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('记录变化时就同步'),
+                        subtitle: const Text(
+                          '建议只在自有 WebDAV 服务器时开启，防止快速占用服务商限额。',
+                        ),
+                        value: _syncOnRecordChange,
+                        onChanged: (value) {
+                          setState(() => _syncOnRecordChange = value);
+                        },
                       ),
                       const SizedBox(height: 18),
                       Align(
