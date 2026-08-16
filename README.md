@@ -17,7 +17,7 @@
 
 <br>
 
-<img src="https://api.star-history.com/svg?repos=aimessoft/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
+<img src="https://star-history.dera.page/svg?repos=aimessoft/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
 </div>
 
 <div align="center">
