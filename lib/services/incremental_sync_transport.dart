@@ -13,6 +13,8 @@ abstract class IncrementalSyncTransport {
   Future<Uint8List?> read(String path);
 
   Future<void> write(String path, Uint8List bytes, {bool atomic = false});
+
+  Future<void> delete(String path);
 }
 
 class WebDavSyncException implements Exception {
@@ -183,6 +185,15 @@ class WebDavIncrementalSyncTransport implements IncrementalSyncTransport {
       operation: '上传同步索引',
       path: path,
       request: () => _writeDirect(path, bytes),
+    );
+  }
+
+  @override
+  Future<void> delete(String path) async {
+    await _runWithRetry<void>(
+      operation: '删除同步文件',
+      path: path,
+      request: () => _deleteDirect(path),
     );
   }
 

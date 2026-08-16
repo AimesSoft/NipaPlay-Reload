@@ -343,10 +343,7 @@ List<UnifiedSettingEntry> _buildUnifiedSettingEntryDefinitions() {
       icon: Ionicons.cloud_upload_outline,
       phoneIcon: cupertino.CupertinoIcons.cloud_upload,
       contentType: UnifiedSettingContentType.backupRestore,
-      visible: (context, surface) =>
-          surface == UnifiedSettingsSurface.desktopTablet &&
-          !globals.isPhone &&
-          !globals.isTelevision,
+      visible: (context, surface) => !globals.isTelevision,
     ),
     UnifiedSettingEntry(
       id: UnifiedSettingEntryIds.player,

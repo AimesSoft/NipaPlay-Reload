@@ -111,6 +111,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 截图已完成，_currentThumbnailPath 是最新值，不会被旧缩略图覆盖
       if (_currentVideoPath != null) {
         await _updateWatchHistory(forceRemoteSync: true);
+        unawaited(
+          AutoSyncService.instance.syncOnPlaybackEnd().catchError((error) {
+            debugPrint('退出播放时增量同步失败: $error');
+          }),
+        );
       }
 
       // Jellyfin同步：如果是Jellyfin流媒体，停止同步
@@ -280,6 +285,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     bool clearPreviousMessages = false,
     bool resetState = false,
   }) {
+    final wasPlaying = _status == PlayerStatus.playing;
     if (newStatus == PlayerStatus.idle || resetState) {
       _resetVideoState();
     }
@@ -321,6 +327,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
     // Wakelock logic
     if (_status == PlayerStatus.playing) {
+      // 视频一开始播放就后台预热播放列表。片尾的“是否有下一话”检查
+      // 会直接命中缓存，不再等待 WebDAV/SMB/媒体服务器枚举目录。
+      if (!wasPlaying) {
+        unawaited(preloadPlaybackPlaylist());
+      }
       try {
         WakelockPlus.enable();
         ////debugPrint("Wakelock enabled: Playback started/resumed.");
@@ -711,6 +722,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
     _playbackDetailContext = null;
+    _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
     _danmakuTracks.clear();
@@ -786,6 +798,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
     _playbackDetailContext = null;
+    _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
     _danmakuTracks.clear();
