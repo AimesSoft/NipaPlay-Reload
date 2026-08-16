@@ -27,8 +27,6 @@
   ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-<版本号>.ebuild merge
   ```
 
-> **⚠️ 安全警告**：Arch Linux AUR 中的 `nipaplay-reload-bin` 包已被恶意用户接管，**请勿通过 AUR 安装**。
-
 - 其他发行版：从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载对应构建包（AppImage / deb 等）并按常规方式安装/运行。
 
 ## Android
