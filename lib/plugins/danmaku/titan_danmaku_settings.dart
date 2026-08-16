@@ -24,7 +24,7 @@ class TitanDanmakuSettings {
     this.duration = 4.5,
     this.limit = 300,
     this.preventShade = false,
-    this.offsetTop = 0,
+    this.offsetTop = 3,
     this.offsetBottom = 0,
     this.maxLength = 50,
     this.isRecyclingDom = true,
@@ -34,6 +34,7 @@ class TitanDanmakuSettings {
 
   static const String defaultFontFamily =
       "SimHei, 'Microsoft JhengHei', Arial, Helvetica, sans-serif";
+  static const int persistenceSchemaVersion = 2;
 
   static const String simplifiedChineseFontFamily =
       "-apple-system, 'PingFang SC', 'Hiragino Sans GB', "
@@ -137,6 +138,7 @@ class TitanDanmakuSettings {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'schemaVersion': persistenceSchemaVersion,
         'opacity': opacity,
         'fontSize': fontSize,
         'bold': bold,
@@ -157,6 +159,7 @@ class TitanDanmakuSettings {
 
   factory TitanDanmakuSettings.fromJson(Map<String, dynamic> json) {
     const defaults = TitanDanmakuSettings();
+    final schemaVersion = _asInt(json['schemaVersion']) ?? 1;
     return defaults.copyWith(
       opacity: _asDouble(json['opacity']),
       fontSize: _asDouble(json['fontSize']),
@@ -168,7 +171,9 @@ class TitanDanmakuSettings {
       duration: _asDouble(json['duration']),
       limit: _asInt(json['limit']),
       preventShade: _asBool(json['preventShade']),
-      offsetTop: _asInt(json['offsetTop']),
+      offsetTop: schemaVersion < persistenceSchemaVersion
+          ? defaults.offsetTop
+          : _asInt(json['offsetTop']),
       offsetBottom: _asInt(json['offsetBottom']),
       maxLength: _asInt(json['maxLength']),
       isRecyclingDom: _asBool(json['isRecyclingDom']),
