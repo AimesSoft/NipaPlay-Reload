@@ -796,7 +796,10 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
         password: _passwordController.text,
         remotePath: _normalizedRemotePath,
       );
-      if (mounted) setState(() => _testMessage = '连接成功，远端目录可访问');
+      if (mounted) {
+        setState(() => _testMessage = null);
+        BlurSnackBar.show(context, '连接成功，远端目录可访问');
+      }
     } catch (error) {
       if (mounted) setState(() => _testMessage = '连接失败：$error');
     } finally {
@@ -989,9 +992,7 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                           child: Text(
                             _testMessage!,
                             style: TextStyle(
-                              color: _testMessage!.startsWith('连接成功')
-                                  ? Colors.green
-                                  : colorScheme.error,
+                              color: colorScheme.error,
                             ),
                           ),
                         ),
