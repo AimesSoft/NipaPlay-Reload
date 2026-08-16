@@ -21,6 +21,11 @@
 
 ## Linux
 
+- Arch Linux (AUR)：从 [`nipaplay-reload-bin`](https://aur.archlinux.org/packages/nipaplay-reload-bin) 包页面下载，或使用 AUR 助手安装：
+  ```bash
+  yay -S nipaplay-reload-bin
+  ```
+
 - Gentoo Linux (x86_64)：
   ```bash
   # 将版本号替换为当前最新版本
