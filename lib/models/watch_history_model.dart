@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class WatchHistoryItem {
@@ -525,6 +527,7 @@ class WatchHistoryManager {
         
         _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
         _lastWriteTime = DateTime.now();
+        _scheduleIncrementalSyncAfterChange();
         
         return;
       } catch (e) {
@@ -577,6 +580,7 @@ class WatchHistoryManager {
 
       await file.writeAsString(jsonString);
       _lastWriteTime = DateTime.now();
+      _scheduleIncrementalSyncAfterChange();
       
       // 验证保存后新文件的大小
       final newFileSize = await file.length();
@@ -681,6 +685,7 @@ class WatchHistoryManager {
         
         // 更新内存缓存，保持同步
         _cachedItems.removeWhere((item) => item.filePath == filePath);
+        _scheduleIncrementalSyncAfterChange();
         return;
       } catch (e) {
         debugPrint('使用数据库删除历史记录失败: $e');
@@ -707,6 +712,7 @@ class WatchHistoryManager {
       final file = io.File(_historyFilePath);
       await file.writeAsString(jsonString);
       _lastWriteTime = DateTime.now();
+      _scheduleIncrementalSyncAfterChange();
     } finally {
       _isWriting = false;
     }
@@ -724,6 +730,7 @@ class WatchHistoryManager {
         
         // 清空内存缓存，保持同步
         _cachedItems.clear();
+        _scheduleIncrementalSyncAfterChange();
         return;
       } catch (e) {
         debugPrint('使用数据库清空历史记录失败: $e');
@@ -740,6 +747,12 @@ class WatchHistoryManager {
       await file.writeAsString('[]'); 
     }
     _lastWriteTime = DateTime.now();
+    _scheduleIncrementalSyncAfterChange();
+  }
+
+  static void _scheduleIncrementalSyncAfterChange() {
+    if (!globals.isDesktop) return;
+    unawaited(AutoSyncService.instance.scheduleSyncAfterLocalChange());
   }
 
   // New method to get history item by animeId and episodeId

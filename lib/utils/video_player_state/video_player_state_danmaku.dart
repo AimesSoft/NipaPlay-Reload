@@ -1548,6 +1548,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       }
 
       if (historyForRemoteSync != null) {
+        // Provider-backed writes already notify the incremental sync service.
+        // Cover the direct database fallback here without resetting the same
+        // trailing debounce twice for normal playback updates.
+        if (globals.isDesktop && watchHistoryProvider == null) {
+          unawaited(
+            AutoSyncService.instance.scheduleSyncAfterLocalChange(),
+          );
+        }
         await _syncWebRemoteHistoryIfNeeded(
           historyForRemoteSync,
           force: forceRemoteSync,

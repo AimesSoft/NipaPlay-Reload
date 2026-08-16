@@ -43,6 +43,60 @@ class PlaybackDetailEpisode {
 typedef PlaybackDetailEpisodeLoader = Future<List<PlaybackDetailEpisode>>
     Function();
 
+/// Keeps one playlist snapshot per active playback source and coalesces
+/// concurrent loads. Failed loads are not cached, so the end-of-playback
+/// check can retry if background preloading failed temporarily.
+class PlaybackPlaylistCache {
+  String? _sourceKey;
+  List<PlaybackDetailEpisode>? _episodes;
+  Future<List<PlaybackDetailEpisode>>? _pendingLoad;
+  int _generation = 0;
+
+  Future<List<PlaybackDetailEpisode>> load({
+    required String sourceKey,
+    required PlaybackDetailEpisodeLoader loader,
+  }) async {
+    if (_sourceKey != sourceKey) {
+      invalidate();
+      _sourceKey = sourceKey;
+    }
+
+    final cached = _episodes;
+    if (cached != null) return cached;
+
+    final pending = _pendingLoad;
+    if (pending != null) return pending;
+
+    final loadGeneration = _generation;
+    late final Future<List<PlaybackDetailEpisode>> loadFuture;
+    loadFuture = Future<List<PlaybackDetailEpisode>>.sync(loader).then(
+      (episodes) {
+        final snapshot = List<PlaybackDetailEpisode>.unmodifiable(episodes);
+        if (_generation == loadGeneration && _sourceKey == sourceKey) {
+          _episodes = snapshot;
+        }
+        return snapshot;
+      },
+    );
+    _pendingLoad = loadFuture;
+
+    try {
+      return await loadFuture;
+    } finally {
+      if (identical(_pendingLoad, loadFuture)) {
+        _pendingLoad = null;
+      }
+    }
+  }
+
+  void invalidate() {
+    _generation++;
+    _sourceKey = null;
+    _episodes = null;
+    _pendingLoad = null;
+  }
+}
+
 class PlaybackPlaylist {
   const PlaybackPlaylist._();
 

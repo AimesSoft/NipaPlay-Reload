@@ -29,6 +29,7 @@ import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/emby_media_source_selection.dart';
@@ -628,6 +629,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int? _animeId; // 存储从 historyItem 传入的 animeId
   WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
   PlaybackDetailContext? _playbackDetailContext;
+  final PlaybackPlaylistCache _playbackPlaylistCache = PlaybackPlaylistCache();
 
   // 字幕管理器
   late SubtitleManager _subtitleManager;
@@ -1513,6 +1515,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+
+    if (_currentVideoPath != null) {
+      unawaited(
+        AutoSyncService.instance.syncOnPlaybackEnd().catchError((error) {
+          debugPrint('退出播放时增量同步失败: $error');
+        }),
+      );
+    }
 
     // 关闭播放器时立即取消自动续播倒计时，避免倒计时在后台继续运行。
     try {
