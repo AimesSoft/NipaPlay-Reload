@@ -1,0 +1,14 @@
+
+// test/environment_variables.dart
+
+
+/// 测试中使用的环境变量名称
+abstract final class TestEnvironmentVariables {
+
+  static const String dandanplayAnimeId    = 'NIPAPLAY_TEST_DANDANPLAY_ANIME_ID';
+  static const String expectedBangumiTvId  = 'NIPAPLAY_TEST_EXPECT_BANGUMI_TV_ID';
+  static const String databasePath         = 'NIPAPLAY_TEST_DB_PATH';
+  static const String animeId              = 'NIPAPLAY_TEST_ANIME_ID';
+  static const String filePath             = 'NIPAPLAY_TEST_FILE_PATH';
+
+}
