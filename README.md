@@ -125,7 +125,7 @@ brew install --cask nipaplay-reload
 
 
 > **⚠️ 安全警告**
-> Arch Linux AUR 中的 `nipaplay-reload-bin` 和 `misuzu-music-bin` 包已被恶意用户接管，**请勿安装**。如需在 Arch Linux 上使用，请从 GitHub Releases 下载。
+> Arch Linux AUR 中的 `misuzu-music-bin` 包已被恶意用户接管，**请勿安装**。
 
 #### Gentoo Linux
 
