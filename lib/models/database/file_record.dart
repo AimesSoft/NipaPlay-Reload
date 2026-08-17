@@ -3,6 +3,7 @@
 
 
 class DbFileRecord {
+
   const DbFileRecord({
     required this.fileHash,
     this.animeId,
@@ -25,7 +26,7 @@ class DbFileRecord {
 
   Map<String, Object?> toMap() => {
         'file_hash': fileHash,
-        'anime_id': animeId,
+        'dandanplay_anime_id': animeId,
         'episode_id': episodeId,
         'file_name': fileName,
         'file_size': fileSize,
@@ -37,7 +38,7 @@ class DbFileRecord {
   factory DbFileRecord.fromMap(Map<String, Object?> map) {
     return DbFileRecord(
       fileHash: map['file_hash'] as String,
-      animeId: (map['anime_id'] as num?)?.toInt(),
+      animeId: (map['dandanplay_anime_id'] as num?)?.toInt(),
       episodeId: (map['episode_id'] as num?)?.toInt(),
       fileName: map['file_name'] as String?,
       fileSize: (map['file_size'] as num?)?.toInt(),

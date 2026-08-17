@@ -8,15 +8,23 @@ class DatabaseSql {
     DatabaseSql.mediaFileTable: DatabaseSql.createMediaFileTable,
     DatabaseSql.mediaSourceTable: DatabaseSql.createMediaSourceTable,
     DatabaseSql.mediaAddressTable: DatabaseSql.createMediaAddressTable,
+    DatabaseSql.bangumiAnimeTable: DatabaseSql.createBangumiAnimeTable,
+    DatabaseSql.bangumiEpisodeTable: DatabaseSql.createBangumiEpisodeTable,
+    DatabaseSql.dandanplayBangumiAnimeRelationTable: DatabaseSql.createDandanplayBangumiAnimeRelationTable,
+    DatabaseSql.dandanplayBangumiEpisodeRelationTable: DatabaseSql.createDandanplayBangumiEpisodeRelationTable,
   };
 
   // 表名
   static const String watchHistoryTable = 'watch_history';
-  static const String mediaAnimeTable   = 'anime';
-  static const String mediaEpisodeTable = 'episode';
+  static const String mediaAnimeTable   = 'dandanplay_anime';
+  static const String mediaEpisodeTable = 'dandanplay_episode';
   static const String mediaFileTable    = 'file';
   static const String mediaSourceTable  = 'source';
   static const String mediaAddressTable = 'address';
+  static const String bangumiAnimeTable = 'bangumi_anime';
+  static const String bangumiEpisodeTable = 'bangumi_episode';
+  static const String dandanplayBangumiAnimeRelationTable = 'relation_dandanplay_bangumi_anime';
+  static const String dandanplayBangumiEpisodeRelationTable = 'relation_dandanplay_bangumi_episode';
 
   // watch_history 字段
   static const String whId = 'id';
@@ -34,24 +42,22 @@ class DatabaseSql {
   static const String whVideoHash = 'video_hash';
 
   // media_anime 字段
-  static const String maId = 'id';
+  static const String maDandanplayAnimeId = 'dandanplay_anime_id';
   static const String maTitle = 'title';
   static const String maCoverImageUrl = 'cover_image_url';
   static const String maDescription = 'description';
-  static const String maCreatedAt = 'created_at';
   static const String maUpdatedAt = 'updated_at';
 
   // media_episode 字段
-  static const String meId = 'id';
-  static const String meAnimeId = 'anime_id';
+  static const String meDandanplayEpisodeId = 'dandanplay_episode_id';
+  static const String meDandanplayAnimeId = 'dandanplay_anime_id';
   static const String meTitle = 'title';
   static const String meSortOrder = 'sort_order';
-  static const String meCreatedAt = 'created_at';
   static const String meUpdatedAt = 'updated_at';
 
   // media_file 字段
   static const String mfFileHash = 'file_hash';
-  static const String mfAnimeId = 'anime_id';
+  static const String mfDandanplayAnimeId = 'dandanplay_anime_id';
   static const String mfEpisodeId = 'episode_id';
   static const String mfFileName = 'file_name';
   static const String mfFileSize = 'file_size';
@@ -74,6 +80,36 @@ class DatabaseSql {
   static const String mdRelativePath = 'relative_path';
   static const String mdFileHash = 'file_hash';
   static const String mdLastSyncedAt = 'last_synced_at';
+
+  // bangumi_anime 字段
+  static const String baId = 'bangumi_anime_id';
+  static const String baAirDate = 'air_date';
+  static const String baTitle = 'title';
+  static const String baTitleCn = 'title_cn';
+  static const String baAliases = 'aliases';
+  static const String baDescription = 'description';
+  static const String baEpisodeCount = 'episode_count';
+  static const String baOfficialSiteUrl = 'url_official_site';
+  static const String baCoverImageUrl = 'url_cover';
+  static const String baUpdatedAt = 'updated_at';
+
+  // bangumi_episode 字段
+  static const String beId = 'bangumi_episode_id';
+  static const String beAnimeId = 'bangumi_anime_id';
+  static const String beEpisodeNumber = 'episode_number';
+  static const String beSortOrder = 'sort_order';
+  static const String beAirDate = 'air_date';
+  static const String beDurationSeconds = 'duration_seconds';
+  static const String beTitle = 'title';
+  static const String beTitleCn = 'title_cn';
+  static const String beDescription = 'description';
+  static const String beUpdatedAt = 'updated_at';
+
+  // relation 字段
+  static const String raDandanplayAnimeId = 'dandanplay_anime_id';
+  static const String raBangumiAnimeId = 'bangumi_anime_id';
+  static const String reDandanplayEpisodeId = 'dandanplay_episode_id';
+  static const String reBangumiEpisodeId = 'bangumi_episode_id';
 
   static const String createWatchHistoryTable = '''
     CREATE TABLE $watchHistoryTable(
@@ -106,39 +142,37 @@ class DatabaseSql {
 
   static const String createMediaAnimeTable = '''
     CREATE TABLE IF NOT EXISTS $mediaAnimeTable(
-      $maId INTEGER PRIMARY KEY,
-      $maTitle TEXT NOT NULL,
+      $maDandanplayAnimeId INTEGER PRIMARY KEY,
       $maCoverImageUrl TEXT,
+      $maTitle TEXT,
       $maDescription TEXT,
-      $maCreatedAt TEXT NOT NULL,
       $maUpdatedAt TEXT NOT NULL
     )
   ''';
 
   static const String createMediaEpisodeTable = '''
     CREATE TABLE IF NOT EXISTS $mediaEpisodeTable(
-      $meId INTEGER PRIMARY KEY,
-      $meAnimeId INTEGER NOT NULL,
+      $meDandanplayEpisodeId INTEGER PRIMARY KEY,
+      $meDandanplayAnimeId INTEGER NOT NULL,
       $meTitle TEXT,
       $meSortOrder REAL,
-      $meCreatedAt TEXT NOT NULL,
       $meUpdatedAt TEXT NOT NULL,
-      FOREIGN KEY ($meAnimeId) REFERENCES $mediaAnimeTable ($maId) ON DELETE CASCADE
+      FOREIGN KEY ($meDandanplayAnimeId) REFERENCES $mediaAnimeTable ($maDandanplayAnimeId) ON DELETE CASCADE
     )
   ''';
 
   static const String createMediaFileTable = '''
     CREATE TABLE IF NOT EXISTS $mediaFileTable(
       $mfFileHash TEXT PRIMARY KEY,
-      $mfAnimeId INTEGER,
+      $mfDandanplayAnimeId INTEGER,
       $mfEpisodeId INTEGER,
       $mfFileName TEXT,
       $mfFileSize INTEGER,
       $mfDuration INTEGER,
       $mfCreatedAt TEXT NOT NULL,
       $mfUpdatedAt TEXT NOT NULL,
-      FOREIGN KEY ($mfAnimeId) REFERENCES $mediaAnimeTable ($maId) ON DELETE SET NULL,
-      FOREIGN KEY ($mfEpisodeId) REFERENCES $mediaEpisodeTable ($meId) ON DELETE SET NULL
+      FOREIGN KEY ($mfDandanplayAnimeId) REFERENCES $mediaAnimeTable ($maDandanplayAnimeId) ON DELETE SET NULL,
+      FOREIGN KEY ($mfEpisodeId) REFERENCES $mediaEpisodeTable ($meDandanplayEpisodeId) ON DELETE SET NULL
     )
   ''';
 
@@ -167,10 +201,64 @@ class DatabaseSql {
     )
   ''';
 
+  static const String createBangumiAnimeTable = '''
+    CREATE TABLE IF NOT EXISTS $bangumiAnimeTable(
+      $baId INTEGER PRIMARY KEY,
+      $baAirDate TEXT,
+      $baTitle TEXT,
+      $baTitleCn TEXT,
+      $baAliases TEXT,
+      $baDescription TEXT,
+      $baEpisodeCount INTEGER,
+      $baOfficialSiteUrl TEXT,
+      $baCoverImageUrl TEXT,
+      $baUpdatedAt TEXT NOT NULL
+    )
+  ''';
+
+  static const String createBangumiEpisodeTable = '''
+    CREATE TABLE IF NOT EXISTS $bangumiEpisodeTable(
+      $beId INTEGER PRIMARY KEY,
+      $beAnimeId INTEGER NOT NULL,
+      $beEpisodeNumber INTEGER,
+      $beSortOrder REAL,
+      $beAirDate TEXT,
+      $beDurationSeconds INTEGER,
+      $beTitle TEXT,
+      $beTitleCn TEXT,
+      $beDescription TEXT,
+      $beUpdatedAt TEXT NOT NULL,
+      FOREIGN KEY ($beAnimeId) REFERENCES $bangumiAnimeTable ($baId) ON DELETE CASCADE
+    )
+  ''';
+
+  static const String createDandanplayBangumiAnimeRelationTable = '''
+    CREATE TABLE IF NOT EXISTS $dandanplayBangumiAnimeRelationTable(
+      $raDandanplayAnimeId INTEGER NOT NULL UNIQUE,
+      $raBangumiAnimeId INTEGER NOT NULL UNIQUE,
+      PRIMARY KEY ($raDandanplayAnimeId, $raBangumiAnimeId),
+      FOREIGN KEY ($raDandanplayAnimeId) REFERENCES $mediaAnimeTable ($maDandanplayAnimeId) ON DELETE CASCADE,
+      FOREIGN KEY ($raBangumiAnimeId) REFERENCES $bangumiAnimeTable ($baId) ON DELETE CASCADE
+    )
+  ''';
+
+  static const String createDandanplayBangumiEpisodeRelationTable = '''
+    CREATE TABLE IF NOT EXISTS $dandanplayBangumiEpisodeRelationTable(
+      $reDandanplayEpisodeId INTEGER NOT NULL UNIQUE,
+      $reBangumiEpisodeId INTEGER NOT NULL UNIQUE,
+      PRIMARY KEY ($reDandanplayEpisodeId, $reBangumiEpisodeId),
+      FOREIGN KEY ($reDandanplayEpisodeId) REFERENCES $mediaEpisodeTable ($meDandanplayEpisodeId) ON DELETE CASCADE,
+      FOREIGN KEY ($reBangumiEpisodeId) REFERENCES $bangumiEpisodeTable ($beId) ON DELETE CASCADE
+    )
+  ''';
+
+  static const String createBangumiEpisodeAnimeIdIndex =
+      'CREATE INDEX IF NOT EXISTS idx_bangumi_episode_anime_id ON $bangumiEpisodeTable($beAnimeId)';
+
   static const String createMediaFileEpisodeIdIndex =
       'CREATE INDEX IF NOT EXISTS idx_media_file_episode_id ON $mediaFileTable($mfEpisodeId)';
   static const String createMediaFileAnimeIdIndex =
-      'CREATE INDEX IF NOT EXISTS idx_media_file_anime_id ON $mediaFileTable($mfAnimeId)';
+      'CREATE INDEX IF NOT EXISTS idx_media_file_anime_id ON $mediaFileTable($mfDandanplayAnimeId)';
   static const String createMediaAddressFileHashIndex =
       'CREATE INDEX IF NOT EXISTS idx_media_address_file_hash ON $mediaAddressTable($mdFileHash)';
 

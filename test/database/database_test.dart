@@ -13,13 +13,15 @@ import '../environment_variables.dart';
 
 
 void main() {
+
   test('给定数据库路径后打印相关数据', () async {
 
     bool canRun = true;
 
     final envDbPath = Platform.environment[TestEnvironmentVariables.databasePath]?.trim();
     if (envDbPath == null || envDbPath.isEmpty) {
-      debugPrint('${color('测试数据库路径', ColorCode.boldCyan)}: ${color('未设置', ColorCode.red)}');
+      const envVarName = TestEnvironmentVariables.databasePath;
+      debugPrint('${color('测试数据库路径: $envVarName', ColorCode.boldCyan)}: ${color('未设置', ColorCode.red)}');
       canRun = false;
     }
     if (!canRun) {
