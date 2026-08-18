@@ -277,7 +277,7 @@ class DatabaseService {
     return rows.map(DbBangumiEpisodeRecord.fromMap).toSet();
   }
 
-  static Future<Set<DbDandanplayAnimeRecord>?> getDandanplayAnimeRecordById(int ddpAniId) async {
+  static Future<DbDandanplayAnimeRecord?> getDandanplayAnimeRecordById(int ddpAniId) async {
     if (_instance == null) {
       throw StateError('DatabaseService is not initialized');
     }
@@ -288,7 +288,7 @@ class DatabaseService {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return rows.map(DbDandanplayAnimeRecord.fromMap).toSet();
+    return DbDandanplayAnimeRecord.fromMap(rows.first);
   }
 
   /// 按 animeId 读取该动画下的所有单集记录

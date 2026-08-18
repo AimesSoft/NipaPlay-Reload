@@ -12,5 +12,6 @@ abstract final class TestEnvironmentVariables {
   static const String databasePath         = 'NIPAPLAY_TEST_DB_PATH';
   static const String animeId              = 'NIPAPLAY_TEST_ANIME_ID';
   static const String filePath             = 'NIPAPLAY_TEST_FILE_PATH';
+  static const String fileHash             = 'NIPAPLAY_TEST_FILE_HASH';
 
 }

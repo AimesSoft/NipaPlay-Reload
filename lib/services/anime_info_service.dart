@@ -1,6 +1,9 @@
 
 // lib/services/anime_info_service.dart
 
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/database/dandanplay_anime_record.dart';
 import 'package:nipaplay/models/database/bangumi_anime_record.dart';
 import 'package:nipaplay/models/database/bangumi_anime_package.dart';
@@ -109,8 +112,92 @@ String? _getInfoboxValue(
 // ========================================================================== //
 // ========================================================================== //
 
+
+class DandanplayFileMatchArgument {
+
+  final String fileName;
+  final String fileHash;
+  final int    fileSize;
+
+  DandanplayFileMatchArgument({
+    required this.fileName,
+    required this.fileHash,
+    required this.fileSize,
+  });
+}
+
+class DandanplayFileMatchResult {
+
+  final int    dandanplayAnimeId;
+  final int    dandanplayEpisodeId;
+  final double danmakuOffset;
+
+  DandanplayFileMatchResult({
+    required this.dandanplayAnimeId,
+    required this.dandanplayEpisodeId,
+    required this.danmakuOffset,
+  });
+}
+
 /// 获取动画信息的服务类
 class AnimeInfoService {
+
+  /// 访问 Dandanplay API: /api/v2/match
+  /// 获取文件匹配的 Episode ID 和对应 Anime ID
+  static Future<DandanplayFileMatchResult?> getDandanplayFileMatch(DandanplayFileMatchArgument arg) async {
+    const apiPath = '/api/v2/match';
+    final appSecret = await DandanplayService.getAppSecret();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final response = await http.post(
+      Uri.parse('${await DandanplayService.getApiBaseUrl()}$apiPath'),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': DandanplayService.userAgent,
+        'X-AppId': DandanplayService.appId,
+        'X-Signature': DandanplayService.generateSignature(
+          DandanplayService.appId,
+          timestamp,
+          apiPath,
+          appSecret,
+        ),
+        'X-Timestamp': '$timestamp',
+      },
+      body: jsonEncode(<String, dynamic>{
+        'fileName': arg.fileName,
+        'fileHash': arg.fileHash,
+        'fileSize': arg.fileSize,
+        'matchMode': 'hashAndFileName',
+      }),
+    );
+    if (response.statusCode != 200) {
+      final error = response.headers['x-error-message'] ?? response.body;
+      throw Exception('弹弹play 文件匹配失败 (${response.statusCode}): $error');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('弹弹play 文件匹配响应格式无效');
+    }
+    final matches = decoded['matches'];
+    if (matches is! List) return null;
+
+    for (final rawMatch in matches) {
+      if (rawMatch is! Map) continue;
+      final match = Map<String, dynamic>.from(rawMatch);
+      final animeId = _toPositiveInt(match['animeId']);
+      final episodeId = _toPositiveInt(match['episodeId']);
+      if (animeId != null && episodeId != null) {
+        return DandanplayFileMatchResult(
+          dandanplayAnimeId: animeId,
+          dandanplayEpisodeId: episodeId,
+          danmakuOffset: match['shift'].toDouble(),
+        );
+      }
+    }
+    return null;
+  }
 
   /// 根据 DanDanPlay AnimeID 获取 BangumiTv ID
   static Future<int?> getBangumiIdByDandanplayId(int ddpId) async {

@@ -1,0 +1,65 @@
+
+// test/process/hash_to_ddp_info_test.dart
+
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
+import 'package:nipaplay/services/anime_info_service.dart';
+import 'package:nipaplay/services/database/database_service.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/utils/color.dart';
+import 'package:nipaplay/utils/file_hash.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../environment_variables.dart';
+import '../test_util/io.dart';
+
+
+void main() {
+
+  // 初始化 Flutter 测试环境
+  WidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues(<String, Object>{SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail: false});
+
+  final testLabel = color('[File Hash -> Dandanplay Anime & Episode ID]', ColorCode.boldBlue);
+
+  test(testLabel, () async {
+
+    // 输入
+    final filePath     = getStringFromEnv(TestEnvironmentVariables.filePath);
+    final databasePath = getStringFromEnv(TestEnvironmentVariables.databasePath);
+    if (filePath == null || databasePath == null) {
+      debugPrint('$testLabel ${color('测试未运行', ColorCode.red)}');
+      return;
+    }
+
+    // 文件 Hash
+    final file = File(filePath);
+    expect(file.existsSync(), isTrue, reason: '测试文件不存在: $filePath');
+    final fileHash = await computeFileHeadMd5(file.path);
+    final fileSize = await file.length();
+    final fileName = file.uri.pathSegments.last;
+    printMsg(color('$testLabel: 文件前16MiB MD5哈希: ${color(fileHash, ColorCode.gray)}', ColorCode.boldCyan));
+    final matchArg = DandanplayFileMatchArgument(
+      fileHash: fileHash,
+      fileSize: fileSize,
+      fileName: fileName,
+    );
+
+    await DatabaseService.initialize(databasePath);
+
+    final matchResult = await AnimeInfoService.getDandanplayFileMatch(matchArg);
+    if (matchResult == null) {
+      printMsg(color('$testLabel: 未找到匹配的 Dandanplay 文件', ColorCode.red));
+      return;
+    }
+    printMsg(
+      '${color('Dandanplay File Match Result', ColorCode.boldCyan)}: '
+      'Anime ID=${matchResult.dandanplayAnimeId}, '
+      'Episode ID=${matchResult.dandanplayEpisodeId}'
+      'Danmaku Offset=${matchResult.danmakuOffset}',
+    );
+  });
+}
+

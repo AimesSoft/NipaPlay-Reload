@@ -35,3 +35,15 @@ String? getStringFromEnv(String envName) {
   printMsg('${color('$envName (预计类型: String)', ColorCode.boldCyan)}: $envValue');
   return envValue;
 }
+
+int? toPositiveInt(Object? value) {
+  final parsed = value is num ? value.toInt() : int.tryParse('$value');
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
+
+void saveStringToFile(String filePath, String content) {
+  final file = File(filePath);
+  file.writeAsStringSync(content);
+  printMsg('${color('已保存到文件', ColorCode.boldCyan)}: $filePath');
+}
