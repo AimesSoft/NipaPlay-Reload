@@ -6,6 +6,7 @@
 abstract final class TestEnvironmentVariables {
 
   static const String dandanplayAnimeId    = 'NIPAPLAY_TEST_DANDANPLAY_ANIME_ID';
+  static const String dandanplayEpisodeId  = 'NIPAPLAY_TEST_DANDANPLAY_EPISODE_ID';
   static const String expectedBangumiTvId  = 'NIPAPLAY_TEST_EXPECT_BANGUMI_TV_ID';
   static const String bangumiTvAnimeId     = 'NIPAPLAY_TEST_BANGUMI_TV_ANIME_ID';
   static const String expectedDandanplayAnimeId = 'NIPAPLAY_TEST_EXPECT_DANDANPLAY_ANIME_ID';

@@ -5,6 +5,7 @@ class DatabaseSql {
   static const episodeTable = 'episode';
   static const dandanplayAnimeTable = 'dandanplay_anime';
   static const dandanplayEpisodeTable = 'dandanplay_episode';
+  static const dandanplayDanmakuTable = 'dandanplay_danmaku';
   static const bangumiAnimeTable = 'bangumi_anime';
   static const bangumiEpisodeTable = 'bangumi_episode';
   static const fileTable = 'file';
@@ -20,6 +21,8 @@ class DatabaseSql {
   static const bangumiAnimeId = 'bangumi_anime_id';
   static const bangumiEpisodeId = 'bangumi_episode_id';
   static const fileHash = 'file_hash';
+  static const danmakuOffsetDandanplay = 'danmaku_offset_dandanplay';
+  static const danmakuOffsetUser = 'danmaku_offset_user';
 
   static const createAnimeTable = '''
     CREATE TABLE $animeTable(
@@ -53,10 +56,18 @@ class DatabaseSql {
       $dandanplayAnimeId INTEGER NOT NULL,
       title TEXT,
       sort_order REAL,
-      danmaku_json TEXT,
       updated_at TEXT NOT NULL,
       FOREIGN KEY ($episodeId) REFERENCES $episodeTable ($episodeId) ON DELETE CASCADE,
       FOREIGN KEY ($dandanplayAnimeId) REFERENCES $dandanplayAnimeTable ($dandanplayAnimeId) ON DELETE CASCADE
+    )
+  ''';
+
+  static const createDandanplayDanmakuTable = '''
+    CREATE TABLE $dandanplayDanmakuTable(
+      $dandanplayEpisodeId INTEGER PRIMARY KEY,
+      danmaku_json TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY ($dandanplayEpisodeId) REFERENCES $dandanplayEpisodeTable ($dandanplayEpisodeId) ON DELETE CASCADE
     )
   ''';
 
@@ -173,6 +184,7 @@ class DatabaseSql {
     createEpisodeTable,
     createDandanplayAnimeTable,
     createDandanplayEpisodeTable,
+    createDandanplayDanmakuTable,
     createBangumiAnimeTable,
     createBangumiEpisodeTable,
     createFileTable,

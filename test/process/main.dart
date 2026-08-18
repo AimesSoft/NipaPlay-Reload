@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/models/database/file_record.dart';
 import 'package:nipaplay/services/anime_info_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -47,8 +48,7 @@ void main() {
       fileName: fileName,
     );
 
-    await DatabaseService.initialize(databasePath);
-
+    // 获取匹配信息
     final matchResult = await AnimeInfoService.getDandanplayFileMatch(matchArg);
     if (matchResult == null) {
       printMsg(color('$testLabel: 未找到匹配的 Dandanplay 文件', ColorCode.red));
@@ -57,9 +57,48 @@ void main() {
     printMsg(
       '${color('Dandanplay File Match Result', ColorCode.boldCyan)}: '
       'Anime ID=${matchResult.dandanplayAnimeId}, '
-      'Episode ID=${matchResult.dandanplayEpisodeId}'
+      'Episode ID=${matchResult.dandanplayEpisodeId}, '
       'Danmaku Offset=${matchResult.danmakuOffset}',
     );
+
+    await DatabaseService.initialize(databasePath);
+
+    // 插入文件记录
+    final fileRecord = DbFileRecord(
+      fileHash: fileHash,
+      fileName: fileName,
+      fileSize: fileSize,
+    );
+    await DatabaseService.upsertMediaFile(fileRecord);
+
+    // 查找数据库是否有对应的 Dandanplay Episode ID
+    final episodeInDb = await DatabaseService.getDandanplayEpisodeRecordById(matchResult.dandanplayEpisodeId);
+    if (episodeInDb != null) {
+
+      printMsg(color("找到对应的 Dandanplay Episode 记录:", ColorCode.green));
+      printMsg(
+        '${color('Dandanplay Episode Record in Database', ColorCode.boldCyan)}: '
+        'ID=${episodeInDb.dandanplayEpisodeId}, '
+        '标题=${episodeInDb.title}, '
+        '集数=${episodeInDb.sortOrder}, '
+        'Anime ID=${episodeInDb.dandanplayAnimeId}',
+      );
+    } else {
+
+      printMsg(color('$testLabel: 数据库中未找到对应的 Dandanplay Episode ID=${matchResult.dandanplayEpisodeId} 的记录', ColorCode.red));
+
+      final ppdAniPkg = await AnimeInfoService.getDandanplayAnimePackageByID(matchResult.dandanplayAnimeId);
+      printMsg(
+        '${color('Dandanplay Anime Package', ColorCode.boldCyan)}: '
+        'ID=${ppdAniPkg!.anime.dandanplayAnimeId}, '
+        '标题=${ppdAniPkg.anime.title}, '
+        '剧集数=${ppdAniPkg.episodes.length}',
+      );
+
+      await DatabaseService.upsertDanDanPlayAnimePackage(ppdAniPkg); // 插入
+    }
+
+    await DatabaseService.matchFileWithDandanplayEpisode(fileHash, matchResult.dandanplayEpisodeId, matchResult.danmakuOffset);
   });
 }
 

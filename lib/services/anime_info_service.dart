@@ -285,8 +285,7 @@ class AnimeInfoService {
 
   static Future<DbBangumiAnimePackage?> getBangumiAnimePackageById(int bgmId) async {
 
-
-    /// 根据 Bangumi TV 条目 ID 获取可持久化的动画记录。
+    /// 根据 Bangumi TV 条目 ID 获取可持久化的动画记录
     Future<DbBangumiAnimeRecord> getBangumiAnimeRecordById(
       int bangumiTvAnimeId,
     ) async {
@@ -316,7 +315,7 @@ class AnimeInfoService {
       );
     }
 
-    /// 根据 Bangumi TV 条目 ID 获取可持久化的剧集记录。
+    /// 根据 Bangumi TV 条目 ID 获取可持久化的剧集记录
     Future<Set<DbBangumiEpisodeRecord>>
         getBangumiEpisodeRecordsByAnimeId(int bangumiTvAnimeId) async {
       final episodes =
@@ -345,5 +344,38 @@ class AnimeInfoService {
     final animeRecord = await getBangumiAnimeRecordById(bgmId);
     final episodeRecords = await getBangumiEpisodeRecordsByAnimeId(bgmId);
     return DbBangumiAnimePackage(anime: animeRecord, episodes: episodeRecords);
+  }
+
+  static Future<String?> getDandanplayDanmakuJsonByEpisodeId(int ddpEpiId) async {
+    if (ddpEpiId <= 0) {
+      throw ArgumentError.value(ddpEpiId, 'ddpEpiId', '必须为正整数');
+    }
+
+    final apiPath = '/api/v2/comment/$ddpEpiId';
+    final appSecret = await DandanplayService.getAppSecret();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final response = await http.get(
+      Uri.parse(
+        '${await DandanplayService.getApiBaseUrl()}$apiPath?withRelated=true',
+      ),
+      headers: <String, String>{
+        'Accept': 'application/json',
+        'User-Agent': DandanplayService.userAgent,
+        'X-AppId': DandanplayService.appId,
+        'X-Signature': DandanplayService.generateSignature(
+          DandanplayService.appId,
+          timestamp,
+          apiPath,
+          appSecret,
+        ),
+        'X-Timestamp': '$timestamp',
+      },
+    );
+    if (response.statusCode != 200) return null;
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded['comments'] is! List) return null;
+    return response.body;
   }
 }

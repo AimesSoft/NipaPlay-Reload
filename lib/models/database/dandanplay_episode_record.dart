@@ -10,7 +10,6 @@ class DbDandanplayEpisodeRecord {
     this.bangumiTvId,
     this.title,
     this.sortOrder,
-    this.danmakuJson,
   });
 
   final int       dandanplayEpisodeId;
@@ -18,14 +17,12 @@ class DbDandanplayEpisodeRecord {
   final int?      bangumiTvId;
   final String?   title;
   final double?   sortOrder;
-  final String?   danmakuJson;
 
   Map<String, Object?> toMap() => {
         'dandanplay_episode_id': dandanplayEpisodeId,
         'dandanplay_anime_id': dandanplayAnimeId,
         'title': title,
         'sort_order': sortOrder,
-        'danmaku_json': danmakuJson,
       };
 
   factory DbDandanplayEpisodeRecord.fromMap(Map<String, Object?> map) {
@@ -35,7 +32,6 @@ class DbDandanplayEpisodeRecord {
       bangumiTvId: null,
       title: map['title'] as String?,
       sortOrder: (map['sort_order'] as num?)?.toDouble(),
-      danmakuJson: map['danmaku_json'] as String?,
     );
   }
 }

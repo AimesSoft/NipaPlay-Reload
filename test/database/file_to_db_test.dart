@@ -13,7 +13,7 @@ import '../environment_variables.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('给定文件路径时可计算前16MiB哈希并写入file表', () async {
+  test('File Path -> File Hash -> DB', () async {
 
     bool canRun = true;
 
@@ -49,9 +49,7 @@ void main() {
 
     final record = DbFileRecord(
       fileHash: actualHash,
-      fileName: file.uri.pathSegments.isNotEmpty
-          ? file.uri.pathSegments.last
-          : file.path.split('/').last,
+      fileName: file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : file.path.split('/').last,
       fileSize: await file.length(),
     );
     await DatabaseService.upsertMediaFile(record);

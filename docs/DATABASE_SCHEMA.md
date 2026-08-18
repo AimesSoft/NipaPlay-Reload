@@ -39,17 +39,24 @@
 
 ### `dandanplay_episode`
 
-| 字段                    | 类型    | 约束                  | 说明                                         |
-| ----------------------- | ------- | --------------------- | -------------------------------------------- |
-| `dandanplay_episode_id` | INTEGER | PRIMARY KEY           | 弹弹play 剧集 ID                             |
-| `episode_id`            | INTEGER | NOT NULL, FOREIGN KEY | 关联 `episode.episode_id`                    |
-| `dandanplay_anime_id`   | INTEGER | NOT NULL, FOREIGN KEY | 关联 `dandanplay_anime.dandanplay_anime_id`  |
-| `title`                 | TEXT    | -                     | 标题                                         |
-| `sort_order`            | REAL    | -                     | 剧集排序值                                   |
-| `danmaku_json`          | TEXT    | -                     | 访问 Dandanplay API 返回的弹幕原始 JSON 文本 |
-| `updated_at`            | TEXT    | NOT NULL              | 最后更新时间                                 |
+| 字段                    | 类型    | 约束                  | 说明                                        |
+| ----------------------- | ------- | --------------------- | ------------------------------------------- |
+| `dandanplay_episode_id` | INTEGER | PRIMARY KEY           | 弹弹play 剧集 ID                            |
+| `episode_id`            | INTEGER | NOT NULL, FOREIGN KEY | 关联 `episode.episode_id`                   |
+| `dandanplay_anime_id`   | INTEGER | NOT NULL, FOREIGN KEY | 关联 `dandanplay_anime.dandanplay_anime_id` |
+| `title`                 | TEXT    | -                     | 标题                                        |
+| `sort_order`            | REAL    | -                     | 剧集排序值                                  |
+| `updated_at`            | TEXT    | NOT NULL              | 最后更新时间                                |
 
 外键: `dandanplay_anime_id -> dandanplay_anime.dandanplay_anime_id ON DELETE CASCADE`.
+
+### `dandanplay_danmaku`
+
+| 字段                    | 类型    | 约束                     | 说明                                            |
+| ----------------------- | ------- | ------------------------ | ----------------------------------------------- |
+| `dandanplay_episode_id` | INTEGER | PRIMARY KEY, FOREIGN KEY | 关联 `dandanplay_episode.dandanplay_episode_id` |
+| `danmaku_json`          | TEXT    | -                        | 访问 Dandanplay API 返回的弹幕原始 JSON 文本    |
+| `updated_at`            | TEXT    | NOT NULL                 | 最后更新时间                                    |
 
 ### `bangumi_anime`
 
@@ -152,6 +159,7 @@
 
 ```text
 dandanplay_anime 1 --- N dandanplay_episode
+dandanplay_episode 1 --- 1 dandanplay_danmaku
 anime 1 --- N dandanplay_anime
 anime 1 --- N bangumi_anime
 episode 1 --- N dandanplay_episode
@@ -243,4 +251,4 @@ emby_dandanplay_mapping 1 --- N emby_episode_mapping
 - 两个 `watch_history` 表位于不同数据库, 结构和用途不同, 不能互换使用.
 - 新媒体库数据库为 `version: 2`; 它不迁移旧媒体库数据库的 relation 表结构.
 - `DatabaseService` 在每次 upsert 前写入 `updated_at` 的 ISO 8601 时间；
-  业务记录模型不持有或写入最后更新时间。表本身没有时间字段的数据库默认值.
+   业务记录模型不持有或写入最后更新时间。表本身没有时间字段的数据库默认值.
