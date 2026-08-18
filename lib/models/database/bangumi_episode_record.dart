@@ -3,7 +3,7 @@
 class DbBangumiEpisodeRecord {
   const DbBangumiEpisodeRecord({
     required this.bangumiEpisodeId,
-    required this.animeId,
+    required this.bangumiAnimeId,
     this.episodeNumber,
     this.sortOrder,
     this.airDate,
@@ -11,11 +11,10 @@ class DbBangumiEpisodeRecord {
     this.title,
     this.titleCn,
     this.description,
-    this.updatedAt,
   });
 
   final int       bangumiEpisodeId;
-  final int       animeId;
+  final int       bangumiAnimeId;
   final int?      episodeNumber;
   final double?   sortOrder;
   final DateTime? airDate;
@@ -23,11 +22,10 @@ class DbBangumiEpisodeRecord {
   final String?   title;
   final String?   titleCn;
   final String?   description;
-  final DateTime? updatedAt;
 
   Map<String, Object?> toMap() => <String, Object?>{
         'bangumi_episode_id': bangumiEpisodeId,
-        'bangumi_anime_id': animeId,
+        'bangumi_anime_id': bangumiAnimeId,
         'episode_number': episodeNumber,
         'sort_order': sortOrder,
         'air_date': airDate?.toIso8601String(),
@@ -35,13 +33,12 @@ class DbBangumiEpisodeRecord {
         'title': title,
         'title_cn': titleCn,
         'description': description,
-        'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
   factory DbBangumiEpisodeRecord.fromMap(Map<String, Object?> map) {
     return DbBangumiEpisodeRecord(
       bangumiEpisodeId: (map['bangumi_episode_id'] as num).toInt(),
-      animeId: (map['bangumi_anime_id'] as num).toInt(),
+      bangumiAnimeId: (map['bangumi_anime_id'] as num).toInt(),
       episodeNumber: (map['episode_number'] as num?)?.toInt(),
       sortOrder: (map['sort_order'] as num?)?.toDouble(),
       airDate: _parseDateTime(map['air_date']),
@@ -49,7 +46,6 @@ class DbBangumiEpisodeRecord {
       title: map['title'] as String?,
       titleCn: map['title_cn'] as String?,
       description: map['description'] as String?,
-      updatedAt: _parseDateTime(map['updated_at']),
     );
   }
 }

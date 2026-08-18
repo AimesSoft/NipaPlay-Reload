@@ -11,7 +11,6 @@ class DbBangumiAnimeRecord {
     this.episodeCount,
     this.officialSiteUrl,
     this.coverImageUrl,
-    this.updatedAt,
   });
 
   final int       bangumiAnimeId;
@@ -23,7 +22,6 @@ class DbBangumiAnimeRecord {
   final int?      episodeCount;
   final String?   officialSiteUrl;
   final String?   coverImageUrl;
-  final DateTime? updatedAt;
 
   Map<String, Object?> toMap() => <String, Object?>{
         'bangumi_anime_id': bangumiAnimeId,
@@ -35,7 +33,6 @@ class DbBangumiAnimeRecord {
         'episode_count': episodeCount,
         'url_official_site': officialSiteUrl,
         'url_cover': coverImageUrl,
-        'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
   factory DbBangumiAnimeRecord.fromMap(Map<String, Object?> map) {
@@ -49,7 +46,6 @@ class DbBangumiAnimeRecord {
       episodeCount: (map['episode_count'] as num?)?.toInt(),
       officialSiteUrl: map['url_official_site'] as String?,
       coverImageUrl: map['url_cover'] as String?,
-      updatedAt: _parseDateTime(map['updated_at']),
     );
   }
 }

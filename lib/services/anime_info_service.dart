@@ -257,7 +257,7 @@ class AnimeInfoService {
         episodeRecords.add(
           DbDandanplayEpisodeRecord(
             dandanplayEpisodeId: episodeId,
-            animeId: animeId,
+            dandanplayAnimeId: animeId,
             bangumiTvId: bangumiTvEpisodeIdsBySortOrder[sortOrder],
             title: episode['episodeTitle']?.toString(),
             sortOrder: sortOrder,
@@ -270,7 +270,17 @@ class AnimeInfoService {
     final anime = await getDanDanPlayAnimeInfoByDanDanPlayID(ddpId);
     if (anime == null) return null;
     final episodes = await getDanDanPlayAnimeEpisodesByDanDanPlayID(ddpId);
-    return DbDandanplayAnimePackage(anime: anime, episodes: episodes ?? <DbDandanplayEpisodeRecord>{});
+    final bangumiAnimeId = await getBangumiIdByDandanplayId(ddpId);
+    return DbDandanplayAnimePackage(
+      anime: DbDandanplayAnimeRecord(
+        dandanplayAnimeId: anime.dandanplayAnimeId,
+        bangumiAnimeId: bangumiAnimeId,
+        title: anime.title,
+        coverImageUrl: anime.coverImageUrl,
+        description: anime.description,
+      ),
+      episodes: episodes ?? <DbDandanplayEpisodeRecord>{},
+    );
   }
 
   static Future<DbBangumiAnimePackage?> getBangumiAnimePackageById(int bgmId) async {
@@ -318,7 +328,7 @@ class AnimeInfoService {
         records.add(
           DbBangumiEpisodeRecord(
             bangumiEpisodeId: episodeId,
-            animeId: bangumiTvAnimeId,
+            bangumiAnimeId: bangumiTvAnimeId,
             episodeNumber: _toInt(episode['ep']),
             sortOrder: _toDouble(episode['sort']),
             airDate: _toDateTime(episode['airdate']),

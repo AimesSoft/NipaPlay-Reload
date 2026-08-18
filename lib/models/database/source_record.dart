@@ -11,7 +11,6 @@ class DbSourceRecord {
     this.password,
     this.metadataJson,
     this.createdAt,
-    this.updatedAt,
   });
 
   final String id;
@@ -21,7 +20,6 @@ class DbSourceRecord {
   final String? password;
   final String? metadataJson;
   final DateTime? createdAt;
-  final DateTime? updatedAt;
 
   Map<String, Object?> toMap() => {
         'id': id,
@@ -31,7 +29,6 @@ class DbSourceRecord {
         'password': password,
         'metadata_json': metadataJson,
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
-        'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
   factory DbSourceRecord.fromMap(Map<String, Object?> map) {
@@ -43,7 +40,6 @@ class DbSourceRecord {
       password: map['password'] as String?,
       metadataJson: map['metadata_json'] as String?,
       createdAt: _parseDateTime(map['created_at']),
-      updatedAt: _parseDateTime(map['updated_at']),
     );
   }
 }
