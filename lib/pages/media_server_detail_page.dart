@@ -48,6 +48,17 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
+@visibleForTesting
+Future<void> startEmbyPlaybackAndCloseDetail({
+  required NavigatorState detailNavigator,
+  required Future<void> Function() startPlayback,
+}) async {
+  if (detailNavigator.mounted) {
+    detailNavigator.pop();
+  }
+  await startPlayback();
+}
+
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
   final MediaServerType serverType;
@@ -1850,6 +1861,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     }
 
     if (!mounted) return;
+    final detailNavigator = Navigator.of(context);
     final videoPlayerState =
         Provider.of<VideoPlayerState>(context, listen: false);
     TabChangeNotifier? tabChangeNotifier;
@@ -1879,20 +1891,26 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       return;
     }
 
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    await initializeEmbyPlayerAttempt(
-      initialize: () => videoPlayerState.initializePlayer(
-        historyItem.filePath,
-        historyItem: historyItem,
-        playbackSession: playbackSession,
-        embyTrackSelection: embyTrackSelection,
-      ),
-      readError: () => videoPlayerState.error,
-      hasVideo: () => videoPlayerState.hasVideo,
-      play: () async => videoPlayerState.play(),
+    await startEmbyPlaybackAndCloseDetail(
+      detailNavigator: detailNavigator,
+      startPlayback: () async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await initializeEmbyPlayerAttempt(
+          initialize: () => videoPlayerState.initializePlayer(
+            historyItem.filePath,
+            historyItem: historyItem,
+            playbackSession: playbackSession,
+            embyTrackSelection: embyTrackSelection,
+          ),
+          readError: () => videoPlayerState.error,
+          hasVideo: () => videoPlayerState.hasVideo,
+          play: () async => videoPlayerState.play(),
+        );
+        if (mounted) {
+          onPlaybackStarted?.call();
+        }
+      },
     );
-    onPlaybackStarted?.call();
-    if (mounted) Navigator.of(context).pop();
   }
 
   Widget _buildEpisodesListForSelectedSeason() {
