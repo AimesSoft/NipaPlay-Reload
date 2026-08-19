@@ -45,13 +45,7 @@ void main() {
       // 打印出 Anime 表的前 5 条记录
       debugPrint('$dbLabel 打印 Anime 表的前 5 条记录');
       final animeRecords = await DatabaseService.getAnimeRecords(5);
-      if (animeRecords != null) {
-        for (final record in animeRecords) {
-          debugPrint('$dbLabel anime record: ${record.toMap()}');
-        }
-      } else {
-        debugPrint('$dbLabel anime record: null');
-      }
+      for (final record in animeRecords) { debugPrint('$dbLabel anime record: ${record.toMap()}'); }
 
     } catch (e) {
       debugPrint('数据库测试失败: $e');

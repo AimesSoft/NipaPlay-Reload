@@ -19,9 +19,10 @@
 
 ### `episode`
 
-| 字段         | 类型    | 约束        |
-| ------------ | ------- | ----------- | ------ |
-| `episode_id` | INTEGER | PRIMARY KEY | 人工键 |
+| 字段         | 类型    | 约束                  |
+| ------------ | ------- | --------------------- | --------------------- |
+| `episode_id` | INTEGER | PRIMARY KEY           | 人工键                |
+| `anime_id`   | INTEGER | NOT NULL, FOREIGN KEY | 关联 `anime.anime_id` |
 
 > 把所有 anime_id 和 episode_id 的外键引用设置为非空键, 每次往 dandanplay_anime/dandanplay_episode/bangumi_anime/bangumi_episode 插入新数据时, 必须先在 anime/episode 表中创建对应的记录.
 
@@ -106,7 +107,7 @@
 | `created_at` | TEXT    | NOT NULL              | 创建时间                  |
 | `updated_at` | TEXT    | NOT NULL              | 更新时间                  |
 
-外键: `episode_id -> episode.episode_id ON DELETE SET NULL`. 索引: `idx_media_file_episode_id(episode_id)`.
+外键: `episode_id -> episode.episode_id ON DELETE CASCADE`. 索引: `idx_media_file_episode_id(episode_id)`.
 
 ### `file_danmaku`
 
@@ -162,6 +163,7 @@ dandanplay_anime 1 --- N dandanplay_episode
 dandanplay_episode 1 --- 1 dandanplay_danmaku
 anime 1 --- N dandanplay_anime
 anime 1 --- N bangumi_anime
+anime 1 --- N episode
 episode 1 --- N dandanplay_episode
 episode 1 --- N bangumi_episode
 episode 1 --- N file
@@ -251,4 +253,4 @@ emby_dandanplay_mapping 1 --- N emby_episode_mapping
 - 两个 `watch_history` 表位于不同数据库, 结构和用途不同, 不能互换使用.
 - 新媒体库数据库为 `version: 2`; 它不迁移旧媒体库数据库的 relation 表结构.
 - `DatabaseService` 在每次 upsert 前写入 `updated_at` 的 ISO 8601 时间；
-   业务记录模型不持有或写入最后更新时间。表本身没有时间字段的数据库默认值.
+  业务记录模型不持有或写入最后更新时间。表本身没有时间字段的数据库默认值.

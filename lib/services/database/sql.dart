@@ -32,7 +32,9 @@ class DatabaseSql {
 
   static const createEpisodeTable = '''
     CREATE TABLE $episodeTable(
-      $episodeId INTEGER PRIMARY KEY
+      $episodeId INTEGER PRIMARY KEY,
+      $animeId INTEGER NOT NULL,
+      FOREIGN KEY ($animeId) REFERENCES $animeTable ($animeId) ON DELETE CASCADE
     )
   ''';
 
