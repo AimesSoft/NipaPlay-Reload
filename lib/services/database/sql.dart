@@ -9,7 +9,7 @@ class DatabaseSql {
   static const bangumiAnimeTable = 'bangumi_anime';
   static const bangumiEpisodeTable = 'bangumi_episode';
   static const fileTable = 'file';
-  static const fileDanmakuTable = 'file_danmaku';
+  static const fileExternalTable = 'file_external';
   static const watchHistoryTable = 'watch_history';
   static const sourceTable = 'source';
   static const addressTable = 'address';
@@ -23,6 +23,7 @@ class DatabaseSql {
   static const fileHash = 'file_hash';
   static const danmakuOffsetDandanplay = 'danmaku_offset_dandanplay';
   static const danmakuOffsetUser = 'danmaku_offset_user';
+  static const linkOptions = 'linkOptions';
 
   static const createAnimeTable = '''
     CREATE TABLE $animeTable(
@@ -121,14 +122,13 @@ class DatabaseSql {
     )
   ''';
 
-  static const createFileDanmakuTable = '''
-    CREATE TABLE $fileDanmakuTable(
+  static const createFileExternalTable = '''
+    CREATE TABLE $fileExternalTable(
       $fileHash TEXT PRIMARY KEY,
-      $dandanplayEpisodeId INTEGER,
-      danmaku_offset_dandanplay REAL,
-      danmaku_offset_user REAL,
-      FOREIGN KEY ($fileHash) REFERENCES $fileTable ($fileHash) ON DELETE CASCADE,
-      FOREIGN KEY ($dandanplayEpisodeId) REFERENCES $dandanplayEpisodeTable ($dandanplayEpisodeId) ON DELETE SET NULL
+      $danmakuOffsetDandanplay REAL,
+      $danmakuOffsetUser REAL,
+      $linkOptions INTEGER,
+      FOREIGN KEY ($fileHash) REFERENCES $fileTable ($fileHash) ON DELETE CASCADE
     )
   ''';
 
@@ -175,7 +175,6 @@ class DatabaseSql {
     'CREATE INDEX idx_dandanplay_episode_anime_id ON $dandanplayEpisodeTable($dandanplayAnimeId)',
     'CREATE INDEX idx_bangumi_episode_anime_id ON $bangumiEpisodeTable($bangumiAnimeId)',
     'CREATE INDEX idx_media_file_episode_id ON $fileTable($episodeId)',
-    'CREATE INDEX idx_file_danmaku_episode_id ON $fileDanmakuTable($dandanplayEpisodeId)',
     'CREATE INDEX idx_watch_history_file_hash ON $watchHistoryTable($fileHash)',
     'CREATE INDEX idx_watch_history_last_watch_time ON $watchHistoryTable(last_watch_time)',
     'CREATE INDEX idx_media_address_file_hash ON $addressTable($fileHash)',
@@ -190,7 +189,7 @@ class DatabaseSql {
     createBangumiAnimeTable,
     createBangumiEpisodeTable,
     createFileTable,
-    createFileDanmakuTable,
+    createFileExternalTable,
     createWatchHistoryTable,
     createSourceTable,
     createAddressTable,

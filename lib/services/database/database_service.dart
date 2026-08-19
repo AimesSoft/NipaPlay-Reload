@@ -6,6 +6,7 @@ import 'package:nipaplay/models/database/dandanplay_anime_record.dart';
 import 'package:nipaplay/models/database/dandanplay_danmaku_record.dart';
 import 'package:nipaplay/models/database/dandanplay_episode_record.dart';
 import 'package:nipaplay/models/database/file_record.dart';
+import 'package:nipaplay/models/database/file_external_record.dart';
 import 'package:nipaplay/services/database/sql.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -193,42 +194,50 @@ class DatabaseService {
     );
   }
 
-  /// 专门插入更新 file_danmaku
-  /// 1. 检查 file 表和 dandanplay_episode 表是否存在匹配的记录
-  /// 2. 如果任意一个不存在, 直接返回
-  /// 3. 插入更新 file_danmaku 表, 记录 fileHash 对应的 dandanplay_episode_id 和弹幕偏移量
-  static Future<void> upsertDandanplayFileDanmaku(String fileHash, int ddpEpiId, double danmakuOffset) async {
-    final fileExists = await _hasRow(
-      DatabaseSql.fileTable,
-      DatabaseSql.fileHash,
-      fileHash,
-    );
-    final episodeExists = await _hasRow(
-      DatabaseSql.dandanplayEpisodeTable,
-      DatabaseSql.dandanplayEpisodeId,
-      ddpEpiId,
-    );
-    if (!fileExists || !episodeExists) return;
+  // ======================================================================== //
+  // ======================================================================== //
+  // ======================================================================== //
 
-    final danmakuValues = <String, Object?>{
-      DatabaseSql.fileHash: fileHash,
-      DatabaseSql.dandanplayEpisodeId: ddpEpiId,
-      DatabaseSql.danmakuOffsetDandanplay: danmakuOffset,
-    };
-    final updated = await _database.update(
-      DatabaseSql.fileDanmakuTable,
-      danmakuValues,
-      where: '${DatabaseSql.fileHash} = ?',
-      whereArgs: <Object>[fileHash],
-    );
-    if (updated == 0) {
-      await _database.insert(
-        DatabaseSql.fileDanmakuTable,
-        danmakuValues..[DatabaseSql.danmakuOffsetUser] = null,
-      );
-    }
+  /// 设置文件的关联选项
+  static Future<void> setFileExternalRecordLinkOptions(String fileHash, int linkOptions) =>
+      _upsertFileExternalValues(fileHash, <String, Object?>{
+        DatabaseSql.linkOptions: linkOptions,
+      });
+
+  /// 读取文件的关联选项, 没有记录时返回 null
+  static Future<int?> getFileExternalRecordLinkOptions(String fileHash) async {
+    final record = await getFileExternalByFileHash(fileHash);
+    return record?.linkOptions;
   }
 
+  /// 设置文件的弹幕偏移量, 只覆盖显式传入的字段
+  static Future<void> setFileExternalRecordDandanplayDanmakuOffset(
+    String fileHash, {
+    double? danmakuOffsetDandanplay,
+    double? danmakuOffsetUser,
+  }) async {
+    final values = <String, Object?>{};
+    if (danmakuOffsetDandanplay != null) {
+      values[DatabaseSql.danmakuOffsetDandanplay] = danmakuOffsetDandanplay;
+    }
+    if (danmakuOffsetUser != null) {
+      values[DatabaseSql.danmakuOffsetUser] = danmakuOffsetUser;
+    }
+    if (values.isEmpty) return;
+    await _upsertFileExternalValues(fileHash, values);
+  }
+
+  /// 读取 Dandanplay 返回的初始弹幕偏移量, 没有记录时返回 null
+  static Future<double?> getFileExternalRecordDandanplayDanmakuOffset(String fileHash) async {
+    final record = await getFileExternalByFileHash(fileHash);
+    return record?.danmakuOffsetDandanplay;
+  }
+
+  /// 读取用户设置的弹幕偏移量, 没有记录时返回 null
+  static Future<double?> getFileExternalRecordUserDanmakuOffset(String fileHash) async {
+    final record = await getFileExternalByFileHash(fileHash);
+    return record?.danmakuOffsetUser;
+  }
 
   // ======================================================================== //
   // ======================================================================== //
@@ -403,75 +412,102 @@ class DatabaseService {
     return id is num ? id.toInt() : null;
   }
 
-  /// 1. 根据 fileHash & ddpEpiId 查询 file_danmaku 表:
-  ///    - 如果存在匹配的记录, FileDanmakuResult.fileDanmaku 返回弹幕信息, fileRecordExists = episodeRecordExists = true
-  ///    - 如果不存在匹配的记录, FileDanmakuResult.fileDanmaku 返回 null
+  /// 查询与该 Dandanplay 剧集关联的 Bangumi 剧集 ID (共享同一个通用 episode_id)
+  static Future<int?> getBangumiEpisodeIdByDandanplayEpisodeId(int ddpEpiId) async {
+
+    final rows = await _database.rawQuery(
+      'SELECT b.${DatabaseSql.bangumiEpisodeId} FROM ${DatabaseSql.bangumiEpisodeTable} b '
+      'JOIN ${DatabaseSql.dandanplayEpisodeTable} d ON b.${DatabaseSql.episodeId} = d.${DatabaseSql.episodeId} '
+      'WHERE d.${DatabaseSql.dandanplayEpisodeId} = ?',
+      <Object>[ddpEpiId],
+    );
+    if (rows.isEmpty) return null;
+    final id = rows.first[DatabaseSql.bangumiEpisodeId];
+    return id is num ? id.toInt() : null;
+  }
+
+  /// 查询该 Dandanplay 剧集所属动画上记录的 Bangumi 动画 ID
+  static Future<int?> getBangumiAnimeIdByDandanplayEpisodeId(int ddpEpiId) async {
+
+    final rows = await _database.rawQuery(
+      'SELECT a.${DatabaseSql.bangumiAnimeId} FROM ${DatabaseSql.dandanplayAnimeTable} a '
+      'JOIN ${DatabaseSql.dandanplayEpisodeTable} d ON a.${DatabaseSql.dandanplayAnimeId} = d.${DatabaseSql.dandanplayAnimeId} '
+      'WHERE d.${DatabaseSql.dandanplayEpisodeId} = ?',
+      <Object>[ddpEpiId],
+    );
+    if (rows.isEmpty) return null;
+    final id = rows.first[DatabaseSql.bangumiAnimeId];
+    return id is num ? id.toInt() : null;
+  }
+
+  /// 1. 根据 fileHash & ddpEpiId 查询弹幕:
+  ///    - 文件必须已经与该 Dandanplay 剧集关联 (共享同一个通用 episode_id)
+  ///    - 弹幕 JSON 来自 dandanplay_danmaku 表, 偏移量来自 file_external 表
+  ///    - 任意一项缺失时 FileDanmakuResult.fileDanmaku 返回 null
   /// 2. 继续查询 file 表和 dandanplay_episode 表, 检查是否存在匹配的记录, 并设置 fileRecordExists 和 episodeRecordExists
   /// 3. 返回 FileDanmakuResult 对象
   static Future<FileDanmakuResult> getDandanplayFileDanmakuByFileHashAndEpisodeId(String fileHash, int ddpEpiId) async {
 
-    final fileDanmakuRows = await _database.query(
-      DatabaseSql.fileDanmakuTable,
-      where:
-          '${DatabaseSql.fileHash} = ? AND '
-          '${DatabaseSql.dandanplayEpisodeId} = ?',
-      whereArgs: <Object>[fileHash, ddpEpiId],
-      limit: 1,
-    );
-    if (fileDanmakuRows.isNotEmpty) {
-      final danmakuRows = await _database.query(
-        DatabaseSql.dandanplayDanmakuTable,
-        columns: <String>['danmaku_json', 'updated_at'],
-        where: '${DatabaseSql.dandanplayEpisodeId} = ?',
-        whereArgs: <Object>[ddpEpiId],
-        limit: 1,
-      );
-      final danmakuJson =
-          danmakuRows.isEmpty ? null : danmakuRows.first['danmaku_json'];
-      final updatedAt =
-          danmakuRows.isEmpty ? null : danmakuRows.first['updated_at'];
-      if (danmakuJson is String && updatedAt is String) {
-        final row = fileDanmakuRows.first;
-        final dandanplayOffset = row[DatabaseSql.danmakuOffsetDandanplay];
-        final userOffset = row[DatabaseSql.danmakuOffsetUser];
-        final offset = dandanplayOffset is num
-            ? dandanplayOffset.toDouble()
-            : 0.0;
-        return FileDanmakuResult(
-          fileRecordExists: true,
-          episodeRecordExists: true,
-          fileDanmaku: FileDanmaku(
-            danmakuJson: danmakuJson,
-            danmakuOffsetDandanplay: offset,
-            danmakuOffsetUser:
-                userOffset is num ? userOffset.toDouble() : offset,
-            lastUpdated: DateTime.parse(updatedAt),
-          ),
-        );
-      }
+    final fileEpisodeId = await _commonEpisodeIdOfFile(fileHash);
+    final dandanplayEpisodeId = await _commonEpisodeIdOfDandanplayEpisode(ddpEpiId);
+    final fileRecordExists = fileEpisodeId != null;
+    final episodeRecordExists = dandanplayEpisodeId != null;
+
+    if (!fileRecordExists || !episodeRecordExists || fileEpisodeId != dandanplayEpisodeId) {
       return FileDanmakuResult(
-        fileRecordExists: true,
-        episodeRecordExists: true,
+        fileRecordExists: fileRecordExists,
+        episodeRecordExists: episodeRecordExists,
       );
     }
 
-    final fileRows = await _database.query(
-      DatabaseSql.fileTable,
-      columns: <String>[DatabaseSql.fileHash],
+    return FileDanmakuResult(
+      fileRecordExists: true,
+      episodeRecordExists: true,
+      fileDanmaku: await _readFileDanmaku(fileHash, ddpEpiId),
+    );
+  }
+
+  /// 根据 fileHash 查询该文件关联的 Dandanplay 弹幕
+  /// 关联关系来自 file.episode_id 与 dandanplay_episode.episode_id
+  static Future<FileDanmaku?> getDandanplayFileDanmakuByFileHash(String fileHash) async {
+    final ddpEpiId = await getDandanplayEpisodeIdByFileHash(fileHash);
+    if (ddpEpiId == null) return null;
+    return _readFileDanmaku(fileHash, ddpEpiId);
+  }
+
+  /// 根据 fileHash 查询 file_external 记录
+  static Future<DbFileExternalRecord?> getFileExternalByFileHash(String fileHash) async {
+    final rows = await _database.query(
+      DatabaseSql.fileExternalTable,
       where: '${DatabaseSql.fileHash} = ?',
       whereArgs: <Object>[fileHash],
       limit: 1,
     );
-    final episodeRows = await _database.query(
-      DatabaseSql.dandanplayEpisodeTable,
-      columns: <String>[DatabaseSql.dandanplayEpisodeId],
+    return rows.isEmpty ? null : DbFileExternalRecord.fromMap(rows.first);
+  }
+
+  /// 读取弹幕 JSON 与该文件的偏移量设置
+  static Future<FileDanmaku?> _readFileDanmaku(String fileHash, int ddpEpiId) async {
+    final danmakuRows = await _database.query(
+      DatabaseSql.dandanplayDanmakuTable,
+      columns: <String>['danmaku_json', 'updated_at'],
       where: '${DatabaseSql.dandanplayEpisodeId} = ?',
       whereArgs: <Object>[ddpEpiId],
       limit: 1,
     );
-    return FileDanmakuResult(
-      fileRecordExists: fileRows.isNotEmpty,
-      episodeRecordExists: episodeRows.isNotEmpty,
+    if (danmakuRows.isEmpty) return null;
+    final danmakuJson = danmakuRows.first['danmaku_json'];
+    final updatedAt = danmakuRows.first['updated_at'];
+    if (danmakuJson is! String || updatedAt is! String) return null;
+
+    final external = await getFileExternalByFileHash(fileHash);
+    final offset = external?.danmakuOffsetDandanplay ?? 0.0;
+
+    return FileDanmaku(
+      danmakuJson: danmakuJson,
+      danmakuOffsetDandanplay: offset,
+      danmakuOffsetUser: external?.danmakuOffsetUser ?? offset,
+      lastUpdated: DateTime.parse(updatedAt),
     );
   }
 
@@ -702,4 +738,32 @@ class DatabaseService {
     );
     return rows.isNotEmpty;
   }
+
+  /// 插入更新 file_external 的部分字段
+  /// 若 file 表不存在对应记录则直接返回
+  static Future<void> _upsertFileExternalValues(
+    String fileHash,
+    Map<String, Object?> values,
+  ) async {
+    final fileExists = await _hasRow(
+      DatabaseSql.fileTable,
+      DatabaseSql.fileHash,
+      fileHash,
+    );
+    if (!fileExists) return;
+
+    final updated = await _database.update(
+      DatabaseSql.fileExternalTable,
+      values,
+      where: '${DatabaseSql.fileHash} = ?',
+      whereArgs: <Object>[fileHash],
+    );
+    if (updated > 0) return;
+
+    await _database.insert(
+      DatabaseSql.fileExternalTable,
+      DbFileExternalRecord(fileHash: fileHash).toMap()..addAll(values),
+    );
+  }
+
 }

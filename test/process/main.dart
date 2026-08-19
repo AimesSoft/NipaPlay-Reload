@@ -98,7 +98,8 @@ void main() {
       await DatabaseService.upsertDanDanPlayAnimePackage(ppdAniPkg); // 插入
     }
 
-    await DatabaseService.upsertDandanplayFileDanmaku(fileHash, matchResult.dandanplayEpisodeId, matchResult.danmakuOffset);
+    await DatabaseService.linkEpisodeDandanplayFile(matchResult.dandanplayEpisodeId, fileHash);
+    await DatabaseService.setFileExternalRecordDandanplayDanmakuOffset(fileHash, danmakuOffsetDandanplay: matchResult.danmakuOffset);
   });
 }
 

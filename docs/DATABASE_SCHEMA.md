@@ -109,14 +109,21 @@
 
 外键: `episode_id -> episode.episode_id ON DELETE CASCADE`. 索引: `idx_media_file_episode_id(episode_id)`.
 
-### `file_danmaku`
+### `file_external`
 
-| 字段                        | 类型    | 约束        | 说明                                            |
-| --------------------------- | ------- | ----------- | ----------------------------------------------- |
-| `file_hash`                 | TEXT    | PRIMARY KEY | 文件哈希                                        |
-| `dandanplay_episode_id`     | INTEGER | FOREIGN KEY | 关联 `dandanplay_episode.dandanplay_episode_id` |
-| `danmaku_offset_dandanplay` | REAL    | -           | Dandanplay 返回的初始弹幕偏移量 (秒)            |
-| `danmaku_offset_user`       | REAL    | -           | 用户设置的弹幕偏移量 (秒)                       |
+| 字段                        | 类型    | 约束        | 说明                                                                   |
+| --------------------------- | ------- | ----------- | ---------------------------------------------------------------------- |
+| `file_hash`                 | TEXT    | PRIMARY KEY | 文件哈希                                                               |
+| `danmaku_offset_dandanplay` | REAL    | -           | Dandanplay 返回的初始弹幕偏移量 (秒)                                   |
+| `danmaku_offset_user`       | REAL    | -           | 用户设置的弹幕偏移量 (秒)                                              |
+| `linkOptions`               | INTEGER | -           | 用户设置的文件关联选项, 用来决定是否关联 Dandanplay/Bangumi 等信息网站 |
+
+linkOptions: 每个 bit 位表示一个选项, 0 表示关闭, 1 表示开启. 目前定义的选项有:
+
+- `0b01`: 是否关联 Dandanplay 弹幕信息 (默认开启)
+- `0b10`: 是否关联 Bangumi 剧集信息 (默认开启)
+
+外键: `file_hash -> file.file_hash ON DELETE CASCADE`.
 
 ### `watch_history`
 
@@ -167,8 +174,7 @@ anime 1 --- N episode
 episode 1 --- N dandanplay_episode
 episode 1 --- N bangumi_episode
 episode 1 --- N file
-dandanplay_episode 1 --- N file_danmaku
-file 1 --- 1 file_danmaku
+file 1 --- 1 file_external
 file 1 --- N address
 file 1 --- N watch_history
 source 1 --- N address
@@ -176,8 +182,10 @@ bangumi_anime 1 --- N bangumi_episode
 ```
 
 `anime` 与 `episode` 是跨数据源的人工主键. DanDanPlay 和 Bangumi 记录通过这些
-键表达同一动画或剧集, 不再使用 relation 表. 删除媒体源会级联删除其 `address`;
-删除文件会级联删除 `file_danmaku` 和新的媒体库 `watch_history`, 并将
+键表达同一动画或剧集, 不再使用 relation 表. 文件与 DanDanPlay 剧集的对应关系也
+通过 `file.episode_id` 与 `dandanplay_episode.episode_id` 表达.
+删除媒体源会级联删除其 `address`;
+删除文件会级联删除 `file_external` 和新的媒体库 `watch_history`, 并将
 `address.file_hash` 置空.
 
 ---

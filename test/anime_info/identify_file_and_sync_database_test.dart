@@ -1,5 +1,5 @@
 
-// test/anime_info/refresh_dandanplay_file_danmaku_test.dart
+// test/anime_info/identify_file_and_sync_database_test.dart
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,11 +26,6 @@ void main() {
     }
 
     await DatabaseService.initialize(databasePath);
-    final result = await AnimeInfoService.refreshDandanplayFileDanmakuByFilePath(filePath);
-    printMsg(
-      '${color('Dandanplay File Danmaku Refresh', ColorCode.boldCyan)}: '
-      'Match Episode ID=${result.matchResult?.dandanplayEpisodeId}, '
-      'Database Updated=${result.refreshDatabaseSuccess}',
-    );
+    await AnimeInfoService.identifyFileAndSyncDatabase(filePath);
   });
 }
