@@ -15,10 +15,12 @@ class PluginDanmakuWebViewOverlay extends StatefulWidget {
     super.key,
     required this.renderer,
     required this.videoState,
+    this.fontScale = 1.0,
   });
 
   final PluginDanmakuRenderer renderer;
   final VideoPlayerState videoState;
+  final double fontScale;
 
   @override
   State<PluginDanmakuWebViewOverlay> createState() =>
@@ -61,6 +63,8 @@ class _PluginDanmakuWebViewOverlayState
       _controller = null;
       _loadError = null;
       unawaited(_initialize());
+    } else if (oldWidget.fontScale != widget.fontScale) {
+      unawaited(_sendSettings(force: true));
     }
   }
 
@@ -197,10 +201,18 @@ class _PluginDanmakuWebViewOverlayState
 
   Future<void> _sendSettings({bool force = false}) async {
     final state = widget.videoState;
+    final fontScale = widget.fontScale.isFinite && widget.fontScale > 0
+        ? widget.fontScale
+        : 1.0;
+    final rendererSettings = state.titanDanmakuSettings.toJson();
+    if (widget.renderer.usesTitanSettings) {
+      rendererSettings['fontSize'] =
+          state.titanDanmakuSettings.fontSize * fontScale;
+    }
     final settings = <String, dynamic>{
       'visible': state.danmakuVisible,
       'opacity': state.mappedDanmakuOpacity,
-      'fontSize': state.actualDanmakuFontSize,
+      'fontSize': state.actualDanmakuFontSize * fontScale,
       'fontFamily': state.danmakuFontFamily,
       'displayArea': state.danmakuDisplayArea,
       'scrollDurationSeconds': state.danmakuScrollDurationSeconds,
@@ -212,7 +224,7 @@ class _PluginDanmakuWebViewOverlayState
       'blockWords': state.danmakuBlockWords,
       'timeOffsetSeconds': state.manualDanmakuOffset + state.autoDanmakuOffset,
       if (widget.renderer.usesTitanSettings)
-        'rendererSettings': state.titanDanmakuSettings.toJson(),
+        'rendererSettings': rendererSettings,
     };
     final encoded = jsonEncode(settings);
     if (!force && encoded == _lastSettingsJson) return;

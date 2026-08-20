@@ -177,6 +177,7 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                       controller: tabController,
                       currentIndex: tabController!.index,
                       enableAnimation: enableAnimation,
+                      keepAlive: true,
                       physics: enableAnimation
                           ? const PageScrollPhysics()
                           : const NeverScrollableScrollPhysics(),
