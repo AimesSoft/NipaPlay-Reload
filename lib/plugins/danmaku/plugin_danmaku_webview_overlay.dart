@@ -178,9 +178,12 @@ class _PluginDanmakuWebViewOverlayState
       _lastLocallySentDanmakuRevision = localRevision;
       final item = state.locallySentDanmaku;
       if (state.locallySentDanmakuDisplayable && item != null) {
+        final realtimeItem = widget.renderer.prepareRealtimeItem(
+          DanmakuItem.fromMap(item).toMap(),
+        );
         await _send(<String, dynamic>{
           'type': 'add',
-          'item': DanmakuItem.fromMap(item).toMap(),
+          'item': realtimeItem,
         });
       }
       return;
