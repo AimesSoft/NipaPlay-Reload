@@ -64,6 +64,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             key: ValueKey(pluginRenderer.selectionId),
             renderer: pluginRenderer,
             videoState: videoState,
+            fontScale: widget.fontSize / videoState.actualDanmakuFontSize,
           );
         }
         final kernelType = DanmakuKernelFactory.getKernelType();

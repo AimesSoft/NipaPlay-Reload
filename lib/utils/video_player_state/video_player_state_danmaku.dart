@@ -29,6 +29,16 @@ class _SpoilerAiRequestConfig {
 }
 
 extension VideoPlayerStateDanmaku on VideoPlayerState {
+  double get effectiveNativeDanmakuFontSize =>
+      actualDanmakuFontSize * _danmakuPresentationScale;
+
+  void setDanmakuPresentationScale(double scale) {
+    final normalized = scale.isFinite && scale > 0 ? scale : 1.0;
+    if ((_danmakuPresentationScale - normalized).abs() < 0.0001) return;
+    _danmakuPresentationScale = normalized;
+    _syncErikaDanmakuFontSize();
+  }
+
   // Whether the active player kernel renders danmaku natively (Erika).
   // When true, NipaPlay feeds its merged/filtered danmaku list to the kernel
   // and keeps its own Flutter danmaku overlay empty to avoid drawing twice.
@@ -76,9 +86,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     unawaited(player.setNativeDanmakuConfig(
       opacity: _danmakuOpacity,
       // actualDanmakuFontSize resolves the "0 = default" sentinel to the same
-      // logical font size used by NipaPlay's DFM+ path; Erika uses the same
-      // default danmaku font and applies surface scale internally.
-      fontSize: actualDanmakuFontSize,
+      // logical font size used by NipaPlay's DFM+ path. The presentation scale
+      // additionally follows compact portrait playback without changing prefs.
+      fontSize: effectiveNativeDanmakuFontSize,
       displayArea: _danmakuDisplayArea,
       mergeDuplicates: _mergeDanmaku,
       allowStacking: _danmakuStacking,
@@ -105,7 +115,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   void _syncErikaDanmakuFontSize() {
     if (!_erikaNativeDanmaku) return;
     unawaited(
-      player.setNativeDanmakuConfig(fontSize: actualDanmakuFontSize),
+      player.setNativeDanmakuConfig(fontSize: effectiveNativeDanmakuFontSize),
     );
   }
 
