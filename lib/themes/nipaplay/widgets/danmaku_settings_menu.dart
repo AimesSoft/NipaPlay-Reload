@@ -22,6 +22,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
+import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 
 enum _DanmakuExportFormat { json, xml }
 
@@ -458,8 +459,12 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   Widget _buildDanmakuStyleSection(VideoPlayerState videoState) {
     final isErikaPlayerKernel =
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
+    final effectivePluginRenderer = PluginDanmakuRenderer.resolveForPlayback(
+      selectedRenderer: DanmakuKernelFactory.activePluginRenderer,
+      nativeDanmakuActive: isErikaPlayerKernel,
+    );
     final usesTitanSettings =
-        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
+        effectivePluginRenderer?.usesTitanSettings ?? false;
     final titan = videoState.titanDanmakuSettings;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;

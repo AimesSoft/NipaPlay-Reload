@@ -136,7 +136,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildDanmakuOverlay(VideoPlayerState videoState) {
-    final isStableKernel = DanmakuKernelFactory.activePluginRenderer != null ||
+    final isStableKernel = videoState.isNativeDanmakuActive ||
+        DanmakuKernelFactory.activePluginRenderer != null ||
         DanmakuKernelFactory.getKernelType() ==
             DanmakuRenderEngine.nipaplayNext;
     return ValueListenableBuilder<double>(

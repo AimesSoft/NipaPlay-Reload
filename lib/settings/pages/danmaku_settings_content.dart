@@ -778,11 +778,15 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     final isErikaPlayerKernel = globals.isTvOS ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final hasPluginRenderer = DanmakuKernelFactory.activePluginRenderer != null;
+    final selectedPluginRenderer = DanmakuKernelFactory.activePluginRenderer;
+    final effectivePluginRenderer = PluginDanmakuRenderer.resolveForPlayback(
+      selectedRenderer: selectedPluginRenderer,
+      nativeDanmakuActive: isErikaPlayerKernel,
+    );
+    final hasPluginRenderer = effectivePluginRenderer != null;
     final usesTitanSettings =
-        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
-    _selectedPluginDanmakuRendererId =
-        DanmakuKernelFactory.activePluginRenderer?.selectionId;
+        effectivePluginRenderer?.usesTitanSettings ?? false;
+    _selectedPluginDanmakuRendererId = selectedPluginRenderer?.selectionId;
     final showNextPlusPlusToggle = !hasPluginRenderer &&
         !globals.isTvOS &&
         _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
@@ -794,8 +798,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       next2Supported: next2Supported,
       pluginRenderers: DanmakuKernelFactory.availablePluginRenderers,
     );
-    final canSelectRenderer = !isErikaPlayerKernel ||
-        DanmakuKernelFactory.availablePluginRenderers.isNotEmpty;
+    final canSelectRenderer = !isErikaPlayerKernel;
 
     return AdaptiveSettingsPage(
       children: [
