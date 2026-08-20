@@ -35,6 +35,17 @@ class PluginDanmakuRenderer {
 
   String get selectionId => 'plugin:$pluginId/$id';
 
+  /// Native danmaku owned by the active playback kernel (currently Erika)
+  /// always takes precedence over a persisted plugin renderer selection.
+  /// The selection itself is retained so it becomes effective again after
+  /// switching back to a playback kernel without native danmaku.
+  static PluginDanmakuRenderer? resolveForPlayback({
+    required PluginDanmakuRenderer? selectedRenderer,
+    required bool nativeDanmakuActive,
+  }) {
+    return nativeDanmakuActive ? null : selectedRenderer;
+  }
+
   bool get usesTitanSettings =>
       pluginId == titanDanmakuPluginId && id == titanDanmakuRendererId;
 

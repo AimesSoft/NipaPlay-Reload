@@ -12,6 +12,7 @@ import 'package:nipaplay/danmaku_dfm/dfm_plus_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/plugins/danmaku/plugin_danmaku_webview_overlay.dart';
+import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
@@ -47,19 +48,23 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
     }
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final pluginRenderer = DanmakuKernelFactory.activePluginRenderer;
+        final nativeDanmakuActive = videoState.isNativeDanmakuActive;
+        final pluginRenderer = PluginDanmakuRenderer.resolveForPlayback(
+          selectedRenderer: DanmakuKernelFactory.activePluginRenderer,
+          nativeDanmakuActive: nativeDanmakuActive,
+        );
+        // The player kernel (Erika) composites danmaku into the video frame
+        // natively. Never draw the Flutter danmaku layer on top of it, whatever
+        // plugin renderer is persisted in the settings.
+        if (nativeDanmakuActive) {
+          return const SizedBox.shrink();
+        }
         if (pluginRenderer != null) {
           return PluginDanmakuWebViewOverlay(
             key: ValueKey(pluginRenderer.selectionId),
             renderer: pluginRenderer,
             videoState: videoState,
           );
-        }
-        // The player kernel (Erika) composites danmaku into the video frame
-        // natively. Never draw the Flutter danmaku layer on top of it, whatever
-        // the front-end theme or danmaku render engine.
-        if (videoState.isNativeDanmakuActive) {
-          return const SizedBox.shrink();
         }
         final kernelType = DanmakuKernelFactory.getKernelType();
         final combinedTimeOffset =

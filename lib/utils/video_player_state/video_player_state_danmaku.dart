@@ -33,7 +33,6 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // When true, NipaPlay feeds its merged/filtered danmaku list to the kernel
   // and keeps its own Flutter danmaku overlay empty to avoid drawing twice.
   bool get _erikaNativeDanmaku {
-    if (DanmakuKernelFactory.activePluginRenderer != null) return false;
     try {
       return player.supportsNativeDanmaku;
     } catch (_) {
@@ -46,20 +45,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // Public so the kernel hot-swap path can keep the Flutter overlay disabled.
   bool get isNativeDanmakuActive => _erikaNativeDanmaku;
 
-  /// Reconciles native danmaku when switching between a plugin WebView
-  /// renderer and the player's built-in native renderer.
+  /// Reconciles danmaku after the persisted plugin renderer changes. A player
+  /// kernel with native danmaku always keeps ownership; plugin selection only
+  /// becomes effective on playback kernels without native danmaku.
   void handleDanmakuRendererChanged() {
     try {
       if (!player.supportsNativeDanmaku) {
         _notifyListeners();
         return;
       }
-      if (DanmakuKernelFactory.activePluginRenderer != null) {
-        unawaited(player.setNativeDanmakuEnabled(false));
-      } else {
-        _syncErikaDanmakuConfig();
-        unawaited(player.loadNativeDanmaku(_danmakuList));
-      }
+      _syncErikaDanmakuConfig();
+      unawaited(player.loadNativeDanmaku(_danmakuList));
+      danmakuController?.clearDanmaku();
     } catch (_) {}
     _notifyListeners();
   }
