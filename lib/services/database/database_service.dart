@@ -44,163 +44,74 @@ class DatabaseService {
     _database = database;
   }
 
-  static String getInfo() => 'DatabaseService: path=$_path';
-  static Future<String> getTableNames() async {
-    return _withDb((db) async {
-      final tables = await db.rawQuery(DatabaseSql.selectTableNames);
-      return 'DatabaseService: tables=${tables.map((row) => row['name']).join(', ')}';
-    });
-  }
 
   // 数据库操作方法
   // ======================================================================== //
   static Future<void> upsertAnimeEpisodeRelation(AniEpiRlt relation, AniEpiRltType type)  => _withDb((db) => _AnimeEpisodeRepository(db).upsert(relation, type));
   static Future<void> upsertAssetRecord(DbAssetRecord asset)                              => _withDb((db) => _AssetRepository(db).upsert(asset));
 
-  static Future<void> linkToAnime(AniEpiRltType type, int typeAnimeId, int animeId  )     => _withDb((db) => _AnimeEpisodeRepository(db).linkAnime(type,typeAnimeId,animeId,));
-  static Future<void> linkToEpisode(AniEpiRltType type, int typeEpisodeId, int episodeId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode(type,typeEpisodeId,episodeId,),);
-  static Future<void> linkVideoAssetToEpisode(Uint8List assetHash, int episodeId)         => _withDb((db) => _AssetRepository(db).linkToEpisode(assetHash, episodeId),);
+  static Future<void> linkToAnime  (AniEpiRltType type, int typAniId, int comAniId) => _withDb((db) => _AnimeEpisodeRepository(db).linkAnime    (type, typAniId, comAniId));
+  static Future<void> linkToEpisode(AniEpiRltType type, int typEpiId, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode  (type, typEpiId, comEpiId));
+  static Future<void> linkVideoAssetToEpisode        (Uint8List hash, int comEpiId) => _withDb((db) => _AssetRepository       (db).linkToEpisode(hash, comEpiId));
 
   static Future<void> setAssetDanmakuOffsets(Uint8List hash, {double? dandanplay, double? user}) => _withDb((db) => _AssetRepository(db).setDanmakuOffsets(hash,dandanplay: dandanplay,user: user,),);
+  static Future<void> setAssetLinkOptions   (Uint8List hash, int value) =>_withDb((db) => _AssetRepository(db).setLinkOptions(hash, value),);
 
 
   // getters
   // ======================================================================== //
 
-  static Future<bool> hasAnime(AniEpiRltType type, int id) =>
-      _withDb((db) => _AnimeEpisodeRepository(db).hasAnime(type, id));
+  // 检查数据库中是否存在指定的 Anime/Episode 记录
+  static Future<bool> hasAnime   (AniEpiRltType type, int aniId) => _withDb((db) => _AnimeEpisodeRepository(db).hasAnime  (type, aniId));
+  static Future<bool> hasEpisode (AniEpiRltType type, int epiId) => _withDb((db) => _AnimeEpisodeRepository(db).hasEpisode(type, epiId));
 
-  static Future<bool> hasEpisode(AniEpiRltType type, int id) =>
-      _withDb((db) => _AnimeEpisodeRepository(db).hasEpisode(type, id));
+  // 外部数据源 ID 与共通 ID 之间双向转换
+  static Future<int?>     getCommonAnimeId  (AniEpiRltType type, int srcAniId) =>_withDb((db) => _AnimeEpisodeRepository(db).findCommonAnimeId  (type, srcAniId));
+  static Future<int?>     getSourceAnimeId  (AniEpiRltType type, int comAniId) =>_withDb((db) => _AnimeEpisodeRepository(db).findSourceAnimeId  (type, comAniId));
+  static Future<int?>     getCommonEpisodeId(AniEpiRltType type, int srcEpiId) =>_withDb((db) => _AnimeEpisodeRepository(db).findCommonEpisodeId(type, srcEpiId));
+  static Future<int?>     getSourceEpisodeId(AniEpiRltType type, int comEpiId) =>_withDb((db) => _AnimeEpisodeRepository(db).findSourceEpisodeId(type, comEpiId));
+  static Future<Set<int>> getAllAnimeIds    (AniEpiRltType type              ) =>_withDb((db) => _AnimeEpisodeRepository(db).findAllAnimeIds    (type          ));
+  static Future<Set<int>> getAllEpisodeIds  (AniEpiRltType type, int aniId   ) =>_withDb((db) => _AnimeEpisodeRepository(db).findAllEpisodeIds  (type, aniId   ));
 
-  static Future<bool> hasDandanplayAnime(int id) =>
-      hasAnime(AniEpiRltType.dandanplay, id);
+  // 获取视频资产记录和关联信息
+  static Future<DbAssetRecord?>      getAssetRecord     (Uint8List hash) =>_withDb((db) => _AssetRepository(db).find(hash));
+  static Future<DbAssetEpisodeInfo?> getAssetEpisodeInfo(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findEpisodeInfo(hash));
+  static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
 
-  static Future<bool> hasDandanplayEpisode(int id) =>
-      hasEpisode(AniEpiRltType.dandanplay, id);
 
-  static Future<bool> hasBangumiAnime(int id) =>
-      hasAnime(AniEpiRltType.bangumi, id);
+  // debug
+  // ======================================================================== //
 
-  static Future<bool> hasBangumiEpisode(int id) =>
-      hasEpisode(AniEpiRltType.bangumi, id);
-
-  static Future<int?> getCommonAnimeId(AniEpiRltType type, int sourceAnimeId) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findCommonAnimeId(
-          type,
-          sourceAnimeId,
-        ),
-      );
-
-  static Future<int?> getSourceAnimeId(
-    AniEpiRltType type,
-    int commonAnimeId,
-  ) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findSourceAnimeId(
-          type,
-          commonAnimeId,
-        ),
-      );
-
-  static Future<List<int>> getAllSourceAnimeIds(AniEpiRltType type) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findAllSourceAnimeIds(type),
-      );
-
-  static Future<int?> getCommonEpisodeId(
-    AniEpiRltType type,
-    int sourceEpisodeId,
-  ) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findCommonEpisodeId(
-          type,
-          sourceEpisodeId,
-        ),
-      );
-
-  static Future<int?> getSourceEpisodeId(
-    AniEpiRltType type,
-    int commonEpisodeId,
-  ) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findSourceEpisodeId(
-          type,
-          commonEpisodeId,
-        ),
-      );
-
-  static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>
-      _withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
-
-  static Future<DbAssetRecord?> getAssetRecord(Uint8List hash) =>
-      _withDb((db) => _AssetRepository(db).find(hash));
-
-  static Future<int?> getDandanplayEpisodeIdByAssetHash(Uint8List hash) =>
-      _withDb(
-        (db) => _AssetRepository(db).findDandanplayEpisodeId(hash),
-      );
-
-  static Future<int?> getBangumiEpisodeIdByDandanplayEpisodeId(int id) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findBangumiEpisodeId(id),
-      );
-
-  static Future<int?> getBangumiAnimeIdByDandanplayEpisodeId(int id) =>
-      _withDb(
-        (db) => _AnimeEpisodeRepository(db).findBangumiAnimeId(id),
-      );
-
-  static Future<void> setAssetLinkOptions(Uint8List hash, int value) =>
-      _withDb(
-        (db) => _AssetRepository(db).setLinkOptions(hash, value),
-      );
-
-  static Future<int?> getAssetLinkOptions(Uint8List hash) =>
-      _withDb((db) => _AssetRepository(db).readLinkOptions(hash));
-
-  static Future<double?> getAssetDandanplayDanmakuOffset(Uint8List hash) =>
-      _withDb(
-        (db) => _AssetRepository(db).readDouble(
-          hash,
-          'danmaku_offset_dandanplay',
-        ),
-      );
-
-  static Future<double?> getAssetUserDanmakuOffset(Uint8List hash) =>
-      _withDb(
-        (db) => _AssetRepository(db).readDouble(
-          hash,
-          'danmaku_offset_user',
-        ),
-      );
-
-  static Future<void> printAnimeEpisodeTables() =>
-      _withDb((db) => _DatabaseDebugPrinter(db).printTables());
+  static String getInfo() => 'DatabaseService: path=$_path';
+  static Future<void> printAnimeEpisodeTables() =>_withDb((db) => _DatabaseDebugPrinter(db).printTables());
+  static Future<String> getTableNames() =>_withDb((db) async {
+    final tables = await db.rawQuery(DatabaseSql.selectTableNames);
+    return 'DatabaseService: tables=${tables.map((row) => row['name']).join(', ')}';
+  });
 
   static Future<String> buildAnimeEpisodeRelationReport({
     required Map<int, String> dandanplayAnimeTitles,
     required Map<int, String> bangumiAnimeTitles,
     required Map<int, String> dandanplayEpisodeTitles,
     required Map<int, String> bangumiEpisodeTitles,
-  }) =>
-      _withDb(
-      (db) => _DatabaseDebugPrinter(db).printAnimeEpisodeRelations(
-        dandanplayAnimeTitles: dandanplayAnimeTitles,
-        bangumiAnimeTitles: bangumiAnimeTitles,
-        dandanplayEpisodeTitles: dandanplayEpisodeTitles,
-        bangumiEpisodeTitles: bangumiEpisodeTitles,
-      ),
-    );
+  }) => _withDb(
+    (db) => _DatabaseDebugPrinter(db).printAnimeEpisodeRelations(
+      dandanplayAnimeTitles: dandanplayAnimeTitles,
+      bangumiAnimeTitles: bangumiAnimeTitles,
+      dandanplayEpisodeTitles: dandanplayEpisodeTitles,
+      bangumiEpisodeTitles: bangumiEpisodeTitles,
+    ),
+  );
 
 
   // 私有方法
   // ======================================================================== //
 
   static Future<T> _withDb<T>(Future<T> Function(Database database) operation) {
+
     final database = _database;
     if (database == null) throw StateError('DatabaseService 未初始化');
+
     return operation(database);
   }
 }

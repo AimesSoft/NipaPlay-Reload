@@ -21,6 +21,27 @@ class _AnimeEpisodeRepository {
     _requireNonNegative(sourceAnimeId, '${type.name}AnimeId');
     for (final id in episodeIds) { _requireNonNegative(id, '${type.name}EpisodeId'); }
 
+    if (type == AniEpiRltType.common) {
+      await database.transaction((txn) async {
+        await txn.insert(
+          'anime',
+          <String, Object?>{'anime_id': sourceAnimeId},
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        for (final episodeId in episodeIds) {
+          await txn.insert(
+            'episode',
+            <String, Object?>{
+              'episode_id': episodeId,
+              'anime_id': sourceAnimeId,
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+      });
+      return;
+    }
+
     await database.transaction((txn) async {
       final animeId = await _sourceAnimeId(txn, schema, sourceAnimeId) ??
           await _createAnime(txn);
@@ -46,6 +67,8 @@ class _AnimeEpisodeRepository {
 
   /// 将外部动画与通用动画关联
   Future<void> linkAnime(AniEpiRltType type, int sourceAnimeId, int animeId) async {
+
+    if (type == AniEpiRltType.common) throw ArgumentError.value(type, 'type', '共通 Anime 无需关联到自身');
 
     _requireNonNegative(sourceAnimeId, 'typeAnimeId');
     _requireNonNegative(animeId, 'animeId');
@@ -84,6 +107,8 @@ class _AnimeEpisodeRepository {
 
   /// 将外部剧集与通用剧集关联
   Future<void> linkEpisode(AniEpiRltType type, int sourceEpisodeId, int episodeId) async {
+
+    if (type == AniEpiRltType.common) throw ArgumentError.value(type, 'type', '共通 Episode 无需关联到自身');
 
     _requireNonNegative(sourceEpisodeId, 'typeEpisodeId');
     _requireNonNegative(episodeId, 'episodeId');
@@ -165,7 +190,7 @@ class _AnimeEpisodeRepository {
     );
   }
 
-  Future<List<int>> findAllSourceAnimeIds(AniEpiRltType type) async {
+  Future<Set<int>> findAllAnimeIds(AniEpiRltType type) async {
     final schema = _relationSchema(type);
     final rows = await database.query(
       schema.animeTable,
@@ -174,7 +199,25 @@ class _AnimeEpisodeRepository {
     );
     return rows
         .map((row) => (row[schema.animeSourceId] as num).toInt())
-        .toList();
+        .toSet();
+  }
+
+  Future<Set<int>> findAllEpisodeIds(
+    AniEpiRltType type,
+    int animeId,
+  ) async {
+    _requireNonNegative(animeId, 'animeId');
+    final schema = _relationSchema(type);
+    final rows = await database.query(
+      schema.episodeTable,
+      columns: <String>[schema.episodeSourceId],
+      where: '${schema.animeSourceId} = ?',
+      whereArgs: <Object>[animeId],
+      orderBy: schema.episodeSourceId,
+    );
+    return rows
+        .map((row) => (row[schema.episodeSourceId] as num).toInt())
+        .toSet();
   }
 
   Future<int?> findCommonEpisodeId(AniEpiRltType type, int sourceEpisodeId) {
@@ -190,30 +233,6 @@ class _AnimeEpisodeRepository {
       'episode_id',
       commonEpisodeId,
     );
-  }
-
-  Future<int?> findBangumiEpisodeId(int dandanplayEpisodeId) async {
-    final rows = await database.rawQuery(
-      'SELECT b.bangumi_episode_id '
-      'FROM bangumi_episode AS b '
-      'JOIN dandanplay_episode AS d ON b.episode_id = d.episode_id '
-      'WHERE d.dandanplay_episode_id = ?',
-      <Object>[dandanplayEpisodeId],
-    );
-    return _firstInt(rows, 'bangumi_episode_id');
-  }
-
-  Future<int?> findBangumiAnimeId(int dandanplayEpisodeId) async {
-    final rows = await database.rawQuery(
-      'SELECT b.bangumi_anime_id '
-      'FROM bangumi_anime AS b '
-      'JOIN dandanplay_anime AS a ON b.anime_id = a.anime_id '
-      'JOIN dandanplay_episode AS e '
-      'ON a.dandanplay_anime_id = e.dandanplay_anime_id '
-      'WHERE e.dandanplay_episode_id = ?',
-      <Object>[dandanplayEpisodeId],
-    );
-    return _firstInt(rows, 'bangumi_anime_id');
   }
 
   Future<int?> _sourceAnimeId(

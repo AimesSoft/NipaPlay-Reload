@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/models/database/anime_episode_relation.dart';
 import 'package:nipaplay/services/anime_info_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/utils/color.dart';
@@ -26,7 +27,13 @@ void main() {
 
     await DatabaseService.initialize(databasePath);
     final assetHash = decodeHex(fileHash, expectedBytes: 16);
-    final dandanplayEpisodeId = await DatabaseService.getDandanplayEpisodeIdByAssetHash(assetHash);
+    final commonEpisodeId = await DatabaseService.getCommonEpisodeIdByAssetHash(assetHash);
+    final dandanplayEpisodeId = commonEpisodeId == null
+        ? null
+        : await DatabaseService.getSourceEpisodeId(
+            DbAnimeEpisodeRelationType.dandanplay,
+            commonEpisodeId,
+          );
     expect(dandanplayEpisodeId, isNotNull);
     await AnimeInfoService.refreshDandanplayDanmakuCacheByEpisodeId(
       dandanplayEpisodeId!,

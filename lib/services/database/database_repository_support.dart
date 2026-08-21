@@ -8,6 +8,12 @@ typedef _RelationSchema = ({
 });
 
 _RelationSchema _relationSchema(AniEpiRltType type) => switch (type) {
+      AniEpiRltType.common => (
+          animeTable: 'anime',
+          animeSourceId: 'anime_id',
+          episodeTable: 'episode',
+          episodeSourceId: 'episode_id',
+        ),
       AniEpiRltType.dandanplay => (
           animeTable: 'dandanplay_anime',
           animeSourceId: 'dandanplay_anime_id',

@@ -122,17 +122,6 @@ class _AssetRepository {
     });
   }
 
-  Future<int?> findDandanplayEpisodeId(Uint8List assetHash) async {
-    final rows = await database.rawQuery(
-      'SELECT d.dandanplay_episode_id '
-      'FROM dandanplay_episode AS d '
-      'JOIN asset_episode AS a ON d.episode_id = a.episode_id '
-      'WHERE a.asset_pre16mib_md5 = ?',
-      <Object?>[_validateHash(assetHash, 16)],
-    );
-    return _firstInt(rows, 'dandanplay_episode_id');
-  }
-
   Future<int?> findCommonEpisodeId(Uint8List assetHash) {
     return _readIntColumn(
       database,
@@ -148,9 +137,32 @@ class _AssetRepository {
         'link_options': _encodeUint32(value),
       });
 
-  Future<int?> readLinkOptions(Uint8List hash) async {
-    final value = await _readEpisodeColumn(hash, 'link_options');
-    return value is Uint8List ? _decodeUint32(value) : null;
+  Future<DbAssetEpisodeInfo?> findEpisodeInfo(Uint8List hash) async {
+    final rows = await database.query(
+      'asset_episode',
+      columns: const <String>[
+        'link_options',
+        'danmaku_offset_dandanplay',
+        'danmaku_offset_user',
+        'duration',
+        'internal_subtitle_track_count',
+      ],
+      where: 'asset_pre16mib_md5 = ?',
+      whereArgs: <Object?>[_validateHash(hash, 16)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+
+    final row = rows.first;
+    return DbAssetEpisodeInfo(
+      linkOptions: _decodeUint32(row['link_options'] as Uint8List),
+      dandanplayDanmakuOffset:
+          (row['danmaku_offset_dandanplay'] as num).toDouble(),
+      userDanmakuOffset: (row['danmaku_offset_user'] as num).toDouble(),
+      duration: (row['duration'] as num?)?.toInt(),
+      internalSubtitleTrackCount:
+          (row['internal_subtitle_track_count'] as num?)?.toInt(),
+    );
   }
 
   Future<void> setDanmakuOffsets(
@@ -165,11 +177,6 @@ class _AssetRepository {
     if (values.isNotEmpty) await _updateEpisode(hash, values);
   }
 
-  Future<double?> readDouble(Uint8List hash, String column) async {
-    final value = await _readEpisodeColumn(hash, column);
-    return (value as num?)?.toDouble();
-  }
-
   Future<void> _updateEpisode(
     Uint8List hash,
     Map<String, Object?> values,
@@ -181,16 +188,5 @@ class _AssetRepository {
       whereArgs: <Object?>[_validateHash(hash, 16)],
     );
     if (updated == 0) throw StateError('视频资产尚未写入 asset_episode');
-  }
-
-  Future<Object?> _readEpisodeColumn(Uint8List hash, String column) async {
-    final rows = await database.query(
-      'asset_episode',
-      columns: <String>[column],
-      where: 'asset_pre16mib_md5 = ?',
-      whereArgs: <Object?>[_validateHash(hash, 16)],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first[column];
   }
 }

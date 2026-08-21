@@ -24,3 +24,22 @@ enum DbAssetType {
   video,
   image,
 }
+
+
+class DbAssetEpisodeInfo {
+
+  final int linkOptions;
+  final double dandanplayDanmakuOffset;
+  final double userDanmakuOffset;
+  final int? duration;
+  final int? internalSubtitleTrackCount;
+
+  DbAssetEpisodeInfo({
+    required this.linkOptions,
+    required this.dandanplayDanmakuOffset,
+    required this.userDanmakuOffset,
+    required this.duration,
+    this.internalSubtitleTrackCount,
+  });
+
+}

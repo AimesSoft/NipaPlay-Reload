@@ -15,6 +15,7 @@ class DbAnimeEpisodeRelation {
 
 
 enum DbAnimeEpisodeRelationType {
+  common,
   dandanplay,
   bangumi,
 }

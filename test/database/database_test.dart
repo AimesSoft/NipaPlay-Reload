@@ -47,9 +47,18 @@ void main() {
       DbAnimeEpisodeRelationType.bangumi,
     );
 
-    final hasDandanplayAnime = await DatabaseService.hasDandanplayAnime(10);
-    final hasBangumiAnime = await DatabaseService.hasBangumiAnime(20);
-    final hasDandanplayEpisode = await DatabaseService.hasDandanplayEpisode(101);
+    final hasDandanplayAnime = await DatabaseService.hasAnime(
+      DbAnimeEpisodeRelationType.dandanplay,
+      10,
+    );
+    final hasBangumiAnime = await DatabaseService.hasAnime(
+      DbAnimeEpisodeRelationType.bangumi,
+      20,
+    );
+    final hasDandanplayEpisode = await DatabaseService.hasEpisode(
+      DbAnimeEpisodeRelationType.dandanplay,
+      101,
+    );
     log(
       '首次 upsert: Dandanplay Anime=$hasDandanplayAnime, '
       'Bangumi Anime=$hasBangumiAnime, '
@@ -70,7 +79,10 @@ void main() {
       ),
       DbAnimeEpisodeRelationType.dandanplay,
     );
-    final hasAddedEpisode = await DatabaseService.hasDandanplayEpisode(103);
+    final hasAddedEpisode = await DatabaseService.hasEpisode(
+      DbAnimeEpisodeRelationType.dandanplay,
+      103,
+    );
     log('增量 upsert: Dandanplay Episode 103=$hasAddedEpisode');
     expect(hasAddedEpisode, isTrue);
     await endSession('增量写入');
@@ -90,7 +102,16 @@ void main() {
       20,
       targetAnimeId,
     );
-    final linkedBangumiAnimeId = await DatabaseService.getBangumiAnimeIdByDandanplayEpisodeId(101);
+    final linkedCommonAnimeId = await DatabaseService.getCommonAnimeId(
+      DbAnimeEpisodeRelationType.dandanplay,
+      10,
+    );
+    final linkedBangumiAnimeId = linkedCommonAnimeId == null
+        ? null
+        : await DatabaseService.getSourceAnimeId(
+            DbAnimeEpisodeRelationType.bangumi,
+            linkedCommonAnimeId,
+          );
     log(
       'Anime 关联查询: Dandanplay Episode 101 -> '
       'Bangumi Anime $linkedBangumiAnimeId',
@@ -113,7 +134,16 @@ void main() {
       201,
       targetEpisodeId,
     );
-    final linkedBangumiEpisodeId = await DatabaseService.getBangumiEpisodeIdByDandanplayEpisodeId(101);
+    final linkedCommonEpisodeId = await DatabaseService.getCommonEpisodeId(
+      DbAnimeEpisodeRelationType.dandanplay,
+      101,
+    );
+    final linkedBangumiEpisodeId = linkedCommonEpisodeId == null
+        ? null
+        : await DatabaseService.getSourceEpisodeId(
+            DbAnimeEpisodeRelationType.bangumi,
+            linkedCommonEpisodeId,
+          );
     log(
       'Episode 关联查询: Dandanplay Episode 101 -> '
       'Bangumi Episode $linkedBangumiEpisodeId',
@@ -139,7 +169,14 @@ void main() {
       assetHash,
       targetEpisodeId,
     );
-    final linkedDandanplayEpisodeId = await DatabaseService.getDandanplayEpisodeIdByAssetHash(assetHash);
+    final assetCommonEpisodeId =
+        await DatabaseService.getCommonEpisodeIdByAssetHash(assetHash);
+    final linkedDandanplayEpisodeId = assetCommonEpisodeId == null
+        ? null
+        : await DatabaseService.getSourceEpisodeId(
+            DbAnimeEpisodeRelationType.dandanplay,
+            assetCommonEpisodeId,
+          );
     log(
       '资产关联查询: hash=${_toHex(assetHash)} -> '
       'Dandanplay Episode $linkedDandanplayEpisodeId',
@@ -156,16 +193,17 @@ void main() {
       dandanplay: 1.5,
       user: 2.0,
     );
-    final linkOptions = await DatabaseService.getAssetLinkOptions(assetHash);
-    final dandanplayOffset = await DatabaseService.getAssetDandanplayDanmakuOffset(assetHash);
-    final userOffset = await DatabaseService.getAssetUserDanmakuOffset(assetHash);
+    final assetEpisodeInfo =
+        await DatabaseService.getAssetEpisodeInfo(assetHash);
     log(
-      '资产设置查询: linkOptions=$linkOptions, '
-      'DandanplayOffset=$dandanplayOffset, UserOffset=$userOffset',
+      '资产设置查询: linkOptions=${assetEpisodeInfo?.linkOptions}, '
+      'DandanplayOffset=${assetEpisodeInfo?.dandanplayDanmakuOffset}, '
+      'UserOffset=${assetEpisodeInfo?.userDanmakuOffset}',
     );
-    expect(linkOptions, DatabaseService.linkDandanplay);
-    expect(dandanplayOffset, 1.5);
-    expect(userOffset, 2.0);
+    expect(assetEpisodeInfo, isNotNull);
+    expect(assetEpisodeInfo!.linkOptions, DatabaseService.linkDandanplay);
+    expect(assetEpisodeInfo.dandanplayDanmakuOffset, 1.5);
+    expect(assetEpisodeInfo.userDanmakuOffset, 2.0);
     await endSession('建立视频资产关联');
     log('全部 upsert/link 断言通过');
   });

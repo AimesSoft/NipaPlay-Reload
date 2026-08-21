@@ -135,8 +135,10 @@ class AnimeInfoService {
     _printLine('文件记录已写入数据库: ${_val(fileHash)}');
 
     // 决定本次使用的关联选项
+    final assetEpisodeInfo =
+        await DatabaseService.getAssetEpisodeInfo(assetHash);
     final linkOptions = priorityLinkOpt ??
-        await DatabaseService.getAssetLinkOptions(assetHash) ??
+        assetEpisodeInfo?.linkOptions ??
         DatabaseService.defaultLinkOptions;
     _printLine('本次使用的关联选项: ${_val(linkOptions)}');
 
@@ -161,11 +163,17 @@ class AnimeInfoService {
     _printLine('匹配到 Dandanplay Anime: ${_val(ddpAniId)}, Episode: ${_val(ddpEpiId)}');
 
     // 确保数据库中存在对应的 dandanplay_episode 记录
-    if (!await DatabaseService.hasDandanplayEpisode(ddpEpiId)) {
+    if (!await DatabaseService.hasEpisode(
+      DbAnimeEpisodeRelationType.dandanplay,
+      ddpEpiId,
+    )) {
       _printLine('数据库中未找到 Dandanplay Episode: ${_val(ddpEpiId)}, 开始刷新 Anime Package');
       await refreshDandanplayAnimeCacheJson(ddpAniId);
       await refreshDandanplayAnimeRelationByCache(ddpAniId);
-      if (!await DatabaseService.hasDandanplayEpisode(ddpEpiId)) {
+      if (!await DatabaseService.hasEpisode(
+        DbAnimeEpisodeRelationType.dandanplay,
+        ddpEpiId,
+      )) {
         _printLine(color('刷新后仍未找到 Dandanplay Episode: ${_val(ddpEpiId)}', ColorCode.red));
         return;
       }
@@ -184,7 +192,16 @@ class AnimeInfoService {
       return;
     }
 
-    final linkedBgmEpiId = await DatabaseService.getBangumiEpisodeIdByDandanplayEpisodeId(ddpEpiId);
+    final linkedCommonEpiId = await DatabaseService.getCommonEpisodeId(
+      DbAnimeEpisodeRelationType.dandanplay,
+      ddpEpiId,
+    );
+    final linkedBgmEpiId = linkedCommonEpiId == null
+        ? null
+        : await DatabaseService.getSourceEpisodeId(
+            DbAnimeEpisodeRelationType.bangumi,
+            linkedCommonEpiId,
+          );
     if (linkedBgmEpiId != null) {
       _printLine('已存在关联的 Bangumi Episode: ${_val(linkedBgmEpiId)}, 结束刷新');
       return;
@@ -202,7 +219,16 @@ class AnimeInfoService {
     await linkDandanplayBangumiAnime(generalAnimeId);
 
     // 再次查询确认关联结果
-    final refreshedBgmEpiId = await DatabaseService.getBangumiEpisodeIdByDandanplayEpisodeId(ddpEpiId);
+    final refreshedCommonEpiId = await DatabaseService.getCommonEpisodeId(
+      DbAnimeEpisodeRelationType.dandanplay,
+      ddpEpiId,
+    );
+    final refreshedBgmEpiId = refreshedCommonEpiId == null
+        ? null
+        : await DatabaseService.getSourceEpisodeId(
+            DbAnimeEpisodeRelationType.bangumi,
+            refreshedCommonEpiId,
+          );
     if (refreshedBgmEpiId == null) {
       _printLine(color('关联后仍未找到对应的 Bangumi Episode: ${_val(ddpEpiId)}', ColorCode.red));
       return;
@@ -479,8 +505,11 @@ class AnimeInfoService {
       return null;
     }
 
-    final dandanplayOffset = await DatabaseService.getAssetDandanplayDanmakuOffset(assetHash) ?? 0.0;
-    final userOffset = await DatabaseService.getAssetUserDanmakuOffset(assetHash) ?? 0.0;
+    final assetEpisodeInfo =
+        await DatabaseService.getAssetEpisodeInfo(assetHash);
+    final dandanplayOffset =
+        assetEpisodeInfo?.dandanplayDanmakuOffset ?? 0.0;
+    final userOffset = assetEpisodeInfo?.userDanmakuOffset ?? 0.0;
 
     final cacheRoot = await StorageService.getCacheDirectory();
     final cacheFile = File('${cacheRoot.path}/danmaku/$ddpEpiId.json');
@@ -724,7 +753,7 @@ class AnimeInfoService {
       dandanplayEpisode: <int, String>{},
       bangumiEpisode: <int, String>{},
     );
-    final dandanplayAnimeIds = await DatabaseService.getAllSourceAnimeIds(
+    final dandanplayAnimeIds = await DatabaseService.getAllAnimeIds(
       DbAnimeEpisodeRelationType.dandanplay,
     );
     for (final animeId in dandanplayAnimeIds) {
@@ -747,7 +776,7 @@ class AnimeInfoService {
       );
     }
 
-    final bangumiAnimeIds = await DatabaseService.getAllSourceAnimeIds(
+    final bangumiAnimeIds = await DatabaseService.getAllAnimeIds(
       DbAnimeEpisodeRelationType.bangumi,
     );
     for (final animeId in bangumiAnimeIds) {
