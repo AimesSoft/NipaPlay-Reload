@@ -37,6 +37,14 @@ import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
+import 'package:nipaplay/models/playback_detail_context.dart';
+
+typedef _PlaybackPageLayoutSnapshot = ({
+  double aspectRatio,
+  PlaybackDetailContext? detailContext,
+  bool hasVideo,
+  bool usesWindowHostedVideoSurface,
+});
 
 @visibleForTesting
 bool shouldConsumeLargeScreenPlaybackPop({
@@ -463,28 +471,42 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       );
     }
 
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
-        final usesWindowHostedVideoSurface =
-            videoState.player.usesWindowOverlayVideoSurface;
+    return Selector<VideoPlayerState, _PlaybackPageLayoutSnapshot>(
+      selector: (context, videoState) => (
+        aspectRatio: videoState.aspectRatio,
+        detailContext: videoState.playbackDetailContext,
+        hasVideo: videoState.hasVideo,
+        usesWindowHostedVideoSurface:
+            videoState.player.usesWindowOverlayVideoSurface,
+      ),
+      shouldRebuild: (previous, next) =>
+          previous.aspectRatio != next.aspectRatio ||
+          !identical(previous.detailContext, next.detailContext) ||
+          previous.hasVideo != next.hasVideo ||
+          previous.usesWindowHostedVideoSurface !=
+              next.usesWindowHostedVideoSurface,
+      builder: (context, layout, child) {
         final isPhonePortrait = globals.isPhone &&
             MediaQuery.orientationOf(context) == Orientation.portrait &&
-            videoState.hasVideo;
+            layout.hasVideo;
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
             duration:
                 _isExiting ? Duration.zero : const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            color: videoState.hasVideo &&
+            color: layout.hasVideo &&
                     !isPhonePortrait &&
                     !_isMacOSHdrTransparentFlutterEnabled &&
-                    !usesWindowHostedVideoSurface
+                    !layout.usesWindowHostedVideoSurface
                 ? Colors.black
                 : Colors.transparent,
             child: isPhonePortrait
-                ? _buildPhonePortraitPlayer(videoState)
-                : _buildPlayerStage(videoState),
+                ? _buildPhonePortraitPlayer(layout)
+                : Consumer<VideoPlayerState>(
+                    builder: (context, videoState, child) =>
+                        _buildPlayerStage(videoState),
+                  ),
           ),
         );
       },
@@ -501,8 +523,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       fit: StackFit.expand,
       clipBehavior: Clip.hardEdge,
       children: [
-        const Positioned.fill(
-          child: VideoPlayerWidget(),
+        Positioned.fill(
+          child: VideoPlayerWidget(danmakuScale: portraitUiScale),
         ),
         if (videoState.hasVideo)
           NipaplayLargeScreenModeScope.isActiveOf(context) &&
@@ -519,7 +541,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     );
   }
 
-  Widget _buildPhonePortraitPlayer(VideoPlayerState videoState) {
+  Widget _buildPhonePortraitPlayer(_PlaybackPageLayoutSnapshot layout) {
     if (_isUiLocked && !_portraitUnlockScheduled) {
       _portraitUnlockScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -530,14 +552,13 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           _isUiLocked = false;
           _showUiLockButton = false;
         });
-        videoState.setShowControls(true);
+        context.read<VideoPlayerState>().setShowControls(true);
       });
     }
-    final aspectRatio =
-        videoState.aspectRatio.isFinite && videoState.aspectRatio > 0
-            ? videoState.aspectRatio
-            : 16 / 9;
-    final detailContext = videoState.playbackDetailContext;
+    final aspectRatio = layout.aspectRatio.isFinite && layout.aspectRatio > 0
+        ? layout.aspectRatio
+        : 16 / 9;
+    final detailContext = layout.detailContext;
 
     return SafeArea(
       left: false,
@@ -554,9 +575,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               (constraints.maxWidth / _phonePortraitUiDesignWidth)
                   .clamp(0.35, 0.72)
                   .toDouble();
-          final playerStage = _buildPlayerStage(
-            videoState,
-            portraitUiScale: portraitUiScale,
+          final playerStage = Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) => _buildPlayerStage(
+              videoState,
+              portraitUiScale: portraitUiScale,
+            ),
           );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -564,26 +587,30 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               SizedBox(
                 height: stageHeight,
                 child: ClipRect(
-                  child: videoState.player.usesWindowOverlayVideoSurface
-                      ? playerStage
-                      : ColoredBox(
-                          color: Colors.black,
-                          child: playerStage,
-                        ),
+                  child: RepaintBoundary(
+                    child: layout.usesWindowHostedVideoSurface
+                        ? playerStage
+                        : ColoredBox(
+                            color: Colors.black,
+                            child: playerStage,
+                          ),
+                  ),
                 ),
               ),
               Expanded(
-                child: detailContext != null
-                    ? AnimeDetailPage(
-                        key: ValueKey(
-                          'portrait-player-detail-${detailContext.sourceKey}',
-                        ),
-                        animeId: detailContext.animeId ?? 0,
-                        playbackDetailContext: detailContext,
-                        renderInWindowScaffold: false,
-                        embeddedInPlayback: true,
-                      )
-                    : const SizedBox.shrink(),
+                child: RepaintBoundary(
+                  child: detailContext != null
+                      ? AnimeDetailPage(
+                          key: ValueKey(
+                            'portrait-player-detail-${detailContext.sourceKey}',
+                          ),
+                          animeId: detailContext.animeId ?? 0,
+                          playbackDetailContext: detailContext,
+                          renderInWindowScaffold: false,
+                          embeddedInPlayback: true,
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ),
             ],
           );

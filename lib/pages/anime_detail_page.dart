@@ -228,6 +228,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   int _commentsVersion = 0;
   final GlobalKey _commentsWidgetKey = GlobalKey();
   int _myCommentTimestamp = 0;
+  bool _hasOpenedCommentsTab = false;
 
   static const String _commentTimestampPrefix = 'bangumi_comment_ts_';
 
@@ -329,6 +330,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _tabController!.addListener(_handleTabChange);
 
     _detailTabController = TabController(length: 2, vsync: this);
+    _detailTabController!.addListener(_handleDetailTabChange);
 
     // 添加Bangumi登录状态监听
     BangumiApiService.loginStatusNotifier
@@ -521,6 +523,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         .removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
+    _detailTabController?.removeListener(_handleDetailTabChange);
     _detailTabController?.dispose();
     _largeScreenDetailsFocusNode.dispose();
     super.dispose();
@@ -560,6 +563,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         // 更新UI以显示新的页面
       });
     }
+  }
+
+  void _handleDetailTabChange() {
+    if (!mounted || _detailTabController?.index != 1 || _hasOpenedCommentsTab) {
+      return;
+    }
+    setState(() {
+      // 评论组件首次进入时再创建，之后保持挂载作为本次详情页的内存缓存。
+      _hasOpenedCommentsTab = true;
+    });
   }
 
   Future<void> _fetchAnimeDetails() async {
@@ -1414,7 +1427,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification is ScrollEndNotification) {
+        if (_detailTabController?.index == 1 &&
+            notification is ScrollEndNotification) {
           final metrics = notification.metrics;
           if (metrics.pixels >= metrics.maxScrollExtent) {
             (_commentsWidgetKey.currentState as dynamic)?.loadMore();
@@ -1490,8 +1504,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       ],
                     ),
                     const SizedBox(height: 12),
-                    if (_detailTabController!.index == 0)
-                      _buildDetailContent(
+                    Visibility(
+                      visible: _detailTabController!.index == 0,
+                      maintainState: true,
+                      child: _buildDetailContent(
                           anime,
                           valueStyle,
                           boldWhiteKeyStyle,
@@ -1501,68 +1517,73 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           bangumiRatingValue,
                           bangumiEvaluationText,
                           metadataWidgets,
-                          titlesWidgets)
-                    else
-                      Builder(builder: (context) {
-                        debugPrint(
-                            '[AnimeDetail] 评论tab: _bangumiSubjectId=$_bangumiSubjectId, anime.id=${anime.id}');
-                        final userInfo = BangumiApiService.userInfo;
-                        final int currentUserId = userInfo != null
-                            ? (userInfo['id'] as int? ?? 0)
-                            : 0;
-                        String userAvatar = '';
-                        if (userInfo != null) {
-                          final raw = userInfo['avatar'];
-                          if (raw is String) {
-                            userAvatar = raw;
-                          } else if (raw is Map<String, dynamic>) {
-                            userAvatar = (raw['large'] as String?) ??
-                                (raw['medium'] as String?) ??
-                                '';
-                          }
-                        }
-                        final String userNickname = userInfo != null
-                            ? ((userInfo['nickname'] as String?) ??
-                                (userInfo['username'] as String?) ??
-                                '')
-                            : '';
-                        final BangumiMyCommentData? myComment =
-                            BangumiApiService.isLoggedIn
-                                ? BangumiMyCommentData(
-                                    nickname: userNickname,
-                                    avatarUrl: userAvatar,
-                                    rate: _bangumiUserRating,
-                                    comment: _bangumiComment ?? '',
-                                    updatedAt: _myCommentTimestamp > 0
-                                        ? _myCommentTimestamp
-                                        : DateTime.now()
-                                                .millisecondsSinceEpoch ~/
-                                            1000,
-                                  )
-                                : null;
-                        return BangumiCommentsWidget(
-                          key: _commentsWidgetKey,
-                          subjectId: _bangumiSubjectId,
-                          dandanplayId: anime.id,
-                          onEditRating: BangumiApiService.isLoggedIn
-                              ? _showCommentDialog
-                              : null,
-                          myComment: myComment,
-                          currentUserId: currentUserId,
-                          commentsVersion: _commentsVersion,
-                          onMyCommentTimestamp: (timestamp) {
-                            if (mounted && timestamp != _myCommentTimestamp) {
-                              setState(() {
-                                _myCommentTimestamp = timestamp;
-                              });
-                              if (_bangumiSubjectId != null) {
-                                _saveCommentTimestamp(
-                                    _bangumiSubjectId!, timestamp);
-                              }
+                          titlesWidgets),
+                    ),
+                    if (_hasOpenedCommentsTab)
+                      Visibility(
+                        visible: _detailTabController!.index == 1,
+                        maintainState: true,
+                        child: Builder(builder: (context) {
+                          debugPrint(
+                              '[AnimeDetail] 评论tab: _bangumiSubjectId=$_bangumiSubjectId, anime.id=${anime.id}');
+                          final userInfo = BangumiApiService.userInfo;
+                          final int currentUserId = userInfo != null
+                              ? (userInfo['id'] as int? ?? 0)
+                              : 0;
+                          String userAvatar = '';
+                          if (userInfo != null) {
+                            final raw = userInfo['avatar'];
+                            if (raw is String) {
+                              userAvatar = raw;
+                            } else if (raw is Map<String, dynamic>) {
+                              userAvatar = (raw['large'] as String?) ??
+                                  (raw['medium'] as String?) ??
+                                  '';
                             }
-                          },
-                        );
-                      }),
+                          }
+                          final String userNickname = userInfo != null
+                              ? ((userInfo['nickname'] as String?) ??
+                                  (userInfo['username'] as String?) ??
+                                  '')
+                              : '';
+                          final BangumiMyCommentData? myComment =
+                              BangumiApiService.isLoggedIn
+                                  ? BangumiMyCommentData(
+                                      nickname: userNickname,
+                                      avatarUrl: userAvatar,
+                                      rate: _bangumiUserRating,
+                                      comment: _bangumiComment ?? '',
+                                      updatedAt: _myCommentTimestamp > 0
+                                          ? _myCommentTimestamp
+                                          : DateTime.now()
+                                                  .millisecondsSinceEpoch ~/
+                                              1000,
+                                    )
+                                  : null;
+                          return BangumiCommentsWidget(
+                            key: _commentsWidgetKey,
+                            subjectId: _bangumiSubjectId,
+                            dandanplayId: anime.id,
+                            onEditRating: BangumiApiService.isLoggedIn
+                                ? _showCommentDialog
+                                : null,
+                            myComment: myComment,
+                            currentUserId: currentUserId,
+                            commentsVersion: _commentsVersion,
+                            onMyCommentTimestamp: (timestamp) {
+                              if (mounted && timestamp != _myCommentTimestamp) {
+                                setState(() {
+                                  _myCommentTimestamp = timestamp;
+                                });
+                                if (_bangumiSubjectId != null) {
+                                  _saveCommentTimestamp(
+                                      _bangumiSubjectId!, timestamp);
+                                }
+                              }
+                            },
+                          );
+                        }),
+                      ),
                   ],
                 );
               },

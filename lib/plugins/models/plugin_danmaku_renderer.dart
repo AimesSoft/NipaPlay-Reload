@@ -22,6 +22,8 @@ class PluginDanmakuRenderer {
   });
 
   static const int supportedApiVersion = 1;
+  static const String titanLocalSendPrefix = '🟩 ';
+  static const String titanLocalSendSuffix = ' 🟩';
 
   final String pluginId;
   final String id;
@@ -35,8 +37,35 @@ class PluginDanmakuRenderer {
 
   String get selectionId => 'plugin:$pluginId/$id';
 
+  /// Native danmaku owned by the active playback kernel (currently Erika)
+  /// always takes precedence over a persisted plugin renderer selection.
+  /// The selection itself is retained so it becomes effective again after
+  /// switching back to a playback kernel without native danmaku.
+  static PluginDanmakuRenderer? resolveForPlayback({
+    required PluginDanmakuRenderer? selectedRenderer,
+    required bool nativeDanmakuActive,
+  }) {
+    return nativeDanmakuActive ? null : selectedRenderer;
+  }
+
   bool get usesTitanSettings =>
       pluginId == titanDanmakuPluginId && id == titanDanmakuRendererId;
+
+  /// Prepares the transient copy sent to a renderer's realtime API.
+  ///
+  /// The submitted danmaku and the copy retained in the host timeline remain
+  /// untouched. Titan receives a copy wrapped in self-colored green emoji
+  /// because its bundled engine supports only one text color per danmaku. This
+  /// keeps the user's selected color for the text while making the local send
+  /// recognizable without requiring rich-text support from the engine.
+  Map<String, dynamic> prepareRealtimeItem(Map<String, dynamic> item) {
+    if (!usesTitanSettings) return item;
+    final content = item['content']?.toString() ?? '';
+    return <String, dynamic>{
+      ...item,
+      'content': '$titanLocalSendPrefix$content$titanLocalSendSuffix',
+    };
+  }
 
   bool shouldUseRealtimeAdd({
     required bool force,

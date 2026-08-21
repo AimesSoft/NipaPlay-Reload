@@ -497,6 +497,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 弹幕字体大小设置
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  // 当前播放布局的临时字号比例，不写入用户设置。
+  double _danmakuPresentationScale = 1.0;
   Timer? _danmakuFontSizePersistenceTimer;
   String _danmakuFontFilePath = '';
   String _danmakuFontFamily = '';
