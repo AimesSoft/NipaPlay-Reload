@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
@@ -630,8 +632,29 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   Future<String?> _showUserAgentInputDialog() async {
     final colorScheme = Theme.of(context).colorScheme;
-    final controller = TextEditingController(
-      text: PlayerFactory.getCustomPlayerUA(),
+    var inputValue = PlayerFactory.getCustomPlayerUA();
+    final isPhone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    final dialogNavigator = Navigator.of(
+      context,
+      rootNavigator: isPhone,
+    );
+    final inputField = TextFormField(
+      initialValue: inputValue,
+      onChanged: (value) => inputValue = value,
+      keyboardType: TextInputType.multiline,
+      minLines: 2,
+      maxLines: 4,
+      autocorrect: false,
+      enableSuggestions: false,
+      cursorColor: AppAccentColors.current,
+      decoration: InputDecoration(
+        hintText: 'Mozilla/5.0 ...',
+        hintStyle: TextStyle(
+          color: colorScheme.onSurface.withValues(alpha: 0.38),
+        ),
+      ),
+      style: TextStyle(color: colorScheme.onSurface),
     );
     final result = await BlurDialog.show<String>(
       context: context,
@@ -665,22 +688,12 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               '自訂 User-Agent',
               'Custom User-Agent',
             ),
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.multiline,
-              minLines: 2,
-              maxLines: 4,
-              autocorrect: false,
-              enableSuggestions: false,
-              cursorColor: AppAccentColors.current,
-              decoration: InputDecoration(
-                hintText: 'Mozilla/5.0 ...',
-                hintStyle: TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.38),
-                ),
-              ),
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
+            child: isPhone
+                ? Material(
+                    type: MaterialType.transparency,
+                    child: inputField,
+                  )
+                : inputField,
           ),
         ],
       ),
@@ -688,16 +701,15 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
         HoverScaleTextButton(
           text: context.l10n.cancel,
           idleColor: colorScheme.onSurface.withValues(alpha: 0.7),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: dialogNavigator.pop,
         ),
         HoverScaleTextButton(
           text: _text(context, '保存', '儲存', 'Save'),
           idleColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          onPressed: () => dialogNavigator.pop(inputValue.trim()),
         ),
       ],
     );
-    controller.dispose();
     return result;
   }
 
