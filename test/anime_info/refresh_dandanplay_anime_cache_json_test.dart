@@ -1,6 +1,5 @@
 
-// test/anime_info/link_dandanplay_bangumi_anime_test.dart
-
+// test/anime_info/refresh_dandanplay_anime_cache_json_test.dart
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,20 +13,20 @@ import '../test_util/io.dart';
 
 
 void main() {
+
   WidgetsFlutterBinding.ensureInitialized();
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
-  test('关联 Dandanplay 与 Bangumi 番剧', () async {
+  test('刷新 Dandanplay Anime Info 到 JSON 缓存', () async {
 
-    final commonAnimeId = getIntFromEnv(TestEnvironmentVariables.commentAnimeId);
+    final dandanplayAnimeId = getIntFromEnv(TestEnvironmentVariables.dandanplayAnimeId);
     final databasePath = getStringFromEnv(TestEnvironmentVariables.databasePath);
-    if (commonAnimeId == null || databasePath == null) {
+    if (dandanplayAnimeId == null || databasePath == null) {
       printMsg(color('测试未运行', ColorCode.red));
       return;
     }
 
     await DatabaseService.initialize(databasePath);
-    await AnimeInfoService.linkDandanplayBangumiAnime(commonAnimeId);
-    await AnimeInfoService.debugAnimeEpisodeRelations();
+    await AnimeInfoService.refreshDandanplayAnimeCacheJson(dandanplayAnimeId);
   });
 }

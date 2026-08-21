@@ -50,6 +50,33 @@ class _AssetRepository {
     });
   }
 
+  Future<DbAssetRecord?> find(Uint8List assetHash) async {
+    final hash = _validateHash(assetHash, 16);
+    final rows = await database.query(
+      'asset',
+      columns: const <String>[
+        'asset_pre16mib_md5',
+        'asset_size',
+        'asset_codec',
+        'asset_sha256',
+      ],
+      where: 'asset_pre16mib_md5 = ?',
+      whereArgs: <Object?>[hash],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+
+    final row = rows.first;
+    final storedHash = row['asset_pre16mib_md5'] as Uint8List;
+    final sha256 = row['asset_sha256'] as Uint8List?;
+    return DbAssetRecord(
+      hashPre16MiBMd5: Uint8List.fromList(storedHash),
+      size: (row['asset_size'] as num?)?.toInt(),
+      codec: row['asset_codec'] as String?,
+      hashSha256: sha256 == null ? null : Uint8List.fromList(sha256),
+    );
+  }
+
   Future<void> linkToEpisode(Uint8List assetHash, int episodeId) async {
     _requireNonNegative(episodeId, 'episodeId');
     final hash = _validateHash(assetHash, 16);
@@ -104,6 +131,16 @@ class _AssetRepository {
       <Object?>[_validateHash(assetHash, 16)],
     );
     return _firstInt(rows, 'dandanplay_episode_id');
+  }
+
+  Future<int?> findCommonEpisodeId(Uint8List assetHash) {
+    return _readIntColumn(
+      database,
+      'asset_episode',
+      'episode_id',
+      'asset_pre16mib_md5',
+      _validateHash(assetHash, 16),
+    );
   }
 
   Future<void> setLinkOptions(Uint8List hash, int value) =>

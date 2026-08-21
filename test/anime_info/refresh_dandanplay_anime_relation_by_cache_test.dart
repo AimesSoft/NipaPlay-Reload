@@ -1,3 +1,6 @@
+
+// test/anime_info/refresh_dandanplay_anime_relation_by_cache_test.dart
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/services/anime_info_service.dart';
@@ -8,26 +11,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../environment_variables.dart';
 import '../test_util/io.dart';
 
+
 void main() {
+
   WidgetsFlutterBinding.ensureInitialized();
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
-  test('刷新 Bangumi Anime Package 到数据库', () async {
+  test('从 Dandanplay Anime JSON 缓存刷新数据库关系', () async {
 
-    final bangumiAnimeId = getIntFromEnv(TestEnvironmentVariables.bangumiTvAnimeId);
+    final dandanplayAnimeId = getIntFromEnv(TestEnvironmentVariables.dandanplayAnimeId);
     final databasePath = getStringFromEnv(TestEnvironmentVariables.databasePath);
-    if (bangumiAnimeId == null || databasePath == null) {
+    if (dandanplayAnimeId == null || databasePath == null) {
       printMsg(color('测试未运行', ColorCode.red));
       return;
     }
 
     await DatabaseService.initialize(databasePath);
-    await AnimeInfoService.refreshBangumiAnimePackageById(bangumiAnimeId);
-
-    final anime = await DatabaseService.getBangumiAnimeRecordById(bangumiAnimeId);
-    printMsg(
-      '${color('Bangumi Anime Record', ColorCode.boldCyan)}: '
-      'ID=${anime?.bangumiAnimeId}, 标题=${anime?.title}',
-    );
+    await AnimeInfoService.refreshDandanplayAnimeRelationByCache(dandanplayAnimeId);
   });
 }

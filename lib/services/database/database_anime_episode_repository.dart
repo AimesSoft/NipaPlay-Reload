@@ -90,8 +90,7 @@ class _AnimeEpisodeRepository {
     final schema = _relationSchema(type);
 
     await database.transaction((txn) async {
-      final oldEpisodeId =
-          await _sourceEpisodeId(txn, schema, sourceEpisodeId);
+      final oldEpisodeId = await _sourceEpisodeId(txn, schema, sourceEpisodeId);
       if (oldEpisodeId == null) {
         throw StateError('关联 Episode 前必须先写入对应的外部剧集记录');
       }
@@ -105,6 +104,22 @@ class _AnimeEpisodeRepository {
       if (animeId == null) {
         throw StateError('外部剧集关联的通用 Episode 不存在');
       }
+      final targetAnimeId = await _readIntColumn(
+        txn,
+        'episode',
+        'anime_id',
+        'episode_id',
+        episodeId,
+      );
+      if (targetAnimeId != null && targetAnimeId != animeId) {
+        debugPrint(
+          '[Database] 取消关联 Episode: '
+          '${type.name} Episode $sourceEpisodeId 当前属于 Anime $animeId, '
+          '目标共通 Episode $episodeId 属于 Anime $targetAnimeId',
+        );
+        return;
+      }
+
       await txn.insert(
         'episode',
         <String, Object?>{
@@ -112,12 +127,6 @@ class _AnimeEpisodeRepository {
           'anime_id': animeId,
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-      await txn.update(
-        'episode',
-        <String, Object?>{'anime_id': animeId},
-        where: 'episode_id = ?',
-        whereArgs: <Object>[episodeId],
       );
       if (oldEpisodeId == episodeId) return;
 
@@ -139,6 +148,48 @@ class _AnimeEpisodeRepository {
   Future<bool> hasEpisode(AniEpiRltType type, int id) {
     final schema = _relationSchema(type);
     return _hasRow(database, schema.episodeTable, schema.episodeSourceId, id);
+  }
+
+  Future<int?> findCommonAnimeId(AniEpiRltType type, int sourceAnimeId) {
+    return _sourceAnimeId(database, _relationSchema(type), sourceAnimeId);
+  }
+
+  Future<int?> findSourceAnimeId(AniEpiRltType type, int commonAnimeId) {
+    final schema = _relationSchema(type);
+    return _readIntColumn(
+      database,
+      schema.animeTable,
+      schema.animeSourceId,
+      'anime_id',
+      commonAnimeId,
+    );
+  }
+
+  Future<List<int>> findAllSourceAnimeIds(AniEpiRltType type) async {
+    final schema = _relationSchema(type);
+    final rows = await database.query(
+      schema.animeTable,
+      columns: <String>[schema.animeSourceId],
+      orderBy: schema.animeSourceId,
+    );
+    return rows
+        .map((row) => (row[schema.animeSourceId] as num).toInt())
+        .toList();
+  }
+
+  Future<int?> findCommonEpisodeId(AniEpiRltType type, int sourceEpisodeId) {
+    return _sourceEpisodeId(database, _relationSchema(type), sourceEpisodeId);
+  }
+
+  Future<int?> findSourceEpisodeId(AniEpiRltType type, int commonEpisodeId) {
+    final schema = _relationSchema(type);
+    return _readIntColumn(
+      database,
+      schema.episodeTable,
+      schema.episodeSourceId,
+      'episode_id',
+      commonEpisodeId,
+    );
   }
 
   Future<int?> findBangumiEpisodeId(int dandanplayEpisodeId) async {

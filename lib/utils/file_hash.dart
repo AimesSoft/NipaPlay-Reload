@@ -3,6 +3,7 @@
 // 提供计算文件 Hash 的工具函数
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,26 @@ import 'package:nipaplay/src/rust/rust_init.dart';
 
 
 const int defaultFileHeadHashBytes = 16 * 1024 * 1024;
+
+Uint8List decodeHex(String value, {int? expectedBytes}) {
+  final normalized = value.trim();
+  if (normalized.length.isOdd ||
+      !RegExp(r'^[0-9a-fA-F]+$').hasMatch(normalized)) {
+    throw const FormatException('无效的十六进制字符串');
+  }
+  if (expectedBytes != null && normalized.length != expectedBytes * 2) {
+    throw FormatException('十六进制字符串必须表示 $expectedBytes 字节');
+  }
+  return Uint8List.fromList(
+    List<int>.generate(
+      normalized.length ~/ 2,
+      (index) => int.parse(
+        normalized.substring(index * 2, index * 2 + 2),
+        radix: 16,
+      ),
+    ),
+  );
+}
 
 /// 计算文件前 [maxBytes] 字节的 MD5 (默认前 16MiB)
 Future<String> computeFileHeadMd5(String filePath, { int maxBytes = defaultFileHeadHashBytes }) async {

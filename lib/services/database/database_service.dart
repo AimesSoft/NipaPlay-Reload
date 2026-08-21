@@ -61,6 +61,8 @@ class DatabaseService {
   static Future<void> linkToEpisode(AniEpiRltType type, int typeEpisodeId, int episodeId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode(type,typeEpisodeId,episodeId,),);
   static Future<void> linkVideoAssetToEpisode(Uint8List assetHash, int episodeId)         => _withDb((db) => _AssetRepository(db).linkToEpisode(assetHash, episodeId),);
 
+  static Future<void> setAssetDanmakuOffsets(Uint8List hash, {double? dandanplay, double? user}) => _withDb((db) => _AssetRepository(db).setDanmakuOffsets(hash,dandanplay: dandanplay,user: user,),);
+
 
   // getters
   // ======================================================================== //
@@ -82,6 +84,58 @@ class DatabaseService {
 
   static Future<bool> hasBangumiEpisode(int id) =>
       hasEpisode(AniEpiRltType.bangumi, id);
+
+  static Future<int?> getCommonAnimeId(AniEpiRltType type, int sourceAnimeId) =>
+      _withDb(
+        (db) => _AnimeEpisodeRepository(db).findCommonAnimeId(
+          type,
+          sourceAnimeId,
+        ),
+      );
+
+  static Future<int?> getSourceAnimeId(
+    AniEpiRltType type,
+    int commonAnimeId,
+  ) =>
+      _withDb(
+        (db) => _AnimeEpisodeRepository(db).findSourceAnimeId(
+          type,
+          commonAnimeId,
+        ),
+      );
+
+  static Future<List<int>> getAllSourceAnimeIds(AniEpiRltType type) =>
+      _withDb(
+        (db) => _AnimeEpisodeRepository(db).findAllSourceAnimeIds(type),
+      );
+
+  static Future<int?> getCommonEpisodeId(
+    AniEpiRltType type,
+    int sourceEpisodeId,
+  ) =>
+      _withDb(
+        (db) => _AnimeEpisodeRepository(db).findCommonEpisodeId(
+          type,
+          sourceEpisodeId,
+        ),
+      );
+
+  static Future<int?> getSourceEpisodeId(
+    AniEpiRltType type,
+    int commonEpisodeId,
+  ) =>
+      _withDb(
+        (db) => _AnimeEpisodeRepository(db).findSourceEpisodeId(
+          type,
+          commonEpisodeId,
+        ),
+      );
+
+  static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>
+      _withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
+
+  static Future<DbAssetRecord?> getAssetRecord(Uint8List hash) =>
+      _withDb((db) => _AssetRepository(db).find(hash));
 
   static Future<int?> getDandanplayEpisodeIdByAssetHash(Uint8List hash) =>
       _withDb(
@@ -106,19 +160,6 @@ class DatabaseService {
   static Future<int?> getAssetLinkOptions(Uint8List hash) =>
       _withDb((db) => _AssetRepository(db).readLinkOptions(hash));
 
-  static Future<void> setAssetDanmakuOffsets(
-    Uint8List hash, {
-    double? dandanplay,
-    double? user,
-  }) =>
-      _withDb(
-        (db) => _AssetRepository(db).setDanmakuOffsets(
-          hash,
-          dandanplay: dandanplay,
-          user: user,
-        ),
-      );
-
   static Future<double?> getAssetDandanplayDanmakuOffset(Uint8List hash) =>
       _withDb(
         (db) => _AssetRepository(db).readDouble(
@@ -137,6 +178,21 @@ class DatabaseService {
 
   static Future<void> printAnimeEpisodeTables() =>
       _withDb((db) => _DatabaseDebugPrinter(db).printTables());
+
+  static Future<String> buildAnimeEpisodeRelationReport({
+    required Map<int, String> dandanplayAnimeTitles,
+    required Map<int, String> bangumiAnimeTitles,
+    required Map<int, String> dandanplayEpisodeTitles,
+    required Map<int, String> bangumiEpisodeTitles,
+  }) =>
+      _withDb(
+      (db) => _DatabaseDebugPrinter(db).printAnimeEpisodeRelations(
+        dandanplayAnimeTitles: dandanplayAnimeTitles,
+        bangumiAnimeTitles: bangumiAnimeTitles,
+        dandanplayEpisodeTitles: dandanplayEpisodeTitles,
+        bangumiEpisodeTitles: bangumiEpisodeTitles,
+      ),
+    );
 
 
   // 私有方法

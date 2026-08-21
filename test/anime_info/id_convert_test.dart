@@ -24,7 +24,7 @@ void main() {
 
     printMsg('${color('Dandanplay Anime ID', ColorCode.boldCyan)}: $ddpAniId');
 
-    final bgmId = await AnimeInfoService.getBangumiIdByDandanplayId(ddpAniId);
+    final bgmId = await AnimeInfoService.requestBangumiIdByDandanplayId(ddpAniId);
     printMsg('${color('Bangumi Anime ID', ColorCode.boldCyan)}: $bgmId');
 
   });
@@ -39,7 +39,7 @@ void main() {
 
     printMsg('${color('Bangumi Anime ID', ColorCode.boldCyan)}: $bgmId');
 
-    final ddpId = await AnimeInfoService.getDandanplayIdByBangumiId(bgmId);
+    final ddpId = await AnimeInfoService.requestDandanplayIdByBangumiId(bgmId);
     printMsg('${color('Dandanplay Anime ID', ColorCode.boldCyan)}: $ddpId');
 
   });

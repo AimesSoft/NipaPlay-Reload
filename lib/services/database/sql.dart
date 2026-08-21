@@ -22,12 +22,8 @@ class DatabaseSql {
 
   static const _createIndexFiles = <String>[
     'create_episode_anime_id_index.sql',
-    'create_dandanplay_anime_anime_id_index.sql',
     'create_dandanplay_episode_anime_id_index.sql',
-    'create_dandanplay_episode_episode_id_index.sql',
-    'create_bangumi_anime_anime_id_index.sql',
     'create_bangumi_episode_anime_id_index.sql',
-    'create_bangumi_episode_episode_id_index.sql',
     'create_net_asset_hash_index.sql',
     'create_path_asset_hash_index.sql',
     'create_asset_episode_episode_id_index.sql',

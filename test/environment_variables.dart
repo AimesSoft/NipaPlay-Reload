@@ -5,6 +5,7 @@
 /// 测试中使用的环境变量名称
 abstract final class TestEnvironmentVariables {
 
+  static const String commentAnimeId       = 'NIPAPLAY_TEST_COMMENT_ANIME_ID';
   static const String dandanplayAnimeId    = 'NIPAPLAY_TEST_DANDANPLAY_ANIME_ID';
   static const String dandanplayEpisodeId  = 'NIPAPLAY_TEST_DANDANPLAY_EPISODE_ID';
   static const String expectedBangumiTvId  = 'NIPAPLAY_TEST_EXPECT_BANGUMI_TV_ID';

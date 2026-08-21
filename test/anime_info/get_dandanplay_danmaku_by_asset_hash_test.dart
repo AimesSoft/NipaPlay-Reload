@@ -1,21 +1,23 @@
 
-// test/database/hash_get_ddp_epi_test.dart
-// 数据库相关测试
+// test/anime_info/get_dandanplay_danmaku_by_asset_hash_test.dart
+
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/services/anime_info_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/utils/color.dart';
-import 'dart:convert';
-
+import 'package:nipaplay/utils/file_hash.dart';
 
 import '../environment_variables.dart';
 import '../test_util/io.dart';
 
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('File Hash -> Dandanplay Episode Record & File Danmaku', () async {
+  test('File Hash -> Dandanplay Danmaku', () async {
 
     final dbPath = getStringFromEnv(TestEnvironmentVariables.databasePath);
     final fileHash = getStringFromEnv(TestEnvironmentVariables.fileHash);
@@ -24,18 +26,17 @@ void main() {
       return;
     }
 
-    await DatabaseService.initialize(dbPath);
+    final assetHash = decodeHex(fileHash, expectedBytes: 16);
 
-    final fileDanmaku = await DatabaseService.getDandanplayFileDanmakuByFileHash(fileHash);
-    if (fileDanmaku == null) {
-      debugPrint(color('未找到匹配的 File Danmaku', ColorCode.red));
-      return;
-    }
+    await DatabaseService.initialize(dbPath);
+    final fileDanmaku = await AnimeInfoService.getDandanplayDanmakuByAssetHash(assetHash);
+
+    expect(fileDanmaku, isNotNull);
     printMsg(
       '${color('File Danmaku', ColorCode.boldCyan)}: '
       'File Hash=$fileHash, '
-      'Dandanplay Danmaku Offset=${fileDanmaku.danmakuOffsetDandanplay}, '
-      'User Danmaku Offset=${fileDanmaku.danmakuOffsetUser}'
+      'Dandanplay Danmaku Offset=${fileDanmaku!.dandanplayOffset}, '
+      'User Danmaku Offset=${fileDanmaku.userOffset}',
     );
 
     // 美观打印前 10 条弹幕

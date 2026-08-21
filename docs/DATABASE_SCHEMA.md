@@ -66,9 +66,9 @@
 | 字段                  | 类型    | 约束                                     | 说明                  |
 | --------------------- | ------- | ---------------------------------------- | --------------------- |
 | `dandanplay_anime_id` | INTEGER | PRIMARY KEY, CHECK( >= 0)                | 弹弹play 动画 ID      |
-| `anime_id`            | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `anime.anime_id` |
+| `anime_id`            | INTEGER | FOREIGN KEY, NOT NULL, UNIQUE, ON DELETE CASCADE | 关联 `anime.anime_id` |
 
-索引: `idx_dandanplay_anime_anime_id(anime_id)`.
+`anime_id` 唯一, 同一个共通 Anime 在 Dandanplay 表中最多对应一条记录.
 
 ### `dandanplay_episode`
 
@@ -76,11 +76,13 @@
 | ----------------------- | ------- | ---------------------------------------- | ------------------------------------------- |
 | `dandanplay_episode_id` | INTEGER | PRIMARY KEY, CHECK( >= 0)                | 弹弹play 剧集 ID                            |
 | `dandanplay_anime_id`   | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `dandanplay_anime.dandanplay_anime_id` |
-| `episode_id`            | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `episode.episode_id`                   |
+| `episode_id`            | INTEGER | FOREIGN KEY, NOT NULL, UNIQUE, ON DELETE CASCADE | 关联 `episode.episode_id`                   |
 
 外键: `dandanplay_anime_id -> dandanplay_anime.dandanplay_anime_id ON DELETE CASCADE`.
 
-索引: `idx_dandanplay_episode_anime_id(dandanplay_anime_id)`, `idx_dandanplay_episode_episode_id(episode_id)`.
+索引: `idx_dandanplay_episode_anime_id(dandanplay_anime_id)`.
+
+`episode_id` 唯一, 同一个共通 Episode 在 Dandanplay 表中最多对应一条记录.
 
 ### `bangumi_anime`
 
@@ -89,9 +91,9 @@
 | 字段               | 类型    | 约束                                     | 说明                  |
 | ------------------ | ------- | ---------------------------------------- | --------------------- |
 | `bangumi_anime_id` | INTEGER | PRIMARY KEY, CHECK( >= 0)                | Bangumi TV 动画 ID    |
-| `anime_id`         | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `anime.anime_id` |
+| `anime_id`         | INTEGER | FOREIGN KEY, NOT NULL, UNIQUE, ON DELETE CASCADE | 关联 `anime.anime_id` |
 
-索引: `idx_bangumi_anime_anime_id(anime_id)`.
+`anime_id` 唯一, 同一个共通 Anime 在 Bangumi 表中最多对应一条记录.
 
 ### `bangumi_episode`
 
@@ -99,11 +101,17 @@
 | -------------------- | ------- | ---------------------------------------- | ------------------------------------- |
 | `bangumi_episode_id` | INTEGER | PRIMARY KEY, CHECK( >= 0)                | Bangumi TV 剧集 ID                    |
 | `bangumi_anime_id`   | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `bangumi_anime.bangumi_anime_id` |
-| `episode_id`         | INTEGER | FOREIGN KEY, NOT NULL, ON DELETE CASCADE | 关联 `episode.episode_id`             |
+| `episode_id`         | INTEGER | FOREIGN KEY, NOT NULL, UNIQUE, ON DELETE CASCADE | 关联 `episode.episode_id`             |
 
 外键: `bangumi_anime_id -> bangumi_anime.bangumi_anime_id ON DELETE CASCADE`.
 
-索引: `idx_bangumi_episode_anime_id(bangumi_anime_id)`, `idx_bangumi_episode_episode_id(episode_id)`.
+索引: `idx_bangumi_episode_anime_id(bangumi_anime_id)`.
+
+`episode_id` 唯一, 同一个共通 Episode 在 Bangumi 表中最多对应一条记录.
+
+> [!NOTE]
+> Dandanplay 与 Bangumi 使用不同的关系表, 因此同一个共通 Anime 或 Episode
+> 可以同时关联一条 Dandanplay 记录和一条 Bangumi 记录.
 
 ### `asset`
 

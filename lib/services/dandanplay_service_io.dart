@@ -14,6 +14,7 @@ import 'debug_log_service.dart';
 import 'android_saf_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
+import 'package:nipaplay/utils/dandanplay_auth.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
 import 'package:nipaplay/src/rust/rust_init.dart';
@@ -25,7 +26,6 @@ class DandanplayService {
       'dandanplay_linked_bangumi_account';
   static const String _loginTimestampKey = 'dandanplay_login_timestamp';
   static String? _token;
-  static String? _appSecret;
   static const String _videoCacheKey = 'video_recognition_cache';
   static const String _animeSearchCacheKey = 'dandanplay_anime_search_cache';
   static const Duration _animeSearchCacheDuration = Duration(days: 7);
@@ -43,10 +43,6 @@ class DandanplayService {
   static String? _screenName;
   static Map<String, dynamic>? _linkedBangumiAccount;
   static int? _loginTimestamp;
-  static const List<String> _servers = [
-    'https://nipaplay.aimes-soft.com',
-    'https://kurisu.aimes-soft.com',
-  ];
   static const String _danmakuProxyEndpoint =
       'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
   static const Duration _danmakuRequestTimeout = Duration(seconds: 10);
@@ -560,105 +556,7 @@ class DandanplayService {
   }
 
   // 获取appSecret
-  static Future<String> getAppSecret() async {
-    // debugPrint('[DandanplayService] getAppSecret: Called.');
-    if (_appSecret != null) {
-      //debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
-      return _appSecret!;
-    }
-
-    // // 尝试从 SharedPreferences 获取 appSecret
-    final prefs = await SharedPreferences.getInstance();
-    final savedAppSecret = prefs.getString('dandanplay_app_secret');
-    if (savedAppSecret != null) {
-      _appSecret = savedAppSecret;
-      //debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
-      return _appSecret!;
-    }
-    //debugPrint('[DandanplayService] getAppSecret: No cached appSecret. Fetching from servers...');
-
-    // 从服务器列表获取 appSecret
-    //final prefs = await SharedPreferences.getInstance();
-    Exception? lastException;
-    for (final server in _servers) {
-      //debugPrint('[DandanplayService] getAppSecret: Trying server: $server');
-      try {
-        ////debugPrint('尝试从服务器 $server 获取appSecret');
-        final response = await http.get(
-          Uri.parse('$server/nipaplay.php'),
-          headers: {'User-Agent': userAgent, 'Accept': 'application/json'},
-        ).timeout(const Duration(seconds: 5));
-
-        // 强制打印服务器返回的原始内容以供调试
-        print(
-          '[NipaPlay AppSecret Response from $server] StatusCode: ${response.statusCode}, Body: ${response.body}',
-        );
-
-        ////debugPrint('服务器响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          ////debugPrint('解析的响应数据: $data');
-          if (data['encryptedAppSecret'] != null) {
-            _appSecret = _b(data['encryptedAppSecret']);
-            await prefs.setString('dandanplay_app_secret', _appSecret!);
-            ////debugPrint('成功从 $server 获取appSecret');
-            return _appSecret!;
-          }
-          throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
-        }
-        throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
-      } on TimeoutException {
-        // 打印超时错误
-        print('[NipaPlay AppSecret Error from $server] TimeoutException: 请求超时');
-        lastException = TimeoutException('从 $server 获取appSecret超时');
-      } catch (e) {
-        // 打印其他所有网络错误
-        print(
-          '[NipaPlay AppSecret Error from $server] Exception: ${e.toString()}',
-        );
-        lastException = e as Exception;
-      }
-    }
-
-    //debugPrint('[DandanplayService] getAppSecret: Finished attempting all servers.');
-    ////debugPrint('所有服务器均不可用，最后的错误: ${lastException?.toString()}');
-    throw lastException ?? Exception('获取应用密钥失败，请检查网络连接');
-  }
-
-  static String _b(String a) {
-    String b = a.split('').map((c) {
-      if (c.toLowerCase() != c.toUpperCase()) {
-        final d = c == c.toUpperCase();
-        final e = d ? 'A'.codeUnitAt(0) : 'a'.codeUnitAt(0);
-        return String.fromCharCode(e + 25 - (c.codeUnitAt(0) - e));
-      }
-      return c;
-    }).join('');
-
-    String f;
-    if (b.length >= 5) {
-      final g = b[0];
-      f = b.substring(1, b.length - 4) + g + b.substring(b.length - 4);
-    } else {
-      f = b;
-    }
-
-    String h = f.split('').map((i) {
-      if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) &&
-          i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
-        return String.fromCharCode('0'.codeUnitAt(0) + (10 - int.parse(i)));
-      }
-      return i;
-    }).join('');
-
-    return h.split('').map((j) {
-      if (j.toLowerCase() != j.toUpperCase()) {
-        return j == j.toLowerCase() ? j.toUpperCase() : j.toLowerCase();
-      }
-      return j;
-    }).join('');
-  }
+  static Future<String> getAppSecret() => DandanplayAuth.getAppSecret();
 
   static String generateSignature(
     String appId,
@@ -666,9 +564,11 @@ class DandanplayService {
     String apiPath,
     String appSecret,
   ) {
-    final signatureString = '$appId$timestamp$apiPath$appSecret';
-    final hash = sha256.convert(utf8.encode(signatureString));
-    return base64.encode(hash.bytes);
+    return DandanplayAuth.generateSignature(
+      timestamp: timestamp,
+      apiPath: apiPath,
+      appSecret: appSecret,
+    );
   }
 
   static Future<Map<String, dynamic>> login(
