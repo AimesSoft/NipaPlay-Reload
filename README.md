@@ -125,10 +125,14 @@ brew install --cask nipaplay-reload
 
 #### Arch Linux (AUR)
 
-从 AUR 下载 [`nipaplay-reload-bin`](https://aur.archlinux.org/packages/nipaplay-reload-bin)，或使用 AUR 助手安装：
+从 AUR 下载 二进制包 [`nipaplay-reload-bin`](https://aur.archlinux.org/packages/nipaplay-reload-bin) 或源码包 [`nipaplay-reload`](https://aur.archlinux.org/packages/nipaplay-reload)：
 
 ```bash
 yay -S nipaplay-reload-bin
+```
+或
+```bash
+yay -S nipaplay-reload
 ```
 
 > **⚠️ 安全警告**
