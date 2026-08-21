@@ -19,6 +19,7 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
+import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 
 enum _DanmakuExportFormat { json, xml }
 
@@ -307,8 +308,12 @@ class _CupertinoDanmakuSettingsPaneState
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final showBinaryDanmakuEffectToggles =
         isErikaPlayerKernel || _usesBinaryDanmakuEffectToggles;
+    final effectivePluginRenderer = PluginDanmakuRenderer.resolveForPlayback(
+      selectedRenderer: DanmakuKernelFactory.activePluginRenderer,
+      nativeDanmakuActive: isErikaPlayerKernel,
+    );
     final usesTitanSettings =
-        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
+        effectivePluginRenderer?.usesTitanSettings ?? false;
     final titan = widget.videoState.titanDanmakuSettings;
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [

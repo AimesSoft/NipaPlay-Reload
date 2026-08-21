@@ -136,7 +136,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildDanmakuOverlay(VideoPlayerState videoState) {
-    final isStableKernel = DanmakuKernelFactory.activePluginRenderer != null ||
+    final isStableKernel = videoState.isNativeDanmakuActive ||
+        DanmakuKernelFactory.activePluginRenderer != null ||
         DanmakuKernelFactory.getKernelType() ==
             DanmakuRenderEngine.nipaplayNext;
     return ValueListenableBuilder<double>(
@@ -517,6 +518,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       context,
       listen: false,
     );
+    _videoPlayerStateInstance?.setDanmakuPresentationScale(
+      widget.danmakuScale,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoPlayerUI oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.danmakuScale != widget.danmakuScale) {
+      _videoPlayerStateInstance?.setDanmakuPresentationScale(
+        widget.danmakuScale,
+      );
+    }
   }
 
   // 使用单独的方法进行安全初始化
@@ -794,6 +808,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     // Flutter background. Always restore it before this route is removed, even
     // if the native overlay's asynchronous detach races with player disposal.
     _videoPlayerStateInstance?.setWindowHostedVideoRect(null);
+    _videoPlayerStateInstance?.setDanmakuPresentationScale(1.0);
     // <<< ADDED: Clear the callback to prevent memory leaks
     _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = null;
     _contextMenuController.dispose();
