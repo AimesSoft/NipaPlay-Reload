@@ -3,18 +3,12 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/models/database/dandanplay_anime_record.dart';
-import 'package:nipaplay/models/database/bangumi_anime_record.dart';
-import 'package:nipaplay/models/database/bangumi_anime_package.dart';
-import 'package:nipaplay/models/database/bangumi_episode_record.dart';
-import 'package:nipaplay/models/database/dandanplay_anime_package.dart';
-import 'package:nipaplay/models/database/dandanplay_episode_record.dart';
-import 'package:nipaplay/models/database/dandanplay_danmaku_record.dart';
-import 'package:nipaplay/models/database/file_external_record.dart';
-import 'package:nipaplay/models/database/file_record.dart';
+import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/services/dandanplay_service_io.dart';
@@ -49,6 +43,12 @@ class DandanplayFileMatchResult {
   });
 }
 
+typedef _AnimePackage = ({
+  int animeId,
+  int? relatedAnimeId,
+  Map<double, int> episodeIdsBySortOrder,
+});
+
 /// 获取动画信息的服务类
 class AnimeInfoService {
 
@@ -67,18 +67,23 @@ class AnimeInfoService {
     final idStr = _val(ddpAniId);
     _printLine('开始刷新 $_ddpLabel Anime Package: $idStr');
 
-    final package = await getDandanplayAnimePackageByID(ddpAniId);
+    final package = await _getDandanplayAnimePackageById(ddpAniId);
     if (package == null) {
       final message = color('未获取到对应 ID 的 Dandanplay Anime Package: $idStr', ColorCode.red);
       _printLine(message);
       return;
     }
     _printLine('获取到 $_ddpLabel Anime Package: $idStr');
-    debugPrint(package.toPrintString(indent: '$_label ', enableColor: true));
 
     _printLine('');
     _printLine('开始将 $_ddpLabel Anime Package 写入数据库: $idStr');
-    await DatabaseService.upsertDanDanPlayAnimePackage(package);
+    await DatabaseService.upsertAnimeEpisodeRelation(
+      DbAnimeEpisodeRelation(
+        animeId: package.animeId,
+        episodeIds: package.episodeIdsBySortOrder.values,
+      ),
+      DbAnimeEpisodeRelationType.dandanplay,
+    );
 
     _printLine('');
     _printLine('完成刷新 $_ddpLabel Anime Package: $idStr');
@@ -90,59 +95,21 @@ class AnimeInfoService {
     final idStr = _val(bangumiAnimeId);
     _printLine('开始刷新 $_bgmLabel Anime Package: $idStr');
 
-    final package = await getBangumiAnimePackageById(bangumiAnimeId);
-    if (package == null) {
-      final message = color(
-        '未获取到对应 ID 的 $_bgmLabel Anime Package: $idStr',
-        ColorCode.red,
-      );
-      _printLine(message);
-      return;
-    }
+    final package = await _getBangumiAnimePackageById(bangumiAnimeId);
     _printLine('获取到 $_bgmLabel Anime Package: $idStr');
-    debugPrint(package.toPrintString(indent: '$_label ', enableColor: true));
 
     _printLine('');
     _printLine('开始将 $_bgmLabel Anime Package 写入数据库: $idStr');
-    await DatabaseService.upsertBangumiAnimePackage(package);
+    await DatabaseService.upsertAnimeEpisodeRelation(
+      DbAnimeEpisodeRelation(
+        animeId: package.animeId,
+        episodeIds: package.episodeIdsBySortOrder.values,
+      ),
+      DbAnimeEpisodeRelationType.bangumi,
+    );
 
     _printLine('');
     _printLine('完成刷新 $_bgmLabel Anime Package: $idStr');
-  }
-
-  /// 1. 根据 ddpEpiId 查询 dandanplay_episode 表
-  /// 2. 如果没有找到对应的记录, 则打印提示信息并直接返回
-  /// 3. 调用 API 获取弹幕 JSON
-  /// 4. 将获取到的弹幕 JSON 插入更新到 dandanplay_danmaku 表
-  static Future<void> refreshDandanplayEpisodeDanmakuById(int ddpEpiId) async {
-
-    final idStr = _val(ddpEpiId);
-    _printLine('开始刷新 Dandanplay Episode Danmaku: $idStr');
-
-    // 保证数据库中存在对应的 dandanplay_episode 记录
-    final episode = await DatabaseService.getDandanplayEpisodeRecordById(ddpEpiId);
-    if (episode == null) {
-      _printLine(color('数据库中未找到 Dandanplay Episode: $idStr', ColorCode.red));
-      return;
-    }
-
-    // 调用 API 获取弹幕 JSON
-    final danmakuJson = await getDandanplayDanmakuJsonByEpisodeId(ddpEpiId);
-    if (danmakuJson == null) {
-      _printLine(color('未获取到弹幕 JSON: $idStr', ColorCode.red));
-      return;
-    }
-
-    // 将获取到的弹幕 JSON 插入更新到 dandanplay_danmaku 表
-    _printLine('开始将 Dandanplay Episode Danmaku 写入数据库: $idStr');
-    await DatabaseService.upsertDandanplayDanmaku(
-      DbDandanplayDanmakuRecord(
-        dandanplayEpisodeId: episode.dandanplayEpisodeId,
-        danmakuJson: danmakuJson,
-      ),
-    );
-
-    _printLine('完成刷新 Dandanplay Episode Danmaku: $idStr');
   }
 
   /// 关联 Dandanplay 和 Bangumi 番剧
@@ -153,43 +120,58 @@ class AnimeInfoService {
   /// 5. 更新 dandanplay_episode 和 bangumi_episode 表, 确保被识别为相同剧集的记录其 episode_id 字段相同
   static Future<void> linkDandanplayAnimeWithBangumiAnime(int ddpAniId, int bgmAniId) async {
 
-    var dandanplayAnime = await DatabaseService.getDandanplayAnimeRecordById(ddpAniId);
-    if (dandanplayAnime == null) {
-      await refreshDandanplayAnimePackageById(ddpAniId);
-      dandanplayAnime = await DatabaseService.getDandanplayAnimeRecordById(ddpAniId);
+    final dandanplayPackage = await _getDandanplayAnimePackageById(ddpAniId);
+    if (dandanplayPackage == null) {
+      throw StateError('无法获取 Dandanplay 动画记录: $ddpAniId');
     }
-    var bangumiAnime = await DatabaseService.getBangumiAnimeRecordById(bgmAniId);
-    if (bangumiAnime == null) {
-      await refreshBangumiAnimePackageById(bgmAniId);
-      bangumiAnime = await DatabaseService.getBangumiAnimeRecordById(bgmAniId);
+    final bangumiPackage = await _getBangumiAnimePackageById(bgmAniId);
+
+    if (!await DatabaseService.hasDandanplayAnime(ddpAniId)) {
+      await DatabaseService.upsertAnimeEpisodeRelation(
+        DbAnimeEpisodeRelation(
+          animeId: ddpAniId,
+          episodeIds: dandanplayPackage.episodeIdsBySortOrder.values,
+        ),
+        DbAnimeEpisodeRelationType.dandanplay,
+      );
     }
-    if (dandanplayAnime == null || bangumiAnime == null) {
-      throw StateError('无法获取需要关联的 Dandanplay 或 Bangumi 动画记录');
+    if (!await DatabaseService.hasBangumiAnime(bgmAniId)) {
+      await DatabaseService.upsertAnimeEpisodeRelation(
+        DbAnimeEpisodeRelation(
+          animeId: bgmAniId,
+          episodeIds: bangumiPackage.episodeIdsBySortOrder.values,
+        ),
+        DbAnimeEpisodeRelationType.bangumi,
+      );
     }
 
-    await DatabaseService.linkAnimeRecordDandanplayBangumi(ddpAniId, bgmAniId);
-
-    final dandanplayEpisodes = await DatabaseService.getDandanplayEpisodeRecordsById(ddpAniId);
-    final bangumiEpisodes = await DatabaseService.getBangumiEpisodeRecordsById(bgmAniId);
-
-    // 以剧集排序信息作为匹配依据
-    final bangumiEpisodeIdBySortOrder = <double, int>{};
-    for (final episode in bangumiEpisodes) {
-      final sortOrder = episode.sortOrder;
-      if (sortOrder == null) continue;
-      bangumiEpisodeIdBySortOrder.putIfAbsent(sortOrder, () => episode.bangumiEpisodeId);
-    }
+    await DatabaseService.linkToAnime(
+      DbAnimeEpisodeRelationType.dandanplay,
+      ddpAniId,
+      ddpAniId,
+    );
+    await DatabaseService.linkToAnime(
+      DbAnimeEpisodeRelationType.bangumi,
+      bgmAniId,
+      ddpAniId,
+    );
 
     var linkedCount = 0;
-    for (final episode in dandanplayEpisodes) {
-      final sortOrder = episode.sortOrder;
-      if (sortOrder == null) continue;
-      final bangumiEpisodeId = bangumiEpisodeIdBySortOrder[sortOrder];
+    for (final entry
+        in dandanplayPackage.episodeIdsBySortOrder.entries) {
+      final bangumiEpisodeId =
+          bangumiPackage.episodeIdsBySortOrder[entry.key];
       if (bangumiEpisodeId == null) continue;
 
-      await DatabaseService.linkEpisodeRecordDandanplayBangumi(
-        episode.dandanplayEpisodeId,
+      await DatabaseService.linkToEpisode(
+        DbAnimeEpisodeRelationType.dandanplay,
+        entry.value,
+        entry.value,
+      );
+      await DatabaseService.linkToEpisode(
+        DbAnimeEpisodeRelationType.bangumi,
         bangumiEpisodeId,
+        entry.value,
       );
       linkedCount++;
     }
@@ -230,26 +212,32 @@ class AnimeInfoService {
       return;
     }
     final fileHash = await computeFileHeadMd5(file.path);
+    final assetHash = _decodeHex(fileHash);
     final fileSize = await file.length();
     final fileName = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : file.path.split('/').last;
-    final fileRecord = DbFileRecord(
-      fileHash: fileHash,
-      fileName: fileName,
-      fileSize: fileSize,
+    final extensionIndex = fileName.lastIndexOf('.');
+    final codec = extensionIndex >= 0 && extensionIndex < fileName.length - 1
+        ? fileName.substring(extensionIndex + 1).toLowerCase()
+        : null;
+    await DatabaseService.upsertAssetRecord(
+      DbAssetRecord(
+        hashPre16MiBMd5: assetHash,
+        size: fileSize,
+        codec: codec,
+      ),
     );
-    await DatabaseService.upsertMediaFile(fileRecord);
     _printLine('文件记录已写入数据库: ${_val(fileHash)}');
 
     // 决定本次使用的关联选项
     final linkOptions = priorityLinkOpt ??
-        await DatabaseService.getFileExternalRecordLinkOptions(fileHash) ??
-        DbFileExternalRecord.defaultLinkOptions;
+        await DatabaseService.getAssetLinkOptions(assetHash) ??
+        DatabaseService.defaultLinkOptions;
     _printLine('本次使用的关联选项: ${_val(linkOptions)}');
 
 
     // ------------------------------ Dandanplay ------------------------------ //
 
-    if (linkOptions & DbFileExternalRecord.linkDandanplay == 0) {
+    if (linkOptions & DatabaseService.linkDandanplay == 0) {
       _printLine(color('关联选项未开启 Dandanplay 匹配, 结束刷新', ColorCode.yellow));
       return;
     }
@@ -266,26 +254,35 @@ class AnimeInfoService {
     _printLine('匹配到 Dandanplay Anime: ${_val(ddpAniId)}, Episode: ${_val(ddpEpiId)}');
 
     // 确保数据库中存在对应的 dandanplay_episode 记录
-    var episode = await DatabaseService.getDandanplayEpisodeRecordById(ddpEpiId);
-    if (episode == null) {
+    var episodeExists =
+        await DatabaseService.hasDandanplayEpisode(ddpEpiId);
+    if (!episodeExists) {
       _printLine('数据库中未找到 Dandanplay Episode: ${_val(ddpEpiId)}, 开始刷新 Anime Package');
       await refreshDandanplayAnimePackageById(ddpAniId);
-      episode = await DatabaseService.getDandanplayEpisodeRecordById(ddpEpiId);
+      episodeExists = await DatabaseService.hasDandanplayEpisode(ddpEpiId);
     }
-    if (episode == null) {
+    if (!episodeExists) {
       _printLine(color('刷新后仍未找到 Dandanplay Episode: ${_val(ddpEpiId)}', ColorCode.red));
       return;
     }
 
     // 将文件关联到 Dandanplay Episode, 并设置弹幕偏移量
-    await DatabaseService.linkEpisodeDandanplayFile(episode.dandanplayEpisodeId, fileHash);
-    await DatabaseService.setFileExternalRecordDandanplayDanmakuOffset(fileHash, danmakuOffsetDandanplay: matchResult.danmakuOffset);
+    await DatabaseService.linkToEpisode(
+      DbAnimeEpisodeRelationType.dandanplay,
+      ddpEpiId,
+      ddpEpiId,
+    );
+    await DatabaseService.linkVideoAssetToEpisode(assetHash, ddpEpiId);
+    await DatabaseService.setAssetDanmakuOffsets(
+      assetHash,
+      dandanplay: matchResult.danmakuOffset,
+    );
     _printLine('文件已关联 Dandanplay Episode: ${_val(ddpEpiId)}, 弹幕偏移量: ${_val(matchResult.danmakuOffset)}');
 
 
     // -------------------------------- Bangumi ------------------------------- //
 
-    if (linkOptions & DbFileExternalRecord.linkBangumi == 0) {
+    if (linkOptions & DatabaseService.linkBangumi == 0) {
       _printLine(color('关联选项未开启 Bangumi 匹配, 结束刷新', ColorCode.yellow));
       return;
     }
@@ -297,12 +294,14 @@ class AnimeInfoService {
     }
 
     final bgmAniId = await DatabaseService.getBangumiAnimeIdByDandanplayEpisodeId(ddpEpiId);
-    if (bgmAniId == null) {
+    final resolvedBgmAniId =
+        bgmAniId ?? await getBangumiIdByDandanplayId(ddpAniId);
+    if (resolvedBgmAniId == null) {
       _printLine(color('Dandanplay Anime ${_val(ddpAniId)} 没有记录对应的 Bangumi Anime ID', ColorCode.red));
       return;
     }
-    _printLine('找到对应的 Bangumi Anime: ${_val(bgmAniId)}, 开始关联');
-    await linkDandanplayAnimeWithBangumiAnime(ddpAniId, bgmAniId);
+    _printLine('找到对应的 Bangumi Anime: ${_val(resolvedBgmAniId)}, 开始关联');
+    await linkDandanplayAnimeWithBangumiAnime(ddpAniId, resolvedBgmAniId);
 
     // 再次查询确认关联结果
     final refreshedBgmEpiId = await DatabaseService.getBangumiEpisodeIdByDandanplayEpisodeId(ddpEpiId);
@@ -394,163 +393,75 @@ class AnimeInfoService {
     return AnimeInfoParse.toPositiveInt(bangumi['animeId'] ?? details['animeId']);
   }
 
-  static Future<DbDandanplayAnimePackage?> getDandanplayAnimePackageByID(int ddpId) async {
+  static Future<_AnimePackage?> _getDandanplayAnimePackageById(
+    int dandanplayAnimeId,
+  ) async {
+    final details = await DandanplayService.getBangumiDetails(
+      dandanplayAnimeId,
+      useCache: false,
+    );
+    final bangumi = details['bangumi'] is Map
+        ? Map<String, dynamic>.from(details['bangumi'] as Map)
+        : <String, dynamic>{};
+    final returnedAnimeId = AnimeInfoParse.toPositiveInt(
+      bangumi['animeId'] ?? details['animeId'],
+    );
+    if (returnedAnimeId == null) return null;
 
-    Future<DbDandanplayAnimeRecord?> getDanDanPlayAnimeInfoByDanDanPlayID(int animeId) async {
-      // 这里直接调用 DandanplayService.getBangumiDetails, 并从返回的结果中提取动画信息
-      final details = await DandanplayService.getBangumiDetails(animeId, useCache: false);
-
-      final bangumi = details['bangumi'] is Map ? Map<String, dynamic>.from(details['bangumi'] as Map) : <String, dynamic>{};
-      final animeTitle = (bangumi['animeTitle'] ?? bangumi['title'] ?? '').toString().trim();
-      if (animeTitle.isEmpty) return null;
-
-      return DbDandanplayAnimeRecord(
-        dandanplayAnimeId: animeId,
-        title: animeTitle,
-        coverImageUrl: bangumi['imageUrl']?.toString(),
-        description: bangumi['description']?.toString(),
-      );
+    final rawEpisodes = bangumi['episodes'] is List
+        ? bangumi['episodes'] as List
+        : (details['episodes'] is List
+            ? details['episodes'] as List
+            : const <dynamic>[]);
+    final episodeIdsBySortOrder = <double, int>{};
+    for (final raw in rawEpisodes) {
+      if (raw is! Map) continue;
+      final episode = Map<String, dynamic>.from(raw);
+      final episodeId = AnimeInfoParse.toPositiveInt(episode['episodeId']);
+      final sortOrder = AnimeInfoParse.toDouble(episode['episodeNumber']);
+      if (episodeId == null || sortOrder == null) continue;
+      episodeIdsBySortOrder.putIfAbsent(sortOrder, () => episodeId);
     }
-
-    Future<Set<DbDandanplayEpisodeRecord>?> getDanDanPlayAnimeEpisodesByDanDanPlayID(int animeId) async {
-      final details = await DandanplayService.getBangumiDetails(animeId, useCache: false);
-
-      final bangumi = details['bangumi'] is Map ? Map<String, dynamic>.from(details['bangumi'] as Map) : <String, dynamic>{};
-      final rawEpisodes = bangumi['episodes'] is List
-          ? (bangumi['episodes'] as List)
-          : (details['episodes'] is List ? (details['episodes'] as List) : const []);
-      final bangumiTvEpisodeIdsBySortOrder =
-          await AnimeInfoParse.getBangumiTvEpisodeIdsBySortOrder(AnimeInfoParse.getBangumiTvId(bangumi));
-
-      final episodeRecords = <DbDandanplayEpisodeRecord>{};
-      for (final raw in rawEpisodes) {
-        if (raw is! Map) continue;
-        final episode = Map<String, dynamic>.from(raw);
-        final episodeId = AnimeInfoParse.toPositiveInt(episode['episodeId']);
-        if (episodeId == null) continue;
-        final sortOrder = AnimeInfoParse.toDouble(episode['episodeNumber']);
-        episodeRecords.add(
-          DbDandanplayEpisodeRecord(
-            dandanplayEpisodeId: episodeId,
-            dandanplayAnimeId: animeId,
-            bangumiTvId: bangumiTvEpisodeIdsBySortOrder[sortOrder],
-            title: episode['episodeTitle']?.toString(),
-            sortOrder: sortOrder,
-          ),
-        );
-      }
-      return episodeRecords;
-    }
-
-    final anime = await getDanDanPlayAnimeInfoByDanDanPlayID(ddpId);
-    if (anime == null) return null;
-    final episodes = await getDanDanPlayAnimeEpisodesByDanDanPlayID(ddpId);
-    final bangumiAnimeId = await getBangumiIdByDandanplayId(ddpId);
-    return DbDandanplayAnimePackage(
-      anime: DbDandanplayAnimeRecord(
-        dandanplayAnimeId: anime.dandanplayAnimeId,
-        bangumiAnimeId: bangumiAnimeId,
-        title: anime.title,
-        coverImageUrl: anime.coverImageUrl,
-        description: anime.description,
-      ),
-      episodes: episodes ?? <DbDandanplayEpisodeRecord>{},
+    return (
+      animeId: returnedAnimeId,
+      relatedAnimeId: AnimeInfoParse.getBangumiTvId(bangumi),
+      episodeIdsBySortOrder: episodeIdsBySortOrder,
     );
   }
 
-  static Future<DbBangumiAnimePackage?> getBangumiAnimePackageById(int bgmId) async {
-
-    /// 根据 Bangumi TV 条目 ID 获取可持久化的动画记录
-    Future<DbBangumiAnimeRecord> getBangumiAnimeRecordById(
-      int bangumiTvAnimeId,
-    ) async {
-      final subject = await BangumiApiService.getPublicSubject(bangumiTvAnimeId);
-      final imageUrls = subject['images'] is Map
-          ? Map<String, dynamic>.from(subject['images'] as Map)
-          : const <String, dynamic>{};
-
-      return DbBangumiAnimeRecord(
-        bangumiAnimeId: AnimeInfoParse.toPositiveInt(subject['id']) ?? bangumiTvAnimeId,
-        airDate: AnimeInfoParse.toDateTime(subject['date']),
-        title: AnimeInfoParse.getString(subject, 'name'),
-        titleCn: AnimeInfoParse.getString(subject, 'name_cn'),
-        aliases: AnimeInfoParse.getInfoboxValue(
-          subject,
-          (key) => key.contains('别名') || key.contains('Alias'),
-        ),
-        description: AnimeInfoParse.getString(subject, 'summary'),
-        episodeCount: AnimeInfoParse.toInt(subject['eps']),
-        officialSiteUrl: AnimeInfoParse.getInfoboxValue(
-          subject,
-          (key) => key.contains('官网') || key.toLowerCase().contains('official'),
-        ),
-        coverImageUrl: AnimeInfoParse.getString(imageUrls, 'large') ??
-            AnimeInfoParse.getString(imageUrls, 'common') ??
-            AnimeInfoParse.getString(imageUrls, 'medium'),
-      );
+  static Future<_AnimePackage> _getBangumiAnimePackageById(
+    int bangumiAnimeId,
+  ) async {
+    final episodes =
+        await BangumiApiService.getPublicSubjectEpisodes(bangumiAnimeId);
+    final episodeIdsBySortOrder = <double, int>{};
+    for (final episode in episodes) {
+      final episodeId = AnimeInfoParse.toPositiveInt(episode['id']);
+      final sortOrder = AnimeInfoParse.toDouble(episode['sort']);
+      if (episodeId == null || sortOrder == null) continue;
+      episodeIdsBySortOrder.putIfAbsent(sortOrder, () => episodeId);
     }
-
-    /// 根据 Bangumi TV 条目 ID 获取可持久化的剧集记录
-    Future<Set<DbBangumiEpisodeRecord>>
-        getBangumiEpisodeRecordsByAnimeId(int bangumiTvAnimeId) async {
-      final episodes =
-          await BangumiApiService.getPublicSubjectEpisodes(bangumiTvAnimeId);
-      final records = <DbBangumiEpisodeRecord>{};
-      for (final episode in episodes) {
-        final episodeId = AnimeInfoParse.toPositiveInt(episode['id']);
-        if (episodeId == null) continue;
-        records.add(
-          DbBangumiEpisodeRecord(
-            bangumiEpisodeId: episodeId,
-            bangumiAnimeId: bangumiTvAnimeId,
-            episodeNumber: AnimeInfoParse.toInt(episode['ep']),
-            sortOrder: AnimeInfoParse.toDouble(episode['sort']),
-            airDate: AnimeInfoParse.toDateTime(episode['airdate']),
-            durationSeconds: AnimeInfoParse.toInt(episode['duration_seconds']),
-            title: AnimeInfoParse.getString(episode, 'name'),
-            titleCn: AnimeInfoParse.getString(episode, 'name_cn'),
-            description: AnimeInfoParse.getString(episode, 'desc'),
-          ),
-        );
-      }
-      return records;
-    }
-
-    final animeRecord = await getBangumiAnimeRecordById(bgmId);
-    final episodeRecords = await getBangumiEpisodeRecordsByAnimeId(bgmId);
-    return DbBangumiAnimePackage(anime: animeRecord, episodes: episodeRecords);
+    return (
+      animeId: bangumiAnimeId,
+      relatedAnimeId: null,
+      episodeIdsBySortOrder: episodeIdsBySortOrder,
+    );
   }
 
-  static Future<String?> getDandanplayDanmakuJsonByEpisodeId(int ddpEpiId) async {
-    if (ddpEpiId <= 0) {
-      throw ArgumentError.value(ddpEpiId, 'ddpEpiId', '必须为正整数');
+  static Uint8List _decodeHex(String value) {
+    final normalized = value.trim();
+    if (normalized.length.isOdd ||
+        !RegExp(r'^[0-9a-fA-F]+$').hasMatch(normalized)) {
+      throw FormatException('无效的十六进制哈希');
     }
-
-    final apiPath = '/api/v2/comment/$ddpEpiId';
-    final appSecret = await DandanplayService.getAppSecret();
-    final timestamp =
-        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-    final response = await http.get(
-      Uri.parse(
-        '${await DandanplayService.getApiBaseUrl()}$apiPath?withRelated=true',
-      ),
-      headers: <String, String>{
-        'Accept': 'application/json',
-        'User-Agent': DandanplayService.userAgent,
-        'X-AppId': DandanplayService.appId,
-        'X-Signature': DandanplayService.generateSignature(
-          DandanplayService.appId,
-          timestamp,
-          apiPath,
-          appSecret,
+    return Uint8List.fromList(
+      List<int>.generate(
+        normalized.length ~/ 2,
+        (index) => int.parse(
+          normalized.substring(index * 2, index * 2 + 2),
+          radix: 16,
         ),
-        'X-Timestamp': '$timestamp',
-      },
+      ),
     );
-    if (response.statusCode != 200) return null;
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map || decoded['comments'] is! List) return null;
-    return response.body;
   }
 }

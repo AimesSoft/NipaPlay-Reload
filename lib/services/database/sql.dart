@@ -1,197 +1,60 @@
+import 'package:flutter/services.dart';
+
 class DatabaseSql {
+
   const DatabaseSql._();
 
-  static const animeTable = 'anime';
-  static const episodeTable = 'episode';
-  static const dandanplayAnimeTable = 'dandanplay_anime';
-  static const dandanplayEpisodeTable = 'dandanplay_episode';
-  static const dandanplayDanmakuTable = 'dandanplay_danmaku';
-  static const bangumiAnimeTable = 'bangumi_anime';
-  static const bangumiEpisodeTable = 'bangumi_episode';
-  static const fileTable = 'file';
-  static const fileExternalTable = 'file_external';
-  static const watchHistoryTable = 'watch_history';
-  static const sourceTable = 'source';
-  static const addressTable = 'address';
+  static const _directory = 'assets/sql';
 
-  static const animeId = 'anime_id';
-  static const episodeId = 'episode_id';
-  static const dandanplayAnimeId = 'dandanplay_anime_id';
-  static const dandanplayEpisodeId = 'dandanplay_episode_id';
-  static const bangumiAnimeId = 'bangumi_anime_id';
-  static const bangumiEpisodeId = 'bangumi_episode_id';
-  static const fileHash = 'file_hash';
-  static const danmakuOffsetDandanplay = 'danmaku_offset_dandanplay';
-  static const danmakuOffsetUser = 'danmaku_offset_user';
-  static const linkOptions = 'linkOptions';
-
-  static const createAnimeTable = '''
-    CREATE TABLE $animeTable(
-      $animeId INTEGER PRIMARY KEY
-    )
-  ''';
-
-  static const createEpisodeTable = '''
-    CREATE TABLE $episodeTable(
-      $episodeId INTEGER PRIMARY KEY,
-      $animeId INTEGER NOT NULL,
-      FOREIGN KEY ($animeId) REFERENCES $animeTable ($animeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createDandanplayAnimeTable = '''
-    CREATE TABLE $dandanplayAnimeTable(
-      $dandanplayAnimeId INTEGER PRIMARY KEY,
-      $animeId INTEGER NOT NULL,
-      $bangumiAnimeId INTEGER,
-      cover_image_url TEXT,
-      title TEXT,
-      description TEXT,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($animeId) REFERENCES $animeTable ($animeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createDandanplayEpisodeTable = '''
-    CREATE TABLE $dandanplayEpisodeTable(
-      $dandanplayEpisodeId INTEGER PRIMARY KEY,
-      $episodeId INTEGER NOT NULL,
-      $dandanplayAnimeId INTEGER NOT NULL,
-      title TEXT,
-      sort_order REAL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($episodeId) REFERENCES $episodeTable ($episodeId) ON DELETE CASCADE,
-      FOREIGN KEY ($dandanplayAnimeId) REFERENCES $dandanplayAnimeTable ($dandanplayAnimeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createDandanplayDanmakuTable = '''
-    CREATE TABLE $dandanplayDanmakuTable(
-      $dandanplayEpisodeId INTEGER PRIMARY KEY,
-      danmaku_json TEXT,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($dandanplayEpisodeId) REFERENCES $dandanplayEpisodeTable ($dandanplayEpisodeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createBangumiAnimeTable = '''
-    CREATE TABLE $bangumiAnimeTable(
-      $bangumiAnimeId INTEGER PRIMARY KEY,
-      $animeId INTEGER NOT NULL,
-      air_date TEXT,
-      title TEXT,
-      title_cn TEXT,
-      aliases TEXT,
-      description TEXT,
-      episode_count INTEGER,
-      url_official_site TEXT,
-      url_cover TEXT,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($animeId) REFERENCES $animeTable ($animeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createBangumiEpisodeTable = '''
-    CREATE TABLE $bangumiEpisodeTable(
-      $bangumiEpisodeId INTEGER PRIMARY KEY,
-      $episodeId INTEGER NOT NULL,
-      $bangumiAnimeId INTEGER NOT NULL,
-      episode_number INTEGER,
-      sort_order REAL,
-      air_date TEXT,
-      duration_seconds INTEGER,
-      title TEXT,
-      title_cn TEXT,
-      description TEXT,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($episodeId) REFERENCES $episodeTable ($episodeId) ON DELETE CASCADE,
-      FOREIGN KEY ($bangumiAnimeId) REFERENCES $bangumiAnimeTable ($bangumiAnimeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createFileTable = '''
-    CREATE TABLE $fileTable(
-      $fileHash TEXT PRIMARY KEY,
-      $episodeId INTEGER NOT NULL,
-      file_name TEXT,
-      file_size INTEGER,
-      duration INTEGER,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY ($episodeId) REFERENCES $episodeTable ($episodeId) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createFileExternalTable = '''
-    CREATE TABLE $fileExternalTable(
-      $fileHash TEXT PRIMARY KEY,
-      $danmakuOffsetDandanplay REAL,
-      $danmakuOffsetUser REAL,
-      $linkOptions INTEGER,
-      FOREIGN KEY ($fileHash) REFERENCES $fileTable ($fileHash) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createWatchHistoryTable = '''
-    CREATE TABLE $watchHistoryTable(
-      $episodeId INTEGER PRIMARY KEY,
-      $fileHash TEXT NOT NULL,
-      watch_progress REAL NOT NULL,
-      last_position INTEGER NOT NULL,
-      duration INTEGER NOT NULL,
-      last_watch_time TEXT NOT NULL,
-      thumbnail_path TEXT,
-      FOREIGN KEY ($episodeId) REFERENCES $episodeTable ($episodeId) ON DELETE CASCADE,
-      FOREIGN KEY ($fileHash) REFERENCES $fileTable ($fileHash) ON DELETE CASCADE
-    )
-  ''';
-
-  static const createSourceTable = '''
-    CREATE TABLE $sourceTable(
-      id TEXT PRIMARY KEY,
-      source_type TEXT NOT NULL,
-      url TEXT NOT NULL,
-      username TEXT,
-      password TEXT,
-      metadata_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  ''';
-
-  static const createAddressTable = '''
-    CREATE TABLE $addressTable(
-      source_id TEXT NOT NULL,
-      relative_path TEXT NOT NULL,
-      $fileHash TEXT,
-      last_synced_at TEXT NOT NULL,
-      PRIMARY KEY (source_id, relative_path),
-      FOREIGN KEY (source_id) REFERENCES $sourceTable (id) ON DELETE CASCADE,
-      FOREIGN KEY ($fileHash) REFERENCES $fileTable ($fileHash) ON DELETE SET NULL
-    )
-  ''';
-
-  static const createIndexes = <String>[
-    'CREATE INDEX idx_dandanplay_episode_anime_id ON $dandanplayEpisodeTable($dandanplayAnimeId)',
-    'CREATE INDEX idx_bangumi_episode_anime_id ON $bangumiEpisodeTable($bangumiAnimeId)',
-    'CREATE INDEX idx_media_file_episode_id ON $fileTable($episodeId)',
-    'CREATE INDEX idx_watch_history_file_hash ON $watchHistoryTable($fileHash)',
-    'CREATE INDEX idx_watch_history_last_watch_time ON $watchHistoryTable(last_watch_time)',
-    'CREATE INDEX idx_media_address_file_hash ON $addressTable($fileHash)',
+  static const _createTableFiles = <String>[
+    'create_anime_table.sql',
+    'create_episode_table.sql',
+    'create_dandanplay_anime_table.sql',
+    'create_dandanplay_episode_table.sql',
+    'create_bangumi_anime_table.sql',
+    'create_bangumi_episode_table.sql',
+    'create_asset_table.sql',
+    'create_net_asset_table.sql',
+    'create_path_asset_table.sql',
+    'create_asset_episode_table.sql',
+    'create_episode_watch_status_table.sql',
   ];
 
-  static const createTables = <String>[
-    createAnimeTable,
-    createEpisodeTable,
-    createDandanplayAnimeTable,
-    createDandanplayEpisodeTable,
-    createDandanplayDanmakuTable,
-    createBangumiAnimeTable,
-    createBangumiEpisodeTable,
-    createFileTable,
-    createFileExternalTable,
-    createWatchHistoryTable,
-    createSourceTable,
-    createAddressTable,
+  static const _createIndexFiles = <String>[
+    'create_episode_anime_id_index.sql',
+    'create_dandanplay_anime_anime_id_index.sql',
+    'create_dandanplay_episode_anime_id_index.sql',
+    'create_dandanplay_episode_episode_id_index.sql',
+    'create_bangumi_anime_anime_id_index.sql',
+    'create_bangumi_episode_anime_id_index.sql',
+    'create_bangumi_episode_episode_id_index.sql',
+    'create_net_asset_hash_index.sql',
+    'create_path_asset_hash_index.sql',
+    'create_asset_episode_episode_id_index.sql',
+    'create_watch_status_video_hash_index.sql',
+    'create_watch_status_thumbnail_hash_index.sql',
+    'create_watch_status_last_watch_time_index.sql',
   ];
+
+  static const enableForeignKeys = 'PRAGMA foreign_keys = ON';
+  static const selectTableNames = '''
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+  ''';
+  static const insertAnime = 'INSERT INTO anime DEFAULT VALUES';
+
+  static late final List<String> createTables;
+  static late final List<String> createIndexes;
+
+  static Future<void>? _loadFuture;
+
+  static Future<void> load() => _loadFuture ??= _loadAll();
+
+  static Future<void> _loadAll() async {
+    createTables = await Future.wait(_createTableFiles.map(_load));
+    createIndexes = await Future.wait(_createIndexFiles.map(_load));
+  }
+
+  static Future<String> _load(String fileName) => rootBundle.loadString('$_directory/$fileName');
 }

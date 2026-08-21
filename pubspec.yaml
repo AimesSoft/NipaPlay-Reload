@@ -264,6 +264,7 @@ flutter:
     - assets/shaders/crt/
     - assets/plugins/builtin/
     - assets/plugins/custom/
+    - assets/sql/
   # GPU着色器文件
   shaders:
     - assets/shaders/danmaku/msdf_text.frag

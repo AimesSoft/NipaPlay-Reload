@@ -1,0 +1,2 @@
+CREATE INDEX idx_dandanplay_episode_anime_id
+ON dandanplay_episode (dandanplay_anime_id);

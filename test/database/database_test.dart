@@ -2,57 +2,173 @@
 // test/database/database_test.dart
 // 数据库相关测试
 
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/database/database_service.dart';
-import 'package:nipaplay/utils/color.dart';
-
-import '../environment_variables.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('给定数据库路径后打印相关数据', () async {
+  test('upsert 与 link 方法建立统一 Anime, Episode 和视频资产关联', () async {
 
-    bool canRun = true;
-
-    final envDbPath = Platform.environment[TestEnvironmentVariables.databasePath]?.trim();
-    if (envDbPath == null || envDbPath.isEmpty) {
-      const envVarName = TestEnvironmentVariables.databasePath;
-      debugPrint('${color('测试数据库路径: $envVarName', ColorCode.boldCyan)}: ${color('未设置', ColorCode.red)}');
-      canRun = false;
-    }
-    if (!canRun) {
-      debugPrint(color('测试未运行', ColorCode.red));
-      return;
+    void session(String message) => debugPrint('\n=== $message ===');
+    void log(String message) => debugPrint('[Database upsert/link] $message');
+    Future<void> endSession(String message) async {
+      debugPrint('--- $message 结束: Anime/Episode 表完整状态 ---');
+      await DatabaseService.printAnimeEpisodeTables();
     }
 
-    final dbPath = envDbPath!;
-    debugPrint('${color('测试数据库路径', ColorCode.boldCyan)}: $dbPath');
 
-    await DatabaseService.initialize(dbPath);
+    session('初始化内存数据库');
+    await DatabaseService.initialize(inMemoryDatabasePath);
+    log(await DatabaseService.getTableNames());
+    await endSession('初始化内存数据库');
 
-    try {
-      final String dbLabel = color('[DB]', ColorCode.blue);
 
-      // 打印出所有表格
-      debugPrint('$dbLabel 打印所有表格');
-      final tables = await DatabaseService.getTableNames();
-      debugPrint('$dbLabel tables: $tables');
+    session('首次写入');
+    log('写入 Dandanplay Anime=10, Episodes=[101, 102]');
+    await DatabaseService.upsertAnimeEpisodeRelation(
+      DbAnimeEpisodeRelation(
+        animeId: 10,
+        episodeIds: const <int>[101, 102],
+      ),
+      DbAnimeEpisodeRelationType.dandanplay,
+    );
+    log('写入 Bangumi Anime=20, Episodes=[201, 202]');
+    await DatabaseService.upsertAnimeEpisodeRelation(
+      DbAnimeEpisodeRelation(
+        animeId: 20,
+        episodeIds: const <int>[201, 202],
+      ),
+      DbAnimeEpisodeRelationType.bangumi,
+    );
 
-      // 打印出 Anime 表的前 5 条记录
-      debugPrint('$dbLabel 打印 Anime 表的前 5 条记录');
-      final animeRecords = await DatabaseService.getAnimeRecords(5);
-      for (final record in animeRecords) { debugPrint('$dbLabel anime record: ${record.toMap()}'); }
+    final hasDandanplayAnime = await DatabaseService.hasDandanplayAnime(10);
+    final hasBangumiAnime = await DatabaseService.hasBangumiAnime(20);
+    final hasDandanplayEpisode = await DatabaseService.hasDandanplayEpisode(101);
+    log(
+      '首次 upsert: Dandanplay Anime=$hasDandanplayAnime, '
+      'Bangumi Anime=$hasBangumiAnime, '
+      'Dandanplay Episode 101=$hasDandanplayEpisode',
+    );
+    expect(hasDandanplayAnime, isTrue);
+    expect(hasBangumiAnime, isTrue);
+    expect(hasDandanplayEpisode, isTrue);
+    await endSession('首次写入');
 
-    } catch (e) {
-      debugPrint('数据库测试失败: $e');
-      rethrow;
 
-    } finally {
-      // await db.close(); // DatabaseService does not expose the db instance anymore
-    }
+    session('增量写入');
+    log('增量写入 Dandanplay Anime=10, Episodes=[101, 102, 103]');
+    await DatabaseService.upsertAnimeEpisodeRelation(
+      DbAnimeEpisodeRelation(
+        animeId: 10,
+        episodeIds: const <int>[101, 102, 103],
+      ),
+      DbAnimeEpisodeRelationType.dandanplay,
+    );
+    final hasAddedEpisode = await DatabaseService.hasDandanplayEpisode(103);
+    log('增量 upsert: Dandanplay Episode 103=$hasAddedEpisode');
+    expect(hasAddedEpisode, isTrue);
+    await endSession('增量写入');
+
+
+    session('建立 Anime 关联');
+    const targetAnimeId = 9000;
+    log('关联 Dandanplay Anime 10 -> 通用 Anime $targetAnimeId');
+    await DatabaseService.linkToAnime(
+      DbAnimeEpisodeRelationType.dandanplay,
+      10,
+      targetAnimeId,
+    );
+    log('关联 Bangumi Anime 20 -> 通用 Anime $targetAnimeId');
+    await DatabaseService.linkToAnime(
+      DbAnimeEpisodeRelationType.bangumi,
+      20,
+      targetAnimeId,
+    );
+    final linkedBangumiAnimeId = await DatabaseService.getBangumiAnimeIdByDandanplayEpisodeId(101);
+    log(
+      'Anime 关联查询: Dandanplay Episode 101 -> '
+      'Bangumi Anime $linkedBangumiAnimeId',
+    );
+    expect(linkedBangumiAnimeId, 20);
+    await endSession('建立 Anime 关联');
+
+
+    session('建立 Episode 关联');
+    const targetEpisodeId = 9101;
+    log('关联 Dandanplay Episode 101 -> 通用 Episode $targetEpisodeId');
+    await DatabaseService.linkToEpisode(
+      DbAnimeEpisodeRelationType.dandanplay,
+      101,
+      targetEpisodeId,
+    );
+    log('关联 Bangumi Episode 201 -> 通用 Episode $targetEpisodeId');
+    await DatabaseService.linkToEpisode(
+      DbAnimeEpisodeRelationType.bangumi,
+      201,
+      targetEpisodeId,
+    );
+    final linkedBangumiEpisodeId = await DatabaseService.getBangumiEpisodeIdByDandanplayEpisodeId(101);
+    log(
+      'Episode 关联查询: Dandanplay Episode 101 -> '
+      'Bangumi Episode $linkedBangumiEpisodeId',
+    );
+    expect(linkedBangumiEpisodeId, 201);
+    await endSession('建立 Episode 关联');
+
+
+    session('建立视频资产关联');
+    final assetHash = Uint8List.fromList(
+      List<int>.generate(16, (index) => index),
+    );
+    log('写入资产: hash=${_toHex(assetHash)}, size=1024, codec=mkv');
+    await DatabaseService.upsertAssetRecord(
+      DbAssetRecord(
+        hashPre16MiBMd5: assetHash,
+        size: 1024,
+        codec: 'mkv',
+      ),
+    );
+    log('关联资产 -> 通用 Episode $targetEpisodeId');
+    await DatabaseService.linkVideoAssetToEpisode(
+      assetHash,
+      targetEpisodeId,
+    );
+    final linkedDandanplayEpisodeId = await DatabaseService.getDandanplayEpisodeIdByAssetHash(assetHash);
+    log(
+      '资产关联查询: hash=${_toHex(assetHash)} -> '
+      'Dandanplay Episode $linkedDandanplayEpisodeId',
+    );
+    expect(linkedDandanplayEpisodeId, 101);
+
+    log('写入资产设置: linkOptions=1, offsets=1.5/2.0');
+    await DatabaseService.setAssetLinkOptions(
+      assetHash,
+      DatabaseService.linkDandanplay,
+    );
+    await DatabaseService.setAssetDanmakuOffsets(
+      assetHash,
+      dandanplay: 1.5,
+      user: 2.0,
+    );
+    final linkOptions = await DatabaseService.getAssetLinkOptions(assetHash);
+    final dandanplayOffset = await DatabaseService.getAssetDandanplayDanmakuOffset(assetHash);
+    final userOffset = await DatabaseService.getAssetUserDanmakuOffset(assetHash);
+    log(
+      '资产设置查询: linkOptions=$linkOptions, '
+      'DandanplayOffset=$dandanplayOffset, UserOffset=$userOffset',
+    );
+    expect(linkOptions, DatabaseService.linkDandanplay);
+    expect(dandanplayOffset, 1.5);
+    expect(userOffset, 2.0);
+    await endSession('建立视频资产关联');
+    log('全部 upsert/link 断言通过');
   });
 }
+
+String _toHex(Uint8List bytes) => bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
