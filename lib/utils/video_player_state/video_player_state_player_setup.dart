@@ -1,5 +1,20 @@
 part of video_player_state;
 
+@visibleForTesting
+String preferredPlaybackErrorDetail({
+  String? specificError,
+  String? mediaLoadError,
+  required Object fallback,
+}) {
+  for (final candidate in <String?>[specificError, mediaLoadError]) {
+    final detail = candidate?.trim();
+    if (detail != null && detail.isNotEmpty) {
+      return detail;
+    }
+  }
+  return fallback.toString();
+}
+
 extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   Future<void> initializePlayer(
     String videoPath, {
@@ -479,9 +494,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
         readyStopwatch.stop();
         if (!mediaReady) {
-          final detail = player.mediaInfo.specificErrorMessage ??
-              player.mediaLoadError ??
-              (isNetworkMedia ? '网络媒体在重试后仍未返回有效数据' : '媒体未返回有效轨道或时长');
+          final detail = preferredPlaybackErrorDetail(
+            specificError: player.mediaInfo.specificErrorMessage,
+            mediaLoadError: player.mediaLoadError,
+            fallback: isNetworkMedia ? '网络媒体在重试后仍未返回有效数据' : '媒体未返回有效轨道或时长',
+          );
           throw TimeoutException(detail);
         }
         debugPrint(
@@ -1120,12 +1137,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
       if (mediaPrepareStarted && !mediaPrepareCompleted) {
-        final message = '播放器打开媒体失败: $e';
+        final detail = preferredPlaybackErrorDetail(
+          specificError: player.mediaInfo.specificErrorMessage,
+          mediaLoadError: player.mediaLoadError,
+          fallback: e,
+        );
+        final message = '播放器打开媒体失败: $detail';
         debugPrint(
-          '[VideoPlayerState] Media prepare failed for $videoPath: $e',
+          '[VideoPlayerState] Media prepare failed for $videoPath: $detail',
         );
         _error = message;
         _setStatus(PlayerStatus.error, message: message);
+        _notifySeriousPlaybackErrorAfterFrame(
+          expectedPlaybackGeneration: initializationGeneration,
+        );
         return;
       }
       _error = '初始化视频播放器时出错: $e';
@@ -1133,6 +1158,28 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 尝试恢复
       _tryRecoverFromError();
     }
+  }
+
+  void _notifySeriousPlaybackErrorAfterFrame({
+    int? expectedPlaybackGeneration,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_isDisposed ||
+          (expectedPlaybackGeneration != null &&
+              expectedPlaybackGeneration != _playbackGeneration)) {
+        return;
+      }
+      await handleBackButton();
+      if (_isDisposed) return;
+      final callback = onSeriousPlaybackErrorAndShouldPop;
+      if (callback == null) {
+        debugPrint(
+          '[VideoPlayerState] Serious playback error callback is unavailable',
+        );
+        return;
+      }
+      callback();
+    });
   }
 
   void _startBackgroundDanmakuLoading(

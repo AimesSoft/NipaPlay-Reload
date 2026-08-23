@@ -1532,15 +1532,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             _duration = Duration.zero;
             _bufferedPositionMs = 0;
 
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
-              await handleBackButton();
-
-              // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
-
-              // 3. 通知UI层执行pop/显示对话框等
-              onSeriousPlaybackErrorAndShouldPop?.call();
-            });
+            _notifySeriousPlaybackErrorAfterFrame();
 
             return;
           }
