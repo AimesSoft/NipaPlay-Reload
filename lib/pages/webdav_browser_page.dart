@@ -55,6 +55,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   List<WebDAVFile> _currentFiles = [];
   // 加载状态
   bool _isLoading = false;
+  int _directoryLoadGeneration = 0;
+  String? _loadedDirectoryConnectionId;
+  String? _loadedDirectoryPath;
   // 是否正在初始化
   bool _isInitializing = true;
 
@@ -119,25 +122,48 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
   }
 
-  Future<void> _loadDirectory({bool isRecursive = false}) async {
-    if (_currentConnection == null) return;
-    // 只在非递归调用时检查 _isLoading，避免重入
-    if (!isRecursive && _isLoading) return;
+  Future<void> _loadDirectory({
+    bool forceRefresh = false,
+  }) async {
+    final connection = _currentConnection;
+    if (connection == null) return;
+    final path = _currentPath;
+    final generation = ++_directoryLoadGeneration;
+    final keepCurrentFiles = _loadedDirectoryConnectionId == connection.id &&
+        _loadedDirectoryPath == path;
 
     setState(() {
       _isLoading = true;
+      if (!keepCurrentFiles) {
+        _currentFiles = [];
+      }
     });
 
     try {
       final files = await WebDAVService.instance.listDirectory(
-        _currentConnection!,
-        _currentPath,
+        connection,
+        path,
+        forceRefresh: forceRefresh,
       );
+
+      if (!mounted ||
+          generation != _directoryLoadGeneration ||
+          _currentConnection?.id != connection.id ||
+          _currentPath != path) {
+        return;
+      }
 
       // 应用排序预设
       final provider =
           Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
-      WebDAVFileSorter.sort(files, provider.sortPreset);
+      await WebDAVFileSorter.sortAsync(files, provider.sortPreset);
+
+      if (!mounted ||
+          generation != _directoryLoadGeneration ||
+          _currentConnection?.id != connection.id ||
+          _currentPath != path) {
+        return;
+      }
 
       // 检查是否需要自动进入 Season 文件夹
       if (provider.autoEnterSeasonFolder) {
@@ -154,7 +180,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             _currentPath = matchPath;
           });
           // 递归加载（标记为递归调用）
-          await _loadDirectory(isRecursive: true);
+          await _loadDirectory();
           return;
         }
       }
@@ -162,11 +188,16 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       if (mounted) {
         setState(() {
           _currentFiles = files;
+          _loadedDirectoryConnectionId = connection.id;
+          _loadedDirectoryPath = path;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted &&
+          generation == _directoryLoadGeneration &&
+          _currentConnection?.id == connection.id &&
+          _currentPath == path) {
         setState(() {
           _isLoading = false;
         });
@@ -614,6 +645,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               secondaryTextColor: secondaryTextColor,
               accentColor: accentColor,
             ),
+            if (_isLoading && _currentFiles.isNotEmpty)
+              LinearProgressIndicator(color: accentColor),
             // 文件列表或搜索结果
             Expanded(
               child: _isSearchMode
@@ -623,7 +656,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                       secondaryTextColor: secondaryTextColor,
                       accentColor: accentColor,
                     )
-                  : _isLoading
+                  : _isLoading && _currentFiles.isEmpty
                       ? Center(
                           child: CircularProgressIndicator(
                               color: AppAccentColors.current),
@@ -683,6 +716,12 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
           label: '服务器',
           onPressed: _showServerSelector,
         ),
+        NipaplayLargeScreenActionButton(
+          icon: Icons.refresh_rounded,
+          label: _isLoading ? '刷新中' : '刷新',
+          onPressed:
+              _isLoading ? null : () => _loadDirectory(forceRefresh: true),
+        ),
         if (provider.enableSearch)
           NipaplayLargeScreenActionButton(
             icon: _isSearchMode ? Icons.close_rounded : Icons.search_rounded,
@@ -710,6 +749,10 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isLoading && _currentFiles.isNotEmpty) ...[
+            LinearProgressIndicator(color: accentColor),
+            const SizedBox(height: 10),
+          ],
           if (_isSearchMode) ...[
             _buildLargeScreenSearchBar(
               textColor: textColor,
@@ -853,7 +896,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     required Color secondaryTextColor,
     required Color accentColor,
   }) {
-    if (_isLoading) {
+    if (_isLoading && _currentFiles.isEmpty) {
       return Center(
         child: CircularProgressIndicator(color: AppAccentColors.current),
       );
@@ -1259,6 +1302,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     });
                   },
                 ),
+              IconButton(
+                tooltip: '刷新目录',
+                icon: Icon(Icons.refresh, color: textColor),
+                onPressed: _isLoading
+                    ? null
+                    : () => _loadDirectory(forceRefresh: true),
+              ),
             ],
           ),
           // 搜索输入框（搜索模式下显示）

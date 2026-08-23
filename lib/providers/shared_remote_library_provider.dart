@@ -1090,6 +1090,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   Future<List<WebDAVFile>> listRemoteWebDAVDirectory({
     required String name,
     required String path,
+    bool forceRefresh = false,
   }) async {
     final host = activeHost;
     if (host == null) {
@@ -1112,7 +1113,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         host: host,
         name: sanitizedName,
         path: path,
+        forceRefresh: forceRefresh,
       ),
+      forceRefresh: forceRefresh,
     );
   }
 
@@ -1120,11 +1123,16 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     required SharedRemoteHost host,
     required String name,
     required String path,
+    required bool forceRefresh,
   }) async {
     try {
       final uri =
           Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
-              .replace(queryParameters: {'name': name, 'path': path});
+              .replace(queryParameters: {
+        'name': name,
+        'path': path,
+        if (forceRefresh) 'refresh': 'true',
+      });
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
 
@@ -1361,6 +1369,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   Future<List<SMBFileEntry>> listRemoteSMBDirectory({
     required String name,
     required String path,
+    bool forceRefresh = false,
   }) async {
     final host = activeHost;
     if (host == null) {
@@ -1383,7 +1392,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         host: host,
         name: sanitizedName,
         path: path,
+        forceRefresh: forceRefresh,
       ),
+      forceRefresh: forceRefresh,
     );
   }
 
@@ -1391,10 +1402,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     required SharedRemoteHost host,
     required String name,
     required String path,
+    required bool forceRefresh,
   }) async {
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/list')
-          .replace(queryParameters: {'name': name, 'path': path});
+          .replace(queryParameters: {
+        'name': name,
+        'path': path,
+        if (forceRefresh) 'refresh': 'true',
+      });
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
 

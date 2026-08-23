@@ -304,9 +304,14 @@ class SMBService {
 
   Future<List<SMBFileEntry>> listDirectory(
     SMBConnection connection,
-    String path,
-  ) async {
-    final files = await _listDirectoryAllCached(connection, path);
+    String path, {
+    bool forceRefresh = false,
+  }) async {
+    final files = await _listDirectoryAllCached(
+      connection,
+      path,
+      forceRefresh: forceRefresh,
+    );
     return files
         .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
         .toList();
@@ -314,15 +319,21 @@ class SMBService {
 
   Future<List<SMBFileEntry>> listDirectoryAll(
     SMBConnection connection,
-    String path,
-  ) {
-    return _listDirectoryAllCached(connection, path);
+    String path, {
+    bool forceRefresh = false,
+  }) {
+    return _listDirectoryAllCached(
+      connection,
+      path,
+      forceRefresh: forceRefresh,
+    );
   }
 
   Future<List<SMBFileEntry>> _listDirectoryAllCached(
     SMBConnection connection,
-    String path,
-  ) {
+    String path, {
+    bool forceRefresh = false,
+  }) {
     final normalizedConnection = _normalizeConnection(connection);
     final normalizedPath = _normalizePath(path);
     final key = (
@@ -337,6 +348,7 @@ class SMBService {
     return _directoryCache.getOrLoad(
       key,
       () => _fetchDirectoryAll(normalizedConnection, normalizedPath),
+      forceRefresh: forceRefresh,
     );
   }
 

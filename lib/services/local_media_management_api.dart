@@ -152,6 +152,8 @@ class LocalMediaManagementApi {
   Future<Response> _handleListWebDAV(Request request) async {
     final name = request.url.queryParameters['name']?.trim();
     final path = request.url.queryParameters['path']?.trim() ?? '/';
+    final forceRefresh =
+        request.url.queryParameters['refresh']?.toLowerCase() == 'true';
     if (name == null || name.isEmpty) {
       return _jsonError(HttpStatus.badRequest, 'Missing name');
     }
@@ -162,7 +164,11 @@ class LocalMediaManagementApi {
     }
 
     try {
-      final files = await _webdavService.listDirectory(connection, path);
+      final files = await _webdavService.listDirectory(
+        connection,
+        path,
+        forceRefresh: forceRefresh,
+      );
       final entries = files
           .map((file) => {
                 'name': file.name,
@@ -325,6 +331,8 @@ class LocalMediaManagementApi {
   Future<Response> _handleListSMB(Request request) async {
     final name = request.url.queryParameters['name']?.trim();
     final path = request.url.queryParameters['path']?.trim() ?? '/';
+    final forceRefresh =
+        request.url.queryParameters['refresh']?.toLowerCase() == 'true';
     if (name == null || name.isEmpty) {
       return _jsonError(HttpStatus.badRequest, 'Missing name');
     }
@@ -335,7 +343,11 @@ class LocalMediaManagementApi {
     }
 
     try {
-      final files = await _smbService.listDirectory(connection, path);
+      final files = await _smbService.listDirectory(
+        connection,
+        path,
+        forceRefresh: forceRefresh,
+      );
       final entries = files
           .map((file) => {
                 'name': file.name,
