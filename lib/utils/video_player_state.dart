@@ -56,6 +56,7 @@ import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/emby_media_selection.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -631,6 +632,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int? _animeId; // 存储从 historyItem 传入的 animeId
   WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
   PlaybackDetailContext? _playbackDetailContext;
+  String? _currentMediaKey;
   final PlaybackPlaylistCache _playbackPlaylistCache = PlaybackPlaylistCache();
 
   // 字幕管理器
@@ -1339,6 +1341,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   List<String> get crtShaderPaths => List.unmodifiable(_crtShaderPaths);
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
+  String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>

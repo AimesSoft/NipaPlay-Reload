@@ -1461,7 +1461,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
             final filePath =
-                MediaSourceUtils.buildWebDavPath(connection.name, file.path);
+                MediaSourceUtils.buildWebDavPath(connection.id, file.path);
             videoFiles.add(_VideoFileItem(
               path: filePath,
               displayName: fileName,
@@ -1500,7 +1500,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
             final filePath =
-                MediaSourceUtils.buildSmbPath(connection.name, file.path);
+                MediaSourceUtils.buildSmbPath(connection.id, file.path);
             videoFiles.add(_VideoFileItem(
               path: filePath,
               displayName: fileName,

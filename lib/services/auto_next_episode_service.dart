@@ -49,12 +49,24 @@ class AutoNextEpisodeService {
     debugPrint('[自动播放] 开始检查下一话: $currentVideoPath');
 
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    final nextEpisode = await videoState.nextPlaylistEpisode();
+    final cursor = await _resolvePlaylistCursor(videoState);
     if (!context.mounted) return;
-    if (nextEpisode == null) {
-      debugPrint('[自动播放] 当前播放列表没有下一项，不显示倒计时');
-      _showNoNextEpisodeMessage(context);
-      return;
+    late final PlaybackDetailEpisode nextEpisode;
+    switch (cursor) {
+      case PlaylistHasNext(:final episode):
+        nextEpisode = episode;
+      case PlaylistAtEnd():
+        debugPrint('[自动播放] 当前播放列表已到最后一项，不显示倒计时');
+        _showNoNextEpisodeMessage(context);
+        return;
+      case PlaylistCurrentNotFound():
+        debugPrint('[自动播放] 刷新播放列表后仍无法定位当前项，取消本次续播');
+        BlurSnackBar.show(context, '无法确认当前播放项，未执行自动续播');
+        return;
+      case PlaylistLoadFailed(:final error):
+        debugPrint('[自动播放] 播放列表加载失败: $error');
+        BlurSnackBar.show(context, '播放列表加载失败，未执行自动续播');
+        return;
     }
 
     // 加载播放列表期间可能已经切换了视频，丢弃过期结果。
@@ -72,6 +84,17 @@ class AutoNextEpisodeService {
         '[AutoNext] 调用_startCountdown, nextEpisode=${_nextEpisode?.videoPath}');
     // 显示初始倒计时消息
     _startCountdown(context);
+  }
+
+  Future<PlaylistCursorResult> _resolvePlaylistCursor(
+    VideoPlayerState videoState,
+  ) async {
+    var result = await videoState.resolvePlaylistCursor();
+    if (result is PlaylistCurrentNotFound) {
+      debugPrint('[自动播放] 缓存列表未定位到当前项，强制刷新后重试');
+      result = await videoState.resolvePlaylistCursor(forceRefresh: true);
+    }
+    return result;
   }
 
   // 取消自动播放
@@ -222,18 +245,31 @@ class AutoNextEpisodeService {
     }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     // 倒计时期间播放列表可能变化，播放前必须以当前列表重新判定。
-    final nextEpisode = await videoState.nextPlaylistEpisode();
+    final cursor = await _resolvePlaylistCursor(videoState);
     if (!context.mounted) return;
-    if (nextEpisode == null) {
-      _nextEpisode = null;
-      // 只有在倒计时未被取消的情况下才显示"没有下一话"提示。
-      // 退出播放器等场景会先调用 cancelAutoNext() 设置 _isCancelled=true，
-      // 若 _currentVideoPath 已被清空则 nextPlaylistEpisode() 返回 null，
-      // 此时不应误报"已经全部看完了"。
-      if (!_isCancelled && context.mounted) {
-        _showNoNextEpisodeMessage(context);
-      }
-      return;
+    late final PlaybackDetailEpisode nextEpisode;
+    switch (cursor) {
+      case PlaylistHasNext(:final episode):
+        nextEpisode = episode;
+      case PlaylistAtEnd():
+        _nextEpisode = null;
+        if (!_isCancelled && context.mounted) {
+          _showNoNextEpisodeMessage(context);
+        }
+        return;
+      case PlaylistCurrentNotFound():
+        _nextEpisode = null;
+        if (!_isCancelled && context.mounted) {
+          BlurSnackBar.show(context, '无法确认当前播放项，已取消自动续播');
+        }
+        return;
+      case PlaylistLoadFailed(:final error):
+        _nextEpisode = null;
+        debugPrint('[自动播放] 播放前检查列表失败: $error');
+        if (!_isCancelled && context.mounted) {
+          BlurSnackBar.show(context, '播放列表加载失败，已取消自动续播');
+        }
+        return;
     }
     _nextEpisode = nextEpisode;
     final settingsProvider =
@@ -250,6 +286,7 @@ class AutoNextEpisodeService {
           historyItem: nextEpisode.historyItem,
           actualPlayUrl: nextEpisode.actualPlayUrl,
           playbackSession: nextEpisode.playbackSession,
+          mediaKey: nextEpisode.mediaKey,
         ),
       );
       _nextEpisode = null;

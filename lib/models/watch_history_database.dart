@@ -9,6 +9,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'watch_history_model.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'dart:io' as io;
 
 class WatchHistoryBulkMergeResult {
@@ -45,7 +48,7 @@ class WatchHistoryDatabase {
   static Database? _database;
   static final WatchHistoryDatabase instance = WatchHistoryDatabase._init();
   static const String _dbName = 'watch_history.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static bool _migrationCompleted = false;
   static bool _ffiInitialized = false;
   static final Map<String, WatchHistoryItem> _webStore = {};
@@ -104,6 +107,7 @@ class WatchHistoryDatabase {
     CREATE TABLE watch_history(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       file_path TEXT UNIQUE NOT NULL,
+      media_key TEXT,
       anime_name TEXT NOT NULL,
       episode_title TEXT,
       episode_id INTEGER,
@@ -119,6 +123,7 @@ class WatchHistoryDatabase {
 
     // 创建索引以加快查询速度
     await db.execute('CREATE INDEX idx_file_path ON watch_history(file_path)');
+    await db.execute('CREATE INDEX idx_media_key ON watch_history(media_key)');
     await db.execute('CREATE INDEX idx_anime_id ON watch_history(anime_id)');
     await db.execute(
         'CREATE INDEX idx_last_watch_time ON watch_history(last_watch_time)');
@@ -128,6 +133,13 @@ class WatchHistoryDatabase {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 1) {
       await _createDB(db, newVersion);
+      return;
+    }
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE watch_history ADD COLUMN media_key TEXT');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_media_key ON watch_history(media_key)',
+      );
     }
     // 未来版本可以在这里添加更多迁移代码
   }
@@ -177,6 +189,7 @@ class WatchHistoryDatabase {
             'watch_history',
             {
               'file_path': item.filePath,
+              'media_key': _mediaKeyFor(item),
               'anime_name': item.animeName,
               'episode_title': item.episodeTitle,
               'episode_id': item.episodeId,
@@ -370,7 +383,7 @@ class WatchHistoryDatabase {
   Future<void> insertOrUpdateWatchHistory(WatchHistoryItem item) async {
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
-      _webStore[item.filePath] = item;
+      _webStore[item.filePath] = item.copyWith(mediaKey: _mediaKeyFor(item));
       _scheduleWebStorePersist();
       return;
     }
@@ -384,6 +397,7 @@ class WatchHistoryDatabase {
         'watch_history',
         {
           'file_path': item.filePath,
+          'media_key': _mediaKeyFor(item),
           'anime_name': item.animeName,
           'episode_title': item.episodeTitle,
           'episode_id': item.episodeId,
@@ -405,6 +419,7 @@ class WatchHistoryDatabase {
           'watch_history',
           {
             'anime_name': item.animeName,
+            'media_key': _mediaKeyFor(item),
             'episode_title': item.episodeTitle,
             'episode_id': item.episodeId,
             'anime_id': item.animeId,
@@ -657,6 +672,7 @@ class WatchHistoryDatabase {
 
   Map<String, Object?> _databaseValues(WatchHistoryItem item) => {
         'file_path': item.filePath,
+        'media_key': _mediaKeyFor(item),
         'anime_name': item.animeName,
         'episode_title': item.episodeTitle,
         'episode_id': item.episodeId,
@@ -696,7 +712,16 @@ class WatchHistoryDatabase {
   Future<WatchHistoryItem?> getHistoryByFilePath(String filePath) async {
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
-      return _webStore[filePath];
+      final exact = _webStore[filePath];
+      if (exact != null) return exact;
+      final mediaKey = MediaIdentityResolver.forPath(filePath);
+      for (final item in _webStore.values) {
+        if ((item.mediaKey ?? MediaIdentityResolver.forPath(item.filePath)) ==
+            mediaKey) {
+          return item;
+        }
+      }
+      return null;
     }
     final db = await database;
 
@@ -709,6 +734,30 @@ class WatchHistoryDatabase {
       );
 
       if (maps.isEmpty) {
+        final mediaKey = MediaIdentityResolver.forPath(filePath);
+        final mediaKeyMaps = await db.query(
+          'watch_history',
+          where: 'media_key = ?',
+          whereArgs: [mediaKey],
+          limit: 1,
+        );
+        if (mediaKeyMaps.isNotEmpty) {
+          return _mapToWatchHistoryItem(mediaKeyMaps.first);
+        }
+
+        final legacyAlias = _legacyConnectionNameAlias(filePath);
+        if (legacyAlias != null && legacyAlias != filePath) {
+          final aliasMaps = await db.query(
+            'watch_history',
+            where: 'file_path = ?',
+            whereArgs: [legacyAlias],
+            limit: 1,
+          );
+          if (aliasMaps.isNotEmpty) {
+            return _mapToWatchHistoryItem(aliasMaps.first);
+          }
+        }
+
         // 如果在iOS上没找到，尝试使用替代路径
         if (Platform.isIOS) {
           String alternativePath;
@@ -1000,6 +1049,10 @@ class WatchHistoryDatabase {
     final originalPath = map['file_path'] as String? ?? '';
     final item = WatchHistoryItem(
       filePath: originalPath,
+      mediaKey: map['media_key'] as String? ??
+          (originalPath.isEmpty
+              ? null
+              : MediaIdentityResolver.forPath(originalPath)),
       animeName: map['anime_name'],
       episodeTitle: map['episode_title'],
       episodeId: (map['episode_id'] as num?)?.toInt(),
@@ -1013,13 +1066,13 @@ class WatchHistoryDatabase {
     );
 
     // 如果路径不是新格式，尝试迁移
-    if (migratePath &&
-        originalPath.isNotEmpty &&
-        !MediaSourceUtils.isNewWebDavPath(originalPath) &&
-        !MediaSourceUtils.isNewSmbPath(originalPath)) {
+    if (migratePath && originalPath.isNotEmpty) {
       final migratedPath = MediaSourceUtils.migratePath(originalPath);
       if (migratedPath != originalPath) {
-        final migratedItem = item.copyWith(filePath: migratedPath);
+        final migratedItem = item.copyWith(
+          filePath: migratedPath,
+          mediaKey: MediaIdentityResolver.forPath(migratedPath),
+        );
         // 异步写回数据库，不阻塞当前读取
         _migratePathInBackground(originalPath, migratedItem);
         return migratedItem;
@@ -1027,6 +1080,31 @@ class WatchHistoryDatabase {
     }
 
     return item;
+  }
+
+  static String _mediaKeyFor(WatchHistoryItem item) =>
+      item.mediaKey ?? MediaIdentityResolver.forPath(item.filePath);
+
+  String? _legacyConnectionNameAlias(String filePath) {
+    final webDav = WebDAVService.instance.resolveMediaPath(filePath);
+    if (webDav != null) {
+      return MediaSourceUtils.buildWebDavPath(
+        webDav.connection.name,
+        webDav.relativePath,
+      );
+    }
+    final smb = MediaSourceUtils.parseSmbMediaPath(filePath);
+    if (smb != null) {
+      final connection =
+          SMBService.instance.getConnectionByIdOrName(smb.connectionName);
+      if (connection != null) {
+        return MediaSourceUtils.buildSmbPath(
+          connection.name,
+          smb.relativePath,
+        );
+      }
+    }
+    return null;
   }
 
   void _migratePathInBackground(String oldPath, WatchHistoryItem migratedItem) {

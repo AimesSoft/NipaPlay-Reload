@@ -9,6 +9,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     PlaybackSession? playbackSession,
     EmbyResolvedTrackBundle? embyTrackSelection,
     PlaybackDetailContext? playbackDetailContext,
+    String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
   }) async {
@@ -54,6 +55,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         historyItem: historyItem,
         actualPlayUrl: actualPlayUrl,
         playbackSession: playbackSession,
+        mediaKey: mediaKey,
       );
       final currentContext = _context;
       resolvedDetailContext = currentContext == null || !currentContext.mounted
@@ -67,6 +69,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _playbackDetailContext = resolvedDetailContext;
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _initialHistoryItem = historyItem;
+    _currentMediaKey = mediaKey ?? MediaIdentityResolver.forPath(videoPath);
 
     // 从 historyItem 中获取弹幕 ID
     if (historyItem != null) {

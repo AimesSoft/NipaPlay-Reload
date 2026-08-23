@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 
 class SMBConnection {
+  final String id;
   final String name;
   final String host;
   final int port;
@@ -16,7 +18,8 @@ class SMBConnection {
   final String domain;
   final bool isConnected;
 
-  const SMBConnection({
+  SMBConnection({
+    String? id,
     required this.name,
     required this.host,
     this.port = 445,
@@ -24,9 +27,10 @@ class SMBConnection {
     required this.password,
     this.domain = '',
     this.isConnected = false,
-  });
+  }) : id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
 
   SMBConnection copyWith({
+    String? id,
     String? name,
     String? host,
     int? port,
@@ -36,6 +40,7 @@ class SMBConnection {
     bool? isConnected,
   }) {
     return SMBConnection(
+      id: id ?? this.id,
       name: name ?? this.name,
       host: host ?? this.host,
       port: port ?? this.port,
@@ -48,6 +53,7 @@ class SMBConnection {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'host': host,
       'port': port,
@@ -59,7 +65,15 @@ class SMBConnection {
   }
 
   factory SMBConnection.fromJson(Map<String, dynamic> json) {
+    final savedId = json['id']?.toString().trim();
     return SMBConnection(
+      id: savedId?.isNotEmpty == true
+          ? savedId
+          : const Uuid().v5(
+              '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+              'nipaplay:smb:${json['host'] ?? ''}|${json['port'] ?? 445}|'
+                  '${json['domain'] ?? ''}|${json['username'] ?? ''}',
+            ),
       name: json['name'] ?? '',
       host: json['host'] ?? '',
       port: json['port'] is int
@@ -192,11 +206,15 @@ class SMBService {
       final savedJson = prefs.getString(_connectionsKey);
       if (savedJson == null) return;
       final List<dynamic> decoded = json.decode(savedJson);
+      final needsIdMigration = decoded.whereType<Map>().any(
+            (entry) => entry['id']?.toString().trim().isNotEmpty != true,
+          );
       _connections
         ..clear()
         ..addAll(decoded
             .whereType<Map<String, dynamic>>()
             .map((e) => _normalizeConnection(SMBConnection.fromJson(e))));
+      if (needsIdMigration) await _saveConnections();
     } catch (e) {
       print('加载SMB连接失败: $e');
     }
@@ -268,6 +286,17 @@ class SMBService {
   SMBConnection? getConnection(String name) {
     try {
       return _connections.firstWhere((element) => element.name == name);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  SMBConnection? getConnectionByIdOrName(String reference) {
+    try {
+      return _connections.firstWhere(
+        (connection) =>
+            connection.id == reference || connection.name == reference,
+      );
     } catch (_) {
       return null;
     }

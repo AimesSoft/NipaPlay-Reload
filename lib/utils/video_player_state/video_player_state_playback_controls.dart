@@ -189,6 +189,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 重置状态
       await _clearTimelinePreviewFiles();
       _currentVideoPath = null;
+      _currentMediaKey = null;
       _macOSWindowHostedVideoRect = null;
       _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
       _position = Duration.zero;
@@ -709,6 +710,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
     _subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
     _currentVideoPath = null;
+    _currentMediaKey = null;
     _currentActualPlayUrl = null; // 清除实际播放URL
     _currentPlaybackSession = null;
     _currentEmbyAccountKey = null;
@@ -784,6 +786,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _error = null;
     }
     _currentVideoPath = null;
+    _currentMediaKey = null;
     _currentActualPlayUrl = null;
     _currentPlaybackSession = null;
     _currentEmbyAccountKey = null;

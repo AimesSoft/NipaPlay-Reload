@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -340,12 +341,16 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
 
     // 创建观看历史项用于播放
+    final stableMediaPath = MediaSourceUtils.buildWebDavPath(
+      _currentConnection!.id,
+      file.path,
+    );
     final historyItem = WatchHistoryItem(
       animeName:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
-      filePath:
-          MediaSourceUtils.buildWebDavPath(_currentConnection!.name, file.path),
+      filePath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -356,11 +361,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
     // 使用 PlaybackService 播放视频
     final playableItem = PlayableItem(
-      videoPath: videoUrl,
+      videoPath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       title:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: file.name,
       historyItem: historyItem,
+      actualPlayUrl: videoUrl,
     );
 
     PlaybackService().play(playableItem);
@@ -2037,11 +2044,15 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       result.file.path,
     );
 
+    final stableMediaPath = MediaSourceUtils.buildWebDavPath(
+      _currentConnection!.id,
+      result.file.path,
+    );
     final historyItem = WatchHistoryItem(
       animeName: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: result.file.name,
-      filePath: MediaSourceUtils.buildWebDavPath(
-          _currentConnection!.name, result.file.path),
+      filePath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -2049,10 +2060,12 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     );
 
     final playableItem = PlayableItem(
-      videoPath: videoUrl,
+      videoPath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       title: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: result.file.name,
       historyItem: historyItem,
+      actualPlayUrl: videoUrl,
     );
 
     PlaybackService().play(playableItem);
