@@ -20,6 +20,7 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
@@ -720,6 +721,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       debugPrint('[播放列表] 开始播放剧集: $filePath');
 
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      final skipDanmakuMatching =
+          context.read<SettingsProvider>().skipDanmakuMatching;
 
       if (mounted) {
         // 检查是否为Jellyfin URL
@@ -761,7 +764,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
           // 创建带有弹幕信息的历史项
           final historyItem = await _createJellyfinHistoryItem(
-              episodeInfo, animeId, episodeIdForDanmaku);
+            episodeInfo,
+            animeId,
+            episodeIdForDanmaku,
+            skipDanmakuMatching: skipDanmakuMatching,
+          );
 
           final playableItem = PlayableItem(
             videoPath: filePath,
@@ -831,7 +838,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
           // 创建带有弹幕信息的历史项
           final historyItem = await _createEmbyHistoryItem(
-              episodeInfo, animeId, episodeIdForDanmaku);
+            episodeInfo,
+            animeId,
+            episodeIdForDanmaku,
+            skipDanmakuMatching: skipDanmakuMatching,
+          );
 
           final playableItem = PlayableItem(
             videoPath: filePath,
@@ -1066,7 +1077,15 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
   /// 创建Jellyfin历史项，包含完整的弹幕映射预测和API获取的准确信息
   Future<WatchHistoryItem> _createJellyfinHistoryItem(
-      JellyfinEpisodeInfo episode, int? animeId, int? episodeId) async {
+    JellyfinEpisodeInfo episode,
+    int? animeId,
+    int? episodeId, {
+    bool skipDanmakuMatching = false,
+  }) async {
+    if (skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
+
     try {
       int? finalAnimeId = animeId;
       int? finalEpisodeId = episodeId;
@@ -1187,7 +1206,15 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
   /// 创建Emby历史项，包含完整的弹幕映射预测和API获取的准确信息
   Future<WatchHistoryItem> _createEmbyHistoryItem(
-      EmbyEpisodeInfo episode, int? animeId, int? episodeId) async {
+    EmbyEpisodeInfo episode,
+    int? animeId,
+    int? episodeId, {
+    bool skipDanmakuMatching = false,
+  }) async {
+    if (skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
+
     try {
       int? finalAnimeId = animeId;
       int? finalEpisodeId = episodeId;

@@ -20,10 +20,9 @@ class SettingsProvider with ChangeNotifier {
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
   bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
 
-  // 播放时自动匹配弹幕
-  bool _autoMatchDanmakuOnPlay = true; // 默认开启
   DanmakuAutoLoadStrategy _danmakuAutoLoadStrategy =
       DanmakuAutoLoadStrategy.remoteAndLocal;
+  bool _skipDanmakuMatching = false;
   bool _fastPlaybackStartup = false;
 
   // 外部播放器设置
@@ -47,9 +46,9 @@ class SettingsProvider with ChangeNotifier {
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
-  bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
   DanmakuAutoLoadStrategy get danmakuAutoLoadStrategy =>
       _danmakuAutoLoadStrategy;
+  bool get skipDanmakuMatching => _skipDanmakuMatching;
   bool get fastPlaybackStartup => _fastPlaybackStartup;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
@@ -93,19 +92,28 @@ class SettingsProvider with ChangeNotifier {
     _autoMatchDanmakuFirstSearchResultOnHashFail = _prefs.getBool(
             SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
         true;
-    final savedAutoMatchDanmakuOnPlay =
-        _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay);
-    _autoMatchDanmakuOnPlay = savedAutoMatchDanmakuOnPlay ?? true;
-    _danmakuAutoLoadStrategy = danmakuAutoLoadStrategyFromPrefs(
-      _prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
-      legacyAutoMatchOnPlay: _autoMatchDanmakuOnPlay,
+    final persistedStrategy =
+        _prefs.getString(SettingsKeys.danmakuAutoLoadStrategy);
+    final danmakuAutoLoadSettings = resolveDanmakuAutoLoadSettings(
+      persistedStrategy: persistedStrategy,
+      persistedSkipMatching: _prefs.getBool(SettingsKeys.skipDanmakuMatching),
+      legacyAutoMatchOnPlay:
+          _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay),
     );
+    _danmakuAutoLoadStrategy = danmakuAutoLoadSettings.strategy;
+    _skipDanmakuMatching = danmakuAutoLoadSettings.skipMatching;
     _fastPlaybackStartup =
         _prefs.getBool(SettingsKeys.fastPlaybackStartup) ?? false;
-    if (!_prefs.containsKey(SettingsKeys.danmakuAutoLoadStrategy)) {
+    if (persistedStrategy != _danmakuAutoLoadStrategy.prefsValue) {
       await _prefs.setString(
         SettingsKeys.danmakuAutoLoadStrategy,
         _danmakuAutoLoadStrategy.prefsValue,
+      );
+    }
+    if (!_prefs.containsKey(SettingsKeys.skipDanmakuMatching)) {
+      await _prefs.setBool(
+        SettingsKeys.skipDanmakuMatching,
+        _skipDanmakuMatching,
       );
     }
     _useExternalPlayer =
@@ -203,15 +211,14 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setAutoMatchDanmakuOnPlay(bool enable) async {
-    _autoMatchDanmakuOnPlay = enable;
-    _danmakuAutoLoadStrategy = enable
-        ? DanmakuAutoLoadStrategy.remoteAndLocal
-        : DanmakuAutoLoadStrategy.manual;
-    await _prefs.setBool(
-      SettingsKeys.autoMatchDanmakuOnPlay,
-      _autoMatchDanmakuOnPlay,
-    );
+  Future<void> setDanmakuAutoLoadStrategy(
+      DanmakuAutoLoadStrategy strategy) async {
+    if (strategy == DanmakuAutoLoadStrategy.manual) {
+      await setSkipDanmakuMatching(true);
+      return;
+    }
+    if (_danmakuAutoLoadStrategy == strategy) return;
+    _danmakuAutoLoadStrategy = strategy;
     await _prefs.setString(
       SettingsKeys.danmakuAutoLoadStrategy,
       _danmakuAutoLoadStrategy.prefsValue,
@@ -219,20 +226,10 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setDanmakuAutoLoadStrategy(
-      DanmakuAutoLoadStrategy strategy) async {
-    if (_danmakuAutoLoadStrategy == strategy) return;
-    _danmakuAutoLoadStrategy = strategy;
-    _autoMatchDanmakuOnPlay = strategy == DanmakuAutoLoadStrategy.remote ||
-        strategy == DanmakuAutoLoadStrategy.remoteAndLocal;
-    await _prefs.setString(
-      SettingsKeys.danmakuAutoLoadStrategy,
-      _danmakuAutoLoadStrategy.prefsValue,
-    );
-    await _prefs.setBool(
-      SettingsKeys.autoMatchDanmakuOnPlay,
-      _autoMatchDanmakuOnPlay,
-    );
+  Future<void> setSkipDanmakuMatching(bool skip) async {
+    if (_skipDanmakuMatching == skip) return;
+    _skipDanmakuMatching = skip;
+    await _prefs.setBool(SettingsKeys.skipDanmakuMatching, skip);
     notifyListeners();
   }
 

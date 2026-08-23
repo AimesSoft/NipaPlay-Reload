@@ -93,12 +93,13 @@ class EpisodeNavigationService {
     required String currentFilePath,
     int? animeId,
     int? episodeId,
+    bool skipDanmakuMatching = false,
   }) async {
     debugPrint('[剧集导航] 开始获取上一话：$currentFilePath, animeId=$animeId, episodeId=$episodeId');
 
     // 检查是否为Jellyfin流媒体，如果是则使用Jellyfin专用导航
     if (_isJellyfinUrl(currentFilePath)) {
-      final jellyfinResult = await _getPreviousEpisodeFromJellyfin(currentFilePath, animeId, episodeId);
+      final jellyfinResult = await _getPreviousEpisodeFromJellyfin(currentFilePath, animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (jellyfinResult.success) {
         debugPrint('[剧集导航] Jellyfin模式成功找到上一话');
         return jellyfinResult;
@@ -108,7 +109,7 @@ class EpisodeNavigationService {
 
     // 检查是否为Emby流媒体，如果是则使用Emby专用导航
     if (_isEmbyUrl(currentFilePath)) {
-      final embyResult = await _getPreviousEpisodeFromEmby(currentFilePath, animeId, episodeId);
+      final embyResult = await _getPreviousEpisodeFromEmby(currentFilePath, animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (embyResult.success) {
         debugPrint('[剧集导航] Emby模式成功找到上一话');
         return embyResult;
@@ -140,7 +141,7 @@ class EpisodeNavigationService {
 
     // 模式2：回退到基于数据库的剧集列表导航
     if (animeId != null && episodeId != null) {
-      final databaseResult = await _getPreviousEpisodeFromDatabase(animeId, episodeId);
+      final databaseResult = await _getPreviousEpisodeFromDatabase(animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (databaseResult.success) {
         debugPrint('[剧集导航] 数据库模式成功找到上一话');
         return databaseResult;
@@ -157,12 +158,13 @@ class EpisodeNavigationService {
     required String currentFilePath,
     int? animeId,
     int? episodeId,
+    bool skipDanmakuMatching = false,
   }) async {
     debugPrint('[剧集导航] 开始获取下一话：$currentFilePath, animeId=$animeId, episodeId=$episodeId');
 
     // 检查是否为Jellyfin流媒体，如果是则使用Jellyfin专用导航
     if (_isJellyfinUrl(currentFilePath)) {
-      final jellyfinResult = await _getNextEpisodeFromJellyfin(currentFilePath, animeId, episodeId);
+      final jellyfinResult = await _getNextEpisodeFromJellyfin(currentFilePath, animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (jellyfinResult.success) {
         debugPrint('[剧集导航] Jellyfin模式成功找到下一话');
         return jellyfinResult;
@@ -172,7 +174,7 @@ class EpisodeNavigationService {
 
     // 检查是否为Emby流媒体，如果是则使用Emby专用导航
     if (_isEmbyUrl(currentFilePath)) {
-      final embyResult = await _getNextEpisodeFromEmby(currentFilePath, animeId, episodeId);
+      final embyResult = await _getNextEpisodeFromEmby(currentFilePath, animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (embyResult.success) {
         debugPrint('[剧集导航] Emby模式成功找到下一话');
         return embyResult;
@@ -204,7 +206,7 @@ class EpisodeNavigationService {
 
     // 模式2：回退到基于数据库的剧集列表导航
     if (animeId != null && episodeId != null) {
-      final databaseResult = await _getNextEpisodeFromDatabase(animeId, episodeId);
+      final databaseResult = await _getNextEpisodeFromDatabase(animeId, episodeId, skipDanmakuMatching: skipDanmakuMatching);
       if (databaseResult.success) {
         debugPrint('[剧集导航] 数据库模式成功找到下一话');
         return databaseResult;
@@ -643,7 +645,7 @@ class EpisodeNavigationService {
   }
 
   /// 模式2：从数据库获取上一话（回退模式）
-  Future<EpisodeNavigationResult> _getPreviousEpisodeFromDatabase(int animeId, int episodeId) async {
+  Future<EpisodeNavigationResult> _getPreviousEpisodeFromDatabase(int animeId, int episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       // 首先尝试使用映射服务查找上一集
       // 检查是否为Emby映射
@@ -670,7 +672,7 @@ class EpisodeNavigationService {
             
             if (previousEpisode != null) {
               // 使用上一集的正确动画ID和剧集ID创建历史项
-              final historyItem = await _createEmbyHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId);
+              final historyItem = await _createEmbyHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
               
               debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=$previousDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
@@ -708,7 +710,7 @@ class EpisodeNavigationService {
             
             if (previousEpisode != null) {
               // 使用上一集的正确动画ID和剧集ID创建历史项
-              final historyItem = await _createJellyfinHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId);
+              final historyItem = await _createJellyfinHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
               
               debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=$previousDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
@@ -768,7 +770,7 @@ class EpisodeNavigationService {
   }
 
   /// 模式2：从数据库获取下一话（回退模式）
-  Future<EpisodeNavigationResult> _getNextEpisodeFromDatabase(int animeId, int episodeId) async {
+  Future<EpisodeNavigationResult> _getNextEpisodeFromDatabase(int animeId, int episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       // 首先尝试使用映射服务查找下一集
       // 检查是否为Emby映射
@@ -795,7 +797,7 @@ class EpisodeNavigationService {
             
             if (nextEpisode != null) {
               // 使用下一集的正确动画ID和剧集ID创建历史项
-              final historyItem = await _createEmbyHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId);
+              final historyItem = await _createEmbyHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
               
               debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=$nextDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
@@ -833,7 +835,7 @@ class EpisodeNavigationService {
             
             if (nextEpisode != null) {
               // 使用下一集的正确动画ID和剧集ID创建历史项
-              final historyItem = await _createJellyfinHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId);
+              final historyItem = await _createJellyfinHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
               
               debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=$nextDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
@@ -1330,14 +1332,16 @@ class EpisodeNavigationService {
   }
 
   /// Jellyfin模式：获取上一话
-  Future<EpisodeNavigationResult> _getPreviousEpisodeFromJellyfin(String currentFilePath, int? animeId, int? episodeId) async {
+  Future<EpisodeNavigationResult> _getPreviousEpisodeFromJellyfin(String currentFilePath, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       if (!JellyfinService.instance.isConnected) {
         return EpisodeNavigationResult.failure('Jellyfin服务器未连接');
       }
 
       // 在导航前先更新当前集的历史记录，确保历史记录卡片显示正确的动画名称
-      await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      if (!skipDanmakuMatching) {
+        await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      }
 
       // 从jellyfin://协议URL中提取episodeId等信息
       final urlParts = _parseJellyfinUrl(currentFilePath);
@@ -1446,7 +1450,7 @@ class EpisodeNavigationService {
         }
         
         // 创建播放历史项
-        final historyItem = await _createJellyfinHistoryItem(previousEpisode, previousAnimeId, previousEpisodeId);
+        final historyItem = await _createJellyfinHistoryItem(previousEpisode, previousAnimeId, previousEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
         
         return EpisodeNavigationResult.success(
           historyItem: historyItem,
@@ -1465,7 +1469,7 @@ class EpisodeNavigationService {
           final previousEpisode = await JellyfinService.instance.getPreviousEpisode(currentEpisodeId);
           if (previousEpisode != null) {
             // 创建不带弹幕映射的历史项（会进行自动匹配）
-            final historyItem = await _createJellyfinHistoryItem(previousEpisode, null, null);
+            final historyItem = await _createJellyfinHistoryItem(previousEpisode, null, null, skipDanmakuMatching: skipDanmakuMatching);
             
             return EpisodeNavigationResult.success(
               historyItem: historyItem,
@@ -1482,14 +1486,16 @@ class EpisodeNavigationService {
   }
 
   /// Jellyfin模式：获取下一话
-  Future<EpisodeNavigationResult> _getNextEpisodeFromJellyfin(String currentFilePath, int? animeId, int? episodeId) async {
+  Future<EpisodeNavigationResult> _getNextEpisodeFromJellyfin(String currentFilePath, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       if (!JellyfinService.instance.isConnected) {
         return EpisodeNavigationResult.failure('Jellyfin服务器未连接');
       }
 
       // 在导航前先更新当前集的历史记录，确保历史记录卡片显示正确的动画名称
-      await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      if (!skipDanmakuMatching) {
+        await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      }
 
       // 从jellyfin://协议URL中提取episodeId等信息
       final urlParts = _parseJellyfinUrl(currentFilePath);
@@ -1611,7 +1617,7 @@ class EpisodeNavigationService {
         }
         
         // 创建播放历史项
-        final historyItem = await _createJellyfinHistoryItem(nextEpisode, nextAnimeId, nextEpisodeId);
+        final historyItem = await _createJellyfinHistoryItem(nextEpisode, nextAnimeId, nextEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
         
         return EpisodeNavigationResult.success(
           historyItem: historyItem,
@@ -1630,7 +1636,7 @@ class EpisodeNavigationService {
           final nextEpisode = await JellyfinService.instance.getNextEpisode(currentEpisodeId);
           if (nextEpisode != null) {
             // 创建不带弹幕映射的历史项（会进行自动匹配）
-            final historyItem = await _createJellyfinHistoryItem(nextEpisode, null, null);
+            final historyItem = await _createJellyfinHistoryItem(nextEpisode, null, null, skipDanmakuMatching: skipDanmakuMatching);
             
             return EpisodeNavigationResult.success(
               historyItem: historyItem,
@@ -1674,7 +1680,11 @@ class EpisodeNavigationService {
   }
 
   /// 创建Jellyfin剧集的历史记录项
-  Future<WatchHistoryItem> _createJellyfinHistoryItem(JellyfinEpisodeInfo episode, int? animeId, int? episodeId) async {
+  Future<WatchHistoryItem> _createJellyfinHistoryItem(JellyfinEpisodeInfo episode, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
+    if (skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
+
     try {
       // 如果有映射的弹幕ID，使用DanDanPlay API获取正确的剧集信息
       if (animeId != null && episodeId != null) {
@@ -1753,14 +1763,16 @@ class EpisodeNavigationService {
   }
 
   /// Emby模式：获取上一话
-  Future<EpisodeNavigationResult> _getPreviousEpisodeFromEmby(String currentFilePath, int? animeId, int? episodeId) async {
+  Future<EpisodeNavigationResult> _getPreviousEpisodeFromEmby(String currentFilePath, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       if (!EmbyService.instance.isConnected) {
         return EpisodeNavigationResult.failure('Emby服务器未连接');
       }
 
       // 在导航前先更新当前集的历史记录，确保历史记录卡片显示正确的动画名称
-      await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      if (!skipDanmakuMatching) {
+        await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      }
 
       // 从emby://协议URL中提取episodeId等信息
       final urlParts = _parseEmbyUrl(currentFilePath);
@@ -1882,7 +1894,7 @@ class EpisodeNavigationService {
         }
         
         // 创建播放历史项
-        final historyItem = await _createEmbyHistoryItem(previousEpisode, previousAnimeId, previousEpisodeId);
+        final historyItem = await _createEmbyHistoryItem(previousEpisode, previousAnimeId, previousEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
         
         return EpisodeNavigationResult.success(
           historyItem: historyItem,
@@ -1901,7 +1913,7 @@ class EpisodeNavigationService {
           final previousEpisode = await EmbyService.instance.getPreviousEpisode(currentEpisodeId);
           if (previousEpisode != null) {
             // 创建不带弹幕映射的历史项（会进行自动匹配）
-            final historyItem = await _createEmbyHistoryItem(previousEpisode, null, null);
+            final historyItem = await _createEmbyHistoryItem(previousEpisode, null, null, skipDanmakuMatching: skipDanmakuMatching);
             
             return EpisodeNavigationResult.success(
               historyItem: historyItem,
@@ -1918,14 +1930,16 @@ class EpisodeNavigationService {
   }
 
   /// Emby模式：获取下一话
-  Future<EpisodeNavigationResult> _getNextEpisodeFromEmby(String currentFilePath, int? animeId, int? episodeId) async {
+  Future<EpisodeNavigationResult> _getNextEpisodeFromEmby(String currentFilePath, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
     try {
       if (!EmbyService.instance.isConnected) {
         return EpisodeNavigationResult.failure('Emby服务器未连接');
       }
 
       // 在导航前先更新当前集的历史记录，确保历史记录卡片显示正确的动画名称
-      await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      if (!skipDanmakuMatching) {
+        await _updateCurrentEpisodeHistory(currentFilePath, animeId, episodeId);
+      }
 
       // 从emby://协议URL中提取episodeId等信息
       final urlParts = _parseEmbyUrl(currentFilePath);
@@ -2047,7 +2061,7 @@ class EpisodeNavigationService {
         }
         
         // 创建播放历史项
-        final historyItem = await _createEmbyHistoryItem(nextEpisode, nextAnimeId, nextEpisodeId);
+        final historyItem = await _createEmbyHistoryItem(nextEpisode, nextAnimeId, nextEpisodeId, skipDanmakuMatching: skipDanmakuMatching);
         
         return EpisodeNavigationResult.success(
           historyItem: historyItem,
@@ -2066,7 +2080,7 @@ class EpisodeNavigationService {
           final nextEpisode = await EmbyService.instance.getNextEpisode(currentEpisodeId);
           if (nextEpisode != null) {
             // 创建不带弹幕映射的历史项（会进行自动匹配）
-            final historyItem = await _createEmbyHistoryItem(nextEpisode, null, null);
+            final historyItem = await _createEmbyHistoryItem(nextEpisode, null, null, skipDanmakuMatching: skipDanmakuMatching);
             
             return EpisodeNavigationResult.success(
               historyItem: historyItem,
@@ -2110,7 +2124,11 @@ class EpisodeNavigationService {
   }
 
   /// 创建Emby剧集的历史记录项
-  Future<WatchHistoryItem> _createEmbyHistoryItem(EmbyEpisodeInfo episode, int? animeId, int? episodeId) async {
+  Future<WatchHistoryItem> _createEmbyHistoryItem(EmbyEpisodeInfo episode, int? animeId, int? episodeId, {bool skipDanmakuMatching = false}) async {
+    if (skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
+
     try {
       // 如果有映射的弹幕ID，使用DanDanPlay API获取正确的剧集信息
       if (animeId != null && episodeId != null) {
