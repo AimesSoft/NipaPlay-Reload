@@ -103,7 +103,9 @@ void main() {
     );
     expect(
       entries,
-      contains('!globals.isPhone &&\n          !globals.isTelevision'),
+      contains('!globals.isPhone &&\n'
+          '          !globals.isTablet &&\n'
+          '          !globals.isTelevision'),
     );
     expect(
       entries,
