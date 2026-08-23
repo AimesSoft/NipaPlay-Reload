@@ -8,10 +8,12 @@ import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:xml/xml.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/services/process_memory_cache.dart';
 
 class WebDAVConnection {
+  final String id;
   final String name;
   final String url;
   final String username;
@@ -19,15 +21,17 @@ class WebDAVConnection {
   final bool isConnected;
 
   WebDAVConnection({
+    String? id,
     required this.name,
     required this.url,
     required this.username,
     required this.password,
     this.isConnected = false,
-  });
+  }) : id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'url': url,
       'username': username,
@@ -37,7 +41,14 @@ class WebDAVConnection {
   }
 
   factory WebDAVConnection.fromJson(Map<String, dynamic> json) {
+    final savedId = json['id']?.toString().trim();
     return WebDAVConnection(
+      id: savedId?.isNotEmpty == true
+          ? savedId
+          : const Uuid().v5(
+              '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+              'nipaplay:webdav:${json['url'] ?? ''}|${json['username'] ?? ''}',
+            ),
       name: json['name'] ?? '',
       url: json['url'] ?? '',
       username: json['username'] ?? '',
@@ -47,6 +58,7 @@ class WebDAVConnection {
   }
 
   WebDAVConnection copyWith({
+    String? id,
     String? name,
     String? url,
     String? username,
@@ -54,6 +66,7 @@ class WebDAVConnection {
     bool? isConnected,
   }) {
     return WebDAVConnection(
+      id: id ?? this.id,
       name: name ?? this.name,
       url: url ?? this.url,
       username: username ?? this.username,
@@ -183,9 +196,13 @@ class WebDAVService {
       final connectionsJson = prefs.getString(_connectionsKey);
       if (connectionsJson != null) {
         final List<dynamic> decoded = json.decode(connectionsJson);
+        final needsIdMigration = decoded.whereType<Map>().any(
+              (entry) => entry['id']?.toString().trim().isNotEmpty != true,
+            );
         _connections = decoded
             .map((e) => _normalizeConnection(WebDAVConnection.fromJson(e)))
             .toList();
+        if (needsIdMigration) await _saveConnections();
       }
     } catch (e) {
       print('加载WebDAV连接失败: $e');
@@ -538,6 +555,17 @@ class WebDAVService {
     }
   }
 
+  WebDAVConnection? getConnectionByIdOrName(String reference) {
+    try {
+      return _connections.firstWhere(
+        (connection) =>
+            connection.id == reference || connection.name == reference,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 通过连接名称和相对路径解析文件信息
   /// 输入格式: webdav://connectionName/relativePath
   /// 返回解析后的连接和相对路径，如果找不到连接则返回 null
@@ -551,7 +579,7 @@ class WebDAVService {
     final connectionName = pathWithoutScheme.substring(0, firstSlashIndex);
     final relativePath = pathWithoutScheme.substring(firstSlashIndex);
 
-    final connection = getConnection(connectionName);
+    final connection = getConnectionByIdOrName(connectionName);
     if (connection == null) return null;
 
     return WebDAVResolvedFile(

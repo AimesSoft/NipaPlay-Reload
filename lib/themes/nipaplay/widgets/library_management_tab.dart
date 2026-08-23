@@ -3124,11 +3124,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return switch (location.type) {
       _MountedLibraryType.local => entry.path,
       _MountedLibraryType.webdav => MediaSourceUtils.buildWebDavPath(
-          location.webdavConnection!.name,
+          location.webdavConnection!.id,
           entry.path,
         ),
       _MountedLibraryType.smb => MediaSourceUtils.buildSmbPath(
-          location.smbConnection!.name,
+          location.smbConnection!.id,
           entry.path,
         ),
     };
@@ -3219,7 +3219,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         return files
             .map((file) => MediaSourceUtils.buildWebDavPath(
-                  location.webdavConnection!.name,
+                  location.webdavConnection!.id,
                   file.path,
                 ))
             .toList();
@@ -3230,7 +3230,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         return files
             .map((file) => MediaSourceUtils.buildSmbPath(
-                  location.smbConnection!.name,
+                  location.smbConnection!.id,
                   file.path,
                 ))
             .toList();
@@ -4431,7 +4431,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }) {
     final filePaths = videoFiles
         .map((f) => MediaSourceUtils.buildWebDavPath(
-              connection.name,
+              connection.id,
               f.path,
             ))
         .toList();
@@ -4495,7 +4495,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final folderKey = '${connection.name}:$folderPath';
         // 构建一个唯一标识符作为folderPath参数
         final uniqueFolderPath =
-            MediaSourceUtils.buildWebDavPath(connection.name, folderPath);
+            MediaSourceUtils.buildWebDavPath(connection.id, folderPath);
         final result =
             await CustomMediaInfoDialog.show(context, uniqueFolderPath);
         if (result != null) {
@@ -4519,7 +4519,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     // SMB 文件以连接名称路径作为唯一标识（与 _playSMBFile 写入历史记录时一致），
     // 这样后续手动/批量匹配写入的 WatchHistoryItem 才能被播放路径命中。
     final fileUrls = videoFiles
-        .map((f) => MediaSourceUtils.buildSmbPath(connection.name, f.path))
+        .map((f) => MediaSourceUtils.buildSmbPath(connection.id, f.path))
         .toList();
     final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
         ? connection.name
@@ -4581,7 +4581,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final folderKey = '${connection.name}:$folderPath';
         // 构建一个唯一标识符作为folderPath参数
         final uniqueFolderPath =
-            MediaSourceUtils.buildSmbPath(connection.name, folderPath);
+            MediaSourceUtils.buildSmbPath(connection.id, folderPath);
         final result =
             await CustomMediaInfoDialog.show(context, uniqueFolderPath);
         if (result != null) {
@@ -5449,7 +5449,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         } else {
           final canPlay = WebDAVService.instance.isVideoFile(file.name);
           final filePath = canPlay
-              ? MediaSourceUtils.buildWebDavPath(connection.name, file.path)
+              ? MediaSourceUtils.buildWebDavPath(connection.id, file.path)
               : null;
           return FutureBuilder<WatchHistoryItem?>(
             future: filePath == null
@@ -5501,7 +5501,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               await CustomMediaInfoDialog.show(
                                 context,
                                 MediaSourceUtils.buildWebDavPath(
-                                  connection.name,
+                                  connection.id,
                                   p.posix.dirname(file.path),
                                 ),
                                 initialVideoPath: filePath!,
@@ -5660,7 +5660,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       } else {
         final canPlay = SMBService.instance.isVideoFile(file.name);
         final filePath = canPlay
-            ? MediaSourceUtils.buildSmbPath(connection.name, file.path)
+            ? MediaSourceUtils.buildSmbPath(connection.id, file.path)
             : null;
         return FutureBuilder<WatchHistoryItem?>(
           future: filePath == null
@@ -5984,7 +5984,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
                   filePath: MediaSourceUtils.buildWebDavPath(
-                    connection.name,
+                    connection.id,
                     file.path,
                   ),
                   probePath: WebDAVService.instance.getFileUrl(
@@ -6067,7 +6067,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   // 播放WebDAV文件
   void _playWebDAVFile(WebDAVConnection connection, WebDAVFile file) {
     final historyItem = WatchHistoryItem(
-      filePath: MediaSourceUtils.buildWebDavPath(connection.name, file.path),
+      filePath: MediaSourceUtils.buildWebDavPath(connection.id, file.path),
       animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''), // 移除扩展名
       episodeTitle: '',
       duration: 0,
@@ -6204,7 +6204,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
                   filePath: MediaSourceUtils.buildSmbPath(
-                    connection.name,
+                    connection.id,
                     file.path,
                   ),
                   probePath: SMBProxyService.instance.buildStreamUrl(
@@ -6278,7 +6278,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   void _playSMBFile(SMBConnection connection, SMBFileEntry file) {
     final historyItem = WatchHistoryItem(
-      filePath: MediaSourceUtils.buildSmbPath(connection.name, file.path),
+      filePath: MediaSourceUtils.buildSmbPath(connection.id, file.path),
       animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: '',
       duration: 0,

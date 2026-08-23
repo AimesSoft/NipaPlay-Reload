@@ -19,6 +19,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_path_name.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
@@ -279,6 +280,8 @@ class PlaybackSourceService {
       actualPlayUrl: playable.actualPlayUrl,
       playbackSession: playable.playbackSession,
       progress: episode.progress,
+      mediaKey: playable.mediaKey ??
+          MediaIdentityResolver.forPath(playable.videoPath),
     );
   }
 
@@ -352,6 +355,7 @@ class PlaybackSourceService {
         episodeId: entry.episodeId,
         historyItem: history,
         actualPlayUrl: streamUrl,
+        mediaKey: MediaIdentityResolver.forPath(streamUrl),
       );
     }).toList();
   }
@@ -476,6 +480,7 @@ class PlaybackSourceService {
       episodeId: resolvedEpisodeId,
       historyItem: history,
       actualPlayUrl: streamUrl,
+      mediaKey: MediaIdentityResolver.forPath(streamUrl),
     );
   }
 
@@ -523,6 +528,7 @@ class PlaybackSourceService {
             title: episode.name,
             subtitle: episode.seriesName,
             historyItem: history,
+            mediaKey: MediaIdentityResolver.forPath('jellyfin://${episode.id}'),
           );
         }).toList();
       },
@@ -567,6 +573,7 @@ class PlaybackSourceService {
             title: episode.name,
             subtitle: episode.seriesName,
             historyItem: history,
+            mediaKey: MediaIdentityResolver.forPath('emby://${episode.id}'),
           );
         }).toList();
       },
@@ -590,7 +597,7 @@ class PlaybackSourceService {
       sourceKind: PlaybackSourceKind.webDav,
       sourceLabel: resolved.connection.name,
       sourceKey:
-          'webdav:${resolved.connection.name}:${p.posix.dirname(resolved.relativePath)}',
+          'webdav:${resolved.connection.id}:${p.posix.dirname(resolved.relativePath)}',
       title: resolvedTitle,
       subtitle: resolvedSubtitle,
       imageUrl: item.historyItem?.thumbnailPath,
@@ -615,13 +622,11 @@ class PlaybackSourceService {
       ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     return videos.map((entry) {
-      // WebDAV 服务器可能返回 URL 编码的路径（中文 → %E7..., [ → %5B 等），
-      // 需要解码为原始字符后再构建 mediaPath，确保路径在整个系统中保持一致，
-      // 否则 WatchHistoryManager 按路径查不到记录，续播时只能显示文件名且无弹幕。
-      final decodedPath = _decodeWebDavPath(entry.path);
+      // 服务端 href 是不透明定位符：持久化地址和身份都保留原始编码。
+      // 解码只用于 entry.name 的 UI 展示，不能参与媒体身份判断。
       final mediaPath = MediaSourceUtils.buildWebDavPath(
-        resolved.connection.name,
-        decodedPath,
+        resolved.connection.id,
+        entry.path,
       );
       // getFileUrl 用于实际 HTTP 请求，保留服务器原始编码。
       final url = WebDAVService.instance.getFileUrl(
@@ -637,34 +642,18 @@ class PlaybackSourceService {
         lastPosition: 0,
         duration: 0,
         lastWatchTime: DateTime.now(),
+        mediaKey: MediaIdentityResolver.forPath(mediaPath),
       );
       return PlaybackDetailEpisode(
-        id: decodedPath,
+        id: entry.path,
         videoPath: mediaPath,
         title: title,
         subtitle: resolved.connection.name,
         historyItem: history,
         actualPlayUrl: url,
+        mediaKey: history.mediaKey,
       );
     }).toList();
-  }
-
-  /// 安全解码 WebDAV 路径中的 URL 编码字符。
-  /// 保留原始路径中的 '/'，只解码非分隔符的编码字符。
-  static String _decodeWebDavPath(String path) {
-    try {
-      // 逐段解码，保留 '/' 作为路径分隔符。
-      return path.split('/').map((segment) {
-        if (segment.isEmpty) return segment;
-        try {
-          return Uri.decodeComponent(segment);
-        } catch (_) {
-          return segment;
-        }
-      }).join('/');
-    } catch (_) {
-      return path;
-    }
   }
 
   static String _webDavParentDirectory(WebDAVResolvedFile resolved) {
@@ -713,7 +702,7 @@ class PlaybackSourceService {
     return PlaybackDetailContext(
       sourceKind: PlaybackSourceKind.smb,
       sourceLabel: connection.name,
-      sourceKey: 'smb:${connection.name}:${_smbParent(smbPath)}',
+      sourceKey: 'smb:${connection.id}:${_smbParent(smbPath)}',
       title: _resolvedTitle(item),
       subtitle: item.subtitle ?? item.historyItem?.episodeTitle,
       imageUrl: item.historyItem?.thumbnailPath,
@@ -739,7 +728,7 @@ class PlaybackSourceService {
 
     return videos.map((entry) {
       final mediaPath =
-          MediaSourceUtils.buildSmbPath(connection.name, entry.path);
+          MediaSourceUtils.buildSmbPath(connection.id, entry.path);
       final url =
           SMBProxyService.instance.buildStreamUrl(connection, entry.path);
       final title = p.basenameWithoutExtension(entry.name);
@@ -751,6 +740,7 @@ class PlaybackSourceService {
         lastPosition: 0,
         duration: 0,
         lastWatchTime: DateTime.now(),
+        mediaKey: MediaIdentityResolver.forPath(mediaPath),
       );
       return PlaybackDetailEpisode(
         id: entry.path,
@@ -759,6 +749,7 @@ class PlaybackSourceService {
         subtitle: connection.name,
         historyItem: history,
         actualPlayUrl: url,
+        mediaKey: history.mediaKey,
       );
     }).toList();
   }
@@ -794,6 +785,7 @@ class PlaybackSourceService {
         animeId: isCurrent ? current.animeId : null,
         episodeId: isCurrent ? current.episodeId : null,
         historyItem: isCurrent ? current.historyItem : null,
+        mediaKey: MediaIdentityResolver.forPath(file.path),
       );
     }).toList();
   }
@@ -831,6 +823,8 @@ class PlaybackSourceService {
       actualPlayUrl: item.actualPlayUrl,
       playbackSession: item.playbackSession,
       progress: item.historyItem?.watchProgress,
+      mediaKey:
+          item.mediaKey ?? MediaIdentityResolver.forPath(item.videoPath),
     );
   }
 
@@ -858,7 +852,7 @@ class PlaybackSourceService {
   }
 
   static SMBConnection? _findSmbConnection(String name) {
-    final direct = SMBService.instance.getConnection(name);
+    final direct = SMBService.instance.getConnectionByIdOrName(name);
     if (direct != null) return direct;
     final matches = SMBService.instance.connections.where((connection) {
       return connection.host == name ||
