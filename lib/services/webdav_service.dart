@@ -12,6 +12,8 @@ import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/models/media_identity.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
+import 'package:nipaplay/src/rust/api/webdav_multistatus.dart' as rust_webdav;
+import 'package:nipaplay/src/rust/frb_generated.dart';
 
 class WebDAVConnection {
   final String id;
@@ -333,8 +335,15 @@ class WebDAVService {
   }
 
   Future<List<WebDAVFile>> listDirectory(
-      WebDAVConnection connection, String path) async {
-    final files = await _listDirectoryAllCached(connection, path);
+    WebDAVConnection connection,
+    String path, {
+    bool forceRefresh = false,
+  }) async {
+    final files = await _listDirectoryAllCached(
+      connection,
+      path,
+      forceRefresh: forceRefresh,
+    );
     return files
         .where((file) => file.isDirectory || isVideoFile(file.name))
         .toList();
@@ -342,15 +351,21 @@ class WebDAVService {
 
   Future<List<WebDAVFile>> listDirectoryAll(
     WebDAVConnection connection,
-    String path,
-  ) {
-    return _listDirectoryAllCached(connection, path);
+    String path, {
+    bool forceRefresh = false,
+  }) {
+    return _listDirectoryAllCached(
+      connection,
+      path,
+      forceRefresh: forceRefresh,
+    );
   }
 
   Future<List<WebDAVFile>> _listDirectoryAllCached(
     WebDAVConnection connection,
-    String path,
-  ) {
+    String path, {
+    bool forceRefresh = false,
+  }) {
     final normalizedConnection = _normalizeConnection(connection);
     final normalizedPath = _normalizeDirectoryPath(path);
     final key = (
@@ -363,6 +378,7 @@ class WebDAVService {
     return _directoryCache.getOrLoad(
       key,
       () => _fetchDirectoryAll(normalizedConnection, normalizedPath),
+      forceRefresh: forceRefresh,
     );
   }
 
@@ -1130,9 +1146,10 @@ class WebDAVService {
         throw Exception('WebDAV PROPFIND failed: ${response.statusCode}');
       }
 
-      final files = _parseWebDAVResponse(
+      final files = await _parseWebDAVResponse(
         responseBody,
         path,
+        responseByteLength: response.bodyBytes.length,
         includeAllFiles: includeAllFiles,
       );
       print('📁 兼容模式解析到 ${files.length} 个项目');
@@ -1145,7 +1162,55 @@ class WebDAVService {
     }
   }
 
-  List<WebDAVFile> _parseWebDAVResponse(
+  static const int _rustMultistatusThresholdBytes = 8 * 1024;
+
+  Future<List<WebDAVFile>> _parseWebDAVResponse(
+    String xmlResponse,
+    String basePath, {
+    int? responseByteLength,
+    bool includeAllFiles = false,
+  }) async {
+    if (!kIsWeb &&
+        (responseByteLength ?? xmlResponse.length) >=
+            _rustMultistatusThresholdBytes &&
+        RustLib.instance.initialized) {
+      try {
+        final entries = await rust_webdav.parseWebdavMultistatus(
+          xml: xmlResponse,
+          basePath: basePath,
+          includeAllFiles: includeAllFiles,
+        );
+        return entries.map((entry) {
+          DateTime? lastModified;
+          final rawLastModified = entry.lastModified;
+          if (rawLastModified != null && rawLastModified.isNotEmpty) {
+            try {
+              lastModified = HttpDate.parse(rawLastModified);
+            } catch (_) {
+              // 与原有 Dart 解析器一致：非法日期不影响其余目录项。
+            }
+          }
+          return WebDAVFile(
+            name: entry.name,
+            path: entry.path,
+            isDirectory: entry.isDirectory,
+            size: entry.size?.toInt(),
+            lastModified: lastModified,
+          );
+        }).toList(growable: false);
+      } catch (error) {
+        debugPrint('Rust WebDAV XML解析失败，回退 Dart: $error');
+      }
+    }
+
+    return _parseWebDAVResponseDart(
+      xmlResponse,
+      basePath,
+      includeAllFiles: includeAllFiles,
+    );
+  }
+
+  List<WebDAVFile> _parseWebDAVResponseDart(
     String xmlResponse,
     String basePath, {
     bool includeAllFiles = false,
