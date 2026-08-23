@@ -44,7 +44,7 @@ void main() {
     expect(style?.itemHeight, 36);
   });
 
-  test('portrait controls rebuild unscaled and danmaku keeps phone size', () {
+  test('portrait controls rebuild unscaled and danmaku receives portrait scale', () {
     final player = File('lib/pages/play_video_page.dart').readAsStringSync();
 
     expect(
@@ -59,11 +59,10 @@ void main() {
       RegExp(r'scale: topControlsScale').allMatches(player).length,
       2,
     );
-    expect(player, contains('const Positioned.fill('));
-    expect(player, contains('child: VideoPlayerWidget()'));
+    expect(player, contains('Positioned.fill('));
     expect(
       player,
-      isNot(contains('VideoPlayerWidget(danmakuScale: portraitUiScale)')),
+      contains('child: VideoPlayerWidget(danmakuScale: portraitUiScale)'),
     );
   });
 }
