@@ -1470,6 +1470,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Auto-match on play disabled (manual matching available)';
 
   @override
+  String get skipDanmakuMatchingTitle => 'Skip Danmaku Matching';
+
+  @override
+  String get skipDanmakuMatchingDescription =>
+      'Do not automatically identify or load danmaku, or open a matching dialog, when playing videos from any source. Manual matching remains available from the player.';
+
+  @override
+  String get skipDanmakuMatchingEnabled => 'Danmaku matching will be skipped';
+
+  @override
+  String get skipDanmakuMatchingDisabled => 'Danmaku matching restored';
+
+  @override
   String get danmakuAutoLoadStrategyTitle => 'Danmaku Auto-Load';
 
   @override

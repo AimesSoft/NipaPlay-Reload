@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -38,6 +39,10 @@ class WatchHistoryAutoMatchHelper {
     required String? matchablePath,
     void Function(String message)? onMatched,
   }) async {
+    if (context.read<SettingsProvider>().skipDanmakuMatching) {
+      return item;
+    }
+
     if (!shouldAutoMatch(item)) {
       return item;
     }

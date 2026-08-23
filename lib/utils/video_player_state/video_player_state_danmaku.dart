@@ -119,12 +119,12 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     );
   }
 
-  Future<DanmakuAutoLoadStrategy> _resolveDanmakuAutoLoadStrategy() async {
+  Future<DanmakuAutoLoadSettings> _resolveDanmakuAutoLoadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    return danmakuAutoLoadStrategyFromPrefs(
-      prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
-      legacyAutoMatchOnPlay:
-          prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true,
+    return resolveDanmakuAutoLoadSettings(
+      persistedStrategy: prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
+      persistedSkipMatching: prefs.getBool(SettingsKeys.skipDanmakuMatching),
+      legacyAutoMatchOnPlay: prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay),
     );
   }
 

@@ -7,6 +7,7 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -218,11 +219,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
     final provider =
         Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+    final skipDanmakuMatching =
+        context.read<SettingsProvider>().skipDanmakuMatching;
     int? quickMatchEpisodeId;
     int? quickMatchAnimeId;
     String? quickMatchAnimeTitle;
 
-    if (provider.bgmIdQuickMatch) {
+    if (!skipDanmakuMatching && provider.bgmIdQuickMatch) {
       // 使用用户自定义正则从完整 URL 中匹配 bgmid
       try {
         final regex = RegExp(provider.bgmIdMatchPattern);
@@ -268,7 +271,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
 
     // ========== tmdbId 快速匹配（bgmid 未匹配成功时尝试） ==========
-    if (quickMatchEpisodeId == null && provider.tmdbIdQuickMatch) {
+    if (!skipDanmakuMatching &&
+        quickMatchEpisodeId == null &&
+        provider.tmdbIdQuickMatch) {
       try {
         final tmdbRegex = RegExp(provider.tmdbIdMatchPattern);
         final tmdbMatch = tmdbRegex.firstMatch(videoUrl);

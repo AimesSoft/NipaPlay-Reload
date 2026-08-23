@@ -870,8 +870,18 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             _playbackGeneration == danmakuLoadGeneration;
 
         if (!canContinue()) return;
-        final danmakuAutoLoadStrategy = await _resolveDanmakuAutoLoadStrategy();
+        final danmakuAutoLoadSettings = await _resolveDanmakuAutoLoadSettings();
         if (!canContinue()) return;
+
+        // “跳过弹幕匹配”表示启动时完全跳过弹幕流程。手动搜索只能由用户
+        // 从播放器弹幕菜单主动触发，不能在这里自动弹出。
+        if (danmakuAutoLoadSettings.skipMatching) {
+          _clearDanmakuAutoLoadState();
+          _addStatusMessage('已跳过弹幕匹配');
+          _applyTimelineDanmakuTrackForCurrentVideo();
+          _updateMergedDanmakuList();
+          return;
+        }
 
         // 针对Jellyfin流媒体视频的特殊处理
         bool jellyfinDanmakuHandled = false;
@@ -922,7 +932,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             }
           }
 
-          switch (danmakuAutoLoadStrategy) {
+          switch (danmakuAutoLoadSettings.strategy) {
             case DanmakuAutoLoadStrategy.remoteAndLocal:
               await loadRemoteDanmakuForCurrentVideo();
               if (!canContinue()) return;
@@ -943,13 +953,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               }
               break;
             case DanmakuAutoLoadStrategy.manual:
-              _clearDanmakuAutoLoadState();
-              final handled = await _tryManualMatchDanmaku(videoPath,
-                  initialFileName: null);
-              if (!canContinue()) return;
-              if (!handled) {
-                _addStatusMessage('已选择手动加载弹幕');
-              }
               break;
           }
         }
