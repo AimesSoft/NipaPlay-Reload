@@ -657,17 +657,6 @@ class PlaybackSourceService {
   }
 
   static String _webDavParentDirectory(WebDAVResolvedFile resolved) {
-    final connectionUri = Uri.parse(resolved.connection.url);
-    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-    final normalizedBase = basePath.endsWith('/') ? basePath : '$basePath/';
-    final filePath = resolved.relativePath.startsWith('/')
-        ? resolved.relativePath
-        : '/${resolved.relativePath}';
-    if (filePath.length > normalizedBase.length &&
-        filePath.startsWith(normalizedBase)) {
-      final relative = filePath.substring(normalizedBase.length);
-      return _normalizeRemoteDirectoryPath(p.posix.dirname(relative));
-    }
     return _normalizeRemoteDirectoryPath(
         p.posix.dirname(resolved.relativePath));
   }

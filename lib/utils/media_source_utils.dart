@@ -207,13 +207,13 @@ class MediaSourceUtils {
   /// 新格式: webdav://connectionName/path/to/file.mp4
   static String? migrateWebDavPath(String oldPath) {
     if (isNewWebDavPath(oldPath)) {
-      final parsed = parseWebDavPath(oldPath);
-      if (parsed == null) return oldPath;
-      final connection =
-          WebDAVService.instance.getConnectionByIdOrName(parsed.connectionName);
-      return connection == null
+      final resolved = WebDAVService.instance.resolveMediaPath(oldPath);
+      return resolved == null
           ? oldPath
-          : buildWebDavPath(connection.id, parsed.relativePath);
+          : buildWebDavPath(
+              resolved.connection.id,
+              resolved.relativePath,
+            );
     }
     if (!isWebDavPath(oldPath)) return null;
 
@@ -352,14 +352,12 @@ class MediaSourceUtils {
   /// 将新格式 WebDAV 路径解析为可播放的 HTTP URL
   /// 返回 null 如果找不到对应连接
   static String? resolveWebDavPathToUrl(String filePath) {
-    final parsed = parseWebDavPath(filePath);
-    if (parsed == null) return null;
-
-    final connection =
-        WebDAVService.instance.getConnectionByIdOrName(parsed.connectionName);
-    if (connection == null) return null;
-
-    return WebDAVService.instance.getFileUrl(connection, parsed.relativePath);
+    final resolved = WebDAVService.instance.resolveMediaPath(filePath);
+    if (resolved == null) return null;
+    return WebDAVService.instance.getFileUrl(
+      resolved.connection,
+      resolved.relativePath,
+    );
   }
 
   /// 将新格式 SMB 路径解析为可播放的代理 URL

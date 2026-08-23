@@ -121,6 +121,13 @@ part 'video_player_state/video_player_state_navigation.dart';
 part 'video_player_state/video_player_state_lifecycle.dart';
 part 'video_player_state/video_player_state_chapters.dart';
 
+String _redactMediaUrlForLog(Object? value) {
+  final text = value?.toString() ?? 'null';
+  final uri = Uri.tryParse(text);
+  if (uri == null || uri.userInfo.isEmpty) return text;
+  return uri.replace(userInfo: '').toString();
+}
+
 enum SubtitleStyleOverrideMode { auto, none, scale, force }
 
 enum SubtitleAlignX { left, center, right }
@@ -740,6 +747,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 新增回调：当发生严重播放错误且应弹出时调用
   Function()? onSeriousPlaybackErrorAndShouldPop;
+  bool _playbackErrorDialogRequested = false;
 
   // 获取菜单栏隐藏状态
   bool get isAppBarHidden => _isAppBarHidden;

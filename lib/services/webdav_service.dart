@@ -10,6 +10,7 @@ import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:xml/xml.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:nipaplay/models/media_identity.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
 
 class WebDAVConnection {
@@ -388,11 +389,12 @@ class WebDAVService {
       if (_shouldFallbackOnDioException(e)) {
         print(
             '🔁 webdav_client 列目录失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
-        return await _legacyListDirectory(
+        final files = await _legacyListDirectory(
           normalizedConnection,
           normalizedPath,
           includeAllFiles: true,
         );
+        return _normalizeLegacyList(normalizedConnection, files);
       }
       print('❌ 获取WebDAV目录内容失败: $e');
       print('📍 堆栈: ${e.stackTrace}');
@@ -400,12 +402,34 @@ class WebDAVService {
     } catch (e, stackTrace) {
       print('❌ 获取WebDAV目录内容失败: $e');
       print('📍 堆栈: $stackTrace');
-      return await _legacyListDirectory(
+      final files = await _legacyListDirectory(
         normalizedConnection,
         normalizedPath,
         includeAllFiles: true,
       );
+      return _normalizeLegacyList(normalizedConnection, files);
     }
+  }
+
+  List<WebDAVFile> _normalizeLegacyList(
+    WebDAVConnection connection,
+    List<WebDAVFile> files,
+  ) {
+    return files
+        .map(
+          (file) => WebDAVFile(
+            name: file.name,
+            path: toConnectionRelativePath(
+              connection,
+              file.path,
+              isDirectory: file.isDirectory,
+            ),
+            isDirectory: file.isDirectory,
+            size: file.size,
+            lastModified: file.lastModified,
+          ),
+        )
+        .toList();
   }
 
   void clearDirectoryCache({String? connectionName}) {
@@ -455,27 +479,25 @@ class WebDAVService {
 
   String getFileUrl(WebDAVConnection connection, String filePath) {
     final normalizedConnection = _normalizeConnection(connection);
-    final trimmedPath = filePath.trim();
-    if (_isFullyQualifiedUrl(trimmedPath)) {
-      return trimmedPath;
+    if (_isFullyQualifiedUrl(filePath)) {
+      return filePath;
     }
 
     final baseUri = Uri.parse(normalizedConnection.url);
-    final combinedPath = _buildServerRelativePath(baseUri.path, trimmedPath);
+    final combinedPath = _buildServerRelativePath(baseUri.path, filePath);
     final hasAuth = normalizedConnection.username.isNotEmpty ||
         normalizedConnection.password.isNotEmpty;
 
-    final uri = Uri(
+    final origin = Uri(
       scheme: baseUri.scheme,
       host: baseUri.host,
       port: baseUri.hasPort ? baseUri.port : null,
-      path: combinedPath,
       userInfo: hasAuth
-          ? '${Uri.encodeComponent(normalizedConnection.username)}:${Uri.encodeComponent(normalizedConnection.password)}'
+          ? '${normalizedConnection.username}:${normalizedConnection.password}'
           : null,
     );
-
-    return uri.toString();
+    final encodedPath = OpaqueMediaPath.canonicalize(combinedPath);
+    return '${origin.toString()}$encodedPath';
   }
 
   WebDAVResolvedFile? resolveFileUrl(String fileUrl) {
@@ -516,7 +538,10 @@ class WebDAVService {
 
     if (bestConnection == null) return null;
 
-    final normalizedPath = _normalizeFilePath(fileUri.path, false);
+    final normalizedPath = toConnectionRelativePath(
+      bestConnection,
+      fileUri.path,
+    );
     return WebDAVResolvedFile(
         connection: bestConnection, relativePath: normalizedPath);
   }
@@ -524,11 +549,10 @@ class WebDAVService {
   /// Resolve either the stable WebDAV media path used by the library or a
   /// legacy fully-qualified WebDAV URL.
   WebDAVResolvedFile? resolveMediaPath(String mediaPath) {
-    final trimmed = mediaPath.trim();
-    if (trimmed.toLowerCase().startsWith('webdav://')) {
-      return resolveConnectionByNamePath(trimmed);
+    if (mediaPath.toLowerCase().startsWith('webdav://')) {
+      return resolveConnectionByNamePath(mediaPath);
     }
-    return resolveFileUrl(trimmed);
+    return resolveFileUrl(mediaPath);
   }
 
   Future<void> updateConnectionStatus(String name) async {
@@ -582,10 +606,49 @@ class WebDAVService {
     final connection = getConnectionByIdOrName(connectionName);
     if (connection == null) return null;
 
+    final normalizedConnection = _normalizeConnection(connection);
     return WebDAVResolvedFile(
-      connection: _normalizeConnection(connection),
-      relativePath: relativePath,
+      connection: normalizedConnection,
+      relativePath: toConnectionRelativePath(
+        normalizedConnection,
+        relativePath,
+      ),
     );
+  }
+
+  /// Converts legacy server-root paths (for example `/dav/anime/01.mkv`)
+  /// and current WebDAV-client paths to one connection-root-relative form.
+  String toConnectionRelativePath(
+    WebDAVConnection connection,
+    String path, {
+    bool isDirectory = false,
+  }) {
+    final normalizedConnection = _normalizeConnection(connection);
+    final baseUri = Uri.tryParse(normalizedConnection.url);
+    var normalizedPath = _normalizeFilePath(path, isDirectory);
+    if (baseUri == null) return normalizedPath;
+
+    final normalizedBase = _ensureNoTrailingSlash(
+      _collapseSlashes(baseUri.path.isEmpty ? '/' : baseUri.path),
+    );
+    if (normalizedBase != '/' &&
+        (normalizedPath == normalizedBase ||
+            normalizedPath.startsWith('$normalizedBase/'))) {
+      normalizedPath = normalizedPath.substring(normalizedBase.length);
+      if (normalizedPath.isEmpty) normalizedPath = '/';
+      if (!normalizedPath.startsWith('/')) normalizedPath = '/$normalizedPath';
+    }
+
+    return isDirectory
+        ? _ensureTrailingSlash(normalizedPath)
+        : _ensureNoTrailingSlash(normalizedPath);
+  }
+
+  /// Builds the old server-root spelling used by historical records.
+  String toLegacyServerPath(WebDAVConnection connection, String relativePath) {
+    final baseUri = Uri.tryParse(_normalizeConnection(connection).url);
+    if (baseUri == null) return _normalizeFilePath(relativePath, false);
+    return _buildServerRelativePath(baseUri.path, relativePath);
   }
 
   webdav.Client _createClient(WebDAVConnection connection) {
@@ -1458,7 +1521,7 @@ class WebDAVService {
   }
 
   String _normalizeDirectoryPath(String path) {
-    var normalized = path.trim();
+    var normalized = path;
     if (normalized.isEmpty) {
       return '/';
     }
@@ -1470,7 +1533,7 @@ class WebDAVService {
   }
 
   String _normalizeFilePath(String path, bool isDirectory) {
-    var normalized = path.trim();
+    var normalized = path;
     if (normalized.isEmpty) {
       normalized = '/';
     }
@@ -1513,7 +1576,7 @@ class WebDAVService {
   }
 
   String _buildServerRelativePath(String basePath, String relativePath) {
-    final bool isDirectory = relativePath.trim().endsWith('/');
+    final bool isDirectory = relativePath.endsWith('/');
     var normalizedRelative = _normalizeFilePath(relativePath, isDirectory);
     final normalizedBase = _ensureTrailingSlash(
         _collapseSlashes(basePath.isEmpty ? '/' : basePath));

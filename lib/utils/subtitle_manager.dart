@@ -1038,7 +1038,10 @@ class SubtitleManager extends ChangeNotifier {
 
         final streamUri = Uri.tryParse(videoPath);
         final scheme = streamUri?.scheme.toLowerCase();
-        if (scheme == 'http' || scheme == 'https') {
+        if (scheme == 'http' ||
+            scheme == 'https' ||
+            MediaSourceUtils.isNewWebDavPath(videoPath) ||
+            MediaSourceUtils.isNewSmbPath(videoPath)) {
           debugPrint('SubtitleManager: 远程流字幕检测结束，跳过本地文件系统检测');
           return;
         }
