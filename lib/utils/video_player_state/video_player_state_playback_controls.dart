@@ -369,6 +369,40 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _notifyListeners();
   }
 
+  void _requestPlaybackErrorDialog() {
+    if (_playbackErrorDialogRequested || _isDisposed) return;
+    _playbackErrorDialogRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
+      final callback = onSeriousPlaybackErrorAndShouldPop;
+      if (callback != null) {
+        callback();
+        return;
+      }
+
+      // Fallback for playback surfaces that have not installed the normal UI
+      // callback. Remote load failures must never remain silent.
+      final dialogContext = _context;
+      if (dialogContext == null || !dialogContext.mounted) return;
+      unawaited(
+        BlurDialog.show<void>(
+          context: dialogContext,
+          title: '播放错误',
+          content: _error ?? '远程视频载入失败，请检查网络或存储设备。',
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                resetPlayer();
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   void togglePlayPause() {
     if (_status == PlayerStatus.playing) {
       pause();
@@ -542,7 +576,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void play() {
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
-      '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}',
+      '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, '
+      'currentMedia: ${_redactMediaUrlForLog(player.media)}',
     );
     final bool isWindowsMediaKit = !kIsWeb &&
         Platform.isWindows &&

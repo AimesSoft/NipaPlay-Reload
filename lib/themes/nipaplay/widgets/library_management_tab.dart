@@ -3158,9 +3158,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final sourcePath = switch (location.type) {
       _MountedLibraryType.local => directoryPath,
       _MountedLibraryType.webdav =>
-        'webdav://${location.webdavConnection!.name}$directoryPath',
+        MediaSourceUtils.buildWebDavPath(
+          location.webdavConnection!.id,
+          directoryPath,
+        ),
       _MountedLibraryType.smb =>
-        'smb://${location.smbConnection!.name}$directoryPath',
+        MediaSourceUtils.buildSmbPath(
+          location.smbConnection!.id,
+          directoryPath,
+        ),
     };
     await CustomMediaInfoDialog.show(
       context,

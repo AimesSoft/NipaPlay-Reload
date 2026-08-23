@@ -716,8 +716,7 @@ class WatchHistoryDatabase {
       if (exact != null) return exact;
       final mediaKey = MediaIdentityResolver.forPath(filePath);
       for (final item in _webStore.values) {
-        if ((item.mediaKey ?? MediaIdentityResolver.forPath(item.filePath)) ==
-            mediaKey) {
+        if (MediaIdentityResolver.forPath(item.filePath) == mediaKey) {
           return item;
         }
       }
@@ -745,18 +744,29 @@ class WatchHistoryDatabase {
           return _mapToWatchHistoryItem(mediaKeyMaps.first);
         }
 
-        final legacyAlias = _legacyConnectionNameAlias(filePath);
-        if (legacyAlias != null && legacyAlias != filePath) {
+        final legacyAliases = _legacyPathAliases(filePath)
+            .where((alias) => alias != filePath)
+            .toSet()
+            .toList();
+        if (legacyAliases.isNotEmpty) {
           final aliasMaps = await db.query(
             'watch_history',
-            where: 'file_path = ?',
-            whereArgs: [legacyAlias],
+            where:
+                'file_path IN (${List.filled(legacyAliases.length, '?').join(',')})',
+            whereArgs: legacyAliases,
             limit: 1,
           );
           if (aliasMaps.isNotEmpty) {
             return _mapToWatchHistoryItem(aliasMaps.first);
           }
         }
+
+        final identityMatch = await _findRemoteIdentityMatch(
+          db,
+          filePath,
+          mediaKey,
+        );
+        if (identityMatch != null) return identityMatch;
 
         // 如果在iOS上没找到，尝试使用替代路径
         if (Platform.isIOS) {
@@ -1049,10 +1059,9 @@ class WatchHistoryDatabase {
     final originalPath = map['file_path'] as String? ?? '';
     final item = WatchHistoryItem(
       filePath: originalPath,
-      mediaKey: map['media_key'] as String? ??
-          (originalPath.isEmpty
-              ? null
-              : MediaIdentityResolver.forPath(originalPath)),
+      mediaKey: originalPath.isEmpty
+          ? null
+          : MediaIdentityResolver.forPath(originalPath),
       animeName: map['anime_name'],
       episodeTitle: map['episode_title'],
       episodeId: (map['episode_id'] as num?)?.toInt(),
@@ -1083,25 +1092,86 @@ class WatchHistoryDatabase {
   }
 
   static String _mediaKeyFor(WatchHistoryItem item) =>
-      item.mediaKey ?? MediaIdentityResolver.forPath(item.filePath);
+      MediaIdentityResolver.forPath(item.filePath);
 
-  String? _legacyConnectionNameAlias(String filePath) {
+  List<String> _legacyPathAliases(String filePath) {
     final webDav = WebDAVService.instance.resolveMediaPath(filePath);
     if (webDav != null) {
-      return MediaSourceUtils.buildWebDavPath(
-        webDav.connection.name,
+      final legacyServerPath = WebDAVService.instance.toLegacyServerPath(
+        webDav.connection,
         webDav.relativePath,
       );
+      return [
+        MediaSourceUtils.buildWebDavPath(
+          webDav.connection.id,
+          webDav.relativePath,
+        ),
+        MediaSourceUtils.buildWebDavPath(
+          webDav.connection.name,
+          webDav.relativePath,
+        ),
+        MediaSourceUtils.buildWebDavPath(
+          webDav.connection.id,
+          legacyServerPath,
+        ),
+        MediaSourceUtils.buildWebDavPath(
+          webDav.connection.name,
+          legacyServerPath,
+        ),
+      ];
     }
     final smb = MediaSourceUtils.parseSmbMediaPath(filePath);
     if (smb != null) {
       final connection =
           SMBService.instance.getConnectionByIdOrName(smb.connectionName);
       if (connection != null) {
-        return MediaSourceUtils.buildSmbPath(
-          connection.name,
-          smb.relativePath,
-        );
+        return [
+          MediaSourceUtils.buildSmbPath(connection.id, smb.relativePath),
+          MediaSourceUtils.buildSmbPath(connection.name, smb.relativePath),
+        ];
+      }
+    }
+    return const [];
+  }
+
+  Future<WatchHistoryItem?> _findRemoteIdentityMatch(
+    Database db,
+    String filePath,
+    String mediaKey,
+  ) async {
+    final references = <String>[];
+    String? scheme;
+
+    final webDav = WebDAVService.instance.resolveMediaPath(filePath);
+    if (webDav != null) {
+      scheme = 'webdav';
+      references.addAll([webDav.connection.id, webDav.connection.name]);
+    } else {
+      final smb = MediaSourceUtils.parseSmbMediaPath(filePath);
+      if (smb != null) {
+        final connection =
+            SMBService.instance.getConnectionByIdOrName(smb.connectionName);
+        if (connection != null) {
+          scheme = 'smb';
+          references.addAll([connection.id, connection.name]);
+        }
+      }
+    }
+    if (scheme == null || references.isEmpty) return null;
+
+    final uniqueReferences = references.toSet().toList();
+    final rows = await db.query(
+      'watch_history',
+      where: uniqueReferences
+          .map((_) => 'file_path LIKE ?')
+          .join(' OR '),
+      whereArgs: uniqueReferences.map((ref) => '$scheme://$ref/%').toList(),
+    );
+    for (final row in rows) {
+      final candidatePath = row['file_path'] as String?;
+      if (candidatePath != null &&
+          MediaIdentityResolver.forPath(candidatePath) == mediaKey) {
+        return _mapToWatchHistoryItem(row);
       }
     }
     return null;

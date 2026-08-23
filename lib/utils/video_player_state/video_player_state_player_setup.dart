@@ -13,6 +13,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
   }) async {
+    _playbackErrorDialogRequested = false;
     final isRequestedEmbyStream = videoPath.startsWith('emby://');
     final requestedEmbyAccountKey = isRequestedEmbyStream
         ? (preserveEmbyAccountKey
@@ -264,6 +265,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
         _setStatus(PlayerStatus.error, message: '无法获取播放会话');
         _error = '无法获取播放会话';
+        _requestPlaybackErrorDialog();
         return;
       }
     }
@@ -282,14 +284,18 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
           _setStatus(PlayerStatus.error, message: '无法解析远程媒体路径，请检查连接配置');
           _error = '无法解析远程媒体路径';
+          _requestPlaybackErrorDialog();
           return;
         }
         debugPrint(
-            'VideoPlayerState: 远程路径解析成功: $videoPath -> $resolvedActualPlayUrl');
+          'VideoPlayerState: 远程路径解析成功: $videoPath -> '
+          '${_redactMediaUrlForLog(resolvedActualPlayUrl)}',
+        );
       } catch (e) {
         debugPrint('VideoPlayerState: 解析远程媒体路径失败: $e');
         _setStatus(PlayerStatus.error, message: '解析远程媒体路径失败: $e');
         _error = '解析远程媒体路径失败';
+        _requestPlaybackErrorDialog();
         return;
       }
     }
@@ -454,6 +460,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       if (isMediaKitKernel && player.supportsMediaLoadReadiness) {
         final readyStopwatch = Stopwatch()..start();
+        var mediaLoadAttempts = 1;
         bool mediaReady = await player.waitUntilMediaReady(
           timeout:
               Duration(seconds: isMediaServer ? 30 : (isNetworkMedia ? 6 : 5)),
@@ -462,9 +469,18 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           return;
         }
 
-        if (!mediaReady && isNetworkMedia && !isMediaServer) {
-          final retried = await player.retryCurrentMediaLoad();
-          if (retried) {
+        if (!mediaReady && isNetworkMedia) {
+          for (var attempt = 2;
+              !mediaReady && attempt <= networkMediaLoadMaxAttempts;
+              attempt++) {
+            final retried = await player.retryCurrentMediaLoad();
+            if (!retried) {
+              // Metadata may have arrived between the deadline and retry
+              // decision. Do not turn that recovery into an error.
+              mediaReady = player.isMediaReady;
+              break;
+            }
+            mediaLoadAttempts = attempt;
             mediaReady = await player.waitUntilMediaReady(
               timeout: const Duration(seconds: 10),
             );
@@ -472,11 +488,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
                 initializationGeneration != _playbackGeneration) {
               return;
             }
-          } else {
-            // Metadata may have arrived between the short deadline and the
-            // retry decision. Do not turn that successful recovery into an
-            // initialization error.
-            mediaReady = player.isMediaReady;
           }
         }
 
@@ -485,7 +496,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           final detail = player.mediaInfo.specificErrorMessage ??
               player.mediaLoadError ??
               (isNetworkMedia ? '网络媒体在重试后仍未返回有效数据' : '媒体未返回有效轨道或时长');
-          throw TimeoutException(detail);
+          final attemptSummary =
+              isNetworkMedia ? '远程媒体已尝试 $mediaLoadAttempts 次仍无法载入：' : '';
+          throw TimeoutException('$attemptSummary$detail');
         }
         debugPrint(
           'VideoPlayerState: MediaKit媒体就绪，等待${readyStopwatch.elapsedMilliseconds}ms',
@@ -1126,6 +1139,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         );
         _error = message;
         _setStatus(PlayerStatus.error, message: message);
+        _requestPlaybackErrorDialog();
         return;
       }
       _error = '初始化视频播放器时出错: $e';

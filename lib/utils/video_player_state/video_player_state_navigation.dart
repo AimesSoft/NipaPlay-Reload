@@ -230,10 +230,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
   }) async {
     final currentPath = _currentVideoPath;
     final detailContext = _playbackDetailContext;
-    final currentMediaKey = _currentMediaKey ??
-        (currentPath == null
-            ? null
-            : MediaIdentityResolver.forPath(currentPath));
+    // Re-resolve from the active path so connection-root migrations cannot
+    // leave a stale key captured before WebDAV/SMB initialization.
+    final currentMediaKey =
+        currentPath == null ? null : MediaIdentityResolver.forPath(currentPath);
     if (currentPath == null ||
         currentMediaKey == null ||
         detailContext == null) {
@@ -252,13 +252,27 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           _playbackDetailContext?.sourceKey != detailContext.sourceKey) {
         return const PlaylistCurrentNotFound();
       }
-      return PlaybackPlaylist.locate(
+      final result = PlaybackPlaylist.locate(
         episodes,
         currentMediaKey,
+        // The path is the source of truth. Cached episode media keys may have
+        // been produced before a remote connection/root migration.
         identityOf: (episode) =>
-            episode.mediaKey ??
             MediaIdentityResolver.forPath(episode.videoPath),
       );
+      if (result is PlaylistCurrentNotFound) {
+        debugPrint(
+          '[播放列表] 当前项身份未命中: source=${detailContext.sourceKey}, '
+          'current=$currentMediaKey, episodes=${episodes.length}',
+        );
+        for (final episode in episodes.take(5)) {
+          final episodeKey = MediaIdentityResolver.forPath(episode.videoPath);
+          debugPrint(
+            '[播放列表] 候选项身份: id=${episode.id}, key=$episodeKey',
+          );
+        }
+      }
+      return result;
     } catch (e) {
       debugPrint('[播放列表] 获取下一项失败: $e');
       return PlaylistLoadFailed(e);
@@ -337,8 +351,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         duration: 0,
         lastWatchTime: DateTime.now(),
         thumbnailPath: detailContext.imageUrl,
-        mediaKey: episode.mediaKey ??
-            MediaIdentityResolver.forPath(episode.videoPath),
+        mediaKey: MediaIdentityResolver.forPath(episode.videoPath),
       );
     }
     historyItem ??= episode.historyItem;
@@ -402,9 +415,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       historyItem: historyItem,
       actualPlayUrl: actualPlayUrl,
       playbackSession: playbackSession,
-      mediaKey: episode.mediaKey ??
-          historyItem?.mediaKey ??
-          MediaIdentityResolver.forPath(episode.videoPath),
+      mediaKey: MediaIdentityResolver.forPath(episode.videoPath),
       // 不传入旧的 detailContext，否则 PlaybackSourceService.resolve() 会
       // 直接复用上一集的上下文（subtitle 是上一集的剧集名），导致新一集显示旧标题。
     );
@@ -1477,7 +1488,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
 
               // 3. 通知UI层执行pop/显示对话框等
-              onSeriousPlaybackErrorAndShouldPop?.call();
+              _requestPlaybackErrorDialog();
             });
 
             return;

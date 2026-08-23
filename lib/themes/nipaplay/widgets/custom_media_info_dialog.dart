@@ -5,7 +5,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -1580,21 +1579,15 @@ class _Step2DialogState extends State<_Step2Dialog> {
       else {
         // 检查是否是WebDAV路径
         if (folderPath.startsWith('webdav://')) {
-          // 解析WebDAV路径：webdav://connectionName/path
-          final pathWithoutScheme = folderPath.substring(9);
-          final firstSlashIndex = pathWithoutScheme.indexOf('/');
-          if (firstSlashIndex != -1) {
-            final connectionName =
-                pathWithoutScheme.substring(0, firstSlashIndex);
-            final path = pathWithoutScheme.substring(firstSlashIndex);
-
-            // 获取WebDAV连接
-            final connection = WebDAVService.instance.connections.firstWhere(
-              (c) => c.name == connectionName,
-            );
-
+          final resolved =
+              WebDAVService.instance.resolveMediaPath(folderPath);
+          if (resolved != null) {
             // 递归扫描文件夹
-            await _scanWebDAVFolder(connection, path, videoExtensions);
+            await _scanWebDAVFolder(
+              resolved.connection,
+              resolved.relativePath,
+              videoExtensions,
+            );
           }
         }
         // 检查是否是SMB路径
@@ -1608,12 +1601,13 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final path = pathWithoutScheme.substring(firstSlashIndex);
 
             // 获取SMB连接
-            final connection = SMBService.instance.connections.firstWhere(
-              (c) => c.name == connectionName,
-            );
+            final connection =
+                SMBService.instance.getConnectionByIdOrName(connectionName);
 
             // 递归扫描文件夹
-            await _scanSMBFolder(connection, path, videoExtensions);
+            if (connection != null) {
+              await _scanSMBFolder(connection, path, videoExtensions);
+            }
           }
         }
         // 本地路径

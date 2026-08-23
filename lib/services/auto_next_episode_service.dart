@@ -5,6 +5,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_prompt_controller.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/countdown_snackbar.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -286,7 +287,7 @@ class AutoNextEpisodeService {
           historyItem: nextEpisode.historyItem,
           actualPlayUrl: nextEpisode.actualPlayUrl,
           playbackSession: nextEpisode.playbackSession,
-          mediaKey: nextEpisode.mediaKey,
+          mediaKey: MediaIdentityResolver.forPath(nextEpisode.videoPath),
         ),
       );
       _nextEpisode = null;
