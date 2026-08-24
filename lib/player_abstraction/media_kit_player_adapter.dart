@@ -320,7 +320,7 @@ class MediaKitPlayerAdapter
   bool _hasReceivedRealPosition = false;
   bool _mediaLoadFailed = false;
   bool _mediaLoadErrorRetryable = false;
-  bool _mediaLoadRetryAttempted = false;
+  int _mediaLoadRetryCount = 0;
   String? _mediaLoadError;
   Media? _lastPreparedMainMedia;
 
@@ -1125,7 +1125,7 @@ class MediaKitPlayerAdapter
     });
   }
 
-  void _resetMediaLoadState({required bool preserveRetryAttempt}) {
+  void _resetMediaLoadState({required bool preserveRetryCount}) {
     if (!_mediaReadyCompleter.isCompleted) {
       _mediaReadyCompleter.complete(false);
     }
@@ -1135,8 +1135,8 @@ class MediaKitPlayerAdapter
     _mediaLoadFailed = false;
     _mediaLoadErrorRetryable = false;
     _mediaLoadError = null;
-    if (!preserveRetryAttempt) {
-      _mediaLoadRetryAttempted = false;
+    if (!preserveRetryCount) {
+      _mediaLoadRetryCount = 0;
     }
     _interpolatedPosition = Duration.zero;
     _lastActualPosition = Duration.zero;
@@ -2145,12 +2145,12 @@ class MediaKitPlayerAdapter
         media == null ||
         _mediaReady ||
         !_currentMainMediaIsNetwork ||
-        _mediaLoadRetryAttempted ||
+        _mediaLoadRetryCount >= networkMediaLoadMaxAttempts - 1 ||
         (_mediaLoadFailed && !_mediaLoadErrorRetryable)) {
       return false;
     }
 
-    _mediaLoadRetryAttempted = true;
+    _mediaLoadRetryCount++;
     final originalGeneration = _mediaLoadGeneration;
     try {
       await _player.stop();
@@ -2159,9 +2159,11 @@ class MediaKitPlayerAdapter
       }
       _mediaLoadGeneration++;
       final generation = _mediaLoadGeneration;
-      _resetMediaLoadState(preserveRetryAttempt: true);
+      _resetMediaLoadState(preserveRetryCount: true);
       debugPrint(
-        'MediaKit: 网络媒体首次载入未就绪，执行一次透明重试 generation=$generation',
+        'MediaKit: 网络媒体载入未就绪，执行第 '
+        '${_mediaLoadRetryCount + 1}/$networkMediaLoadMaxAttempts 次载入 '
+        'generation=$generation',
       );
       _openMainMedia(media);
       return true;
@@ -2262,7 +2264,7 @@ class MediaKitPlayerAdapter
     _volumeResyncNeeded = true;
     // 递增代数计数器，使旧的延迟加载操作作废
     _mediaLoadGeneration++;
-    _resetMediaLoadState(preserveRetryAttempt: false);
+    _resetMediaLoadState(preserveRetryCount: false);
     // 清除不属于当前视频的残留外部音频路径，防止旧视频的MKA被加载到新视频上
     if (!_pendingExternalAudioIsFresh) {
       _pendingExternalAudioFile = null;

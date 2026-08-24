@@ -2939,6 +2939,7 @@ dependencies = [
  "ndk-sys",
  "percent-encoding",
  "pollster",
+ "quick-xml",
  "raw-window-handle",
  "regex",
  "reqwest",

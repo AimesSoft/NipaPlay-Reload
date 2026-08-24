@@ -13,4 +13,6 @@ const List<String> kAcknowledgementNames = [
   'SKYWOW',
   '爱跑步的男孩',
   'Bassman',
+  '银蓝_Yl',
+  '小石絹代',
 ];

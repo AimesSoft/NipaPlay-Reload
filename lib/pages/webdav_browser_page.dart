@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -55,6 +56,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   List<WebDAVFile> _currentFiles = [];
   // 加载状态
   bool _isLoading = false;
+  int _directoryLoadGeneration = 0;
+  String? _loadedDirectoryConnectionId;
+  String? _loadedDirectoryPath;
   // 是否正在初始化
   bool _isInitializing = true;
 
@@ -119,25 +123,48 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
   }
 
-  Future<void> _loadDirectory({bool isRecursive = false}) async {
-    if (_currentConnection == null) return;
-    // 只在非递归调用时检查 _isLoading，避免重入
-    if (!isRecursive && _isLoading) return;
+  Future<void> _loadDirectory({
+    bool forceRefresh = false,
+  }) async {
+    final connection = _currentConnection;
+    if (connection == null) return;
+    final path = _currentPath;
+    final generation = ++_directoryLoadGeneration;
+    final keepCurrentFiles = _loadedDirectoryConnectionId == connection.id &&
+        _loadedDirectoryPath == path;
 
     setState(() {
       _isLoading = true;
+      if (!keepCurrentFiles) {
+        _currentFiles = [];
+      }
     });
 
     try {
       final files = await WebDAVService.instance.listDirectory(
-        _currentConnection!,
-        _currentPath,
+        connection,
+        path,
+        forceRefresh: forceRefresh,
       );
+
+      if (!mounted ||
+          generation != _directoryLoadGeneration ||
+          _currentConnection?.id != connection.id ||
+          _currentPath != path) {
+        return;
+      }
 
       // 应用排序预设
       final provider =
           Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
-      WebDAVFileSorter.sort(files, provider.sortPreset);
+      await WebDAVFileSorter.sortAsync(files, provider.sortPreset);
+
+      if (!mounted ||
+          generation != _directoryLoadGeneration ||
+          _currentConnection?.id != connection.id ||
+          _currentPath != path) {
+        return;
+      }
 
       // 检查是否需要自动进入 Season 文件夹
       if (provider.autoEnterSeasonFolder) {
@@ -154,7 +181,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             _currentPath = matchPath;
           });
           // 递归加载（标记为递归调用）
-          await _loadDirectory(isRecursive: true);
+          await _loadDirectory();
           return;
         }
       }
@@ -162,11 +189,16 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       if (mounted) {
         setState(() {
           _currentFiles = files;
+          _loadedDirectoryConnectionId = connection.id;
+          _loadedDirectoryPath = path;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted &&
+          generation == _directoryLoadGeneration &&
+          _currentConnection?.id == connection.id &&
+          _currentPath == path) {
         setState(() {
           _isLoading = false;
         });
@@ -345,12 +377,16 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
 
     // 创建观看历史项用于播放
+    final stableMediaPath = MediaSourceUtils.buildWebDavPath(
+      _currentConnection!.id,
+      file.path,
+    );
     final historyItem = WatchHistoryItem(
       animeName:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
-      filePath:
-          MediaSourceUtils.buildWebDavPath(_currentConnection!.name, file.path),
+      filePath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -361,11 +397,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
     // 使用 PlaybackService 播放视频
     final playableItem = PlayableItem(
-      videoPath: videoUrl,
+      videoPath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       title:
           quickMatchAnimeTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: file.name,
       historyItem: historyItem,
+      actualPlayUrl: videoUrl,
     );
 
     PlaybackService().play(playableItem);
@@ -612,6 +650,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               secondaryTextColor: secondaryTextColor,
               accentColor: accentColor,
             ),
+            if (_isLoading && _currentFiles.isNotEmpty)
+              LinearProgressIndicator(color: accentColor),
             // 文件列表或搜索结果
             Expanded(
               child: _isSearchMode
@@ -621,7 +661,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                       secondaryTextColor: secondaryTextColor,
                       accentColor: accentColor,
                     )
-                  : _isLoading
+                  : _isLoading && _currentFiles.isEmpty
                       ? Center(
                           child: CircularProgressIndicator(
                               color: AppAccentColors.current),
@@ -681,6 +721,12 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
           label: '服务器',
           onPressed: _showServerSelector,
         ),
+        NipaplayLargeScreenActionButton(
+          icon: Icons.refresh_rounded,
+          label: _isLoading ? '刷新中' : '刷新',
+          onPressed:
+              _isLoading ? null : () => _loadDirectory(forceRefresh: true),
+        ),
         if (provider.enableSearch)
           NipaplayLargeScreenActionButton(
             icon: _isSearchMode ? Icons.close_rounded : Icons.search_rounded,
@@ -708,6 +754,10 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isLoading && _currentFiles.isNotEmpty) ...[
+            LinearProgressIndicator(color: accentColor),
+            const SizedBox(height: 10),
+          ],
           if (_isSearchMode) ...[
             _buildLargeScreenSearchBar(
               textColor: textColor,
@@ -851,7 +901,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     required Color secondaryTextColor,
     required Color accentColor,
   }) {
-    if (_isLoading) {
+    if (_isLoading && _currentFiles.isEmpty) {
       return Center(
         child: CircularProgressIndicator(color: AppAccentColors.current),
       );
@@ -1257,6 +1307,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     });
                   },
                 ),
+              IconButton(
+                tooltip: '刷新目录',
+                icon: Icon(Icons.refresh, color: textColor),
+                onPressed: _isLoading
+                    ? null
+                    : () => _loadDirectory(forceRefresh: true),
+              ),
             ],
           ),
           // 搜索输入框（搜索模式下显示）
@@ -2042,11 +2099,15 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       result.file.path,
     );
 
+    final stableMediaPath = MediaSourceUtils.buildWebDavPath(
+      _currentConnection!.id,
+      result.file.path,
+    );
     final historyItem = WatchHistoryItem(
       animeName: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: result.file.name,
-      filePath: MediaSourceUtils.buildWebDavPath(
-          _currentConnection!.name, result.file.path),
+      filePath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
@@ -2054,10 +2115,12 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     );
 
     final playableItem = PlayableItem(
-      videoPath: videoUrl,
+      videoPath: stableMediaPath,
+      mediaKey: MediaIdentityResolver.forPath(stableMediaPath),
       title: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: result.file.name,
       historyItem: historyItem,
+      actualPlayUrl: videoUrl,
     );
 
     PlaybackService().play(playableItem);
