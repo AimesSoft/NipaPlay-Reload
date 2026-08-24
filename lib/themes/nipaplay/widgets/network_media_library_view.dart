@@ -11,6 +11,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/jellyfin_series_auto_match_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -1925,8 +1926,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   List<NetworkMediaItem> _convertToNetworkMediaItems(List<dynamic> items) {
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
-        return items
-            .cast<JellyfinMediaItem>()
+        final jellyfinItems = items.cast<JellyfinMediaItem>().toList();
+        unawaited(JellyfinSeriesAutoMatchService.instance
+            .matchSeriesBatchIfEnabled(jellyfinItems));
+        return jellyfinItems
             .map((item) => JellyfinMediaItemAdapter(item))
             .toList();
       case NetworkMediaServerType.emby:

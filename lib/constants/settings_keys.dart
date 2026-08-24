@@ -11,6 +11,9 @@ class SettingsKeys {
 
   static const String autoMatchDanmakuOnPlay = 'danmaku_auto_match_on_play';
 
+  static const String autoMatchJellyfinSeries =
+      'jellyfin_auto_match_series_by_hash';
+
   static const String danmakuAutoLoadStrategy = 'danmaku_auto_load_strategy';
 
   static const String fastPlaybackStartup = 'fast_playback_startup';

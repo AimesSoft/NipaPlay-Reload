@@ -778,6 +778,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                       .getLatestMediaItemsByLibrary(library.id, limit: 25);
                   if (libraryItems.isNotEmpty) {
                     _recentJellyfinItemsByLibrary[library.name] = libraryItems;
+                    unawaited(JellyfinSeriesAutoMatchService.instance
+                        .matchSeriesBatchIfEnabled(libraryItems));
                   }
                 } catch (_) {}
               }());

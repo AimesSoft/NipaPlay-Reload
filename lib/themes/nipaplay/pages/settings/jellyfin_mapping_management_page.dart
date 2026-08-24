@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:provider/provider.dart';
 
 class JellyfinMappingManagementPage extends StatefulWidget {
   const JellyfinMappingManagementPage({super.key});
@@ -231,6 +233,18 @@ class _JellyfinMappingManagementPageState
               title: '映射管理',
             ),
           ),
+          Consumer<SettingsProvider>(
+            builder: (context, settings, child) {
+              return SettingsItem.toggle(
+                title: '自动识别 Jellyfin 动画',
+                subtitle: '新系列缺少映射时，读取一集的前 16 MB 并使用文件哈希匹配',
+                icon: Ionicons.scan_outline,
+                value: settings.autoMatchJellyfinSeries,
+                onChanged: settings.setAutoMatchJellyfinSeries,
+              );
+            },
+          ),
+          Divider(height: 1, color: _dividerColor),
           SettingsItem.button(
             title: '重新加载统计',
             subtitle: '刷新映射统计信息',

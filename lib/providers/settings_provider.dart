@@ -22,6 +22,7 @@ class SettingsProvider with ChangeNotifier {
 
   // 播放时自动匹配弹幕
   bool _autoMatchDanmakuOnPlay = true; // 默认开启
+  bool _autoMatchJellyfinSeries = false;
   DanmakuAutoLoadStrategy _danmakuAutoLoadStrategy =
       DanmakuAutoLoadStrategy.remoteAndLocal;
   bool _fastPlaybackStartup = false;
@@ -48,6 +49,7 @@ class SettingsProvider with ChangeNotifier {
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
   bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
+  bool get autoMatchJellyfinSeries => _autoMatchJellyfinSeries;
   DanmakuAutoLoadStrategy get danmakuAutoLoadStrategy =>
       _danmakuAutoLoadStrategy;
   bool get fastPlaybackStartup => _fastPlaybackStartup;
@@ -96,6 +98,8 @@ class SettingsProvider with ChangeNotifier {
     final savedAutoMatchDanmakuOnPlay =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay);
     _autoMatchDanmakuOnPlay = savedAutoMatchDanmakuOnPlay ?? true;
+    _autoMatchJellyfinSeries =
+        _prefs.getBool(SettingsKeys.autoMatchJellyfinSeries) ?? false;
     _danmakuAutoLoadStrategy = danmakuAutoLoadStrategyFromPrefs(
       _prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
       legacyAutoMatchOnPlay: _autoMatchDanmakuOnPlay,
@@ -216,6 +220,12 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.danmakuAutoLoadStrategy,
       _danmakuAutoLoadStrategy.prefsValue,
     );
+    notifyListeners();
+  }
+
+  Future<void> setAutoMatchJellyfinSeries(bool enable) async {
+    _autoMatchJellyfinSeries = enable;
+    await _prefs.setBool(SettingsKeys.autoMatchJellyfinSeries, enable);
     notifyListeners();
   }
 
