@@ -5,7 +5,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -27,8 +26,16 @@ class CustomMediaInfoDialog {
 
   static Future<Map<String, dynamic>?> show(
       BuildContext context, String folderPath,
-      {String? initialVideoPath}) {
-    return _showStep1(context, folderPath, initialVideoPath: initialVideoPath);
+      {String? initialVideoPath,
+      List<String>? preloadedVideoPaths,
+      Future<List<String>> Function(bool recursive)? videoPathLoader}) {
+    return _showStep1(
+      context,
+      folderPath,
+      initialVideoPath: initialVideoPath,
+      preloadedVideoPaths: preloadedVideoPaths,
+      videoPathLoader: videoPathLoader,
+    );
   }
 
   static Future<T?> _showAdaptiveContent<T>({
@@ -57,6 +64,8 @@ class CustomMediaInfoDialog {
   static Future<Map<String, dynamic>?> _showStep1(
       BuildContext context, String folderPath,
       {String? initialVideoPath,
+      List<String>? preloadedVideoPaths,
+      Future<List<String>> Function(bool recursive)? videoPathLoader,
       Map<String, dynamic>? step1Data,
       VoidCallback? onBack}) async {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
@@ -886,10 +895,15 @@ class CustomMediaInfoDialog {
                           Navigator.of(context).pop();
                           _Step2Dialog.show(callerContext, step1Data,
                               initialVideoPath: initialVideoPath,
+                              preloadedVideoPaths: preloadedVideoPaths,
+                              videoPathLoader: videoPathLoader,
                               onBack: onBack ??
                                   () {
                                     _showStep1(callerContext, folderPath,
                                         initialVideoPath: initialVideoPath,
+                                        preloadedVideoPaths:
+                                            preloadedVideoPaths,
+                                        videoPathLoader: videoPathLoader,
                                         step1Data: step1Data);
                                   });
                         },
@@ -1074,16 +1088,30 @@ class CustomMediaInfoDialog {
 class _Step2Dialog extends StatefulWidget {
   final Map<String, dynamic> step1Data;
   final String? initialVideoPath;
+  final List<String>? preloadedVideoPaths;
+  final Future<List<String>> Function(bool recursive)? videoPathLoader;
   final ValueNotifier<List<_VideoFileItem>> videoFilesNotifier =
       ValueNotifier([]);
 
-  _Step2Dialog({required this.step1Data, this.initialVideoPath});
+  _Step2Dialog({
+    required this.step1Data,
+    this.initialVideoPath,
+    this.preloadedVideoPaths,
+    this.videoPathLoader,
+  });
 
   static Future<Map<String, dynamic>?> show(
       BuildContext context, Map<String, dynamic> step1Data,
-      {String? initialVideoPath, VoidCallback? onBack}) async {
-    final _Step2Dialog dialog =
-        _Step2Dialog(step1Data: step1Data, initialVideoPath: initialVideoPath);
+      {String? initialVideoPath,
+      List<String>? preloadedVideoPaths,
+      Future<List<String>> Function(bool recursive)? videoPathLoader,
+      VoidCallback? onBack}) async {
+    final _Step2Dialog dialog = _Step2Dialog(
+      step1Data: step1Data,
+      initialVideoPath: initialVideoPath,
+      preloadedVideoPaths: preloadedVideoPaths,
+      videoPathLoader: videoPathLoader,
+    );
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -1461,7 +1489,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
             final filePath =
-                MediaSourceUtils.buildWebDavPath(connection.name, file.path);
+                MediaSourceUtils.buildWebDavPath(connection.id, file.path);
             videoFiles.add(_VideoFileItem(
               path: filePath,
               displayName: fileName,
@@ -1500,7 +1528,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final sortKey =
                 CustomMediaInfoDialog._generateSortKey(episodeNumber);
             final filePath =
-                MediaSourceUtils.buildSmbPath(connection.name, file.path);
+                MediaSourceUtils.buildSmbPath(connection.id, file.path);
             videoFiles.add(_VideoFileItem(
               path: filePath,
               displayName: fileName,
@@ -1539,6 +1567,37 @@ class _Step2DialogState extends State<_Step2Dialog> {
     final folderPath = widget.step1Data['folderPath'] as String;
 
     try {
+      final loadedVideoPaths = widget.videoPathLoader != null
+          ? await widget.videoPathLoader!(scanSubfolders)
+          : widget.preloadedVideoPaths;
+      if (loadedVideoPaths != null) {
+        for (final filePath in loadedVideoPaths) {
+          final uri = Uri.tryParse(filePath);
+          final fileName = uri != null && uri.scheme.isNotEmpty
+              ? p.basename(uri.path)
+              : p.basename(filePath);
+          final extension = p.extension(fileName).toLowerCase();
+          if (!videoExtensions.contains(extension)) continue;
+          final episodeNumber =
+              CustomMediaInfoDialog._extractEpisodeNumber(fileName);
+          videoFiles.add(_VideoFileItem(
+            path: filePath,
+            displayName: fileName,
+            episodeNumber: episodeNumber,
+            sortKey: CustomMediaInfoDialog._generateSortKey(episodeNumber),
+          ));
+        }
+        videoFiles.sort((a, b) {
+          if (a.sortKey != null && b.sortKey != null) {
+            return a.sortKey!.compareTo(b.sortKey!);
+          }
+          if (a.sortKey != null) return -1;
+          if (b.sortKey != null) return 1;
+          return a.displayName.compareTo(b.displayName);
+        });
+        return;
+      }
+
       // 如果提供了initialVideoPath，只处理这个视频文件
       if (widget.initialVideoPath != null) {
         final filePath = widget.initialVideoPath!;
@@ -1580,21 +1639,14 @@ class _Step2DialogState extends State<_Step2Dialog> {
       else {
         // 检查是否是WebDAV路径
         if (folderPath.startsWith('webdav://')) {
-          // 解析WebDAV路径：webdav://connectionName/path
-          final pathWithoutScheme = folderPath.substring(9);
-          final firstSlashIndex = pathWithoutScheme.indexOf('/');
-          if (firstSlashIndex != -1) {
-            final connectionName =
-                pathWithoutScheme.substring(0, firstSlashIndex);
-            final path = pathWithoutScheme.substring(firstSlashIndex);
-
-            // 获取WebDAV连接
-            final connection = WebDAVService.instance.connections.firstWhere(
-              (c) => c.name == connectionName,
-            );
-
+          final resolved = WebDAVService.instance.resolveMediaPath(folderPath);
+          if (resolved != null) {
             // 递归扫描文件夹
-            await _scanWebDAVFolder(connection, path, videoExtensions);
+            await _scanWebDAVFolder(
+              resolved.connection,
+              resolved.relativePath,
+              videoExtensions,
+            );
           }
         }
         // 检查是否是SMB路径
@@ -1608,12 +1660,13 @@ class _Step2DialogState extends State<_Step2Dialog> {
             final path = pathWithoutScheme.substring(firstSlashIndex);
 
             // 获取SMB连接
-            final connection = SMBService.instance.connections.firstWhere(
-              (c) => c.name == connectionName,
-            );
+            final connection =
+                SMBService.instance.getConnectionByIdOrName(connectionName);
 
             // 递归扫描文件夹
-            await _scanSMBFolder(connection, path, videoExtensions);
+            if (connection != null) {
+              await _scanSMBFolder(connection, path, videoExtensions);
+            }
           }
         }
         // 本地路径

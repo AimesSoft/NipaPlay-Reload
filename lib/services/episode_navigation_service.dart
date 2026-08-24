@@ -1101,7 +1101,7 @@ class EpisodeNavigationService {
   }
 
   SMBConnection? _findSmbConnectionByNameOrHost(String connName) {
-    final direct = SMBService.instance.getConnection(connName);
+    final direct = SMBService.instance.getConnectionByIdOrName(connName);
     if (direct != null) return direct;
 
     final matches = SMBService.instance.connections.where((c) {
@@ -1160,7 +1160,7 @@ class EpisodeNavigationService {
 
       final nextFile = videoFiles[currentIndex + 1];
       final nextPath =
-          MediaSourceUtils.buildSmbPath(connection.name, nextFile.path);
+          MediaSourceUtils.buildSmbPath(connection.id, nextFile.path);
       return EpisodeNavigationResult.success(
         filePath: nextPath,
         message: '从文件列表找到下一个视频：${nextFile.name}',
@@ -1217,7 +1217,7 @@ class EpisodeNavigationService {
 
       final previousFile = videoFiles[currentIndex - 1];
       final previousPath =
-          MediaSourceUtils.buildSmbPath(connection.name, previousFile.path);
+          MediaSourceUtils.buildSmbPath(connection.id, previousFile.path);
       return EpisodeNavigationResult.success(
         filePath: previousPath,
         message: '从文件列表找到上一个视频：${previousFile.name}',
@@ -1279,7 +1279,7 @@ class EpisodeNavigationService {
       final adjacent = videoFiles[adjacentIndex];
       return EpisodeNavigationResult.success(
         filePath: MediaSourceUtils.buildWebDavPath(
-          resolved.connection.name,
+          resolved.connection.id,
           adjacent.path,
         ),
         message: '从WebDAV目录找到$direction：${adjacent.name}',
@@ -1291,18 +1291,6 @@ class EpisodeNavigationService {
   }
 
   String _webDavParentDirectory(WebDAVResolvedFile resolved) {
-    final connectionUri = Uri.parse(resolved.connection.url);
-    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-    final normalizedBase = basePath.endsWith('/') ? basePath : '$basePath/';
-    final filePath = resolved.relativePath.startsWith('/')
-        ? resolved.relativePath
-        : '/${resolved.relativePath}';
-    if (filePath.length > normalizedBase.length &&
-        filePath.startsWith(normalizedBase)) {
-      final relative = filePath.substring(normalizedBase.length);
-      final parent = path.posix.dirname(relative);
-      return parent == '.' ? '/' : parent;
-    }
     final parent = path.posix.dirname(resolved.relativePath);
     return parent == '.' ? '/' : parent;
   }

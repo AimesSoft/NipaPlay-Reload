@@ -312,6 +312,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
         445;
 
     final connection = SMBConnection(
+      id: widget.editConnection?.id,
       name: _nameController.text.trim(),
       host: _hostController.text.trim(),
       port: port,

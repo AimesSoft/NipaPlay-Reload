@@ -1,13 +1,53 @@
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Int64List, Uint32List;
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
-import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay/src/rust/api/remote_directory.dart'
+    as rust_remote_directory;
 import 'package:nipaplay/src/rust/frb_generated.dart';
 
 class WebDAVFileSorter {
   const WebDAVFileSorter._();
 
+  static const int rustBatchThreshold = 128;
+
   static void sort(List<WebDAVFile> files, WebDAVSortPreset preset) {
     files.sort((a, b) => compare(a, b, preset));
+  }
+
+  /// Uses one asynchronous Rust task for large directories. This avoids an
+  /// FFI call for every comparator invocation while keeping small directories
+  /// on the cheaper Dart path.
+  static Future<void> sortAsync(
+    List<WebDAVFile> files,
+    WebDAVSortPreset preset,
+  ) async {
+    if (files.length < rustBatchThreshold || !RustLib.instance.initialized) {
+      sort(files, preset);
+      return;
+    }
+
+    try {
+      final order = await rust_remote_directory.sortRemoteEntryIndices(
+        names: files.map((file) => file.name).toList(growable: false),
+        isDirectories:
+            files.map((file) => file.isDirectory).toList(growable: false),
+        sizes: Int64List.fromList(
+          files.map((file) => file.size ?? 0).toList(growable: false),
+        ),
+        modifiedMillis: Int64List.fromList(
+          files
+              .map((file) => file.lastModified?.millisecondsSinceEpoch ?? 0)
+              .toList(growable: false),
+        ),
+        preset: _rustPresetCode(preset),
+      );
+      if (_applyOrder(files, order)) return;
+    } catch (_) {
+      // Rust 运行时不可用或绑定异常时使用确定性的 Dart 回退。
+    }
+
+    sort(files, preset);
   }
 
   static int compare(
@@ -15,18 +55,27 @@ class WebDAVFileSorter {
     WebDAVFile b,
     WebDAVSortPreset preset,
   ) {
+    return _compareWith(a, b, preset, naturalCompare);
+  }
+
+  static int _compareWith(
+    WebDAVFile a,
+    WebDAVFile b,
+    WebDAVSortPreset preset,
+    int Function(String, String) compareNames,
+  ) {
     switch (preset) {
       case WebDAVSortPreset.defaultValue:
         if (a.isDirectory != b.isDirectory) {
           return a.isDirectory ? -1 : 1;
         }
-        return naturalCompare(a.name, b.name);
+        return compareNames(a.name, b.name);
 
       case WebDAVSortPreset.nameAsc:
-        return naturalCompare(a.name, b.name);
+        return compareNames(a.name, b.name);
 
       case WebDAVSortPreset.nameDesc:
-        return naturalCompare(b.name, a.name);
+        return compareNames(b.name, a.name);
 
       case WebDAVSortPreset.modifiedDesc:
         return _compareDateThenName(
@@ -34,6 +83,7 @@ class WebDAVFileSorter {
           a.lastModified,
           a,
           b,
+          compareNames,
         );
 
       case WebDAVSortPreset.modifiedAsc:
@@ -42,6 +92,7 @@ class WebDAVFileSorter {
           b.lastModified,
           a,
           b,
+          compareNames,
         );
 
       case WebDAVSortPreset.sizeDesc:
@@ -50,6 +101,7 @@ class WebDAVFileSorter {
           a.size ?? 0,
           a,
           b,
+          compareNames,
         );
 
       case WebDAVSortPreset.sizeAsc:
@@ -58,18 +110,16 @@ class WebDAVFileSorter {
           b.size ?? 0,
           a,
           b,
+          compareNames,
         );
     }
   }
 
   static int naturalCompare(String a, String b) {
-    if (RustLib.instance.initialized) {
-      try {
-        return rust_metadata.naturalCompare(a: a, b: b);
-      } catch (_) {
-        // 使用下方 Dart/Web fallback。
-      }
-    }
+    return _naturalCompareDart(a, b);
+  }
+
+  static int _naturalCompareDart(String a, String b) {
     final aParts = _tokenize(a);
     final bParts = _tokenize(b);
     final minLength =
@@ -113,11 +163,12 @@ class WebDAVFileSorter {
     DateTime? second,
     WebDAVFile a,
     WebDAVFile b,
+    int Function(String, String) compareNames,
   ) {
     final cmp = (first ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
       second ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
-    return cmp != 0 ? cmp : naturalCompare(a.name, b.name);
+    return cmp != 0 ? cmp : compareNames(a.name, b.name);
   }
 
   static int _compareNumberThenName(
@@ -125,9 +176,35 @@ class WebDAVFileSorter {
     int second,
     WebDAVFile a,
     WebDAVFile b,
+    int Function(String, String) compareNames,
   ) {
     final cmp = first.compareTo(second);
-    return cmp != 0 ? cmp : naturalCompare(a.name, b.name);
+    return cmp != 0 ? cmp : compareNames(a.name, b.name);
+  }
+
+  static int _rustPresetCode(WebDAVSortPreset preset) => switch (preset) {
+        WebDAVSortPreset.defaultValue => 0,
+        WebDAVSortPreset.nameAsc => 1,
+        WebDAVSortPreset.nameDesc => 2,
+        WebDAVSortPreset.modifiedDesc => 3,
+        WebDAVSortPreset.modifiedAsc => 4,
+        WebDAVSortPreset.sizeDesc => 5,
+        WebDAVSortPreset.sizeAsc => 6,
+      };
+
+  static bool _applyOrder(List<WebDAVFile> files, Uint32List order) {
+    if (order.length != files.length) return false;
+    final seen = List<bool>.filled(files.length, false);
+    for (final index in order) {
+      if (index >= files.length || seen[index]) return false;
+      seen[index] = true;
+    }
+
+    final original = List<WebDAVFile>.of(files);
+    for (var index = 0; index < order.length; index++) {
+      files[index] = original[order[index]];
+    }
+    return true;
   }
 
   static List<String> _tokenize(String value) {

@@ -339,6 +339,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       }
 
       final connection = WebDAVConnection(
+        id: widget.editConnection?.id,
         name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
@@ -400,6 +401,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       }
 
       final connection = WebDAVConnection(
+        id: widget.editConnection?.id,
         name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),

@@ -231,96 +231,58 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
   }
 
-  Future<PlaybackDetailEpisode?> nextPlaylistEpisode() async {
+  Future<PlaylistCursorResult> resolvePlaylistCursor({
+    bool forceRefresh = false,
+  }) async {
     final currentPath = _currentVideoPath;
     final detailContext = _playbackDetailContext;
-    if (currentPath == null || detailContext == null) return null;
+    // Re-resolve from the active path so connection-root migrations cannot
+    // leave a stale key captured before WebDAV/SMB initialization.
+    final currentMediaKey =
+        currentPath == null ? null : MediaIdentityResolver.forPath(currentPath);
+    if (currentPath == null ||
+        currentMediaKey == null ||
+        detailContext == null) {
+      return const PlaylistCurrentNotFound();
+    }
 
     try {
+      if (forceRefresh) {
+        _playbackPlaylistCache.invalidate();
+      }
       final episodes = await _playbackPlaylistCache.load(
         sourceKey: detailContext.sourceKey,
         loader: detailContext.episodeLoader,
       );
-      return PlaybackPlaylist.next(
+      if (_currentVideoPath != currentPath ||
+          _playbackDetailContext?.sourceKey != detailContext.sourceKey) {
+        return const PlaylistCurrentNotFound();
+      }
+      final result = PlaybackPlaylist.locate(
         episodes,
-        currentPath,
-        isSamePath: _isSamePlaylistPath,
+        currentMediaKey,
+        // The path is the source of truth. Cached episode media keys may have
+        // been produced before a remote connection/root migration.
+        identityOf: (episode) =>
+            MediaIdentityResolver.forPath(episode.videoPath),
       );
+      if (result is PlaylistCurrentNotFound) {
+        debugPrint(
+          '[播放列表] 当前项身份未命中: source=${detailContext.sourceKey}, '
+          'current=$currentMediaKey, episodes=${episodes.length}',
+        );
+        for (final episode in episodes.take(5)) {
+          final episodeKey = MediaIdentityResolver.forPath(episode.videoPath);
+          debugPrint(
+            '[播放列表] 候选项身份: id=${episode.id}, key=$episodeKey',
+          );
+        }
+      }
+      return result;
     } catch (e) {
       debugPrint('[播放列表] 获取下一项失败: $e');
-      return null;
+      return PlaylistLoadFailed(e);
     }
-  }
-
-  bool _isSamePlaylistPath(String a, String b) {
-    if (a == b) return true;
-
-    final smbA = MediaSourceUtils.parseSmbMediaPath(a);
-    final smbB = MediaSourceUtils.parseSmbMediaPath(b);
-    if (smbA != null && smbB != null) {
-      return smbA.connectionName == smbB.connectionName &&
-          _normalizePlaylistPath(smbA.relativePath) ==
-              _normalizePlaylistPath(smbB.relativePath);
-    }
-
-    final webDavA = WebDAVService.instance.resolveMediaPath(a);
-    final webDavB = WebDAVService.instance.resolveMediaPath(b);
-    if (webDavA != null && webDavB != null) {
-      return webDavA.connection.name == webDavB.connection.name &&
-          _normalizePlaylistPath(webDavA.relativePath) ==
-              _normalizePlaylistPath(webDavB.relativePath);
-    }
-    return false;
-  }
-
-  String _normalizePlaylistPath(String value) {
-    var normalized = value.replaceAll('\\', '/');
-    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
-    if (!normalized.startsWith('/')) normalized = '/$normalized';
-    // URI-decode to handle server-side URL encoding of special characters
-    // (e.g. %5B → [, %20 → space, %23 → #). WebDAV servers may return
-    // encoded paths while the current video path uses raw characters, or
-    // vice versa. Decode after slash normalization so that any %2F in the
-    // path is decoded to / and then caught by a second normalization pass.
-    try {
-      normalized = Uri.decodeComponent(normalized);
-    } catch (_) {
-      // If the path isn't valid percent-encoding, keep it as-is.
-    }
-    // Re-normalize in case decoded characters introduced slashes.
-    normalized = normalized.replaceAll('\\', '/');
-    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
-    return normalized.length > 1 && normalized.endsWith('/')
-        ? normalized.substring(0, normalized.length - 1)
-        : normalized;
-  }
-
-  /// 将 WebDAV 路径编码为 URL 安全格式，作为 DB 查找的回退。
-  /// 对路径段逐段 encodeComponent，保留 webdav://连接名 前缀和 '/' 分隔符。
-  /// 将 WebDAV 路径重新编码为 URL 安全格式，作为 DB 查找的回退。
-  /// 注意：不使用裸 Uri.encodeComponent，因为部分 WebDAV 服务器（如 alist）
-  /// 不会编码路径中的 + 号，而 encodeComponent 会把 + 变成 %2B，
-  /// 导致与 DB 中存储的路径（含字面量 +）不匹配。
-  String _encodeWebDavPath(String rawPath) {
-    final parsed = MediaSourceUtils.parseWebDavPath(rawPath);
-    if (parsed == null) return rawPath;
-    final encodedRelative = parsed.relativePath
-        .split('/')
-        .map((s) => s.isEmpty ? s : _encodePathSegmentForWebDav(s))
-        .join('/');
-    return MediaSourceUtils.buildWebDavPath(
-        parsed.connectionName, encodedRelative);
-  }
-
-  /// 编码路径段，保留 WebDAV 服务器通常不编码的字符。
-  /// Uri.encodeComponent 遵循 RFC 3986 编码所有非保留字符，
-  /// 但部分服务器在路径中不编码 + ! ' ( ) * 等字符。
-  static String _encodePathSegmentForWebDav(String segment) {
-    var encoded = Uri.encodeComponent(segment);
-    // 部分 WebDAV 服务器（alist 等）路径中保留 + 为字面量，
-    // 而 encodeComponent 将其编码为 %2B。
-    encoded = encoded.replaceAll('%2B', '+');
-    return encoded;
   }
 
   // 播放下一话
@@ -332,11 +294,25 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       return;
     }
 
-    final nextEpisode = verifiedPlaylistEpisode ?? await nextPlaylistEpisode();
+    PlaybackDetailEpisode? nextEpisode = verifiedPlaylistEpisode;
     if (nextEpisode == null) {
-      debugPrint('[下一话] 当前播放列表已经是最后一项');
-      _showEpisodeNotFoundMessage('下一话');
-      return;
+      final result = await resolvePlaylistCursor();
+      switch (result) {
+        case PlaylistHasNext(:final episode):
+          nextEpisode = episode;
+        case PlaylistAtEnd():
+          debugPrint('[下一话] 当前播放列表已经是最后一项');
+          _showEpisodeNotFoundMessage('下一话');
+          return;
+        case PlaylistCurrentNotFound():
+          debugPrint('[下一话] 无法在播放列表中定位当前项');
+          _showEpisodeErrorMessage('下一话', '无法在播放列表中定位当前项');
+          return;
+        case PlaylistLoadFailed(:final error):
+          debugPrint('[下一话] 播放列表加载失败: $error');
+          _showEpisodeErrorMessage('下一话', '播放列表加载失败：$error');
+          return;
+      }
     }
 
     if (_isEpisodeNavigating) {
@@ -365,15 +341,6 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
     var historyItem =
         await WatchHistoryManager.getHistoryItemByPath(episode.videoPath);
-    // WebDAV 路径可能存在 URL 编码差异（服务器返回编码 vs DB 存储原始），
-    // 直接查找失败时尝试用编码后的路径再查一次。
-    if (historyItem == null && episode.videoPath.startsWith('webdav://')) {
-      final encodedPath = _encodeWebDavPath(episode.videoPath);
-      if (encodedPath != episode.videoPath) {
-        historyItem =
-            await WatchHistoryManager.getHistoryItemByPath(encodedPath);
-      }
-    }
     final detailContext = _playbackDetailContext;
 
     // 播放列表中的本地文件项通常只保存路径。切集前补回媒体库中的匹配记录，
@@ -394,6 +361,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         duration: 0,
         lastWatchTime: DateTime.now(),
         thumbnailPath: detailContext.imageUrl,
+        mediaKey: MediaIdentityResolver.forPath(episode.videoPath),
       );
     }
     historyItem ??= episode.historyItem;
@@ -458,6 +426,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       historyItem: historyItem,
       actualPlayUrl: actualPlayUrl,
       playbackSession: playbackSession,
+      mediaKey: MediaIdentityResolver.forPath(episode.videoPath),
       // 不传入旧的 detailContext，否则 PlaybackSourceService.resolve() 会
       // 直接复用上一集的上下文（subtitle 是上一集的剧集名），导致新一集显示旧标题。
     );
