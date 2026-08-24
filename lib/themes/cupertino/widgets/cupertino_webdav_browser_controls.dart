@@ -145,6 +145,17 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
                 cupertino.CupertinoButton(
                   padding: const EdgeInsets.all(7),
                   minimumSize: const Size.square(36),
+                  onPressed: _isLoading
+                      ? null
+                      : () => _loadDirectory(forceRefresh: true),
+                  child: const Icon(
+                    cupertino.CupertinoIcons.refresh,
+                    size: 20,
+                  ),
+                ),
+                cupertino.CupertinoButton(
+                  padding: const EdgeInsets.all(7),
+                  minimumSize: const Size.square(36),
                   onPressed: _showCupertinoServerActions,
                   child: const Icon(
                     cupertino.CupertinoIcons.ellipsis_circle,
@@ -273,18 +284,25 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
   }
 
   Widget _buildCupertinoWebDavDirectory() {
-    if (_isLoading) {
+    if (_isLoading && _currentFiles.isEmpty) {
       return const Center(child: AdaptiveMediaActivityIndicator());
     }
     if (_currentFiles.isEmpty) {
       return const Center(child: Text('当前目录为空'));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 96),
-      itemCount: _currentFiles.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) =>
-          _buildCupertinoWebDavFile(_currentFiles[index]),
+    return Column(
+      children: [
+        if (_isLoading) const cupertino.CupertinoActivityIndicator(radius: 8),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 96),
+            itemCount: _currentFiles.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) =>
+                _buildCupertinoWebDavFile(_currentFiles[index]),
+          ),
+        ),
+      ],
     );
   }
 

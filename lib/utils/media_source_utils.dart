@@ -111,34 +111,35 @@ class MediaSourceUtils {
 
   // ==================== 新路径格式工具方法 ====================
 
-  /// 判断路径是否为新格式的 WebDAV 路径 (webdav://connectionName/path)
+  /// 判断路径是否为稳定 WebDAV 路径 (webdav://connectionId/path)
   static bool isNewWebDavPath(String filePath) {
     if (filePath.isEmpty) return false;
     return filePath.toLowerCase().startsWith('webdav://');
   }
 
-  /// 判断路径是否为新格式的 SMB 路径 (smb://connectionName/path)
+  /// 判断路径是否为稳定 SMB 路径 (smb://connectionId/path)
   static bool isNewSmbPath(String filePath) {
     if (filePath.isEmpty) return false;
     return filePath.toLowerCase().startsWith('smb://');
   }
 
-  /// 构建新格式 WebDAV 路径: webdav://connectionName/relativePath
-  static String buildWebDavPath(String connectionName, String relativePath) {
-    var path = relativePath.trim();
+  /// 构建稳定 WebDAV 路径。旧数据中的连接名称仍可作为兼容引用。
+  static String buildWebDavPath(
+      String connectionReference, String relativePath) {
+    var path = relativePath;
     if (!path.startsWith('/')) {
       path = '/$path';
     }
-    return 'webdav://$connectionName$path';
+    return 'webdav://$connectionReference$path';
   }
 
-  /// 构建新格式 SMB 路径: smb://connectionName/relativePath
-  static String buildSmbPath(String connectionName, String relativePath) {
-    var path = relativePath.trim();
+  /// 构建稳定 SMB 路径。旧数据中的连接名称仍可作为兼容引用。
+  static String buildSmbPath(String connectionReference, String relativePath) {
+    var path = relativePath;
     if (!path.startsWith('/')) {
       path = '/$path';
     }
-    return 'smb://$connectionName$path';
+    return 'smb://$connectionReference$path';
   }
 
   /// 解析新格式 WebDAV 路径，返回 (connectionName, relativePath)
@@ -181,10 +182,10 @@ class MediaSourceUtils {
     final stablePath = parseSmbPath(filePath);
     if (stablePath != null &&
         stablePath.connectionName.trim().isNotEmpty &&
-        stablePath.relativePath.trim().isNotEmpty) {
+        stablePath.relativePath.isNotEmpty) {
       return (
         connectionName: stablePath.connectionName.trim(),
-        relativePath: stablePath.relativePath.trim(),
+        relativePath: stablePath.relativePath,
       );
     }
 
@@ -205,14 +206,22 @@ class MediaSourceUtils {
   /// 旧格式: http://user:pass@host:port/path/to/file.mp4
   /// 新格式: webdav://connectionName/path/to/file.mp4
   static String? migrateWebDavPath(String oldPath) {
-    if (isNewWebDavPath(oldPath)) return oldPath;
+    if (isNewWebDavPath(oldPath)) {
+      final resolved = WebDAVService.instance.resolveMediaPath(oldPath);
+      return resolved == null
+          ? oldPath
+          : buildWebDavPath(
+              resolved.connection.id,
+              resolved.relativePath,
+            );
+    }
     if (!isWebDavPath(oldPath)) return null;
 
     try {
       // 1. 精确匹配：host/port 完全一致
       final resolved = WebDAVService.instance.resolveFileUrl(oldPath);
       if (resolved != null) {
-        return buildWebDavPath(resolved.connection.name, resolved.relativePath);
+        return buildWebDavPath(resolved.connection.id, resolved.relativePath);
       }
 
       // 2. 降级匹配：地址已变更，通过 URL path 前缀和用户名来识别连接
@@ -227,7 +236,7 @@ class MediaSourceUtils {
         final conn = connections.first;
         final relativePath = _extractRelativePath(fileUri.path, conn.url);
         if (relativePath != null) {
-          return buildWebDavPath(conn.name, relativePath);
+          return buildWebDavPath(conn.id, relativePath);
         }
       }
 
@@ -261,7 +270,7 @@ class MediaSourceUtils {
       if (bestMatch != null && bestScore >= 50) {
         final relativePath = _extractRelativePath(fileUri.path, bestMatch.url);
         if (relativePath != null) {
-          return buildWebDavPath(bestMatch.name, relativePath);
+          return buildWebDavPath(bestMatch.id, relativePath);
         }
       }
     } catch (_) {}
@@ -302,7 +311,15 @@ class MediaSourceUtils {
   /// 旧格式: http://127.0.0.1:33221/smb/stream?conn=connectionName&path=/path
   /// 新格式: smb://connectionName/path
   static String? migrateSmbPath(String oldPath) {
-    if (isNewSmbPath(oldPath)) return oldPath;
+    if (isNewSmbPath(oldPath)) {
+      final parsed = parseSmbMediaPath(oldPath);
+      if (parsed == null) return oldPath;
+      final connection =
+          SMBService.instance.getConnectionByIdOrName(parsed.connectionName);
+      return connection == null
+          ? oldPath
+          : buildSmbPath(connection.id, parsed.relativePath);
+    }
 
     // 检查是否是旧格式的 SMB 代理 URL
     final uri = Uri.tryParse(oldPath);
@@ -313,16 +330,14 @@ class MediaSourceUtils {
     final smbPath = uri.queryParameters['path']?.trim();
     if (connName == null || connName.isEmpty || smbPath == null) return null;
 
-    return buildSmbPath(connName, smbPath);
+    final connection = SMBService.instance.getConnectionByIdOrName(connName);
+    return buildSmbPath(connection?.id ?? connName, smbPath);
   }
 
   /// 将任意旧格式路径迁移为新格式（如果适用）
   /// 返回迁移后的路径，如果不适用则返回原始路径
   static String migratePath(String filePath) {
     if (filePath.isEmpty) return filePath;
-    // 已是新格式，直接返回
-    if (isNewWebDavPath(filePath) || isNewSmbPath(filePath)) return filePath;
-
     // 尝试迁移 WebDAV 路径
     final webdavMigrated = migrateWebDavPath(filePath);
     if (webdavMigrated != null) return webdavMigrated;
@@ -337,14 +352,12 @@ class MediaSourceUtils {
   /// 将新格式 WebDAV 路径解析为可播放的 HTTP URL
   /// 返回 null 如果找不到对应连接
   static String? resolveWebDavPathToUrl(String filePath) {
-    final parsed = parseWebDavPath(filePath);
-    if (parsed == null) return null;
-
-    final connection =
-        WebDAVService.instance.getConnection(parsed.connectionName);
-    if (connection == null) return null;
-
-    return WebDAVService.instance.getFileUrl(connection, parsed.relativePath);
+    final resolved = WebDAVService.instance.resolveMediaPath(filePath);
+    if (resolved == null) return null;
+    return WebDAVService.instance.getFileUrl(
+      resolved.connection,
+      resolved.relativePath,
+    );
   }
 
   /// 将新格式 SMB 路径解析为可播放的代理 URL
@@ -353,7 +366,8 @@ class MediaSourceUtils {
     final parsed = parseSmbPath(filePath);
     if (parsed == null) return null;
 
-    final connection = SMBService.instance.getConnection(parsed.connectionName);
+    final connection =
+        SMBService.instance.getConnectionByIdOrName(parsed.connectionName);
     if (connection == null) return null;
 
     return SMBProxyService.instance
