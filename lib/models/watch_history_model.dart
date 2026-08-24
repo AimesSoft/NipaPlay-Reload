@@ -7,6 +7,7 @@ import 'watch_history_database.dart'; // 添加引入数据库类
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 
 class WatchHistoryItem {
   String filePath;
@@ -21,6 +22,7 @@ class WatchHistoryItem {
   String? thumbnailPath;
   bool isFromScan;
   String? videoHash; // 添加视频哈希值字段，用于弹幕匹配
+  String? mediaKey;
   bool get isDandanplayRemote {
     final normalized = filePath.toLowerCase();
     return normalized.startsWith('dandanplay://') ||
@@ -40,6 +42,7 @@ class WatchHistoryItem {
     this.thumbnailPath,
     this.isFromScan = false,
     this.videoHash,  // 添加哈希值参数
+    this.mediaKey,
   });
 
   Map<String, dynamic> toJson() {
@@ -56,6 +59,7 @@ class WatchHistoryItem {
       'thumbnailPath': thumbnailPath,
       'isFromScan': isFromScan,
       'videoHash': videoHash, // 添加视频哈希值
+      'mediaKey': mediaKey,
     };
   }
 
@@ -75,6 +79,7 @@ class WatchHistoryItem {
       thumbnailPath: json['thumbnailPath'],
       isFromScan: json['isFromScan'] ?? false,
       videoHash: json['videoHash'], // 添加视频哈希值
+      mediaKey: json['mediaKey']?.toString(),
     );
   }
 
@@ -91,6 +96,7 @@ class WatchHistoryItem {
     String? thumbnailPath,
     bool? isFromScan,
     String? videoHash,
+    String? mediaKey,
   }) {
     return WatchHistoryItem(
       filePath: filePath ?? this.filePath,
@@ -105,6 +111,7 @@ class WatchHistoryItem {
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       isFromScan: isFromScan ?? this.isFromScan,
       videoHash: videoHash ?? this.videoHash,
+      mediaKey: mediaKey ?? this.mediaKey,
     );
   }
 }
@@ -998,7 +1005,14 @@ class WatchHistoryManager {
       // 使用原有的JSON逻辑
       final items = await getAllHistory();
       try {
-        return items.firstWhere((item) => item.filePath == filePath);
+        final mediaKey = MediaIdentityResolver.forPath(filePath);
+        return items.firstWhere(
+          (item) =>
+              item.filePath == filePath ||
+              (item.mediaKey ??
+                      MediaIdentityResolver.forPath(item.filePath)) ==
+                  mediaKey,
+        );
       } catch (e) {
         // 如果在iOS上没找到，尝试使用替代路径
         if (io.Platform.isIOS) {

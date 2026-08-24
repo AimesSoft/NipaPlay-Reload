@@ -104,6 +104,7 @@ class _CupertinoWebDAVConnectionSheetState
 
   WebDAVConnection _buildConnection() {
     return WebDAVConnection(
+      id: widget.editConnection?.id,
       name: _resolveConnectionName(),
       url: _urlController.text.trim(),
       username: _usernameController.text.trim(),

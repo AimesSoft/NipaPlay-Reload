@@ -26,6 +26,7 @@ class PlaybackDetailEpisode {
     this.actualPlayUrl,
     this.playbackSession,
     this.progress,
+    this.mediaKey,
   });
 
   final String id;
@@ -38,6 +39,7 @@ class PlaybackDetailEpisode {
   final String? actualPlayUrl;
   final PlaybackSession? playbackSession;
   final double? progress;
+  final String? mediaKey;
 }
 
 typedef PlaybackDetailEpisodeLoader = Future<List<PlaybackDetailEpisode>>
@@ -100,18 +102,42 @@ class PlaybackPlaylistCache {
 class PlaybackPlaylist {
   const PlaybackPlaylist._();
 
-  static PlaybackDetailEpisode? next(
+  static PlaylistCursorResult locate(
     List<PlaybackDetailEpisode> episodes,
-    String currentPath, {
-    bool Function(String candidate, String current)? isSamePath,
+    String currentMediaKey, {
+    String Function(PlaybackDetailEpisode episode)? identityOf,
   }) {
-    final matches = isSamePath ?? (candidate, current) => candidate == current;
+    final resolveIdentity =
+        identityOf ?? (episode) => episode.mediaKey ?? episode.videoPath;
     final currentIndex = episodes.indexWhere(
-      (episode) => matches(episode.videoPath, currentPath),
+      (episode) => resolveIdentity(episode) == currentMediaKey,
     );
-    if (currentIndex < 0 || currentIndex >= episodes.length - 1) return null;
-    return episodes[currentIndex + 1];
+    if (currentIndex < 0) return const PlaylistCurrentNotFound();
+    if (currentIndex >= episodes.length - 1) return const PlaylistAtEnd();
+    return PlaylistHasNext(episodes[currentIndex + 1]);
   }
+}
+
+sealed class PlaylistCursorResult {
+  const PlaylistCursorResult();
+}
+
+class PlaylistHasNext extends PlaylistCursorResult {
+  const PlaylistHasNext(this.episode);
+  final PlaybackDetailEpisode episode;
+}
+
+class PlaylistAtEnd extends PlaylistCursorResult {
+  const PlaylistAtEnd();
+}
+
+class PlaylistCurrentNotFound extends PlaylistCursorResult {
+  const PlaylistCurrentNotFound();
+}
+
+class PlaylistLoadFailed extends PlaylistCursorResult {
+  const PlaylistLoadFailed(this.error);
+  final Object error;
 }
 
 class PlaybackDetailContext {

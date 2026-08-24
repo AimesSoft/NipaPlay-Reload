@@ -7,7 +7,8 @@ export './abstract_player.dart'
         AsyncDisposablePlayer,
         AsyncExternalSubtitlePlayer,
         AsyncSeekPlayer,
-        MediaLoadAwarePlayer;
+        MediaLoadAwarePlayer,
+        networkMediaLoadMaxAttempts;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 

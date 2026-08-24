@@ -7,5 +7,7 @@ pub mod media_metadata;
 pub mod media_probe;
 pub mod next2;
 pub mod performance;
+pub mod remote_directory;
 pub mod simple;
 pub mod torrent;
+pub mod webdav_multistatus;

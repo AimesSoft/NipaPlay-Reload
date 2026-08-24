@@ -22,6 +22,7 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
@@ -263,40 +264,10 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       normalized = '/$normalized';
     }
     normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
-    // URI-decode to handle server-side URL encoding of special characters
-    // (e.g. %5B → [, %20 → space, %E7... → 中). WebDAV servers may return
-    // encoded entry paths, and _currentFilePath from history may also be
-    // encoded. Decode so both sides are compared in raw format.
-    try {
-      normalized = Uri.decodeComponent(normalized);
-    } catch (_) {
-      // Keep as-is if decoding fails.
-    }
-    // Re-normalize in case decoded characters introduced slashes (%2F → /).
-    normalized = normalized.replaceAll('\\', '/');
-    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
     if (normalized.length > 1 && normalized.endsWith('/')) {
       normalized = normalized.substring(0, normalized.length - 1);
     }
     return normalized;
-  }
-
-  /// 解码 WebDAV 路径中每个路径段的 URI 编码字符。
-  /// 例如 "/%E7%A6%BB%E7%BA%BF%E7%BC%93%E5%AD%98/%5BDBD-Raws%5D%20..."
-  /// → "/离线缓存/[DBD-Raws] ..."
-  static String _decodeWebDavPath(String path) {
-    try {
-      return path.split('/').map((segment) {
-        if (segment.isEmpty) return segment;
-        try {
-          return Uri.decodeComponent(segment);
-        } catch (_) {
-          return segment;
-        }
-      }).join('/');
-    } catch (_) {
-      return path;
-    }
   }
 
   String _dirnameSmbPath(String smbPath) {
@@ -309,7 +280,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
   }
 
   SMBConnection? _findSmbConnectionByNameOrHost(String connName) {
-    final direct = SMBService.instance.getConnection(connName);
+    final direct = SMBService.instance.getConnectionByIdOrName(connName);
     if (direct != null) {
       return direct;
     }
@@ -484,31 +455,9 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
         throw Exception('无法识别WebDAV连接');
       }
 
-      final connectionUri = Uri.parse(resolved.connection.url);
-      final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-      final normalizedBasePath =
-          basePath.endsWith('/') ? basePath : '$basePath/';
-      final filePath = resolved.relativePath.startsWith('/')
-          ? resolved.relativePath
-          : '/${resolved.relativePath}';
-
-      String parentDir;
-      if (filePath.length > normalizedBasePath.length &&
-          filePath.startsWith(normalizedBasePath)) {
-        parentDir = filePath.substring(normalizedBasePath.length);
-        final lastSlashIndex = parentDir.lastIndexOf('/');
-        if (lastSlashIndex > 0) {
-          parentDir = parentDir.substring(0, lastSlashIndex);
-        } else if (lastSlashIndex == 0) {
-          parentDir = '/';
-        } else {
-          parentDir = '/';
-        }
-      } else {
-        parentDir = p.posix.dirname(resolved.relativePath);
-      }
-
-      parentDir = _normalizeRemoteDirectoryPath(parentDir);
+      final parentDir = _normalizeRemoteDirectoryPath(
+        p.posix.dirname(resolved.relativePath),
+      );
 
       final entries = await WebDAVService.instance.listDirectory(
         resolved.connection,
@@ -522,13 +471,9 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
         ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
-        // 解码 entry.path 中的 URI 编码字符（%E7...、%5B 等），
-        // 确保生成的路径与 history DB 中的路径格式一致，以便
-        // 播放列表正确高亮当前播放的剧集。
-        final decodedPath = _decodeWebDavPath(entry.path);
         final filePath = MediaSourceUtils.buildWebDavPath(
-          resolved.connection.name,
-          decodedPath,
+          resolved.connection.id,
+          entry.path,
         );
         _remoteDisplayNameCache[filePath] =
             p.basenameWithoutExtension(entry.name);
@@ -581,7 +526,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final filePath =
-            MediaSourceUtils.buildSmbPath(connection.name, entry.path);
+            MediaSourceUtils.buildSmbPath(connection.id, entry.path);
         _remoteDisplayNameCache[filePath] =
             p.basenameWithoutExtension(entry.name);
         return filePath;
@@ -765,6 +710,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
           final playableItem = PlayableItem(
             videoPath: filePath,
+            mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
             subtitle: historyItem.episodeTitle,
             animeId: historyItem.animeId,
@@ -775,8 +721,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!mounted) {
             return;
           }
-          if (await PlaybackService().tryPlayExternally(
-              context, playableItem)) {
+          if (await PlaybackService()
+              .tryPlayExternally(context, playableItem)) {
             if (mounted) {
               widget.onClose();
             }
@@ -786,6 +732,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 按照剧集导航的方式，使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Jellyfin协议URL作为标识符
+            mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
             playbackDetailContext: videoState.playbackDetailContext,
@@ -835,6 +782,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
           final playableItem = PlayableItem(
             videoPath: filePath,
+            mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
             subtitle: historyItem.episodeTitle,
             animeId: historyItem.animeId,
@@ -845,8 +793,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!mounted) {
             return;
           }
-          if (await PlaybackService().tryPlayExternally(
-              context, playableItem)) {
+          if (await PlaybackService()
+              .tryPlayExternally(context, playableItem)) {
             if (mounted) {
               widget.onClose();
             }
@@ -856,6 +804,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 按照剧集导航的方式，使用Emby协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Emby协议URL作为标识符
+            mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
             playbackDetailContext: videoState.playbackDetailContext,
@@ -876,7 +825,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             final lastSegment =
                 pathSegments.isNotEmpty ? pathSegments.last : filePath;
             final fallbackTitle = _remoteDisplayNameCache[filePath] ??
-                p.basenameWithoutExtension(Uri.decodeComponent(lastSegment));
+                p.basenameWithoutExtension(_safeDecode(lastSegment));
             final actualPlayUrl =
                 MediaSourceUtils.resolveRemotePathToUrl(filePath);
             if (actualPlayUrl == null || actualPlayUrl.isEmpty) {
@@ -884,6 +833,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             }
             final playableItem = PlayableItem(
               videoPath: filePath,
+              mediaKey: MediaIdentityResolver.forPath(filePath),
               title: cachedHistory?.animeName ?? fallbackTitle,
               subtitle: cachedHistory?.episodeTitle,
               animeId: cachedHistory?.animeId,
@@ -895,8 +845,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             if (!mounted) {
               return;
             }
-            if (await PlaybackService().tryPlayExternally(
-                context, playableItem)) {
+            if (await PlaybackService()
+                .tryPlayExternally(context, playableItem)) {
               if (mounted) {
                 widget.onClose();
               }
@@ -905,6 +855,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
             await videoState.initializePlayer(
               filePath,
+              mediaKey: MediaIdentityResolver.forPath(filePath),
               historyItem: cachedHistory,
               actualPlayUrl: actualPlayUrl,
               playbackDetailContext: videoState.playbackDetailContext,
@@ -917,12 +868,15 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               throw Exception('文件不存在: $filePath');
             }
 
-            final playableItem = PlayableItem(videoPath: filePath);
+            final playableItem = PlayableItem(
+              videoPath: filePath,
+              mediaKey: MediaIdentityResolver.forPath(filePath),
+            );
             if (!mounted) {
               return;
             }
-            if (await PlaybackService().tryPlayExternally(
-                context, playableItem)) {
+            if (await PlaybackService()
+                .tryPlayExternally(context, playableItem)) {
               if (mounted) {
                 widget.onClose();
               }
@@ -931,6 +885,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
             await videoState.initializePlayer(
               filePath,
+              mediaKey: MediaIdentityResolver.forPath(filePath),
               playbackDetailContext: videoState.playbackDetailContext,
             );
             debugPrint('[播放列表] 文件路径播放完成');
@@ -1002,11 +957,18 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
     final uri = Uri.tryParse(filePath);
     if (uri != null && uri.pathSegments.isNotEmpty) {
-      return p
-          .basenameWithoutExtension(Uri.decodeComponent(uri.pathSegments.last));
+      return p.basenameWithoutExtension(_safeDecode(uri.pathSegments.last));
     }
 
     return p.basenameWithoutExtension(filePath);
+  }
+
+  String _safeDecode(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } catch (_) {
+      return value;
+    }
   }
 
   bool _isSameSharedManagementStream(String a, String b) {
@@ -1024,26 +986,6 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
         _effectivePort(aUri) == _effectivePort(bUri);
   }
 
-  bool _isSameSmbStream(String a, String b) {
-    final parsedA = MediaSourceUtils.parseSmbMediaPath(a);
-    final parsedB = MediaSourceUtils.parseSmbMediaPath(b);
-    if (parsedA == null || parsedB == null) {
-      return false;
-    }
-    return parsedA.connectionName == parsedB.connectionName &&
-        _normalizeSmbPath(parsedA.relativePath) ==
-            _normalizeSmbPath(parsedB.relativePath);
-  }
-
-  bool _isSameWebDavPath(String a, String b) {
-    final resolvedA = WebDAVService.instance.resolveMediaPath(a);
-    final resolvedB = WebDAVService.instance.resolveMediaPath(b);
-    if (resolvedA == null || resolvedB == null) return false;
-    return resolvedA.connection.name == resolvedB.connection.name &&
-        _normalizeSmbPath(resolvedA.relativePath) ==
-            _normalizeSmbPath(resolvedB.relativePath);
-  }
-
   bool _isCurrentEpisode(String filePath) {
     final currentPath = _currentFilePath;
     if (currentPath == null) {
@@ -1052,16 +994,10 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
     if (filePath == currentPath) {
       return true;
     }
-    if (_isSameSmbStream(filePath, currentPath)) {
-      return true;
-    }
-    if (_isSameWebDavPath(filePath, currentPath)) {
-      return true;
-    }
     if (_isSameSharedManagementStream(filePath, currentPath)) {
       return true;
     }
-    return false;
+    return MediaIdentityResolver.samePath(filePath, currentPath);
   }
 
   /// 创建Jellyfin历史项，包含完整的弹幕映射预测和API获取的准确信息
