@@ -97,10 +97,11 @@ class _CupertinoSmbConnectionSheetState
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    final name = widget.editConnection?.name ??
-        (port == 445 ? host : '$host:$port');
+    final name =
+        widget.editConnection?.name ?? (port == 445 ? host : '$host:$port');
 
     return SMBConnection(
+      id: widget.editConnection?.id,
       name: name,
       host: host,
       port: port,

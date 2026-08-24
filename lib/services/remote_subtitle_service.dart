@@ -210,6 +210,10 @@ class RemoteSubtitleService {
       return _listSmbCandidates(resolvedPath);
     }
 
+    if (MediaSourceUtils.isNewWebDavPath(resolvedPath)) {
+      return _listWebDavCandidates(resolvedPath);
+    }
+
     final uri = Uri.tryParse(resolvedPath);
     if (uri != null) {
       final scheme = uri.scheme.toLowerCase();
@@ -243,9 +247,9 @@ class RemoteSubtitleService {
         candidate.extension.isNotEmpty ? candidate.extension : '.srt';
     final cacheKey = switch (candidate) {
       WebDavRemoteSubtitleCandidate() =>
-        'webdav:${candidate.connection.name}:${candidate.remotePath}',
+        'webdav:${candidate.connection.id}:${candidate.remotePath}',
       SmbRemoteSubtitleCandidate() =>
-        'smb:${candidate.connection.name}:${candidate.smbPath}',
+        'smb:${candidate.connection.id}:${candidate.smbPath}',
       DandanplayRemoteSubtitleCandidate() =>
         'dandanplay:${candidate.entryId}:${candidate.fileName}',
       SharedRemoteSubtitleCandidate() =>
@@ -416,10 +420,13 @@ class RemoteSubtitleService {
 
     final baseDir = await StorageService.getAppStorageDirectory();
     final cacheDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
-    if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: baseDir=${baseDir.path}, subtitle_fonts=${cacheDir.path}, exists=${await cacheDir.exists()}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] ensureFontCached: baseDir=${baseDir.path}, subtitle_fonts=${cacheDir.path}, exists=${await cacheDir.exists()}');
     if (!await cacheDir.exists()) {
       await cacheDir.create(recursive: true);
-      if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: 创建了 subtitle_fonts 目录');
+      if (kDebugMode)
+        debugPrint('[FONT_DEBUG] ensureFontCached: 创建了 subtitle_fonts 目录');
     }
 
     // 异步清理缓存（不阻塞当前下载）
@@ -431,12 +438,15 @@ class RemoteSubtitleService {
         'shared:${candidate.fontUri.replace(userInfo: '', fragment: '').toString()}';
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
     final target = File(p.join(cacheDir.path, '$hash$extension'));
-    if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: candidate=${candidate.name}, hash=$hash, target=${target.path}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] ensureFontCached: candidate=${candidate.name}, hash=$hash, target=${target.path}');
 
     if (!forceRefresh && await target.exists()) {
       final size = await target.length();
       if (size > 0) {
-        if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: 字体已缓存, size=$size, 跳过下载');
+        if (kDebugMode)
+          debugPrint('[FONT_DEBUG] ensureFontCached: 字体已缓存, size=$size, 跳过下载');
         return target.path;
       }
     }
@@ -452,7 +462,9 @@ class RemoteSubtitleService {
         await target.delete();
       }
       await tmp.rename(target.path);
-      if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: 下载完成, 最终路径=${target.path}, size=${await target.length()}');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] ensureFontCached: 下载完成, 最终路径=${target.path}, size=${await target.length()}');
       return target.path;
     } catch (e) {
       if (kDebugMode) debugPrint('[FONT_DEBUG] ensureFontCached: 下载失败: $e');
@@ -780,7 +792,9 @@ class RemoteSubtitleService {
       fragment: '',
     );
 
-    if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: requestUri=$requestUri, audioPath=${info.audioPath}, audioFilePath=${info.audioFilePath}');
+    if (kDebugMode)
+      debugPrint(
+          '[MKA_DEBUG] _listSharedRemoteAudioCandidates: requestUri=$requestUri, audioPath=${info.audioPath}, audioFilePath=${info.audioFilePath}');
 
     final headers = <String, String>{
       'accept': 'application/json',
@@ -805,12 +819,16 @@ class RemoteSubtitleService {
     try {
       response = await dio.get<String>(requestUri.toString());
     } catch (e) {
-      if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP请求失败: $e');
+      if (kDebugMode)
+        debugPrint(
+            '[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP请求失败: $e');
       return const [];
     }
 
     final status = response.statusCode ?? 0;
-    if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
+    if (kDebugMode)
+      debugPrint(
+          '[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
     if (status != 200) {
       return const [];
     }
@@ -827,7 +845,9 @@ class RemoteSubtitleService {
           ? decoded
           : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
     } catch (e) {
-      if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: JSON解析失败: $e');
+      if (kDebugMode)
+        debugPrint(
+            '[MKA_DEBUG] _listSharedRemoteAudioCandidates: JSON解析失败: $e');
       return const [];
     }
     if (payload.isEmpty) {
@@ -836,11 +856,15 @@ class RemoteSubtitleService {
 
     final rawItems = payload['items'];
     if (rawItems is! List) {
-      if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: payload中无items, keys=${payload.keys.toList()}');
+      if (kDebugMode)
+        debugPrint(
+            '[MKA_DEBUG] _listSharedRemoteAudioCandidates: payload中无items, keys=${payload.keys.toList()}');
       return const [];
     }
 
-    if (kDebugMode) debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: rawItems count=${rawItems.length}');
+    if (kDebugMode)
+      debugPrint(
+          '[MKA_DEBUG] _listSharedRemoteAudioCandidates: rawItems count=${rawItems.length}');
 
     final candidates = <RemoteAudioCandidate>[];
     for (final item in rawItems) {
@@ -886,7 +910,9 @@ class RemoteSubtitleService {
       fragment: '',
     );
 
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: requestUri=$requestUri, shareId=${info.shareId}, fontsPath=${info.fontsPath}, fontPath=${info.fontPath}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _listSharedRemoteFontCandidates: requestUri=$requestUri, shareId=${info.shareId}, fontsPath=${info.fontsPath}, fontPath=${info.fontPath}');
 
     final headers = <String, String>{
       'accept': 'application/json',
@@ -911,12 +937,16 @@ class RemoteSubtitleService {
     try {
       response = await dio.get<String>(requestUri.toString());
     } catch (e) {
-      if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP请求失败: $e');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP请求失败: $e');
       return const [];
     }
 
     final status = response.statusCode ?? 0;
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
     if (status != 200) {
       return const [];
     }
@@ -933,7 +963,9 @@ class RemoteSubtitleService {
           ? decoded
           : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
     } catch (e) {
-      if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: JSON解析失败: $e');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] _listSharedRemoteFontCandidates: JSON解析失败: $e');
       return const [];
     }
     if (payload.isEmpty) {
@@ -942,11 +974,15 @@ class RemoteSubtitleService {
 
     final rawItems = payload['items'];
     if (rawItems is! List) {
-      if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: payload中无items字段, keys=${payload.keys.toList()}');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] _listSharedRemoteFontCandidates: payload中无items字段, keys=${payload.keys.toList()}');
       return const [];
     }
 
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: rawItems count=${rawItems.length}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _listSharedRemoteFontCandidates: rawItems count=${rawItems.length}');
 
     final candidates = <RemoteFontCandidate>[];
     for (final item in rawItems) {
@@ -977,7 +1013,9 @@ class RemoteSubtitleService {
     }
 
     candidates.sort((a, b) => a.name.compareTo(b.name));
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: 最终候选数=${candidates.length}');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _listSharedRemoteFontCandidates: 最终候选数=${candidates.length}');
     return candidates;
   }
 
@@ -993,7 +1031,9 @@ class RemoteSubtitleService {
     }
 
     final requestUri = candidate.audioUri.replace(userInfo: '');
-    if (kDebugMode) debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 开始流式下载, uri=$requestUri');
+    if (kDebugMode)
+      debugPrint(
+          '[MKA_DEBUG] _downloadSharedRemoteAudio: 开始流式下载, uri=$requestUri');
 
     // MKA/FLAC 文件通常很大（几十到几百MB），使用 ResponseType.stream 流式下载
     // 避免将整个文件缓冲到内存导致 OOM 或连接超时
@@ -1027,12 +1067,16 @@ class RemoteSubtitleService {
       }
       await sink.close();
     } catch (e) {
-      try { await sink.close(); } catch (_) {}
+      try {
+        await sink.close();
+      } catch (_) {}
       rethrow;
     }
 
     final size = await destination.length();
-    if (kDebugMode) debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 下载完成, size=$size bytes');
+    if (kDebugMode)
+      debugPrint(
+          '[MKA_DEBUG] _downloadSharedRemoteAudio: 下载完成, size=$size bytes');
     if (size == 0) {
       throw Exception('共享媒体外挂音轨下载结果为空文件');
     }
@@ -1050,7 +1094,9 @@ class RemoteSubtitleService {
     }
 
     final requestUri = candidate.fontUri.replace(userInfo: '');
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: 请求字体 ${candidate.name}, uri=$requestUri');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _downloadSharedRemoteFont: 请求字体 ${candidate.name}, uri=$requestUri');
     // CJK 字体可达 10–20MB+，使用流式下载避免 OOM，与音频下载保持一致
     final dio = Dio(
       BaseOptions(
@@ -1081,12 +1127,16 @@ class RemoteSubtitleService {
       }
       await sink.close();
     } catch (e) {
-      try { await sink.close(); } catch (_) {}
+      try {
+        await sink.close();
+      } catch (_) {}
       rethrow;
     }
 
     final size = await destination.length();
-    if (kDebugMode) debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: 下载完成, size=$size bytes');
+    if (kDebugMode)
+      debugPrint(
+          '[FONT_DEBUG] _downloadSharedRemoteFont: 下载完成, size=$size bytes');
     if (size == 0) {
       throw Exception('共享媒体字体下载结果为空文件');
     }
@@ -1097,26 +1147,11 @@ class RemoteSubtitleService {
     await WebDAVService.instance.initialize();
 
     WebDAVResolvedFile? resolved =
-        WebDAVService.instance.resolveFileUrl(videoUrl);
+        WebDAVService.instance.resolveMediaPath(videoUrl);
     resolved ??= _tryResolveWebDavFromUrl(videoUrl);
     if (resolved == null) return const [];
 
-    // 计算相对于连接基础URL的路径
-    final connectionUri = Uri.parse(resolved.connection.url);
-    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-    final normalizedBasePath = basePath.endsWith('/') ? basePath : '$basePath/';
-    final filePath = resolved.relativePath.startsWith('/')
-        ? resolved.relativePath
-        : '/${resolved.relativePath}';
-
-    String directory;
-    if (filePath.length > normalizedBasePath.length &&
-        filePath.startsWith(normalizedBasePath)) {
-      directory = filePath.substring(normalizedBasePath.length);
-      directory = _posixDirname(directory);
-    } else {
-      directory = _posixDirname(resolved.relativePath);
-    }
+    final directory = _posixDirname(resolved.relativePath);
 
     final entries = await WebDAVService.instance
         .listDirectoryAll(resolved.connection, directory);
@@ -1144,10 +1179,15 @@ class RemoteSubtitleService {
       Uri smbUri) async {
     await SMBService.instance.initialize();
 
-    final connection = _resolveSmbConnectionFromUri(smbUri);
+    final stablePath = MediaSourceUtils.parseSmbPath(smbUri.toString());
+    final connection = stablePath == null
+        ? _resolveSmbConnectionFromUri(smbUri)
+        : SMBService.instance
+            .getConnectionByIdOrName(stablePath.connectionName);
     if (connection == null) return const [];
 
-    final smbPath = _normalizeSmbPathFromUri(smbUri);
+    final smbPath =
+        stablePath?.relativePath ?? _normalizeSmbPathFromUri(smbUri);
     if (smbPath.isEmpty || smbPath == '/') return const [];
 
     final directory = _posixDirname(smbPath);

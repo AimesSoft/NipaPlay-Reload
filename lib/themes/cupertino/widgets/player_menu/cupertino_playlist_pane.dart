@@ -21,6 +21,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:provider/provider.dart';
@@ -187,7 +188,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
   }
 
   SMBConnection? _findSmbConnectionByNameOrHost(String connName) {
-    final direct = SMBService.instance.getConnection(connName);
+    final direct = SMBService.instance.getConnectionByIdOrName(connName);
     if (direct != null) return direct;
     final matches = SMBService.instance.connections.where((connection) {
       if (connection.host == connName) return true;
@@ -338,30 +339,9 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       throw Exception('无法识别WebDAV连接');
     }
 
-    final connectionUri = Uri.parse(resolved.connection.url);
-    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-    final normalizedBasePath = basePath.endsWith('/') ? basePath : '$basePath/';
-    final filePath = resolved.relativePath.startsWith('/')
-        ? resolved.relativePath
-        : '/${resolved.relativePath}';
-
-    String parentDir;
-    if (filePath.length > normalizedBasePath.length &&
-        filePath.startsWith(normalizedBasePath)) {
-      parentDir = filePath.substring(normalizedBasePath.length);
-      final lastSlashIndex = parentDir.lastIndexOf('/');
-      if (lastSlashIndex > 0) {
-        parentDir = parentDir.substring(0, lastSlashIndex);
-      } else if (lastSlashIndex == 0) {
-        parentDir = '/';
-      } else {
-        parentDir = '/';
-      }
-    } else {
-      parentDir = p.posix.dirname(resolved.relativePath);
-    }
-
-    parentDir = _normalizeRemoteDirectoryPath(parentDir);
+    final parentDir = _normalizeRemoteDirectoryPath(
+      p.posix.dirname(resolved.relativePath),
+    );
 
     final entries = await WebDAVService.instance.listDirectory(
       resolved.connection,
@@ -376,7 +356,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
 
     _episodes = videoEntries.map((entry) {
       final filePath = MediaSourceUtils.buildWebDavPath(
-        resolved.connection.name,
+        resolved.connection.id,
         entry.path,
       );
       _remoteDisplayNameCache[filePath] =
@@ -417,8 +397,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       ..sort((a, b) => WebDAVFileSorter.playlistCompare(a.name, b.name));
 
     _episodes = videoEntries.map((entry) {
-      final filePath =
-          MediaSourceUtils.buildSmbPath(connection.name, entry.path);
+      final filePath = MediaSourceUtils.buildSmbPath(connection.id, entry.path);
       _remoteDisplayNameCache[filePath] =
           p.basenameWithoutExtension(entry.name);
       _remoteSubtitleCache[filePath] = connection.name;
@@ -521,7 +500,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       default:
         final uri = Uri.tryParse(path);
         if (uri != null && uri.pathSegments.isNotEmpty) {
-          return Uri.decodeComponent(uri.pathSegments.last);
+          return _safeDecode(uri.pathSegments.last);
         }
         return path.split('/').last;
     }
@@ -550,6 +529,14 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         return 'SMB';
       default:
         return path;
+    }
+  }
+
+  String _safeDecode(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } catch (_) {
+      return value;
     }
   }
 
@@ -601,34 +588,12 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         _effectivePort(aUri) == _effectivePort(bUri);
   }
 
-  bool _isSameSmbStream(String a, String b) {
-    final parsedA = MediaSourceUtils.parseSmbMediaPath(a);
-    final parsedB = MediaSourceUtils.parseSmbMediaPath(b);
-    if (parsedA == null || parsedB == null) {
-      return false;
-    }
-    return parsedA.connectionName == parsedB.connectionName &&
-        _normalizeSmbPath(parsedA.relativePath) ==
-            _normalizeSmbPath(parsedB.relativePath);
-  }
-
-  bool _isSameWebDavPath(String a, String b) {
-    final resolvedA = WebDAVService.instance.resolveMediaPath(a);
-    final resolvedB = WebDAVService.instance.resolveMediaPath(b);
-    if (resolvedA == null || resolvedB == null) return false;
-    return resolvedA.connection.name == resolvedB.connection.name &&
-        _normalizeSmbPath(resolvedA.relativePath) ==
-            _normalizeSmbPath(resolvedB.relativePath);
-  }
-
   bool _isCurrentEpisode(String path) {
     final currentPath = _currentPath;
     if (currentPath == null) return false;
     if (path == currentPath) return true;
-    if (_isSameSmbStream(path, currentPath)) return true;
-    if (_isSameWebDavPath(path, currentPath)) return true;
     if (_isSameSharedManagementStream(path, currentPath)) return true;
-    return false;
+    return MediaIdentityResolver.samePath(path, currentPath);
   }
 
   Future<void> _playEpisode(String path) async {
@@ -663,18 +628,19 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
 
         final playableItem = PlayableItem(
           videoPath: path,
+          mediaKey: MediaIdentityResolver.forPath(path),
           actualPlayUrl: actualPlayUrl,
           playbackSession: playbackSession,
         );
         if (!mounted) return;
-        if (await PlaybackService().tryPlayExternally(
-            context, playableItem)) {
+        if (await PlaybackService().tryPlayExternally(context, playableItem)) {
           return;
         }
       }
 
       await widget.videoState.initializePlayer(
         path,
+        mediaKey: MediaIdentityResolver.forPath(path),
         actualPlayUrl: actualPlayUrl,
         playbackSession: playbackSession,
         playbackDetailContext: widget.videoState.playbackDetailContext,

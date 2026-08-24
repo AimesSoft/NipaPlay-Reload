@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cmp_utf16`, `compare_decimal_strings`, `is_decimal`, `is_subtitle_noise_token`, `natural_parts`, `ordering_to_i32`, `regex`, `strip_leading_group_tags`
+// These functions are ignored because they are not marked as `pub`: `cmp_utf16`, `compare_decimal_strings`, `is_decimal`, `is_subtitle_noise_token`, `natural_ordering`, `natural_parts`, `ordering_to_i32`, `regex`, `strip_leading_group_tags`
 
 String mediaBaseNameWithoutExtension({required String pathOrName}) => RustLib
     .instance.api

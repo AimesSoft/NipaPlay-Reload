@@ -32,6 +32,7 @@ aho-corasick = "1"
 futures-util = "0.3.32"
 md-5 = "0.10.6"
 percent-encoding = "2.3.2"
+quick-xml = "0.37.5"
 reqwest = { version = "0.12.4", default-features = false, features = ["rustls-tls", "stream"] }
 url = "2.5.8"
 
