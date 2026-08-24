@@ -34,6 +34,12 @@ class EmbyDandanplayMatcher {
   // 返回一个包含预匹配结果的Map
   Future<Map<String, dynamic>> precomputeVideoInfoAndMatch(
       BuildContext context, EmbyEpisodeInfo episode) async {
+    if (context.read<SettingsProvider>().skipDanmakuMatching) {
+      return const {
+        'success': false,
+        'message': '已跳过弹幕匹配',
+      };
+    }
     try {
       final String seriesName = episode.seriesName ?? '未知剧集';
       final String episodeName =
@@ -141,6 +147,9 @@ class EmbyDandanplayMatcher {
   Future<WatchHistoryItem?> createPlayableHistoryItem(
       BuildContext context, EmbyEpisodeInfo episode,
       {bool showMatchDialog = true}) async {
+    if (context.read<SettingsProvider>().skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
     // 1. 先创建基本的WatchHistoryItem
     final historyItem = episode.toWatchHistoryItem();
 

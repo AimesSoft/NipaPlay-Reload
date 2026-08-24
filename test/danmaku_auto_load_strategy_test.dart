@@ -48,5 +48,27 @@ void main() {
         DanmakuAutoLoadStrategy.manual,
       );
     });
+
+    test('resolves legacy manual strategy into the standalone skip switch', () {
+      final settings = resolveDanmakuAutoLoadSettings(
+        persistedStrategy: 'manual',
+        persistedSkipMatching: null,
+        legacyAutoMatchOnPlay: null,
+      );
+
+      expect(settings.strategy, DanmakuAutoLoadStrategy.remoteAndLocal);
+      expect(settings.skipMatching, isTrue);
+    });
+
+    test('explicit skip preference overrides the legacy manual value', () {
+      final settings = resolveDanmakuAutoLoadSettings(
+        persistedStrategy: 'manual',
+        persistedSkipMatching: false,
+        legacyAutoMatchOnPlay: false,
+      );
+
+      expect(settings.strategy, DanmakuAutoLoadStrategy.remoteAndLocal);
+      expect(settings.skipMatching, isFalse);
+    });
   });
 }

@@ -240,6 +240,10 @@ class _NipaplayErikaWindowOverlayVideoView extends StatefulWidget {
 class _NipaplayErikaWindowOverlayVideoViewState
     extends State<_NipaplayErikaWindowOverlayVideoView>
     with WidgetsBindingObserver {
+  static final Expando<Object> _cutoutOwners =
+      Expando<Object>('Erika overlay cutout owners');
+
+  final Object _cutoutOwner = Object();
   Timer? _retryTimer;
   Timer? _frameTimer;
   int _bindAttempts = 0;
@@ -297,10 +301,17 @@ class _NipaplayErikaWindowOverlayVideoViewState
     _retryTimer?.cancel();
     _frameTimer?.cancel();
     widget.onPlatformViewIdChanged?.call(null);
-    // Clear the Flutter cutout synchronously. Native teardown is asynchronous,
-    // so leaving this rect behind makes the next page look transparent until a
-    // resize/fullscreen event happens to force another repaint.
-    widget.onFrameRectChanged?.call(null);
+    // Removing this surface can happen while Flutter has locked the widget
+    // tree for a rebuild. Clearing the shared cutout synchronously would call
+    // notifyListeners() from dispose(), so defer it until that frame finishes.
+    final onFrameRectChanged = widget.onFrameRectChanged;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (onFrameRectChanged != null &&
+          identical(_cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
+        _cutoutOwners[onFrameRectChanged] = null;
+        onFrameRectChanged(null);
+      }
+    });
     unawaited(_releaseOverlaySurface());
     super.dispose();
   }
@@ -488,7 +499,17 @@ class _NipaplayErikaWindowOverlayVideoViewState
           _secondaryWindow != secondaryWindow) {
         return;
       }
-      widget.onFrameRectChanged?.call(visible ? flutterCutout : null);
+      final onFrameRectChanged = widget.onFrameRectChanged;
+      if (onFrameRectChanged != null) {
+        if (visible) {
+          _cutoutOwners[onFrameRectChanged] = _cutoutOwner;
+          onFrameRectChanged(flutterCutout);
+        } else if (identical(
+            _cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
+          _cutoutOwners[onFrameRectChanged] = null;
+          onFrameRectChanged(null);
+        }
+      }
     } catch (error) {
       _lastFrameSignature = null;
       debugPrint(

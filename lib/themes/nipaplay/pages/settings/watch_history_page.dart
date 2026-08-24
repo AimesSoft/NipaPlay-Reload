@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -514,6 +515,9 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       return;
     }
 
+    final skipDanmakuMatching =
+        context.read<SettingsProvider>().skipDanmakuMatching;
+
     debugPrint(
         '[WatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
     var currentItem = item;
@@ -600,7 +604,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       return;
     }
 
-    if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
+    if (!skipDanmakuMatching &&
+        WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       String matchablePath = currentItem.filePath;
       if (currentItem.filePath.startsWith('jellyfin://')) {
         final itemId = currentItem.filePath.replaceFirst('jellyfin://', '');

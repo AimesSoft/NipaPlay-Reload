@@ -1383,6 +1383,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoMatchDanmakuOnPlayDisabledManual => '已关闭播放时自动匹配弹幕（可手动匹配）';
 
   @override
+  String get skipDanmakuMatchingTitle => '跳过弹幕匹配';
+
+  @override
+  String get skipDanmakuMatchingDescription =>
+      '开启后，播放任何来源的视频时都不会自动识别、加载弹幕或弹出匹配窗口；仍可从播放器弹幕菜单手动匹配。';
+
+  @override
+  String get skipDanmakuMatchingEnabled => '已开启跳过弹幕匹配';
+
+  @override
+  String get skipDanmakuMatchingDisabled => '已恢复弹幕匹配';
+
+  @override
   String get danmakuAutoLoadStrategyTitle => '弹幕自动加载策略';
 
   @override
@@ -3320,6 +3333,19 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get autoMatchDanmakuOnPlayDisabledManual => '已關閉播放時自動匹配彈幕（可手動匹配）';
+
+  @override
+  String get skipDanmakuMatchingTitle => '跳過彈幕匹配';
+
+  @override
+  String get skipDanmakuMatchingDescription =>
+      '開啟後，播放任何來源的影片時都不會自動識別、載入彈幕或彈出匹配視窗；仍可從播放器彈幕選單手動匹配。';
+
+  @override
+  String get skipDanmakuMatchingEnabled => '已開啟跳過彈幕匹配';
+
+  @override
+  String get skipDanmakuMatchingDisabled => '已恢復彈幕匹配';
 
   @override
   String get danmakuAutoLoadStrategyTitle => '彈幕自動載入策略';

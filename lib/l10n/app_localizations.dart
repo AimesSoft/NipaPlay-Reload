@@ -2616,6 +2616,30 @@ abstract class AppLocalizations {
   /// **'已关闭播放时自动匹配弹幕（可手动匹配）'**
   String get autoMatchDanmakuOnPlayDisabledManual;
 
+  /// No description provided for @skipDanmakuMatchingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳过弹幕匹配'**
+  String get skipDanmakuMatchingTitle;
+
+  /// No description provided for @skipDanmakuMatchingDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，播放任何来源的视频时都不会自动识别、加载弹幕或弹出匹配窗口；仍可从播放器弹幕菜单手动匹配。'**
+  String get skipDanmakuMatchingDescription;
+
+  /// No description provided for @skipDanmakuMatchingEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启跳过弹幕匹配'**
+  String get skipDanmakuMatchingEnabled;
+
+  /// No description provided for @skipDanmakuMatchingDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复弹幕匹配'**
+  String get skipDanmakuMatchingDisabled;
+
   /// No description provided for @danmakuAutoLoadStrategyTitle.
   ///
   /// In zh, this message translates to:
