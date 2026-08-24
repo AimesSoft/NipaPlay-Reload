@@ -1,5 +1,20 @@
 part of video_player_state;
 
+@visibleForTesting
+String preferredPlaybackErrorDetail({
+  String? specificError,
+  String? mediaLoadError,
+  required Object fallback,
+}) {
+  for (final candidate in <String?>[specificError, mediaLoadError]) {
+    final detail = candidate?.trim();
+    if (detail != null && detail.isNotEmpty) {
+      return detail;
+    }
+  }
+  return fallback.toString();
+}
+
 extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   Future<void> initializePlayer(
     String videoPath, {
@@ -493,9 +508,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
         readyStopwatch.stop();
         if (!mediaReady) {
-          final detail = player.mediaInfo.specificErrorMessage ??
-              player.mediaLoadError ??
-              (isNetworkMedia ? '网络媒体在重试后仍未返回有效数据' : '媒体未返回有效轨道或时长');
+          final detail = preferredPlaybackErrorDetail(
+            specificError: player.mediaInfo.specificErrorMessage,
+            mediaLoadError: player.mediaLoadError,
+            fallback: isNetworkMedia ? '网络媒体在重试后仍未返回有效数据' : '媒体未返回有效轨道或时长',
+          );
           final attemptSummary =
               isNetworkMedia ? '远程媒体已尝试 $mediaLoadAttempts 次仍无法载入：' : '';
           throw TimeoutException('$attemptSummary$detail');
@@ -886,8 +903,18 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             _playbackGeneration == danmakuLoadGeneration;
 
         if (!canContinue()) return;
-        final danmakuAutoLoadStrategy = await _resolveDanmakuAutoLoadStrategy();
+        final danmakuAutoLoadSettings = await _resolveDanmakuAutoLoadSettings();
         if (!canContinue()) return;
+
+        // “跳过弹幕匹配”表示启动时完全跳过弹幕流程。手动搜索只能由用户
+        // 从播放器弹幕菜单主动触发，不能在这里自动弹出。
+        if (danmakuAutoLoadSettings.skipMatching) {
+          _clearDanmakuAutoLoadState();
+          _addStatusMessage('已跳过弹幕匹配');
+          _applyTimelineDanmakuTrackForCurrentVideo();
+          _updateMergedDanmakuList();
+          return;
+        }
 
         // 针对Jellyfin流媒体视频的特殊处理
         bool jellyfinDanmakuHandled = false;
@@ -938,7 +965,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             }
           }
 
-          switch (danmakuAutoLoadStrategy) {
+          switch (danmakuAutoLoadSettings.strategy) {
             case DanmakuAutoLoadStrategy.remoteAndLocal:
               await loadRemoteDanmakuForCurrentVideo();
               if (!canContinue()) return;
@@ -959,13 +986,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               }
               break;
             case DanmakuAutoLoadStrategy.manual:
-              _clearDanmakuAutoLoadState();
-              final handled = await _tryManualMatchDanmaku(videoPath,
-                  initialFileName: null);
-              if (!canContinue()) return;
-              if (!handled) {
-                _addStatusMessage('已选择手动加载弹幕');
-              }
               break;
           }
         }
@@ -1133,13 +1153,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
       if (mediaPrepareStarted && !mediaPrepareCompleted) {
-        final message = '播放器打开媒体失败: $e';
+        final detail = preferredPlaybackErrorDetail(
+          specificError: player.mediaInfo.specificErrorMessage,
+          mediaLoadError: player.mediaLoadError,
+          fallback: e,
+        );
+        final message = '播放器打开媒体失败: $detail';
         debugPrint(
-          '[VideoPlayerState] Media prepare failed for $videoPath: $e',
+          '[VideoPlayerState] Media prepare failed for $videoPath: $detail',
         );
         _error = message;
         _setStatus(PlayerStatus.error, message: message);
-        _requestPlaybackErrorDialog();
+        _notifySeriousPlaybackErrorAfterFrame(
+          expectedPlaybackGeneration: initializationGeneration,
+        );
         return;
       }
       _error = '初始化视频播放器时出错: $e';
@@ -1147,6 +1174,25 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 尝试恢复
       _tryRecoverFromError();
     }
+  }
+
+  void _notifySeriousPlaybackErrorAfterFrame({
+    int? expectedPlaybackGeneration,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_isDisposed ||
+          (expectedPlaybackGeneration != null &&
+              expectedPlaybackGeneration != _playbackGeneration)) {
+        return;
+      }
+      await handleBackButton();
+      if (_isDisposed ||
+          (expectedPlaybackGeneration != null &&
+              expectedPlaybackGeneration != _playbackGeneration)) {
+        return;
+      }
+      _requestPlaybackErrorDialog();
+    });
   }
 
   void _startBackgroundDanmakuLoading(

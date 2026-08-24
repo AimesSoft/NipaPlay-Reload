@@ -451,6 +451,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
   }
 
   Future<WatchHistoryItem?> _createWatchHistoryItem(dynamic episode) async {
+    if (context.read<SettingsProvider>().skipDanmakuMatching) {
+      return episode.toWatchHistoryItem();
+    }
+
     // 根据服务器类型使用相应的匹配器创建可播放的历史记录项
     try {
       dynamic matcher;
@@ -530,6 +534,11 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     if (_mediaDetail == null || !_isMovie) return;
     if (_isDetailAutoMatching) {
       BlurSnackBar.show(context, '正在自动匹配，请稍候');
+      return;
+    }
+
+    if (context.read<SettingsProvider>().skipDanmakuMatching) {
+      Navigator.of(context).pop(_mediaDetail!.toWatchHistoryItem());
       return;
     }
 
@@ -1731,12 +1740,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
 
       debugPrint('准备创建播放会话');
 
-      if (mounted) {
+      final skipDanmakuMatching =
+          context.read<SettingsProvider>().skipDanmakuMatching;
+      if (mounted && !skipDanmakuMatching) {
         BlurSnackBar.show(context, '正在匹配弹幕信息...');
       }
 
-      final historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
-          () => _createWatchHistoryItem(episode));
+      final historyItem = skipDanmakuMatching
+          ? episode.toWatchHistoryItem()
+          : await _runDetailAutoMatchTask<WatchHistoryItem?>(
+              () => _createWatchHistoryItem(episode),
+            );
       if (historyItem == null) return;
 
       debugPrint(

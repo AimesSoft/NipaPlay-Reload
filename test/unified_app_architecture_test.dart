@@ -730,7 +730,7 @@ void main() {
     expect(controls, contains('if (globals.isPhone)'));
     expect(controls, contains('setPhonePlaybackPortrait()'));
     expect(controls, contains('setPhonePlaybackLandscape()'));
-    expect(player, contains('_buildPhonePortraitPlayer(videoState)'));
+    expect(player, contains('_buildPhonePortraitPlayer(layout)'));
     expect(player, contains('final stageHeight'));
     expect(player, contains('constraints.maxWidth / aspectRatio'));
     expect(player, contains('return SafeArea('));
@@ -779,7 +779,7 @@ void main() {
     expect(player, contains('_phonePortraitUiDesignWidth = 760'));
     expect(player, contains('compactPortrait: portraitUiScale < 0.999'));
     expect(player, contains('_portraitUnlockScheduled'));
-    expect(player, contains('videoState.setShowControls(true)'));
+    expect(player, contains('context.read<VideoPlayerState>().setShowControls(true)'));
     expect(player, contains('if (!isCompactPortrait) ...['));
     expect(
       player,

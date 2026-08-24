@@ -15,7 +15,13 @@ Future<T?> showInViewDialog<T>({
   Offset? anchorPoint,
   bool? requestFocus,
 }) {
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
+  // Flutter's experimental desktop windowing promotes showDialog to a
+  // separate native view. Keep these dialogs in the current Flutter view so
+  // they inherit the existing window metrics and navigator lifecycle.
+  final useInViewRoute = defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+  if (kIsWeb || !useInViewRoute) {
     return showDialog<T>(
       context: context,
       builder: builder,

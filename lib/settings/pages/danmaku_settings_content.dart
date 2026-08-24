@@ -1446,9 +1446,37 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 height: 1),
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile.toggle(
+                  title: context.l10n.skipDanmakuMatchingTitle,
+                  subtitle: context.l10n.skipDanmakuMatchingDescription,
+                  icon: Ionicons.hand_left_outline,
+                  value: settingsProvider.skipDanmakuMatching,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                  onChanged: (bool value) async {
+                    await settingsProvider.setSkipDanmakuMatching(value);
+                    if (context.mounted) {
+                      BlurSnackBar.show(
+                        context,
+                        value
+                            ? context.l10n.skipDanmakuMatchingEnabled
+                            : context.l10n.skipDanmakuMatchingDisabled,
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
                 final currentStrategy =
                     settingsProvider.danmakuAutoLoadStrategy;
                 final items = DanmakuAutoLoadStrategy.values
+                    .where(
+                      (strategy) => strategy != DanmakuAutoLoadStrategy.manual,
+                    )
                     .map(
                       (strategy) =>
                           DropdownMenuItemData<DanmakuAutoLoadStrategy>(

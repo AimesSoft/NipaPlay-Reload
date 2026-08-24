@@ -35,6 +35,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       return;
     }
 
+    final skipDanmakuMatching = _context != null && _context!.mounted
+        ? _context!.read<SettingsProvider>().skipDanmakuMatching
+        : false;
+
     _isEpisodeNavigating = true;
 
     try {
@@ -89,6 +93,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         currentFilePath: _currentVideoPath!,
         animeId: _animeId,
         episodeId: _episodeId,
+        skipDanmakuMatching: skipDanmakuMatching,
       );
 
       if (result.success) {
@@ -114,6 +119,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         }
 
         if (historyItem != null &&
+            !skipDanmakuMatching &&
             WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
           historyItem = await _tryAutoMatchForNavigation(historyItem);
         }
@@ -326,6 +332,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
   }
 
   Future<void> _playPlaylistEpisode(PlaybackDetailEpisode episode) async {
+    final skipDanmakuMatching = _context != null && _context!.mounted
+        ? _context!.read<SettingsProvider>().skipDanmakuMatching
+        : false;
+
     // 优先查询数据库中的真实观看记录，因为 WebDAV/SMB 的 episodeLoader
     // 创建的占位 historyItem 中 animeName/episodeTitle 都是文件名，没有
     // animeId。数据库中有通过弹幕匹配写入的正确番剧/剧集名。
@@ -356,6 +366,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
     historyItem ??= episode.historyItem;
     if (historyItem != null &&
+        !skipDanmakuMatching &&
         WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
       // WebDAV/SMB 等远程路径优先使用 episode.actualPlayUrl（服务器返回的
       // 原始编码路径构建的 HTTP URL），避免 _resolveMatchablePath 从解码后
@@ -437,6 +448,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       return;
     }
 
+    final skipDanmakuMatching = _context != null && _context!.mounted
+        ? _context!.read<SettingsProvider>().skipDanmakuMatching
+        : false;
+
     _isEpisodeNavigating = true;
 
     try {
@@ -491,6 +506,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         currentFilePath: _currentVideoPath!,
         animeId: _animeId,
         episodeId: _episodeId,
+        skipDanmakuMatching: skipDanmakuMatching,
       );
 
       if (result.success) {
@@ -515,6 +531,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         }
 
         if (historyItem != null &&
+            !skipDanmakuMatching &&
             WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
           historyItem = await _tryAutoMatchForNavigation(historyItem);
         }
@@ -704,6 +721,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     final isPhoneLayout = _context != null && _context!.mounted
         ? Provider.of<UIThemeProvider>(_context!, listen: false).isPhoneLayout
         : false;
+    final skipDanmakuMatching = _context != null && _context!.mounted
+        ? _context!.read<SettingsProvider>().skipDanmakuMatching
+        : false;
 
     final Widget indicator = isPhoneLayout
         ? const CupertinoActivityIndicator(radius: 12)
@@ -729,7 +749,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         indicator,
         const SizedBox(height: 16),
         Text(
-          '正在定位剧集并匹配弹幕，请稍候…',
+          skipDanmakuMatching ? '正在定位剧集，请稍候…' : '正在定位剧集并匹配弹幕，请稍候…',
           style: textStyle,
           textAlign: TextAlign.center,
         ),
@@ -1481,15 +1501,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             _duration = Duration.zero;
             _bufferedPositionMs = 0;
 
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
-              await handleBackButton();
-
-              // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
-
-              // 3. 通知UI层执行pop/显示对话框等
-              _requestPlaybackErrorDialog();
-            });
+            _notifySeriousPlaybackErrorAfterFrame();
 
             return;
           }
