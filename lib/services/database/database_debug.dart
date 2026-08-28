@@ -13,7 +13,6 @@ class _DatabaseDebugPrinter {
     'bangumi_anime',
     'bangumi_episode',
     'asset_episode',
-    'episode_watch_status',
   ];
 
   Future<void> printTables() async {

@@ -183,27 +183,6 @@ void main() {
     );
     expect(linkedDandanplayEpisodeId, 101);
 
-    log('写入资产设置: linkOptions=1, offsets=1.5/2.0');
-    await DatabaseService.setAssetLinkOptions(
-      assetHash,
-      DatabaseService.linkDandanplay,
-    );
-    await DatabaseService.setAssetDanmakuOffsets(
-      assetHash,
-      dandanplay: 1.5,
-      user: 2.0,
-    );
-    final assetEpisodeInfo =
-        await DatabaseService.getAssetEpisodeInfo(assetHash);
-    log(
-      '资产设置查询: linkOptions=${assetEpisodeInfo?.linkOptions}, '
-      'DandanplayOffset=${assetEpisodeInfo?.dandanplayDanmakuOffset}, '
-      'UserOffset=${assetEpisodeInfo?.userDanmakuOffset}',
-    );
-    expect(assetEpisodeInfo, isNotNull);
-    expect(assetEpisodeInfo!.linkOptions, DatabaseService.linkDandanplay);
-    expect(assetEpisodeInfo.dandanplayDanmakuOffset, 1.5);
-    expect(assetEpisodeInfo.userDanmakuOffset, 2.0);
     await endSession('建立视频资产关联');
     log('全部 upsert/link 断言通过');
   });

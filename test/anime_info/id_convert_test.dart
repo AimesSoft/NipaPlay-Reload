@@ -2,7 +2,7 @@
 // test/anime_info/id_convert_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/anime_info_service.dart';
+import 'package:nipaplay/services/anime_info/anime_info_service.dart';
 import 'package:nipaplay/utils/color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

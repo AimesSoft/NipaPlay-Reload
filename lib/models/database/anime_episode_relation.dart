@@ -4,7 +4,7 @@
 
 class DbAnimeEpisodeRelation {
 
-  int animeId;
+  int           animeId;
   Iterable<int> episodeIds;
 
   DbAnimeEpisodeRelation({

@@ -54,9 +54,6 @@ class DatabaseService {
   static Future<void> linkToEpisode(AniEpiRltType type, int typEpiId, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode  (type, typEpiId, comEpiId));
   static Future<void> linkVideoAssetToEpisode        (Uint8List hash, int comEpiId) => _withDb((db) => _AssetRepository       (db).linkToEpisode(hash, comEpiId));
 
-  static Future<void> setAssetDanmakuOffsets(Uint8List hash, {double? dandanplay, double? user}) => _withDb((db) => _AssetRepository(db).setDanmakuOffsets(hash,dandanplay: dandanplay,user: user,),);
-  static Future<void> setAssetLinkOptions   (Uint8List hash, int value) =>_withDb((db) => _AssetRepository(db).setLinkOptions(hash, value),);
-
 
   // getters
   // ======================================================================== //
@@ -75,7 +72,6 @@ class DatabaseService {
 
   // 获取视频资产记录和关联信息
   static Future<DbAssetRecord?>      getAssetRecord     (Uint8List hash) =>_withDb((db) => _AssetRepository(db).find(hash));
-  static Future<DbAssetEpisodeInfo?> getAssetEpisodeInfo(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findEpisodeInfo(hash));
   static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
 
 

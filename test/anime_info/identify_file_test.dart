@@ -1,5 +1,5 @@
 
-// test/anime_info/refresh_dandanplay_anime_relation_by_cache_test.dart
+// test/anime_info/identify_file_test.dart
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,20 +13,19 @@ import '../test_util/io.dart';
 
 
 void main() {
-
   WidgetsFlutterBinding.ensureInitialized();
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
-  test('从 Dandanplay Anime JSON 缓存刷新数据库关系', () async {
+  test('刷新文件的 Dandanplay 弹幕关联', () async {
 
-    final dandanplayAnimeId = getIntFromEnv(TestEnvironmentVariables.dandanplayAnimeId);
+    final filePath = getStringFromEnv(TestEnvironmentVariables.filePath);
     final databasePath = getStringFromEnv(TestEnvironmentVariables.databasePath);
-    if (dandanplayAnimeId == null || databasePath == null) {
+    if (filePath == null || databasePath == null) {
       printMsg(color('测试未运行', ColorCode.red));
       return;
     }
 
     await DatabaseService.initialize(databasePath);
-    await AnimeInfoService.refreshDandanplayAnimeRelationByCache(dandanplayAnimeId);
+    await AnimeInfoService.identifyFile(filePath);
   });
 }

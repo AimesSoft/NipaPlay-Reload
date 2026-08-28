@@ -107,10 +107,8 @@ Future<void> _deleteEpisodeIfUnreferenced(
     'AND NOT EXISTS (SELECT 1 FROM dandanplay_episode '
     'WHERE episode_id = ?) '
     'AND NOT EXISTS (SELECT 1 FROM bangumi_episode WHERE episode_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM asset_episode WHERE episode_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM episode_watch_status '
-    'WHERE episode_id = ?)',
-    <Object>[episodeId, episodeId, episodeId, episodeId, episodeId],
+    'AND NOT EXISTS (SELECT 1 FROM asset_episode WHERE episode_id = ?)',
+    <Object>[episodeId, episodeId, episodeId, episodeId],
   );
   if (deleted > 0 && animeId != null) {
     await _deleteAnimeIfUnreferenced(executor, animeId);
@@ -122,19 +120,6 @@ Uint8List _validateHash(Uint8List value, int expectedBytes) {
     throw FormatException('哈希必须为 $expectedBytes 字节');
   }
   return Uint8List.fromList(value);
-}
-
-Uint8List _encodeUint32(int value) {
-  if (value < 0 || value > 0xFFFFFFFF) {
-    throw RangeError.range(value, 0, 0xFFFFFFFF, 'value');
-  }
-  final data = ByteData(4)..setUint32(0, value, Endian.big);
-  return data.buffer.asUint8List();
-}
-
-int _decodeUint32(Uint8List value) {
-  if (value.length != 4) throw const FormatException('位掩码必须为 4 字节');
-  return ByteData.sublistView(value).getUint32(0, Endian.big);
 }
 
 void _requireNonNegative(int value, String name) {

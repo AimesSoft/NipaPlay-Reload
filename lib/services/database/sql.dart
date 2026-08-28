@@ -17,7 +17,6 @@ class DatabaseSql {
     'create_net_asset_table.sql',
     'create_path_asset_table.sql',
     'create_asset_episode_table.sql',
-    'create_episode_watch_status_table.sql',
   ];
 
   static const _createIndexFiles = <String>[
@@ -27,9 +26,6 @@ class DatabaseSql {
     'create_net_asset_hash_index.sql',
     'create_path_asset_hash_index.sql',
     'create_asset_episode_episode_id_index.sql',
-    'create_watch_status_video_hash_index.sql',
-    'create_watch_status_thumbnail_hash_index.sql',
-    'create_watch_status_last_watch_time_index.sql',
   ];
 
   static const enableForeignKeys = 'PRAGMA foreign_keys = ON';
