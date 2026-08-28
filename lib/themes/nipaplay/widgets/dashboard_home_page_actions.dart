@@ -319,6 +319,9 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       return;
     }
 
+    final skipDanmakuMatching =
+        context.read<SettingsProvider>().skipDanmakuMatching;
+
     var currentItem = item;
     // 检查是否为网络URL或流媒体协议URL
     final isNetworkUrl = currentItem.filePath.startsWith('http://') ||
@@ -403,7 +406,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       return;
     }
 
-    if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
+    if (!skipDanmakuMatching &&
+        WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       String matchablePath = currentItem.filePath;
       if (currentItem.filePath.startsWith('jellyfin://')) {
         final itemId = currentItem.filePath.replaceFirst('jellyfin://', '');

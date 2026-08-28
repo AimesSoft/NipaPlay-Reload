@@ -22,7 +22,6 @@ class PlaybackService {
 
   /// 尝试使用外部播放器播放 [item], 如果成功则返回 true, 否则返回 false.
   Future<bool> tryPlayExternally(BuildContext context, PlayableItem item) async {
-
     // 检查设置是否允许使用外部播放器
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (!settings.useExternalPlayer) return false;
@@ -74,6 +73,7 @@ class PlaybackService {
       actualPlayUrl: item.actualPlayUrl,
       playbackSession: item.playbackSession,
       playbackDetailContext: detailContext,
+      mediaKey: item.mediaKey,
     );
   }
 }

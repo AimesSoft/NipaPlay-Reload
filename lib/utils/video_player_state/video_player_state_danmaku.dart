@@ -29,11 +29,20 @@ class _SpoilerAiRequestConfig {
 }
 
 extension VideoPlayerStateDanmaku on VideoPlayerState {
+  double get effectiveNativeDanmakuFontSize =>
+      actualDanmakuFontSize * _danmakuPresentationScale;
+
+  void setDanmakuPresentationScale(double scale) {
+    final normalized = scale.isFinite && scale > 0 ? scale : 1.0;
+    if ((_danmakuPresentationScale - normalized).abs() < 0.0001) return;
+    _danmakuPresentationScale = normalized;
+    _syncErikaDanmakuFontSize();
+  }
+
   // Whether the active player kernel renders danmaku natively (Erika).
   // When true, NipaPlay feeds its merged/filtered danmaku list to the kernel
   // and keeps its own Flutter danmaku overlay empty to avoid drawing twice.
   bool get _erikaNativeDanmaku {
-    if (DanmakuKernelFactory.activePluginRenderer != null) return false;
     try {
       return player.supportsNativeDanmaku;
     } catch (_) {
@@ -46,20 +55,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // Public so the kernel hot-swap path can keep the Flutter overlay disabled.
   bool get isNativeDanmakuActive => _erikaNativeDanmaku;
 
-  /// Reconciles native danmaku when switching between a plugin WebView
-  /// renderer and the player's built-in native renderer.
+  /// Reconciles danmaku after the persisted plugin renderer changes. A player
+  /// kernel with native danmaku always keeps ownership; plugin selection only
+  /// becomes effective on playback kernels without native danmaku.
   void handleDanmakuRendererChanged() {
     try {
       if (!player.supportsNativeDanmaku) {
         _notifyListeners();
         return;
       }
-      if (DanmakuKernelFactory.activePluginRenderer != null) {
-        unawaited(player.setNativeDanmakuEnabled(false));
-      } else {
-        _syncErikaDanmakuConfig();
-        unawaited(player.loadNativeDanmaku(_danmakuList));
-      }
+      _syncErikaDanmakuConfig();
+      unawaited(player.loadNativeDanmaku(_danmakuList));
+      danmakuController?.clearDanmaku();
     } catch (_) {}
     _notifyListeners();
   }
@@ -79,9 +86,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     unawaited(player.setNativeDanmakuConfig(
       opacity: _danmakuOpacity,
       // actualDanmakuFontSize resolves the "0 = default" sentinel to the same
-      // logical font size used by NipaPlay's DFM+ path; Erika uses the same
-      // default danmaku font and applies surface scale internally.
-      fontSize: actualDanmakuFontSize,
+      // logical font size used by NipaPlay's DFM+ path. The presentation scale
+      // additionally follows compact portrait playback without changing prefs.
+      fontSize: effectiveNativeDanmakuFontSize,
       displayArea: _danmakuDisplayArea,
       mergeDuplicates: _mergeDanmaku,
       allowStacking: _danmakuStacking,
@@ -108,16 +115,16 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   void _syncErikaDanmakuFontSize() {
     if (!_erikaNativeDanmaku) return;
     unawaited(
-      player.setNativeDanmakuConfig(fontSize: actualDanmakuFontSize),
+      player.setNativeDanmakuConfig(fontSize: effectiveNativeDanmakuFontSize),
     );
   }
 
-  Future<DanmakuAutoLoadStrategy> _resolveDanmakuAutoLoadStrategy() async {
+  Future<DanmakuAutoLoadSettings> _resolveDanmakuAutoLoadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    return danmakuAutoLoadStrategyFromPrefs(
-      prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
-      legacyAutoMatchOnPlay:
-          prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true,
+    return resolveDanmakuAutoLoadSettings(
+      persistedStrategy: prefs.getString(SettingsKeys.danmakuAutoLoadStrategy),
+      persistedSkipMatching: prefs.getBool(SettingsKeys.skipDanmakuMatching),
+      legacyAutoMatchOnPlay: prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay),
     );
   }
 

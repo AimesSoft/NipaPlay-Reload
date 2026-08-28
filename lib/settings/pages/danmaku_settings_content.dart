@@ -778,11 +778,15 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
     final isErikaPlayerKernel = globals.isTvOS ||
         PlayerFactory.getKernelType() == PlayerKernelType.erika;
     final next2Supported = Next2PlatformSupport.isKernelSupported;
-    final hasPluginRenderer = DanmakuKernelFactory.activePluginRenderer != null;
+    final selectedPluginRenderer = DanmakuKernelFactory.activePluginRenderer;
+    final effectivePluginRenderer = PluginDanmakuRenderer.resolveForPlayback(
+      selectedRenderer: selectedPluginRenderer,
+      nativeDanmakuActive: isErikaPlayerKernel,
+    );
+    final hasPluginRenderer = effectivePluginRenderer != null;
     final usesTitanSettings =
-        DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false;
-    _selectedPluginDanmakuRendererId =
-        DanmakuKernelFactory.activePluginRenderer?.selectionId;
+        effectivePluginRenderer?.usesTitanSettings ?? false;
+    _selectedPluginDanmakuRendererId = selectedPluginRenderer?.selectionId;
     final showNextPlusPlusToggle = !hasPluginRenderer &&
         !globals.isTvOS &&
         _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext;
@@ -794,8 +798,7 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
       next2Supported: next2Supported,
       pluginRenderers: DanmakuKernelFactory.availablePluginRenderers,
     );
-    final canSelectRenderer = !isErikaPlayerKernel ||
-        DanmakuKernelFactory.availablePluginRenderers.isNotEmpty;
+    final canSelectRenderer = !isErikaPlayerKernel;
 
     return AdaptiveSettingsPage(
       children: [
@@ -1443,9 +1446,37 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                 height: 1),
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
+                return AdaptiveSettingsTile.toggle(
+                  title: context.l10n.skipDanmakuMatchingTitle,
+                  subtitle: context.l10n.skipDanmakuMatchingDescription,
+                  icon: Ionicons.hand_left_outline,
+                  value: settingsProvider.skipDanmakuMatching,
+                  hideNativeIOS26Switch: _isSpoilerAiSettingsSheetVisible,
+                  onChanged: (bool value) async {
+                    await settingsProvider.setSkipDanmakuMatching(value);
+                    if (context.mounted) {
+                      BlurSnackBar.show(
+                        context,
+                        value
+                            ? context.l10n.skipDanmakuMatchingEnabled
+                            : context.l10n.skipDanmakuMatchingDisabled,
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
                 final currentStrategy =
                     settingsProvider.danmakuAutoLoadStrategy;
                 final items = DanmakuAutoLoadStrategy.values
+                    .where(
+                      (strategy) => strategy != DanmakuAutoLoadStrategy.manual,
+                    )
                     .map(
                       (strategy) =>
                           DropdownMenuItemData<DanmakuAutoLoadStrategy>(

@@ -99,6 +99,10 @@ pub fn media_extract_anime_title_keyword(path_or_name: String) -> String {
 
 #[flutter_rust_bridge::frb(sync)]
 pub fn natural_compare(a: String, b: String) -> i32 {
+    ordering_to_i32(natural_ordering(&a, &b))
+}
+
+pub(crate) fn natural_ordering(a: &str, b: &str) -> Ordering {
     let a_parts = natural_parts(&a);
     let b_parts = natural_parts(&b);
     for (left, right) in a_parts.iter().zip(&b_parts) {
@@ -108,10 +112,10 @@ pub fn natural_compare(a: String, b: String) -> i32 {
             cmp_utf16(&left.to_lowercase(), &right.to_lowercase())
         };
         if ordering != Ordering::Equal {
-            return ordering_to_i32(ordering);
+            return ordering;
         }
     }
-    ordering_to_i32(a_parts.len().cmp(&b_parts.len()))
+    a_parts.len().cmp(&b_parts.len())
 }
 
 /// Preserves the provider's older natural-sort behavior: text is case-sensitive

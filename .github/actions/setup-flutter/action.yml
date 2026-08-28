@@ -8,7 +8,7 @@ inputs:
   flutter-version:
     description: 'Optional Flutter version override for a platform-specific build'
     required: false
-    default: ''
+    default: '3.44.6'
   dependency-profile:
     description: 'Dependency override profile: mainline or linux'
     required: false

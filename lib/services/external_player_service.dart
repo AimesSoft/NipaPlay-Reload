@@ -79,7 +79,9 @@ abstract final class ExternalPlayerService {
 
     // 尝试获取弹幕
     DanmakuItemSet? danmakuSet;
-    if (!settings.externalPlayerDanmakuOverlay) {
+    if (settings.skipDanmakuMatching) {
+      _log('danmaku: 已启用跳过弹幕匹配，跳过自动获取');
+    } else if (!settings.externalPlayerDanmakuOverlay) {
       _log('danmaku: 弹幕外挂未启用');
     } else if (item.episodeId == null) {
       _log('danmaku: 缺少 episodeId，跳过弹幕获取');
