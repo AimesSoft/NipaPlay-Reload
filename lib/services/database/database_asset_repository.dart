@@ -6,13 +6,11 @@ class _AssetRepository {
   final Database database;
 
   Future<void> upsert(DbAssetRecord asset) async {
+
     final size = asset.size;
-    if (size != null && size < 0) {
-      throw ArgumentError.value(size, 'asset.size', '不能小于 0');
-    }
+    if (size != null && size < 0) throw ArgumentError.value(size, 'asset.size', '不能小于 0');
     final hash = _validateHash(asset.hashPre16MiBMd5, 16);
-    final sha256 =
-        asset.hashSha256 == null ? null : _validateHash(asset.hashSha256!, 32);
+    final sha256 = asset.hashSha256 == null ? null : _validateHash(asset.hashSha256!, 32);
 
     await database.transaction((txn) async {
       final values = <String, Object?>{
@@ -78,30 +76,19 @@ class _AssetRepository {
   }
 
   Future<void> linkToEpisode(Uint8List assetHash, int episodeId) async {
+
     _requireNonNegative(episodeId, 'episodeId');
     final hash = _validateHash(assetHash, 16);
 
     await database.transaction((txn) async {
-      final oldEpisodeId = await _readIntColumn(
-        txn,
-        'asset_episode',
-        'episode_id',
-        'asset_pre16mib_md5',
-        hash,
-      );
-      if (oldEpisodeId == null) {
-        throw StateError('关联 Episode 前必须先写入视频资产记录');
-      }
-      final animeId = await _readIntColumn(
-        txn,
-        'episode',
-        'anime_id',
-        'episode_id',
-        oldEpisodeId,
-      );
-      if (animeId == null) {
-        throw StateError('视频资产关联的通用 Episode 不存在');
-      }
+
+      final oldEpisodeId = await _readIntColumn(txn, 'asset_episode', 'episode_id', 'asset_pre16mib_md5', hash);
+      if (oldEpisodeId == null) throw StateError('关联 Episode 前必须先写入视频资产记录');
+
+      final animeId = await _readIntColumn(txn, 'episode', 'anime_id', 'episode_id', oldEpisodeId);
+      if (animeId == null) throw StateError('视频资产关联的通用 Episode 不存在');
+
+      // 插入共通剧集记录
       await txn.insert(
         'episode',
         <String, Object?>{
@@ -112,6 +99,7 @@ class _AssetRepository {
       );
       if (oldEpisodeId == episodeId) return;
 
+      // 更新视频资产关联的共通剧集 ID
       await txn.update(
         'asset_episode',
         <String, Object?>{'episode_id': episodeId},

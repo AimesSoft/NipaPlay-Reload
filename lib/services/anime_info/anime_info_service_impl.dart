@@ -242,9 +242,9 @@ class _AnimeInfoRepository {
       );
     }
 
-    await DatabaseService.upsertAnimeEpisodeRelation(
-      relation,
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
       DbAnimeEpisodeRelationType.dandanplay,
+      relation,
     );
     _printLine(
       '已从缓存更新 Dandanplay Anime ${_val(ddpAniId)} 关系, '
@@ -297,9 +297,9 @@ class _AnimeInfoRepository {
       );
     }
 
-    await DatabaseService.upsertAnimeEpisodeRelation(
-      relation,
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
       DbAnimeEpisodeRelationType.bangumi,
+      relation,
     );
     _printLine(
       '已从缓存更新 Bangumi Anime ${_val(bangumiAnimeId)} 关系, '
@@ -362,13 +362,13 @@ class _AnimeInfoRepository {
     final bangumiPackage = _parseAnimeEpisodeRelationBangumi(bangumiPackageJson);
     final episodeMatches = _getDandanplayBangumiEpisodeMatch(dandanplayPackageJson, bangumiPackageJson);
 
-    await DatabaseService.upsertAnimeEpisodeRelation(
-      dandanplayPackage,
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
       DbAnimeEpisodeRelationType.dandanplay,
+      dandanplayPackage,
     );
-    await DatabaseService.upsertAnimeEpisodeRelation(
-      bangumiPackage,
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
       DbAnimeEpisodeRelationType.bangumi,
+      bangumiPackage,
     );
 
     var linkedCount = 0;
@@ -397,12 +397,12 @@ class _AnimeInfoRepository {
               ? dandanplayCommonEpisodeId
               : bangumiCommonEpisodeId;
 
-      await DatabaseService.linkToEpisode(
+      await DatabaseService.linkSourceEpisodeToCommonEpisode(
         DbAnimeEpisodeRelationType.dandanplay,
         dandanplayEpisodeId,
         commonEpisodeId,
       );
-      await DatabaseService.linkToEpisode(
+      await DatabaseService.linkSourceEpisodeToCommonEpisode(
         DbAnimeEpisodeRelationType.bangumi,
         bangumiEpisodeId,
         commonEpisodeId,

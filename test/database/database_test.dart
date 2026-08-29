@@ -31,20 +31,20 @@ void main() {
 
     session('首次写入');
     log('写入 Dandanplay Anime=10, Episodes=[101, 102]');
-    await DatabaseService.upsertAnimeEpisodeRelation(
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
+      DbAnimeEpisodeRelationType.dandanplay,
       DbAnimeEpisodeRelation(
         animeId: 10,
         episodeIds: const <int>[101, 102],
       ),
-      DbAnimeEpisodeRelationType.dandanplay,
     );
     log('写入 Bangumi Anime=20, Episodes=[201, 202]');
-    await DatabaseService.upsertAnimeEpisodeRelation(
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
+      DbAnimeEpisodeRelationType.bangumi,
       DbAnimeEpisodeRelation(
         animeId: 20,
         episodeIds: const <int>[201, 202],
       ),
-      DbAnimeEpisodeRelationType.bangumi,
     );
 
     final hasDandanplayAnime = await DatabaseService.hasAnime(
@@ -72,12 +72,12 @@ void main() {
 
     session('增量写入');
     log('增量写入 Dandanplay Anime=10, Episodes=[101, 102, 103]');
-    await DatabaseService.upsertAnimeEpisodeRelation(
+    await DatabaseService.upsertSourceAnimeEpisodeRelation(
+      DbAnimeEpisodeRelationType.dandanplay,
       DbAnimeEpisodeRelation(
         animeId: 10,
         episodeIds: const <int>[101, 102, 103],
       ),
-      DbAnimeEpisodeRelationType.dandanplay,
     );
     final hasAddedEpisode = await DatabaseService.hasEpisode(
       DbAnimeEpisodeRelationType.dandanplay,
@@ -91,13 +91,13 @@ void main() {
     session('建立 Anime 关联');
     const targetAnimeId = 9000;
     log('关联 Dandanplay Anime 10 -> 通用 Anime $targetAnimeId');
-    await DatabaseService.linkToAnime(
+    await DatabaseService.linkSourceAnimeToCommonAnime(
       DbAnimeEpisodeRelationType.dandanplay,
       10,
       targetAnimeId,
     );
     log('关联 Bangumi Anime 20 -> 通用 Anime $targetAnimeId');
-    await DatabaseService.linkToAnime(
+    await DatabaseService.linkSourceAnimeToCommonAnime(
       DbAnimeEpisodeRelationType.bangumi,
       20,
       targetAnimeId,
@@ -123,13 +123,13 @@ void main() {
     session('建立 Episode 关联');
     const targetEpisodeId = 9101;
     log('关联 Dandanplay Episode 101 -> 通用 Episode $targetEpisodeId');
-    await DatabaseService.linkToEpisode(
+    await DatabaseService.linkSourceEpisodeToCommonEpisode(
       DbAnimeEpisodeRelationType.dandanplay,
       101,
       targetEpisodeId,
     );
     log('关联 Bangumi Episode 201 -> 通用 Episode $targetEpisodeId');
-    await DatabaseService.linkToEpisode(
+    await DatabaseService.linkSourceEpisodeToCommonEpisode(
       DbAnimeEpisodeRelationType.bangumi,
       201,
       targetEpisodeId,

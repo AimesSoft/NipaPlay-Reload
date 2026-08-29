@@ -17,34 +17,20 @@ class _AnimeEpisodeRepository {
     final schema        = _relationSchema(type);
     final sourceAnimeId = relation.animeId;
     final episodeIds    = relation.episodeIds.toSet();
+
     // 检查 ID 是否为非负数
     _requireNonNegative(sourceAnimeId, '${type.name}AnimeId');
     for (final id in episodeIds) { _requireNonNegative(id, '${type.name}EpisodeId'); }
 
+    // 如果是共通类型, 禁止插入
     if (type == AniEpiRltType.common) {
-      await database.transaction((txn) async {
-        await txn.insert(
-          'anime',
-          <String, Object?>{'anime_id': sourceAnimeId},
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        for (final episodeId in episodeIds) {
-          await txn.insert(
-            'episode',
-            <String, Object?>{
-              'episode_id': episodeId,
-              'anime_id': sourceAnimeId,
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
-        }
-      });
+      debugPrint('[Database] 禁止写入共通 Anime/Episode 关系');
       return;
     }
 
+    // 事务中写入外部动画与剧集关系
     await database.transaction((txn) async {
-      final animeId = await _sourceAnimeId(txn, schema, sourceAnimeId) ??
-          await _createAnime(txn);
+      final animeId = await _sourceAnimeId(txn, schema, sourceAnimeId) ?? await _createAnime(txn);
       await txn.insert(
         schema.animeTable,
         <String, Object?>{
@@ -54,42 +40,41 @@ class _AnimeEpisodeRepository {
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
       for (final sourceEpisodeId in episodeIds) {
-        await _upsertEpisode(
-          txn,
-          schema,
-          sourceAnimeId,
-          sourceEpisodeId,
-          animeId,
-        );
+        await _upsertEpisode(txn, schema, sourceAnimeId, sourceEpisodeId, animeId);
       }
     });
   }
 
   /// 将外部动画与通用动画关联
-  Future<void> linkAnime(AniEpiRltType type, int sourceAnimeId, int animeId) async {
+  Future<void> linkAnime(AniEpiRltType type, int sourceAnimeId, int commonAnimeId) async {
 
     if (type == AniEpiRltType.common) throw ArgumentError.value(type, 'type', '共通 Anime 无需关联到自身');
 
-    _requireNonNegative(sourceAnimeId, 'typeAnimeId');
-    _requireNonNegative(animeId, 'animeId');
+    _requireNonNegative(sourceAnimeId, '${type.name}AnimeId');
+    _requireNonNegative(commonAnimeId, 'commonAnimeId');
     final schema = _relationSchema(type);
 
     await database.transaction((txn) async {
 
       final oldAnimeId = await _sourceAnimeId(txn, schema, sourceAnimeId);
-      if (oldAnimeId == null) {
-        throw StateError('关联 Anime 前必须先写入对应的外部动画记录');
-      }
+      if (oldAnimeId == null) throw StateError('关联 Anime 前必须先写入对应的外部动画记录');
+
       await txn.insert(
         'anime',
-        <String, Object?>{'anime_id': animeId},
+        <String, Object?>{'anime_id': commonAnimeId},
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
-      if (oldAnimeId == animeId) return;
+      if (oldAnimeId == commonAnimeId) {
+        debugPrint(
+          '[Database] 关联 Anime: '
+          '${type.name} Anime $sourceAnimeId 已经关联到共通 Anime $commonAnimeId',
+        );
+        return;
+      }
 
       await txn.update(
         schema.animeTable,
-        <String, Object?>{'anime_id': animeId},
+        <String, Object?>{'anime_id': commonAnimeId},
         where: '${schema.animeSourceId} = ?',
         whereArgs: <Object>[sourceAnimeId],
       );
@@ -99,65 +84,61 @@ class _AnimeEpisodeRepository {
         'WHERE episode_id IN ('
         'SELECT episode_id FROM ${schema.episodeTable} '
         'WHERE ${schema.animeSourceId} = ?)',
-        <Object>[animeId, sourceAnimeId],
+        <Object>[commonAnimeId, sourceAnimeId],
       );
       await _deleteAnimeIfUnreferenced(txn, oldAnimeId);
     });
+
+    debugPrint(
+      '[Database] 关联 Anime: '
+      '${type.name} Anime $sourceAnimeId 关联到共通 Anime $commonAnimeId',
+    );
   }
 
   /// 将外部剧集与通用剧集关联
-  Future<void> linkEpisode(AniEpiRltType type, int sourceEpisodeId, int episodeId) async {
+  Future<void> linkEpisode(AniEpiRltType type, int sourceEpisodeId, int commonEpisodeId) async {
 
     if (type == AniEpiRltType.common) throw ArgumentError.value(type, 'type', '共通 Episode 无需关联到自身');
 
-    _requireNonNegative(sourceEpisodeId, 'typeEpisodeId');
-    _requireNonNegative(episodeId, 'episodeId');
+    _requireNonNegative(sourceEpisodeId, '${type.name}EpisodeId');
+    _requireNonNegative(commonEpisodeId, 'commonEpisodeId');
     final schema = _relationSchema(type);
 
     await database.transaction((txn) async {
+
       final oldEpisodeId = await _sourceEpisodeId(txn, schema, sourceEpisodeId);
-      if (oldEpisodeId == null) {
-        throw StateError('关联 Episode 前必须先写入对应的外部剧集记录');
-      }
-      final animeId = await _readIntColumn(
-        txn,
-        'episode',
-        'anime_id',
-        'episode_id',
-        oldEpisodeId,
-      );
-      if (animeId == null) {
-        throw StateError('外部剧集关联的通用 Episode 不存在');
-      }
-      final targetAnimeId = await _readIntColumn(
-        txn,
-        'episode',
-        'anime_id',
-        'episode_id',
-        episodeId,
-      );
+      if (oldEpisodeId == null) throw StateError('关联 Episode 前必须先写入对应的外部剧集记录');
+
+      // 获取外部剧集对应的通用动画 ID
+      final animeId = await _readIntColumn(txn, 'episode', 'anime_id', 'episode_id', oldEpisodeId);
+      if (animeId == null) throw StateError('外部剧集关联的通用 Episode 不存在');
+      final targetAnimeId = await _readIntColumn(txn, 'episode', 'anime_id', 'episode_id', commonEpisodeId);
+
+      // 如果目标共通剧集的通用动画 ID 与当前外部剧集的通用动画 ID 不一致, 则取消关联
       if (targetAnimeId != null && targetAnimeId != animeId) {
         debugPrint(
           '[Database] 取消关联 Episode: '
           '${type.name} Episode $sourceEpisodeId 当前属于 Anime $animeId, '
-          '目标共通 Episode $episodeId 属于 Anime $targetAnimeId',
+          '目标共通 Episode $commonEpisodeId 属于 Anime $targetAnimeId',
         );
         return;
       }
 
+      // 插入共通剧集记录
       await txn.insert(
         'episode',
         <String, Object?>{
-          'episode_id': episodeId,
+          'episode_id': commonEpisodeId,
           'anime_id': animeId,
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
-      if (oldEpisodeId == episodeId) return;
+      if (oldEpisodeId == commonEpisodeId) return;
 
+      // 更新外部剧集关联的共通剧集 ID
       await txn.update(
         schema.episodeTable,
-        <String, Object?>{'episode_id': episodeId},
+        <String, Object?>{'episode_id': commonEpisodeId},
         where: '${schema.episodeSourceId} = ?',
         whereArgs: <Object>[sourceEpisodeId],
       );

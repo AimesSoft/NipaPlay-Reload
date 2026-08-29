@@ -28,6 +28,8 @@ runs:
 
     - name: Setup Dart (for FVM)
       uses: dart-lang/setup-dart@v1
+      with:
+        problem-matcher: false
 
     - name: Cache FVM & Pub cache (Linux/macOS)
       if: runner.os != 'Windows'

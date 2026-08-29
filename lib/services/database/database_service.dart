@@ -16,13 +16,8 @@ part 'database_repository_support.dart';
 
 class DatabaseService {
 
-  static const int linkDandanplay = 0x1;
-  static const int linkBangumi = 0x2;
-  static const int defaultLinkOptions = 0xFFFFFFFF;
-
-  static String? _path;
+  static String?   _path;
   static Database? _database;
-
 
   static Future<void> initialize(String dbFilePath) async {
 
@@ -40,19 +35,19 @@ class DatabaseService {
       },
     );
 
-    _path = dbFilePath;
+    _path     = dbFilePath;
     _database = database;
   }
 
 
   // 数据库操作方法
   // ======================================================================== //
-  static Future<void> upsertAnimeEpisodeRelation(AniEpiRlt relation, AniEpiRltType type)  => _withDb((db) => _AnimeEpisodeRepository(db).upsert(relation, type));
-  static Future<void> upsertAssetRecord(DbAssetRecord asset)                              => _withDb((db) => _AssetRepository(db).upsert(asset));
+  static Future<void> upsertSourceAnimeEpisodeRelation(AniEpiRltType type, AniEpiRlt relation)  => _withDb((db) => _AnimeEpisodeRepository(db).upsert(relation, type));
+  static Future<void> upsertAssetRecord               (DbAssetRecord asset)                     => _withDb((db) => _AssetRepository(db)       .upsert(asset));
 
-  static Future<void> linkToAnime  (AniEpiRltType type, int typAniId, int comAniId) => _withDb((db) => _AnimeEpisodeRepository(db).linkAnime    (type, typAniId, comAniId));
-  static Future<void> linkToEpisode(AniEpiRltType type, int typEpiId, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode  (type, typEpiId, comEpiId));
-  static Future<void> linkVideoAssetToEpisode        (Uint8List hash, int comEpiId) => _withDb((db) => _AssetRepository       (db).linkToEpisode(hash, comEpiId));
+  static Future<void> linkSourceAnimeToCommonAnime    (AniEpiRltType type, int typAniId, int comAniId) => _withDb((db) => _AnimeEpisodeRepository(db).linkAnime    (type, typAniId, comAniId));
+  static Future<void> linkSourceEpisodeToCommonEpisode(AniEpiRltType type, int typEpiId, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode  (type, typEpiId, comEpiId));
+  static Future<void> linkVideoAssetToEpisode                           (Uint8List hash, int comEpiId) => _withDb((db) => _AssetRepository       (db).linkToEpisode(hash, comEpiId));
 
 
   // getters
