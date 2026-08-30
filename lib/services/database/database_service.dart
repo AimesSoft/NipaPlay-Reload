@@ -58,16 +58,17 @@ class DatabaseService {
   static Future<bool> hasEpisode (AniEpiRltType type, int epiId) => _withDb((db) => _AnimeEpisodeRepository(db).hasEpisode(type, epiId));
 
   // 外部数据源 ID 与共通 ID 之间双向转换
-  static Future<int?>     getCommonAnimeId  (AniEpiRltType type, int srcAniId) =>_withDb((db) => _AnimeEpisodeRepository(db).findCommonAnimeId  (type, srcAniId));
-  static Future<int?>     getSourceAnimeId  (AniEpiRltType type, int comAniId) =>_withDb((db) => _AnimeEpisodeRepository(db).findSourceAnimeId  (type, comAniId));
-  static Future<int?>     getCommonEpisodeId(AniEpiRltType type, int srcEpiId) =>_withDb((db) => _AnimeEpisodeRepository(db).findCommonEpisodeId(type, srcEpiId));
-  static Future<int?>     getSourceEpisodeId(AniEpiRltType type, int comEpiId) =>_withDb((db) => _AnimeEpisodeRepository(db).findSourceEpisodeId(type, comEpiId));
-  static Future<Set<int>> getAllAnimeIds    (AniEpiRltType type              ) =>_withDb((db) => _AnimeEpisodeRepository(db).findAllAnimeIds    (type          ));
-  static Future<Set<int>> getAllEpisodeIds  (AniEpiRltType type, int aniId   ) =>_withDb((db) => _AnimeEpisodeRepository(db).findAllEpisodeIds  (type, aniId   ));
+  static Future<int?>     getCommonAnimeId  (AniEpiRltType type, int srcAniId) => _withDb((db) => _AnimeEpisodeRepository(db).findCommonAnimeId  (type, srcAniId));
+  static Future<int?>     getSourceAnimeId  (AniEpiRltType type, int comAniId) => _withDb((db) => _AnimeEpisodeRepository(db).findSourceAnimeId  (type, comAniId));
+  static Future<int?>     getCommonEpisodeId(AniEpiRltType type, int srcEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).findCommonEpisodeId(type, srcEpiId));
+  static Future<int?>     getSourceEpisodeId(AniEpiRltType type, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).findSourceEpisodeId(type, comEpiId));
+  static Future<Set<int>> getAllAnimeIds    (AniEpiRltType type              ) => _withDb((db) => _AnimeEpisodeRepository(db).findAllAnimeIds    (type          ));
+  static Future<Set<int>> getAllEpisodeIds  (AniEpiRltType type, int aniId   ) => _withDb((db) => _AnimeEpisodeRepository(db).findAllEpisodeIds  (type, aniId   ));
 
   // 获取视频资产记录和关联信息
   static Future<DbAssetRecord?>      getAssetRecord     (Uint8List hash) =>_withDb((db) => _AssetRepository(db).find(hash));
   static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
+  static Future<int?> getDandanplayEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findDandanplayEpisodeId(hash));
 
 
   // debug

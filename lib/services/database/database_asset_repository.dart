@@ -120,4 +120,16 @@ class _AssetRepository {
     );
   }
 
+  Future<int?> findDandanplayEpisodeId(Uint8List assetHash) async {
+    final commonEpisodeId = await findCommonEpisodeId(assetHash);
+    if (commonEpisodeId == null) return null;
+    return _readIntColumn(
+      database,
+      'dandanplay_episode',
+      'dandanplay_episode_id',
+      'episode_id',
+      commonEpisodeId,
+    );
+  }
+
 }

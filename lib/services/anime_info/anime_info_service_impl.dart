@@ -5,13 +5,6 @@ part of 'anime_info_service.dart';
 /// 获取动画信息的服务类
 class _AnimeInfoRepository {
 
-  static final String _label =  color('[Anime Info Service]', ColorCode.boldMagenta);
-  static void _printLine(String message) => debugPrint('$_label ${color(message, ColorCode.gray)}');
-  static String _val(Object str) => color(str.toString(), ColorCode.boldWhite);
-
-  static final String _bgmLabel = color('Bangumi', ColorCode.pink);
-  static final String _ddpLabel = color('Dandanplay', ColorCode.cyan);
-
   static Future<String> debugAnimeEpisodeRelations({String? cacheRootPath}) async {
     final resolvedCacheRootPath = cacheRootPath ?? (await StorageService.getCacheDirectory()).path;
     final titles = await _loadAnimeEpisodeDebugTitles(resolvedCacheRootPath);
@@ -24,287 +17,129 @@ class _AnimeInfoRepository {
   }
 
 
-  /// - 根据文件路径得到 FileRecord
+  /// 通过文件信息保证数据库中存在该文件 hash <-> Dandanplay Episode 的关联关系,
+  /// 期间如有必要会访问 API 获取必要数据.
+  ///
   /// - 将资产记录插入或更新到 asset 表
   ///
-  /// - 尝试用 hash 查找 common epi id 查找 Dandanplay Episode ID:
-  /// - 如果找到 dandanplay epi id, 通过 common epi id 查找 store 文件的 isMatchedDandanplay 状态, 如果是 true, 则直接返回
-  /// - 如果没有找到 dandanplay epi id, 或者 isMatchedDandanplay 为 false, 则继续尝试用文件信息访问 /api/v2/match API
+  /// - 尝试用 hash 查找 Dandanplay Episode ID:
+  /// - 如果没有找到 dandanplay epi id, 则继续尝试用文件信息访问 /api/v2/match API
   /// - 特别的, 如果 forceMatch 为 true, 则无论如何都访问 /api/v2/match API
   ///
   /// - 如果 API 匹配失败, 则打印提示信息并直接返回
   /// - 如果 API 匹配成功, 根据匹配到的 Dandanplay Episode ID 查询 dandanplay episode 表
   /// - 如果没有找到对应的记录, 则刷新 Dandanplay Anime 缓存和数据库关系
   /// - 确保数据库内有对应的 dandanplay_episode 记录后, 关联资产与剧集
-  /// - 最后将 dandanplay_episode 表的 isMatchedDandanplay 设置为 true, 并保存弹幕偏移量
+  /// - 最后保存弹幕偏移量
+  ///
+  /// [fileInfo] 由调用方负责根据本地文件路径或 http(s) 远程文件地址 (例如 WebDAV 文件地址)
+  /// 计算得到, 本方法不再关心文件地址的具体形式, 只消费已经算好的哈希/大小/文件名等信息.
   ///
   /// **整个过程随时打印详细执行信息, 方便调试和查看执行结果**
-  static Future<void> identifyFileUseDandanplayMatch(String filePath, {bool forceMatch = false}) async {
+  static Future<void> identifyFileUseDandanplayMatch(FileInfo fileInfo, {bool forceMatch = false}) async {
 
-    _printLine('开始刷新文件关联信息: ${_val(filePath)}');
+    final fileName        = '${fileInfo.fileNameNoExtension}.${fileInfo.fileExtension}';
+    final fileDisplayPath = '${fileInfo.fileDirectory}/$fileName';
+    final fileHash        = fileInfo.filePre16MiBMd5Hash;
+    final fileHashEncode  = encodeHex(fileHash);
 
-    // 计算文件哈希, 写入 file 表
-    final file = File(filePath);
-    if (!file.existsSync()) {
-      _printLine(color('文件不存在: ${_val(filePath)}', ColorCode.red));
-      return;
-    }
-    final fileHash = await computeFileHeadMd5(file.path);
-    final assetHash = decodeHex(fileHash, expectedBytes: 16);
-    final fileSize = await file.length();
-    final fileName = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : file.path.split('/').last;
-    final extensionIndex = fileName.lastIndexOf('.');
-    final codec = extensionIndex >= 0 && extensionIndex < fileName.length - 1 ? fileName.substring(extensionIndex + 1).toLowerCase() : null;
-    final record = DbAssetRecord(hashPre16MiBMd5: assetHash, size: fileSize, codec: codec);
+    _printLine("");
+    _printLine(color('===== 开始刷新文件的 Dandanplay 弹幕关联 =====', ColorCode.boldCyan));
+    _printLine('文件地址: ${_val(fileDisplayPath)}');
+    _printLine('文件名  : ${_val(fileName)}');
+    _printLine('大小    : ${_val(_formatFileSize(fileInfo.fileSize))}');
+    _printLine('哈希    : ${_val(fileHashEncode)}');
+    _printLine('强制匹配: ${_val(forceMatch)}');
 
-    await DatabaseService.upsertAssetRecord(record);
+    // 将文件哈希等信息写入 asset 表
+    await DatabaseService.upsertAssetRecord(fileInfo.toDbAssetRecord());
 
-    _printLine('文件记录已写入数据库: ${_val(fileHash)}');
-
-    if (!forceMatch) {
-      final commonEpiId = await DatabaseService.getCommonEpisodeIdByAssetHash(assetHash);
-      if (commonEpiId != null && await getDandanplayEpisodeMatchStatus(commonEpiId)) {
-        _printLine('资产已完成 Dandanplay 匹配, 跳过重复匹配: ${_val(commonEpiId)}');
-        return;
-      }
-    } else {
-      _printLine('强制匹配模式已启用, 将跳过数据库检查并访问 Dandanplay API');
-    }
+    _printLine(
+      '[1/5] 资产记录已写入数据库: '
+      '文件名 ${_val(fileName)}, '
+      '哈希 ${_val(fileHashEncode)}, '
+      '后缀 ${_val(fileInfo.fileExtension)}'
+    );
 
 
     // ------------------------------ Dandanplay ---------------------------- //
 
-    // 根据文件信息访问 /api/v2/match API
-    final matchArgument = DandanplayFileMatchArgument(fileHash: fileHash, fileSize: fileSize, fileName: fileName);
-    final matchResult = await requestDandanplayFileMatch(matchArgument);
-    if (matchResult == null) {
-      _printLine(color('文件未匹配到 Dandanplay 剧集: ${_val(fileHash)}', ColorCode.red));
-      return;
+    if (forceMatch) {
+      const msg = '[2/5] 强制匹配模式已启用, 将跳过数据库检查并访问 Dandanplay API';
+      _printLine(color(msg, ColorCode.yellow));
     }
-    final ddpAniId = matchResult.dandanplayAnimeId;
-    final ddpEpiId = matchResult.dandanplayEpisodeId;
-    final danmakuOffset = matchResult.danmakuOffset;
-    _printLine('匹配到 Dandanplay Anime: ${_val(ddpAniId)}, Episode: ${_val(ddpEpiId)}');
-
-    // 确保数据库中存在对应的 Dandanplay Episode 记录
-    int? commonEpiId = await DatabaseService.getCommonEpisodeId(DbAnimeEpisodeRelationType.dandanplay, ddpEpiId);
-    if (commonEpiId == null) {
-
-      _printLine('数据库中未找到 Dandanplay Episode: ${_val(ddpEpiId)}, 开始刷新 Dandanplay Anime 缓存和数据库关系');
-
-      await refreshDandanplayAnimeCacheJson      (ddpAniId); // 访问 API 刷新缓存
-      await refreshDandanplayAnimeRelationByCache(ddpAniId); // 利用缓存刷新数据库
-
-      commonEpiId = await DatabaseService.getCommonEpisodeId(DbAnimeEpisodeRelationType.dandanplay, ddpEpiId);
-      if (commonEpiId == null) {
-        _printLine(color('刷新后仍未找到 Dandanplay Episode: ${_val(ddpEpiId)}', ColorCode.red));
+    else {
+      final id = await DatabaseService.getDandanplayEpisodeIdByAssetHash(fileHash);
+      if (id != null) {
+        final msg =
+        '[2/5] 资产已匹配 Dandanplay 剧集: ${_val(id)}, '
+        '跳过重复匹配: ${_val(fileHashEncode)}';
+        _printLine(color(msg, ColorCode.green));
         return;
       }
+      _printLine('[2/5] 资产尚未匹配 Dandanplay 剧集, 继续访问匹配 API');
+    }
+
+    // 根据文件信息访问 /api/v2/match API, 获取匹配结果
+    final arg = fileInfo.toDandanplayFileMatchArgument();
+    final res = await _APIRepository.requestDandanplayFileMatch(arg);
+    if (res == null) {
+      final msg =
+      '[3/5] 文件未匹配到 Dandanplay 剧集: ${_val(fileHashEncode)}';
+      _printLine(color(msg, ColorCode.red));
+      return;
+    }
+    final ddpAniId = res.dandanplayAnimeId;
+    final ddpEpiId = res.dandanplayEpisodeId;
+    final danmakuOffset = res.danmakuOffset;
+    _printLine(
+      '[3/5] 匹配到 Dandanplay Anime: ${_val(ddpAniId)}, '
+      'Episode: ${_val(ddpEpiId)}, '
+      '弹幕偏移量: ${_val(danmakuOffset)}'
+    );
+
+    // 确保数据库中存在对应的 Dandanplay Episode 记录
+    int? commonEpiId = await DatabaseService.getCommonEpisodeId(AniEpiRltType.dandanplay, ddpEpiId);
+    if (commonEpiId == null) {
+
+      _printLine(
+        '[4/5] 数据库中未找到 Dandanplay Episode: ${_val(ddpEpiId)}, '
+        '开始刷新 Dandanplay Anime 缓存和数据库关系'
+      );
+
+      await _APIRepository.refreshDandanplayAnimeCacheJson(ddpAniId);            // 访问 API 刷新缓存
+      await _DatabaseRepository.refreshDandanplayAnimeRelationByCache(ddpAniId); // 利用缓存刷新数据库
+      commonEpiId = await DatabaseService.getCommonEpisodeId(AniEpiRltType.dandanplay, ddpEpiId);
+      if (commonEpiId == null) {
+        _printLine(color('[4/5] 刷新后仍未找到 Dandanplay Episode: ${_val(ddpEpiId)}', ColorCode.red));
+        return;
+      }
+      _printLine(
+        '[4/5] Dandanplay Anime 缓存和数据库关系刷新完成, '
+        'Common Episode ID: ${_val(commonEpiId)}'
+      );
+    } else {
+      _printLine(
+        '[4/5] 数据库中已存在 Dandanplay Episode: ${_val(ddpEpiId)}, '
+        'Common Episode ID: ${_val(commonEpiId)}'
+      );
     }
 
     // 将文件关联到 Dandanplay Episode
-    await DatabaseService.linkVideoAssetToEpisode(assetHash, commonEpiId);
-    _printLine('文件已关联 Dandanplay Episode: ${_val(ddpEpiId)}, Common Episode ID: ${_val(commonEpiId)}, 弹幕偏移量: ${_val(danmakuOffset)}');
+    await DatabaseService.linkVideoAssetToEpisode(fileHash, commonEpiId);
+    _printLine(
+      '[5/5] 文件已关联 Dandanplay Episode: ${_val(ddpEpiId)}, '
+      'Common Episode ID: ${_val(commonEpiId)}, '
+      '弹幕偏移量: ${_val(danmakuOffset)}'
+    );
 
     // 设置参数
-    await storeDandanplayEpisodeDanmakuOffset(commonEpiId, danmakuOffset);
-    await storeDandanplayEpisodeMatchStatus(commonEpiId, true);
+    await storeDandanplayEpisodeDanmakuOffset(fileHash, danmakuOffset);
 
-    _printLine('刷新文件关联信息完成: ${_val(filePath)}');
-  }
-
-  /// 1. 根据 Dandanplay Episode ID 访问 Dandanplay API 获取对应的弹幕 JSON 字符串, 如果失败, 则打印提示信息并返回
-  /// 2. 将弹幕 JSON 字符串写入 cache/danmaku/{ddpEpiId}.json
-  static Future<void> refreshDandanplayDanmakuCacheByEpisodeId(int ddpEpiId) async {
-
-    String danmakuJson;
-    try {
-      danmakuJson = await _requestDandanplayDanmakuJson(ddpEpiId);
-    } catch (error) {
-      _printLine(color('获取 Dandanplay Episode ${_val(ddpEpiId)} 弹幕失败: $error', ColorCode.red));
-      return;
-    }
-
-    final cacheRoot = await StorageService.getCacheDirectory();
-    final cacheDirectory = Directory('${cacheRoot.path}/danmaku/dandanplay');
-    await cacheDirectory.create(recursive: true);
-    final cacheFile = File('${cacheDirectory.path}/$ddpEpiId.json');
-    await cacheFile.writeAsString(danmakuJson);
-    _printLine(
-      '已缓存 Dandanplay Episode ${_val(ddpEpiId)} 弹幕: '
-      '${_val(cacheFile.path)}',
-    );
-  }
-
-
-  /// 1. 根据 Dandanplay Anime ID 访问 API 获取对应的 Anime 及其所有 Episode 信息
-  /// 2. 将动画及其所有剧集整理成一个 JSON 对象
-  /// 3. 将该 JSON 对象覆盖写入 `<应用数据根目录>/cache/dandanplay/{ddpAniId}.json`
-  static Future<void> refreshDandanplayAnimeCacheJson(int ddpAniId) async {
-
-    final idStr = _val(ddpAniId);
-    _printLine('开始刷新 $_ddpLabel Anime Package: $idStr');
-
-    // 获取原始请求
-    final packageJson = await _getDandanplayAnimePackageById(ddpAniId);
-    if (packageJson == null) {
-      final message = color('未获取到对应 ID 的 Dandanplay Anime Package: $idStr', ColorCode.red);
-      _printLine(message);
-      return;
-    }
-
-    // 将 JSON 缓存到本地
-    final cacheDirectory = Directory('${(await StorageService.getCacheDirectory()).path}/dandanplay');
-    await cacheDirectory.create(recursive: true);
-    final cacheFile = File('${cacheDirectory.path}/$ddpAniId.json');
-    await cacheFile.writeAsString(const JsonEncoder.withIndent('  ').convert(packageJson));
-    _printLine('已缓存 $_ddpLabel Anime Package: ${_val(cacheFile.path)}');
-  }
-
-  static Future<void> refreshDandanplayAnimeCacheByBangumiId(
-    int bgmAniId,
-  ) async {
-    final details = await DandanplayService.getBangumiByBgmId(bgmAniId);
-    if (details == null) {
-      _printLine(
-        color(
-          '未找到 Bangumi Anime ${_val(bgmAniId)} 对应的 Dandanplay Anime',
-          ColorCode.yellow,
-        ),
-      );
-      return;
-    }
-
-    final bangumi = details['bangumi'];
-    if (bangumi is! Map) {
-      throw const FormatException('Dandanplay Bangumi 响应缺少 bangumi 对象');
-    }
-    final ddpAniId = AnimeInfoParse.toPositiveInt(
-      bangumi['animeId'] ?? details['animeId'],
-    );
-    if (ddpAniId == null) {
-      throw const FormatException(
-        'Dandanplay Bangumi 响应缺少有效的 animeId',
-      );
-    }
-
-    final anime = Map<String, dynamic>.from(bangumi)
-      ..remove('episodes')
-      ..['animeId'] = ddpAniId;
-    final episodes = bangumi['episodes'] is List
-        ? (bangumi['episodes'] as List)
-            .whereType<Map>()
-            .map((episode) => Map<String, dynamic>.from(episode))
-            .toList()
-        : const <Map<String, dynamic>>[];
-    final packageJson = <String, dynamic>{
-      'anime': anime,
-      'episodes': episodes,
-    };
-
-    final cacheDirectory = Directory(
-      '${(await StorageService.getCacheDirectory()).path}/dandanplay',
-    );
-    await cacheDirectory.create(recursive: true);
-    final cacheFile = File('${cacheDirectory.path}/$ddpAniId.json');
-    await cacheFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(packageJson),
-    );
-    _printLine('已缓存 $_ddpLabel Anime Package: ${_val(cacheFile.path)}');
-  }
-
-  /// 1. 查看缓存文件是否存在, 如果不存在, 则打印提示信息并返回
-  /// 2. 读取缓存文件, 解析 JSON, 提取 Anime ID 和 Episode ID 的对应关系
-  /// 3. 将对应关系插入更新数据库
-  static Future<void> refreshDandanplayAnimeRelationByCache(int ddpAniId) async {
-    final cacheRoot = await StorageService.getCacheDirectory();
-    final cacheFile = File('${cacheRoot.path}/dandanplay/$ddpAniId.json');
-    if (!await cacheFile.exists()) {
-      _printLine(
-        color(
-          '未找到 Dandanplay Anime ${_val(ddpAniId)} 缓存: '
-          '${_val(cacheFile.path)}',
-          ColorCode.yellow,
-        ),
-      );
-      return;
-    }
-
-    final packageJson = _decodeAnimePackageCache(
-      await cacheFile.readAsString(),
-      'Dandanplay',
-    );
-    final relation = _parseAnimeEpisodeRelationDandanplay(packageJson);
-    if (relation.animeId != ddpAniId) {
-      throw FormatException(
-        'Dandanplay Anime 缓存 ID 不一致: '
-        '文件名=$ddpAniId, 内容=${relation.animeId}',
-      );
-    }
-
-    await DatabaseService.upsertSourceAnimeEpisodeRelation(
-      DbAnimeEpisodeRelationType.dandanplay,
-      relation,
-    );
-    _printLine(
-      '已从缓存更新 Dandanplay Anime ${_val(ddpAniId)} 关系, '
-      'Episode 数量: ${_val(relation.episodeIds.length)}',
-    );
-  }
-
-  /// 1. 根据 Bangumi Anime ID 访问 API 获取对应的 Anime 及其所有 Episode 信息
-  /// 2. 将动画及其所有剧集整理成一个 JSON 对象
-  /// 3. 将该 JSON 对象覆盖写入 `<应用数据根目录>/cache/bangumi/{bangumiAnimeId}.json`
-  static Future<void> refreshBangumiAnimeCacheJson(int bangumiAnimeId) async {
-
-    final idStr = _val(bangumiAnimeId);
-    _printLine('开始刷新 $_bgmLabel Anime Package: $idStr');
-
-    final packageJson = await _getBangumiAnimePackageById(bangumiAnimeId);
-
-    final cacheDirectory = Directory(
-      '${(await StorageService.getCacheDirectory()).path}/bangumi',
-    );
-    await cacheDirectory.create(recursive: true);
-    final cacheFile = File('${cacheDirectory.path}/$bangumiAnimeId.json');
-    await cacheFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(packageJson),
-    );
-    _printLine('已缓存 $_bgmLabel Anime Package: ${_val(cacheFile.path)}');
-  }
-
-  /// 1. 查看缓存文件是否存在, 如果不存在, 则打印提示信息并返回
-  /// 2. 读取缓存文件, 解析 JSON, 提取 Anime ID 和 Episode ID 的对应关系
-  /// 3. 将对应关系插入更新数据库
-  static Future<void> refreshBangumiAnimeRelationByCache(int bangumiAnimeId) async {
-
-    final cacheRoot = await StorageService.getCacheDirectory();
-    final cacheFile = File('${cacheRoot.path}/bangumi/$bangumiAnimeId.json');
-    if (!await cacheFile.exists()) {
-      _printLine(color('未找到 Bangumi Anime ${_val(bangumiAnimeId)} 缓存: ${_val(cacheFile.path)}', ColorCode.yellow));
-      return;
-    }
-
-    final packageJson = _decodeAnimePackageCache(
-      await cacheFile.readAsString(),
-      'Bangumi',
-    );
-    final relation = _parseAnimeEpisodeRelationBangumi(packageJson);
-    if (relation.animeId != bangumiAnimeId) {
-      throw FormatException(
-        'Bangumi Anime 缓存 ID 不一致: '
-        '文件名=$bangumiAnimeId, 内容=${relation.animeId}',
-      );
-    }
-
-    await DatabaseService.upsertSourceAnimeEpisodeRelation(
-      DbAnimeEpisodeRelationType.bangumi,
-      relation,
-    );
-    _printLine(
-      '已从缓存更新 Bangumi Anime ${_val(bangumiAnimeId)} 关系, '
-      'Episode 数量: ${_val(relation.episodeIds.length)}',
-    );
+    _printLine(color(
+      '===== 刷新文件的 Dandanplay 弹幕关联完成: ${_val(fileDisplayPath)} =====',
+      ColorCode.boldGreen
+    ));
   }
 
   /// 关联 Dandanplay 和 Bangumi 番剧
@@ -459,64 +294,6 @@ class _AnimeInfoRepository {
 
   // ======================================================================== //
 
-  /// 访问 Dandanplay API: /api/v2/match
-  /// 获取文件匹配的 Episode ID 和对应 Anime ID
-  static Future<DandanplayFileMatchResult?> requestDandanplayFileMatch(DandanplayFileMatchArgument arg) async {
-
-    const apiPath = '/api/v2/match';
-    final appSecret = await DandanplayService.getAppSecret();
-    final timestamp =
-        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-    final response = await http.post(
-      Uri.parse('${await DandanplayService.getApiBaseUrl()}$apiPath'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': DandanplayService.userAgent,
-        'X-AppId': DandanplayService.appId,
-        'X-Signature': DandanplayService.generateSignature(
-          DandanplayService.appId,
-          timestamp,
-          apiPath,
-          appSecret,
-        ),
-        'X-Timestamp': '$timestamp',
-      },
-      body: jsonEncode(<String, dynamic>{
-        'fileName': arg.fileName,
-        'fileHash': arg.fileHash,
-        'fileSize': arg.fileSize,
-        'matchMode': 'hashAndFileName',
-      }),
-    );
-    if (response.statusCode != 200) {
-      final error = response.headers['x-error-message'] ?? response.body;
-      throw Exception('弹弹play 文件匹配失败 (${response.statusCode}): $error');
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const FormatException('弹弹play 文件匹配响应格式无效');
-    }
-    final matches = decoded['matches'];
-    if (matches is! List) return null;
-
-    for (final rawMatch in matches) {
-      if (rawMatch is! Map) continue;
-      final match = Map<String, dynamic>.from(rawMatch);
-      final animeId = AnimeInfoParse.toPositiveInt(match['animeId']);
-      final episodeId = AnimeInfoParse.toPositiveInt(match['episodeId']);
-      if (animeId != null && episodeId != null) {
-        return DandanplayFileMatchResult(
-          dandanplayAnimeId: animeId,
-          dandanplayEpisodeId: episodeId,
-          danmakuOffset: match['shift'].toDouble(),
-        );
-      }
-    }
-    return null;
-  }
-
   /// 根据 DanDanPlay AnimeID 获取 BangumiTv ID
   static Future<int?> requestBangumiIdByDandanplayId(int ddpId) async {
     final details = await DandanplayService.getBangumiDetails(ddpId, useCache: false);
@@ -542,138 +319,6 @@ class _AnimeInfoRepository {
   // ======================================================================== //
   // ======================================================================== //
 
-  static Future<Map<String, dynamic>?> _getDandanplayAnimePackageById(
-    int dandanplayAnimeId,
-  ) async {
-    final details = await DandanplayService.getBangumiDetails(
-      dandanplayAnimeId,
-      useCache: false,
-    );
-    final bangumi = details['bangumi'] is Map
-        ? Map<String, dynamic>.from(details['bangumi'] as Map)
-        : <String, dynamic>{};
-    final returnedAnimeId = AnimeInfoParse.toPositiveInt(
-      bangumi['animeId'] ?? details['animeId'],
-    );
-    if (returnedAnimeId == null) return null;
-
-    final rawEpisodes = bangumi['episodes'] is List
-        ? bangumi['episodes'] as List
-        : (details['episodes'] is List
-            ? details['episodes'] as List
-            : const <dynamic>[]);
-    final episodes = rawEpisodes
-        .whereType<Map>()
-        .map((episode) => Map<String, dynamic>.from(episode))
-        .toList();
-    final anime = Map<String, dynamic>.from(
-      bangumi.isNotEmpty ? bangumi : details,
-    )
-      ..remove('episodes')
-      ..['animeId'] = returnedAnimeId;
-    return <String, dynamic>{
-      'anime': anime,
-      'episodes': episodes,
-    };
-  }
-
-  static DbAnimeEpisodeRelation _parseAnimeEpisodeRelationDandanplay(
-    Map<String, dynamic> jsonObject,
-  ) {
-    final anime = jsonObject['anime'];
-    if (anime is! Map) {
-      throw const FormatException('Dandanplay Anime Package 缺少 anime 对象');
-    }
-    final animeId = AnimeInfoParse.toPositiveInt(anime['animeId']);
-    if (animeId == null) {
-      throw const FormatException('Dandanplay Anime Package 缺少有效的 animeId');
-    }
-
-    final episodeIdsBySortOrder = _parseEpisodeIdsBySortOrder(
-      jsonObject,
-      episodeIdKey: 'episodeId',
-      sortOrderKey: 'episodeNumber',
-      sourceName: 'Dandanplay',
-    );
-    return DbAnimeEpisodeRelation(
-      animeId: animeId,
-      episodeIds: episodeIdsBySortOrder.values,
-    );
-  }
-
-  static Future<Map<String, dynamic>> _getBangumiAnimePackageById(
-    int bangumiAnimeId,
-  ) async {
-    final anime = await BangumiApiService.getPublicSubject(bangumiAnimeId);
-    final returnedAnimeId = AnimeInfoParse.toPositiveInt(anime['id']);
-    if (returnedAnimeId == null) {
-      throw const FormatException('Bangumi Anime Package 缺少有效的 id');
-    }
-    final episodes =
-        await BangumiApiService.getPublicSubjectEpisodes(bangumiAnimeId);
-    return <String, dynamic>{
-      'anime': anime,
-      'episodes': episodes,
-    };
-  }
-
-  static DbAnimeEpisodeRelation _parseAnimeEpisodeRelationBangumi(
-    Map<String, dynamic> jsonObject,
-  ) {
-    final anime = jsonObject['anime'];
-    if (anime is! Map) {
-      throw const FormatException('Bangumi Anime Package 缺少 anime 对象');
-    }
-    final animeId = AnimeInfoParse.toPositiveInt(anime['id']);
-    if (animeId == null) {
-      throw const FormatException('Bangumi Anime Package 缺少有效的 id');
-    }
-
-    final episodeIdsBySortOrder = _parseEpisodeIdsBySortOrder(
-      jsonObject,
-      episodeIdKey: 'id',
-      sortOrderKey: 'sort',
-      sourceName: 'Bangumi',
-    );
-    return DbAnimeEpisodeRelation(
-      animeId: animeId,
-      episodeIds: episodeIdsBySortOrder.values,
-    );
-  }
-
-  static Map<double, int> _parseEpisodeIdsBySortOrder(
-    Map<String, dynamic> jsonObject, {
-    required String episodeIdKey,
-    required String sortOrderKey,
-    required String sourceName,
-  }) {
-    final rawEpisodes = jsonObject['episodes'];
-    if (rawEpisodes is! List) {
-      throw FormatException('$sourceName Anime Package 缺少 episodes 数组');
-    }
-
-    final episodeIdsBySortOrder = <double, int>{};
-    for (final rawEpisode in rawEpisodes) {
-      if (rawEpisode is! Map) continue;
-      final episodeId =
-          AnimeInfoParse.toPositiveInt(rawEpisode[episodeIdKey]);
-      final sortOrder = AnimeInfoParse.toDouble(rawEpisode[sortOrderKey]);
-      if (episodeId == null || sortOrder == null) continue;
-      episodeIdsBySortOrder.putIfAbsent(sortOrder, () => episodeId);
-    }
-    return episodeIdsBySortOrder;
-  }
-
-  static Map<String, dynamic> _decodeAnimePackageCache(
-    String content,
-    String sourceName,
-  ) {
-    final decoded = jsonDecode(content);
-    if (decoded is! Map) {
-      throw FormatException('$sourceName Anime Package 缓存格式无效');
-    }
-    return Map<String, dynamic>.from(decoded);
-  }
 
   static Future<_AnimeEpisodeDebugTitles> _loadAnimeEpisodeDebugTitles(
     String cacheRootPath,
@@ -812,45 +457,5 @@ class _AnimeInfoRepository {
       }
     }
     return matches;
-  }
-
-  static Future<String> _requestDandanplayDanmakuJson(int ddpEpiId) async {
-    final apiPath = '/api/v2/comment/$ddpEpiId';
-    final baseUrl = await NetworkSettings.getDandanplayServer();
-    final appSecret = await DandanplayAuth.getAppSecret();
-    final timestamp =
-        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-    final uri = Uri.parse('$baseUrl$apiPath').replace(
-      queryParameters: const <String, String>{
-        'withRelated': 'true',
-      },
-    );
-    final response = await http.get(
-      uri,
-      headers: <String, String>{
-        'Accept': 'application/json',
-        'User-Agent': DandanplayAuth.userAgent,
-        'X-AppId': DandanplayAuth.appId,
-        'X-AppSecret': appSecret,
-        'X-Signature': DandanplayAuth.generateSignature(
-          timestamp: timestamp,
-          apiPath: apiPath,
-          appSecret: appSecret,
-        ),
-        'X-Timestamp': '$timestamp',
-      },
-    );
-    if (response.statusCode != 200) {
-      final error = response.headers['x-error-message'] ?? response.body;
-      throw Exception(
-        '弹弹play弹幕请求失败 (${response.statusCode}): $error',
-      );
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map || decoded['comments'] is! List) {
-      throw const FormatException('弹弹play弹幕响应格式无效');
-    }
-    return response.body;
   }
 }
