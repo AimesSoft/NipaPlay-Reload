@@ -81,6 +81,11 @@ Future<String> computeFileHeadMd5(String filePath, { int maxBytes = defaultFileH
   return md5.convert(bytes).toString();
 }
 
+Future<Uint8List> computeFileHeadMd5Bytes(String filePath, { int maxBytes = defaultFileHeadHashBytes }) async {
+  final hashHex = await computeFileHeadMd5(filePath, maxBytes: maxBytes);
+  return decodeHex(hashHex);
+}
+
 /// 通过 HTTP Range 请求读取远程文件前 [maxBytes] 字节并计算 MD5 (默认前 16MiB)
 /// 同时返回远程文件的总大小
 ///

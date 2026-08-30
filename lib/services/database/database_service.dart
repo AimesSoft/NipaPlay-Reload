@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay/models/database/asset_path_record.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/database/sql.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -44,10 +45,13 @@ class DatabaseService {
   // ======================================================================== //
   static Future<void> upsertSourceAnimeEpisodeRelation(AniEpiRltType type, AniEpiRlt relation)  => _withDb((db) => _AnimeEpisodeRepository(db).upsert(relation, type));
   static Future<void> upsertAssetRecord               (DbAssetRecord asset)                     => _withDb((db) => _AssetRepository(db)       .upsert(asset));
+  static Future<void> upsertAssetPathRecord(DbPathAssetRecord asset) => _withDb((db) => _AssetRepository(db).upsertPathRecord(asset));
 
   static Future<void> linkSourceAnimeToCommonAnime    (AniEpiRltType type, int typAniId, int comAniId) => _withDb((db) => _AnimeEpisodeRepository(db).linkAnime    (type, typAniId, comAniId));
   static Future<void> linkSourceEpisodeToCommonEpisode(AniEpiRltType type, int typEpiId, int comEpiId) => _withDb((db) => _AnimeEpisodeRepository(db).linkEpisode  (type, typEpiId, comEpiId));
   static Future<void> linkVideoAssetToEpisode                           (Uint8List hash, int comEpiId) => _withDb((db) => _AssetRepository       (db).linkToEpisode(hash, comEpiId));
+
+  static Future<void> synchronizeAssetPathRecords(int sourceId, Set<AssetPathInSource> allFilePaths) => _withDb((db) => _AssetRepository(db).synchronizeRecords(sourceId, allFilePaths));
 
 
   // getters
@@ -70,6 +74,8 @@ class DatabaseService {
   static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
   static Future<int?> getDandanplayEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findDandanplayEpisodeId(hash));
 
+  // 获取指定媒体源下所有 asset_pre16mib_md5 字段为 null 的视频资产路径记录
+  static Future<Set<AssetPathInSource>> getAssetPathRecordsNoHash(int sourceId) => _withDb((db) => _AssetRepository(db).getAssetPathRecordsNoHash(sourceId));
 
   // debug
   // ======================================================================== //

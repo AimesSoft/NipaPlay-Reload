@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay/models/database/asset_path_record.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
@@ -28,7 +29,7 @@ class AnimeInfoService {
 
   // 主要方法
   // ------------------------------------------------------------------------ //
-  static Future<void>      identifyFileUseDandanplayMatch (FileInfo fileInfo, {bool forceMatch = false,}) => _AnimeInfoRepository.identifyFileUseDandanplayMatch(fileInfo, forceMatch: forceMatch);
+  static Future<void>      identifyFileUseDandanplayMatch (AssetPath filePath, Uint8List filePre16MiBMd5Hash, int size, {bool forceMatch = false,}) => _AnimeInfoRepository.identifyFileUseDandanplayMatch(filePath, filePre16MiBMd5Hash, size, forceMatch: forceMatch);
   static Future<void>      linkDandanplayBangumiAnime     (int comAniId) => _AnimeInfoRepository.linkDandanplayBangumiAnime(comAniId);
   static Future<JsonData?> getDandanplayDanmakuByAssetHash(Uint8List assetHash) => _AnimeInfoRepository.getDandanplayDanmakuByAssetHash(assetHash);
 

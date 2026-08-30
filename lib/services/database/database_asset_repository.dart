@@ -48,6 +48,51 @@ class _AssetRepository {
     });
   }
 
+
+  Future<void> upsertPathRecord(DbPathAssetRecord asset) async {
+
+
+    final upsertDateTime = DateTime.now().toIso8601String();
+
+    final hash = asset.hashPre16MiBMd5 == null ? null : _validateHash(asset.hashPre16MiBMd5!, 16);
+    final sourceId = asset.assetPath.mediaSourceId;
+    if (sourceId < 0) throw ArgumentError.value(sourceId, 'asset.sourceId', '不能小于 0');
+
+    final address = asset.assetPath.pathInSource.path;
+    final nameNoExt = asset.assetPath.pathInSource.nameNoExt;
+    final ext = asset.assetPath.pathInSource.ext;
+    final createdAt = asset.createdAt;
+    final updatedAt = asset.updatedAt;
+
+    // 事务中执行插入或更新操作
+    await database.transaction((txn) async {
+      final values = <String, Object?>{
+        'asset_pre16mib_md5': hash,
+        'asset_created_at': createdAt,
+        'asset_updated_at': updatedAt,
+        'updated_at': upsertDateTime,
+      };
+      final updated = await txn.update(
+        'path_asset',
+        values,
+        where: 'source_id = ? AND asset_address = ? AND asset_name_no_ext = ? AND asset_extension = ?',
+        whereArgs: <Object?>[sourceId, address, nameNoExt, ext],
+      );
+      if (updated == 0) {
+        await txn.insert(
+          'path_asset',
+          <String, Object?>{
+            'source_id': sourceId,
+            'asset_address': address,
+            'asset_name_no_ext': nameNoExt,
+            'asset_extension': ext,
+            ...values,
+          },
+        );
+      }
+    });
+  }
+
   Future<DbAssetRecord?> find(Uint8List assetHash) async {
     final hash = _validateHash(assetHash, 16);
     final rows = await database.query(
@@ -132,4 +177,81 @@ class _AssetRepository {
     );
   }
 
+  /// 给定媒体源 ID 和文件路径集合
+  /// 1. 插入更新 filePaths
+  /// 2. 删除数据库中媒体源 ID 为 sourceId, 且文件路径不在 filePaths 中的所有视频资产路径记录
+  Future<void> synchronizeRecords(int sourceId, Set<AssetPathInSource> filePaths) async {
+
+    _requireNonNegative(sourceId, 'sourceId');
+
+
+    // 插入或更新所有文件路径记录
+    int count = 0;
+    for (final filePath in filePaths) {
+      final assetPath = AssetPath(
+        mediaSourceId: sourceId,
+        pathInSource: filePath,
+      );
+      final pathRecord = DbPathAssetRecord(assetPath: assetPath);
+      await upsertPathRecord(pathRecord);
+      count++;
+    }
+    debugPrint('已插入或更新 $count 条媒体源 ID=$sourceId 的文件路径记录');
+
+    // 删除数据库中媒体源 ID 为 sourceId, 且文件路径不在 filePaths 中的所有视频资产路径记录
+    await database.transaction((txn) async {
+
+      // 查询数据库中媒体源 ID 为 sourceId 的所有文件路径记录
+      final existingPaths = await txn.query(
+        'path_asset',
+        columns: const <String>['asset_address', 'asset_name_no_ext', 'asset_extension'],
+        where: 'source_id = ?',
+        whereArgs: <Object?>[sourceId],
+      );
+
+      int deletedCount = 0;
+      for (final row in existingPaths) {
+        final path = row['asset_address'] as String;
+        final nameNoExt = row['asset_name_no_ext'] as String;
+        final ext = row['asset_extension'] as String;
+
+        bool exists = false;
+        for (final filePath in filePaths) {
+          if (filePath.path == path && filePath.nameNoExt == nameNoExt && filePath.ext == ext) {
+            // 文件路径存在于 filePaths 中, 跳过删除
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          await txn.delete(
+            'path_asset',
+            where: 'source_id = ? AND asset_address = ? AND asset_name_no_ext = ? AND asset_extension = ?',
+            whereArgs: <Object?>[sourceId, path, nameNoExt, ext],
+          );
+          deletedCount++;
+        }
+      }
+
+      debugPrint('已删除 $deletedCount 条媒体源 ID=$sourceId 的文件路径记录');
+    });
+  }
+
+  Future<Set<AssetPathInSource>> getAssetPathRecordsNoHash(int sourceId) async {
+    final rows = await database.query(
+      'path_asset',
+      columns: const <String>['asset_address', 'asset_name_no_ext', 'asset_extension'],
+      where: 'source_id = ? AND asset_pre16mib_md5 IS NULL',
+      whereArgs: <Object?>[sourceId],
+    );
+    final result = <AssetPathInSource>{};
+    for (final row in rows) {
+      result.add(AssetPathInSource(
+        path: row['asset_address'] as String,
+        nameNoExt: row['asset_name_no_ext'] as String,
+        ext: row['asset_extension'] as String,
+      ));
+    }
+    return result;
+  }
 }

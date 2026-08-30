@@ -1,3 +1,4 @@
+import 'package:nipaplay/services/media_source/media_source_service.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -90,6 +91,7 @@ import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
@@ -408,6 +410,12 @@ void main(List<String> args) async {
   // 创建应用所需的目录结构
   await _initializeAppDirectories();
 
+  // 初始化新版关系型数据库 (nipaplay.db)
+  await _initializeDatabaseService();
+
+  // MediaSourceService 初始化
+  await _initializeMediaSourceService();
+
   // 预加载播放器内核设置
   await PlayerFactory.initialize();
 
@@ -644,6 +652,31 @@ Future<void> _initializeAppDirectories() async {
     await _ensureTemporaryDirectoryExists();
   } catch (e) {
     debugPrint('创建应用目录结构失败: $e');
+  }
+}
+
+// 初始化新版关系型数据库 (nipaplay.db)
+// 数据库文件保存在应用数据目录下, 详见 docs/DATA_STORAGE.md
+Future<void> _initializeDatabaseService() async {
+  if (kIsWeb) return;
+  try {
+    final appStorageDirectory = await StorageService.getAppStorageDirectory();
+    final dbFilePath = path.join(appStorageDirectory.path, 'nipaplay.db');
+    await DatabaseService.initialize(dbFilePath);
+    debugPrint('[DatabaseService] 数据库初始化成功: $dbFilePath');
+  } catch (e) {
+    debugPrint('[DatabaseService] 数据库初始化失败: $e');
+  }
+}
+
+// 初始化 MediaSourceService
+Future<void> _initializeMediaSourceService() async {
+  if (kIsWeb) return;
+  try {
+    await MediaSourceService.initialize();
+    debugPrint('[MediaSourceService] 初始化成功');
+  } catch (e) {
+    debugPrint('[MediaSourceService] 初始化失败: $e');
   }
 }
 

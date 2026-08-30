@@ -36,29 +36,40 @@ class _AnimeInfoRepository {
   /// 计算得到, 本方法不再关心文件地址的具体形式, 只消费已经算好的哈希/大小/文件名等信息.
   ///
   /// **整个过程随时打印详细执行信息, 方便调试和查看执行结果**
-  static Future<void> identifyFileUseDandanplayMatch(FileInfo fileInfo, {bool forceMatch = false}) async {
+  static Future<void>
+  identifyFileUseDandanplayMatch(
+    AssetPath filePath,
+    Uint8List filePre16MiBMd5Hash,
+    int size,
+    {bool forceMatch = false}
+  ) async {
 
-    final fileName        = '${fileInfo.fileNameNoExtension}.${fileInfo.fileExtension}';
-    final fileDisplayPath = '${fileInfo.fileDirectory}/$fileName';
-    final fileHash        = fileInfo.filePre16MiBMd5Hash;
+    final fileName        = '${filePath.pathInSource.nameNoExt}.${filePath.pathInSource.ext}';
+    final fileDisplayPath = '${filePath.pathInSource.path}/$fileName';
+    final fileHash        = filePre16MiBMd5Hash;
     final fileHashEncode  = encodeHex(fileHash);
 
     _printLine("");
     _printLine(color('===== 开始刷新文件的 Dandanplay 弹幕关联 =====', ColorCode.boldCyan));
     _printLine('文件地址: ${_val(fileDisplayPath)}');
     _printLine('文件名  : ${_val(fileName)}');
-    _printLine('大小    : ${_val(_formatFileSize(fileInfo.fileSize))}');
+    _printLine('大小    : ${_val(_formatFileSize(size))}');
     _printLine('哈希    : ${_val(fileHashEncode)}');
     _printLine('强制匹配: ${_val(forceMatch)}');
 
     // 将文件哈希等信息写入 asset 表
-    await DatabaseService.upsertAssetRecord(fileInfo.toDbAssetRecord());
+    final assetRecord = DbAssetRecord(
+      hashPre16MiBMd5: fileHash,
+      size: size,
+      codec: filePath.pathInSource.ext,
+    );
+    await DatabaseService.upsertAssetRecord(assetRecord);
 
     _printLine(
       '[1/5] 资产记录已写入数据库: '
       '文件名 ${_val(fileName)}, '
       '哈希 ${_val(fileHashEncode)}, '
-      '后缀 ${_val(fileInfo.fileExtension)}'
+      '后缀 ${_val(filePath.pathInSource.ext)}'
     );
 
 
@@ -81,7 +92,11 @@ class _AnimeInfoRepository {
     }
 
     // 根据文件信息访问 /api/v2/match API, 获取匹配结果
-    final arg = fileInfo.toDandanplayFileMatchArgument();
+    final arg = DandanplayFileMatchArgument(
+      fileHash: fileHashEncode,
+      fileName: fileName,
+      fileSize: size,
+    );
     final res = await _APIRepository.requestDandanplayFileMatch(arg);
     if (res == null) {
       final msg =

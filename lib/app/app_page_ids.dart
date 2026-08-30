@@ -9,12 +9,14 @@ class AppPageIds {
   static const String account = 'account';
   static const String externalPlayerConsole = 'external_player_console';
   static const String settings = 'settings';
+  static const String mediaSources = 'media_sources';
 
   static const List<String> primaryOrder = <String>[
     home,
     video,
     webdav,
     mediaLibrary,
+    mediaSources,
     torrent,
     account,
     externalPlayerConsole,
@@ -25,6 +27,7 @@ class AppPageIds {
     home,
     video,
     mediaLibrary,
+    mediaSources,
     torrent,
     account,
   ];
