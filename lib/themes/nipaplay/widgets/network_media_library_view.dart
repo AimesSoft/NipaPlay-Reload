@@ -44,6 +44,7 @@ abstract class NetworkMediaItem {
   double? get userRating;
   bool get isFolder;
   String? get progress; // 新增
+  bool get isPlayed; // 服务器端记录的已观看状态
 }
 
 // 通用媒体库接口
@@ -82,6 +83,9 @@ class JellyfinMediaItemAdapter implements NetworkMediaItem {
     // Jellyfin 列表接口可能不返回具体的播放进度集数，如果需要更详细的可以后续扩展
     return null;
   }
+
+  @override
+  bool get isPlayed => _item.userData?.played == true;
 
   JellyfinMediaItem get originalItem => _item;
 }
@@ -127,6 +131,9 @@ class EmbyMediaItemAdapter implements NetworkMediaItem {
     if (_item.userData?.played == true) return '已看完';
     return null;
   }
+
+  @override
+  bool get isPlayed => _item.userData?.played == true;
 
   EmbyMediaItem get originalItem => _item;
 }
@@ -184,6 +191,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   List<NetworkMediaItem> _searchResults = [];
   List<NetworkMediaItem> _filteredMediaItems = [];
   Timer? _searchDebounceTimer;
+  bool _showOnlyUnwatched = false;
 
   Widget _buildPlainActionButton({
     required IconData icon,
@@ -220,6 +228,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             .toList();
       }
 
+      // 只看未观看过滤
+      if (_showOnlyUnwatched) {
+        source = source.where((item) => !item.isPlayed).toList();
+      }
+
       if (_showRemoteSortDropdown) {
         _filteredMediaItems = source;
         return;
@@ -238,6 +251,39 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       }
       _filteredMediaItems = source;
     });
+  }
+
+  // 切换“只看未观看”过滤（排序弹层开关会调用）
+  void _toggleShowOnlyUnwatched() {
+    setState(() {
+      _showOnlyUnwatched = !_showOnlyUnwatched;
+    });
+    _applySortAndFilter();
+  }
+
+  // 手动刷新当前视图（媒体库列表 / 媒体库内容 / 文件夹）
+  Future<void> _manualRefresh() async {
+    if (!mounted) return;
+    if (_isShowingLibraryContent) {
+      if (_isFolderNavigation) {
+        final folderId = _currentFolderId ?? _selectedLibraryId;
+        if (folderId != null) {
+          setState(() {
+            _isLoadingLibraryContent = true;
+            _error = null;
+          });
+          await _loadFolderItems(folderId);
+        }
+      } else if (_selectedLibraryId != null) {
+        setState(() {
+          _isLoadingLibraryContent = true;
+          _error = null;
+        });
+        await _loadLibraryContent(_selectedLibraryId!);
+      }
+    } else {
+      await _loadData();
+    }
   }
 
   @override
@@ -550,11 +596,17 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         if (showRemoteSort) ...[
           NipaplayLargeScreenActionButton(
             icon: Icons.sort_rounded,
-            label: '排序',
+            label: _showOnlyUnwatched ? '排序·未看' : '排序',
             onPressed: _showLargeScreenRemoteSortDialog,
           ),
           const SizedBox(width: 10),
         ],
+        NipaplayLargeScreenActionButton(
+          icon: Icons.refresh_rounded,
+          label: '刷新',
+          onPressed: _manualRefresh,
+        ),
+        const SizedBox(width: 10),
         NipaplayLargeScreenActionButton(
           icon: Ionicons.settings_outline,
           label: '服务器',
@@ -711,10 +763,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   Widget _buildLargeScreenMediaGrid(List<NetworkMediaItem> items) {
     if (items.isEmpty) {
-      return const NipaplayLargeScreenEmptyState(
-        icon: Icons.search_off_rounded,
-        title: '没有匹配结果',
-        subtitle: '换个关键词再试试',
+      final filteredEmpty = !_isSearching && _showOnlyUnwatched;
+      return NipaplayLargeScreenEmptyState(
+        icon: filteredEmpty
+            ? Ionicons.eye_off_outline
+            : Icons.search_off_rounded,
+        title: filteredEmpty ? '没有未观看的条目' : '没有匹配结果',
+        subtitle: filteredEmpty ? '关闭“只看未观看”或刷新后再试' : '换个关键词再试试',
       );
     }
 
@@ -953,7 +1008,20 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _buildLargeScreenRemoteUnwatchedTile(context),
+                          const SizedBox(height: 8),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4, bottom: 8),
+                            child: Text(
+                              '排序方式',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
                           for (var index = 0;
                               index < items.length;
                               index++) ...[
@@ -977,6 +1045,58 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (selection != null) {
       _applyRemoteSortSelection(selection);
     }
+  }
+
+  Widget _buildLargeScreenRemoteUnwatchedTile(BuildContext dialogContext) {
+    return NipaplayLargeScreenFocusableAction(
+      isSelected: _showOnlyUnwatched,
+      onActivate: () {
+        _toggleShowOnlyUnwatched();
+        Navigator.of(dialogContext).pop();
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Icon(
+            _showOnlyUnwatched
+                ? Ionicons.eye_off_outline
+                : Ionicons.eye_outline,
+            size: 18,
+            color: _showOnlyUnwatched ? _accentColor : null,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '只看未观看',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '仅显示服务器上还没看完的条目',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_showOnlyUnwatched)
+            Icon(
+              Icons.check_rounded,
+              size: 18,
+              color: _accentColor,
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLargeScreenRemoteSortItem(
@@ -1206,39 +1326,70 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               controller: _gridScrollController,
               child: _isFolderNavigation
                   ? _buildFolderListView()
-                  : GridView.builder(
-                      controller: _gridScrollController,
-                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: showSummary
-                            ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
-                            : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
-                        mainAxisExtent: showSummary
-                            ? HorizontalAnimeCard.detailedCardHeight
-                            : HorizontalAnimeCard.compactCardHeight,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      cacheExtent: 800,
-                      clipBehavior: Clip.hardEdge,
-                      physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics()),
-                      addAutomaticKeepAlives: false,
-                      addRepaintBoundaries: true,
-                      itemCount: _isSearching
-                          ? _searchResults.length
-                          : _filteredMediaItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _isSearching
-                            ? _searchResults[index]
-                            : _filteredMediaItems[index];
-                        return _buildMediaCard(item);
-                      },
-                    ),
+                  : (_isSearching ? _searchResults : _filteredMediaItems)
+                          .isEmpty
+                      ? _buildEmptyResultsPlaceholder()
+                      : GridView.builder(
+                          controller: _gridScrollController,
+                          gridDelegate:
+                              SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: showSummary
+                                ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                                : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                            mainAxisExtent: showSummary
+                                ? HorizontalAnimeCard.detailedCardHeight
+                                : HorizontalAnimeCard.compactCardHeight,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          cacheExtent: 800,
+                          clipBehavior: Clip.hardEdge,
+                          physics: const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics()),
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: true,
+                          itemCount: _isSearching
+                              ? _searchResults.length
+                              : _filteredMediaItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _isSearching
+                                ? _searchResults[index]
+                                : _filteredMediaItems[index];
+                            return _buildMediaCard(item);
+                          },
+                        ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEmptyResultsPlaceholder() {
+    final filteredEmpty = !_isSearching && _showOnlyUnwatched;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              filteredEmpty
+                  ? Ionicons.eye_off_outline
+                  : Icons.search_off_rounded,
+              color: Colors.grey,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              filteredEmpty ? '没有未观看的条目' : '没有匹配结果',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1460,6 +1611,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     final showLocalSort = !_showRemoteSortDropdown;
     final trailingActions = [
+      _buildRefreshAction(),
       _buildServerSettingsAction(),
       if (_showRemoteSortDropdown) _buildRemoteSortDropdown(),
     ];
@@ -1493,6 +1645,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         _applySortAndFilter();
       },
       trailingActions: [
+        _buildRefreshAction(),
         _buildServerSettingsAction(),
       ],
     );
@@ -1992,10 +2145,19 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   LocalLibraryActionControl _buildRemoteSortDropdown() {
     return LocalLibraryActionControl(
-      label: '排序',
+      label: _showOnlyUnwatched ? '排序（只看未观看）' : '排序',
       desktopIcon: Icons.sort_rounded,
       phoneIcon: cupertino.CupertinoIcons.arrow_up_arrow_down,
       onPressed: _showAdaptiveRemoteSortDialog,
+    );
+  }
+
+  LocalLibraryActionControl _buildRefreshAction() {
+    return LocalLibraryActionControl(
+      label: '刷新',
+      desktopIcon: Icons.refresh,
+      phoneIcon: cupertino.CupertinoIcons.refresh,
+      onPressed: _manualRefresh,
     );
   }
 
@@ -2011,14 +2173,70 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       currentSortSettings['sortOrder']!,
     );
 
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final contentHeight = 112.0 + (items.length + 1) * 52.0;
+    final effectiveHeightRatio =
+        (contentHeight / screenHeight).clamp(0.3, 0.82).toDouble();
+
     final selection =
-        await CupertinoBottomSheet.showSelection<_RemoteSortSelection>(
+        await CupertinoBottomSheet.show<_RemoteSortSelection>(
       context: context,
       title: '排序',
-      options: [
-        for (final item in items)
-          CupertinoBottomSheetOption(label: item.title, value: item.value),
-      ],
+      heightRatio: effectiveHeightRatio,
+      child: CupertinoBottomSheetContentLayout(
+        sliversBuilder: (sheetContext, topSpacing) => [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(12, topSpacing + 4, 12, 24),
+            sliver: SliverToBoxAdapter(
+              child: cupertino.CupertinoListSection.insetGrouped(
+                margin: EdgeInsets.zero,
+                children: [
+                  cupertino.CupertinoListTile(
+                    leading: Icon(
+                      _showOnlyUnwatched
+                          ? cupertino.CupertinoIcons.eye_slash
+                          : cupertino.CupertinoIcons.eye,
+                      size: 20,
+                    ),
+                    title: const Text('只看未观看'),
+                    trailing: _showOnlyUnwatched
+                        ? Icon(
+                            cupertino.CupertinoIcons.check_mark,
+                            size: 18,
+                            color: cupertino.CupertinoTheme.of(sheetContext)
+                                .primaryColor,
+                          )
+                        : null,
+                    onTap: () {
+                      _toggleShowOnlyUnwatched();
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                  for (final item in items)
+                    cupertino.CupertinoListTile(
+                      title: Text(item.title),
+                      subtitle: item.description == null
+                          ? null
+                          : Text(item.description!),
+                      trailing: item.isSelected
+                          ? Icon(
+                              cupertino.CupertinoIcons.check_mark,
+                              size: 18,
+                              color: cupertino.CupertinoTheme.of(sheetContext)
+                                  .primaryColor,
+                            )
+                          : null,
+                      onTap: () =>
+                          Navigator.of(sheetContext).pop<_RemoteSortSelection>(
+                        item.value,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
     if (selection != null) _applyRemoteSortSelection(selection);
   }
