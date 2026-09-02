@@ -1,0 +1,3 @@
+
+# 忽略 draw.io 的备份文件
+*.drawio.bkp

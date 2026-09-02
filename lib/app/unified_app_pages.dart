@@ -116,6 +116,20 @@ List<UnifiedAppPage> buildUnifiedAppPages(
       ],
       actionIds: commonActions,
     ),
+    UnifiedAppPage(
+      id: AppPageIds.mediaSources,
+      titleBuilder: (_) => '媒体源',
+      phoneIcon: CupertinoIcons.folder,
+      phoneActiveIcon: CupertinoIcons.folder_fill,
+      phoneSymbol: 'folder',
+      phoneActiveSymbol: 'folder.fill',
+      components: const [
+        AppPageComponent(
+          id: 'media-sources',
+          type: AppPageComponentType.mediaSources,
+        ),
+      ],
+    ),
     if (availability.showDownloader)
       UnifiedAppPage(
         id: AppPageIds.torrent,

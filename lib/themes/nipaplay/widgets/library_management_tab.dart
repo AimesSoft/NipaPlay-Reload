@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/models/database/asset_path_record.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -50,6 +51,8 @@ import 'package:nipaplay/media_library/adaptive_library_management_overview.dart
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/services/anime_info/anime_info_service.dart';
+import 'package:nipaplay/utils/file_hash.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
 
@@ -215,6 +218,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
   final Set<String> _expandedWebDAVFolders = {};
   final Set<String> _loadingWebDAVFolders = {};
+  final Set<String> _matchingWebDAVConnections = {};
+  final Set<String> _matchingLocalFolders = {};
   List<SMBConnection> _smbConnections = [];
   final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
   final Set<String> _expandedSMBFolders = {};
@@ -2562,6 +2567,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   onPressed: () => _openLocalMount(folderPath),
                 ),
                 UnifiedLibraryManagementAction(
+                  label: '匹配文件到新数据库',
+                  icon: LibraryManagementIcon.scan,
+                  onPressed: _matchingLocalFolders.contains(folderPath)
+                      ? null
+                      : () => _matchLocalFolderToNewDatabaseFiles(
+                            folderPath,
+                          ),
+                ),
+                UnifiedLibraryManagementAction(
                   label: '重新扫描',
                   icon: LibraryManagementIcon.refresh,
                   onPressed: scanService?.isScanning == true
@@ -2610,6 +2624,16 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   onPressed: isRemoteMode
                       ? null
                       : () => _editWebDAVConnection(connection),
+                ),
+                UnifiedLibraryManagementAction(
+                  label: '匹配文件到新数据库',
+                  icon: LibraryManagementIcon.scan,
+                  onPressed: isRemoteMode ||
+                          _matchingWebDAVConnections.contains(connection.name)
+                      ? null
+                      : () => _matchWebDAVConnectionToNewDatabaseFiles(
+                            connection,
+                          ),
                 ),
                 UnifiedLibraryManagementAction(
                   label: '测试连接',
@@ -6543,5 +6567,194 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         BlurSnackBar.show(context, '连接测试失败: $e');
       }
     }
+  }
+
+  // 将该 WebDAV 连接下的所有视频文件匹配到新数据库
+  Future<void> _matchWebDAVConnectionToNewDatabaseFiles(
+    WebDAVConnection connection,
+  ) async {
+    if (_matchingWebDAVConnections.contains(connection.name)) {
+      BlurSnackBar.show(context, '"${connection.name}" 已有匹配任务在进行中，请稍后。');
+      return;
+    }
+
+    setState(() {
+      _matchingWebDAVConnections.add(connection.name);
+    });
+    BlurSnackBar.show(context, '正在获取 "${connection.name}" 的文件列表...');
+
+    try {
+      final videoFiles = await _getWebDAVVideoFiles(
+        connection,
+        '/',
+        recursive: true,
+      );
+      if (videoFiles.isEmpty) {
+        if (mounted) BlurSnackBar.show(context, '未找到可匹配的视频文件');
+        return;
+      }
+
+      if (mounted) {
+        BlurSnackBar.show(
+          context,
+          '开始匹配 "${connection.name}" 下 ${videoFiles.length} 个文件到新数据库...',
+        );
+      }
+
+      var successCount = 0;
+      var failureCount = 0;
+      for (final file in videoFiles) {
+        final fileAddress = WebDAVService.instance.getFileUrl(
+          connection,
+          file.path,
+        );
+        try {
+          final remoteUri = tryParseRemoteFileUri(fileAddress);
+          if (remoteUri == null) {
+            throw Exception('无法解析远程文件地址: $fileAddress');
+          }
+          final requestUri = stripUriUserInfo(remoteUri);
+          final headers = basicAuthHeadersFromUri(remoteUri);
+          final remoteInfo = await computeRemoteFileHeadMd5(
+            requestUri,
+            headers: headers,
+          );
+          final Uint8List filePre16MiBMd5Hash = decodeHex(remoteInfo.hash, expectedBytes: 16);
+
+          final fileName = file.name;
+          final extensionIndex = fileName.lastIndexOf('.');
+          final fileNameNoExtension = extensionIndex > 0
+              ? fileName.substring(0, extensionIndex)
+              : fileName;
+          final fileExtension = extensionIndex >= 0 && extensionIndex < fileName.length - 1
+              ? fileName.substring(extensionIndex + 1).toLowerCase()
+              : '';
+          final fileDirectory = p.dirname(file.path);
+          final assetPath = AssetPath(
+            mediaSourceId: -1,
+            pathInSource: AssetPathInSource(
+              path: fileDirectory,
+              nameNoExt: fileNameNoExtension,
+              ext: fileExtension,
+            ),
+          );
+
+          await AnimeInfoService.identifyFileUseDandanplayMatch(assetPath,
+              filePre16MiBMd5Hash, remoteInfo.size);
+          successCount++;
+        } catch (e) {
+          failureCount++;
+          debugPrint('[LibraryManagement] 匹配文件到新数据库失败: $fileAddress, $e');
+        }
+      }
+
+      if (mounted) {
+        BlurSnackBar.show(
+          context,
+          '"${connection.name}" 匹配完成: 成功 $successCount 个, 失败 $failureCount 个',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '匹配文件到新数据库失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _matchingWebDAVConnections.remove(connection.name);
+        });
+      }
+    }
+  }
+
+  Future<void> _matchLocalFolderToNewDatabaseFiles(String folderPath) async {
+    if (_matchingLocalFolders.contains(folderPath)) {
+      BlurSnackBar.show(context, '"$folderPath" 已有匹配任务在进行中，请稍后。');
+      return;
+    }
+
+    setState(() {
+      _matchingLocalFolders.add(folderPath);
+    });
+    BlurSnackBar.show(context, '正在获取 "$folderPath" 的文件列表...');
+
+    try {
+      final videoFiles = await _getLocalVideoFiles(folderPath);
+      if (videoFiles.isEmpty) {
+        if (mounted) BlurSnackBar.show(context, '未找到可匹配的视频文件');
+        return;
+      }
+
+      if (mounted) {
+        BlurSnackBar.show(
+          context,
+          '开始匹配 "$folderPath" 下 ${videoFiles.length} 个文件到新数据库...',
+        );
+      }
+
+      var successCount = 0;
+      var failureCount = 0;
+      for (final filePath in videoFiles) {
+        try {
+          final fileName = p.basename(filePath);
+          final extensionIndex = fileName.lastIndexOf('.');
+          final fileNameNoExtension = extensionIndex > 0
+              ? fileName.substring(0, extensionIndex)
+              : fileName;
+          final fileExtension = extensionIndex >= 0 && extensionIndex < fileName.length - 1
+              ? fileName.substring(extensionIndex + 1).toLowerCase()
+              : '';
+          final fileDirectory = p.dirname(filePath);
+          final fileSize = await io.File(filePath).length();
+          final fileHash = await computeFileHeadMd5Bytes(filePath);
+
+          final fileInfo = AssetPath(
+            mediaSourceId: -1,
+            pathInSource: AssetPathInSource(
+              path: fileDirectory,
+              nameNoExt: fileNameNoExtension,
+              ext: fileExtension,
+            ),
+          );
+
+          await AnimeInfoService.identifyFileUseDandanplayMatch(fileInfo, fileHash, fileSize);
+          successCount++;
+        } catch (e) {
+          failureCount++;
+          debugPrint('[LibraryManagement] 匹配文件到新数据库失败: $filePath, $e');
+        }
+      }
+
+      if (mounted) {
+        BlurSnackBar.show(
+          context,
+          '"$folderPath" 匹配完成: 成功 $successCount 个, 失败 $failureCount 个',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '匹配文件到新数据库失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _matchingLocalFolders.remove(folderPath);
+        });
+      }
+    }
+  }
+
+  Future<List<String>> _getLocalVideoFiles(String folderPath) async {
+    final result = <String>[];
+    final directory = io.Directory(folderPath);
+    if (!await directory.exists()) {
+      return result;
+    }
+    await for (final entity in directory.list(recursive: true, followLinks: false)) {
+      if (entity is io.File && WebDAVService.instance.isVideoFile(p.basename(entity.path))) {
+        result.add(entity.path);
+      }
+    }
+    return result;
   }
 }
