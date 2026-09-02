@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum LocalLibrarySortType {
   name,
@@ -57,6 +58,8 @@ class LocalLibraryControlBar extends StatefulWidget {
   final List<LocalLibraryActionControl>? trailingActions;
   final LibraryManagementViewMode? viewMode;
   final VoidCallback? onToggleViewMode;
+  final bool? showUnwatchedOnly;
+  final VoidCallback? onToggleUnwatchedOnly;
 
   LocalLibraryControlBar({
     super.key,
@@ -72,6 +75,8 @@ class LocalLibraryControlBar extends StatefulWidget {
     this.trailingActions,
     this.viewMode,
     this.onToggleViewMode,
+    this.showUnwatchedOnly,
+    this.onToggleUnwatchedOnly,
   });
 
   @override
@@ -101,6 +106,8 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
     assert(!widget.showSort ||
         (widget.currentSort != null && widget.onSortChanged != null));
     assert((widget.viewMode == null) == (widget.onToggleViewMode == null));
+    assert((widget.showUnwatchedOnly == null) ==
+        (widget.onToggleUnwatchedOnly == null));
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _buildPhoneControlBar(context);
     }
@@ -152,6 +159,20 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               onClear: widget.onClearSearch,
             ),
           ),
+          if (widget.showUnwatchedOnly != null) ...[
+            const SizedBox(width: 10),
+            SearchBarActionButton(
+              icon: widget.showUnwatchedOnly == true
+                  ? Ionicons.eye_off_outline
+                  : Ionicons.eye_outline,
+              size: 20,
+              color: widget.showUnwatchedOnly == true
+                  ? AppAccentColors.current
+                  : primaryTextColor,
+              tooltip: widget.showUnwatchedOnly == true ? '显示全部' : '只看未观看',
+              onPressed: widget.onToggleUnwatchedOnly,
+            ),
+          ],
           if (widget.viewMode != null) ...[
             const SizedBox(width: 10),
             SearchBarActionButton(
@@ -247,29 +268,74 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   }
 
   Future<void> _showPhoneSortMenu(BuildContext context) async {
+    final showUnwatched = widget.showUnwatchedOnly != null;
+    final sortEntries = <(LocalLibrarySortType, String)>[
+      (LocalLibrarySortType.dateAdded, '最近观看'),
+      (LocalLibrarySortType.name, '名称排序'),
+      (LocalLibrarySortType.rating, '评分排序'),
+    ];
+
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final contentHeight = 112.0 + (sortEntries.length + 1) * 52.0;
+    final effectiveHeightRatio =
+        (contentHeight / screenHeight).clamp(0.3, 0.82).toDouble();
+
     final selected =
-        await CupertinoBottomSheet.showSelection<LocalLibrarySortType>(
+        await CupertinoBottomSheet.show<LocalLibrarySortType>(
       context: context,
       title: '排序',
-      options: [
-        _phoneSortOption(LocalLibrarySortType.dateAdded, '最近观看'),
-        _phoneSortOption(LocalLibrarySortType.name, '名称排序'),
-        _phoneSortOption(LocalLibrarySortType.rating, '评分排序'),
-      ],
+      heightRatio: effectiveHeightRatio,
+      child: CupertinoBottomSheetContentLayout(
+        sliversBuilder: (sheetContext, topSpacing) => [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(12, topSpacing + 4, 12, 24),
+            sliver: SliverToBoxAdapter(
+              child: cupertino.CupertinoListSection.insetGrouped(
+                margin: EdgeInsets.zero,
+                children: [
+                  if (showUnwatched)
+                    cupertino.CupertinoListTile(
+                      leading: Icon(
+                        cupertino.CupertinoIcons.eye,
+                        size: 20,
+                      ),
+                      title: const Text('只看未观看'),
+                      trailing: widget.showUnwatchedOnly == true
+                          ? Icon(
+                              cupertino.CupertinoIcons.check_mark,
+                              size: 18,
+                              color: cupertino.CupertinoTheme.of(sheetContext)
+                                  .primaryColor,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        widget.onToggleUnwatchedOnly?.call();
+                      },
+                    ),
+                  for (final entry in sortEntries)
+                    cupertino.CupertinoListTile(
+                      title: Text(entry.$2),
+                      trailing: widget.currentSort == entry.$1
+                          ? Icon(
+                              cupertino.CupertinoIcons.check_mark,
+                              size: 18,
+                              color: cupertino.CupertinoTheme.of(sheetContext)
+                                  .primaryColor,
+                            )
+                          : null,
+                      onTap: () => Navigator.of(sheetContext)
+                          .pop<LocalLibrarySortType>(entry.$1),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
     if (selected != null) {
       widget.onSortChanged?.call(selected);
     }
-  }
-
-  CupertinoBottomSheetOption<LocalLibrarySortType> _phoneSortOption(
-    LocalLibrarySortType type,
-    String label,
-  ) {
-    return CupertinoBottomSheetOption(
-      label: label,
-      value: type,
-      selected: widget.currentSort == type,
-    );
   }
 }
