@@ -4,6 +4,59 @@ import ObjectiveC.runtime
 import QuartzCore
 import media_kit_video
 
+/// Flutter's macOS text input plugin does not select a Roman input source for
+/// password keyboard types. Restrict its active context, never the whole app.
+class PasswordInputModePlugin: NSObject, FlutterPlugin {
+    private weak var restrictedContext: NSTextInputContext?
+    private var previousLocales: [String]?
+    private var previousInputSource: NSTextInputSourceIdentifier?
+
+    static func register(with registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(
+            name: "nipaplay/password_input_mode", binaryMessenger: registrar.messenger)
+        let instance = PasswordInputModePlugin()
+        registrar.addMethodCallDelegate(instance, channel: channel)
+        NotificationCenter.default.addObserver(
+            instance, selector: #selector(instance.restoreInputContext),
+            name: NSApplication.didResignActiveNotification, object: nil)
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard call.method == "setPasswordMode", let enabled = call.arguments as? Bool else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        if enabled, NSApp.isActive, let context = NSTextInputContext.current {
+            if restrictedContext !== context {
+                restoreInputContext()
+                restrictedContext = context
+                previousLocales = context.allowedInputSourceLocales
+                previousInputSource = context.selectedKeyboardInputSource
+            }
+            context.allowedInputSourceLocales = [NSAllRomanInputSourcesLocaleIdentifier]
+        } else {
+            restoreInputContext()
+        }
+        result(nil)
+    }
+
+    @objc private func restoreInputContext() {
+        guard let context = restrictedContext else { return }
+        context.allowedInputSourceLocales = previousLocales
+        if let previousInputSource {
+            context.selectedKeyboardInputSource = previousInputSource
+        }
+        restrictedContext = nil
+        previousLocales = nil
+        previousInputSource = nil
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        restoreInputContext()
+    }
+}
+
 class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
     static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "security_bookmark", binaryMessenger: registrar.messenger)
@@ -1521,6 +1574,7 @@ class MainFlutterWindow: NSWindow {
     
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
+    PasswordInputModePlugin.register(with: flutterViewController.registrar(forPlugin: "PasswordInputModePlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
 
