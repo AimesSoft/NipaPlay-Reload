@@ -188,7 +188,9 @@ class _CupertinoSmbConnectionSheetState
         CupertinoTextField(
           controller: controller,
           placeholder: placeholder,
-          keyboardType: keyboardType,
+          keyboardType: obscureText ? TextInputType.visiblePassword : keyboardType,
+          autocorrect: !obscureText,
+          enableSuggestions: !obscureText,
           inputFormatters: inputFormatters,
           obscureText: obscureText,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

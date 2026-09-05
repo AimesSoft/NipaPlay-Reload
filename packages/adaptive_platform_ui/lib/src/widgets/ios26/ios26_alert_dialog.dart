@@ -143,6 +143,7 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
   }
 
   String _keyboardTypeToString(TextInputType type) {
+    if (type == TextInputType.visiblePassword) return 'visiblePassword';
     if (type == TextInputType.emailAddress) return 'emailAddress';
     if (type == TextInputType.number) return 'number';
     if (type == TextInputType.phone) return 'phone';
@@ -231,7 +232,17 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
                 CupertinoTextField(
                   controller: _textController,
                   placeholder: input.placeholder,
-                  keyboardType: input.keyboardType,
+                  keyboardType: input.isPassword
+                      ? TextInputType.visiblePassword
+                      : input.keyboardType,
+                  autocorrect: !input.isPassword,
+                  enableSuggestions: !input.isPassword,
+                  smartDashesType: input.isPassword
+                      ? SmartDashesType.disabled
+                      : null,
+                  smartQuotesType: input.isPassword
+                      ? SmartQuotesType.disabled
+                      : null,
                   obscureText: input.obscureText,
                   maxLength: input.maxLength,
                   autofocus: true,
