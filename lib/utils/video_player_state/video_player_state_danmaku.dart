@@ -423,6 +423,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         return;
       }
 
+      final canDownload = await DanmakuMatchingService.instance.canAccess();
+      if (!canContinue()) return;
+      if (!canDownload) {
+        debugPrint('[弹幕访问] 未登录弹弹play，跳过在线弹幕下载');
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕下载');
+        unawaited(_promptDandanplayLogin());
+        return;
+      }
       debugPrint('缓存中没有找到弹幕，从网络加载中...');
       // 从网络加载弹幕
       final animeId = int.tryParse(animeIdStr) ?? 0;
@@ -502,6 +510,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (canContinue()) {
           _setStatus(PlayerStatus.playing, message: '弹幕数据无效，跳过加载');
         }
+      }
+    } on DandanplayLoginRequired {
+      if (canContinue()) {
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕下载');
+        unawaited(_promptDandanplayLogin());
       }
     } catch (e, st) {
       debugPrint('加载弹幕失败: $e');

@@ -9,7 +9,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -512,7 +512,7 @@ class LocalMediaManagementApi {
 
     for (final candidate in candidates) {
       try {
-        final videoInfo = await DandanplayService.getVideoInfo(
+        final videoInfo = await DanmakuMatchingService.instance.getVideoInfo(
           candidate.filePath,
         );
         final matches = videoInfo['matches'];

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/danmaku_matching_service.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart'
+    show DandanplayLoginRequired;
+import 'package:nipaplay/widgets/dandanplay_login_notice.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
@@ -43,6 +46,15 @@ class ManualDanmakuMatcher {
     BuildContext context, {
     String? initialVideoTitle,
   }) async {
+    try {
+      await DanmakuMatchingService.instance.ensureAccess();
+    } on DandanplayLoginRequired {
+      if (context.mounted) {
+        await DandanplayLoginNotice.showIfNeeded(context);
+      }
+      return null;
+    }
+    if (!context.mounted) return null;
     if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
       return NipaplayLargeScreenViewContainer.show<Map<String, dynamic>>(
         context: context,

@@ -1,14 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 // crypto not needed here (hash computed in RemoteMediaFetcher)
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -33,12 +31,11 @@ class JellyfinDandanplayMatcher {
   // 在视频播放前提前计算哈希值和匹配弹幕ID，避免播放时卡顿
   // 返回一个包含预匹配结果的Map
   Future<Map<String, dynamic>> precomputeVideoInfoAndMatch(
-      BuildContext context, JellyfinEpisodeInfo episode) async {
+    BuildContext context,
+    JellyfinEpisodeInfo episode,
+  ) async {
     if (context.read<SettingsProvider>().skipDanmakuMatching) {
-      return const {
-        'success': false,
-        'message': '已跳过弹幕匹配',
-      };
+      return const {'success': false, 'message': '已跳过弹幕匹配'};
     }
 
     try {
@@ -51,12 +48,16 @@ class JellyfinDandanplayMatcher {
       final videoInfoMap = {
         'hash': '',
         'fileName': '$seriesName - $episodeName.mp4',
-        'fileSize': 0
+        'fileSize': 0,
       };
 
       // 获取预匹配结果
-      final matchResult =
-          await _matchWithDandanPlay(context, episode, false, videoInfoMap);
+      final matchResult = await _matchWithDandanPlay(
+        context,
+        episode,
+        false,
+        videoInfoMap,
+      );
 
       if (matchResult.isNotEmpty &&
           matchResult['matches'] != null &&
@@ -79,7 +80,7 @@ class JellyfinDandanplayMatcher {
             'episodeTitle': match['episodeTitle'],
             'videoHash': videoInfoMap['hash'], // 如果计算成功，则包含哈希值
             'fileName': videoInfoMap['fileName'],
-            'fileSize': videoInfoMap['fileSize']
+            'fileSize': videoInfoMap['fileSize'],
           };
         }
       }
@@ -90,7 +91,7 @@ class JellyfinDandanplayMatcher {
         'message': '预计算阶段不再执行哈希，仅在播放前处理',
         'videoHash': '',
         'fileName': videoInfoMap['fileName'],
-        'fileSize': videoInfoMap['fileSize']
+        'fileSize': videoInfoMap['fileSize'],
       };
     } catch (e) {
       debugPrint('预计算和匹配过程中出错: $e');
@@ -104,8 +105,9 @@ class JellyfinDandanplayMatcher {
       debugPrint('开始预加载弹幕: episodeId=$episodeId, animeId=$animeId');
 
       // 检查是否已经缓存了弹幕数据
-      final cachedDanmaku =
-          await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(
+        episodeId,
+      );
       if (cachedDanmaku != null) {
         debugPrint('弹幕已存在于缓存中，无需预加载: episodeId=$episodeId');
         return;
@@ -144,8 +146,10 @@ class JellyfinDandanplayMatcher {
   /// [episode] Jellyfin剧集信息
   /// [showMatchDialog] 是否显示匹配对话框（默认true）
   Future<WatchHistoryItem?> createPlayableHistoryItem(
-      BuildContext context, JellyfinEpisodeInfo episode,
-      {bool showMatchDialog = true}) async {
+    BuildContext context,
+    JellyfinEpisodeInfo episode, {
+    bool showMatchDialog = true,
+  }) async {
     if (context.read<SettingsProvider>().skipDanmakuMatching) {
       return episode.toWatchHistoryItem();
     }
@@ -157,7 +161,8 @@ class JellyfinDandanplayMatcher {
       // 获取Jellyfin流媒体URL（仅用于日志）
       final streamUrl = await getPlayUrl(episode);
       debugPrint(
-          '正在为Jellyfin内容创建可播放项: ${episode.seriesName} - ${episode.name}');
+        '正在为Jellyfin内容创建可播放项: ${episode.seriesName} - ${episode.name}',
+      );
       debugPrint('Jellyfin流媒体URL: $streamUrl');
 
       // 获取视频信息（阻塞等待，确保先尝试哈希匹配）
@@ -171,7 +176,11 @@ class JellyfinDandanplayMatcher {
 
       // 2. 通过DandanPlay API匹配内容
       final Map<String, dynamic> dummyVideoInfo = await _matchWithDandanPlay(
-          context, episode, showMatchDialog, videoInfo);
+        context,
+        episode,
+        showMatchDialog,
+        videoInfo,
+      );
       if (dummyVideoInfo['__cancel__'] == true) {
         debugPrint('用户取消了弹幕匹配，直接返回null');
         return null;
@@ -202,7 +211,8 @@ class JellyfinDandanplayMatcher {
           videoHash: videoInfo['hash'], // 保存视频哈希值，用于后续匹配弹幕
         );
         debugPrint(
-            '创建了增强的历史记录项: ${updatedItem.animeName} - ${updatedItem.episodeTitle}');
+          '创建了增强的历史记录项: ${updatedItem.animeName} - ${updatedItem.episodeTitle}',
+        );
         return updatedItem;
       } else {
         debugPrint('没有匹配到DandanPlay内容，将使用原始历史记录项');
@@ -224,14 +234,19 @@ class JellyfinDandanplayMatcher {
   /// [movie] Jellyfin电影信息
   /// [showMatchDialog] 是否显示匹配对话框（默认true）
   Future<WatchHistoryItem?> createPlayableHistoryItemFromMovie(
-      BuildContext context, JellyfinMovieInfo movie,
-      {bool showMatchDialog = true}) async {
+    BuildContext context,
+    JellyfinMovieInfo movie, {
+    bool showMatchDialog = true,
+  }) async {
     // 创建虚拟的JellyfinEpisodeInfo来复用现有匹配逻辑
     final episodeInfo = _createVirtualEpisodeFromItem(movie);
 
     // 直接调用现有的剧集匹配方法
-    final result = await createPlayableHistoryItem(context, episodeInfo,
-        showMatchDialog: showMatchDialog);
+    final result = await createPlayableHistoryItem(
+      context,
+      episodeInfo,
+      showMatchDialog: showMatchDialog,
+    );
     if (result == null) return null;
     return result;
   }
@@ -272,8 +287,12 @@ class JellyfinDandanplayMatcher {
   /// 返回格式化为videoInfo的数据
   /// [videoInfo] 包含视频哈希值、文件名和文件大小的Map
   Future<Map<String, dynamic>> _matchWithDandanPlay(
-      BuildContext context, JellyfinEpisodeInfo episode, bool showMatchDialog,
-      [Map<String, dynamic>? videoInfo]) async {
+    BuildContext context,
+    JellyfinEpisodeInfo episode,
+    bool showMatchDialog, [
+    Map<String, dynamic>? videoInfo,
+  ]) async {
+    await DanmakuMatchingService.instance.ensureAccess();
     try {
       // 构建匹配的查询参数
       final String seriesName = episode.seriesName ?? '';
@@ -297,14 +316,16 @@ class JellyfinDandanplayMatcher {
       if (hasHash && hasVideoInfo) {
         final nonNullInfo = info!;
         debugPrint(
-            '尝试使用精确信息匹配: ${nonNullInfo['fileName']}, 文件大小: ${nonNullInfo['fileSize']} 字节, 哈希值: ${nonNullInfo['hash']}');
+          '尝试使用精确信息匹配: ${nonNullInfo['fileName']}, 文件大小: ${nonNullInfo['fileSize']} 字节, 哈希值: ${nonNullInfo['hash']}',
+        );
 
         // 尝试使用弹弹play的match API进行精确匹配
         try {
           final matchResult = await _matchWithDandanPlayAPI(nonNullInfo);
           if (matchResult.isNotEmpty && matchResult['isMatched'] == true) {
             debugPrint(
-                '通过精确匹配成功! 匹配结果: ${matchResult['animeTitle']} - ${matchResult['episodeTitle']}');
+              '通过精确匹配成功! 匹配结果: ${matchResult['animeTitle']} - ${matchResult['episodeTitle']}',
+            );
             return matchResult;
           } else {
             debugPrint('精确匹配未成功，回退到搜索匹配');
@@ -350,7 +371,8 @@ class JellyfinDandanplayMatcher {
           final seriesMatches = await _searchAnime(seriesNameOnly);
           if (seriesMatches.isNotEmpty) {
             debugPrint(
-                '使用季名称"$seriesNameOnly"搜索成功，找到 ${seriesMatches.length} 个匹配');
+              '使用季名称"$seriesNameOnly"搜索成功，找到 ${seriesMatches.length} 个匹配',
+            );
             animeMatches = seriesMatches; // 使用季名称搜索的结果
           } else {
             debugPrint('使用季名称"$seriesNameOnly"搜索也没有找到匹配结果');
@@ -409,10 +431,8 @@ class JellyfinDandanplayMatcher {
         final result = await showInViewDialog<Map<String, dynamic>>(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AnimeMatchDialog(
-            matches: animeMatches,
-            episodeInfo: episode,
-          ),
+          builder: (context) =>
+              AnimeMatchDialog(matches: animeMatches, episodeInfo: episode),
         );
         if (result?['__cancel__'] == true) {
           return {'__cancel__': true};
@@ -461,12 +481,13 @@ class JellyfinDandanplayMatcher {
               'animeTitle': selectedMatch['animeTitle'],
               'episodeId': selectedMatch['episodeId'],
               'episodeTitle': selectedMatch['episodeTitle'] ?? episode.name,
-            }
-          ]
+            },
+          ],
         };
       } else {
         debugPrint(
-            '警告: 用户选择了动画但没有选择剧集，episodeId可能为空: ${selectedMatch['animeTitle']}');
+          '警告: 用户选择了动画但没有选择剧集，episodeId可能为空: ${selectedMatch['animeTitle']}',
+        );
       }
 
       // 如果用户只选择了动画但没有选择剧集，则需要获取剧集列表并进行匹配
@@ -487,7 +508,9 @@ class JellyfinDandanplayMatcher {
         };
       }
       final epMatches = await _getAnimeEpisodes(
-          selectedMatch['animeId'], selectedMatch['animeTitle']);
+        selectedMatch['animeId'],
+        selectedMatch['animeTitle'],
+      );
 
       // 尝试根据集数匹配到具体剧集
       Map<String, dynamic> matchedEpisode = {};
@@ -505,7 +528,8 @@ class JellyfinDandanplayMatcher {
             if (exactMatches.isNotEmpty) {
               matchedEpisode = exactMatches.first;
               debugPrint(
-                  '成功匹配到第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                '成功匹配到第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+              );
             } else {
               // 然后尝试从标题中查找集数
               exactMatches = epMatches.where((ep) {
@@ -518,24 +542,28 @@ class JellyfinDandanplayMatcher {
               if (exactMatches.isNotEmpty) {
                 matchedEpisode = exactMatches.first;
                 debugPrint(
-                    '通过标题匹配到第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                  '通过标题匹配到第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+                );
               } else {
                 // 如果集数超出范围但在合理范围内，选择最后一集
                 if (episode.indexNumber! > epMatches.length &&
                     episode.indexNumber! <= epMatches.length + 5) {
                   matchedEpisode = epMatches.last;
                   debugPrint(
-                      '集数超出范围但在合理范围内，使用最后一集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                    '集数超出范围但在合理范围内，使用最后一集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+                  );
                 } else if (episode.indexNumber! <= epMatches.length) {
                   // 使用索引号匹配
                   matchedEpisode = epMatches[episode.indexNumber! - 1];
                   debugPrint(
-                      '使用索引号匹配第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                    '使用索引号匹配第 ${episode.indexNumber} 集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+                  );
                 } else {
                   // 无法匹配，使用第一集
                   matchedEpisode = epMatches.first;
                   debugPrint(
-                      '无法匹配到第 ${episode.indexNumber} 集，使用第一集作为备选: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                    '无法匹配到第 ${episode.indexNumber} 集，使用第一集作为备选: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+                  );
                 }
               }
             }
@@ -544,14 +572,16 @@ class JellyfinDandanplayMatcher {
             if (epMatches.isNotEmpty) {
               matchedEpisode = epMatches.first;
               debugPrint(
-                  '出错时使用第一个剧集作为备选: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                '出错时使用第一个剧集作为备选: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+              );
             }
           }
         } else {
           // 没有集数信息，使用第一个
           matchedEpisode = epMatches.first;
           debugPrint(
-              '没有集数信息，使用第一个剧集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+            '没有集数信息，使用第一个剧集: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+          );
         }
       } else {
         debugPrint('警告: 未找到任何剧集信息');
@@ -562,8 +592,9 @@ class JellyfinDandanplayMatcher {
           // 检查是否包含季号信息，如"第二季"、"S2"等
           final seasonMatch = RegExp(r'第(\d+)季|S(\d+)').firstMatch(animeTitle);
           if (seasonMatch != null) {
-            final seasonNumber =
-                int.parse(seasonMatch.group(1) ?? seasonMatch.group(2) ?? '1');
+            final seasonNumber = int.parse(
+              seasonMatch.group(1) ?? seasonMatch.group(2) ?? '1',
+            );
             debugPrint('检测到季号信息: 第$seasonNumber季');
 
             // 尝试查找不含季号的基本动画名称
@@ -577,10 +608,11 @@ class JellyfinDandanplayMatcher {
                 'episodeId': selectedMatch['animeId'] * 10000 +
                     (episode.indexNumber ?? 1), // 创建一个可能的剧集ID
                 'episodeTitle': '第${episode.indexNumber ?? 1}集',
-                'episodeIndex': episode.indexNumber ?? 1
+                'episodeIndex': episode.indexNumber ?? 1,
               };
               debugPrint(
-                  '创建虚拟剧集匹配: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}');
+                '创建虚拟剧集匹配: ${matchedEpisode['episodeTitle']}, ID: ${matchedEpisode['episodeId']}',
+              );
             }
           }
         }
@@ -606,17 +638,21 @@ class JellyfinDandanplayMatcher {
         // 在非对话框模式下，尝试根据动画ID查询更多信息
         if (!showMatchDialog && selectedMatch['animeId'] != null) {
           debugPrint(
-              '尝试再次获取动画 ${selectedMatch['animeId']} 的所有剧集以找到有效的episodeId');
+            '尝试再次获取动画 ${selectedMatch['animeId']} 的所有剧集以找到有效的episodeId',
+          );
           // 再次尝试获取剧集列表
           // 确保 selectedMatch 包含 animeId 和 animeTitle
           if (selectedMatch['animeId'] == null ||
               selectedMatch['animeTitle'] == null) {
             debugPrint(
-                '错误: 第二次尝试获取剧集时，selectedMatch 中仍缺少 animeId 或 animeTitle。');
+              '错误: 第二次尝试获取剧集时，selectedMatch 中仍缺少 animeId 或 animeTitle。',
+            );
           } else {
             final List<Map<String, dynamic>> allEpisodes =
                 await _getAnimeEpisodes(
-                    selectedMatch['animeId'], selectedMatch['animeTitle']);
+              selectedMatch['animeId'],
+              selectedMatch['animeTitle'],
+            );
             if (allEpisodes.isNotEmpty &&
                 allEpisodes.first.containsKey('episodeId')) {
               episodeId = allEpisodes.first['episodeId'];
@@ -637,7 +673,8 @@ class JellyfinDandanplayMatcher {
         debugPrint('严重错误: 匹配过程结束但episodeId仍为空，弹幕功能可能无法正常工作');
       } else {
         debugPrint(
-            '匹配成功: animeId=${selectedMatch['animeId']}, episodeId=$episodeId, 标题=${selectedMatch['animeTitle']} - $episodeTitle');
+          '匹配成功: animeId=${selectedMatch['animeId']}, episodeId=$episodeId, 标题=${selectedMatch['animeTitle']} - $episodeTitle',
+        );
 
         // 自动保存映射关系到智能映射系统
         try {
@@ -660,8 +697,8 @@ class JellyfinDandanplayMatcher {
             'animeTitle': selectedMatch['animeTitle'],
             'episodeId': episodeId,
             'episodeTitle': episodeTitle,
-          }
-        ]
+          },
+        ],
       };
     } catch (e) {
       debugPrint('匹配Jellyfin内容时出错: $e');
@@ -674,7 +711,8 @@ class JellyfinDandanplayMatcher {
   ///
   /// [videoInfo] 包含文件哈希值、文件名和文件大小的Map
   Future<Map<String, dynamic>> _matchWithDandanPlayAPI(
-      Map<String, dynamic> videoInfo) async {
+    Map<String, dynamic> videoInfo,
+  ) async {
     try {
       final String? hash = videoInfo['hash'] as String?;
       final String? fileName = videoInfo['fileName'] as String?;
@@ -686,57 +724,21 @@ class JellyfinDandanplayMatcher {
       }
 
       debugPrint(
-          '使用弹弹play的match API进行精确匹配: hash=$hash, fileName=$fileName, fileSize=$fileSize');
-
-      // 获取appSecret
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/match';
-
-      // 构建请求头和请求体
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-AppId': DandanplayService.appId,
-        'X-Signature': DandanplayService.generateSignature(
-            DandanplayService.appId, timestamp, apiPath, appSecret),
-        'X-Timestamp': '$timestamp',
-      };
-
-      final body = json.encode({
-        'fileName': fileName,
-        'fileHash': hash,
-        'fileSize': fileSize,
-        'matchMode': 'hashAndFileName',
-      });
-
-      debugPrint('发送匹配请求到弹弹play API');
-      final response = await http.post(
-        WebRemoteAccessService.proxyUri(
-          Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
-        ),
-        headers: headers,
-        body: body,
+        '使用弹弹play的match API进行精确匹配: hash=$hash, fileName=$fileName, fileSize=$fileSize',
       );
 
-      debugPrint('匹配API响应状态码: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // 检查是否成功匹配
-        if (data['isMatched'] == true) {
-          debugPrint('精确匹配成功: ${data['matches']?.length ?? 0} 个结果');
-          return _normalizeMatchApiResult(data);
-        } else {
-          debugPrint('弹弹play API未能精确匹配');
-          return {};
-        }
-      } else {
-        debugPrint('弹弹play匹配API请求失败: ${response.statusCode}');
-        return {};
+      debugPrint('发送匹配请求到弹弹play API');
+      final data = await DanmakuMatchingService.instance.matchVideo(
+        fileName: fileName ?? '',
+        fileHash: hash ?? '',
+        fileSize: fileSize,
+      );
+      if (data['isMatched'] == true) {
+        debugPrint('精确匹配成功: ${data['matches']?.length ?? 0} 个结果');
+        return _normalizeMatchApiResult(data);
       }
+      debugPrint('弹弹play API未能精确匹配');
+      return {};
     } catch (e) {
       debugPrint('调用弹弹play匹配API时出错: $e');
       return {};
@@ -792,12 +794,13 @@ class JellyfinDandanplayMatcher {
 
     try {
       debugPrint('开始搜索动画: "$title"');
-      final results = await DandanplayService.searchAnime(title);
+      final results = await DanmakuMatchingService.instance.searchAnime(title);
       if (results.isNotEmpty) {
         debugPrint('找到 ${results.length} 个匹配动画');
         final first = results.first;
         debugPrint(
-            '第一个结果: ID=${first['animeId']}, 标题=${first['animeTitle']}, 类型=${first['typeDescription']}');
+          '第一个结果: ID=${first['animeId']}, 标题=${first['animeTitle']}, 类型=${first['typeDescription']}',
+        );
         return results;
       }
       debugPrint('没有匹配的动画');
@@ -812,14 +815,10 @@ class JellyfinDandanplayMatcher {
 
   /// 获取动画的剧集列表
   Future<List<Map<String, dynamic>>> _getAnimeEpisodes(
-      int animeId, String animeTitle) async {
+    int animeId,
+    String animeTitle,
+  ) async {
     debugPrint('开始获取动画ID: $animeId (标题: "$animeTitle") 的剧集列表');
-    // 直接使用传入的 animeTitle，不再调用 _getAnimeTitle
-
-    if (animeTitle.isEmpty) {
-      debugPrint('动画标题为空 (ID: $animeId)，无法继续搜索剧集。');
-      return [];
-    }
 
     List<Map<String, dynamic>> normalizeEpisodes(List<dynamic> rawEpisodes) {
       final episodes = rawEpisodes
@@ -836,8 +835,8 @@ class JellyfinDandanplayMatcher {
         }
         final episodeTitle = ep['episodeTitle'] as String? ?? '';
         final indexMatch = RegExp(
-                r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】|\s(\d+)$')
-            .firstMatch(episodeTitle);
+          r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】|\s(\d+)$',
+        ).firstMatch(episodeTitle);
         if (indexMatch != null) {
           String? numStr;
           for (int j = 1; j <= indexMatch.groupCount; j++) {
@@ -856,12 +855,9 @@ class JellyfinDandanplayMatcher {
     }
 
     try {
-      final bangumiData = await DandanplayService.getBangumiDetails(animeId);
-      final bangumi = bangumiData['bangumi'];
-      final rawEpisodes = bangumi is Map<String, dynamic>
-          ? bangumi['episodes']
-          : bangumiData['episodes'];
-      if (rawEpisodes is List && rawEpisodes.isNotEmpty) {
+      final rawEpisodes =
+          await DanmakuMatchingService.instance.getAnimeEpisodes(animeId);
+      if (rawEpisodes.isNotEmpty) {
         final episodes = normalizeEpisodes(rawEpisodes);
         debugPrint('通过番剧详情获取 ${episodes.length} 个剧集，跳过标题搜索剧集');
         return episodes;
@@ -870,198 +866,27 @@ class JellyfinDandanplayMatcher {
       debugPrint('通过番剧详情获取剧集失败，回退标题搜索剧集: $e');
     }
 
-    try {
-      // 使用获取到的动画标题搜索剧集
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/episodes';
-
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url =
-          '$baseUrl/api/v2/search/episodes?anime=${Uri.encodeComponent(animeTitle)}';
-      debugPrint('请求URL (使用标题搜索剧集): $url');
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-              DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
-      debugPrint('获取剧集列表状态码 (使用标题搜索): ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        final previewText = response.body.length > 200
-            ? '${response.body.substring(0, 200)}...(总长度: ${response.body.length})'
-            : response.body;
-        debugPrint('剧集列表响应预览 (使用标题 "$animeTitle" 搜索): $previewText');
-
-        if (data['animes'] != null &&
-            data['animes'] is List &&
-            (data['animes'] as List).isNotEmpty) {
-          Map<String, dynamic>? matchedAnimeByTitleAndId;
-          List<dynamic> animesList = data['animes'];
-
-          // 首先尝试通过 animeId 精确匹配
-          for (var animeData in animesList) {
-            if (animeData is Map<String, dynamic> &&
-                animeData['animeId'] == animeId) {
-              matchedAnimeByTitleAndId = animeData;
-              // 在此上下文中，matchedAnimeByTitleAndId 已被赋值且不为null，因此不需要 '?'
-              debugPrint(
-                  '在标题搜索结果中通过 animeId ($animeId) 精确匹配到动画: ${matchedAnimeByTitleAndId['animeTitle']}');
-              break;
-            }
-          }
-
-          // 如果没有通过 animeId 精确匹配到，但列表不为空，可以考虑使用第一个结果作为备选
-          if (matchedAnimeByTitleAndId == null && animesList.isNotEmpty) {
-            // animesList.first 可能不是 Map<String, dynamic>，所以需要 as Map<String, dynamic>?
-            // 并且 matchedAnimeByTitleAndId 在此赋值后可能为 null，所以后续访问需要 '?'
-            matchedAnimeByTitleAndId =
-                animesList.first as Map<String, dynamic>?;
-            debugPrint(
-                '警告: 在标题搜索结果中未通过 animeId ($animeId) 精确匹配。使用第一个结果: ${matchedAnimeByTitleAndId?['animeTitle']} (ID: ${matchedAnimeByTitleAndId?['animeId']})');
-          }
-
-          if (matchedAnimeByTitleAndId != null &&
-              matchedAnimeByTitleAndId['episodes'] != null &&
-              matchedAnimeByTitleAndId['episodes'] is List) {
-            final episodes = List<Map<String, dynamic>>.from(
-                matchedAnimeByTitleAndId['episodes']);
-            debugPrint(
-                '成功获取 ${episodes.length} 个剧集，动画标题: ${matchedAnimeByTitleAndId['animeTitle']} (原始请求ID: $animeId)');
-
-            if (episodes.isNotEmpty) {
-              int validEpisodes = 0;
-              for (var ep in episodes) {
-                if (ep['episodeId'] != null) {
-                  validEpisodes++;
-                }
-              }
-              if (validEpisodes < episodes.length) {
-                debugPrint(
-                    '警告: 只有 $validEpisodes/${episodes.length} 个剧集有有效的episodeId');
-              } else {
-                debugPrint('所有剧集都有有效的episodeId');
-              }
-
-              final firstEp = episodes.first;
-              debugPrint(
-                  '第一个剧集: ID=${firstEp['episodeId']}, 标题=${firstEp['episodeTitle']}');
-
-              for (var i = 0; i < episodes.length; i++) {
-                var ep = episodes[i];
-                final episodeTitle = ep['episodeTitle'] as String? ?? '';
-                // 更新正则表达式以更好地匹配集数，例如 " 01 ", "EP01", "(01)"
-                final indexMatch = RegExp(
-                        r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】|\s(\d+)$')
-                    .firstMatch(episodeTitle);
-
-                if (indexMatch != null) {
-                  // 尝试所有可能的捕获组
-                  String? numStr;
-                  for (int j = 1; j <= indexMatch.groupCount; j++) {
-                    if (indexMatch.group(j) != null) {
-                      numStr = indexMatch.group(j);
-                      break;
-                    }
-                  }
-                  if (numStr != null) {
-                    ep['episodeIndex'] = int.parse(numStr);
-                  } else {
-                    ep['episodeIndex'] = i + 1; // Fallback
-                  }
-                } else {
-                  ep['episodeIndex'] = i + 1;
-                }
-              }
-            }
+    if (animeTitle.isNotEmpty) {
+      try {
+        final animes = await DanmakuMatchingService.instance.searchEpisodes(
+          animeTitle,
+        );
+        if (animes.isNotEmpty) {
+          final matchedAnime = animes.cast<Map<String, dynamic>>().firstWhere(
+                (anime) => anime['animeId'] == animeId,
+                orElse: () => animes.first,
+              );
+          final rawEpisodes = matchedAnime['episodes'];
+          if (rawEpisodes is List && rawEpisodes.isNotEmpty) {
+            final episodes = normalizeEpisodes(rawEpisodes);
+            debugPrint('通过标题搜索获取 ${episodes.length} 个剧集');
             return episodes;
-          } else {
-            debugPrint(
-                '警告: 匹配的动画 (${matchedAnimeByTitleAndId?['animeTitle']}) 中没有episodes字段或不是列表格式。');
-          }
-        } else {
-          debugPrint('警告: 使用标题 "$animeTitle" 搜索剧集时，响应中没有animes字段或为空。');
-          if (data.containsKey('errorMessage') &&
-              data['errorMessage'] != null) {
-            debugPrint('API返回错误: ${data['errorMessage']}');
           }
         }
-      } else {
-        debugPrint(
-            '使用标题 "$animeTitle" 获取剧集列表失败，状态码: ${response.statusCode}, 响应: ${response.body}');
+      } catch (e, stackTrace) {
+        debugPrint('使用标题 "$animeTitle" 获取剧集列表时出错: $e');
+        debugPrint('错误堆栈: $stackTrace');
       }
-    } catch (e, stackTrace) {
-      debugPrint('使用标题 "$animeTitle" 获取剧集列表时出错: $e');
-      debugPrint('错误堆栈: $stackTrace');
-    }
-
-    // 如果无法获取到剧集列表，尝试作为电影处理
-    debugPrint('未能获取剧集列表，尝试作为电影/剧场版处理 (animeId: $animeId)');
-    try {
-      // 使用DandanplayService现有的getBangumiDetails方法获取电影的详细信息
-      final bangumiData = await DandanplayService.getBangumiDetails(animeId);
-
-      if (bangumiData['success'] == true &&
-          bangumiData['bangumi'] != null &&
-          bangumiData['bangumi']['episodes'] != null &&
-          bangumiData['bangumi']['episodes'] is List) {
-        final episodes =
-            List<Map<String, dynamic>>.from(bangumiData['bangumi']['episodes']);
-        debugPrint('从番组信息中获取到 ${episodes.length} 个剧集');
-
-        // 为每个剧集添加episodeIndex并规范数据格式
-        for (var i = 0; i < episodes.length; i++) {
-          var ep = episodes[i];
-
-          // 确保episodeId存在
-          if (ep['episodeId'] == null) {
-            debugPrint('警告: 番组剧集中缺少episodeId: ${ep['episodeTitle']}');
-            continue;
-          }
-
-          // 从标题中提取集数或使用索引
-          final episodeTitle = ep['episodeTitle'] as String? ?? '';
-          final indexMatch = RegExp(
-                  r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】')
-              .firstMatch(episodeTitle);
-
-          if (indexMatch != null) {
-            String? numStr;
-            for (int j = 1; j <= indexMatch.groupCount; j++) {
-              if (indexMatch.group(j) != null) {
-                numStr = indexMatch.group(j);
-                break;
-              }
-            }
-            if (numStr != null) {
-              ep['episodeIndex'] = int.parse(numStr);
-            } else {
-              ep['episodeIndex'] = i + 1;
-            }
-          } else {
-            ep['episodeIndex'] = i + 1;
-          }
-
-          debugPrint(
-              '番组剧集: ID=${ep['episodeId']}, 标题=${ep['episodeTitle']}, 索引=${ep['episodeIndex']}');
-        }
-
-        return episodes;
-      } else {
-        debugPrint('番组信息中没有episodes字段或格式不正确');
-      }
-    } catch (e) {
-      debugPrint('获取电影番组信息失败: $e');
     }
 
     debugPrint('未能获取动画ID: $animeId (标题: "$animeTitle") 的剧集列表');
@@ -1074,7 +899,8 @@ class JellyfinDandanplayMatcher {
   ///
   /// 返回包含视频元数据的Map
   Future<Map<String, dynamic>> extractMetadataFromStreamUrl(
-      String streamUrl) async {
+    String streamUrl,
+  ) async {
     try {
       // 尝试从URL中提取itemId
       final RegExp regExp = RegExp(r'/Videos/([^/]+)/stream');
@@ -1092,14 +918,15 @@ class JellyfinDandanplayMatcher {
 
           if (episodeDetails != null) {
             debugPrint(
-                '成功获取剧集详情: ${episodeDetails.seriesName} - ${episodeDetails.name}');
+              '成功获取剧集详情: ${episodeDetails.seriesName} - ${episodeDetails.name}',
+            );
 
             return {
               'seriesName': episodeDetails.seriesName,
               'episodeTitle': episodeDetails.name,
               'episodeId': itemId,
               'jellyfin': true,
-              'success': true
+              'success': true,
             };
           }
         } catch (detailsError) {
@@ -1148,20 +975,25 @@ class JellyfinDandanplayMatcher {
   }
 
   Future<Map<String, dynamic>> _computeVideoHashInternal(
-      JellyfinEpisodeInfo episode) async {
+    JellyfinEpisodeInfo episode,
+  ) async {
     final String seriesName = episode.seriesName ?? '未知剧集';
     final String episodeName = episode.name.isNotEmpty ? episode.name : '未知标题';
     final String fallbackFileName = '$seriesName - $episodeName.mp4';
 
     try {
-      final streamUrl = JellyfinService.instance
-          .getStreamUrlWithOptions(episode.id, forceDirectPlay: true);
+      final streamUrl = JellyfinService.instance.getStreamUrlWithOptions(
+        episode.id,
+        forceDirectPlay: true,
+      );
       debugPrint('Jellyfin 哈希计算使用直连URL: $streamUrl');
 
-      final remoteHead =
-          await RemoteMediaFetcher.fetchHead(Uri.parse(streamUrl));
+      final remoteHead = await RemoteMediaFetcher.fetchHead(
+        Uri.parse(streamUrl),
+      );
       debugPrint(
-          'Jellyfin 哈希计算成功，读取 ${remoteHead.bytesHashed} 字节，hash=${remoteHead.hash}');
+        'Jellyfin 哈希计算成功，读取 ${remoteHead.bytesHashed} 字节，hash=${remoteHead.hash}',
+      );
 
       // 直接依赖流媒体返回的文件名/大小，跳过额外的媒体信息请求以避免长时间阻塞
       const Map<String, dynamic> mediaInfo = {};
@@ -1185,11 +1017,7 @@ class JellyfinDandanplayMatcher {
     } catch (e, stackTrace) {
       debugPrint('Jellyfin 自动哈希失败，回退到手动匹配: $e');
       debugPrint('错误堆栈: $stackTrace');
-      return {
-        'hash': '',
-        'fileName': fallbackFileName,
-        'fileSize': 0,
-      };
+      return {'hash': '', 'fileName': fallbackFileName, 'fileSize': 0};
     }
   }
 
@@ -1258,8 +1086,11 @@ class JellyfinDandanplayMatcher {
   /// 保存映射关系到数据库
   ///
   /// 在成功匹配后自动保存 Jellyfin 剧集与 DandanPlay 的映射关系
-  Future<void> _saveMappingToDatabase(JellyfinEpisodeInfo episode,
-      Map<String, dynamic> selectedMatch, dynamic episodeId) async {
+  Future<void> _saveMappingToDatabase(
+    JellyfinEpisodeInfo episode,
+    Map<String, dynamic> selectedMatch,
+    dynamic episodeId,
+  ) async {
     try {
       final mappingService = JellyfinEpisodeMappingService();
 
@@ -1283,7 +1114,8 @@ class JellyfinDandanplayMatcher {
         );
 
         debugPrint(
-            '成功保存映射关系: 剧集 ${episode.indexNumber} -> DandanPlay episodeId: $episodeId');
+          '成功保存映射关系: 剧集 ${episode.indexNumber} -> DandanPlay episodeId: $episodeId',
+        );
       }
     } catch (e) {
       debugPrint('保存映射关系时出错: $e');
@@ -1357,8 +1189,9 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
 
     try {
       // 使用已有的搜索动画功能
-      final results =
-          await JellyfinDandanplayMatcher.instance._searchAnime(searchText);
+      final results = await JellyfinDandanplayMatcher.instance._searchAnime(
+        searchText,
+      );
 
       setState(() {
         _isSearching = false;
@@ -1489,20 +1322,22 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
         setState(() {
           _selectedEpisode = exactMatch;
           debugPrint(
-              '自动匹配到剧集: ${exactMatch['episodeTitle']}, episodeId=${exactMatch['episodeId']}');
+            '自动匹配到剧集: ${exactMatch['episodeTitle']}, episodeId=${exactMatch['episodeId']}',
+          );
         });
         return;
       }
 
       // 如果没有精确匹配，尝试查找接近的集数
-      final List<Map<String, dynamic>> sortedEpisodes =
-          List.from(_currentEpisodes);
+      final List<Map<String, dynamic>> sortedEpisodes = List.from(
+        _currentEpisodes,
+      );
       sortedEpisodes.sort((a, b) {
         final aIndex = a['episodeIndex'] ?? 0;
         final bIndex = b['episodeIndex'] ?? 0;
-        return (aIndex - currentEpisodeIndex)
-            .abs()
-            .compareTo((bIndex - currentEpisodeIndex).abs());
+        return (aIndex - currentEpisodeIndex).abs().compareTo(
+              (bIndex - currentEpisodeIndex).abs(),
+            );
       });
 
       if (sortedEpisodes.isNotEmpty) {
@@ -1510,7 +1345,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
         setState(() {
           _selectedEpisode = closestMatch;
           debugPrint(
-              '找到最接近的剧集匹配: ${closestMatch['episodeTitle']}, 集数: ${closestMatch['episodeIndex']} (目标集数: $currentEpisodeIndex)');
+            '找到最接近的剧集匹配: ${closestMatch['episodeTitle']}, 集数: ${closestMatch['episodeIndex']} (目标集数: $currentEpisodeIndex)',
+          );
         });
       }
     } catch (e) {
@@ -1520,7 +1356,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
         setState(() {
           _selectedEpisode = _currentEpisodes.first;
           debugPrint(
-              '无法精确匹配剧集，默认选择第一集: ${_currentEpisodes.first['episodeTitle']}');
+            '无法精确匹配剧集，默认选择第一集: ${_currentEpisodes.first['episodeTitle']}',
+          );
         });
       }
     }
@@ -1546,7 +1383,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
       result['episodeId'] = _selectedEpisode!['episodeId'];
       result['episodeTitle'] = _selectedEpisode!['episodeTitle'];
       debugPrint(
-          '用户选择了剧集: ${_selectedEpisode!['episodeTitle']}, episodeId=${_selectedEpisode!['episodeId']}');
+        '用户选择了剧集: ${_selectedEpisode!['episodeTitle']}, episodeId=${_selectedEpisode!['episodeId']}',
+      );
     } else {
       // 如果在剧集选择界面用户没有选择具体剧集，但有可用剧集，默认使用第一个
       if (_showEpisodesView && _currentEpisodes.isNotEmpty) {
@@ -1554,7 +1392,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
         result['episodeId'] = firstEpisode['episodeId'];
         result['episodeTitle'] = firstEpisode['episodeTitle'];
         debugPrint(
-            '用户没有选择具体剧集，默认使用第一个: ${firstEpisode['episodeTitle']}, episodeId=${firstEpisode['episodeId']}');
+          '用户没有选择具体剧集，默认使用第一个: ${firstEpisode['episodeTitle']}, episodeId=${firstEpisode['episodeId']}',
+        );
       } else {
         debugPrint('警告: 没有匹配到任何剧集信息，episodeId可能为空');
       }
@@ -1609,8 +1448,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                     onPressed: () =>
                         Navigator.of(context).pop({'__cancel__': true}),
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ],
               ),
@@ -1623,14 +1464,20 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        '正在播放: ${widget.episodeInfo.seriesName} - ${widget.episodeInfo.name}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.white)),
+                      '正在播放: ${widget.episodeInfo.seriesName} - ${widget.episodeInfo.name}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                     if (widget.episodeInfo.indexNumber != null)
-                      Text('第 ${widget.episodeInfo.indexNumber} 集',
-                          style: const TextStyle(
-                              color: Colors.blueAccent,
-                              fontWeight: FontWeight.bold)),
+                      Text(
+                        '第 ${widget.episodeInfo.indexNumber} 集',
+                        style: const TextStyle(
+                          color: Colors.blueAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1645,22 +1492,33 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('已选动画:',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 12)),
-                            Text(_selectedAnime!['animeTitle'] ?? '未知动画',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
+                            const Text(
+                              '已选动画:',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              _selectedAnime!['animeTitle'] ?? '未知动画',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                       TextButton.icon(
-                        icon: const Icon(Icons.arrow_back,
-                            size: 16, color: Colors.white70),
-                        label: const Text('返回',
-                            style:
-                                TextStyle(fontSize: 12, color: Colors.white70)),
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          size: 16,
+                          color: Colors.white70,
+                        ),
+                        label: const Text(
+                          '返回',
+                          style: TextStyle(fontSize: 12, color: Colors.white70),
+                        ),
                         onPressed: _backToAnimeSelection,
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1694,19 +1552,23 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                             decoration: InputDecoration(
                               hintText: '手动搜索动画名称',
                               hintStyle: TextStyle(
-                                  color: Colors.white.withOpacity(0.6)),
+                                color: Colors.white.withOpacity(0.6),
+                              ),
                               isDense: true,
                               border: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                    color: Colors.white.withOpacity(0.3)),
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                    color: Colors.white.withOpacity(0.3)),
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
-                                    color: Colors.white.withOpacity(0.6)),
+                                  color: Colors.white.withOpacity(0.6),
+                                ),
                               ),
                             ),
                             onSubmitted: (_) => _performSearch(),
@@ -1719,7 +1581,9 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                         text: '搜索',
                         onTap: _isSearching ? () {} : _performSearch,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         fontSize: 15,
                       ),
                     ],
@@ -1730,8 +1594,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
               if (!_showEpisodesView) ...[
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('请从以下匹配结果中选择动画:',
-                      style: TextStyle(color: Colors.white)),
+                  child: Text(
+                    '请从以下匹配结果中选择动画:',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (_searchMessage.isNotEmpty)
@@ -1750,11 +1616,15 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                 Expanded(
                   child: _isSearching
                       ? const Center(
-                          child: CircularProgressIndicator(color: Colors.white))
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
                       : _currentMatches.isEmpty
                           ? const Center(
-                              child: Text('没有匹配结果',
-                                  style: TextStyle(color: Colors.white70)))
+                              child: Text(
+                                '没有匹配结果',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            )
                           : ListView.builder(
                               shrinkWrap: true,
                               itemCount: _currentMatches.length,
@@ -1762,7 +1632,9 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                 final match = _currentMatches[index];
                                 return Container(
                                   margin: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.05),
                                     borderRadius: BorderRadius.circular(6),
@@ -1779,7 +1651,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                           ? Text(
                                               match['typeDescription'],
                                               style: const TextStyle(
-                                                  color: Colors.white70),
+                                                color: Colors.white70,
+                                              ),
                                             )
                                           : null,
                                       onTap: () => _loadAnimeEpisodes(match),
@@ -1797,8 +1670,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
               if (_showEpisodesView) ...[
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child:
-                      Text('请选择匹配的剧集:', style: TextStyle(color: Colors.white)),
+                  child: Text(
+                    '请选择匹配的剧集:',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (_episodesMessage.isNotEmpty)
@@ -1817,11 +1692,15 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                 Expanded(
                   child: _isLoadingEpisodes
                       ? const Center(
-                          child: CircularProgressIndicator(color: Colors.white))
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
                       : _currentEpisodes.isEmpty
                           ? const Center(
-                              child: Text('没有找到剧集',
-                                  style: TextStyle(color: Colors.white70)))
+                              child: Text(
+                                '没有找到剧集',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            )
                           : ListView.builder(
                               shrinkWrap: true,
                               itemCount: _currentEpisodes.length,
@@ -1833,7 +1712,9 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                             episode['episodeId'];
                                 return Container(
                                   margin: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.05),
                                     borderRadius: BorderRadius.circular(6),
@@ -1847,8 +1728,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                             color: Colors.white),
                                       ),
                                       trailing: isSelected
-                                          ? const Icon(Icons.check_circle,
-                                              color: Colors.green)
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              color: Colors.green,
+                                            )
                                           : null,
                                       selected: isSelected,
                                       onTap: () {
@@ -1874,9 +1757,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                           ? '请选择一个剧集来获取正确的弹幕'
                           : '已选择剧集，点击"确认选择"继续',
                       style: TextStyle(
-                          color: _selectedEpisode == null
-                              ? Colors.white70
-                              : Colors.green),
+                        color: _selectedEpisode == null
+                            ? Colors.white70
+                            : Colors.green,
+                      ),
                     ),
                   ),
               ],
@@ -1888,23 +1772,30 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                 children: [
                   if (!_showEpisodesView)
                     TextButton(
-                      child: const Text('跳过匹配',
-                          style: TextStyle(color: Colors.white70)),
+                      child: const Text(
+                        '跳过匹配',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   if (_showEpisodesView) ...[
                     TextButton(
                       onPressed: _backToAnimeSelection,
                       style: TextButton.styleFrom(
-                          foregroundColor: Colors.blueAccent),
-                      child: const Text('返回动画选择',
-                          style: TextStyle(color: Colors.white70)),
+                        foregroundColor: Colors.blueAccent,
+                      ),
+                      child: const Text(
+                        '返回动画选择',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       style: TextButton.styleFrom(foregroundColor: Colors.grey),
-                      child: const Text('跳过匹配',
-                          style: TextStyle(color: Colors.white70)),
+                      child: const Text(
+                        '跳过匹配',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                     ),
                     if (_currentEpisodes.isNotEmpty)
                       ClipRRect(
@@ -1925,11 +1816,13 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                               style: TextButton.styleFrom(
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                               ),
-                              child: Text(_selectedEpisode != null
-                                  ? '确认选择剧集'
-                                  : '使用第一集'),
+                              child: Text(
+                                _selectedEpisode != null ? '确认选择剧集' : '使用第一集',
+                              ),
                             ),
                           ),
                         ),

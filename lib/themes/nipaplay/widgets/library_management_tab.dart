@@ -22,7 +22,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
-import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
@@ -5816,8 +5816,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
     for (final candidate in candidates) {
       try {
-        final videoInfo =
-            await DandanplayService.getVideoInfo(candidate.probePath);
+        final videoInfo = await DanmakuMatchingService.instance.getVideoInfo(
+          candidate.probePath,
+        );
         final matches = videoInfo['matches'];
         if (videoInfo['isMatched'] != true ||
             matches is! List ||

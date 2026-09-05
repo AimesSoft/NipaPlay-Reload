@@ -6,7 +6,8 @@ import 'package:shelf_router/shelf_router.dart';
 import 'bangumi_service.dart';
 import 'bangumi_api_service.dart';
 import 'dandanplay_service.dart';
-import 'package:http/http.dart' as http;
+import 'danmaku_matching_service.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -40,6 +41,7 @@ class WebApiService {
     _router.get('/bangumi/detail/<id>', handleBangumiDetailRequest);
     _router.get('/bangumi/login_status', handleBangumiLoginStatusRequest);
     _router.get('/danmaku/video_info', handleVideoInfoRequest);
+    _router.post('/danmaku/match', handleDanmakuMatchRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
     _router.add('GET', '/web_proxy', _webUiProxyApi.handle);
@@ -234,6 +236,8 @@ class WebApiService {
           },
         );
       }
+    } on http.DandanplayLoginRequired catch (e) {
+      return Response(401, body: e.message);
     } catch (e) {
       //debugPrint('[ImageProxy] Exception: $e');
       return Response.internalServerError(body: 'Error proxying image: $e');
@@ -629,13 +633,62 @@ class WebApiService {
       return Response.badRequest(body: 'Missing "videoPath" parameter');
     }
     try {
-      final videoInfo = await DandanplayService.getVideoInfo(videoPath);
+      final videoInfo = await DanmakuMatchingService.instance.getVideoInfo(
+        videoPath,
+      );
       return Response.ok(
         json.encode(videoInfo),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
+    } on http.DandanplayLoginRequired catch (e) {
+      return Response(401, body: e.message);
     } catch (e) {
       return Response.internalServerError(body: 'Error getting video info: $e');
+    }
+  }
+
+  Future<Response> handleDanmakuMatchRequest(Request request) async {
+    try {
+      final decoded = json.decode(await request.readAsString());
+      if (decoded is! Map) {
+        return Response.badRequest(body: 'Invalid JSON body');
+      }
+      final data = Map<String, dynamic>.from(decoded);
+      final fileName = data['fileName']?.toString() ?? '';
+      final fileHash = data['fileHash']?.toString() ?? '';
+      final fileSize = data['fileSize'];
+      if (fileName.isEmpty || fileSize is! num || fileSize < 0) {
+        return Response.badRequest(body: 'Invalid matching metadata');
+      }
+
+      final result = await DanmakuMatchingService.instance.matchVideo(
+        fileName: fileName,
+        fileHash: fileHash,
+        fileSize: fileSize.toInt(),
+      );
+      return Response.ok(
+        json.encode(result),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } on http.DandanplayLoginRequired catch (error) {
+      return Response(
+        401,
+        body: json.encode({
+          'success': false,
+          'errorCode': 401,
+          'errorMessage': error.message,
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (error) {
+      return Response.internalServerError(
+        body: json.encode({
+          'success': false,
+          'errorCode': 500,
+          'errorMessage': error.toString(),
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
     }
   }
 
@@ -655,6 +708,8 @@ class WebApiService {
         json.encode(danmaku),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
+    } on http.DandanplayLoginRequired catch (e) {
+      return Response(401, body: e.message);
     } catch (e) {
       return Response.internalServerError(body: 'Error loading danmaku: $e');
     }

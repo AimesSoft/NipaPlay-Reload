@@ -858,9 +858,8 @@
       "description": {}
     }
   },
-  "networkServerDescriptionPrimary": "api.dandanplay.net (Official server, recommended)",
-  "networkServerDescriptionBackup": "139.224.252.88:16001 (Mirror server, use when the primary server is unavailable)",
-  "networkServerSelectSubtitle": "Select a DanDanPlay danmaku server. The backup server can be used when the primary server is unavailable.",
+  "networkServerDescriptionPrimary": "Dandanplay online services require a Dandanplay account. Custom third-party danmaku services do not.",
+  "networkServerSelectSubtitle": "Choose the default Dandanplay service or a custom third-party danmaku service.",
   "customServerWithValue": "Custom: {server}",
   "@customServerWithValue": {
     "placeholders": {

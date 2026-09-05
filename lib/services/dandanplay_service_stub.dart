@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -18,10 +18,6 @@ class DandanplayService {
   static const String _linkedBangumiAccountKey =
       'dandanplay_linked_bangumi_account';
   static const String _loginTimestampKey = 'dandanplay_login_timestamp';
-  static const List<String> _servers = [
-    'https://nipaplay.aimes-soft.com',
-    'https://kurisu.aimes-soft.com'
-  ];
   static const String _videoCacheKey = 'video_recognition_cache';
   static bool _isLoggedIn = false;
   static String? _userName;
@@ -37,8 +33,9 @@ class DandanplayService {
   static const int _filenameFallbackVersion = 2;
   static const int _animeSearchCacheMaxEntries = 300;
   static const Duration _bangumiDetailsCacheDuration = Duration(hours: 6);
-  static const Duration _authorizedBangumiDetailsCacheDuration =
-      Duration(minutes: 15);
+  static const Duration _authorizedBangumiDetailsCacheDuration = Duration(
+    minutes: 15,
+  );
   static final Map<String, List<Map<String, dynamic>>> _animeSearchMemoryCache =
       {};
   static final Map<String, DateTime> _animeSearchMemoryCacheTime = {};
@@ -63,6 +60,27 @@ class DandanplayService {
     final raw = _linkedBangumiAccount?['expires']?.toString();
     if (raw == null || raw.isEmpty) return null;
     return DateTime.tryParse(raw);
+  }
+
+  static Future<bool> canAccessCurrentServer() async {
+    final hasLocalToken = _token != null && _token!.isNotEmpty;
+    final usesLoggedInWebProxy =
+        _useWebApiProxy && _webApiBaseUrl?.isNotEmpty == true;
+    return !NetworkSettings.isDandanplayServiceUri(Uri.parse(await getApiBaseUrl())) ||
+        (_isLoggedIn && (hasLocalToken || usesLoggedInWebProxy));
+  }
+
+  static Future<void> ensureLoggedInForMatching() async {
+    if (!await canAccessCurrentServer()) {
+      throw http.DandanplayLoginRequired();
+    }
+  }
+
+  static Map<String, String> get authorizationHeaders {
+    if (!_isLoggedIn || _token == null || _token!.isEmpty) {
+      return const {};
+    }
+    return {'Authorization': 'Bearer $_token'};
   }
 
   static String _maskToken(String? token) {
@@ -154,6 +172,7 @@ class DandanplayService {
   static Future<void> initialize() async {
     // 从localStorage加载登录状态
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dandanplay_app_secret');
     _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
@@ -258,7 +277,10 @@ class DandanplayService {
   }
 
   static Future<void> saveLoginInfo(
-      String token, String username, String screenName) async {
+    String token,
+    String username,
+    String screenName,
+  ) async {
     _clearBangumiDetailsCache();
     _token = token;
     await _updateLoginStatus(
@@ -303,7 +325,8 @@ class DandanplayService {
   }
 
   static Future<Map<String, dynamic>?> getCachedVideoInfo(
-      String fileHash) async {
+    String fileHash,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cache = prefs.getString(_videoCacheKey);
@@ -341,7 +364,9 @@ class DandanplayService {
   }
 
   static Future<void> saveVideoInfoToCache(
-      String fileHash, Map<String, dynamic> videoInfo) async {
+    String fileHash,
+    Map<String, dynamic> videoInfo,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cache = prefs.getString(_videoCacheKey);
@@ -500,69 +525,111 @@ class DandanplayService {
   }
 
   static Future<String> getAppSecret() async {
-    if (_appSecret != null) {
-      return _appSecret!;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final savedAppSecret = prefs.getString('dandanplay_app_secret');
-    if (savedAppSecret != null) {
-      _appSecret = savedAppSecret;
-      return _appSecret!;
-    }
-
-    Exception? lastException;
-    for (final server in _servers) {
-      try {
-        final response = await http.get(
-          Uri.parse('$server/nipaplay.php'),
-          headers: {
-            'User-Agent': userAgent,
-            'Accept': 'application/json',
-          },
-        ).timeout(const Duration(seconds: 5));
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['encryptedAppSecret'] != null) {
-            _appSecret = _b(data['encryptedAppSecret']);
-            await prefs.setString('dandanplay_app_secret', _appSecret!);
-            return _appSecret!;
-          }
-          throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
-        }
-        throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
-      } on TimeoutException {
-        lastException = TimeoutException('从 $server 获取appSecret超时');
-      } catch (e) {
-        lastException = e is Exception ? e : Exception(e.toString());
-      }
-    }
-
-    throw lastException ?? Exception('获取应用密钥失败，请检查网络连接');
+    return _appSecret ??= 'server-managed';
   }
 
   static String generateSignature(
-      String appId, int timestamp, String apiPath, String appSecret) {
+    String appId,
+    int timestamp,
+    String apiPath,
+    String appSecret,
+  ) {
     final signatureString = '$appId$timestamp$apiPath$appSecret';
     final hash = sha256.convert(utf8.encode(signatureString));
     return base64.encode(hash.bytes);
   }
 
+  static Future<Map<String, dynamic>> matchVideo({
+    required String fileName,
+    required String fileHash,
+    required int fileSize,
+  }) async {
+    await ensureLoggedInForMatching();
+    final webApiBaseUrl = await _getWebApiBaseUrl();
+    if (webApiBaseUrl != null) {
+      final response = await http.post(
+        Uri.parse('$webApiBaseUrl/api/danmaku/match'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'fileName': fileName,
+          'fileHash': fileHash,
+          'fileSize': fileSize,
+        }),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('匹配弹幕失败: ${_responseError(response.body)}');
+      }
+      final decoded = json.decode(response.body);
+      if (decoded is! Map) {
+        throw const FormatException('弹幕匹配响应格式错误');
+      }
+      return Map<String, dynamic>.from(decoded);
+    }
+
+    final appSecret = await getAppSecret();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    const apiPath = '/api/v2/match';
+    final response = await http.post(
+      Uri.parse('${await getApiBaseUrl()}$apiPath'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(
+          appId,
+          timestamp,
+          apiPath,
+          appSecret,
+        ),
+        'X-Timestamp': '$timestamp',
+        ...authorizationHeaders,
+      },
+      body: json.encode({
+        'fileName': fileName,
+        'fileHash': fileHash,
+        'fileSize': fileSize,
+        'matchMode': 'hashAndFileName',
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final errorMessage =
+          response.headers['x-error-message'] ?? _responseError(response.body);
+      throw Exception('匹配弹幕失败: $errorMessage');
+    }
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('弹幕匹配响应格式错误');
+    }
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  static String _responseError(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['errorMessage'] != null) {
+        return decoded['errorMessage'].toString();
+      }
+    } catch (_) {}
+    return body.trim().isEmpty ? '请检查网络连接' : body;
+  }
+
   static Future<Map<String, dynamic>> login(
-      String username, String password) async {
+    String username,
+    String password,
+  ) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/login'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: json.encode({
-            'username': username,
-            'password': password,
-          }),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'username': username, 'password': password}),
         );
 
         final data = json.decode(response.body);
@@ -574,11 +641,7 @@ class DandanplayService {
           final loginTs = data is Map<String, dynamic>
               ? _parseLoginTimestamp(data['ts'] ?? data['loginTs'])
               : null;
-          await saveLoginInfo(
-            '',
-            username,
-            data['screenName'] ?? username,
-          );
+          await saveLoginInfo('', username, data['screenName'] ?? username);
           await _saveLinkedBangumiAccount(
             linkedBangumi,
             loginTimestamp: loginTs,
@@ -601,14 +664,18 @@ class DandanplayService {
       final hash = md5.convert(utf8.encode(hashString)).toString();
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}/api/v2/login'),
+        Uri.parse('${NetworkSettings.primaryServer}/api/v2/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, '/api/v2/login', appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            '/api/v2/login',
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
         },
         body: json.encode({
@@ -643,7 +710,7 @@ class DandanplayService {
         } else {
           return {
             'success': false,
-            'message': data['errorMessage'] ?? '登录失败，请检查用户名和密码'
+            'message': data['errorMessage'] ?? '登录失败，请检查用户名和密码',
           };
         }
       } else {
@@ -651,7 +718,7 @@ class DandanplayService {
             response.headers['x-error-message'] ?? response.body;
         return {
           'success': false,
-          'message': '网络请求失败 (${response.statusCode}): $errorMessage'
+          'message': '网络请求失败 (${response.statusCode}): $errorMessage',
         };
       }
     } catch (e) {
@@ -670,9 +737,9 @@ class DandanplayService {
         if (normalizedRedirect != null && normalizedRedirect.isNotEmpty) {
           query['redirectUrl'] = normalizedRedirect;
         }
-        final uri =
-            Uri.parse('$webApiBaseUrl/api/dandanplay/bangumi/oauth_login')
-                .replace(queryParameters: query);
+        final uri = Uri.parse(
+          '$webApiBaseUrl/api/dandanplay/bangumi/oauth_login',
+        ).replace(queryParameters: query);
         final response = await http.get(uri);
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
@@ -712,8 +779,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -759,15 +830,14 @@ class DandanplayService {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
-        final requestUri =
-            Uri.parse('$webApiBaseUrl/api/dandanplay/refresh_login');
+        final requestUri = Uri.parse(
+          '$webApiBaseUrl/api/dandanplay/refresh_login',
+        );
         var requestMethod = 'POST';
         debugPrint(
           '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod uri=$requestUri',
         );
-        var response = await http.post(
-          requestUri,
-        );
+        var response = await http.post(requestUri);
         debugPrint(
           '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode} '
           'allow=${response.headers['allow'] ?? '-'} '
@@ -835,7 +905,7 @@ class DandanplayService {
     }
 
     try {
-      final apiBaseUrl = await getApiBaseUrl();
+      final apiBaseUrl = NetworkSettings.primaryServer;
       final appSecret = await getAppSecret();
       final timestamp =
           (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
@@ -853,8 +923,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -879,8 +953,12 @@ class DandanplayService {
             'Accept': 'application/json',
             'User-Agent': userAgent,
             'X-AppId': appId,
-            'X-Signature':
-                generateSignature(appId, timestamp, apiPath, appSecret),
+            'X-Signature': generateSignature(
+              appId,
+              timestamp,
+              apiPath,
+              appSecret,
+            ),
             'X-Timestamp': '$timestamp',
             'Authorization': 'Bearer $_token',
           },
@@ -957,9 +1035,7 @@ class DandanplayService {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/register'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'username': username,
             'password': password,
@@ -1001,7 +1077,7 @@ class DandanplayService {
       };
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        Uri.parse('${NetworkSettings.primaryServer}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -1025,14 +1101,14 @@ class DandanplayService {
         }
         return {
           'success': false,
-          'message': data['errorMessage'] ?? '注册失败，请检查提交信息'
+          'message': data['errorMessage'] ?? '注册失败，请检查提交信息',
         };
       }
 
       final errorMessage = response.headers['x-error-message'] ?? response.body;
       return {
         'success': false,
-        'message': '网络请求失败 (${response.statusCode}): $errorMessage'
+        'message': '网络请求失败 (${response.statusCode}): $errorMessage',
       };
     } catch (e) {
       debugPrint('[弹弹play服务] 注册失败: $e');
@@ -1041,19 +1117,16 @@ class DandanplayService {
   }
 
   static Future<void> updateEpisodeWatchStatus(
-      int episodeId, bool isWatched) async {
+    int episodeId,
+    bool isWatched,
+  ) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/episodes/watch_status'),
-          headers: const {
-            'Content-Type': 'application/json',
-          },
-          body: json.encode({
-            'episodeId': episodeId,
-            'isWatched': isWatched,
-          }),
+          headers: const {'Content-Type': 'application/json'},
+          body: json.encode({'episodeId': episodeId, 'isWatched': isWatched}),
         );
 
         if (response.statusCode == 200) {
@@ -1084,15 +1157,17 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
         body: json.encode({
-          'episodeIdList': [
-            episodeId,
-          ],
+          'episodeIdList': [episodeId],
         }),
       );
 
@@ -1114,12 +1189,14 @@ class DandanplayService {
   }
 
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
+    await ensureLoggedInForMatching();
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.get(
           Uri.parse(
-              '$webApiBaseUrl/api/danmaku/video_info?videoPath=${Uri.encodeComponent(videoPath)}'),
+            '$webApiBaseUrl/api/danmaku/video_info?videoPath=${Uri.encodeComponent(videoPath)}',
+          ),
         );
 
         if (response.statusCode == 200) {
@@ -1175,13 +1252,16 @@ class DandanplayService {
   }
 
   static Future<Map<String, dynamic>> getDanmaku(
-      String episodeId, int animeId) async {
+    String episodeId,
+    int animeId,
+  ) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.get(
           Uri.parse(
-              '$webApiBaseUrl/api/danmaku/load?episodeId=$episodeId&animeId=$animeId'),
+            '$webApiBaseUrl/api/danmaku/load?episodeId=$episodeId&animeId=$animeId',
+          ),
         );
 
         if (response.statusCode == 200) {
@@ -1210,8 +1290,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
@@ -1248,8 +1332,10 @@ class DandanplayService {
     }
   }
 
-  static Future<Map<String, dynamic>> getUserPlayHistory(
-      {DateTime? fromDate, DateTime? toDate}) async {
+  static Future<Map<String, dynamic>> getUserPlayHistory({
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -1276,8 +1362,9 @@ class DandanplayService {
             final animes = data['playHistoryAnimes'] as List;
             for (final anime in animes) {
               if (anime['imageUrl'] != null) {
-                anime['imageUrl'] =
-                    getProxiedImageUrl(anime['imageUrl'] as String);
+                anime['imageUrl'] = getProxiedImageUrl(
+                  anime['imageUrl'] as String,
+                );
               }
             }
           }
@@ -1312,7 +1399,8 @@ class DandanplayService {
 
       final baseUrl = await getApiBaseUrl();
       final uri = Uri.parse(
-          '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
+        '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}',
+      );
 
       final response = await http.get(
         uri,
@@ -1320,8 +1408,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1357,9 +1449,7 @@ class DandanplayService {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/add_play_history'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'episodeIdList': episodeIdList,
             'addToFavorite': addToFavorite,
@@ -1413,8 +1503,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1517,8 +1611,9 @@ class DandanplayService {
           if (kIsWeb && data['bangumi'] != null) {
             final bangumi = data['bangumi'];
             if (bangumi['imageUrl'] != null) {
-              bangumi['imageUrl'] =
-                  getProxiedImageUrl(bangumi['imageUrl'] as String);
+              bangumi['imageUrl'] = getProxiedImageUrl(
+                bangumi['imageUrl'] as String,
+              );
             }
           }
 
@@ -1568,20 +1663,24 @@ class DandanplayService {
 
   /// 通过 Bangumi.tv subjectId 获取番剧详情（Web stub — 不支持）
   static Future<Map<String, dynamic>?> getBangumiByBgmId(
-      int bgmtvSubjectId) async {
+    int bgmtvSubjectId,
+  ) async {
     debugPrint('[弹弹play服务-Web] getBangumiByBgmId not supported on web');
     return null;
   }
 
   /// 通过 TMDB ID 获取番剧详情（Web stub — 不支持）
-  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId,
-      {int? seasonNumber}) async {
+  static Future<Map<String, dynamic>?> getBangumiByTmdbId(
+    int tmdbId, {
+    int? seasonNumber,
+  }) async {
     debugPrint('[弹弹play服务-Web] getBangumiByTmdbId not supported on web');
     return null;
   }
 
   static Future<Map<int, bool>> getEpisodesWatchStatus(
-      List<int> episodeIds) async {
+    List<int> episodeIds,
+  ) async {
     try {
       // 先获取播放历史
       final historyData = await getUserPlayHistory();
@@ -1628,8 +1727,9 @@ class DandanplayService {
     }
   }
 
-  static Future<Map<String, dynamic>> getUserFavorites(
-      {bool onlyOnAir = false}) async {
+  static Future<Map<String, dynamic>> getUserFavorites({
+    bool onlyOnAir = false,
+  }) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -1680,7 +1780,8 @@ class DandanplayService {
 
       final baseUrl = await getApiBaseUrl();
       final uri = Uri.parse(
-          '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
+        '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}',
+      );
 
       final response = await http.get(
         uri,
@@ -1688,8 +1789,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1726,9 +1831,7 @@ class DandanplayService {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/add_favorite'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'animeId': animeId,
             'favoriteStatus': favoriteStatus,
@@ -1776,8 +1879,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1841,8 +1948,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1930,9 +2041,7 @@ class DandanplayService {
       try {
         final response = await http.post(
           Uri.parse('$webApiBaseUrl/api/dandanplay/send_danmaku'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'episodeId': episodeId,
             'time': time,
@@ -1977,8 +2086,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -2043,63 +2156,33 @@ class DandanplayService {
 
     final canMatchByHash = fileHash.isNotEmpty && fileSize > 0;
     if (canMatchByHash) {
-      final appSecret = await getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-
-      final baseUrl = await getApiBaseUrl();
-      final apiUrl = '$baseUrl/api/v2/match';
-
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': userAgent,
-        'X-AppId': appId,
-        'X-Signature':
-            generateSignature(appId, timestamp, '/api/v2/match', appSecret),
-        'X-Timestamp': timestamp.toString(),
-        if (_isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
-      };
-
-      final body = json.encode({
-        'fileName': fileName,
-        'fileHash': fileHash,
-        'fileSize': fileSize,
-        'matchMode': 'hashAndFileName',
-        if (_isLoggedIn && _token != null) 'token': _token,
-      });
-
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: headers,
-        body: body,
+      final data = await matchVideo(
+        fileName: fileName,
+        fileHash: fileHash,
+        fileSize: fileSize,
       );
+      if (data['isMatched'] == true) {
+        _ensureVideoInfoTitles(data);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['isMatched'] == true) {
-          _ensureVideoInfoTitles(data);
+        if (fileHash.isNotEmpty) {
+          await saveVideoInfoToCache(fileHash, data);
+        }
 
-          if (fileHash.isNotEmpty) {
-            await saveVideoInfoToCache(fileHash, data);
-          }
-
-          if (data['matches'] != null && data['matches'].isNotEmpty) {
-            final match = data['matches'][0];
-            if (match['episodeId'] != null && match['animeId'] != null) {
-              try {
-                final episodeId = match['episodeId'].toString();
-                final animeId = match['animeId'] as int;
-                final danmakuData = await getDanmaku(episodeId, animeId);
-                data['comments'] = danmakuData['comments'];
-              } catch (e) {
-                debugPrint('获取弹幕失败: $e');
-              }
+        if (data['matches'] != null && data['matches'].isNotEmpty) {
+          final match = data['matches'][0];
+          if (match['episodeId'] != null && match['animeId'] != null) {
+            try {
+              final episodeId = match['episodeId'].toString();
+              final animeId = match['animeId'] as int;
+              final danmakuData = await getDanmaku(episodeId, animeId);
+              data['comments'] = danmakuData['comments'];
+            } catch (e) {
+              debugPrint('获取弹幕失败: $e');
             }
           }
-
-          return data;
         }
+
+        return data;
       }
     }
 
@@ -2304,12 +2387,14 @@ class DandanplayService {
   }
 
   static Future<List<Map<String, dynamic>>> _searchAnimeByKeyword(
-      String keyword) {
+    String keyword,
+  ) {
     return searchAnime(keyword);
   }
 
   static Future<List<Map<String, dynamic>>> _getBangumiEpisodes(
-      int animeId) async {
+    int animeId,
+  ) async {
     final data = await getBangumiDetails(animeId);
 
     final dynamic rawEpisodes = (data['bangumi'] is Map<String, dynamic>)
@@ -2477,45 +2562,11 @@ class DandanplayService {
       return {
         'comments': formattedComments,
         'fromCache': false,
-        'count': formattedComments.length
+        'count': formattedComments.length,
       };
     }
 
     throw Exception('该视频暂无弹幕');
-  }
-
-  static String _b(String a) {
-    String b = a.split('').map((c) {
-      if (c.toLowerCase() != c.toUpperCase()) {
-        final d = c == c.toUpperCase();
-        final e = d ? 'A'.codeUnitAt(0) : 'a'.codeUnitAt(0);
-        return String.fromCharCode(e + 25 - (c.codeUnitAt(0) - e));
-      }
-      return c;
-    }).join('');
-
-    String f;
-    if (b.length >= 5) {
-      final g = b[0];
-      f = b.substring(1, b.length - 4) + g + b.substring(b.length - 4);
-    } else {
-      f = b;
-    }
-
-    String h = f.split('').map((i) {
-      if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) &&
-          i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
-        return String.fromCharCode('0'.codeUnitAt(0) + (10 - int.parse(i)));
-      }
-      return i;
-    }).join('');
-
-    return h.split('').map((j) {
-      if (j.toLowerCase() != j.toUpperCase()) {
-        return j == j.toLowerCase() ? j.toUpperCase() : j.toLowerCase();
-      }
-      return j;
-    }).join('');
   }
 
   static void _loadLinkedBangumiFromPrefs(SharedPreferences prefs) {
@@ -2599,7 +2650,8 @@ class DandanplayService {
 
         final response = await http.get(
           Uri.parse(
-              '$webApiBaseUrl/api/dandanplay/webtoken?business=$business'),
+            '$webApiBaseUrl/api/dandanplay/webtoken?business=$business',
+          ),
         );
 
         debugPrint('[弹弹play服务-Web] 获取WebToken响应: ${response.statusCode}');
@@ -2633,8 +2685,12 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature':
-              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -2689,8 +2745,8 @@ class DandanplayService {
       }
 
       final manageUri = Uri.parse(
-              '${await getApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage')
-          .replace(queryParameters: {'webToken': webToken});
+        '${await getApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage',
+      ).replace(queryParameters: {'webToken': webToken});
       return manageUri.toString();
     } catch (e) {
       debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: $e');

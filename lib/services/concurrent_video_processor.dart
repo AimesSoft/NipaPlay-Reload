@@ -5,7 +5,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 
 /// 视频处理结果
 class VideoProcessResult {
@@ -116,7 +116,8 @@ class ConcurrentVideoProcessor {
   static Future<VideoProcessResult> _processSingleVideoPath(
       String videoPath) async {
     try {
-      final videoInfo = await DandanplayService.getVideoInfo(videoPath)
+      final videoInfo = await DanmakuMatchingService.instance
+          .getVideoInfo(videoPath)
           .timeout(_requestTimeout, onTimeout: () {
         throw TimeoutException('获取视频信息超时 (${_displayName(videoPath)})');
       });

@@ -5,9 +5,12 @@ class NetworkSettings {
   static const String _dandanplayServerKey = 'dandanplay_server_url';
   static const String _bangumiServerKey = 'bangumi_server_url';
 
-  // 弹弹play 服务器常量
-  static const String primaryServer = 'https://api.dandanplay.net';
-  static const String backupServer = 'http://139.224.252.88:16001';
+  // 官方发行版统一通过 NipaPlay 网关访问弹弹play。旧地址仅用于迁移
+  // 已安装版本保存的偏好，客户端不再持有弹弹play AppSecret。
+  static const String primaryServer =
+      'https://nipaplay.aimes-soft.com/dandanplay';
+  static const String _legacyOfficialServer = 'https://api.dandanplay.net';
+  static const String _legacyBackupServer = 'http://139.224.252.88:16001';
 
   // 默认服务器（主服务器）
   static const String defaultServer = primaryServer;
@@ -15,11 +18,30 @@ class NetworkSettings {
   // Bangumi 服务器常量
   static const String bangumiDefaultServer = 'https://api.bgm.tv';
 
+  /// Recognize the provider by origin, never just by its compatible API path.
+  static bool isDandanplayServiceUri(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (host == 'api.dandanplay.net' || host.endsWith('.dandanplay.net')) {
+      return true;
+    }
+    final gateway = Uri.parse(primaryServer);
+    if (host == gateway.host &&
+        (uri.path == gateway.path || uri.path.startsWith('${gateway.path}/'))) {
+      return uri.path != '${gateway.path}/healthz';
+    }
+    return host == '139.224.252.88' && uri.port == 16001;
+  }
+
   /// 获取当前弹弹play服务器地址
   static Future<String> getDandanplayServer() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_dandanplayServerKey) ?? defaultServer;
-    return _normalizeServerUrl(stored);
+    final normalized = _normalizeServerUrl(stored);
+    if (normalized == _legacyOfficialServer ||
+        normalized == _legacyBackupServer) {
+      return primaryServer;
+    }
+    return normalized;
   }
 
   /// 设置弹弹play服务器地址
@@ -66,24 +88,13 @@ class NetworkSettings {
     print('[网络设置] Bangumi服务器已重置为默认: $bangumiDefaultServer');
   }
 
-  /// 检查是否使用备用服务器
-  static Future<bool> isUsingBackupServer() async {
-    final currentServer = await getDandanplayServer();
-    return currentServer == backupServer;
-  }
-
   /// 获取所有可用服务器列表
   static List<Map<String, String>> getAvailableServers() {
     return [
       {
-        'name': '主服务器',
+        'name': 'NipaPlay 服务',
         'url': primaryServer,
-        'description': 'api.dandanplay.net（官方服务器）',
-      },
-      {
-        'name': '备用服务器',
-        'url': backupServer,
-        'description': '139.224.252.88:16001（镜像服务器）',
+        'description': '由 NipaPlay 网关连接弹弹play',
       },
     ];
   }
@@ -94,7 +105,9 @@ class NetworkSettings {
       return false;
     }
     final normalized = _normalizeServerUrl(serverUrl);
-    return normalized != primaryServer && normalized != backupServer;
+    return normalized != primaryServer &&
+        normalized != _legacyOfficialServer &&
+        normalized != _legacyBackupServer;
   }
 
   /// 粗略校验用户输入的服务器地址

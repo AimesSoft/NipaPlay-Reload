@@ -1820,15 +1820,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get networkServerDescriptionPrimary =>
-      'api.dandanplay.net (Official server, recommended)';
-
-  @override
-  String get networkServerDescriptionBackup =>
-      '139.224.252.88:16001 (Mirror server, use when the primary server is unavailable)';
+      'Dandanplay online services require a Dandanplay account. Custom third-party danmaku services do not.';
 
   @override
   String get networkServerSelectSubtitle =>
-      'Select a DanDanPlay danmaku server. The backup server can be used when the primary server is unavailable.';
+      'Choose the default Dandanplay service or a custom third-party danmaku service.';
 
   @override
   String customServerWithValue(Object server) {
