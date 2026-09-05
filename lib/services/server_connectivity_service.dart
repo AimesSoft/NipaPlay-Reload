@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
@@ -69,6 +69,18 @@ class ServerConnectivityService {
   }
 
   Future<bool> _checkDandanplay(String serverUrl) async {
+    // Check our gateway itself without spending an upstream API request or
+    // reporting a healthy server as offline just because the user logged out.
+    if (serverUrl == NetworkSettings.primaryServer) {
+      try {
+        final response = await http
+            .get(Uri.parse('$serverUrl/healthz'))
+            .timeout(const Duration(seconds: 8));
+        return response.statusCode == 200;
+      } catch (_) {
+        return false;
+      }
+    }
     const apiPath = '/api/v2/bangumi/1';
     final uri = Uri.parse('$serverUrl$apiPath');
     try {

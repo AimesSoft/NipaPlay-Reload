@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/models/trending_bangumi.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class TrendingBangumiService {
   TrendingBangumiService._({http.Client? client})
-      : _client = client ?? http.Client(),
+      : _client = client ?? http.DandanplayHttpClient(),
         _delay = Future<void>.delayed;
 
   @visibleForTesting

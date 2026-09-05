@@ -1,8 +1,8 @@
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shelf/shelf.dart';
 
 class WebUiProxyApi {
-  WebUiProxyApi({http.Client? client}) : _client = client ?? http.Client();
+  WebUiProxyApi({http.Client? client}) : _client = client ?? http.DandanplayHttpClient();
 
   final http.Client _client;
 
@@ -45,6 +45,8 @@ class WebUiProxyApi {
     http.StreamedResponse upstream;
     try {
       upstream = await _client.send(proxyRequest);
+    } on http.DandanplayLoginRequired catch (e) {
+      return Response(401, body: e.message);
     } catch (e) {
       return Response.internalServerError(body: 'Proxy request failed: $e');
     }

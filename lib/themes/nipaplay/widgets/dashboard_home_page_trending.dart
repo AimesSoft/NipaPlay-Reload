@@ -68,7 +68,9 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
       _updateTrendingState(() {
         _trendingLoadingKeys.remove(key);
         if (_currentTrendingQuery.cacheKey == key) {
-          _trendingError = '排行榜加载失败';
+          _trendingError = error is http.DandanplayLoginRequired
+              ? '登录弹弹play账号后查看排行榜'
+              : '排行榜加载失败';
         }
       });
       debugPrint('加载排行榜失败: $error');
