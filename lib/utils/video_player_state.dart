@@ -27,6 +27,10 @@ import 'package:path/path.dart' as p;
 import 'globals.dart' as globals;
 import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart'
+    show DandanplayLoginRequired;
+import 'package:nipaplay/widgets/dandanplay_login_notice.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
@@ -256,6 +260,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int? _dandanplayLoginPromptGeneration;
 
   void _notifyListeners() {
     if (_isDisposed) {

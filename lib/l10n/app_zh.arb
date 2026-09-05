@@ -870,9 +870,8 @@
       "description": {}
     }
   },
-  "networkServerDescriptionPrimary": "api.dandanplay.net（官方服务器，推荐使用）",
-  "networkServerDescriptionBackup": "139.224.252.88:16001（镜像服务器，主服务器无法访问时使用）",
-  "networkServerSelectSubtitle": "选择弹弹play弹幕服务器。备用服务器可在主服务器无法访问时使用。",
+  "networkServerDescriptionPrimary": "使用弹弹play在线服务需要登录弹弹play账号。自定义第三方弹幕服务不受此限制。",
+  "networkServerSelectSubtitle": "选择默认弹弹play服务或自定义第三方弹幕服务。",
   "customServerWithValue": "自定义：{server}",
   "@customServerWithValue": {
     "placeholders": {

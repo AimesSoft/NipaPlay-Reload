@@ -1715,14 +1715,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get networkServerDescriptionPrimary =>
-      'api.dandanplay.net（官方服务器，推荐使用）';
+      '使用弹弹play在线服务需要登录弹弹play账号。自定义第三方弹幕服务不受此限制。';
 
   @override
-  String get networkServerDescriptionBackup =>
-      '139.224.252.88:16001（镜像服务器，主服务器无法访问时使用）';
-
-  @override
-  String get networkServerSelectSubtitle => '选择弹弹play弹幕服务器。备用服务器可在主服务器无法访问时使用。';
+  String get networkServerSelectSubtitle => '选择默认弹弹play服务或自定义第三方弹幕服务。';
 
   @override
   String customServerWithValue(Object server) {
@@ -3667,14 +3663,10 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get networkServerDescriptionPrimary =>
-      'api.dandanplay.net（官方伺服器，建議使用）';
+      '使用彈彈play線上服務需要登入彈彈play帳號。自訂第三方彈幕服務不受此限制。';
 
   @override
-  String get networkServerDescriptionBackup =>
-      '139.224.252.88:16001（鏡像伺服器，主伺服器無法存取時使用）';
-
-  @override
-  String get networkServerSelectSubtitle => '選擇彈彈play 彈幕伺服器。主伺服器無法存取時可使用備用伺服器。';
+  String get networkServerSelectSubtitle => '選擇預設彈彈play服務或自訂第三方彈幕服務。';
 
   @override
   String customServerWithValue(Object server) {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -39,10 +39,12 @@ class BangumiApiService {
   static String? _accessToken;
   static bool _isLoggedIn = false;
   static Map<String, dynamic>? _userInfo;
-  
+
   /// 登录状态监听器
-  static final ValueNotifier<bool> loginStatusNotifier = ValueNotifier<bool>(false);
-  
+  static final ValueNotifier<bool> loginStatusNotifier = ValueNotifier<bool>(
+    false,
+  );
+
   /// Web端同步定时器
   static Timer? _syncTimer;
 
@@ -94,7 +96,7 @@ class BangumiApiService {
       debugPrint('[Bangumi API] 初始化失败: $e');
     }
   }
-  
+
   /// 监听BaseURL变化
   static void _onBaseUrlChanged() {
     debugPrint('[Bangumi API] 检测到BaseURL变化，重新启动同步');
@@ -102,7 +104,7 @@ class BangumiApiService {
     _startSyncTimer();
     _syncLoginStatusFromServer();
   }
-  
+
   /// 启动Web端同步定时器
   static void _startSyncTimer() {
     _syncTimer?.cancel(); // 先取消旧的，防止重复
@@ -117,16 +119,14 @@ class BangumiApiService {
       final baseUrl = await WebRemoteAccessService.resolveCandidateBaseUrl();
       // 减少日志刷屏，仅在非localhost或明确配置时打印详细信息，或者降低频率
       // debugPrint('[Bangumi API] 同步登录状态，BaseURL: $baseUrl');
-      
+
       if (baseUrl == null || baseUrl.isEmpty) {
         return false;
       }
 
       final uri = Uri.parse('$baseUrl/api/bangumi/login_status');
 
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 3));
+      final response = await http.get(uri).timeout(const Duration(seconds: 3));
 
       // debugPrint('[Bangumi API] 响应状态码: ${response.statusCode}');
       if (response.statusCode == 404) {
@@ -134,7 +134,7 @@ class BangumiApiService {
         // 不停止定时器，允许自动恢复
         return false;
       }
-      
+
       if (response.statusCode != 200) {
         debugPrint('[Bangumi API] 请求失败 (${response.statusCode})');
         return false;
@@ -143,13 +143,13 @@ class BangumiApiService {
       // debugPrint('[Bangumi API] 响应内容: ${response.body}');
       final data = json.decode(response.body);
       final newLoginStatus = data['isLoggedIn'] == true;
-      
+
       // 只有状态改变时才更新
       if (_isLoggedIn != newLoginStatus) {
         debugPrint('[Bangumi API] Web端登录状态更新: $newLoginStatus');
         _isLoggedIn = newLoginStatus;
         loginStatusNotifier.value = _isLoggedIn;
-        
+
         final userInfo = data['userInfo'];
         if (userInfo is Map<String, dynamic>) {
           _userInfo = Map<String, dynamic>.from(userInfo);
@@ -165,13 +165,13 @@ class BangumiApiService {
           await prefs.remove(_userInfoKey);
         }
       } else if (_isLoggedIn && _userInfo == null) {
-         // 状态是已登录但没有用户信息，尝试补充信息
-         final userInfo = data['userInfo'];
-         if (userInfo is Map<String, dynamic>) {
-           _userInfo = Map<String, dynamic>.from(userInfo);
-           final prefs = await SharedPreferences.getInstance();
-           await prefs.setString(_userInfoKey, json.encode(_userInfo));
-         }
+        // 状态是已登录但没有用户信息，尝试补充信息
+        final userInfo = data['userInfo'];
+        if (userInfo is Map<String, dynamic>) {
+          _userInfo = Map<String, dynamic>.from(userInfo);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_userInfoKey, json.encode(_userInfo));
+        }
       }
 
       return true;
@@ -206,13 +206,16 @@ class BangumiApiService {
         await prefs.setString(_userInfoKey, json.encode(userData));
 
         debugPrint(
-            '[Bangumi API] Token验证成功，用户: ${userData['username'] ?? 'unknown'}');
+          '[Bangumi API] Token验证成功，用户: ${userData['username'] ?? 'unknown'}',
+        );
         return true;
       } else if (response.statusCode == 401) {
         debugPrint('[Bangumi API] Token已失效 (401)，需要重新登录');
         return false;
       } else {
-        debugPrint('[Bangumi API] Token验证返回非200状态 (${response.statusCode})，暂时保留登录状态');
+        debugPrint(
+          '[Bangumi API] Token验证返回非200状态 (${response.statusCode})，暂时保留登录状态',
+        );
         return true;
       }
     } catch (e) {
@@ -250,7 +253,8 @@ class BangumiApiService {
         await prefs.setBool(_isLoggedInKey, true);
 
         debugPrint(
-            '[Bangumi API] Token保存成功，用户: ${userData['username'] ?? 'unknown'}');
+          '[Bangumi API] Token保存成功，用户: ${userData['username'] ?? 'unknown'}',
+        );
 
         return {
           'success': true,
@@ -259,10 +263,7 @@ class BangumiApiService {
         };
       } else if (response.statusCode == 401) {
         debugPrint('[Bangumi API] Token无效: ${response.statusCode}');
-        return {
-          'success': false,
-          'message': '访问令牌无效，请检查令牌是否正确',
-        };
+        return {'success': false, 'message': '访问令牌无效，请检查令牌是否正确'};
       } else {
         debugPrint('[Bangumi API] Token验证失败: ${response.statusCode}');
         return {
@@ -272,10 +273,7 @@ class BangumiApiService {
       }
     } catch (e) {
       debugPrint('[Bangumi API] 保存Token时发生异常: $e');
-      return {
-        'success': false,
-        'message': '网络错误，请检查网络连接: $e',
-      };
+      return {'success': false, 'message': '网络错误，请检查网络连接: $e'};
     }
   }
 
@@ -294,16 +292,10 @@ class BangumiApiService {
 
       debugPrint('[Bangumi API] Token已清除');
 
-      return {
-        'success': true,
-        'message': '已清除Bangumi授权信息',
-      };
+      return {'success': true, 'message': '已清除Bangumi授权信息'};
     } catch (e) {
       debugPrint('[Bangumi API] 清除Token时发生异常: $e');
-      return {
-        'success': false,
-        'message': '清除失败: $e',
-      };
+      return {'success': false, 'message': '清除失败: $e'};
     }
   }
 
@@ -324,10 +316,7 @@ class BangumiApiService {
     Map<String, String>? queryParams,
   }) async {
     if (_accessToken == null) {
-      return {
-        'success': false,
-        'message': '未设置访问令牌，请先授权',
-      };
+      return {'success': false, 'message': '未设置访问令牌，请先授权'};
     }
 
     try {
@@ -365,37 +354,22 @@ class BangumiApiService {
           response = await http.get(uri, headers: headers);
           break;
         case 'POST':
-          response = await http.post(
-            uri,
-            headers: headers,
-            body: requestBody,
-          );
+          response = await http.post(uri, headers: headers, body: requestBody);
           // debugPrint('[Bangumi API] POST 请求头：$headers');
           break;
         case 'PUT':
-          response = await http.put(
-            uri,
-            headers: headers,
-            body: requestBody,
-          );
+          response = await http.put(uri, headers: headers, body: requestBody);
           // debugPrint('[Bangumi API] PUT 请求头：$headers');
           break;
         case 'PATCH':
-          response = await http.patch(
-            uri,
-            headers: headers,
-            body: requestBody,
-          );
+          response = await http.patch(uri, headers: headers, body: requestBody);
           // debugPrint('[Bangumi API] PATCH 请求头：$headers');
           break;
         case 'DELETE':
           response = await http.delete(uri, headers: headers);
           break;
         default:
-          return {
-            'success': false,
-            'message': '不支持的HTTP方法: $method',
-          };
+          return {'success': false, 'message': '不支持的HTTP方法: $method'};
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -423,7 +397,8 @@ class BangumiApiService {
         };
       } else {
         debugPrint(
-            '[Bangumi API] 请求失败: ${response.statusCode} - ${response.body}');
+          '[Bangumi API] 请求失败: ${response.statusCode} - ${response.body}',
+        );
         return {
           'success': false,
           'message': 'API请求失败，状态码: ${response.statusCode}',
@@ -432,10 +407,7 @@ class BangumiApiService {
       }
     } catch (e) {
       debugPrint('[Bangumi API] 请求异常: $e');
-      return {
-        'success': false,
-        'message': '网络错误: $e',
-      };
+      return {'success': false, 'message': '网络错误: $e'};
     }
   }
 
@@ -444,10 +416,13 @@ class BangumiApiService {
   /// [subjectId] 条目ID
   /// [username] 用户名（如果为null则使用当前登录用户）
   /// 返回收藏信息或错误
-  static Future<Map<String, dynamic>> getUserCollection(int subjectId,
-      {String? username}) async {
+  static Future<Map<String, dynamic>> getUserCollection(
+    int subjectId, {
+    String? username,
+  }) async {
     debugPrint(
-        '[Bangumi API] 获取收藏状态: subjectId=$subjectId, username=$username');
+      '[Bangumi API] 获取收藏状态: subjectId=$subjectId, username=$username',
+    );
 
     // 如果没有提供username且已登录，使用当前用户的username
     String actualUsername = '-';
@@ -461,7 +436,9 @@ class BangumiApiService {
     debugPrint('[Bangumi API] 实际使用的用户名: $actualUsername');
 
     final result = await _makeRequest(
-        'GET', '/v0/users/$actualUsername/collections/$subjectId');
+      'GET',
+      '/v0/users/$actualUsername/collections/$subjectId',
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏状态获取成功');
@@ -495,17 +472,17 @@ class BangumiApiService {
   }) async {
     debugPrint('[Bangumi API] 添加收藏: subjectId=$subjectId, type=$type');
 
-    final body = <String, dynamic>{
-      'type': type,
-    };
+    final body = <String, dynamic>{'type': type};
 
     if (comment != null) body['comment'] = comment;
     if (rate != null && rate >= 1 && rate <= 10) body['rate'] = rate;
     if (private != null) body['private'] = private;
 
     final result = await _makeRequest(
-        'POST', '/v0/users/-/collections/$subjectId',
-        body: body);
+      'POST',
+      '/v0/users/-/collections/$subjectId',
+      body: body,
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏添加成功');
@@ -540,8 +517,10 @@ class BangumiApiService {
     if (private != null) body['private'] = private;
 
     final result = await _makeRequest(
-        'POST', '/v0/users/-/collections/$subjectId',
-        body: body);
+      'POST',
+      '/v0/users/-/collections/$subjectId',
+      body: body,
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏状态更新成功');
@@ -557,11 +536,14 @@ class BangumiApiService {
   /// [subjectId] 条目ID
   /// 返回该条目下所有剧集的收藏状态
   static Future<Map<String, dynamic>> getUserEpisodeCollections(
-      int subjectId) async {
+    int subjectId,
+  ) async {
     debugPrint('[Bangumi API] 获取剧集收藏状态: $subjectId');
 
     final result = await _makeRequest(
-        'GET', '/v0/users/-/collections/$subjectId/episodes');
+      'GET',
+      '/v0/users/-/collections/$subjectId/episodes',
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 剧集收藏状态获取成功');
@@ -580,13 +562,13 @@ class BangumiApiService {
   ) async {
     debugPrint('[Bangumi API] 更新剧集收藏状态: $episodeId, type=$type');
 
-    final body = <String, dynamic>{
-      'type': type,
-    };
+    final body = <String, dynamic>{'type': type};
 
     final result = await _makeRequest(
-        'PUT', '/v0/users/-/collections/-/episodes/$episodeId',
-        body: body);
+      'PUT',
+      '/v0/users/-/collections/-/episodes/$episodeId',
+      body: body,
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 剧集收藏状态更新成功');
@@ -633,21 +615,24 @@ class BangumiApiService {
       // 跳过未收藏状态(type=0)，因为不需要发送请求
       if (type == 0) continue;
 
-      final body = {
-        'episode_id': episodeIds,
-        'type': type,
-      };
+      final body = {'episode_id': episodeIds, 'type': type};
 
       final result = await _makeRequest(
-          'PATCH', '/v0/users/-/collections/$subjectId/episodes',
-          body: body);
+        'PATCH',
+        '/v0/users/-/collections/$subjectId/episodes',
+        body: body,
+      );
 
       if (!result['success']) {
         allSuccess = false;
         lastError = result['message'] ?? '未知错误';
-        debugPrint('[Bangumi API] 批量更新剧集收藏状态失败 (type=$type): ${result['message']}');
+        debugPrint(
+          '[Bangumi API] 批量更新剧集收藏状态失败 (type=$type): ${result['message']}',
+        );
       } else {
-        debugPrint('[Bangumi API] 批量更新剧集收藏状态成功 (type=$type, ${episodeIds.length}个剧集)');
+        debugPrint(
+          '[Bangumi API] 批量更新剧集收藏状态成功 (type=$type, ${episodeIds.length}个剧集)',
+        );
       }
     }
 
@@ -690,16 +675,17 @@ class BangumiApiService {
   }) async {
     debugPrint('[Bangumi API] 获取条目剧集列表: $subjectId');
 
-    final queryParams = <String, String>{
-      'subject_id': subjectId.toString(),
-    };
+    final queryParams = <String, String>{'subject_id': subjectId.toString()};
 
     if (type != null) queryParams['type'] = type.toString();
     if (limit != null) queryParams['limit'] = limit.toString();
     if (offset != null) queryParams['offset'] = offset.toString();
 
-    final result =
-        await _makeRequest('GET', '/v0/episodes', queryParams: queryParams);
+    final result = await _makeRequest(
+      'GET',
+      '/v0/episodes',
+      queryParams: queryParams,
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 条目剧集列表获取成功');
@@ -733,13 +719,11 @@ class BangumiApiService {
   }) async {
     debugPrint('[Bangumi API] 搜索条目: $keyword');
 
-    final body = <String, dynamic>{
-      'keyword': keyword,
-    };
+    final body = <String, dynamic>{'keyword': keyword};
 
     if (type != null) {
       body['filter'] = {
-        'type': [type]
+        'type': [type],
       };
     }
     if (tag != null && tag.isNotEmpty) {
@@ -750,8 +734,11 @@ class BangumiApiService {
     if (limit != null) body['limit'] = limit;
     if (offset != null) body['offset'] = offset;
 
-    final result =
-        await _makeRequest('POST', '/v0/search/subjects', body: body);
+    final result = await _makeRequest(
+      'POST',
+      '/v0/search/subjects',
+      body: body,
+    );
 
     if (result['success']) {
       debugPrint('[Bangumi API] 条目搜索成功');
@@ -769,21 +756,26 @@ class BangumiApiService {
   }) async {
     try {
       final nextBaseUrl = await getNextBaseUrl();
-      final targetUri = Uri.parse(
-              '$nextBaseUrl/p1/subjects/$subjectId/comments')
-          .replace(queryParameters: {
-        'limit': limit.toString(),
-        'offset': offset.toString(),
-      });
-      debugPrint('[Bangumi Comments] 请求 subjectId=$subjectId, offset=$offset, timeout=${timeout.inSeconds}s');
+      final targetUri =
+          Uri.parse('$nextBaseUrl/p1/subjects/$subjectId/comments').replace(
+            queryParameters: {
+              'limit': limit.toString(),
+              'offset': offset.toString(),
+            },
+          );
+      debugPrint(
+        '[Bangumi Comments] 请求 subjectId=$subjectId, offset=$offset, timeout=${timeout.inSeconds}s',
+      );
       debugPrint('[Bangumi Comments] 原始URI: $targetUri');
       final uri = WebRemoteAccessService.proxyUri(targetUri);
       debugPrint('[Bangumi Comments] 代理后URI: $uri');
 
-      final response = await http.get(uri, headers: {
-        'User-Agent': _userAgent,
-        'Accept': 'application/json',
-      }).timeout(timeout);
+      final response = await http
+          .get(
+            uri,
+            headers: {'User-Agent': _userAgent, 'Accept': 'application/json'},
+          )
+          .timeout(timeout);
       debugPrint('[Bangumi Comments] 状态码: ${response.statusCode}');
       final preview = response.body.length > 300
           ? response.body.substring(0, 300)
@@ -794,18 +786,19 @@ class BangumiApiService {
         final data = json.decode(response.body);
         debugPrint('[Bangumi Comments] 解析成功, data类型: ${data.runtimeType}');
         if (data is Map && data['data'] is List) {
-          debugPrint('[Bangumi Comments] data.data 列表长度: ${(data['data'] as List).length}, total: ${data['total']}');
+          debugPrint(
+            '[Bangumi Comments] data.data 列表长度: ${(data['data'] as List).length}, total: ${data['total']}',
+          );
         }
         return {'success': true, 'data': data};
       } else {
         debugPrint('[Bangumi Comments] 请求失败: ${response.statusCode}');
-        return {
-          'success': false,
-          'message': '获取评论失败: ${response.statusCode}',
-        };
+        return {'success': false, 'message': '获取评论失败: ${response.statusCode}'};
       }
     } on TimeoutException {
-      debugPrint('[Bangumi Comments] 请求超时(${timeout.inSeconds}s)，subjectId=$subjectId');
+      debugPrint(
+        '[Bangumi Comments] 请求超时(${timeout.inSeconds}s)，subjectId=$subjectId',
+      );
       return {'success': false, 'message': '请求超时', 'isTimeout': true};
     } catch (e) {
       debugPrint('[Bangumi Comments] 获取评论异常: $e');
@@ -822,16 +815,17 @@ class BangumiApiService {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     try {
+      final baseUrl = await DandanplayService.getApiBaseUrl();
       final targetUri = Uri.parse(
-        'https://api.dandanplay.net/api/v2/bangumi/$bangumiId/comments',
+        '$baseUrl/api/v2/bangumi/$bangumiId/comments',
       ).replace(queryParameters: {'page': page.toString()});
       debugPrint('[Dandanplay Comments] 原始URI: $targetUri');
       final uri = WebRemoteAccessService.proxyUri(targetUri);
       debugPrint('[Dandanplay Comments] 代理后URI: $uri');
 
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
+          .round();
       final apiPath = '/api/v2/bangumi/$bangumiId/comments';
 
       final Map<String, String> headers = {
@@ -856,8 +850,7 @@ class BangumiApiService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final body = json.decode(response.body);
-        debugPrint(
-            '[Dandanplay Comments] 响应类型: ${body.runtimeType}');
+        debugPrint('[Dandanplay Comments] 响应类型: ${body.runtimeType}');
 
         if (body is Map<String, dynamic>) {
           List<dynamic>? commentList;
@@ -873,12 +866,19 @@ class BangumiApiService {
             }
           }
 
-          total = body['count'] as int? ?? body['total'] as int? ?? commentList?.length ?? 0;
-          final bool hasMore = body['hasMore'] as bool? ?? (commentList != null && commentList.length >= 20);
+          total =
+              body['count'] as int? ??
+              body['total'] as int? ??
+              commentList?.length ??
+              0;
+          final bool hasMore =
+              body['hasMore'] as bool? ??
+              (commentList != null && commentList.length >= 20);
 
           if (commentList != null) {
             debugPrint(
-                '[Dandanplay Comments] 解析到 ${commentList.length} 条评论, count=$total, hasMore=$hasMore');
+              '[Dandanplay Comments] 解析到 ${commentList.length} 条评论, count=$total, hasMore=$hasMore',
+            );
             return {
               'success': true,
               'source': 'dandanplay',
@@ -888,12 +888,15 @@ class BangumiApiService {
 
           if (body['data'] is List) {
             final list = body['data'] as List;
-            debugPrint(
-                '[Dandanplay Comments] data是数组，解析到 ${list.length} 条评论');
+            debugPrint('[Dandanplay Comments] data是数组，解析到 ${list.length} 条评论');
             return {
               'success': true,
               'source': 'dandanplay',
-              'data': {'data': list, 'total': total ?? list.length, 'hasMore': list.length >= 20},
+              'data': {
+                'data': list,
+                'total': total ?? list.length,
+                'hasMore': list.length >= 20,
+              },
             };
           }
         }
@@ -903,7 +906,11 @@ class BangumiApiService {
           return {
             'success': true,
             'source': 'dandanplay',
-            'data': {'data': body, 'total': body.length, 'hasMore': body.length >= 20},
+            'data': {
+              'data': body,
+              'total': body.length,
+              'hasMore': body.length >= 20,
+            },
           };
         }
 
@@ -911,10 +918,7 @@ class BangumiApiService {
             ? response.body.substring(0, 300)
             : response.body;
         debugPrint('[Dandanplay Comments] 无法解析响应，body预览: $preview');
-        return {
-          'success': false,
-          'message': 'Dandanplay 评论: 无法解析响应格式',
-        };
+        return {'success': false, 'message': 'Dandanplay 评论: 无法解析响应格式'};
       } else {
         return {
           'success': false,
@@ -926,5 +930,4 @@ class BangumiApiService {
       return {'success': false, 'message': 'Dandanplay 网络错误: $e'};
     }
   }
-
 }

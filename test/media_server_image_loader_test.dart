@@ -4,8 +4,19 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 
 void main() {
+  test('image downloads cannot anonymously call a Dandanplay API', () async {
+    await expectLater(
+      loadNetworkImageBytes(
+        Uri.parse('${NetworkSettings.primaryServer}/api/v2/image/1'),
+      ),
+      throwsA(isA<DandanplayLoginRequired>()),
+    );
+  });
+
   test('media-server image detection stays inside the registered base path',
       () {
     setMediaServerBaseUrl('test-emby', 'https://media.example/emby');
