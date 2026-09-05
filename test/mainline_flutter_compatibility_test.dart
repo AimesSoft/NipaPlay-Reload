@@ -12,7 +12,10 @@ void main() {
     expect(pubspec, isNot(contains('path: packages/fvp-0.37.3')));
     expect(pubspec, isNot(contains('path: packages/fluent_ui-4.15.1')));
     expect(pubspec, contains('fvp: ^0.33.1'));
-    expect(File('.fvmrc').readAsStringSync(), contains('3.44.6'));
+    expect(
+      File('.github/actions/setup-flutter/action.yml').readAsStringSync(),
+      contains("default: '3.44.6'"),
+    );
     expect(File('pubspec_overrides.ohos.yaml').existsSync(), isTrue);
     expect(File('pubspec_overrides.linux.yaml').existsSync(), isTrue);
     expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
