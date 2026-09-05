@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -171,6 +172,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     with AutomaticKeepAliveClientMixin {
   static Color get _accentColor => AppAccentColors.current;
 
+  // “只看未观看”状态的持久化 Key（按服务器类型区分）
+  String get _unwatchedFilterPrefsKey =>
+      'network_media_unwatched_only_${widget.serverType.name}';
+
   List<NetworkMediaItem> _mediaItems = [];
   String? _error;
   Timer? _refreshTimer;
@@ -259,6 +264,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       _showOnlyUnwatched = !_showOnlyUnwatched;
     });
     _applySortAndFilter();
+    _persistUnwatchedFilterState();
   }
 
   // 手动刷新当前视图（媒体库列表 / 媒体库内容 / 文件夹）
@@ -296,9 +302,35 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted) {
         final provider = _provider;
         provider.addListener(_onProviderChanged);
+        _restoreUnwatchedFilterState();
         _loadData(); // Initial load based on current provider state
       }
     });
+  }
+
+  // 从本地存储恢复“只看未观看”开关状态（重开应用后保持上一次的状态）
+  Future<void> _restoreUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getBool(_unwatchedFilterPrefsKey);
+      if (saved == null || !mounted) return;
+      setState(() {
+        _showOnlyUnwatched = saved;
+      });
+      _applySortAndFilter();
+    } catch (e) {
+      debugPrint('[$_serverName] 恢复未观看过滤状态失败: $e');
+    }
+  }
+
+  // 将“只看未观看”开关状态写入本地存储
+  Future<void> _persistUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_unwatchedFilterPrefsKey, _showOnlyUnwatched);
+    } catch (e) {
+      debugPrint('[$_serverName] 保存未观看过滤状态失败: $e');
+    }
   }
 
   @override
