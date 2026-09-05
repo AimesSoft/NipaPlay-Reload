@@ -708,6 +708,80 @@ class BangumiApiService {
     return result;
   }
 
+  /// 获取公开的条目剧集列表，无需用户授权。
+  static Future<List<Map<String, dynamic>>> getPublicSubjectEpisodes(
+    int subjectId,
+  ) async {
+    const pageSize = 100;
+    var offset = 0;
+    final episodes = <Map<String, dynamic>>[];
+
+    while (true) {
+      final baseUrl = await getBaseUrl();
+      final uri = WebRemoteAccessService.proxyUri(
+        Uri.parse('$baseUrl/v0/episodes').replace(
+          queryParameters: <String, String>{
+            'subject_id': subjectId.toString(),
+            'limit': pageSize.toString(),
+            'offset': offset.toString(),
+          },
+        ),
+      );
+      final response = await http.get(
+        uri,
+        headers: <String, String>{
+          'User-Agent': _userAgent,
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw StateError(
+          '获取 Bangumi 条目剧集失败: HTTP ${response.statusCode}',
+        );
+      }
+
+      final payload = json.decode(response.body);
+      if (payload is! Map || payload['data'] is! List) {
+        throw const FormatException('Bangumi 条目剧集响应格式无效');
+      }
+
+      final page = (payload['data'] as List)
+          .whereType<Map>()
+          .map((episode) => Map<String, dynamic>.from(episode))
+          .toList();
+      episodes.addAll(page);
+
+      final total = payload['total'] as int?;
+      offset += page.length;
+      if (page.isEmpty || page.length < pageSize || total == null || offset >= total) {
+        return episodes;
+      }
+    }
+  }
+
+  /// 获取公开的条目详情，无需用户授权。
+  static Future<Map<String, dynamic>> getPublicSubject(int subjectId) async {
+    final baseUrl = await getBaseUrl();
+    final response = await http.get(
+      WebRemoteAccessService.proxyUri(
+        Uri.parse('$baseUrl/v0/subjects/$subjectId'),
+      ),
+      headers: <String, String>{
+        'User-Agent': _userAgent,
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw StateError('获取 Bangumi 条目详情失败: HTTP ${response.statusCode}');
+    }
+
+    final payload = json.decode(response.body);
+    if (payload is! Map) {
+      throw const FormatException('Bangumi 条目详情响应格式无效');
+    }
+    return Map<String, dynamic>.from(payload);
+  }
+
   /// 测试API连接
   ///
   /// 公共方法，用于测试当前Token是否有效
