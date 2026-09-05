@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -47,6 +48,35 @@ class SharedRemoteLibraryView extends StatefulWidget {
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
   static Color get _accentColor => AppAccentColors.current;
+
+  // “只看未观看”状态的持久化 Key
+  static const String _unwatchedFilterPrefsKey =
+      'shared_library_unwatched_only';
+
+  // 从本地存储恢复“只看未观看”开关状态（重开应用后保持上一次的状态）
+  Future<void> _restoreUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getBool(_unwatchedFilterPrefsKey);
+      if (saved == null || !mounted) return;
+      setState(() {
+        _showOnlyUnwatched = saved;
+      });
+    } catch (e) {
+      debugPrint('[共享媒体库] 恢复未观看过滤状态失败: $e');
+    }
+  }
+
+  // 将“只看未观看”开关状态写入本地存储
+  Future<void> _persistUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_unwatchedFilterPrefsKey, _showOnlyUnwatched);
+    } catch (e) {
+      debugPrint('[共享媒体库] 保存未观看过滤状态失败: $e');
+    }
+  }
+
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -95,6 +125,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         }
       });
     }
+    // 恢复“只看未观看”开关状态
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _restoreUnwatchedFilterState();
+      }
+    });
   }
 
   @override
@@ -198,6 +234,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                       setState(() {
                         _showOnlyUnwatched = !_showOnlyUnwatched;
                       });
+                      _persistUnwatchedFilterState();
                     },
               viewMode: isManagement ? _managementViewMode : null,
               onToggleViewMode: isManagement
@@ -480,6 +517,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         setState(() {
           _showOnlyUnwatched = !_showOnlyUnwatched;
         });
+        _persistUnwatchedFilterState();
       },
       borderRadius: BorderRadius.circular(8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
