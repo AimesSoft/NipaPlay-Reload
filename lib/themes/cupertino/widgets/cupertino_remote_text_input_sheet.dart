@@ -208,7 +208,11 @@ class _CupertinoRemoteTextInputContentState
           focusNode: _focusNodes[field.id],
           autofocus: index == 0,
           obscureText: field.obscureText,
-          keyboardType: _keyboardType(field.inputType),
+          keyboardType: field.obscureText
+              ? TextInputType.visiblePassword
+              : _keyboardType(field.inputType),
+          autocorrect: !field.obscureText,
+          enableSuggestions: !field.obscureText,
           textInputAction: isLast ? TextInputAction.done : TextInputAction.next,
           minLines: field.multiline ? 4 : 1,
           maxLines: field.multiline ? 8 : 1,

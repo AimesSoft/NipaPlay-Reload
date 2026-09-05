@@ -119,6 +119,9 @@ class AdaptiveTextField extends StatelessWidget {
   /// The decoration to show around the text field (Material only).
   final InputDecoration? decoration;
 
+  bool get _isPassword =>
+      obscureText || keyboardType == TextInputType.visiblePassword;
+
   @override
   Widget build(BuildContext context) {
     if (PlatformInfo.prefersCupertinoControls) {
@@ -133,7 +136,7 @@ class AdaptiveTextField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       placeholder: placeholder,
-      keyboardType: keyboardType,
+      keyboardType: _isPassword ? TextInputType.visiblePassword : keyboardType,
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       style: style,
@@ -142,7 +145,10 @@ class AdaptiveTextField extends StatelessWidget {
       minLines: minLines,
       maxLength: maxLength,
       obscureText: obscureText,
-      autocorrect: autocorrect,
+      autocorrect: !_isPassword && autocorrect,
+      enableSuggestions: !_isPassword,
+      smartDashesType: _isPassword ? SmartDashesType.disabled : null,
+      smartQuotesType: _isPassword ? SmartQuotesType.disabled : null,
       autofocus: autofocus,
       enabled: enabled,
       readOnly: readOnly,
@@ -191,7 +197,7 @@ class AdaptiveTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       focusNode: focusNode,
-      keyboardType: keyboardType,
+      keyboardType: _isPassword ? TextInputType.visiblePassword : keyboardType,
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       style: style,
@@ -200,7 +206,10 @@ class AdaptiveTextField extends StatelessWidget {
       minLines: minLines,
       maxLength: maxLength,
       obscureText: obscureText,
-      autocorrect: autocorrect,
+      autocorrect: !_isPassword && autocorrect,
+      enableSuggestions: !_isPassword,
+      smartDashesType: _isPassword ? SmartDashesType.disabled : null,
+      smartQuotesType: _isPassword ? SmartQuotesType.disabled : null,
       autofocus: autofocus,
       enabled: enabled,
       readOnly: readOnly,

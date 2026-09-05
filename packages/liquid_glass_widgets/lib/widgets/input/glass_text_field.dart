@@ -647,7 +647,21 @@ class _GlassTextFieldState extends State<GlassTextField> {
             controller: widget.controller,
             focusNode: _focusNode,
             obscureText: widget.obscureText,
-            keyboardType: widget.keyboardType,
+            keyboardType: widget.obscureText
+                ? TextInputType.visiblePassword
+                : widget.keyboardType,
+            autocorrect: !widget.obscureText &&
+                widget.keyboardType != TextInputType.visiblePassword,
+            enableSuggestions: !widget.obscureText &&
+                widget.keyboardType != TextInputType.visiblePassword,
+            smartDashesType: widget.obscureText ||
+                    widget.keyboardType == TextInputType.visiblePassword
+                ? SmartDashesType.disabled
+                : null,
+            smartQuotesType: widget.obscureText ||
+                    widget.keyboardType == TextInputType.visiblePassword
+                ? SmartQuotesType.disabled
+                : null,
             textInputAction: widget.textInputAction,
             maxLines: widget.maxLines,
             minLines: widget.minLines,

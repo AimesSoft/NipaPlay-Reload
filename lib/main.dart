@@ -1,4 +1,5 @@
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
+import 'package:nipaplay/services/password_input_mode_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -164,6 +165,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  PasswordInputModeService.instance.start();
   if (!kIsWeb && globals.supportsRustNativeBridge) {
     try {
       await ensureRustInitialized();

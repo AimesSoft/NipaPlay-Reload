@@ -379,7 +379,14 @@ class iOS26AlertDialogView: NSObject, FlutterPlatformView {
                 textField.isSecureTextEntry = textFieldObscureText
 
                 // Set keyboard type
-                if let keyboardType = textFieldKeyboardType {
+                if textFieldObscureText || textFieldKeyboardType == "visiblePassword" {
+                    textField.keyboardType = .asciiCapable
+                    textField.autocorrectionType = .no
+                    textField.autocapitalizationType = .none
+                    textField.spellCheckingType = .no
+                    textField.smartDashesType = .no
+                    textField.smartQuotesType = .no
+                } else if let keyboardType = textFieldKeyboardType {
                     switch keyboardType {
                     case "emailAddress":
                         textField.keyboardType = .emailAddress

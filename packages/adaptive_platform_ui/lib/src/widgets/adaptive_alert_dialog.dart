@@ -30,6 +30,9 @@ class AdaptiveAlertDialogInput {
 
   /// Maximum length of the text input
   final int? maxLength;
+
+  bool get isPassword =>
+      obscureText || keyboardType == TextInputType.visiblePassword;
 }
 
 /// An adaptive alert dialog that renders platform-specific styles
@@ -260,7 +263,17 @@ class AdaptiveAlertDialog {
                   CupertinoTextField(
                     controller: textController,
                     placeholder: input.placeholder,
-                    keyboardType: input.keyboardType,
+                    keyboardType: input.isPassword
+                        ? TextInputType.visiblePassword
+                        : input.keyboardType,
+                    autocorrect: !input.isPassword,
+                    enableSuggestions: !input.isPassword,
+                    smartDashesType: input.isPassword
+                        ? SmartDashesType.disabled
+                        : null,
+                    smartQuotesType: input.isPassword
+                        ? SmartQuotesType.disabled
+                        : null,
                     obscureText: input.obscureText,
                     maxLength: input.maxLength,
                     autofocus: true,
@@ -380,7 +393,17 @@ class AdaptiveAlertDialog {
                     hintText: input.placeholder,
                     border: const OutlineInputBorder(),
                   ),
-                  keyboardType: input.keyboardType,
+                  keyboardType: input.isPassword
+                      ? TextInputType.visiblePassword
+                      : input.keyboardType,
+                  autocorrect: !input.isPassword,
+                  enableSuggestions: !input.isPassword,
+                  smartDashesType: input.isPassword
+                      ? SmartDashesType.disabled
+                      : null,
+                  smartQuotesType: input.isPassword
+                      ? SmartQuotesType.disabled
+                      : null,
                   obscureText: input.obscureText,
                   maxLength: input.maxLength,
                   autofocus: true,

@@ -241,6 +241,11 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                 child: TextFormField(
                   controller: _passwordController,
                   obscureText: !_passwordVisible,
+                  keyboardType: TextInputType.visiblePassword,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  smartDashesType: SmartDashesType.disabled,
+                  smartQuotesType: SmartQuotesType.disabled,
                   cursorColor: accentColor,
                   style: TextStyle(color: textColor),
                   decoration: buildDecoration(
