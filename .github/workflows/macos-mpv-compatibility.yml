@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           git -C third_party/libmpv-darwin-build apply "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch"
           git -C third_party/libmpv-darwin-build apply "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-swift-target.patch"
+          git -C third_party/libmpv-darwin-build apply "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-dav1d-release-source.patch"
       - name: Install isolated test tools
         shell: bash
         run: |

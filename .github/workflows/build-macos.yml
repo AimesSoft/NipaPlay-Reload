@@ -71,6 +71,7 @@ jobs:
             echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
             echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-swift-target.patch | awk '{print $1}')"
+            echo "dav1d-source-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-dav1d-release-source.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -168,6 +169,18 @@ jobs:
             echo "Patched uchardet URL to Debian mirror."
           else
             echo "uchardet URL already patched or different; skipping."
+          fi
+
+      - name: Use official dav1d release archive
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The GitLab archive endpoint serves an anti-bot HTML page to CI.
+          # Use the same version from VideoLAN's release server and its checksum.
+          PATCH_FILE="$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-dav1d-release-source.patch"
+          if ! git -C third_party/libmpv-darwin-build apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+            git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
           fi
 
       - name: Build macOS libmpv xcframeworks from source
