@@ -70,10 +70,7 @@ void main() {
       'lib/utils/system_resource_monitor.dart',
     ).readAsStringSync();
 
-    expect(
-      tvOSOverrides,
-      contains('ref: v0.1.6'),
-    );
+    expect(tvOSOverrides, isNot(contains('erika_flutter:')));
     expect(monitor, contains('_instance._updatePlayerKernelType();'));
     expect(monitor, contains("_instance._activeDecoder = 'Erika（等待媒体）';"));
 

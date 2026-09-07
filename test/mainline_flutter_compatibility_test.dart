@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('shared pubspec does not force platform-specific dependency forks', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    final erikaRef = _gitDependencyRef(pubspec, 'erika_flutter');
 
     expect(pubspec, isNot(contains('gitcode.com/openharmony')));
     expect(pubspec, isNot(contains('gitee.com/openharmony')));
@@ -21,7 +20,7 @@ void main() {
     expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
     expect(pubspec, contains('package_info_plus: ^10.2.1'));
     expect(pubspec, contains('wakelock_plus: ^1.7.0'));
-    expect(erikaRef, 'e1d598d032c69ec53c42fe38d49c1d48503f5a91');
+    expect(pubspec, contains('erika_flutter: ^0.1.9'));
     expect(
       File('.flutter-version-linux').readAsStringSync().trim(),
       '3.47.0-0.3.pre',
@@ -65,7 +64,7 @@ void main() {
     expect(linuxKeys, containsAll(['desktop_multi_window', 'fvp']));
   });
 
-  test('tvOS mode isolates only its SDK-specific Erika revision', () {
+  test('tvOS mode uses the shared hosted Erika package', () {
     final sharedKeys = _dependencyOverrideKeys(
       File('pubspec.yaml').readAsStringSync(),
     );
@@ -73,11 +72,6 @@ void main() {
       'pubspec_overrides.tvos.yaml',
     ).readAsStringSync();
     final tvOSKeys = _dependencyOverrideKeys(tvOSOverrides);
-    final sharedErikaRef = _gitDependencyRef(
-      File('pubspec.yaml').readAsStringSync(),
-      'erika_flutter',
-    );
-    final tvOSErikaRef = _gitDependencyRef(tvOSOverrides, 'erika_flutter');
     final wrapper = File('tool/flutter_tvos.sh').readAsStringSync();
     final workflow = File(
       '.github/workflows/build-tvos.yml',
@@ -86,11 +80,10 @@ void main() {
     expect(tvOSKeys, containsAll(sharedKeys));
     expect(tvOSOverrides, isNot(contains('package_info_plus:')));
     expect(tvOSOverrides, isNot(contains('wakelock_plus:')));
-    expect(tvOSErikaRef, 'v0.1.6');
-    expect(tvOSErikaRef, isNot(sharedErikaRef));
+    expect(tvOSOverrides, isNot(contains('erika_flutter:')));
     expect(wrapper, contains('configure_flutter_dependencies.dart" tvos'));
     expect(workflow, contains('configure_flutter_dependencies.dart tvos'));
-    expect(workflow, contains('ERIKA_PREBUILT_TAG: $tvOSErikaRef'));
+    expect(workflow, isNot(contains('ERIKA_PREBUILT_TAG:')));
   });
 
   test('desktop multi-window downgrade is isolated to HarmonyOS mode', () {
@@ -333,21 +326,4 @@ Set<String> _dependencyOverrideKeys(String yaml) {
   }
 
   return keys;
-}
-
-String _gitDependencyRef(String yaml, String packageName) {
-  final lines = yaml.split('\n');
-  final packageLine = RegExp('^  ${RegExp.escape(packageName)}:\\s*\$');
-
-  for (var index = 0; index < lines.length; index++) {
-    if (!packageLine.hasMatch(lines[index])) continue;
-    for (var nested = index + 1; nested < lines.length; nested++) {
-      final line = lines[nested];
-      if (RegExp(r'^  [a-zA-Z0-9_]+:\s*$').hasMatch(line)) break;
-      final ref = RegExp(r'^      ref:\s*(\S+)\s*$').firstMatch(line);
-      if (ref != null) return ref.group(1)!;
-    }
-  }
-
-  throw StateError('No git ref found for $packageName');
 }
