@@ -18,6 +18,11 @@ on:
         default: false
         required: true
         type: boolean
+      run_macos:
+        description: 'Build macOS test packages without publishing a release'
+        default: false
+        required: true
+        type: boolean
 permissions:
   contents: read
 
@@ -74,3 +79,12 @@ jobs:
     name: Linux amd64 Release Build
     if: github.event_name == 'workflow_dispatch' && inputs.run_linux
     uses: ./.github/workflows/build-linux.yml
+
+  build-macos:
+    name: macOS Release Build
+    if: github.event_name == 'workflow_dispatch' && inputs.run_macos
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-macos.yml
+    secrets: inherit

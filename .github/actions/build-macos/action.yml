@@ -231,6 +231,14 @@ runs:
           mkdir -p "$(dirname "$staged_app_path")"
           ditto "$app_path" "$staged_app_path"
 
+          # Verify the frameworks actually embedded by CocoaPods before signing
+          # or publishing; inspecting only the cached xcframework is insufficient.
+          verify_args=()
+          for arch in $xcode_archs; do
+            verify_args+=(--require-arch "$arch")
+          done
+          python3 scripts/macos/verify_mpv_compatibility.py "$staged_app_path" "${verify_args[@]}"
+
           executable_path="${staged_app_path}/Contents/MacOS/NipaPlay"
           if [ -f "$executable_path" ]; then
             echo "✅ ${artifact_label} 主程序架构: $(lipo -archs "$executable_path")"

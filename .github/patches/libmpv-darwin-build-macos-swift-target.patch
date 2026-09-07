@@ -1,0 +1,15 @@
+diff --git a/nix/packages/mk-pkg-mpv/default.nix b/nix/packages/mk-pkg-mpv/default.nix
+--- a/nix/packages/mk-pkg-mpv/default.nix
++++ b/nix/packages/mk-pkg-mpv/default.nix
+@@ -288,6 +288,11 @@
+       -Dvulkan=enabled `# Vulkan context support`
+       -Dvideotoolbox-pl=enabled `# Videotoolbox with libplacebo`
+       -Dswift-build=enabled `# Swift bits required by macvk`
++      # mpv uses a custom_target to invoke swiftc, so the cross-file's
++      # swift_args/swift_link_args do not reach the compiler. Set both the
++      # deployment target and architecture through mpv's own swift-flags.
++      # Otherwise Intel builds on Apple Silicon silently omit the Swift code.
++      "-Dswift-flags=-target ${if arch == "amd64" then "x86_64" else arch}-apple-macos11.0"
+ 
+       `# bundled libplacebo subproject`
+       -Dlibplacebo:vulkan=enabled `# Vulkan backend`

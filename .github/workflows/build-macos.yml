@@ -70,6 +70,7 @@ jobs:
             echo "libplacebo=$(git -C third_party/libplacebo rev-parse HEAD)"
             echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
+            echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-swift-target.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -135,6 +136,19 @@ jobs:
           if grep -q 'targetRuntimePkgs' "$TARGET_FILE"; then
             echo "libmpv-darwin-build patch already present; skipping."
           else
+            git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
+          fi
+
+      - name: Patch mpv Swift architecture and deployment target
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH_FILE="$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-swift-target.patch"
+          if git -C third_party/libmpv-darwin-build apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+            echo "mpv Swift target patch already present; skipping."
+          else
+            git -C third_party/libmpv-darwin-build apply --check "$PATCH_FILE"
             git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
           fi
 
@@ -218,6 +232,11 @@ jobs:
             echo "Missing cached libmpv archive: $ARCHIVE_PATH" >&2
             exit 1
           fi
+          VERIFY_DIR="$(mktemp -d)"
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+          tar -xzf "$ARCHIVE_PATH" -C "$VERIFY_DIR"
+          python3 scripts/macos/verify_mpv_compatibility.py "$VERIFY_DIR" \
+            --require-arch arm64 --require-arch x86_64
           ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
           echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
           echo "libmpv archive SHA256: ${ARCHIVE_SHA256}"

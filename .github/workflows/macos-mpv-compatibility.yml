@@ -1,0 +1,52 @@
+name: macOS mpv Swift Compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/patches/libmpv-darwin-build-*.patch'
+      - '.github/workflows/build-macos.yml'
+      - '.github/workflows/macos-mpv-compatibility.yml'
+      - '.github/actions/build-macos/action.yml'
+      - 'scripts/macos/**'
+      - 'third_party/mpv'
+      - 'third_party/libmpv-darwin-build'
+  workflow_dispatch:
+    inputs:
+      build_packages:
+        description: 'Also build macOS app packages for VM testing (uses signing secrets; does not publish a release)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  swift-compatibility:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Check builder patches apply together
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C third_party/libmpv-darwin-build apply "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch"
+          git -C third_party/libmpv-darwin-build apply "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-swift-target.patch"
+      - name: Install isolated test tools
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mpv-test-tools"
+          "$RUNNER_TEMP/mpv-test-tools/bin/python" -m pip install meson ninja
+          echo "$RUNNER_TEMP/mpv-test-tools/bin" >> "$GITHUB_PATH"
+      - name: Compile and inspect both Swift architectures
+        run: python3 scripts/macos/test_verify_mpv_compatibility.py
+
+  build-packages:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_packages
+    needs: swift-compatibility
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-macos.yml
+    secrets: inherit
