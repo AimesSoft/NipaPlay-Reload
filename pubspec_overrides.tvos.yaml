@@ -6,12 +6,6 @@
 # Pub replaces dependency_overrides as a complete section, so the shared
 # overrides from pubspec.yaml are repeated below the tvOS-specific entries.
 dependency_overrides:
-  # Keep the tvOS plugin source aligned with its versioned prebuilt runtime.
-  erika_flutter:
-    git:
-      url: https://github.com/AimesSoft/Erika.git
-      ref: v0.1.6
-      path: packages/erika_flutter
   # Shared repository overrides. Keep these keys aligned with pubspec.yaml.
   liquid_glass_widgets:
     path: packages/liquid_glass_widgets
