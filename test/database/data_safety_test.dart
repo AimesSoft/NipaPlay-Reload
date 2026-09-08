@@ -348,4 +348,49 @@ void main() {
     expect(await file.readAsBytes(), orderedEquals(before));
     expect(await readJsonFromFile(JsonFileType.episode, id), {'position': 12345});
   });
+
+  test('concurrent user updates and an ID merge preserve every field', () async {
+    await seed(ddp, 10, [101]);
+    final old = (await DatabaseService.getCommonEpisodeId(ddp, 101))!;
+    await Future.wait([
+      saveJsonToFile(JsonFileType.episode, old, {'first': 1}),
+      DatabaseService.linkSourceEpisodeToCommonEpisode(ddp, 101, 9000),
+      saveJsonToFile(JsonFileType.episode, old, {'second': 2}),
+    ]);
+    expect(await readJsonFromFile(JsonFileType.episode, 9000), {'first': 1, 'second': 2});
+  });
+
+  test('corrupt source JSON aborts an update without overwriting the canonical file', () async {
+    await seed(ddp, 10, [101]);
+    final old = (await DatabaseService.getCommonEpisodeId(ddp, 101))!;
+    await saveJsonToFile(JsonFileType.episode, old, {'original': 'keep'});
+    await DatabaseService.linkSourceEpisodeToCommonEpisode(ddp, 101, 9000);
+    await saveJsonToFile(JsonFileType.episode, 9000, {'updated': 'keep too'});
+    final appDir = await StorageService.getAppStorageDirectory();
+    final target = File('${appDir.path}/episode/9000.json');
+    final before = await target.readAsBytes();
+    final source = File('${appDir.path}/episode/$old.json');
+    await source.writeAsString('{incomplete');
+    await expectLater(saveJsonToFile(JsonFileType.episode, 9000, {'updated': 'overwrite'}),
+        throwsA(isA<FormatException>()));
+    expect(await target.readAsBytes(), orderedEquals(before));
+    expect(await source.readAsString(), '{incomplete');
+  });
+
+  test('an unmatched shared episode stays intact until its last asset is relinked', () async {
+    await seed(ddp, 10, [101]);
+    final target = (await DatabaseService.getCommonEpisodeId(ddp, 101))!;
+    final secondHash = Uint8List.fromList(List<int>.filled(16, 42));
+    await DatabaseService.upsertAssetRecord(DbAssetRecord(hashPre16MiBMd5: hash));
+    final old = (await DatabaseService.getCommonEpisodeIdByAssetHash(hash))!;
+    await DatabaseService.upsertAssetRecord(DbAssetRecord(hashPre16MiBMd5: secondHash));
+    await DatabaseService.linkVideoAssetToEpisode(secondHash, old);
+    await saveJsonToFile(JsonFileType.episode, old, {'note': 'unmatched user setting'});
+    await DatabaseService.linkVideoAssetToEpisode(hash, target);
+    expect(await DatabaseService.getCommonEpisodeIdByAssetHash(secondHash), old);
+    expect(await DatabaseService.getCommonEpisodeId(AniEpiRltType.common, old), old);
+    await DatabaseService.linkVideoAssetToEpisode(secondHash, target);
+    expect(await DatabaseService.getDandanplayEpisodeIdByAssetHash(secondHash), 101);
+    expect(await readJsonFromFile(JsonFileType.episode, target), {'note': 'unmatched user setting'});
+  });
 }
