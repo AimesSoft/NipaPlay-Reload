@@ -1,5 +1,6 @@
 library video_player_state;
 
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -666,6 +667,26 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     milliseconds: 400,
   );
   final String _playerVolumeKey = 'player_volume';
+  double _volumeBoost = 1.0;
+  bool get supportsVolumeBoost =>
+      !kIsWeb &&
+      (player.getPlayerKernelName() == 'MDK' ||
+          player.getPlayerKernelName() == 'Media Kit');
+  double get volumeBoost => supportsVolumeBoost ? _volumeBoost : 1.0;
+
+  Future<void> setVolumeBoost(double value) async {
+    if (!supportsVolumeBoost || !value.isFinite) return;
+    _volumeBoost = value.clamp(1.0, 2.0);
+    applyPlayerVolume();
+    _notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('player_volume_boost', _volumeBoost);
+  }
+
+  void applyPlayerVolume() {
+    player.volume = (_useSystemVolume ? 1.0 : _currentVolume) * volumeBoost;
+  }
+
   double _currentVolume = 0.5; // Default volume
   double _initialDragVolume = 0.5;
   bool _isVolumeIndicatorVisible = false;
@@ -713,9 +734,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void _ensurePlayerVolumeMatchesPlatformPolicy() {
     if (!_useSystemVolume) return;
     try {
-      // 在移动端使用系统音量时，播放器内部音量应保持 1.0，避免与系统音量叠乘导致音量偏小。
-      if ((player.volume - 1.0).abs() > 0.0001) {
-        player.volume = 1.0;
+      // 系统音量只控制设备音量；额外增益仅应用在播放内核中。
+      if ((player.volume - volumeBoost).abs() > 0.0001) {
+        applyPlayerVolume();
       }
     } catch (_) {}
   }
@@ -845,6 +866,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _savePlayerVolumePreference(double volume) async {
+    if (_useSystemVolume) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_playerVolumeKey, volume.clamp(0.0, 1.0));
@@ -885,7 +907,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _setSystemVolume(double volume) async {
-    if (!_useSystemVolume) return;
+    if (!_useSystemVolume || _isDisposed) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.hidden ||
+        lifecycle == AppLifecycleState.detached) {
+      _pendingSystemVolume = null;
+      return;
+    }
     if (_systemVolumeController == null) return;
     _isSystemVolumeUpdating = true;
     try {

@@ -4,10 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use librqbit::ByteBufT;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ListOnlyResponse, Magnet, Session,
-    SessionOptions, SessionPersistenceConfig,
+    DhtSessionConfig, SessionOptions, SessionPersistenceConfig,
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::runtime::{Builder, Runtime};
@@ -87,7 +86,14 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
                 // HarmonyOS uses Rust's `aarch64-unknown-linux-ohos` target,
                 // whose HOME points outside the application sandbox. Keep
                 // rqbit from writing its global DHT cache there.
-                disable_dht_persistence: cfg!(any(target_os = "android", feature = "ohos")),
+                dht: Some(DhtSessionConfig {
+                    persistence: if cfg!(any(target_os = "android", feature = "ohos")) {
+                        None
+                    } else {
+                        DhtSessionConfig::default().persistence
+                    },
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
         )
@@ -577,8 +583,8 @@ fn handle_stream_request(mut socket: TcpStream) -> Result<(), String> {
         parse_stream_path(&path).ok_or_else(|| format!("invalid torrent stream path: {path}"))?;
     let state = torrent_runtime();
     let api = current_api(state)?;
-    let mut stream = api
-        .api_stream(torrent_id.into(), file_id)
+    let mut stream = state.runtime
+        .block_on(api.api_stream(torrent_id.into(), file_id))
         .map_err(|error| format!("failed to create torrent stream: {error:#}"))?;
     let file_len = stream.len();
 
@@ -780,20 +786,16 @@ fn file_stem_or_name(file_path: &str) -> String {
 }
 
 fn torrent_metadata_folder_name(metadata: &ListOnlyResponse) -> Option<String> {
-    if let Some(name) = metadata.info.name.as_ref() {
-        let name = String::from_utf8_lossy(name.as_slice());
+    if let Some(name) = metadata.info.name() {
         if let Some(folder_name) = sanitize_folder_name(name.as_ref()) {
             return Some(folder_name);
         }
     }
 
     let mut largest_file: Option<(u64, String)> = None;
-    let files = metadata.info.iter_file_details().ok()?;
+    let files = metadata.info.iter_file_details();
     for file in files {
-        let file_name = match file.filename.to_string() {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
+        let file_name = file.filename.to_string();
         let stem = Path::new(&file_name)
             .file_stem()
             .and_then(|value| value.to_str())
@@ -814,8 +816,8 @@ fn torrent_metadata_folder_name(metadata: &ListOnlyResponse) -> Option<String> {
 }
 
 fn torrent_metadata_display_name(metadata: &ListOnlyResponse) -> Option<String> {
-    metadata.info.name.as_ref().and_then(|name| {
-        let name = String::from_utf8_lossy(name.as_slice()).trim().to_string();
+    metadata.info.name().and_then(|name| {
+        let name = name.trim().to_string();
         if name.is_empty() {
             None
         } else {
@@ -825,19 +827,13 @@ fn torrent_metadata_display_name(metadata: &ListOnlyResponse) -> Option<String> 
 }
 
 fn torrent_preview_to_json(metadata: &ListOnlyResponse) -> Result<String, String> {
-    let files = metadata
-        .info
-        .iter_file_details()
-        .map_err(|error| format!("failed to list torrent files: {error:#}"))?;
+    let files = metadata.info.iter_file_details();
     let mut total_size = 0_u64;
     let files_json = files
         .enumerate()
         .map(|(index, file)| {
             total_size = total_size.saturating_add(file.len);
-            let path = file
-                .filename
-                .to_string()
-                .unwrap_or_else(|_| format!("file-{}", index + 1));
+            let path = file.filename.to_string();
             serde_json::json!({
                 "index": index,
                 "path": path,

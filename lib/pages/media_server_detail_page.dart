@@ -127,7 +127,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
   String? _selectedSeasonId;
   bool _isLoading = true;
   String? _error;
-  bool _isMovie = false; // 新增状态，判断是否为电影
+  bool _isMovie = false;
+  bool _isEpisode = false;
+  bool get _isPlayableItem => _isMovie || _isEpisode;
 
   bool _isDetailAutoMatching = false;
   bool _detailAutoMatchDialogVisible = false;
@@ -251,38 +253,40 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         detail = await service.getMediaItemDetails(widget.mediaId);
       }
 
-      if (mounted) {
-        setState(() {
-          _mediaDetail = detail;
-          _isMovie = detail.type == 'Movie'; // 判断是否为电影
+      if (!mounted) return;
+      setState(() {
+        _mediaDetail = detail;
+        _isMovie = detail.type == 'Movie';
+        _isEpisode = detail.type == 'Episode';
+        _tabController?.dispose();
+        _tabController = null;
 
-          if (_isMovie) {
-            _isLoading = false;
-            // 对于电影，我们不需要 TabController
-          } else {
-            // 对于剧集，初始化 TabController
-            _tabController = TabController(
-                length: 2,
-                vsync: this,
-                initialIndex: Provider.of<AppearanceSettingsProvider>(context,
-                                listen: false)
-                            .animeCardAction ==
-                        AnimeCardAction.synopsis
-                    ? 0
-                    : 1);
-            _tabController!.addListener(() {
-              if (mounted && !_tabController!.indexIsChanging) {
-                setState(() {
-                  // 当 TabController 的索引稳定改变后，触发重建以更新 SwitchableView 的 currentIndex
-                });
-              }
-            });
-          }
-        });
-      }
+        if (_isPlayableItem) {
+          _isLoading = false;
+          // 电影和单集直接播放，不需要系列的季/集切换栏
+        } else {
+          // 对于剧集，初始化 TabController
+          _tabController = TabController(
+              length: 2,
+              vsync: this,
+              initialIndex: Provider.of<AppearanceSettingsProvider>(context,
+                              listen: false)
+                          .animeCardAction ==
+                      AnimeCardAction.synopsis
+                  ? 0
+                  : 1);
+          _tabController!.addListener(() {
+            if (mounted && !_tabController!.indexIsChanging) {
+              setState(() {
+                // 当 TabController 的索引稳定改变后，触发重建以更新 SwitchableView 的 currentIndex
+              });
+            }
+          });
+        }
+      });
 
       // 如果是剧集，才加载季节信息
-      if (!_isMovie) {
+      if (!_isPlayableItem) {
         dynamic seasons;
         if (widget.serverType == MediaServerType.jellyfin) {
           seasons = await (service as JellyfinService)
@@ -527,6 +531,25 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       debugPrint('创建可播放历史记录项失败: $e');
       // 出现错误时仍然返回基本的WatchHistoryItem，确保播放功能不会完全失败
       return episode.toWatchHistoryItem();
+    }
+  }
+
+  Future<void> _playMediaItem() async {
+    if (!_isEpisode) {
+      await _playMovie();
+      return;
+    }
+    try {
+      final dynamic episode = widget.serverType == MediaServerType.emby
+          ? await EmbyService.instance.getEpisodeDetails(widget.mediaId)
+          : await JellyfinService.instance.getEpisodeDetails(widget.mediaId);
+      if (!mounted) return;
+      if (episode == null) {
+        throw Exception('无法获取单集详情，请重试');
+      }
+      await _playEpisode(episode);
+    } catch (e) {
+      if (mounted) BlurSnackBar.show(context, '播放失败: $e');
     }
   }
 
@@ -868,7 +891,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           ),
           const SizedBox(width: 24),
           Expanded(
-            child: _isMovie
+            child: _isPlayableItem
                 ? _buildLargeScreenMoviePanel()
                 : _buildLargeScreenEpisodesPanel(),
           ),
@@ -885,12 +908,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             ? '$sourceLabel · ${_mediaDetail!.originalTitle}'
             : sourceLabel,
         actions: [
-          if (_mediaDetail != null && _isMovie)
+          if (_mediaDetail != null && _isPlayableItem)
             NipaplayLargeScreenActionButton(
               icon: Icons.play_arrow_rounded,
               label: '播放',
               autofocus: true,
-              onPressed: _isDetailAutoMatching ? null : _playMovie,
+              onPressed: _isDetailAutoMatching ? null : _playMediaItem,
             ),
           NipaplayLargeScreenIconButton(
             icon: Icons.close_rounded,
@@ -1051,7 +1074,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           NipaplayLargeScreenActionButton(
             icon: Icons.play_arrow_rounded,
             label: _isDetailAutoMatching ? '正在匹配' : '播放',
-            onPressed: _isDetailAutoMatching ? null : _playMovie,
+            onPressed: _isDetailAutoMatching ? null : _playMediaItem,
           ),
         ],
       ),
@@ -1383,8 +1406,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         isDesktopOrTablet: isDesktopOrTablet,
         infoView: RepaintBoundary(child: _buildInfoView()),
         episodesView:
-            _isMovie ? null : RepaintBoundary(child: _buildEpisodesView()),
-        desktopView: (isDesktopOrTablet && !_isMovie)
+            _isPlayableItem ? null : RepaintBoundary(child: _buildEpisodesView()),
+        desktopView: (isDesktopOrTablet && !_isPlayableItem)
             ? _buildDesktopTabletLayout()
             : null,
       );
@@ -1603,7 +1626,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
               ),
             ),
           ],
-          if (_isMovie) ...[
+          if (_isPlayableItem) ...[
             SizedBox(height: 16),
             Row(
               children: [
@@ -1617,7 +1640,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                       BlurSnackBar.show(context, '正在自动匹配，请稍候');
                       return;
                     }
-                    _playMovie();
+                    _playMediaItem();
                   },
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),

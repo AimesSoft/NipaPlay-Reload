@@ -101,7 +101,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
       if (_mutedForExit) {
         if (!_useSystemVolume) {
-          player.volume = _currentVolume;
+          applyPlayerVolume();
           _logMacOSHdrResetTrace('restored player volume to $_currentVolume');
         }
         _mutedForExit = false;
@@ -592,7 +592,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // 兜底恢复：若 handleBackButton 静音后未经 resetPlayer 进入新一轮播放（如错误弹窗流程）
     if (_mutedForExit) {
       if (!_useSystemVolume) {
-        player.volume = _currentVolume;
+        applyPlayerVolume();
       }
       _mutedForExit = false;
     }
@@ -1260,7 +1260,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _queueSystemVolumeUpdate(newVolume);
       } else {
         // Web 等不支持系统音量时：使用播放器内部音量
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
     } catch (e) {
       //debugPrint("Failed to set system volume via player: $e");
@@ -1295,7 +1295,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _queueSystemVolumeUpdate(newVolume);
       } else {
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
 
       if (globals.isDesktop) {
@@ -1328,7 +1328,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _queueSystemVolumeUpdate(newVolume);
       } else {
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
 
       if (globals.isDesktop) {

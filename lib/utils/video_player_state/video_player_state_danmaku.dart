@@ -262,29 +262,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       String filePath) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
-    final content = utf8.decode(bytes, allowMalformed: true);
-    final lowerPath = filePath.toLowerCase();
-
-    if (lowerPath.endsWith('.xml')) {
-      return _convertBilibiliXmlDanmakuToJson(content);
-    }
-
-    if (lowerPath.endsWith('.json')) {
-      final decoded = json.decode(content);
-      if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded.cast<String, dynamic>());
-      }
-      if (decoded is List) {
-        return <String, dynamic>{'comments': decoded};
-      }
-      throw Exception('JSON根节点必须是对象或数组');
-    }
-
-    throw Exception('不支持的文件格式: $filePath');
-  }
-
-  Map<String, dynamic> _convertBilibiliXmlDanmakuToJson(String xmlContent) {
-    return convertBilibiliXmlDanmakuToJson(xmlContent);
+    return compute(parseLocalDanmakuBytes, bytes);
   }
 
   int _countLocalDanmakuComments(Map<String, dynamic> jsonData) {

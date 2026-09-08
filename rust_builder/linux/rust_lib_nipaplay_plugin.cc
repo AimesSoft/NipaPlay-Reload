@@ -46,7 +46,7 @@ constexpr int kMaxDimension = 16384;
 constexpr int kFallbackSize = 512;
 
 struct SurfaceState;
-using SurfaceMap = std::unordered_map<std::string, std::unique_ptr<SurfaceState>>;
+using SurfaceMap = std::unordered_map<std::string, std::shared_ptr<SurfaceState>>;
 using SurfaceMutex = std::mutex;
 
 struct SurfaceState {
@@ -58,6 +58,7 @@ struct SurfaceState {
   uint32_t width = 0;
   uint32_t height = 0;
   std::mutex lock;
+  bool disposed = false;
 };
 
 typedef struct _Next2GLTexture Next2GLTexture;
@@ -65,7 +66,8 @@ typedef struct _Next2GLTextureClass Next2GLTextureClass;
 
 struct _Next2GLTexture {
   FlTextureGL parent_instance;
-  SurfaceState* state = nullptr;
+  std::shared_ptr<SurfaceState>* state = nullptr;
+  GdkGLContext* gl_context = nullptr;
   GLuint texture_name = 0;
   uint32_t texture_width = 0;
   uint32_t texture_height = 0;
@@ -179,69 +181,27 @@ static std::string ReadSurfaceId(FlValue* map) {
   return "default";
 }
 
-struct GlStateSnapshot {
-  GLint active_texture = GL_TEXTURE0;
-  GLint texture_binding_2d = 0;
-  GLint framebuffer_binding = 0;
-  GLint renderbuffer_binding = 0;
-  GLint current_program = 0;
-  GLint array_buffer_binding = 0;
-  GLint element_array_buffer_binding = 0;
-  GLint vertex_array_binding = 0;
-  GLint viewport[4] = {0, 0, 0, 0};
-  GLboolean blend = GL_FALSE;
-  GLboolean scissor = GL_FALSE;
-  GLboolean depth = GL_FALSE;
-  GLboolean cull = GL_FALSE;
-};
-
-static void SetGlEnabled(GLenum capability, GLboolean enabled) {
-  if (enabled == GL_TRUE) {
-    glEnable(capability);
-  } else {
-    glDisable(capability);
+// wgpu changes texture units, UBOs, blend/stencil state and pixel-store state.
+// A partial GL snapshot cannot protect Flutter/MDK's state caches. Keep Next2
+// in a separate GDK context that shares texture storage with the Flutter view.
+class ScopedGlContext {
+ public:
+  explicit ScopedGlContext(GdkGLContext* context)
+      : previous_(gdk_gl_context_get_current()) {
+    if (previous_) g_object_ref(previous_);
+    gdk_gl_context_make_current(context);
   }
-}
-
-static GlStateSnapshot SaveGlState() {
-  GlStateSnapshot state;
-  glGetIntegerv(GL_ACTIVE_TEXTURE, &state.active_texture);
-  glActiveTexture(GL_TEXTURE0);
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.texture_binding_2d);
-  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &state.framebuffer_binding);
-  glGetIntegerv(GL_RENDERBUFFER_BINDING, &state.renderbuffer_binding);
-  glGetIntegerv(GL_CURRENT_PROGRAM, &state.current_program);
-  glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &state.array_buffer_binding);
-  glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &state.element_array_buffer_binding);
-#ifdef GL_VERTEX_ARRAY_BINDING
-  glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &state.vertex_array_binding);
-#endif
-  glGetIntegerv(GL_VIEWPORT, state.viewport);
-  state.blend = glIsEnabled(GL_BLEND);
-  state.scissor = glIsEnabled(GL_SCISSOR_TEST);
-  state.depth = glIsEnabled(GL_DEPTH_TEST);
-  state.cull = glIsEnabled(GL_CULL_FACE);
-  return state;
-}
-
-static void RestoreGlState(const GlStateSnapshot& state) {
-  SetGlEnabled(GL_BLEND, state.blend);
-  SetGlEnabled(GL_SCISSOR_TEST, state.scissor);
-  SetGlEnabled(GL_DEPTH_TEST, state.depth);
-  SetGlEnabled(GL_CULL_FACE, state.cull);
-  glUseProgram(static_cast<GLuint>(state.current_program));
-#ifdef GL_VERTEX_ARRAY_BINDING
-  glBindVertexArray(static_cast<GLuint>(state.vertex_array_binding));
-#endif
-  glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(state.array_buffer_binding));
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(state.element_array_buffer_binding));
-  glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(state.renderbuffer_binding));
-  glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(state.framebuffer_binding));
-  glViewport(state.viewport[0], state.viewport[1], state.viewport[2], state.viewport[3]);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(state.texture_binding_2d));
-  glActiveTexture(static_cast<GLenum>(state.active_texture));
-}
+  ~ScopedGlContext() {
+    if (previous_) {
+      gdk_gl_context_make_current(previous_);
+      g_object_unref(previous_);
+    } else {
+      gdk_gl_context_clear_current();
+    }
+  }
+ private:
+  GdkGLContext* previous_;
+};
 
 static const void* next2_gl_proc_loader(const char* name) {
   if (name == nullptr) {
@@ -292,6 +252,8 @@ static void ClearTexture(GLuint texture_name, uint32_t width, uint32_t height) {
                          texture_name, 0);
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
     glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
   }
@@ -306,26 +268,27 @@ static gboolean next2_gl_texture_populate(FlTextureGL* texture,
                                           GError** error) {
   (void)error;
   auto* next2_texture = reinterpret_cast<Next2GLTexture*>(texture);
-  SurfaceState* state = next2_texture->state;
-  if (state == nullptr) {
+  if (next2_texture->state == nullptr || next2_texture->gl_context == nullptr) {
+    return FALSE;
+  }
+  auto state = *next2_texture->state;
+  std::lock_guard<std::mutex> guard(state->lock);
+  if (state->disposed) {
     return FALSE;
   }
 
   uint64_t engine_handle = 0;
   uint32_t desired_width = 0;
   uint32_t desired_height = 0;
-  {
-    std::lock_guard<std::mutex> guard(state->lock);
-    engine_handle = state->engine_handle;
-    desired_width = state->width;
-    desired_height = state->height;
-  }
+  engine_handle = state->engine_handle;
+  desired_width = state->width;
+  desired_height = state->height;
 
   if (engine_handle == 0 || desired_width == 0 || desired_height == 0) {
     return FALSE;
   }
 
-  const GlStateSnapshot gl_state = SaveGlState();
+  ScopedGlContext context(next2_texture->gl_context);
   const bool has_storage = EnsureTextureStorage(next2_texture, desired_width, desired_height);
   bool rendered = false;
   if (has_storage) {
@@ -336,7 +299,9 @@ static gboolean next2_gl_texture_populate(FlTextureGL* texture,
       ClearTexture(next2_texture->texture_name, desired_width, desired_height);
     }
   }
-  RestoreGlState(gl_state);
+  // The shared texture must be complete before Flutter samples it in its own
+  // context. This also covers the transparent clear path after a failed render.
+  glFinish();
 
   if (!has_storage) {
     return FALSE;
@@ -351,10 +316,25 @@ static gboolean next2_gl_texture_populate(FlTextureGL* texture,
 
 static void next2_gl_texture_dispose(GObject* object) {
   auto* self = reinterpret_cast<Next2GLTexture*>(object);
-  if (self->texture_name != 0) {
-    glDeleteTextures(1, &self->texture_name);
+  if (self->state != nullptr) {
+    auto state = *self->state;
+    std::lock_guard<std::mutex> guard(state->lock);
+    // wgpu's external GL adapter must also be dropped with its context current.
+    if (self->gl_context != nullptr) {
+      ScopedGlContext context(self->gl_context);
+      if (state->engine_handle != 0) next2_engine_dispose(state->engine_handle);
+      if (self->texture_name != 0) glDeleteTextures(1, &self->texture_name);
+      glFinish();
+    } else if (state->engine_handle != 0) {
+      // No GL context means no renderer has been initialized yet.
+      next2_engine_dispose(state->engine_handle);
+    }
+    state->engine_handle = 0;
     self->texture_name = 0;
+    delete self->state;
+    self->state = nullptr;
   }
+  g_clear_object(&self->gl_context);
   G_OBJECT_CLASS(next2_gl_texture_parent_class)->dispose(object);
 }
 
@@ -365,15 +345,18 @@ static void next2_gl_texture_class_init(Next2GLTextureClass* klass) {
 
 static void next2_gl_texture_init(Next2GLTexture* self) {
   self->state = nullptr;
+  self->gl_context = nullptr;
   self->texture_name = 0;
   self->texture_width = 0;
   self->texture_height = 0;
 }
 
-static FlTextureGL* create_gl_texture(SurfaceState* state) {
+static FlTextureGL* create_gl_texture(const std::shared_ptr<SurfaceState>& state,
+                                     GdkGLContext* context) {
   auto* texture = reinterpret_cast<Next2GLTexture*>(
       g_object_new(next2_gl_texture_get_type(), nullptr));
-  texture->state = state;
+  texture->state = new std::shared_ptr<SurfaceState>(state);
+  texture->gl_context = context;  // Takes ownership.
   return FL_TEXTURE_GL(texture);
 }
 
@@ -396,7 +379,7 @@ static gboolean tick_cb(gpointer user_data) {
 
 static void dispose_surface(RustLibNipaplayPlugin* self,
                             const std::string& surface_id) {
-  std::unique_ptr<SurfaceState> removed;
+  std::shared_ptr<SurfaceState> removed;
   {
     std::lock_guard<std::mutex> lock(self->surfaces_lock);
     auto it = self->surfaces.find(surface_id);
@@ -406,6 +389,10 @@ static void dispose_surface(RustLibNipaplayPlugin* self,
     removed = std::move(it->second);
     self->surfaces.erase(it);
   }
+  {
+    std::lock_guard<std::mutex> guard(removed->lock);
+    removed->disposed = true;
+  }
   if (removed->texture_base) {
     fl_texture_registrar_unregister_texture(self->texture_registrar,
                                             removed->texture_base);
@@ -413,9 +400,8 @@ static void dispose_surface(RustLibNipaplayPlugin* self,
   if (removed->texture) {
     g_object_unref(removed->texture);
   }
-  if (removed->engine_handle != 0) {
-    next2_engine_dispose(removed->engine_handle);
-  }
+  // Flutter may still hold a texture reference. Its final dispose releases the
+  // engine in the correct GL context and keeps SurfaceState alive until then.
 }
 
 static void handle_method_call(RustLibNipaplayPlugin* self,
@@ -440,7 +426,7 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
     auto it = self->surfaces.find(surface_id);
     bool is_new_engine = false;
     if (it == self->surfaces.end()) {
-      auto created = std::make_unique<SurfaceState>();
+      auto created = std::make_shared<SurfaceState>();
       created->surface_id = surface_id;
       created->width = width;
       created->height = height;
@@ -452,11 +438,24 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
         fl_method_call_respond(method_call, response, nullptr);
         return;
       }
-      created->texture = create_gl_texture(created.get());
+      FlView* view = fl_plugin_registrar_get_view(self->registrar);
+      GdkWindow* window = view ? gtk_widget_get_window(GTK_WIDGET(view)) : nullptr;
+      g_autoptr(GError) context_error = nullptr;
+      GdkGLContext* context = window
+          ? gdk_window_create_gl_context(window, &context_error) : nullptr;
+      if (context == nullptr || !gdk_gl_context_realize(context, &context_error)) {
+        g_clear_object(&context);
+        next2_engine_dispose(created->engine_handle);
+        g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+            fl_method_error_response_new("gl_context_failed",
+                context_error ? context_error->message : "No Flutter GL window", nullptr));
+        fl_method_call_respond(method_call, response, nullptr);
+        return;
+      }
+      created->texture = create_gl_texture(created, context);
       created->texture_base = FL_TEXTURE(created->texture);
       if (!fl_texture_registrar_register_texture(self->texture_registrar,
                                                  created->texture_base)) {
-        next2_engine_dispose(created->engine_handle);
         g_object_unref(created->texture);
         g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
             fl_method_error_response_new("register_texture_failed",
@@ -472,15 +471,11 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
     if (state->width != width || state->height != height) {
       const uint8_t ok = next2_engine_resize(state->engine_handle, width, height);
       if (ok == 0) {
-        next2_engine_dispose(state->engine_handle);
-        state->engine_handle = next2_engine_create(width, height);
-        if (state->engine_handle == 0) {
-          g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
-              fl_method_error_response_new("engine_create_failed",
-                                           "next2_engine_create returned 0", nullptr));
-          fl_method_call_respond(method_call, response, nullptr);
-          return;
-        }
+        g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+            fl_method_error_response_new("engine_resize_failed",
+                                         "Next2 resize failed", nullptr));
+        fl_method_call_respond(method_call, response, nullptr);
+        return;
       }
       {
         std::lock_guard<std::mutex> state_guard(state->lock);

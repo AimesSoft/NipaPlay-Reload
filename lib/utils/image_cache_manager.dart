@@ -1,3 +1,5 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -379,9 +381,17 @@ class ImageCacheManager {
 
     try {
       // 清除内存缓存
-      clear();
+      // RawImage 等仍可能持有缓存中的 ui.Image，不能销毁正在显示的句柄。
+      // 保留有引用的图片和正在进行的加载，仅清理闲置图片。
+      for (final key in _cache.keys.toList()) {
+        if ((_refCount[key] ?? 0) > 0) continue;
+        _cache.remove(key)?.dispose();
+        _refCount.remove(key);
+        _lastAccessed.remove(key);
+      }
 
       if (!kIsWeb) {
+        await _initCacheDir();
         // 清除本地文件缓存
         try {
           if (_cacheDir != null && await _cacheDir!.exists()) {
@@ -406,19 +416,7 @@ class ImageCacheManager {
           //////debugPrint('清除缩略图缓存失败: $e');
         }
 
-        // 清除 cached_network_image 的缓存
-        try {
-          final cacheDir = await getTemporaryDirectory();
-          final imageCacheDir =
-              Directory('${cacheDir.path}/cached_network_image');
-
-          if (await imageCacheDir.exists()) {
-            await imageCacheDir.delete(recursive: true);
-            //////debugPrint('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
-          }
-        } catch (e) {
-          //////debugPrint('清除 cached_network_image 缓存失败: $e');
-        }
+        await CachedNetworkImageProvider.defaultCacheManager.emptyCache();
 
         // 清除自定义图片缓存
         try {
@@ -433,21 +431,11 @@ class ImageCacheManager {
           //////debugPrint('清除自定义图片缓存失败: $e');
         }
 
-        // 清除所有临时文件
-        try {
-          final cacheDir = await getTemporaryDirectory();
-          final files = await cacheDir.list().toList();
-          for (var file in files) {
-            if (file is File || file is Directory) {
-              await file.delete(recursive: true);
-            }
-          }
-          //////debugPrint('已清除所有临时文件: ${cacheDir.path}');
-        } catch (e) {
-          //////debugPrint('清除临时文件失败: $e');
-        }
+        // 临时目录可能是 Windows 全局 TEMP，包含正在使用的文件和其他
+        // 应用的数据。图片清理只能访问上面明确属于本应用的图片目录。
       }
 
+      clearMediaServerImageMemoryCache();
       // 清除 Flutter 的图片缓存
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();

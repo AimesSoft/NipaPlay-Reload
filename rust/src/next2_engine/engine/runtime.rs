@@ -278,8 +278,9 @@ pub fn resize_linux_gl_engine(handle: u64, width: u32, height: u32) -> bool {
     let Some(entry) = guard.get_mut(&handle) else {
         return false;
     };
-    entry.width = width.max(INITIAL_WIDTH);
-    entry.height = height.max(INITIAL_HEIGHT);
+    // The native texture callback supplies the new dimensions. Keep the last
+    // rendered dimensions until then so it actually resizes Next2Renderer.
+    let _ = (width, height);
     entry.frame_ready.store(true, Ordering::Release);
     true
 }

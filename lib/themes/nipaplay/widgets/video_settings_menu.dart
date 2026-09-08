@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_menu/player_quick_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -498,7 +499,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             .build()
             .where((item) => item.paneId != PlayerMenuPaneId.playlist)
             .toList();
-        final double menuHeight = _heightForSettingsItemCount(menuItems.length);
+        final double menuHeight = _heightForSettingsItemCount(menuItems.length + 4);
         final bool hideBackForStandaloneInitialPane =
             widget.hideBackButtonForInitialPane &&
                 widget.initialPaneId != null &&
@@ -519,9 +520,10 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                   onHoverChanged: widget.onHoverChanged,
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: menuItems
-                        .map((item) => _buildSettingsItem(item))
-                        .toList(),
+                    children: [
+                      const PlayerQuickControls(),
+                      ...menuItems.map((item) => _buildSettingsItem(item)),
+                    ],
                   ),
                 ),
               )

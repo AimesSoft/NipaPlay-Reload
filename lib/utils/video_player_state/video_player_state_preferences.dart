@@ -575,11 +575,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     _playbackRate = resolved;
+    if (_isSpeedBoostActive) _normalPlaybackRate = resolved;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_playbackRateKey, resolved);
 
     // 立即应用新的播放速度
-    if (hasVideo) {
+    if (hasVideo && !_isSpeedBoostActive) {
       player.setPlaybackRate(resolved);
       debugPrint('设置播放速度: ${resolved}x');
     }

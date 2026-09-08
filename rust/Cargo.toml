@@ -41,7 +41,7 @@ wgpu-hal = { version = "27.0.4", features = ["metal"] }
 metal = "0.32.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-librqbit = { version = "8.1.1", default-features = false, features = ["default-tls"] }
+librqbit = { version = "9.0.1", default-features = false, features = ["default-tls"] }
 wgpu-hal = { version = "27.0.4", features = ["dx12"] }
 windows = { version = "0.58", features = [
     "Win32_System_Performance",
@@ -55,7 +55,7 @@ windows = { version = "0.58", features = [
 ] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-librqbit = { version = "8.1.1", default-features = false, features = ["rust-tls"] }
+librqbit = { version = "9.0.1", default-features = false, features = ["rust-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 wgpu-hal = { version = "27.0.4", features = ["gles"] }
