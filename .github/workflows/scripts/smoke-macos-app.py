@@ -24,6 +24,7 @@ def main():
     parser.add_argument("app", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--seconds", type=int, default=45)
+    parser.add_argument("--architecture", choices=["arm64", "x86_64"])
     args = parser.parse_args()
     if args.seconds < 10:
         parser.error("--seconds must be at least 10")
@@ -44,8 +45,11 @@ def main():
     survived = False
     try:
         with (output / "startup.log").open("w") as log:
+            command = [str(executable)]
+            if args.architecture:
+                command = ["/usr/bin/arch", f"-{args.architecture}", *command]
             process = subprocess.Popen(
-                [str(executable)], stdout=log, stderr=subprocess.STDOUT,
+                command, stdout=log, stderr=subprocess.STDOUT,
                 env={**os.environ, "DYLD_PRINT_LIBRARIES": "1"},
             )
             deadline = time.monotonic() + args.seconds
@@ -56,6 +60,7 @@ def main():
                 capture(output / "sample.txt", ["sample", str(process.pid), "1", "1"])
             result = {
                 "app": str(app), "pid": process.pid,
+                "architecture": args.architecture,
                 "survived": survived, "exit_code": process.poll(),
                 "duration_seconds": round(time.time() - start, 1),
             }

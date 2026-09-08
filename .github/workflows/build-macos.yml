@@ -2,22 +2,27 @@ name: Build macOS
 
 on:
   workflow_call:
+    inputs:
+      architectures:
+        description: 'JSON array of package architectures (include universal for the macOS 14 gate)'
+        type: string
+        default: '["universal", "arm64", "x86_64"]'
     secrets:
       MACOS_CERTIFICATE_BASE64:
         description: 'macOS Distribution Certificate (Base64)'
-        required: true
+        required: false
       MACOS_CERTIFICATE_PASSWORD:
         description: 'macOS Certificate Password'
-        required: true
+        required: false
       APPLE_TEAM_ID:
         description: 'Apple Team ID'
-        required: true
+        required: false
       APPLE_ID:
         description: 'Apple ID (email address)'
-        required: true
+        required: false
       APPLE_APP_PASSWORD:
         description: 'Apple App-specific Password'
-        required: true
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -70,6 +75,7 @@ jobs:
             echo "libplacebo=$(git -C third_party/libplacebo rev-parse HEAD)"
             echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
+            echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-swift-deployment-target.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -156,6 +162,14 @@ jobs:
             echo "uchardet URL already patched or different; skipping."
           fi
 
+      - name: Set the deployment target for mpv's custom Swift compiler
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C third_party/libmpv-darwin-build apply \
+            "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-swift-deployment-target.patch"
+
       - name: Build macOS libmpv xcframeworks from source
         if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -230,20 +244,14 @@ jobs:
           key: ${{ steps.libmpv-key.outputs.cache-key }}
 
   build:
-    name: Build macOS Packages (${{ matrix.label }})
+    name: Build macOS Packages (${{ matrix.architecture }})
     needs: prepare
     runs-on: macos-26
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
-        include:
-          - architecture: universal
-            label: Universal
-          - architecture: arm64
-            label: Apple Silicon
-          - architecture: x86_64
-            label: Intel
+        architecture: ${{ fromJSON(inputs.architectures) }}
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
@@ -349,3 +357,8 @@ jobs:
           name: dart-symbols-macOS-${{ matrix.architecture }}
           path: build/symbols-macos/${{ matrix.architecture }}/
           if-no-files-found: warn
+
+  compatibility:
+    name: Run packaged app on macOS 14
+    needs: build
+    uses: ./.github/workflows/smoke-macos.yml

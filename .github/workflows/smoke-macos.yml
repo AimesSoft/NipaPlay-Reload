@@ -1,0 +1,55 @@
+name: macOS Runtime Smoke
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    name: macOS 14 startup (${{ matrix.architecture }})
+    runs-on: macos-14
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify macOS 14 Apple Silicon runtime
+        run: |
+          sw_vers
+          uname -m
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 14
+          test "$(uname -m)" = arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macOS-universal
+          path: packages
+      - name: Unpack the built distribution
+        run: |
+          ditto -x -k packages/*macOS_Universal.zip "$RUNNER_TEMP/app"
+          # Unsigned diagnostic builds need an ad-hoc signature on Apple Silicon.
+          # Keep the original Developer ID signature on release builds.
+          APP="$RUNNER_TEMP/app/NipaPlay.app"
+          if ! codesign --verify --deep --strict "$APP"; then
+            codesign --force --deep --sign - "$APP"
+          fi
+      - name: Check Rosetta runtime
+        if: matrix.architecture == 'x86_64'
+        run: arch -x86_64 /usr/bin/uname -m
+      - name: Run packaged app and retain diagnostics
+        env:
+          APP_ARCH: ${{ matrix.architecture }}
+        run: |
+          python3 .github/workflows/scripts/smoke-macos-app.py \
+            "$RUNNER_TEMP/app/NipaPlay.app" --architecture "$APP_ARCH" \
+            --output "diagnostics/$APP_ARCH"
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-14-runtime-${{ matrix.architecture }}
+          path: diagnostics/
+          if-no-files-found: warn

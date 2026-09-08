@@ -2,15 +2,28 @@ name: macOS Compatibility
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional released version to diagnose instead of building source (for example v1.11.5)'
+        type: string
+        default: ''
   push:
     branches: [codex/fix-476-macos14]
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
+  build:
+    if: inputs.release_tag == ''
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      architectures: '["universal"]'
+
   released-app:
-    name: Run v1.11.5 on macOS 14
+    if: inputs.release_tag != ''
+    name: Run released app on macOS 14
     runs-on: macos-14
     timeout-minutes: 15
     steps:
@@ -24,8 +37,9 @@ jobs:
       - name: Download released Apple Silicon app
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          gh release download v1.11.5 --repo "$GITHUB_REPOSITORY" --pattern '*macOS_AppleSilicon.zip' --dir "$RUNNER_TEMP/released"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*macOS_AppleSilicon.zip' --dir "$RUNNER_TEMP/released"
           ditto -x -k "$RUNNER_TEMP/released/"*.zip "$RUNNER_TEMP/released/app"
       - name: Run app and collect diagnostics
         run: python3 .github/workflows/scripts/smoke-macos-app.py "$RUNNER_TEMP/released/app/NipaPlay.app" --output diagnostics/released
