@@ -239,6 +239,19 @@ runs:
           fi
         done < "$MACOS_VARIANTS_FILE"
 
+    - name: Verify embedded mpv compatibility
+      shell: bash
+      run: |
+        set -euo pipefail
+        while IFS='|' read -r variant_key xcode_archs artifact_label variant_suffix; do
+          arch_args=()
+          for arch in $xcode_archs; do
+            arch_args+=(--require-arch "$arch")
+          done
+          python3 scripts/macos/verify_mpv_compatibility.py \
+            "$MACOS_STAGING_ROOT/$variant_suffix/NipaPlay.app" "${arch_args[@]}"
+        done < "$MACOS_VARIANTS_FILE"
+
     - name: Copy mdk.framework.dSYM to App Bundle
       shell: bash
       run: |

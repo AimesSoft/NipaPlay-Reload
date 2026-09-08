@@ -2,22 +2,31 @@ name: Build macOS
 
 on:
   workflow_call:
+    inputs:
+      architectures:
+        description: 'JSON array of package architectures (include universal for the macOS 14 gate)'
+        type: string
+        default: '["universal", "arm64", "x86_64"]'
+      unsigned:
+        description: 'Explicitly allow diagnostic builds without signing credentials'
+        type: boolean
+        default: false
     secrets:
       MACOS_CERTIFICATE_BASE64:
         description: 'macOS Distribution Certificate (Base64)'
-        required: true
+        required: false
       MACOS_CERTIFICATE_PASSWORD:
         description: 'macOS Certificate Password'
-        required: true
+        required: false
       APPLE_TEAM_ID:
         description: 'Apple Team ID'
-        required: true
+        required: false
       APPLE_ID:
         description: 'Apple ID (email address)'
-        required: true
+        required: false
       APPLE_APP_PASSWORD:
         description: 'Apple App-specific Password'
-        required: true
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -27,6 +36,7 @@ on:
         value: ${{ jobs.prepare.outputs.artifact-name }}
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -40,6 +50,22 @@ jobs:
       libmpv-cache-key: ${{ steps.libmpv-key.outputs.cache-key }}
       libmpv-sha256: ${{ steps.libmpv-metadata.outputs.archive-sha256 }}
     steps:
+      - name: Require release signing credentials
+        if: '!inputs.unsigned'
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          for credential in MACOS_CERTIFICATE_BASE64 MACOS_CERTIFICATE_PASSWORD APPLE_TEAM_ID APPLE_ID APPLE_APP_PASSWORD; do
+            if [ -z "${!credential}" ]; then
+              echo "::error::Missing required release credential: $credential"
+              exit 1
+            fi
+          done
+
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
@@ -70,6 +96,8 @@ jobs:
             echo "libplacebo=$(git -C third_party/libplacebo rev-parse HEAD)"
             echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
+            echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-swift-deployment-target.patch | awk '{print $1}')"
+            echo "dav1d-source-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-dav1d-release-source.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -156,6 +184,24 @@ jobs:
             echo "uchardet URL already patched or different; skipping."
           fi
 
+      - name: Set the deployment target for mpv's custom Swift compiler
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C third_party/libmpv-darwin-build apply \
+            "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-swift-deployment-target.patch"
+
+      - name: Use official dav1d release archive
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The GitLab archive endpoint serves anti-bot HTML to CI. Keep the
+          # same version using VideoLAN's official release and its checksum.
+          git -C third_party/libmpv-darwin-build apply \
+            "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-dav1d-release-source.patch"
+
       - name: Build macOS libmpv xcframeworks from source
         if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -218,6 +264,11 @@ jobs:
             echo "Missing cached libmpv archive: $ARCHIVE_PATH" >&2
             exit 1
           fi
+          CHECK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$CHECK_DIR"' EXIT
+          tar -xzf "$ARCHIVE_PATH" -C "$CHECK_DIR"
+          python3 scripts/macos/verify_mpv_compatibility.py "$CHECK_DIR" \
+            --require-arch arm64 --require-arch x86_64
           ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
           echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
           echo "libmpv archive SHA256: ${ARCHIVE_SHA256}"
@@ -230,20 +281,14 @@ jobs:
           key: ${{ steps.libmpv-key.outputs.cache-key }}
 
   build:
-    name: Build macOS Packages (${{ matrix.label }})
+    name: Build macOS Packages (${{ matrix.architecture }})
     needs: prepare
     runs-on: macos-26
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
-        include:
-          - architecture: universal
-            label: Universal
-          - architecture: arm64
-            label: Apple Silicon
-          - architecture: x86_64
-            label: Intel
+        architecture: ${{ fromJSON(inputs.architectures) }}
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
@@ -349,3 +394,10 @@ jobs:
           name: dart-symbols-macOS-${{ matrix.architecture }}
           path: build/symbols-macos/${{ matrix.architecture }}/
           if-no-files-found: warn
+
+  compatibility:
+    name: Run packaged app on macOS 14
+    needs: build
+    uses: ./.github/workflows/smoke-macos.yml
+    with:
+      unsigned: ${{ inputs.unsigned }}
