@@ -1,0 +1,38 @@
+name: macOS Compatibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/fix-476-macos14]
+
+permissions:
+  contents: read
+
+jobs:
+  released-app:
+    name: Run v1.11.5 on macOS 14
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runtime
+        run: |
+          sw_vers
+          uname -m
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 14
+          test "$(uname -m)" = arm64
+      - name: Download released Apple Silicon app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.11.5 --repo "$GITHUB_REPOSITORY" --pattern '*macOS_AppleSilicon.zip' --dir "$RUNNER_TEMP/released"
+          ditto -x -k "$RUNNER_TEMP/released/"*.zip "$RUNNER_TEMP/released/app"
+      - name: Run app and collect diagnostics
+        run: python3 .github/workflows/scripts/smoke-macos-app.py "$RUNNER_TEMP/released/app/NipaPlay.app" --output diagnostics/released
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-14-released-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
