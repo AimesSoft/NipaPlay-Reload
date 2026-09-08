@@ -17,8 +17,9 @@ target，会留下最低版本标为 macOS 11、却仍然导入
 `-target x86_64-apple-macos11.0`。补丁摘要参与 libmpv 缓存键，确保旧的
 不兼容产物不会被复用。
 
-`check-macos-mpv.py` 在缓存保存和后续应用构建之前检查两个架构的最低版本，
-并拒绝对该符号的强引用；缓存命中也会执行检查。真正的系统兼容性仍由
+`scripts/macos/verify_mpv_compatibility.py` 在缓存保存和后续应用构建之前检查
+两个架构的最低版本，并拒绝对该符号的强引用以及未链接的 mpv Swift 类；
+缓存命中也会执行检查。真正的系统兼容性仍由
 `smoke-macos.yml` 的启动测试确认。
 
 ## 手动运行
@@ -27,6 +28,19 @@ target，会留下最低版本标为 macOS 11、却仍然导入
 默认会从源码构建 Universal 包，不使用发布证书、不发布 Release。
 若 `release_tag` 填写 `v1.11.5` 这样的版本号，则直接下载对应的
 Apple Silicon 发布包进行诊断。
+
+若已有一次构建的 `release-macOS-universal` artifact，可填写
+`artifact_run_id`，直接在 macOS 14 上测试该安装包。此模式保留并验证原有
+签名，适用于正式签名的构建，且优先于 `release_tag`。
+
+可在装有 Xcode、Meson、Ninja 的 Mac 上运行编译回归测试：
+
+```sh
+python3 scripts/macos/test_verify_mpv_compatibility.py
+```
+
+测试使用 mpv 自身的 Swift custom target，覆盖旧参数失效、跨架构缺失
+Swift 类，以及修复后 ARM64 / x86_64 正确链接。
 
 诊断 artifact 包括 `result.json`、`startup.log`、`unified.log`、可用的
 系统崩溃报告、Mpv 的符号及加载命令。源码构建的测试还保存进程采样和

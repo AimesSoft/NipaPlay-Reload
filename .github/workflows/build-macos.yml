@@ -36,6 +36,7 @@ on:
         value: ${{ jobs.prepare.outputs.artifact-name }}
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -96,6 +97,7 @@ jobs:
             echo "builder=$(git -C third_party/libmpv-darwin-build rev-parse HEAD)"
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
             echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-swift-deployment-target.patch | awk '{print $1}')"
+            echo "dav1d-source-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-dav1d-release-source.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -190,6 +192,16 @@ jobs:
           git -C third_party/libmpv-darwin-build apply \
             "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-swift-deployment-target.patch"
 
+      - name: Use official dav1d release archive
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The GitLab archive endpoint serves anti-bot HTML to CI. Keep the
+          # same version using VideoLAN's official release and its checksum.
+          git -C third_party/libmpv-darwin-build apply \
+            "$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-dav1d-release-source.patch"
+
       - name: Build macOS libmpv xcframeworks from source
         if: steps.libmpv-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -255,7 +267,8 @@ jobs:
           CHECK_DIR="$(mktemp -d)"
           trap 'rm -rf "$CHECK_DIR"' EXIT
           tar -xzf "$ARCHIVE_PATH" -C "$CHECK_DIR"
-          python3 .github/workflows/scripts/check-macos-mpv.py "$CHECK_DIR"
+          python3 scripts/macos/verify_mpv_compatibility.py "$CHECK_DIR" \
+            --require-arch arm64 --require-arch x86_64
           ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
           echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
           echo "libmpv archive SHA256: ${ARCHIVE_SHA256}"

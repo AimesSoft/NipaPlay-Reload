@@ -1,0 +1,13 @@
+diff --git a/packages.lock.nix b/packages.lock.nix
+--- a/packages.lock.nix
++++ b/packages.lock.nix
+@@ -1,7 +1,7 @@
+ {
+   dav1d = {
+     version = "1.2.1";
+-    url = "https://code.videolan.org/videolan/dav1d/-/archive/1.2.1/dav1d-1.2.1.tar.bz2";
+-    sha256 = "a4003623cdc0109dec3aac8435520aa3fb12c4d69454fa227f2658cdb6dab5fa";
++    url = "https://download.videolan.org/pub/videolan/dav1d/1.2.1/dav1d-1.2.1.tar.xz";
++    sha256 = "4e33eb61ec54c768a16da0cf8fa0928b4c4593f5f804a3c887d4a21c318340b2";
+   };
+   ffmpeg = {

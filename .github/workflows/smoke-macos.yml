@@ -7,8 +7,13 @@ on:
         description: 'Ad-hoc sign an explicitly unsigned diagnostic build'
         type: boolean
         default: false
+      run-id:
+        description: 'Optional source artifact run; defaults to this run'
+        type: string
+        default: ''
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -32,6 +37,8 @@ jobs:
         with:
           name: release-macOS-universal
           path: packages
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run-id || github.run_id }}
       - name: Unpack the built distribution
         env:
           UNSIGNED: ${{ inputs.unsigned }}

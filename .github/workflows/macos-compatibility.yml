@@ -7,23 +7,34 @@ on:
         description: 'Optional released version to diagnose instead of building source (for example v1.11.5)'
         type: string
         default: ''
+      artifact_run_id:
+        description: 'Optional Actions run containing release-macOS-universal (skip rebuilding)'
+        type: string
+        default: ''
   push:
     branches: [codex/fix-476-macos14]
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
 jobs:
   build:
-    if: inputs.release_tag == ''
+    if: inputs.release_tag == '' && inputs.artifact_run_id == ''
     uses: ./.github/workflows/build-macos.yml
     with:
       architectures: '["universal"]'
       unsigned: true
 
+  existing-build:
+    if: inputs.artifact_run_id != ''
+    uses: ./.github/workflows/smoke-macos.yml
+    with:
+      run-id: ${{ inputs.artifact_run_id }}
+
   released-app:
-    if: inputs.release_tag != ''
+    if: inputs.release_tag != '' && inputs.artifact_run_id == ''
     name: Run released app on macOS 14
     runs-on: macos-14
     timeout-minutes: 15
