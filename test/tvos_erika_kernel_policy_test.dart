@@ -62,7 +62,7 @@ void main() {
     expect(danmaku, contains('!globals.isTvOS &&'));
   });
 
-  test('tvOS release pins the native Erika plugin and reports Erika', () {
+  test('tvOS release uses shared hosted Erika and reports Erika', () {
     final tvOSOverrides = File(
       'pubspec_overrides.tvos.yaml',
     ).readAsStringSync();
