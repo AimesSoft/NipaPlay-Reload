@@ -11,11 +11,19 @@ public class VolumeController {
     self.audioSession = audioSession
   }
 
+  public func suspend() {
+    // Do not leave a hidden system volume slider attached while another app
+    // controls the audio session. Reattach only on the next explicit gesture.
+    volumeView.removeFromSuperview()
+    tempMuteVolume = nil
+  }
+
   public func getVolume() -> Float {
     return audioSession.getVolume()
   }
 
   public func setVolume(volume: Float, showSystemUI: Bool) {
+    guard UIApplication.shared.applicationState != .background else { return }
     let clampedVolume = volume.clamp(to: 0.0...1.0)
     if clampedVolume != 0.0 {
       tempMuteVolume = nil

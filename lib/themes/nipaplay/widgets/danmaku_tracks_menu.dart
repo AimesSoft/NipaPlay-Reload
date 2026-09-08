@@ -5,9 +5,7 @@ import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
-import 'dart:convert';
-import 'dart:io' as io;
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:file_selector/file_selector.dart';
 
 class DanmakuTracksMenu extends StatefulWidget {
@@ -46,24 +44,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
 
     try {
       // 使用文件选择器选择弹幕文件
-      final XTypeGroup jsonTypeGroup = XTypeGroup(
-        label: 'JSON弹幕文件',
-        extensions: const ['json'],
-        uniformTypeIdentifiers: io.Platform.isIOS
-            ? ['public.json', 'public.text', 'public.plain-text']
-            : null,
-      );
-
-      final XTypeGroup xmlTypeGroup = XTypeGroup(
-        label: 'XML弹幕文件',
-        extensions: const ['xml'],
-        uniformTypeIdentifiers: io.Platform.isIOS
-            ? ['public.xml', 'public.text', 'public.plain-text']
-            : null,
-      );
-
-      final XFile? file = await openFile(
-        acceptedTypeGroups: [jsonTypeGroup, xmlTypeGroup],
+      final file = await openFile(
+        acceptedTypeGroups: localDanmakuFileTypes,
         confirmButtonText: '选择弹幕文件',
       );
 
@@ -76,55 +58,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
         return;
       }
 
-      // 读取文件内容并根据扩展名处理
-      //final fileContent = await file.readAsString();
-      final fileBytes = await file.readAsBytes();
-      final fileContent = utf8.decode(fileBytes);
-      final fileName = file.name.toLowerCase();
-      Map<String, dynamic> jsonData;
-
-      if (fileName.endsWith('.xml')) {
-        // XML文件，先转换为JSON格式
-        jsonData = _convertXmlToJson(fileContent);
-      } else {
-        // JSON文件，直接解析
-        jsonData = json.decode(fileContent);
-      }
-
-      // 解析弹幕数据，支持多种格式
-      List<dynamic> comments = [];
-
-      if (jsonData.containsKey('comments') && jsonData['comments'] is List) {
-        // 标准格式：comments字段包含数组
-        comments = jsonData['comments'];
-      } else if (jsonData.containsKey('data')) {
-        // 兼容格式：data字段
-        final data = jsonData['data'];
-        if (data is List) {
-          // data是数组
-          comments = data;
-        } else if (data is String) {
-          // data是字符串，需要解析
-          try {
-            final parsedData = json.decode(data);
-            if (parsedData is List) {
-              comments = parsedData;
-            } else {
-              throw Exception('data字段的JSON字符串不是数组格式');
-            }
-          } catch (e) {
-            throw Exception('data字段的JSON字符串解析失败: $e');
-          }
-        } else {
-          throw Exception('data字段格式不正确，应为数组或JSON字符串');
-        }
-      } else {
-        throw Exception('JSON文件格式不正确，必须包含comments数组或data字段');
-      }
-
-      if (comments.isEmpty) {
-        throw Exception('弹幕文件中没有弹幕数据');
-      }
+      final jsonData = await readLocalDanmakuFile(file);
+      final comments = jsonData['comments'] as List;
 
       final localTrackCount = videoState.danmakuTracks.values
           .where((track) => track['source'] == 'local')
@@ -153,11 +88,6 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
         _isLoadingLocalDanmaku = false;
       }
     }
-  }
-
-  // XML弹幕转换为JSON格式
-  Map<String, dynamic> _convertXmlToJson(String xmlContent) {
-    return convertBilibiliXmlDanmakuToJson(xmlContent);
   }
 
   @override

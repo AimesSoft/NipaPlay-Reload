@@ -1899,12 +1899,12 @@ class MediaKitPlayerAdapter
   @override
   double get volume {
     final mpvLinear = _player.state.volume / 100.0;
-    return pow(mpvLinear, 3.0).toDouble().clamp(0.0, 1.0);
+    return pow(mpvLinear, 3.0).toDouble().clamp(0.0, 2.0);
   }
 
   @override
   set volume(double value) {
-    _requestedVolume = value.clamp(0.0, 1.0).toDouble();
+    _requestedVolume = value.clamp(0.0, 2.0).toDouble();
     // 对用户值取立方根，补偿 mpv 的三次方缩放
     final mpvValue = pow(_requestedVolume, 1.0 / 3.0) * 100.0;
     _player.setVolume(mpvValue);
