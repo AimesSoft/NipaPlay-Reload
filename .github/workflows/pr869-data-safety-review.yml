@@ -1,0 +1,35 @@
+name: PR 869 data safety review
+
+on:
+  push:
+    branches: [codex/pr-869-data-safety-review-20260908]
+
+permissions:
+  contents: read
+
+jobs:
+  data-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: ./.github/actions/setup-flutter
+      - name: Generate build information
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+      - name: Test original PR code with synthetic data only
+        env:
+          NIPAPLAY_REVIEW_ROOT: ${{ runner.temp }}/pr869-data-safety
+          XDG_DATA_HOME: ${{ runner.temp }}/pr869-data-safety/xdg-data
+          XDG_CACHE_HOME: ${{ runner.temp }}/pr869-data-safety/xdg-cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/pr869-data-safety/xdg-config
+        run: |
+          set -o pipefail
+          flutter test --no-pub --reporter expanded test/review/pr869_data_safety_test.dart 2>&1 | tee pr869-data-safety.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr869-data-safety-evidence
+          path: pr869-data-safety.log
