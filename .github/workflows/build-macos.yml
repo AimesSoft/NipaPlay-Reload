@@ -7,6 +7,10 @@ on:
         description: 'JSON array of package architectures (include universal for the macOS 14 gate)'
         type: string
         default: '["universal", "arm64", "x86_64"]'
+      unsigned:
+        description: 'Explicitly allow diagnostic builds without signing credentials'
+        type: boolean
+        default: false
     secrets:
       MACOS_CERTIFICATE_BASE64:
         description: 'macOS Distribution Certificate (Base64)'
@@ -45,6 +49,22 @@ jobs:
       libmpv-cache-key: ${{ steps.libmpv-key.outputs.cache-key }}
       libmpv-sha256: ${{ steps.libmpv-metadata.outputs.archive-sha256 }}
     steps:
+      - name: Require release signing credentials
+        if: '!inputs.unsigned'
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          for credential in MACOS_CERTIFICATE_BASE64 MACOS_CERTIFICATE_PASSWORD APPLE_TEAM_ID APPLE_ID APPLE_APP_PASSWORD; do
+            if [ -z "${!credential}" ]; then
+              echo "::error::Missing required release credential: $credential"
+              exit 1
+            fi
+          done
+
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
@@ -232,6 +252,10 @@ jobs:
             echo "Missing cached libmpv archive: $ARCHIVE_PATH" >&2
             exit 1
           fi
+          CHECK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$CHECK_DIR"' EXIT
+          tar -xzf "$ARCHIVE_PATH" -C "$CHECK_DIR"
+          python3 .github/workflows/scripts/check-macos-mpv.py "$CHECK_DIR"
           ARCHIVE_SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
           echo "archive-sha256=${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
           echo "libmpv archive SHA256: ${ARCHIVE_SHA256}"
@@ -362,3 +386,5 @@ jobs:
     name: Run packaged app on macOS 14
     needs: build
     uses: ./.github/workflows/smoke-macos.yml
+    with:
+      unsigned: ${{ inputs.unsigned }}

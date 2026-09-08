@@ -2,6 +2,11 @@ name: macOS Runtime Smoke
 
 on:
   workflow_call:
+    inputs:
+      unsigned:
+        description: 'Ad-hoc sign an explicitly unsigned diagnostic build'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,14 +33,19 @@ jobs:
           name: release-macOS-universal
           path: packages
       - name: Unpack the built distribution
+        env:
+          UNSIGNED: ${{ inputs.unsigned }}
         run: |
           ditto -x -k packages/*macOS_Universal.zip "$RUNNER_TEMP/app"
           # Unsigned diagnostic builds need an ad-hoc signature on Apple Silicon.
           # Keep the original Developer ID signature on release builds.
           APP="$RUNNER_TEMP/app/NipaPlay.app"
-          if ! codesign --verify --deep --strict "$APP"; then
+          if [ "$UNSIGNED" = true ]; then
             codesign --force --deep --sign - "$APP"
           fi
+          codesign --verify --deep --strict "$APP"
+      - name: Compile window observation helper
+        run: xcrun swiftc .github/workflows/scripts/macos-app-windows.swift -o "$RUNNER_TEMP/app-windows"
       - name: Check Rosetta runtime
         if: matrix.architecture == 'x86_64'
         run: arch -x86_64 /usr/bin/uname -m
@@ -45,6 +55,7 @@ jobs:
         run: |
           python3 .github/workflows/scripts/smoke-macos-app.py \
             "$RUNNER_TEMP/app/NipaPlay.app" --architecture "$APP_ARCH" \
+            --window-probe "$RUNNER_TEMP/app-windows" \
             --output "diagnostics/$APP_ARCH"
       - name: Upload runtime diagnostics
         if: always()

@@ -20,6 +20,7 @@ jobs:
     uses: ./.github/workflows/build-macos.yml
     with:
       architectures: '["universal"]'
+      unsigned: true
 
   released-app:
     if: inputs.release_tag != ''
