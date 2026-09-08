@@ -42,16 +42,66 @@ typedef JsonData = Map<String, dynamic>;
 
 /// 保存 JSON 数据到本地文件
 Future<void> saveJsonToFile(JsonFileType fileType, int id, JsonData jsonData) async {
-
-  final filePath = await _getFilePathById(fileType, id);
-  if (filePath == null) throw ArgumentError('无法获取文件路径: $fileType, $id');
-  final file = File(filePath);
-  final jsonString = const JsonEncoder.withIndent('  ').convert(jsonData);
-  await file.writeAsString(jsonString);
-
-  debugPrint('已保存 JSON 数据到文件: ${await _getFilePathById(fileType, id)}');
+  await _withJsonIds(fileType, id, (ids) async {
+    final data = fileType == JsonFileType.anime || fileType == JsonFileType.episode
+        ? _mergeJson(await _readJsonFiles(fileType, ids) ?? {}, jsonData)
+        : jsonData;
+    final filePath = await _getFilePathById(fileType, ids.last);
+    if (filePath == null) throw ArgumentError('无法获取文件路径: $fileType, $id');
+    await _writeJsonAtomically(File(filePath), data);
+  });
 }
 
+/// Read canonical user data together with JSON preserved under earlier IDs.
+/// More recent merge targets win conflicting fields; source files are retained.
+Future<JsonData?> readJsonFromFile(JsonFileType fileType, int id) =>
+    _withJsonIds(fileType, id, (ids) => _readJsonFiles(fileType, ids));
+
+Future<T> _withJsonIds<T>(JsonFileType type, int id, Future<T> Function(List<int>) operation) =>
+    switch (type) {
+      JsonFileType.anime => DatabaseService.withAnimeJsonIds(id, operation),
+      JsonFileType.episode => DatabaseService.withEpisodeJsonIds(id, operation),
+      _ => operation([id]),
+    };
+
+Future<JsonData?> _readJsonFiles(JsonFileType type, List<int> ids) async {
+  JsonData? result;
+  for (final id in ids) {
+    final filePath = await _getFilePathById(type, id);
+    if (filePath == null) throw ArgumentError('无法获取 JSON 文件路径');
+    final file = File(filePath);
+    if (!await file.exists()) continue;
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map) throw FormatException('JSON 文件格式无效: $filePath');
+    result = _mergeJson(result ?? {}, Map<String, dynamic>.from(decoded));
+  }
+  return result;
+}
+
+JsonData _mergeJson(JsonData original, JsonData updates) {
+  final result = Map<String, dynamic>.from(original);
+  for (final entry in updates.entries) {
+    final previous = result[entry.key];
+    result[entry.key] = previous is Map && entry.value is Map
+        ? _mergeJson(Map<String, dynamic>.from(previous),
+            Map<String, dynamic>.from(entry.value as Map))
+        : entry.value;
+  }
+  return result;
+}
+
+Future<void> _writeJsonAtomically(File file, JsonData data) async {
+  final json = const JsonEncoder.withIndent('  ').convert(data);
+  await file.parent.create(recursive: true);
+  final staging = await file.parent.createTemp('.nipaplay-json-');
+  try {
+    final temporary = File('${staging.path}/data.json');
+    await temporary.writeAsString(json, flush: true);
+    await temporary.rename(file.path);
+  } finally {
+    await staging.delete(recursive: true);
+  }
+}
 
 Future<int?> getBangumiAnimeIdByDandanplayAnimeIdFromCache(int ddpAniId) async {
 
@@ -76,18 +126,8 @@ Future<int?> getBangumiAnimeIdByDandanplayAnimeIdFromCache(int ddpAniId) async {
 }
 
 Future<bool> getDandanplayEpisodeMatchStatus(int commonEpiId) async {
-
-  final filePath = await _getFilePathById(JsonFileType.episode, commonEpiId);
-  if (filePath == null) return false;
-  final cacheFile = File(filePath);
-  if (!await cacheFile.exists()) return false;
-
-  final decoded = jsonDecode(await cacheFile.readAsString());
-  if (decoded is! Map) {
-    throw const FormatException('Dandanplay Episode 缓存格式无效');
-  }
-
-  return decoded['isMatchedDandanplay'] == true;
+  final decoded = await readJsonFromFile(JsonFileType.episode, commonEpiId);
+  return decoded?['isMatchedDandanplay'] == true;
 }
 
 

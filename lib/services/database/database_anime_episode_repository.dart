@@ -58,6 +58,7 @@ class _AnimeEpisodeRepository {
 
       final oldAnimeId = await _sourceAnimeId(txn, schema, sourceAnimeId);
       if (oldAnimeId == null) throw StateError('关联 Anime 前必须先写入对应的外部动画记录');
+      commonAnimeId = await _canonicalId(txn, 'anime', commonAnimeId) ?? commonAnimeId;
 
       await txn.insert(
         'anime',
@@ -72,21 +73,13 @@ class _AnimeEpisodeRepository {
         return;
       }
 
-      await txn.update(
-        schema.animeTable,
-        <String, Object?>{'anime_id': commonAnimeId},
-        where: '${schema.animeSourceId} = ?',
-        whereArgs: <Object>[sourceAnimeId],
-      );
-      await txn.rawUpdate(
-        'UPDATE episode '
-        'SET anime_id = ? '
-        'WHERE episode_id IN ('
-        'SELECT episode_id FROM ${schema.episodeTable} '
-        'WHERE ${schema.animeSourceId} = ?)',
-        <Object>[commonAnimeId, sourceAnimeId],
-      );
-      await _deleteAnimeIfUnreferenced(txn, oldAnimeId);
+      // Merge the whole common identity. UNIQUE conflicts reject ambiguous
+      // merges and roll back every relation instead of detaching one source.
+      for (final table in const ['dandanplay_anime', 'bangumi_anime', 'episode']) {
+        await txn.update(table, {'anime_id': commonAnimeId},
+            where: 'anime_id = ?', whereArgs: [oldAnimeId]);
+      }
+      await _markMerged(txn, 'anime', oldAnimeId, commonAnimeId);
     });
 
     debugPrint(
@@ -108,6 +101,7 @@ class _AnimeEpisodeRepository {
 
       final oldEpisodeId = await _sourceEpisodeId(txn, schema, sourceEpisodeId);
       if (oldEpisodeId == null) throw StateError('关联 Episode 前必须先写入对应的外部剧集记录');
+      commonEpisodeId = await _canonicalId(txn, 'episode', commonEpisodeId) ?? commonEpisodeId;
 
       // 获取外部剧集对应的通用动画 ID
       final animeId = await _readIntColumn(txn, 'episode', 'anime_id', 'episode_id', oldEpisodeId);
@@ -116,12 +110,7 @@ class _AnimeEpisodeRepository {
 
       // 如果目标共通剧集的通用动画 ID 与当前外部剧集的通用动画 ID 不一致, 则取消关联
       if (targetAnimeId != null && targetAnimeId != animeId) {
-        debugPrint(
-          '[Database] 取消关联 Episode: '
-          '${type.name} Episode $sourceEpisodeId 当前属于 Anime $animeId, '
-          '目标共通 Episode $commonEpisodeId 属于 Anime $targetAnimeId',
-        );
-        return;
+        throw StateError('无法合并属于不同 Anime 的 Episode: $oldEpisodeId -> $commonEpisodeId');
       }
 
       // 插入共通剧集记录
@@ -135,14 +124,11 @@ class _AnimeEpisodeRepository {
       );
       if (oldEpisodeId == commonEpisodeId) return;
 
-      // 更新外部剧集关联的共通剧集 ID
-      await txn.update(
-        schema.episodeTable,
-        <String, Object?>{'episode_id': commonEpisodeId},
-        where: '${schema.episodeSourceId} = ?',
-        whereArgs: <Object>[sourceEpisodeId],
-      );
-      await _deleteEpisodeIfUnreferenced(txn, oldEpisodeId);
+      for (final table in const ['dandanplay_episode', 'bangumi_episode', 'asset_episode']) {
+        await txn.update(table, {'episode_id': commonEpisodeId},
+            where: 'episode_id = ?', whereArgs: [oldEpisodeId]);
+      }
+      await _markMerged(txn, 'episode', oldEpisodeId, commonEpisodeId);
     });
   }
 
@@ -157,17 +143,20 @@ class _AnimeEpisodeRepository {
   }
 
   Future<int?> findCommonAnimeId(AniEpiRltType type, int sourceAnimeId) {
+    if (type == AniEpiRltType.common) return _canonicalId(database, 'anime', sourceAnimeId);
     return _sourceAnimeId(database, _relationSchema(type), sourceAnimeId);
   }
 
-  Future<int?> findSourceAnimeId(AniEpiRltType type, int commonAnimeId) {
+  Future<int?> findSourceAnimeId(AniEpiRltType type, int commonAnimeId) async {
+    final canonical = await _canonicalId(database, 'anime', commonAnimeId);
+    if (canonical == null) return null;
     final schema = _relationSchema(type);
     return _readIntColumn(
       database,
       schema.animeTable,
       schema.animeSourceId,
       'anime_id',
-      commonAnimeId,
+      canonical,
     );
   }
 
@@ -176,6 +165,7 @@ class _AnimeEpisodeRepository {
     final rows = await database.query(
       schema.animeTable,
       columns: <String>[schema.animeSourceId],
+      where: type == AniEpiRltType.common ? 'merged_into IS NULL' : null,
       orderBy: schema.animeSourceId,
     );
     return rows
@@ -188,11 +178,17 @@ class _AnimeEpisodeRepository {
     int animeId,
   ) async {
     _requireNonNegative(animeId, 'animeId');
+    if (type == AniEpiRltType.common) {
+      final canonical = await _canonicalId(database, 'anime', animeId);
+      if (canonical == null) return {};
+      animeId = canonical;
+    }
     final schema = _relationSchema(type);
     final rows = await database.query(
       schema.episodeTable,
       columns: <String>[schema.episodeSourceId],
-      where: '${schema.animeSourceId} = ?',
+      where: '${schema.animeSourceId} = ?'
+          '${type == AniEpiRltType.common ? ' AND merged_into IS NULL' : ''}',
       whereArgs: <Object>[animeId],
       orderBy: schema.episodeSourceId,
     );
@@ -202,17 +198,20 @@ class _AnimeEpisodeRepository {
   }
 
   Future<int?> findCommonEpisodeId(AniEpiRltType type, int sourceEpisodeId) {
+    if (type == AniEpiRltType.common) return _canonicalId(database, 'episode', sourceEpisodeId);
     return _sourceEpisodeId(database, _relationSchema(type), sourceEpisodeId);
   }
 
-  Future<int?> findSourceEpisodeId(AniEpiRltType type, int commonEpisodeId) {
+  Future<int?> findSourceEpisodeId(AniEpiRltType type, int commonEpisodeId) async {
+    final canonical = await _canonicalId(database, 'episode', commonEpisodeId);
+    if (canonical == null) return null;
     final schema = _relationSchema(type);
     return _readIntColumn(
       database,
       schema.episodeTable,
       schema.episodeSourceId,
       'episode_id',
-      commonEpisodeId,
+      canonical,
     );
   }
 

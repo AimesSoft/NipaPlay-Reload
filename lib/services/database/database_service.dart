@@ -22,21 +22,54 @@ class DatabaseService {
   static Future<void> initialize(String dbFilePath) async {
 
     sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
     await DatabaseSql.load();
 
-    final database = await openDatabase(
+    final database = await databaseFactoryFfi.openDatabase(
       dbFilePath,
-      version: 2,
-      onConfigure: (db) => db.execute(DatabaseSql.enableForeignKeys),
-      onCreate: (db, _) async {
-        for (final sql in DatabaseSql.createTables ) { await db.execute(sql); }
-        for (final sql in DatabaseSql.createIndexes) { await db.execute(sql); }
-      },
+      options: OpenDatabaseOptions(
+        version: 3,
+        onConfigure: (db) async {
+          final existing = await db.rawQuery("SELECT name FROM sqlite_master "
+              "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+              "AND name != 'android_metadata'");
+          if (existing.isNotEmpty && !await _isUnifiedDatabase(db)) {
+            throw StateError('不是 NipaPlay 统一媒体数据库，拒绝修改: $dbFilePath');
+          }
+          await db.execute(DatabaseSql.enableForeignKeys);
+        },
+        onCreate: (db, _) async {
+          for (final sql in DatabaseSql.createTables ) { await db.execute(sql); }
+          for (final sql in DatabaseSql.createIndexes) { await db.execute(sql); }
+        },
+        onUpgrade: (db, oldVersion, _) async {
+          // This is the unified database only. Never stamp or migrate a legacy
+          // watch_history.db accidentally supplied by a caller.
+          if (oldVersion != 2 || !await _isUnifiedDatabase(db)) {
+            throw StateError('不支持的数据库，拒绝修改原有数据: $dbFilePath');
+          }
+          await db.execute('ALTER TABLE anime ADD COLUMN merged_into INTEGER '
+              'REFERENCES anime (anime_id) CHECK (merged_into != anime_id)');
+          await db.execute('ALTER TABLE episode ADD COLUMN merged_into INTEGER '
+              'REFERENCES episode (episode_id) CHECK (merged_into != episode_id)');
+          for (final sql in DatabaseSql.mergeIndexes) { await db.execute(sql); }
+        },
+        onOpen: (db) async {
+          if (!await _isUnifiedDatabase(db)) {
+            throw StateError('不是 NipaPlay 统一媒体数据库: $dbFilePath');
+          }
+        },
+      ),
     );
 
     _path     = dbFilePath;
     _database = database;
+  }
+
+  static Future<void> close() async {
+    final database = _database;
+    _database = null;
+    _path = null;
+    await database?.close();
   }
 
 
@@ -69,6 +102,17 @@ class DatabaseService {
   static Future<DbAssetRecord?>      getAssetRecord     (Uint8List hash) =>_withDb((db) => _AssetRepository(db).find(hash));
   static Future<int?> getCommonEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findCommonEpisodeId(hash));
   static Future<int?> getDandanplayEpisodeIdByAssetHash(Uint8List hash) =>_withDb((db) => _AssetRepository(db).findDandanplayEpisodeId(hash));
+
+  /// Serialize metadata access with ID merges. IDs are ordered with the
+  /// canonical record last, so its explicitly saved fields take precedence.
+  /// Original JSON files remain intact; SQL redirects make them reachable.
+  static Future<T> withAnimeJsonIds<T>(int id, Future<T> Function(List<int>) operation) =>
+      _withDb((db) => db.transaction((txn) async =>
+          operation(await _jsonIds(txn, 'anime', id))));
+
+  static Future<T> withEpisodeJsonIds<T>(int id, Future<T> Function(List<int>) operation) =>
+      _withDb((db) => db.transaction((txn) async =>
+          operation(await _jsonIds(txn, 'episode', id))));
 
 
   // debug

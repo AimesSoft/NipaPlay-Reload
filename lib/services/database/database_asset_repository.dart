@@ -14,17 +14,20 @@ class _AssetRepository {
 
     await database.transaction((txn) async {
       final values = <String, Object?>{
-        'asset_size': size,
-        'asset_codec': asset.codec,
-        'asset_sha256': sha256,
+        if (size != null) 'asset_size': size,
+        if (asset.codec != null) 'asset_codec': asset.codec,
+        if (sha256 != null) 'asset_sha256': sha256,
       };
-      final updated = await txn.update(
-        'asset',
-        values,
-        where: 'asset_pre16mib_md5 = ?',
-        whereArgs: <Object?>[hash],
-      );
-      if (updated == 0) {
+      final exists = await _hasRow(txn, 'asset', 'asset_pre16mib_md5', hash);
+      if (exists && values.isNotEmpty) {
+        await txn.update(
+          'asset',
+          values,
+          where: 'asset_pre16mib_md5 = ?',
+          whereArgs: <Object?>[hash],
+        );
+      }
+      if (!exists) {
         await txn.insert(
           'asset',
           <String, Object?>{'asset_pre16mib_md5': hash, ...values},
@@ -82,6 +85,8 @@ class _AssetRepository {
 
     await database.transaction((txn) async {
 
+      episodeId = await _canonicalId(txn, 'episode', episodeId) ?? episodeId;
+
       final oldEpisodeId = await _readIntColumn(txn, 'asset_episode', 'episode_id', 'asset_pre16mib_md5', hash);
       if (oldEpisodeId == null) throw StateError('关联 Episode 前必须先写入视频资产记录');
 
@@ -106,7 +111,7 @@ class _AssetRepository {
         where: 'asset_pre16mib_md5 = ?',
         whereArgs: <Object?>[hash],
       );
-      await _deleteEpisodeIfUnreferenced(txn, oldEpisodeId);
+      await _redirectEpisodeIfUnreferenced(txn, oldEpisodeId, episodeId);
     });
   }
 

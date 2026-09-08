@@ -76,43 +76,72 @@ Future<bool> _hasRow(
   return rows.isNotEmpty;
 }
 
-Future<void> _deleteAnimeIfUnreferenced(
-  DatabaseExecutor executor,
-  int animeId,
-) async {
-  await executor.rawDelete(
-    'DELETE FROM anime '
-    'WHERE anime_id = ? '
-    'AND NOT EXISTS (SELECT 1 FROM episode WHERE anime_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM dandanplay_anime WHERE anime_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM bangumi_anime WHERE anime_id = ?)',
-    <Object>[animeId, animeId, animeId, animeId],
-  );
+Future<bool> _isUnifiedDatabase(DatabaseExecutor executor) async {
+  for (final table in const ['anime', 'episode', 'dandanplay_anime',
+      'dandanplay_episode', 'bangumi_anime', 'bangumi_episode', 'asset',
+      'asset_episode', 'path_asset', 'net_asset']) {
+    if (!await _hasRow(executor, 'sqlite_master', 'name', table)) return false;
+  }
+  return true;
 }
 
-Future<void> _deleteEpisodeIfUnreferenced(
+Future<int?> _canonicalId(DatabaseExecutor executor, String table, int id) async {
+  _requireNonNegative(id, '${table}Id');
+  final visited = <int>{};
+  while (visited.add(id)) {
+    final rows = await executor.query(table,
+        columns: ['merged_into'], where: '${table}_id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    final target = rows.single['merged_into'] as int?;
+    if (target == null) return id;
+    id = target;
+  }
+  throw StateError('数据库中的 $table ID 重定向形成循环');
+}
+
+Future<void> _markMerged(
+  DatabaseExecutor executor, String table, int oldId, int targetId,
+) async {
+  if (oldId == targetId) return;
+  // Keep the old row to reserve its ID forever. Keep the redirect chain as
+  // well: an intermediate canonical JSON must override its older ancestors.
+  await executor.update(table, {'merged_into': targetId},
+      where: '${table}_id = ?', whereArgs: [oldId]);
+}
+
+Future<List<int>> _jsonIds(DatabaseExecutor executor, String table, int id) async {
+  final target = await _canonicalId(executor, table, id);
+  if (target == null) throw StateError('不存在的 $table ID: $id');
+  final rows = await executor.rawQuery('''
+    WITH RECURSIVE metadata_ids(id, depth) AS (
+      SELECT ?, 0
+      UNION ALL
+      SELECT item.${table}_id, parent.depth + 1
+      FROM $table item JOIN metadata_ids parent ON item.merged_into = parent.id
+    )
+    SELECT id FROM metadata_ids ORDER BY depth DESC, id ASC
+  ''', [target]);
+  return rows.map((row) => row['id'] as int).toList();
+}
+
+Future<void> _redirectEpisodeIfUnreferenced(
   DatabaseExecutor executor,
   int episodeId,
+  int targetId,
 ) async {
-  final animeId = await _readIntColumn(
-    executor,
-    'episode',
-    'anime_id',
-    'episode_id',
-    episodeId,
-  );
-  final deleted = await executor.rawDelete(
-    'DELETE FROM episode '
-    'WHERE episode_id = ? '
-    'AND NOT EXISTS (SELECT 1 FROM dandanplay_episode '
-    'WHERE episode_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM bangumi_episode WHERE episode_id = ?) '
-    'AND NOT EXISTS (SELECT 1 FROM asset_episode WHERE episode_id = ?)',
-    <Object>[episodeId, episodeId, episodeId, episodeId],
-  );
-  if (deleted > 0 && animeId != null) {
-    await _deleteAnimeIfUnreferenced(executor, animeId);
+  for (final table in const ['dandanplay_episode', 'bangumi_episode', 'asset_episode']) {
+    if (await _hasRow(executor, table, 'episode_id', episodeId)) return;
   }
+  await _markMerged(executor, 'episode', episodeId, targetId);
+  final animeId = await _readIntColumn(executor, 'episode', 'anime_id', 'episode_id', episodeId);
+  final targetAnimeId = await _readIntColumn(executor, 'episode', 'anime_id', 'episode_id', targetId);
+  if (animeId == null || targetAnimeId == null || animeId == targetAnimeId) return;
+  for (final table in const ['dandanplay_anime', 'bangumi_anime']) {
+    if (await _hasRow(executor, table, 'anime_id', animeId)) return;
+  }
+  final activeEpisodes = await executor.query('episode', columns: ['episode_id'],
+      where: 'anime_id = ? AND merged_into IS NULL', whereArgs: [animeId], limit: 1);
+  if (activeEpisodes.isEmpty) await _markMerged(executor, 'anime', animeId, targetAnimeId);
 }
 
 Uint8List _validateHash(Uint8List value, int expectedBytes) {
