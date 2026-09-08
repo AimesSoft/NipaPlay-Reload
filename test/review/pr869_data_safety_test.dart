@@ -76,6 +76,9 @@ void main() {
     }
     final prefs = await SharedPreferences.getInstance();
     final preferencesBefore = {for (final key in prefs.getKeys()) key: prefs.get(key)};
+    // Exercise onCreate with legacy fixtures already present, not a cached handle.
+    await (await databaseFactoryFfi.openDatabase(dbPath)).close();
+    dbPath = '$root/coexistence-fresh.db';
     await DatabaseService.initialize(dbPath);
     await seed(ddp, 10, [101, 102]);
     await seed(bgm, 20, [201]);
