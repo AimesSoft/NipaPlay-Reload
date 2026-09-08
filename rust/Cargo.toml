@@ -10,6 +10,10 @@ crate-type = ["cdylib", "staticlib"]
 default = []
 ohos = []
 
+[patch.crates-io]
+# 0.7.0 otherwise calls the Linux-only bind_device API when targeting iOS.
+librqbit-dualstack-sockets = { path = "third_party/librqbit-dualstack-sockets" }
+
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
 libc = "0.2"

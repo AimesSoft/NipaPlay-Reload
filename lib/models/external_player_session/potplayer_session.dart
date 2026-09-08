@@ -3,14 +3,13 @@
 // Windows PotPlayer 外部播放器会话
 
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:io';
 
-import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/models/external_player_session/potplayer_window_api.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
@@ -137,7 +136,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
   @override
   void togglePause() {
     if (isClosed || _windowHandle == 0) return;
-    _WindowsPotPlayerApi.instance.postMessage(
+    WindowsPotPlayerApi.instance.postMessage(
       _windowHandle,
       _wmCommand,
       _playPauseCommand,
@@ -162,7 +161,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
     final milliseconds = duration > Duration.zero
         ? target.inMilliseconds.clamp(0, duration.inMilliseconds)
         : target.inMilliseconds;
-    _WindowsPotPlayerApi.instance.postMessage(
+    WindowsPotPlayerApi.instance.postMessage(
       _windowHandle,
       _wmUser,
       _setCurrentTime,
@@ -204,7 +203,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
   /// 没有原字幕时第二次切换回关闭状态，因此不会重复显示弹幕。
   Future<void> _selectOriginalSubtitleAsSecondary() async {
     if (_windowHandle == 0 || isClosed) return;
-    final api = _WindowsPotPlayerApi.instance;
+    final api = WindowsPotPlayerApi.instance;
     final previousForegroundWindow = api.getForegroundWindow();
     api.setForegroundWindow(_windowHandle);
     await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -260,7 +259,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
       _stateTimer?.cancel();
       return;
     }
-    final api = _WindowsPotPlayerApi.instance;
+    final api = WindowsPotPlayerApi.instance;
     if (api.isWindow(_windowHandle) == 0) {
       _windowHandle = 0;
       _deleteAssFile();
@@ -299,7 +298,7 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
   static Future<int> _waitForPlayerWindow(int processId) async {
     final deadline = DateTime.now().add(const Duration(seconds: 5));
     do {
-      final handle = _WindowsPotPlayerApi.instance.findWindowForProcess(
+      final handle = WindowsPotPlayerApi.instance.findWindowForProcess(
         processId,
       );
       if (handle != 0) return handle;
@@ -383,145 +382,5 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
     final path = '${Directory.systemTemp.path}${Platform.pathSeparator}'
         'nipaplay_danmaku${Platform.pathSeparator}potplayer_$timestamp.ass';
     return path;
-  }
-}
-
-typedef _EnumWindowsProcNative = Int32 Function(IntPtr, IntPtr);
-typedef _EnumWindowsNative = Int32 Function(
-  Pointer<NativeFunction<_EnumWindowsProcNative>>,
-  IntPtr,
-);
-typedef _EnumWindowsDart = int Function(
-  Pointer<NativeFunction<_EnumWindowsProcNative>>,
-  int,
-);
-typedef _GetWindowThreadProcessIdNative = Uint32 Function(
-  IntPtr,
-  Pointer<Uint32>,
-);
-typedef _GetWindowThreadProcessIdDart = int Function(
-  int,
-  Pointer<Uint32>,
-);
-typedef _SendMessageNative = IntPtr Function(IntPtr, Uint32, IntPtr, IntPtr);
-typedef _SendMessageDart = int Function(int, int, int, int);
-typedef _PostMessageNative = Int32 Function(IntPtr, Uint32, IntPtr, IntPtr);
-typedef _PostMessageDart = int Function(int, int, int, int);
-typedef _IsWindowNative = Int32 Function(IntPtr);
-typedef _IsWindowDart = int Function(int);
-typedef _IsWindowVisibleNative = Int32 Function(IntPtr);
-typedef _IsWindowVisibleDart = int Function(int);
-typedef _GetClassNameNative = Int32 Function(IntPtr, Pointer<Uint16>, Int32);
-typedef _GetClassNameDart = int Function(int, Pointer<Uint16>, int);
-typedef _GetForegroundWindowNative = IntPtr Function();
-typedef _GetForegroundWindowDart = int Function();
-typedef _SetForegroundWindowNative = Int32 Function(IntPtr);
-typedef _SetForegroundWindowDart = int Function(int);
-typedef _KeybdEventNative = Void Function(Uint8, Uint8, Uint32, IntPtr);
-typedef _KeybdEventDart = void Function(int, int, int, int);
-
-int _enumWindowForProcess(int windowHandle, int targetProcessId) {
-  final processId = calloc<Uint32>();
-  try {
-    _WindowsPotPlayerApi.instance.getWindowThreadProcessId(
-      windowHandle,
-      processId,
-    );
-    if (processId.value == targetProcessId &&
-        _WindowsPotPlayerApi.instance.isWindowVisible(windowHandle) != 0 &&
-        _WindowsPotPlayerApi.instance.isPotPlayerMainWindow(windowHandle)) {
-      _WindowsPotPlayerApi.enumeratedWindowHandle = windowHandle;
-      return 0;
-    }
-    return 1;
-  } finally {
-    calloc.free(processId);
-  }
-}
-
-class _WindowsPotPlayerApi {
-  _WindowsPotPlayerApi._() {
-    final user32 = DynamicLibrary.open('user32.dll');
-    enumWindows = user32.lookupFunction<_EnumWindowsNative, _EnumWindowsDart>(
-      'EnumWindows',
-    );
-    getWindowThreadProcessId = user32.lookupFunction<
-        _GetWindowThreadProcessIdNative,
-        _GetWindowThreadProcessIdDart>('GetWindowThreadProcessId');
-    sendMessage = user32.lookupFunction<_SendMessageNative, _SendMessageDart>(
-      'SendMessageW',
-    );
-    postMessage = user32.lookupFunction<_PostMessageNative, _PostMessageDart>(
-      'PostMessageW',
-    );
-    isWindow = user32.lookupFunction<_IsWindowNative, _IsWindowDart>(
-      'IsWindow',
-    );
-    isWindowVisible =
-        user32.lookupFunction<_IsWindowVisibleNative, _IsWindowVisibleDart>(
-      'IsWindowVisible',
-    );
-    getClassName =
-        user32.lookupFunction<_GetClassNameNative, _GetClassNameDart>(
-      'GetClassNameW',
-    );
-    getForegroundWindow = user32.lookupFunction<_GetForegroundWindowNative,
-        _GetForegroundWindowDart>('GetForegroundWindow');
-    setForegroundWindow = user32.lookupFunction<_SetForegroundWindowNative,
-        _SetForegroundWindowDart>('SetForegroundWindow');
-    keybdEvent = user32.lookupFunction<_KeybdEventNative, _KeybdEventDart>(
-      'keybd_event',
-    );
-  }
-
-  static final _WindowsPotPlayerApi instance = _WindowsPotPlayerApi._();
-  static int enumeratedWindowHandle = 0;
-  static final Pointer<NativeFunction<_EnumWindowsProcNative>> _enumCallback =
-      Pointer.fromFunction<_EnumWindowsProcNative>(_enumWindowForProcess, 0);
-
-  late final _EnumWindowsDart enumWindows;
-  late final _GetWindowThreadProcessIdDart getWindowThreadProcessId;
-  late final _SendMessageDart sendMessage;
-  late final _PostMessageDart postMessage;
-  late final _IsWindowDart isWindow;
-  late final _IsWindowVisibleDart isWindowVisible;
-  late final _GetClassNameDart getClassName;
-  late final _GetForegroundWindowDart getForegroundWindow;
-  late final _SetForegroundWindowDart setForegroundWindow;
-  late final _KeybdEventDart keybdEvent;
-
-  static const int _vkControl = 0x11;
-  static const int _vkMenu = 0x12;
-  static const int _vkL = 0x4C;
-  static const int _keyEventKeyUp = 0x0002;
-
-  void sendCtrlAltL() {
-    keybdEvent(_vkControl, 0, 0, 0);
-    keybdEvent(_vkMenu, 0, 0, 0);
-    keybdEvent(_vkL, 0, 0, 0);
-    keybdEvent(_vkL, 0, _keyEventKeyUp, 0);
-    keybdEvent(_vkMenu, 0, _keyEventKeyUp, 0);
-    keybdEvent(_vkControl, 0, _keyEventKeyUp, 0);
-  }
-
-  bool isPotPlayerMainWindow(int windowHandle) {
-    final buffer = calloc<Uint16>(256);
-    try {
-      final length = getClassName(windowHandle, buffer, 256);
-      if (length <= 0) return false;
-      final className =
-          buffer.cast<Utf16>().toDartString(length: length).toLowerCase();
-      return className == 'potplayer' ||
-          className == 'potplayer32' ||
-          className == 'potplayer64';
-    } finally {
-      calloc.free(buffer);
-    }
-  }
-
-  int findWindowForProcess(int processId) {
-    enumeratedWindowHandle = 0;
-    enumWindows(_enumCallback, processId);
-    return enumeratedWindowHandle;
   }
 }
