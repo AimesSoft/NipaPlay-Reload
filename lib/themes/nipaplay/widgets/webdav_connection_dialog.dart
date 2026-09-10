@@ -417,12 +417,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       if (widget.onSave != null) {
         success = await widget.onSave!(connection);
       } else {
-        if (widget.editConnection != null) {
-          // 如果是编辑模式，先删除旧连接
-          await WebDAVService.instance
-              .removeConnection(widget.editConnection!.name);
-        }
-        success = await WebDAVService.instance.addConnection(connection);
+        success = await WebDAVService.instance.upsertConnection(connection);
       }
 
       if (mounted) {

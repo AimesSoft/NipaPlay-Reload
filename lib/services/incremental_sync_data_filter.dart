@@ -1,5 +1,7 @@
 import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
+import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 
 /// Removes device-bound local media data from the cross-device repository.
 ///
@@ -9,15 +11,22 @@ import 'package:nipaplay/services/incremental_sync_repository.dart';
 class IncrementalSyncDataFilter {
   const IncrementalSyncDataFilter._();
 
-  static Map<String, dynamic> sanitizeBackup(Map<String, dynamic> backup) {
+  static Map<String, dynamic> sanitizeBackup(
+    Map<String, dynamic> backup, {
+    Map<String, String> webDavConnectionTombstones = const {},
+  }) {
     final result = Map<String, dynamic>.from(backup);
 
     final mediaLibraries = backup[BackupCategory.mediaLibraries.name];
     final localLibraryRoots = _localLibraryRoots(mediaLibraries);
     if (mediaLibraries is Map) {
-      result[BackupCategory.mediaLibraries.name] =
-          Map<String, dynamic>.from(mediaLibraries)
-            ..remove('localMediaLibraries');
+      final sanitizedMediaLibraries = Map<String, dynamic>.from(mediaLibraries)
+        ..remove('localMediaLibraries');
+      _normalizeWebDavConnections(
+        sanitizedMediaLibraries,
+        tombstones: webDavConnectionTombstones,
+      );
+      result[BackupCategory.mediaLibraries.name] = sanitizedMediaLibraries;
     }
 
     for (final category in const [
@@ -40,7 +49,11 @@ class IncrementalSyncDataFilter {
     final result = IncrementalSyncCodec.cloneState(state);
     final localLibraryRoots =
         _localLibraryRoots(state[BackupCategory.mediaLibraries.name]);
-    result[BackupCategory.mediaLibraries.name]?.remove('localMediaLibraries');
+    final mediaLibraries = result[BackupCategory.mediaLibraries.name];
+    mediaLibraries?.remove('localMediaLibraries');
+    if (mediaLibraries != null) {
+      _normalizeWebDavConnections(mediaLibraries);
+    }
     for (final category in const [
       BackupCategory.watchHistory,
       BackupCategory.episodeMatches,
@@ -51,6 +64,48 @@ class IncrementalSyncDataFilter {
       );
     }
     return result;
+  }
+
+  static void _normalizeWebDavConnections(
+    Map<String, dynamic> mediaLibraries, {
+    Map<String, String> tombstones = const {},
+  }) {
+    final rawConnections = mediaLibraries.remove('webdavConnections');
+    if (rawConnections is List) {
+      for (final rawConnection in rawConnections) {
+        if (rawConnection is! Map) continue;
+        final connection = WebDAVConnection.fromJson(
+          Map<String, dynamic>.from(rawConnection),
+        ).toJson()
+          ..remove('isConnected');
+        final id = connection['id']?.toString().trim();
+        if (id == null || id.isEmpty) continue;
+        mediaLibraries.putIfAbsent(
+          IncrementalSyncWebDavConnections.keyFor(id),
+          () => connection,
+        );
+      }
+    }
+
+    for (final key in mediaLibraries.keys
+        .where(IncrementalSyncWebDavConnections.isConnectionKey)
+        .toList(growable: false)) {
+      final value = mediaLibraries[key];
+      if (value is Map &&
+          !IncrementalSyncWebDavConnections.isTombstone(value)) {
+        mediaLibraries[key] = Map<String, dynamic>.from(value)
+          ..remove('isConnected');
+      }
+    }
+
+    for (final entry in tombstones.entries) {
+      final key = IncrementalSyncWebDavConnections.keyFor(entry.key);
+      if (mediaLibraries.containsKey(key)) continue;
+      mediaLibraries[key] = IncrementalSyncWebDavConnections.tombstone(
+        connectionId: entry.key,
+        deletedAt: entry.value,
+      );
+    }
   }
 
   static bool isDeviceLocalRecord(

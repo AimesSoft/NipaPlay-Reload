@@ -186,11 +186,7 @@ class _CupertinoWebDAVConnectionSheetState
       if (widget.onSave != null) {
         success = await widget.onSave!(connection);
       } else {
-        if (widget.editConnection != null) {
-          await WebDAVService.instance
-              .removeConnection(widget.editConnection!.name);
-        }
-        success = await WebDAVService.instance.addConnection(connection);
+        success = await WebDAVService.instance.upsertConnection(connection);
       }
     } catch (e) {
       success = false;
@@ -243,7 +239,8 @@ class _CupertinoWebDAVConnectionSheetState
         CupertinoTextField(
           controller: controller,
           placeholder: placeholder,
-          keyboardType: obscureText ? TextInputType.visiblePassword : keyboardType,
+          keyboardType:
+              obscureText ? TextInputType.visiblePassword : keyboardType,
           autocorrect: !obscureText,
           enableSuggestions: !obscureText,
           inputFormatters: inputFormatters,

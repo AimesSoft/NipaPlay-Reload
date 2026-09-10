@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
 
 typedef IncrementalSyncState = Map<String, Map<String, dynamic>>;
 
@@ -274,6 +275,32 @@ class IncrementalSyncCodec {
         case BackupCategory.episodeMatches:
           backup[entry.key] = entry.value.values.toList();
         case BackupCategory.mediaLibraries:
+          final mediaLibraries = <String, dynamic>{};
+          final webDavConnections = <dynamic>[];
+          for (final valueEntry in entry.value.entries) {
+            if (IncrementalSyncWebDavConnections.isConnectionKey(
+              valueEntry.key,
+            )) {
+              if (!IncrementalSyncWebDavConnections.isTombstone(
+                valueEntry.value,
+              )) {
+                webDavConnections.add(valueEntry.value);
+              }
+              continue;
+            }
+            // Read old repositories, but never let their aggregate empty list
+            // act as a deletion signal.
+            if (valueEntry.key == 'webdavConnections') {
+              final legacy = valueEntry.value;
+              if (legacy is List) webDavConnections.addAll(legacy);
+              continue;
+            }
+            mediaLibraries[valueEntry.key] = valueEntry.value;
+          }
+          if (webDavConnections.isNotEmpty) {
+            mediaLibraries['webdavConnections'] = webDavConnections;
+          }
+          backup[entry.key] = mediaLibraries;
         case BackupCategory.accounts:
           backup[entry.key] = entry.value;
         case null:
