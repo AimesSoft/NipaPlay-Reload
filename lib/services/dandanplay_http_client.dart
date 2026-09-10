@@ -64,19 +64,51 @@ class DandanplayHttpClient extends transport.BaseClient {
           return _inner.send(request);
         }
         if (authorization.isEmpty) throw DandanplayLoginRequired();
-        request.headers
-            .removeWhere((key, _) => key.toLowerCase() == 'authorization');
-        request.headers.addAll(authorization);
+        _overwriteHeaders(request.headers, authorization);
       }
     } else {
       // Older callers may still supply the account header for custom servers.
       final token = authorization['Authorization'];
       if (token != null) {
-        request.headers.removeWhere((key, value) =>
-            key.toLowerCase() == 'authorization' && value == token);
+        _removeHeaderIfValueMatches(request.headers, 'authorization', token);
       }
     }
     return _inner.send(request);
+  }
+
+  /// Overwrites [values] into [headers] in place.
+  ///
+  /// `http`'s `BaseRequest.headers` is a case-insensitive `LinkedHashMap`, and
+  /// on the Dart VM `LinkedHashMap.removeWhere` leaves the table index pointing
+  /// at the entries it just deleted: unlike `remove`, it only marks the data
+  /// slots of the tombstone and never writes `_DELETED_PAIR` into `_index`.
+  /// Inserting a key whose probe reaches such a stale slot then compares against
+  /// the tombstone and throws
+  /// `type 'List<dynamic>' is not a subtype of type 'String' of 'key1'`.
+  /// Assigning the entries keeps the same "replace whatever the caller sent"
+  /// semantics without ever creating a tombstone, and the case-insensitive
+  /// equality still folds differently cased keys onto a single entry.
+  static void _overwriteHeaders(
+    Map<String, String> headers,
+    Map<String, String> values,
+  ) {
+    for (final entry in values.entries) {
+      headers[entry.key] = entry.value;
+    }
+  }
+
+  /// Removes the header named [name] (case-insensitively) when its value equals
+  /// [value]. Uses `remove`, which keeps the hash table consistent.
+  static void _removeHeaderIfValueMatches(
+    Map<String, String> headers,
+    String name,
+    String value,
+  ) {
+    for (final key in headers.keys.toList()) {
+      if (key.toLowerCase() == name && headers[key] == value) {
+        headers.remove(key);
+      }
+    }
   }
 
   @override
