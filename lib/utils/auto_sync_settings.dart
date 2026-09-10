@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nipaplay/services/full_backup_service.dart';
+import 'package:nipaplay/services/backup_category.dart';
 
 /// Persisted configuration for the incremental multi-device sync repository.
 ///
@@ -23,6 +23,21 @@ class AutoSyncSettings {
   static const String _deviceIdKey = 'incremental_sync_device_id';
   static const String _lastSyncAtKey = 'incremental_sync_last_sync_at';
   static const String _lastSyncErrorKey = 'incremental_sync_last_error';
+
+  /// User-configurable multi-device sync settings included in full backups.
+  /// Runtime identity and status fields such as device ID, last sync time and
+  /// last error are deliberately excluded.
+  static const Set<String> fullBackupPreferenceKeys = {
+    _enabledKey,
+    _legacyPathKey,
+    _serverUrlKey,
+    _usernameKey,
+    _passwordKey,
+    _remotePathKey,
+    _intervalMinutesKey,
+    _categoriesKey,
+    _syncOnRecordChangeKey,
+  };
 
   static const int defaultIntervalMinutes = 30;
   static const String defaultRemotePath = '/NipaPlay/sync';

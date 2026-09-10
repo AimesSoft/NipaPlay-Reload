@@ -15,6 +15,7 @@ import 'package:nipaplay/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay/services/incremental_sync_data_filter.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/services/incremental_sync_transport.dart';
+import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -267,13 +268,15 @@ class AutoSyncService extends ChangeNotifier {
     if (manifestBytes == null) {
       await transport.ensureDirectory(remoteRoot);
     }
+    final collectedLocalBackup = await _backupService.collectBackupData(
+      categories: categories,
+      // Thumbnails and local media paths are device-bound cache/library
+      // artifacts and must never enter the cross-device repository.
+      includeWatchHistoryThumbnails: false,
+    );
     final localBackup = IncrementalSyncDataFilter.sanitizeBackup(
-      await _backupService.collectBackupData(
-        categories: categories,
-        // Thumbnails and local media paths are device-bound cache/library
-        // artifacts and must never enter the cross-device repository.
-        includeWatchHistoryThumbnails: false,
-      ),
+      collectedLocalBackup,
+      webDavConnectionTombstones: WebDAVService.instance.connectionTombstones,
     );
     final localState =
         IncrementalSyncCodec.flattenBackup(localBackup, categories);
@@ -898,16 +901,6 @@ class AutoSyncService extends ChangeNotifier {
         for (final id in ids) {
           await MultiAddressServerService.instance.deleteProfile(id);
         }
-      } else if (operation.key == 'webdavConnections' &&
-          value is List &&
-          value.isEmpty) {
-        await WebDAVService.instance.initialize();
-        final names = WebDAVService.instance.connections
-            .map((connection) => connection.name)
-            .toList();
-        for (final name in names) {
-          await WebDAVService.instance.removeConnection(name);
-        }
       } else if (operation.key == 'smbConnections' &&
           value is List &&
           value.isEmpty) {
@@ -923,9 +916,36 @@ class AutoSyncService extends ChangeNotifier {
       }
     }
 
+    for (final operation in operations.where(
+      (operation) =>
+          !operation.deleted &&
+          operation.category == BackupCategory.mediaLibraries.name &&
+          IncrementalSyncWebDavConnections.isConnectionKey(operation.key) &&
+          IncrementalSyncWebDavConnections.isTombstone(
+            operation.value,
+          ),
+    )) {
+      final connectionId =
+          IncrementalSyncWebDavConnections.connectionIdFromKey(operation.key);
+      if (connectionId == null) continue;
+      await WebDAVService.instance.applySyncTombstone(
+        connectionId: connectionId,
+        deletedAt: IncrementalSyncWebDavConnections.tombstoneDeletedAt(
+          operation.value,
+        ),
+      );
+    }
+
     final changedState = <String, Map<String, dynamic>>{};
-    for (final operation
-        in operations.where((operation) => !operation.deleted)) {
+    for (final operation in operations.where(
+      (operation) =>
+          !operation.deleted &&
+          !(operation.category == BackupCategory.mediaLibraries.name &&
+              IncrementalSyncWebDavConnections.isConnectionKey(
+                operation.key,
+              ) &&
+              IncrementalSyncWebDavConnections.isTombstone(operation.value)),
+    )) {
       changedState.putIfAbsent(operation.category, () => {})[operation.key] =
           operation.value;
     }
