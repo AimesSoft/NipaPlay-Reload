@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as transport;
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/utils/http_header_utils.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
 export 'package:http/http.dart'
@@ -64,51 +65,18 @@ class DandanplayHttpClient extends transport.BaseClient {
           return _inner.send(request);
         }
         if (authorization.isEmpty) throw DandanplayLoginRequired();
-        _overwriteHeaders(request.headers, authorization);
+        // 这里不能用 removeWhere/addAll 改写：http 的 headers 是自定义
+        // equals 的 LinkedHashMap，会踩到 dart-lang/sdk#64217。
+        addOrReplaceHeaders(request.headers, authorization);
       }
     } else {
       // Older callers may still supply the account header for custom servers.
       final token = authorization['Authorization'];
       if (token != null) {
-        _removeHeaderIfValueMatches(request.headers, 'authorization', token);
+        removeHeaderIfValueMatches(request.headers, 'authorization', token);
       }
     }
     return _inner.send(request);
-  }
-
-  /// Overwrites [values] into [headers] in place.
-  ///
-  /// `http`'s `BaseRequest.headers` is a case-insensitive `LinkedHashMap`, and
-  /// on the Dart VM `LinkedHashMap.removeWhere` leaves the table index pointing
-  /// at the entries it just deleted: unlike `remove`, it only marks the data
-  /// slots of the tombstone and never writes `_DELETED_PAIR` into `_index`.
-  /// Inserting a key whose probe reaches such a stale slot then compares against
-  /// the tombstone and throws
-  /// `type 'List<dynamic>' is not a subtype of type 'String' of 'key1'`.
-  /// Assigning the entries keeps the same "replace whatever the caller sent"
-  /// semantics without ever creating a tombstone, and the case-insensitive
-  /// equality still folds differently cased keys onto a single entry.
-  static void _overwriteHeaders(
-    Map<String, String> headers,
-    Map<String, String> values,
-  ) {
-    for (final entry in values.entries) {
-      headers[entry.key] = entry.value;
-    }
-  }
-
-  /// Removes the header named [name] (case-insensitively) when its value equals
-  /// [value]. Uses `remove`, which keeps the hash table consistent.
-  static void _removeHeaderIfValueMatches(
-    Map<String, String> headers,
-    String name,
-    String value,
-  ) {
-    for (final key in headers.keys.toList()) {
-      if (key.toLowerCase() == name && headers[key] == value) {
-        headers.remove(key);
-      }
-    }
   }
 
   @override
