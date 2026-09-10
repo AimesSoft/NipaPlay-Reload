@@ -102,7 +102,7 @@ class WatchHistoryDatabase {
   }
 
   // 创建数据库表
-  Future<void> _createDB(Database db, int version) async {
+  static Future<void> _createDB(Database db, int version) async {
     await db.execute('''
     CREATE TABLE watch_history(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,17 +131,45 @@ class WatchHistoryDatabase {
 
   // 数据库升级处理
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await applyMigrations(db, oldVersion, newVersion);
+  }
+
+  /// 具体的升级步骤。抽成静态方法便于测试直接调用。
+  @visibleForTesting
+  static Future<void> applyMigrations(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 1) {
       await _createDB(db, newVersion);
       return;
     }
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE watch_history ADD COLUMN media_key TEXT');
+      // 迁移必须幂等：早期构建在 user_version 还是 1 的时候就已经把
+      // media_key 写进了 CREATE TABLE，这类库再执行 ALTER 会抛
+      // "duplicate column name: media_key"，导致整个 onUpgrade 回滚、
+      // 观看历史永远加载不出来。
+      if (!await _hasColumn(db, 'watch_history', 'media_key')) {
+        await db.execute(
+          'ALTER TABLE watch_history ADD COLUMN media_key TEXT',
+        );
+      }
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_media_key ON watch_history(media_key)',
       );
     }
     // 未来版本可以在这里添加更多迁移代码
+  }
+
+  /// SQLite 没有 `ADD COLUMN IF NOT EXISTS`，迁移前先查一下列是否存在。
+  static Future<bool> _hasColumn(
+    DatabaseExecutor db,
+    String table,
+    String column,
+  ) async {
+    final rows = await db.rawQuery('PRAGMA table_info("$table")');
+    return rows.any((row) => row['name'] == column);
   }
 
   // 关闭数据库连接
