@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as transport;
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/utils/http_header_utils.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
 export 'package:http/http.dart'
@@ -64,16 +65,15 @@ class DandanplayHttpClient extends transport.BaseClient {
           return _inner.send(request);
         }
         if (authorization.isEmpty) throw DandanplayLoginRequired();
-        request.headers
-            .removeWhere((key, _) => key.toLowerCase() == 'authorization');
-        request.headers.addAll(authorization);
+        // 这里不能用 removeWhere/addAll 改写：http 的 headers 是自定义
+        // equals 的 LinkedHashMap，会踩到 dart-lang/sdk#64217。
+        addOrReplaceHeaders(request.headers, authorization);
       }
     } else {
       // Older callers may still supply the account header for custom servers.
       final token = authorization['Authorization'];
       if (token != null) {
-        request.headers.removeWhere((key, value) =>
-            key.toLowerCase() == 'authorization' && value == token);
+        removeHeaderIfValueMatches(request.headers, 'authorization', token);
       }
     }
     return _inner.send(request);

@@ -159,4 +159,60 @@ void main() {
     await expectLater(client.get(uri), throwsA(isA<DandanplayLoginRequired>()));
     client.close();
   });
+
+  test('replacing a caller-supplied Authorization header never throws',
+      () async {
+    // Regression: `removeWhere` + `addAll` on http's case-insensitive headers
+    // map left a stale index slot pointing at a deleted entry, so re-inserting
+    // the same key threw
+    // `type 'List<dynamic>' is not a subtype of type 'String'`.
+    final seen = <http.Request>[];
+    final client = DandanplayHttpClient(
+      authorization: () => {'Authorization': 'Bearer account-token'},
+      inner: MockClient((request) async {
+        seen.add(request);
+        return http.Response('{}', 200);
+      }),
+    );
+    for (final path in ['trending/all/hot/week', 'comment/123', 'favorite']) {
+      await client.get(
+        Uri.parse('$gateway/api/v2/$path'),
+        headers: {
+          'Accept': 'application/json',
+          'X-AppId': 'app-id',
+          'Authorization': 'Bearer stale-caller-token',
+        },
+      );
+    }
+    expect(seen.length, 3);
+    for (final request in seen) {
+      expect(request.headers['Authorization'], 'Bearer account-token');
+      expect(
+        request.headers.keys
+            .where((key) => key.toLowerCase() == 'authorization')
+            .length,
+        1,
+      );
+    }
+    client.close();
+  });
+
+  test('dropping a stale account header for a custom provider never throws',
+      () async {
+    final seen = <http.Request>[];
+    final client = DandanplayHttpClient(
+      authorization: () => {'Authorization': 'Bearer account-token'},
+      inner: MockClient((request) async {
+        seen.add(request);
+        return http.Response('{}', 200);
+      }),
+    );
+    await client.get(
+      Uri.parse('https://third-party.example/api/v2/comment/123'),
+      headers: {'Authorization': 'Bearer account-token', 'X-Other': 'kept'},
+    );
+    expect(seen.single.headers.containsKey('authorization'), isFalse);
+    expect(seen.single.headers['X-Other'], 'kept');
+    client.close();
+  });
 }

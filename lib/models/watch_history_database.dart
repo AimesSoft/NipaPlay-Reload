@@ -102,7 +102,7 @@ class WatchHistoryDatabase {
   }
 
   // 创建数据库表
-  Future<void> _createDB(Database db, int version) async {
+  static Future<void> _createDB(Database db, int version) async {
     await db.execute('''
     CREATE TABLE watch_history(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,17 +131,48 @@ class WatchHistoryDatabase {
 
   // 数据库升级处理
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await applyMigrations(db, oldVersion, newVersion);
+  }
+
+  /// 具体的升级步骤。抽成静态方法便于测试直接调用。
+  @visibleForTesting
+  static Future<void> applyMigrations(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 1) {
       await _createDB(db, newVersion);
       return;
     }
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE watch_history ADD COLUMN media_key TEXT');
+      // 迁移必须幂等：sqflite 在没有 onDowngrade 的情况下，遇到磁盘上的
+      // user_version 高于代码里的版本时，只会把 user_version 改小、不动表
+      // 结构。所以只要先用 1.11.6 及以后的版本跑过，再用 1.11.5 或更早的
+      // 版本打开同一个库（两者 bundle id 相同、共用 watch_history.db），
+      // 库就会变成「user_version = 1 但 media_key 已存在」。
+      // 这种库再无条件执行 ALTER 会抛 "duplicate column name: media_key"，
+      // 整个 onUpgrade 回滚，库再也打不开、观看历史一直为空。
+      if (!await _hasColumn(db, 'watch_history', 'media_key')) {
+        await db.execute(
+          'ALTER TABLE watch_history ADD COLUMN media_key TEXT',
+        );
+      }
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_media_key ON watch_history(media_key)',
       );
     }
     // 未来版本可以在这里添加更多迁移代码
+  }
+
+  /// SQLite 没有 `ADD COLUMN IF NOT EXISTS`，迁移前先查一下列是否存在。
+  static Future<bool> _hasColumn(
+    DatabaseExecutor db,
+    String table,
+    String column,
+  ) async {
+    final rows = await db.rawQuery('PRAGMA table_info("$table")');
+    return rows.any((row) => row['name'] == column);
   }
 
   // 关闭数据库连接

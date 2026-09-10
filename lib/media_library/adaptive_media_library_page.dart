@@ -57,6 +57,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   TabChangeNotifier? _tabChangeNotifier;
   CupertinoPageActionsController? _pageActionsController;
   bool _connectionsInitialized = false;
+  bool _requestedHistoryLoad = false;
   int _selectionRevision = 0;
   late final MediaLibrarySectionOrderStore _sectionOrderStore;
 
@@ -276,7 +277,12 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         watchHistoryProvider,
         _,
       ) {
-        if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
+        // 只请求一次：加载失败时 isLoaded 会一直是 false，
+        // 在 build 里反复补load会变成每帧一次的重试风暴。
+        if (!_requestedHistoryLoad &&
+            !watchHistoryProvider.isLoaded &&
+            !watchHistoryProvider.isLoading) {
+          _requestedHistoryLoad = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !watchHistoryProvider.isLoaded) {
               watchHistoryProvider.loadHistory();
