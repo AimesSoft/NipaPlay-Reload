@@ -146,10 +146,13 @@ class WatchHistoryDatabase {
       return;
     }
     if (oldVersion < 2) {
-      // 迁移必须幂等：早期构建在 user_version 还是 1 的时候就已经把
-      // media_key 写进了 CREATE TABLE，这类库再执行 ALTER 会抛
-      // "duplicate column name: media_key"，导致整个 onUpgrade 回滚、
-      // 观看历史永远加载不出来。
+      // 迁移必须幂等：sqflite 在没有 onDowngrade 的情况下，遇到磁盘上的
+      // user_version 高于代码里的版本时，只会把 user_version 改小、不动表
+      // 结构。所以只要先用 1.11.6 及以后的版本跑过，再用 1.11.5 或更早的
+      // 版本打开同一个库（两者 bundle id 相同、共用 watch_history.db），
+      // 库就会变成「user_version = 1 但 media_key 已存在」。
+      // 这种库再无条件执行 ALTER 会抛 "duplicate column name: media_key"，
+      // 整个 onUpgrade 回滚，库再也打不开、观看历史一直为空。
       if (!await _hasColumn(db, 'watch_history', 'media_key')) {
         await db.execute(
           'ALTER TABLE watch_history ADD COLUMN media_key TEXT',

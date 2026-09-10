@@ -4,8 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// 早期构建把 media_key 写进了 user_version = 1 的建表语句里，
-/// 于是出现了一批「版本号是 1、但列已经存在」的库。
+/// 旧版本（代码里的数据库版本号还是 1）打开过已经升级过的库时，sqflite
+/// 会把 user_version 改小却不动表结构，于是留下「版本号是 1、但列已经
+/// 存在」的库。这里手工还原这种状态。
 const String _v1SchemaWithMediaKey = '''
 CREATE TABLE watch_history(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
