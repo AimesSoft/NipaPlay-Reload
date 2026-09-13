@@ -57,6 +57,9 @@ jobs:
       - name: Run flutter analyze
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib
 
+      - name: Test DFM trace analyzer
+        run: python3 -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
+
       - name: Detect root test files
         id: detect_tests
         shell: bash
@@ -79,6 +82,8 @@ jobs:
     name: Windows Release Build
     if: github.event_name == 'workflow_dispatch' && inputs.run_windows
     uses: ./.github/workflows/build-windows.yml
+    with:
+      zip_only: true
 
   build-linux:
     name: Linux amd64 Release Build
