@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FramePhase;
 import 'frame_rate_sampler.dart';
 
 import 'package:flutter/foundation.dart';
