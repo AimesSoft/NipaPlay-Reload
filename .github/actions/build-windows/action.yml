@@ -4,7 +4,7 @@ inputs:
   app-version:
     description: '应用版本号'
     required: true
-  zip-only:
+  zip_only:
     description: 'Stop after producing the portable ZIP package'
     required: false
     default: 'false'
@@ -478,13 +478,13 @@ runs:
         key: ${{ steps.restore-erika-native-sources.outputs.cache-primary-key }}
 
     - name: Install Inno Setup
-      if: inputs.zip-only != 'true'
+      if: inputs.zip_only != 'true'
       shell: pwsh
       run: |
         choco install innosetup --no-progress -y
 
     - name: Ensure Inno Setup Chinese language file
-      if: inputs.zip-only != 'true'
+      if: inputs.zip_only != 'true'
       shell: pwsh
       run: |
         $langFile = Join-Path "${env:ProgramFiles(x86)}" "Inno Setup 6\Languages\ChineseSimplified.isl"
@@ -520,7 +520,7 @@ runs:
         }
 
     - name: Create Windows installer with Inno Setup
-      if: inputs.zip-only != 'true'
+      if: inputs.zip_only != 'true'
       id: installer
       shell: pwsh
       run: |
@@ -641,7 +641,7 @@ runs:
         echo "installer_path=$finalPath" >> $env:GITHUB_OUTPUT
 
     - name: Update msix_version to match app version
-      if: inputs.zip-only != 'true'
+      if: inputs.zip_only != 'true'
       id: update_msix_version
       shell: pwsh
       run: |
@@ -685,7 +685,7 @@ runs:
         echo "msix_version=$msixVersion" >> $env:GITHUB_OUTPUT
 
     - name: Build MSIX package
-      if: inputs.zip-only != 'true'
+      if: inputs.zip_only != 'true'
       id: msix_build
       shell: pwsh
       run: |

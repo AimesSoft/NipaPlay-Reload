@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/build-windows
         with:
           app-version: ${{ steps.setup.outputs.version }}
-          zip-only: 'true'
+          zip_only: 'true'
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
