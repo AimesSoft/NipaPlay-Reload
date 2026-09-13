@@ -79,6 +79,8 @@ jobs:
     name: Windows Release Build
     if: github.event_name == 'workflow_dispatch' && inputs.run_windows
     uses: ./.github/workflows/build-windows.yml
+    with:
+      zip_only: true
 
   build-linux:
     name: Linux amd64 Release Build
