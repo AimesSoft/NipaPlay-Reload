@@ -92,3 +92,15 @@ DFM+ 的媒体时钟 snap 阈值为 150ms，若滚动速度为 150 px/s，一次
 ```powershell
 cargo run --offline --manifest-path tools/diagnostics/next2_frame_pacing/Cargo.toml --target-dir rust/target/frame-pacing-probe
 ```
+
+## 180 Hz 实机复测补充
+
+首轮修复后低帧感消失，但资源监视器显示 Flutter 完成帧会在约 350 FPS 与 150 FPS 之间大幅跳变。350 FPS 明显超过 180 Hz 显示器的物理刷新上限，说明它不是显示器真正呈现的帧率。
+
+已确认的统计缺陷：`SystemResourceMonitor` 把 `timings.length` 累加到独立的一秒定时器窗口。Flutter 的 `addTimingsCallback` 在 Release 下约每秒批量上报一次，两个周期没有共同边界。窗口可能收到两批或没有完整一批数据，因此稳定的实际帧序列也能产生接近翻倍/骤降的读数。依据：[Flutter addTimingsCallback 文档](https://api.flutter.dev/flutter/scheduler/SchedulerBinding/addTimingsCallback.html)，以及本机 SDK `packages/flutter/lib/src/scheduler/binding.dart` 的对应注释。
+
+修复改为按 `FrameTiming.rasterFinish` 的真实时间戳计算窗口中的帧间隔数/时间跨度。到达批次只负责运送样本；独立定时器仅在三秒无报告时使数据失效。新增最大帧间隔指标保留单次停顿信息，避免平均 FPS 掩盖抽帧。单元测试覆盖 180 Hz 帧序列按 1/70/180/360/721 条批次送达、真实 150 Hz、50 ms 停顿、重复报告和停用后重启。
+
+上一轮把 350 FPS 直接解释为“纹理完成通知绕过垂直同步”的推断没有运行时证据，现撤回。尚未提交的 Dart 相位限流器及其测试已移除：对本来按 vsync 工作的 Ticker 再加独立截止时间，可能因时钟误差跳过有效刷新，不能据此修复抖动。
+
+稳帧方向：保留现有 Ticker 作为 DFM+ 动画入口，在 180 Hz 下每个刷新周期的总预算约为 5.56 ms。新指标测量的是 Flutter 光栅完成节奏，仍不是 DXGI/DWM 实际呈现。若实测最大帧间隔明显增大，下一步应把 Ticker、布局/提交、GPU 完成及实际 Present 时间戳对齐，定位超预算阶段；若光栅节奏稳定而弹幕仍跳动，则检查共享纹理采样与坐标版本的对应关系。没有这条实机时间线，目前不能确认剩余视觉抖动的唯一根因，也不能承诺锁定 180 FPS。单纯添加 5.56 ms 软件限流不等于垂直同步。
