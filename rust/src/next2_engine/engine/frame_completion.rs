@@ -124,23 +124,20 @@ pub(crate) struct GpuCompletionDriver {
 
 struct GpuCompletionWake {
     requested: u64,
-    closed: bool,
 }
 
 impl GpuCompletionDriver {
-    pub(crate) fn start(device: CompletionArc<wgpu::Device>) -> Self {
+    pub(crate) fn start(device: CompletionArc<wgpu::Device>) -> Result<Self, String> {
         let wake = CompletionArc::new((
-            CompletionMutex::new(GpuCompletionWake {
-                requested: 0,
-                closed: false,
-            }),
+            CompletionMutex::new(GpuCompletionWake { requested: 0 }),
             Condvar::new(),
         ));
         let worker_wake = CompletionArc::clone(&wake);
-        let _ = thread::Builder::new()
+        thread::Builder::new()
             .name("next2-gpu-completion".to_string())
-            .spawn(move || completion_worker(device, worker_wake));
-        Self { wake }
+            .spawn(move || completion_worker(device, worker_wake))
+            .map_err(|err| format!("spawn next2 GPU completion thread failed: {err}"))?;
+        Ok(Self { wake })
     }
 
     pub(crate) fn request_poll(&self) {
@@ -163,22 +160,25 @@ fn completion_worker(
             Ok(state) => state,
             Err(_) => return,
         };
-        while !state.closed && state.requested == observed {
+        while state.requested == observed {
             state = match condvar.wait(state) {
                 Ok(state) => state,
                 Err(_) => return,
             };
         }
-        if state.closed {
-            return;
-        }
         observed = state.requested;
         drop(state);
 
-        let _ = device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(Duration::from_millis(50)),
-        });
+        // A timeout is only a chance to re-enter wgpu and service callbacks;
+        // it must not turn the latest submission into a notification that
+        // depends on some future frame. Retry until this snapshot completes.
+        while matches!(
+            device.poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_millis(50)),
+            }),
+            Err(wgpu::PollError::Timeout)
+        ) {}
     }
 }
 

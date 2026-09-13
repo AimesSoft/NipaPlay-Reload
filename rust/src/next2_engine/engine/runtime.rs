@@ -576,7 +576,7 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
         }));
 
         let device = Arc::new(device);
-        let completion_driver = GpuCompletionDriver::start(Arc::clone(&device));
+        let completion_driver = GpuCompletionDriver::start(Arc::clone(&device))?;
         Ok(Arc::new(EngineDeviceContext {
             #[cfg(target_os = "android")]
             instance,
