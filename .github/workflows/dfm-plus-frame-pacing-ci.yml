@@ -1,0 +1,49 @@
+name: Temporary DFM Plus Windows ZIP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      FVP_DEPS_URL: https://sourceforge.net/projects/mdk-sdk/files/nightly
+      FVP_DEPS_LATEST: 0
+      ERIKA_PREBUILT: "1"
+      NIPAPLAY_VERBOSE_WINDOWS_BUILD: "0"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+
+      - name: Validate DFM Plus Dart changes
+        shell: pwsh
+        run: flutter analyze lib/danmaku_dfm/dfm_plus_overlay.dart lib/danmaku_next/next2_texture_bridge.dart
+
+      - name: Validate next2 Rust changes
+        shell: pwsh
+        run: cargo test --manifest-path rust/Cargo.toml --lib --target x86_64-pc-windows-msvc next2_engine::engine::
+
+      - name: Generate build info
+        shell: pwsh
+        run: python .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Build portable Windows ZIP
+        id: package
+        uses: ./.github/actions/build-windows
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+          zip-only: 'true'
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfm-plus-Windows-x64-zip
+          path: ${{ steps.package.outputs.zip-path }}
+          if-no-files-found: error

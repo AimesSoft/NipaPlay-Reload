@@ -90,6 +90,29 @@ pub extern "C" fn next2_engine_poll_frame_ready(handle: u64) -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
+#[no_mangle]
+pub extern "C" fn next2_engine_set_frame_ready_event(handle: u64, event_handle: usize) -> u8 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        lookup_engine(handle)
+            .map(|entry| entry.completion.bind_windows_event(event_handle))
+            .unwrap_or(false)
+    }));
+    match result {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI set_frame_ready_event PANIC: {msg}"));
+            0
+        }
+    }
+}
+
 #[cfg(not(target_os = "linux"))]
 #[no_mangle]
 pub extern "C" fn next2_engine_attach_present_texture(
@@ -203,6 +226,7 @@ pub extern "C" fn next2_engine_dispose(handle: u64) {
         let Some(entry) = remove_engine(handle) else {
             return;
         };
+        entry.completion.close();
         let _ = entry.cmd_tx.send(EngineCommand::Stop);
     }
 }

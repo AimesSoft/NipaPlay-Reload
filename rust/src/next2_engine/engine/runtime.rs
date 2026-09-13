@@ -5,7 +5,9 @@ use std::ffi::{c_char, CString};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
@@ -127,7 +129,7 @@ pub enum EngineCommand {
 
 pub struct EngineEntry {
     pub cmd_tx: mpsc::Sender<EngineCommand>,
-    pub frame_ready: Arc<AtomicBool>,
+    pub completion: Arc<FrameCompletionState>,
     pub mtl_device_ptr: usize,
 }
 
@@ -159,7 +161,7 @@ pub fn lookup_engine(handle: u64) -> Option<EngineEntry> {
     let entry = guard.get(&handle)?;
     Some(EngineEntry {
         cmd_tx: entry.cmd_tx.clone(),
-        frame_ready: Arc::clone(&entry.frame_ready),
+        completion: Arc::clone(&entry.completion),
         mtl_device_ptr: entry.mtl_device_ptr,
     })
 }
@@ -176,7 +178,7 @@ pub fn poll_frame_ready(handle: u64) -> bool {
     let Some(entry) = lookup_engine(handle) else {
         return false;
     };
-    entry.frame_ready.swap(false, Ordering::AcqRel)
+    entry.completion.consume()
 }
 
 #[cfg(target_os = "linux")]
@@ -479,14 +481,14 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
     let mtl_device_ptr = extract_mtl_device_ptr(ctx.device.as_ref()) as usize;
 
     let (cmd_tx, cmd_rx) = mpsc::channel::<EngineCommand>();
-    let frame_ready = Arc::new(AtomicBool::new(false));
-    let frame_ready_thread = Arc::clone(&frame_ready);
+    let completion = Arc::new(FrameCompletionState::new());
+    let completion_thread = Arc::clone(&completion);
 
     thread::Builder::new()
         .name("next2-engine".to_string())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_engine_loop(ctx, width, height, frame_ready_thread, cmd_rx);
+                run_engine_loop(ctx, width, height, completion_thread, cmd_rx);
             }));
             if let Err(e) = result {
                 if let Some(s) = e.downcast_ref::<String>() {
@@ -513,7 +515,7 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
         handle,
         EngineEntry {
             cmd_tx,
-            frame_ready,
+            completion,
             mtl_device_ptr,
         },
     );
@@ -528,6 +530,7 @@ struct EngineDeviceContext {
     adapter: Arc<wgpu::Adapter>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
+    completion_driver: GpuCompletionDriver,
 }
 
 static DEVICE_CONTEXT: OnceLock<Result<Arc<EngineDeviceContext>, String>> = OnceLock::new();
@@ -572,13 +575,16 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
             eprintln!("wgpu uncaptured error: {err}");
         }));
 
+        let device = Arc::new(device);
+        let completion_driver = GpuCompletionDriver::start(Arc::clone(&device));
         Ok(Arc::new(EngineDeviceContext {
             #[cfg(target_os = "android")]
             instance,
             #[cfg(target_os = "android")]
             adapter,
-            device: Arc::new(device),
+            device,
             queue: Arc::new(queue),
+            completion_driver,
         }))
     });
 
@@ -680,7 +686,7 @@ fn run_engine_loop(
     ctx: Arc<EngineDeviceContext>,
     mut width: u32,
     mut height: u32,
-    frame_ready: Arc<AtomicBool>,
+    completion: Arc<FrameCompletionState>,
     cmd_rx: mpsc::Receiver<EngineCommand>,
 ) {
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
@@ -769,6 +775,7 @@ fn run_engine_loop(
                     if !attached {
                         continue;
                     }
+                    completion.begin_generation();
                     width = w.max(1);
                     height = h.max(1);
                     let _ = renderer.resize(width, height);
@@ -785,6 +792,7 @@ fn run_engine_loop(
                     let response = if let Some((target, shared_handle)) =
                         create_dx12_shared_present_texture(ctx.device.as_ref(), w, h)
                     {
+                        completion.begin_generation();
                         present_target = Some(target);
                         width = w;
                         height = h;
@@ -805,6 +813,7 @@ fn run_engine_loop(
                     width: w,
                     height: h,
                 } => {
+                    completion.begin_generation();
                     width = w.max(1);
                     height = h.max(1);
                     let _ = renderer.resize(width, height);
@@ -828,6 +837,7 @@ fn run_engine_loop(
                     }
                 }
                 EngineCommand::Stop => {
+                    completion.close();
                     running = false;
                     break;
                 }
@@ -848,9 +858,13 @@ fn run_engine_loop(
         if has_pending_frame || needs_interp {
             if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
-                signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
+                signal_frame_ready(
+                    ctx.queue.as_ref(),
+                    &completion,
+                    &ctx.completion_driver,
+                );
             } else {
-                frame_ready.store(false, Ordering::Release);
+                completion.begin_generation();
             }
 
             has_pending_frame = false;

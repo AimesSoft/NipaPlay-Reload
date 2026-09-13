@@ -15,6 +15,8 @@ uint64_t next2_engine_create(uint32_t width, uint32_t height);
 uint8_t next2_engine_resize(uint64_t handle, uint32_t width, uint32_t height);
 void next2_engine_dispose(uint64_t handle);
 bool next2_engine_poll_frame_ready(uint64_t handle);
+uint8_t next2_engine_set_frame_ready_event(uint64_t handle,
+                                           uintptr_t event_handle);
 uint8_t next2_engine_create_dxgi_shared_texture(uint64_t handle,
                                                 uint32_t width,
                                                 uint32_t height,
@@ -39,7 +41,6 @@ namespace {
 constexpr char kChannelName[] = "nipaplay/next2_texture";
 constexpr int kMaxDimension = 16384;
 constexpr int kFallbackSize = 512;
-constexpr UINT kTickIntervalMs = 16;  // ~60Hz
 
 std::optional<int64_t> ToInt64(const flutter::EncodableValue& value) {
   if (const auto* i32 = std::get_if<int32_t>(&value)) {
@@ -201,6 +202,10 @@ void RustLibNipaplayPlugin::RegisterWithRegistrar(
 RustLibNipaplayPlugin::RustLibNipaplayPlugin(
     flutter::PluginRegistrarWindows* registrar)
     : registrar_(registrar), texture_registrar_(registrar->texture_registrar()) {
+  // Auto-reset coalesces bursts; completion sequence numbers in Rust preserve
+  // level-triggered readiness until the consumer observes the latest frame.
+  frame_ready_event_ = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  stop_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
   channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
       registrar->messenger(), kChannelName,
       &flutter::StandardMethodCodec::GetInstance());
@@ -221,10 +226,21 @@ RustLibNipaplayPlugin::~RustLibNipaplayPlugin() {
     surfaces_.clear();
   }
   for (auto& surface : removed_surfaces) {
+    if (surface->engine_handle != 0) {
+      next2_engine_set_frame_ready_event(surface->engine_handle, 0);
+    }
     ReleaseTexture(surface.get());
     if (surface->engine_handle != 0) {
       next2_engine_dispose(surface->engine_handle);
     }
+  }
+  if (frame_ready_event_) {
+    ::CloseHandle(frame_ready_event_);
+    frame_ready_event_ = nullptr;
+  }
+  if (stop_event_) {
+    ::CloseHandle(stop_event_);
+    stop_event_ = nullptr;
   }
 }
 
@@ -242,6 +258,10 @@ void RustLibNipaplayPlugin::HandleMethodCall(
   }
 
   if (method_call.method_name() == "getTextureInfo") {
+    if (!frame_ready_event_ || !stop_event_) {
+      result->Error("event_create_failed", "Failed to create frame notification events");
+      return;
+    }
     const std::string surface_id = ReadSurfaceId(*args);
     const uint32_t width = static_cast<uint32_t>(
         ReadClampedInt(*args, "width", kFallbackSize, 1, kMaxDimension));
@@ -316,6 +336,13 @@ void RustLibNipaplayPlugin::HandleMethodCall(
       is_new_engine = true;
     }
 
+    if (next2_engine_set_frame_ready_event(
+            state->engine_handle,
+            reinterpret_cast<uintptr_t>(frame_ready_event_)) == 0) {
+      result->Error("event_bind_failed", "Failed to bind frame-ready event");
+      return;
+    }
+
     EnsureTickThreadRunning();
 
     flutter::EncodableMap response;
@@ -383,6 +410,7 @@ void RustLibNipaplayPlugin::HandleMethodCall(
 
 void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
   std::unique_ptr<SurfaceState> removed;
+  bool stop_tick_thread = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = surfaces_.find(surface_id);
@@ -391,9 +419,15 @@ void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
     }
     removed = std::move(it->second);
     surfaces_.erase(it);
-    if (surfaces_.empty()) {
-      StopTickThread();
-    }
+    stop_tick_thread = surfaces_.empty();
+  }
+  // The notification thread takes mutex_ in Tick(). Never join it while that
+  // mutex is held.
+  if (stop_tick_thread) {
+    StopTickThread();
+  }
+  if (removed->engine_handle != 0) {
+    next2_engine_set_frame_ready_event(removed->engine_handle, 0);
   }
   if (removed->texture_id >= 0) {
     ReleaseTexture(removed.get());
@@ -444,14 +478,22 @@ void RustLibNipaplayPlugin::EnsureTickThreadRunning() {
   if (tick_running_.load()) {
     return;
   }
+  ::ResetEvent(stop_event_);
   tick_running_.store(true);
   tick_thread_ = std::thread([this]() {
+    HANDLE events[] = {stop_event_, frame_ready_event_};
     while (tick_running_.load()) {
+      const DWORD wait_result = ::WaitForMultipleObjects(2, events, FALSE, INFINITE);
+      if (wait_result == WAIT_OBJECT_0) {
+        break;
+      }
+      if (wait_result != WAIT_OBJECT_0 + 1) {
+        break;
+      }
       try {
         Tick();
       } catch (...) {
       }
-      ::Sleep(kTickIntervalMs);
     }
   });
 }
@@ -461,6 +503,9 @@ void RustLibNipaplayPlugin::StopTickThread() {
     return;
   }
   tick_running_.store(false);
+  if (stop_event_) {
+    ::SetEvent(stop_event_);
+  }
   if (tick_thread_.joinable()) {
     tick_thread_.join();
   }

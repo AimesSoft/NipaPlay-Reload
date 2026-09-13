@@ -1,0 +1,11 @@
+[package]
+name = "next2-frame-pacing-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+wgpu = { version = "=27.0.1", default-features = false, features = ["std", "dx12"] }
+pollster = "0.4"
+
+[workspace]

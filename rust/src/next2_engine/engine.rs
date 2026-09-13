@@ -1,3 +1,4 @@
+include!("engine/frame_completion.rs");
 include!("engine/runtime.rs");
 include!("engine/rendering.rs");
 include!("engine/renderer_core.rs");

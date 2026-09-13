@@ -2,6 +2,8 @@
 struct FramePayload {
     items: Vec<FrameItemPayload>,
     #[serde(default)]
+    motion_mode: MotionMode,
+    #[serde(default)]
     emoji_glyphs: Option<Vec<FrameEmojiGlyphPayload>>,
     /// Chars to prefetch-rasterize asynchronously (lookahead pre-warming).
     /// Each char is dispatched via `atlas.request_rasterize` at the current
@@ -9,6 +11,14 @@ struct FramePayload {
     /// only the delta (chars not yet prefetched) to keep payload small.
     #[serde(default)]
     prefetch_chars: Option<String>,
+}
+
+#[derive(Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum MotionMode {
+    #[default]
+    LegacyInterpolation,
+    VsyncSnapshot,
 }
 
 #[derive(Deserialize)]
@@ -150,4 +160,22 @@ fn decode_emoji_rasters(payloads: &[FrameEmojiGlyphPayload]) -> Vec<EmojiRasterD
         });
     }
     out
+}
+
+#[cfg(test)]
+mod frame_payload_tests {
+    use super::*;
+
+    #[test]
+    fn old_payloads_keep_legacy_interpolation() {
+        let payload: FramePayload = serde_json::from_str(r#"{"items":[]}"#).unwrap();
+        assert!(payload.motion_mode == MotionMode::LegacyInterpolation);
+    }
+
+    #[test]
+    fn dfm_payload_selects_vsync_snapshot_motion() {
+        let payload: FramePayload =
+            serde_json::from_str(r#"{"items":[],"motion_mode":"vsync_snapshot"}"#).unwrap();
+        assert!(payload.motion_mode == MotionMode::VsyncSnapshot);
+    }
 }

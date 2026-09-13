@@ -389,6 +389,7 @@ impl Next2Renderer {
             interp_dt: 0.0,
             last_submit_instant: None,
             submit_interval_ema: 0.0,
+            motion_mode: MotionMode::LegacyInterpolation,
         })
     }
 
@@ -472,6 +473,7 @@ impl Next2Renderer {
         let shadow_style = input.shadow_style;
         let font_size = input.font_size.max(1.0);
 
+        self.motion_mode = parsed.motion_mode;
         for item in parsed.items {
             let tokens =
                 normalize_tokens(item.tokens, item.text.as_str(), item.count_text.as_deref());

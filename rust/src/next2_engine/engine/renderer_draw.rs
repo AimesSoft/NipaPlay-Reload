@@ -423,6 +423,9 @@ impl Next2Renderer {
     /// build_vertices, guaranteeing we stop re-rendering exactly when motion
     /// would freeze anyway.
     fn needs_interpolation_render(&self) -> bool {
+        if self.motion_mode == MotionMode::VsyncSnapshot {
+            return false;
+        }
         // Submit-rate adaptive gate. Only fill between submissions when Dart
         // feeds slower than our 16ms tick (~30fps submit). When Dart sustains
         // ~1 submit/tick (ema <= 20ms, healthy 60fps), idle interp is
@@ -456,7 +459,13 @@ impl Next2Renderer {
         // arrives for >50ms (pause / upstream stall) dt clamps to 0, freezing
         // motion on the last submission without needing a pause command.
         let elapsed = self.submit_instant.elapsed().as_secs_f32();
-        self.interp_dt = if elapsed < 0.050 { elapsed } else { 0.0 };
+        self.interp_dt = if self.motion_mode == MotionMode::LegacyInterpolation
+            && elapsed < 0.050
+        {
+            elapsed
+        } else {
+            0.0
+        };
         let interp_dt = self.interp_dt as f64;
 
         // Take `frame_items` out of `self` so the loop body can borrow `self`
