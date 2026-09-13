@@ -32,6 +32,12 @@ uint8_t next2_engine_set_frame(uint64_t handle,
                                const char* custom_font_family,
                                const char* custom_font_file_path);
 uint8_t next2_engine_reset_scene(uint64_t handle);
+uint8_t next2_engine_set_frame_traced(uint64_t handle, const char* json,
+    float font_size, float outline_width, uint8_t shadow_style, float opacity,
+    const char* font_family, const char* font_path, uint64_t frame_id);
+uint8_t next2_diagnostics_enabled();
+void next2_diagnostics_dart_batch(const char* json);
+void next2_diagnostics_texture_event(uint64_t handle, uint8_t event);
 }
 
 namespace rust_lib_nipaplay {
@@ -324,11 +330,13 @@ void RustLibNipaplayPlugin::HandleMethodCall(
       state->binding =
           std::make_unique<TextureBinding>(shared_handle, state->width, state->height);
       auto* binding = state->binding.get();
+      const auto diagnostic_handle = state->engine_handle;
       state->texture_variant = std::make_unique<flutter::TextureVariant>(
           flutter::GpuSurfaceTexture(
               kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
-              [binding](size_t, size_t)
+              [binding, diagnostic_handle](size_t, size_t)
                   -> const FlutterDesktopGpuSurfaceDescriptor* {
+                next2_diagnostics_texture_event(diagnostic_handle, 1);
                 return binding->descriptor.get();
               }));
       state->texture_id =
@@ -356,6 +364,8 @@ void RustLibNipaplayPlugin::HandleMethodCall(
         flutter::EncodableValue(static_cast<int32_t>(state->height));
     response[flutter::EncodableValue("isNewEngine")] =
         flutter::EncodableValue(is_new_engine);
+    response[flutter::EncodableValue("diagnosticsEnabled")] =
+        flutter::EncodableValue(next2_diagnostics_enabled() != 0);
     result->Success(flutter::EncodableValue(response));
     return;
   }
@@ -378,11 +388,12 @@ void RustLibNipaplayPlugin::HandleMethodCall(
     const float opacity = ReadFloat(*args, "opacity", 1.0f);
     const std::string custom_font_family = ReadString(*args, "customFontFamily");
     const std::string custom_font_file_path = ReadString(*args, "customFontFilePath");
-    const uint8_t ok = next2_engine_set_frame(handle, frame_json->c_str(),
+    const uint64_t diagnostic_id = ReadU64(*args, "diagnosticFrameId", 0);
+    const uint8_t ok = next2_engine_set_frame_traced(handle, frame_json->c_str(),
                                               font_size, outline_width,
                                               shadow_style, opacity,
                                               custom_font_family.c_str(),
-                                              custom_font_file_path.c_str());
+                                              custom_font_file_path.c_str(), diagnostic_id);
     result->Success(flutter::EncodableValue(ok != 0));
     return;
   }
@@ -420,6 +431,15 @@ void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
     removed = std::move(it->second);
     surfaces_.erase(it);
     stop_tick_thread = surfaces_.empty();
+  }
+
+  if (method_call.method_name() == "diagnosticsBatch") {
+    const auto json = ReadString(*args, "json");
+    if (json.size() <= 1024 * 1024 && next2_diagnostics_enabled()) {
+      next2_diagnostics_dart_batch(json.c_str());
+    }
+    result->Success();
+    return;
   }
   // The notification thread takes mutex_ in Tick(). Never join it while that
   // mutex is held.
@@ -470,7 +490,9 @@ void RustLibNipaplayPlugin::Tick() {
     if (!next2_engine_poll_frame_ready(state->engine_handle)) {
       continue;
     }
+    next2_diagnostics_texture_event(state->engine_handle, 2);
     texture_registrar_->MarkTextureFrameAvailable(state->texture_id);
+    next2_diagnostics_texture_event(state->engine_handle, 3);
   }
 }
 

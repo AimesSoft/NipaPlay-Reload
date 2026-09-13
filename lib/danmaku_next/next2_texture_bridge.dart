@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
+import 'package:nipaplay/danmaku_next/next2_frame_trace.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 
 class Next2TextureInfo {
@@ -27,6 +28,10 @@ class Next2TextureBridge {
   static bool get isSupported => Next2PlatformSupport.isNativeTextureSupported;
 
   int? _engineHandle;
+  final Next2FrameTrace trace = Next2FrameTrace((data) async {
+    await _channel
+        .invokeMethod<void>('diagnosticsBatch', {'json': jsonEncode(data)});
+  });
 
   Future<Next2TextureInfo?> ensureTexture({
     required String surfaceId,
@@ -72,6 +77,11 @@ class Next2TextureBridge {
     }
 
     _engineHandle = engineHandle;
+    if (raw['diagnosticsEnabled'] == true) {
+      trace.start(engineHandle);
+      trace.add('texture_info',
+          {'width': outWidth, 'height': outHeight, 'new_engine': isNewEngine});
+    }
 
     return Next2TextureInfo(
       textureId: textureId,
@@ -96,6 +106,7 @@ class Next2TextureBridge {
     double playbackRate = 1.0,
     Map<String, dynamic>? framePayload,
     String motionMode = 'legacy_interpolation',
+    int diagnosticFrameId = 0,
   }) async {
     if (!isSupported) {
       return false;
@@ -122,11 +133,18 @@ class Next2TextureBridge {
       'motion_mode': motionMode,
     };
 
+    if (trace.enabled) trace.add('encode_begin', {}, frame: diagnosticFrameId);
+    final frameJson = jsonEncode(payload);
+    if (trace.enabled) {
+      trace.add('send_begin', {'bytes': frameJson.length},
+          frame: diagnosticFrameId);
+    }
     final ok = await _channel.invokeMethod<bool>(
       'setFrame',
       <String, dynamic>{
         'engineHandle': engineHandle,
-        'frameJson': jsonEncode(payload),
+        'frameJson': frameJson,
+        if (trace.enabled) 'diagnosticFrameId': diagnosticFrameId,
         'fontSize': fontSize * fontScale,
         'outlineWidth': outlineWidth,
         'shadowStyle': _shadowStyleCode(shadowStyle),
@@ -135,6 +153,9 @@ class Next2TextureBridge {
         'customFontFilePath': customFontFilePath,
       },
     );
+    if (trace.enabled) {
+      trace.add('send_return', {'ok': ok}, frame: diagnosticFrameId);
+    }
 
     return ok == true;
   }
@@ -162,6 +183,7 @@ class Next2TextureBridge {
   }
 
   Future<void> disposeSurface(String surfaceId) async {
+    trace.dispose();
     if (!isSupported) {
       return;
     }

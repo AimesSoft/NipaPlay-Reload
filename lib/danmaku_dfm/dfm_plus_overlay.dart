@@ -94,6 +94,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
   double _danmakuSupersample = 0.0;
+  double _diagnosticRefreshRate = 0.0;
   Locale? _danmakuLocale;
 
   /// Tracks whether the native scene is currently empty. Lets us skip the
@@ -355,6 +356,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+        _diagnosticRefreshRate = View.of(context).display.refreshRate;
         final supersample =
             context.watch<SettingsProvider>().danmakuSupersample;
         final locale = Localizations.maybeLocaleOf(context);
@@ -410,6 +412,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   void _onVsync(Duration elapsed) {
     _vsyncElapsedUs = elapsed.inMicroseconds;
+    if (_textureBridge.trace.enabled) {
+      _textureBridge.trace.add('tick', {
+        'elapsed_us': _vsyncElapsedUs,
+        'in_flight': _updateInFlight,
+        'queued': _updateQueued
+      });
+    }
     _queueUpdate();
   }
 
@@ -561,6 +570,33 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // callbacks while native submission is busy and renders the latest time.
         final layoutStartUs = _timingClock.elapsedMicroseconds;
         final frame = _bridge.layout(interpolatedTime);
+        final diagnosticFrameId = _textureBridge.trace.nextFrame();
+        if (_textureBridge.trace.enabled) {
+          _textureBridge.trace.add(
+              'snapshot',
+              {
+                'elapsed_us': currentWallUs,
+                'media_s': interpolatedTime,
+                'count': frame.length,
+                'playing': widget.isPlaying,
+            'refresh_hz': _diagnosticRefreshRate,
+            'supersample': _danmakuSupersample,
+            'dpr': _lastDevicePixelRatio,
+                'samples': frame
+                    .where((item) => item.typeCode == 1 || item.typeCode == 6)
+                    .take(3)
+                    .map((item) => {
+                          'id': identityHashCode(item.content),
+                          'x': item.x,
+                          'y': item.y,
+                          'time': item.time,
+                          'speed': item.scrollSpeed,
+                          'type': item.typeCode,
+                        })
+                    .toList(growable: false),
+              },
+              frame: diagnosticFrameId);
+        }
         final layoutMs =
             (_timingClock.elapsedMicroseconds - layoutStartUs) / 1000.0;
 
@@ -579,6 +615,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final submitStartUs = _timingClock.elapsedMicroseconds;
         await _tryUpdateTexture(
           frame,
+          diagnosticFrameId: diagnosticFrameId,
           prefetchChars: prefetchChars,
           isInitialPrefetch: isInitialPrefetch,
         );
@@ -593,6 +630,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       }
     } catch (_) {
       // Keep overlay alive and retry on next frame.
+      if (_textureBridge.trace.enabled) {
+        _textureBridge.trace.add('update_error', {});
+      }
       _queueUpdate();
     } finally {
       _updateInFlight = false;
@@ -603,6 +643,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     List<PositionedDanmakuItem> frame, {
     String? prefetchChars,
     bool isInitialPrefetch = false,
+    int diagnosticFrameId = 0,
   }) async {
     if (!Next2TextureBridge.isSupported || _layoutSize.isEmpty) {
       return false;
@@ -706,6 +747,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     // stale danmaku on screen and never re-clear an already-empty scene.
     if (frame.isEmpty) {
       if (_sceneCleared) {
+        if (_textureBridge.trace.enabled) {
+          _textureBridge.trace.add('empty_skip', {}, frame: diagnosticFrameId);
+        }
         return true; // already clear — nothing to submit this vsync
       }
       // Fall through: send one empty setFrame to clear the scene.
@@ -749,6 +793,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       effectivePrefetch = null;
     }
 
+    if (_textureBridge.trace.enabled) {
+      _textureBridge.trace.add('payload_begin', {}, frame: diagnosticFrameId);
+    }
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
       fontSize: widget.fontSize,
@@ -774,6 +821,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       playbackRate: widget.playbackRate,
       motionMode: 'vsync_snapshot',
       framePayload: prepared.toJson(),
+      diagnosticFrameId: diagnosticFrameId,
     );
 
     if (pushed) {

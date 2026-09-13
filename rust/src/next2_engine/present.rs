@@ -182,11 +182,12 @@ pub(crate) fn signal_frame_ready(
     queue: &wgpu::Queue,
     completion: &Arc<FrameCompletionState>,
     driver: &GpuCompletionDriver,
+    diagnostic_frame: (u64, u64),
 ) {
     // draw_to_present has already submitted the real command buffer. Register
     // against that submission; never clear an older completion here because
     // the platform consumer may not have observed it yet.
-    completion.register_submission(queue, driver);
+    completion.register_submission(queue, driver, diagnostic_frame);
 }
 
 #[cfg(target_os = "android")]

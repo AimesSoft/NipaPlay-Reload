@@ -278,7 +278,19 @@ pub extern "C" fn next2_engine_set_frame(
     custom_font_family: *const c_char,
     custom_font_file_path: *const c_char,
 ) -> u8 {
+    next2_engine_set_frame_traced(handle, frame_json, font_size, outline_width,
+        shadow_style, opacity, custom_font_family, custom_font_file_path, 0)
+}
+
+#[no_mangle]
+pub extern "C" fn next2_engine_set_frame_traced(
+    handle: u64, frame_json: *const c_char, font_size: f32,
+    outline_width: f32, shadow_style: u8, opacity: f32,
+    custom_font_family: *const c_char, custom_font_file_path: *const c_char,
+    diagnostic_id: u64,
+) -> u8 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        super::diagnostics::record("ffi_enter", handle, diagnostic_id, 0, 0);
         let Some(json) = parse_c_string(frame_json) else {
             return 0;
         };
@@ -286,6 +298,8 @@ pub extern "C" fn next2_engine_set_frame(
         let custom_font_family = parse_c_string(custom_font_family).unwrap_or_default();
         let custom_font_file_path = parse_c_string(custom_font_file_path).unwrap_or_default();
         let input = RenderFrameInput {
+            diagnostic_engine: handle,
+            diagnostic_id,
             frame_json: json,
             font_size,
             outline_width,
@@ -309,6 +323,7 @@ pub extern "C" fn next2_engine_set_frame(
                 return 0;
             };
             let (reply_tx, reply_rx) = mpsc::channel();
+            super::diagnostics::record("enqueue", handle, diagnostic_id, 0, 0);
             if entry
                 .cmd_tx
                 .send(EngineCommand::SetFrame {
@@ -319,10 +334,12 @@ pub extern "C" fn next2_engine_set_frame(
             {
                 return 0;
             }
-            match reply_rx.recv() {
+            let response = match reply_rx.recv() {
                 Ok(true) => 1,
                 _ => 0,
-            }
+            };
+            super::diagnostics::record("ffi_return", handle, diagnostic_id, response as i64, 0);
+            response
         }
     }));
     match result {
@@ -337,6 +354,35 @@ pub extern "C" fn next2_engine_set_frame(
             0
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn next2_diagnostics_enabled() -> u8 {
+    std::panic::catch_unwind(super::diagnostics::enabled).unwrap_or(false) as u8
+}
+
+#[no_mangle]
+pub extern "C" fn next2_diagnostics_dart_batch(json: *const c_char) {
+    let _ = std::panic::catch_unwind(|| {
+        if super::diagnostics::enabled() {
+            if let Some(json) = parse_c_string(json) { super::diagnostics::dart_batch(json); }
+        }
+    });
+}
+
+#[no_mangle]
+pub extern "C" fn next2_diagnostics_texture_event(handle: u64, event: u8) {
+    let _ = std::panic::catch_unwind(|| {
+        if !super::diagnostics::enabled() { return; }
+        #[cfg(not(target_os = "linux"))]
+        if let Some(entry) = lookup_engine(handle) {
+            let (completed, submitted) = entry.completion.diagnostic_ids();
+            let name = match event { 1 => "texture_sample", 2 => "notify_begin", 3 => "notify_end", _ => "texture_retire" };
+            // This is the latest observed completion, NOT proof of which
+            // pixels Flutter/ANGLE sampled from the shared single texture.
+            super::diagnostics::record(name, handle, completed, submitted as i64, 0);
+        }
+    });
 }
 
 #[cfg(target_os = "linux")]

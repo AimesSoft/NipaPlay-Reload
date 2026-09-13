@@ -9,6 +9,8 @@ pub(crate) struct FrameCompletionState {
     completed_sequence: CompletionAtomicU64,
     consumed_sequence: CompletionAtomicU64,
     closed: CompletionAtomicBool,
+    diagnostic_completed: CompletionAtomicU64,
+    diagnostic_submitted: CompletionAtomicU64,
     #[cfg(target_os = "windows")]
     ready_event: CompletionMutex<Option<CompletionArc<WindowsEventHandle>>>,
 }
@@ -21,12 +23,16 @@ impl FrameCompletionState {
             completed_sequence: CompletionAtomicU64::new(0),
             consumed_sequence: CompletionAtomicU64::new(0),
             closed: CompletionAtomicBool::new(false),
+            diagnostic_completed: CompletionAtomicU64::new(0),
+            diagnostic_submitted: CompletionAtomicU64::new(0),
             #[cfg(target_os = "windows")]
             ready_event: CompletionMutex::new(None),
         }
     }
 
     pub(crate) fn begin_generation(&self) {
+        self.diagnostic_completed.store(0, Ordering::Release);
+        self.diagnostic_submitted.store(0, Ordering::Release);
         self.generation.fetch_add(1, Ordering::AcqRel);
         let latest = self.next_sequence.load(Ordering::Acquire);
         self.completed_sequence.store(latest, Ordering::Release);
@@ -37,12 +43,14 @@ impl FrameCompletionState {
         self: &CompletionArc<Self>,
         queue: &wgpu::Queue,
         driver: &GpuCompletionDriver,
+        diagnostic_frame: (u64, u64),
     ) {
         if self.closed.load(Ordering::Acquire) {
             return;
         }
         let generation = self.generation.load(Ordering::Acquire);
         let sequence = self.next_sequence.fetch_add(1, Ordering::AcqRel) + 1;
+        self.diagnostic_submitted.store(diagnostic_frame.1, Ordering::Release);
         let state = CompletionArc::clone(self);
         queue.on_submitted_work_done(move || {
             if state.closed.load(Ordering::Acquire)
@@ -51,6 +59,8 @@ impl FrameCompletionState {
                 return;
             }
             state.completed_sequence.fetch_max(sequence, Ordering::AcqRel);
+            state.diagnostic_completed.fetch_max(diagnostic_frame.1, Ordering::AcqRel);
+            super::diagnostics::record("gpu_complete", diagnostic_frame.0, diagnostic_frame.1, sequence as i64, generation as i64);
             state.signal_platform_event();
         });
         driver.request_poll();
@@ -71,6 +81,10 @@ impl FrameCompletionState {
                 return true;
             }
         }
+    }
+
+    pub(crate) fn diagnostic_ids(&self) -> (u64, u64) {
+        (self.diagnostic_completed.load(Ordering::Acquire), self.diagnostic_submitted.load(Ordering::Acquire))
     }
 
     pub(crate) fn close(&self) {

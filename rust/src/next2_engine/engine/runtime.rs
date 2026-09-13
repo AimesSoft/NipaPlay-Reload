@@ -84,6 +84,8 @@ const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 
 #[derive(Clone)]
 pub struct RenderFrameInput {
+    pub diagnostic_engine: u64,
+    pub diagnostic_id: u64,
     pub frame_json: String,
     pub font_size: f32,
     pub outline_width: f32,
@@ -697,6 +699,8 @@ fn run_engine_loop(
     let mut running = true;
     let mut has_pending_frame = false;
 
+    let mut diagnostic_frame = (0u64, 0u64);
+
     while running {
         // Drain completed async glyph prefetches before any command/draw this
         // iteration, so prefetched glyphs land in the atlas before they're
@@ -824,6 +828,8 @@ fn run_engine_loop(
                     has_pending_frame = true;
                 }
                 EngineCommand::SetFrame { input, reply } => {
+                    let trace_frame = (input.diagnostic_engine, input.diagnostic_id);
+                    super::diagnostics::record("process_begin", trace_frame.0, trace_frame.1, 0, 0);
                     let font_source = load_custom_font_source(
                         input.custom_font_family.as_str(),
                         input.custom_font_file_path.as_str(),
@@ -831,8 +837,10 @@ fn run_engine_loop(
                     .ok()
                     .flatten();
                     let ok = renderer.update_frame(input, font_source);
+                    super::diagnostics::record("process_end", trace_frame.0, trace_frame.1, ok as i64, 0);
                     let _ = reply.send(ok);
                     if ok {
+                        diagnostic_frame = trace_frame;
                         has_pending_frame = true;
                     }
                 }
@@ -857,11 +865,14 @@ fn run_engine_loop(
         let needs_interp = renderer.needs_interpolation_render();
         if has_pending_frame || needs_interp {
             if let Some(target) = present_target.as_mut() {
+                super::diagnostics::record("draw_begin", diagnostic_frame.0, diagnostic_frame.1, 0, 0);
                 renderer.draw_to_present(target);
+                super::diagnostics::record("draw_submitted", diagnostic_frame.0, diagnostic_frame.1, 0, 0);
                 signal_frame_ready(
                     ctx.queue.as_ref(),
                     &completion,
                     &ctx.completion_driver,
+                    diagnostic_frame,
                 );
             } else {
                 completion.begin_generation();
