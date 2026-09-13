@@ -103,4 +103,6 @@ cargo run --offline --manifest-path tools/diagnostics/next2_frame_pacing/Cargo.t
 
 上一轮把 350 FPS 直接解释为“纹理完成通知绕过垂直同步”的推断没有运行时证据，现撤回。尚未提交的 Dart 相位限流器及其测试已移除：对本来按 vsync 工作的 Ticker 再加独立截止时间，可能因时钟误差跳过有效刷新，不能据此修复抖动。
 
+交叉检查 Flutter 引擎源码也不支持“完成通知立即产生下一次 Ticker”的简单闭环：[Animator::RequestFrame / AwaitVSync](https://github.com/flutter/flutter/blob/master/engine/src/flutter/shell/common/animator.cc) 合并待处理请求并等待 VsyncWaiter；单独的纹理更新还可复用上一帧层树而不调用 BeginFrame。[Shell::OnFrameRasterized](https://github.com/flutter/flutter/blob/master/engine/src/flutter/shell/common/shell.cc) 还包含累计 100 帧提前上报的条件，所以批次大小本来就不等于一秒内的帧数。源码证据用于纠正此前归因；未据此推定用户机器上的实际 Present 频率。
+
 稳帧方向：保留现有 Ticker 作为 DFM+ 动画入口，在 180 Hz 下每个刷新周期的总预算约为 5.56 ms。新指标测量的是 Flutter 光栅完成节奏，仍不是 DXGI/DWM 实际呈现。若实测最大帧间隔明显增大，下一步应把 Ticker、布局/提交、GPU 完成及实际 Present 时间戳对齐，定位超预算阶段；若光栅节奏稳定而弹幕仍跳动，则检查共享纹理采样与坐标版本的对应关系。没有这条实机时间线，目前不能确认剩余视觉抖动的唯一根因，也不能承诺锁定 180 FPS。单纯添加 5.56 ms 软件限流不等于垂直同步。
