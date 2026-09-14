@@ -35,6 +35,8 @@ class SystemProxyService {
 
       if (Platform.isWindows) {
         await _loadWindowsProxySettings();
+      } else if (Platform.isMacOS) {
+        await _loadMacOSProxySettings();
       } else {
         // 其他平台暂时依赖环境变量，后续可按需补充。
       }
@@ -184,6 +186,120 @@ class SystemProxyService {
     }
   }
 
+  Future<void> _loadMacOSProxySettings() async {
+    try {
+      final result = await Process.run('/usr/sbin/scutil', ['--proxy']);
+      if (result.exitCode != 0) {
+        debugPrint(
+            'SystemProxyService: failed to query macOS proxy, code=${result.exitCode}');
+        return;
+      }
+
+      final config = _parseMacOSProxyOutput(result.stdout.toString());
+      if (config != null) {
+        _applyConfig(config);
+      } else {
+        _proxyEnabled = false;
+      }
+    } catch (e) {
+      debugPrint('SystemProxyService: error loading macOS proxy: $e');
+    }
+  }
+
+  @visibleForTesting
+  void applyMacOSProxyOutputForTesting(String output) {
+    final config = _parseMacOSProxyOutput(output);
+    if (config == null) {
+      _proxyEnabled = false;
+      _schemeProxy.clear();
+      _bypassRules.clear();
+      _defaultProxy = null;
+      _bypassSimpleLocal = false;
+      return;
+    }
+    _applyConfig(config);
+  }
+
+  static _ProxyConfig? _parseMacOSProxyOutput(String output) {
+    final values = <String, String>{};
+    final exceptions = <String>[];
+    var readingExceptions = false;
+
+    for (final rawLine in output.split(RegExp(r'\r?\n'))) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (readingExceptions) {
+        if (line == '}') {
+          readingExceptions = false;
+          continue;
+        }
+        final exceptionMatch = RegExp(r'^\d+\s*:\s*(.*?)\s*$').firstMatch(line);
+        final exception = exceptionMatch?.group(1)?.trim();
+        if (exception != null && exception.isNotEmpty) {
+          exceptions.add(exception);
+        }
+        continue;
+      }
+
+      if (line.startsWith('ExceptionsList')) {
+        readingExceptions = true;
+        continue;
+      }
+
+      final valueMatch =
+          RegExp(r'^([A-Za-z0-9]+)\s*:\s*(.*?)\s*$').firstMatch(line);
+      if (valueMatch != null) {
+        values[valueMatch.group(1)!] = valueMatch.group(2)!.trim();
+      }
+    }
+
+    final schemeProxy = <String, String>{};
+    String? defaultProxy;
+
+    void addProxy({
+      required String enableKey,
+      required String hostKey,
+      required String portKey,
+      required String scheme,
+    }) {
+      if (values[enableKey] != '1') return;
+      final host = values[hostKey]?.trim();
+      final port = values[portKey]?.trim();
+      if (host == null || host.isEmpty || port == null || port.isEmpty) {
+        return;
+      }
+
+      final endpoint = _normalizeProxyUri('$host:$port');
+      if (endpoint == null || endpoint.isEmpty) return;
+      schemeProxy[scheme] = endpoint;
+      defaultProxy ??= endpoint;
+    }
+
+    addProxy(
+      enableKey: 'HTTPEnable',
+      hostKey: 'HTTPProxy',
+      portKey: 'HTTPPort',
+      scheme: 'http',
+    );
+    addProxy(
+      enableKey: 'HTTPSEnable',
+      hostKey: 'HTTPSProxy',
+      portKey: 'HTTPSPort',
+      scheme: 'https',
+    );
+
+    if (schemeProxy.isEmpty) return null;
+
+    return _ProxyConfig(
+      enabled: true,
+      defaultProxy: defaultProxy,
+      schemeProxy: schemeProxy,
+      bypassPatterns: exceptions,
+      bypassSimpleLocal: exceptions.contains('<local>'),
+    );
+  }
+
   _ProxyConfig? _parseWindowsProxyServer(String raw, String? bypassRaw) {
     final schemeProxy = <String, String>{};
     String? defaultProxy;
@@ -324,7 +440,7 @@ class _BypassRule {
     if (_regex == null) {
       return false;
     }
-    return _regex!.hasMatch(host);
+    return _regex.hasMatch(host);
   }
 
   static bool _containsDot(String host) => host.contains('.');
