@@ -109,6 +109,57 @@ pub(super) fn next_deadline(deadline: Instant, period: Duration, now: Instant) -
     deadline + period.mul_f64(slots as f64)
 }
 
+/// One render stream: real vsync pulses normally drive it; a missing pulse is
+/// covered by a deadline. Late pulses cannot double-render a fallback's slot.
+pub(super) struct FramePacer {
+    pub deadline: Option<Instant>,
+    last_draw: Option<Instant>,
+    last_pulse: Option<u64>,
+    pulse_pending: bool,
+}
+impl FramePacer {
+    pub fn new() -> Self {
+        Self {
+            deadline: None,
+            last_draw: None,
+            last_pulse: None,
+            pulse_pending: false,
+        }
+    }
+    pub fn pulse(&mut self, arrived: Instant, elapsed_us: u64, period: Duration) {
+        if self.last_pulse == Some(elapsed_us) {
+            return;
+        }
+        self.last_pulse = Some(elapsed_us);
+        self.pulse_pending = true;
+        // Leave a small arrival tolerance before declaring the next pulse lost.
+        // This grace is applied once per real pulse, not on every fallback.
+        self.deadline = Some(arrived + period + period.mul_f64(0.20));
+    }
+    pub fn ready(&mut self, now: Instant, period: Duration) -> Option<bool> {
+        if self.pulse_pending {
+            self.pulse_pending = false;
+            if self
+                .last_draw
+                .is_none_or(|last| now.saturating_duration_since(last) >= period.mul_f64(0.65))
+            {
+                return Some(true);
+            }
+        }
+        if self.deadline.is_none_or(|t| now >= t) {
+            Some(false)
+        } else {
+            None
+        }
+    }
+    pub fn rendered(&mut self, now: Instant, period: Duration, vsync: bool) {
+        self.last_draw = Some(now);
+        if !vsync {
+            self.deadline = Some(next_deadline(self.deadline.unwrap_or(now), period, now));
+        }
+    }
+}
+
 pub(super) fn sample_x(
     x: f64,
     speed: f64,
@@ -126,6 +177,40 @@ pub(super) fn sample_x(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn vsync_and_fallback_share_one_render_slot() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 0, period);
+        assert_eq!(pacer.ready(start, period), Some(true));
+        pacer.rendered(start, period, true);
+        // The next pulse is missing: the fallback fires with 1ms grace.
+        let fallback = start + Duration::from_millis(6);
+        assert_eq!(pacer.ready(fallback, period), Some(false));
+        pacer.rendered(fallback, period, false);
+        let late = start + Duration::from_millis(7);
+        pacer.pulse(late, 5000, period);
+        assert_eq!(pacer.ready(late, period), None);
+        // The following normal pulse resumes output without a second stream.
+        let normal = start + Duration::from_millis(10);
+        pacer.pulse(normal, 10000, period);
+        assert_eq!(pacer.ready(normal, period), Some(true));
+    }
+    #[test]
+    fn missing_several_pulses_keeps_fallback_cadence() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 0, period);
+        pacer.ready(start, period);
+        pacer.rendered(start, period, true);
+        for ms in [6, 11, 16, 21] {
+            let now = start + Duration::from_millis(ms);
+            assert_eq!(pacer.ready(now, period), Some(false));
+            pacer.rendered(now, period, false);
+        }
+    }
     #[test]
     fn dart_gap_does_not_freeze_or_reset_motion() {
         let start = Instant::now();

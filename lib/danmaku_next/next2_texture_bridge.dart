@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/danmaku_next/next2_frame_trace.dart';
+import 'next2_native_vsync.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 
 class Next2TextureInfo {
@@ -28,6 +29,10 @@ class Next2TextureBridge {
   static bool get isSupported => Next2PlatformSupport.isNativeTextureSupported;
 
   int? _engineHandle;
+  bool signalVsync(int elapsedUs) {
+    final handle = _engineHandle;
+    return handle != null && Next2NativeVsync.signal(handle, elapsedUs);
+  }
   final Next2FrameTrace trace = Next2FrameTrace((data) async {
     await _channel
         .invokeMethod<void>('diagnosticsBatch', {'json': jsonEncode(data)});

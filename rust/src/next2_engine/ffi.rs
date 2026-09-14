@@ -23,6 +23,17 @@ fn parse_c_string(ptr: *const c_char) -> Option<String> {
     c_str.to_str().ok().map(ToOwned::to_owned)
 }
 
+/// Nonblocking vsync notification: no JSON, layout, or GPU work on the caller.
+#[cfg(target_os = "windows")]
+#[no_mangle]
+pub extern "C" fn next2_engine_vsync(handle: u64, elapsed_us: u64) -> u8 {
+    std::panic::catch_unwind(|| {
+        lookup_engine(handle).is_some_and(|entry| entry.cmd_tx.send(EngineCommand::Vsync {
+            arrived: std::time::Instant::now(), elapsed_us,
+        }).is_ok()) as u8
+    }).unwrap_or(0)
+}
+
 #[no_mangle]
 pub extern "C" fn next2_engine_create(width: u32, height: u32) -> u64 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

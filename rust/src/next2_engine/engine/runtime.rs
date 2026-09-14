@@ -61,29 +61,6 @@ const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
 
-// Scope the Windows timer request to a live continuous-animation engine. This
-// also improves the channel's deadline wait; default Windows waits can otherwise
-// round a 4-6ms display period up to the system's ~15.6ms timer quantum.
-struct MotionTimerResolution;
-#[cfg(target_os = "windows")]
-#[link(name = "winmm")]
-extern "system" {
-    fn timeBeginPeriod(period: u32) -> u32;
-    fn timeEndPeriod(period: u32) -> u32;
-}
-impl MotionTimerResolution {
-    fn acquire() -> Option<Self> {
-        #[cfg(target_os = "windows")]
-        if unsafe { timeBeginPeriod(1) } != 0 { return None; }
-        Some(Self)
-    }
-}
-impl Drop for MotionTimerResolution {
-    fn drop(&mut self) {
-        #[cfg(target_os = "windows")]
-        unsafe { timeEndPeriod(1); }
-    }
-}
 const BASE_ATLAS_SIZE: u32 = 8192;
 const MSDF_RANGE: f64 = super::DANMAKU_MSDF_RANGE;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
@@ -128,6 +105,7 @@ pub struct DxgiSharedTextureInfo {
 }
 
 pub enum EngineCommand {
+    Vsync { arrived: std::time::Instant, elapsed_us: u64 },
     AttachPresentTexture {
         raw_target_ptr: usize,
         width: u32,
@@ -154,7 +132,7 @@ pub enum EngineCommand {
 }
 
 pub struct EngineEntry {
-    pub cmd_tx: mpsc::Sender<EngineCommand>,
+    pub cmd_tx: command_channel::Sender<EngineCommand>,
     pub completion: Arc<FrameCompletionState>,
     pub mtl_device_ptr: usize,
 }
@@ -506,7 +484,7 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
 
     let mtl_device_ptr = extract_mtl_device_ptr(ctx.device.as_ref()) as usize;
 
-    let (cmd_tx, cmd_rx) = mpsc::channel::<EngineCommand>();
+    let (cmd_tx, cmd_rx) = command_channel::channel::<EngineCommand>();
     let completion = Arc::new(FrameCompletionState::new());
     let completion_thread = Arc::clone(&completion);
 
@@ -713,7 +691,7 @@ fn run_engine_loop(
     mut width: u32,
     mut height: u32,
     completion: Arc<FrameCompletionState>,
-    cmd_rx: mpsc::Receiver<EngineCommand>,
+    cmd_rx: command_channel::Receiver<EngineCommand>,
 ) {
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
         Ok(renderer) => renderer,
@@ -724,11 +702,13 @@ fn run_engine_loop(
     let mut has_pending_frame = false;
 
     let mut diagnostic_frame = (0u64, 0u64);
-    let mut render_deadline: Option<std::time::Instant> = None;
+    let mut pacer = motion::FramePacer::new();
     let mut motion_revision = 0;
     let mut motion_period = TICK_INTERVAL;
-    let mut timer_resolution = None;
+    let mut multimedia_scheduling = None;
+    let mut multimedia_attempted = false;
     let mut render_sequence = 0i64;
+    super::diagnostics::record("pacing_wait_backend", 0, 0, cmd_rx.precise() as i64, 0);
 
     while running {
         // Drain completed async glyph prefetches before any command/draw this
@@ -736,13 +716,18 @@ fn run_engine_loop(
         // needed by `draw_to_present`. Non-blocking; cheap when empty.
         renderer.drain_prefetch(ctx.queue.as_ref());
         let mut received_command = false;
+        let mut commands_drained = 0;
         let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
         if continuous && renderer.needs_interpolation_render() {
-            if timer_resolution.is_none() {
-                timer_resolution = MotionTimerResolution::acquire();
+            if !multimedia_attempted {
+                multimedia_scheduling = command_channel::MultimediaScheduling::acquire();
+                multimedia_attempted = true;
+                super::diagnostics::record("pacing_mmcss", diagnostic_frame.0, 0,
+                    multimedia_scheduling.is_some() as i64, 0);
             }
         } else {
-            timer_resolution = None;
+            drop(multimedia_scheduling.take());
+            multimedia_attempted = false;
         }
 
         loop {
@@ -753,10 +738,17 @@ fn run_engine_loop(
                 })
             } else {
                 let wait = if continuous && (has_pending_frame || renderer.needs_interpolation_render()) {
-                    render_deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
+                    pacer.deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
                         .unwrap_or(Duration::ZERO)
                 } else { TICK_INTERVAL };
-                cmd_rx.recv_timeout(wait)
+                let wait_start = std::time::Instant::now();
+                super::diagnostics::record("pacing_wait_begin", diagnostic_frame.0, 0,
+                    wait.as_micros() as i64, cmd_rx.precise() as i64);
+                let received = cmd_rx.recv_timeout(wait);
+                let spent = wait_start.elapsed();
+                super::diagnostics::record("pacing_wait_end", diagnostic_frame.0, 0,
+                    spent.as_micros() as i64, received.is_ok() as i64);
+                received
             };
 
             let cmd = match recv_result {
@@ -769,7 +761,15 @@ fn run_engine_loop(
             };
 
             received_command = true;
+            commands_drained += 1;
             match cmd {
+                EngineCommand::Vsync { arrived, elapsed_us } => {
+                    if renderer.motion_mode == MotionMode::ContinuousAnchor {
+                        pacer.pulse(arrived, elapsed_us, renderer.motion_clock.period);
+                        super::diagnostics::record("vsync_pulse", diagnostic_frame.0, 0,
+                            elapsed_us as i64, arrived.elapsed().as_micros() as i64);
+                    }
+                }
                 EngineCommand::AttachPresentTexture {
                     raw_target_ptr,
                     width: w,
@@ -892,7 +892,7 @@ fn run_engine_loop(
                 }
             }
             // A continuously arriving command stream must not starve rendering.
-            if render_deadline.is_some_and(|t| std::time::Instant::now() >= t) {
+            if commands_drained >= 64 {
                 break;
             }
         }
@@ -901,21 +901,18 @@ fn run_engine_loop(
             break;
         }
 
-        // Re-render not only on a freshly submitted frame, but also on idle
-        // 16ms ticks while scroll interpolation is active. needs_interpolation_render
-        // is true only when there are scroll items AND a frame was submitted
-        // within the last 50ms — so paused/empty scenes add no continuous GPU
-        // load. draw_to_present recomputes interp_dt internally, advancing
-        // scroll items between Dart submissions (30fps submit → ~60fps motion).
+        // Real vsync and deadline fallback share a single pacing state. Source
+        // packets update the scene without adding an independent render stream.
         let needs_interp = renderer.needs_interpolation_render();
         let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
         if motion_revision != renderer.motion_clock.revision || motion_period != renderer.motion_clock.period {
             motion_revision = renderer.motion_clock.revision;
             motion_period = renderer.motion_clock.period;
-            render_deadline = None;
+            pacer = motion::FramePacer::new();
         }
         let now = std::time::Instant::now();
-        let due = !continuous || render_deadline.is_none_or(|t| now >= t);
+        let pacing = if continuous { pacer.ready(now, renderer.motion_clock.period) } else { Some(false) };
+        let due = pacing.is_some();
         if (has_pending_frame || needs_interp) && due {
             if let Some(target) = present_target.as_mut() {
                 render_sequence += 1;
@@ -927,6 +924,8 @@ fn run_engine_loop(
                 } else { diagnostic_frame };
                 renderer.diagnostic_render = render_trace;
                 if continuous {
+                    super::diagnostics::record("pacing_draw", render_trace.0, render_trace.1,
+                        (pacing == Some(true)) as i64, 0);
                     super::diagnostics::record("render_source", render_trace.0, render_trace.1,
                         diagnostic_frame.1 as i64, render_sequence);
                 }
@@ -945,10 +944,10 @@ fn run_engine_loop(
 
             has_pending_frame = false;
             if continuous {
-                render_deadline = Some(motion::next_deadline(render_deadline.unwrap_or(now),
-                    renderer.motion_clock.period, std::time::Instant::now()));
+                pacer.rendered(std::time::Instant::now(), renderer.motion_clock.period,
+                    pacing == Some(true));
             } else {
-                render_deadline = None;
+                pacer = motion::FramePacer::new();
             }
         }
     }

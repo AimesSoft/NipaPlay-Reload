@@ -421,6 +421,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   void _onVsync(Duration elapsed) {
     _vsyncElapsedUs = elapsed.inMicroseconds;
+    _textureBridge.signalVsync(_vsyncElapsedUs);
     if (_textureBridge.trace.enabled) {
       _textureBridge.trace.add('tick', {
         'elapsed_us': _vsyncElapsedUs,
@@ -428,8 +429,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         'queued': _updateQueued
       });
     }
-    // Native owns every animation frame. Dart only refreshes the 250ms scene
-    // window and clock anchor; a missing Ticker no longer freezes the texture.
+    // The lightweight signal above aligns native rendering to real vsync.
+    // Scene/clock updates remain sparse; native deadlines cover missing ticks.
     if (_timingClock.elapsedMicroseconds - _lastMotionSubmitWallUs >=
             _motionSubmitIntervalUs ||
         _forceLayout) {
