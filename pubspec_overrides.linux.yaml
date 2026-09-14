@@ -6,6 +6,8 @@
 # pub treats this section as a replacement rather than a per-package merge, so
 # the shared overrides from pubspec.yaml are repeated below.
 dependency_overrides:
+  shared_preferences_windows:
+    path: packages/shared_preferences_windows
   # Flutter 3.47 renamed the private same-engine windowing constructor fields.
   desktop_multi_window:
     path: packages/desktop_multi_window_linux_347

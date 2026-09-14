@@ -8,6 +8,8 @@
 # Pub treats this section as a replacement rather than a per-package merge, so
 # the shared overrides from pubspec.yaml are repeated below the OHOS entries.
 dependency_overrides:
+  shared_preferences_windows:
+    path: packages/shared_preferences_windows
   # universal_gamepad has no HarmonyOS native implementation and requires a
   # newer Dart SDK than the pinned OpenHarmony Flutter toolchain. Replace it
   # with a no-op API-compatible package so OHOS never registers or calls it.

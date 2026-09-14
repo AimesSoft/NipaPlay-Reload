@@ -8,6 +8,15 @@ import 'package:shared_preferences_windows/shared_preferences_windows.dart';
 
 import 'fake_path_provider_windows.dart';
 
+class CountingPathProvider extends FakePathProviderWindows {
+  int calls = 0;
+  @override
+  Future<String?> getApplicationSupportPath() {
+    calls++;
+    return super.getApplicationSupportPath();
+  }
+}
+
 // Implements only async disk operations: any sync call fails the test.
 class AsyncOnlyFile implements File {
   AsyncOnlyFile(this.delegate);
@@ -59,9 +68,10 @@ void main() {
   test('slow disk leaves event loop free and preserves write order', () async {
     final disk = MemoryFileSystem.test();
     final file = AsyncOnlyFile(disk.file('/preferences.json'));
+    final provider = CountingPathProvider();
     final prefs = SharedPreferencesWindows()
       ..fs = AsyncOnlyFileSystem(file)
-      ..pathProvider = FakePathProviderWindows();
+      ..pathProvider = provider;
     await prefs.getAll();
     final first = prefs.setValue('Int', 'flutter.position', 1000);
     await file.firstWrite.future;
@@ -75,5 +85,7 @@ void main() {
     expect(await second, isTrue);
     expect(file.writes, hasLength(2));
     expect(jsonDecode(await file.readAsString())['flutter.position'], 2000);
+    expect(provider.calls, 1,
+        reason: 'Repeated saves must not query Win32 paths');
   });
 }

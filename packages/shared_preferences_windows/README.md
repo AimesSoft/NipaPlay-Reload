@@ -23,7 +23,8 @@ its public setters return Futures. NipaPlay persists playback position every
 This fork uses asynchronous file reads, existence checks, creation and writes.
 Writes capture their preference snapshot and run in invocation order; reads wait
 for pending writes. Public interfaces, filename, encoding and settings remain
-compatible. JSON encoding still runs on the caller isolate.
+compatible. The application-support path is cached after its first successful
+lookup to avoid repeating synchronous Win32 EXE metadata queries. JSON encoding still runs on the caller isolate.
 
 Run `flutter test --no-pub packages/shared_preferences_windows/test` from the
 application root. The slow-disk test blocks a write while proving the event loop

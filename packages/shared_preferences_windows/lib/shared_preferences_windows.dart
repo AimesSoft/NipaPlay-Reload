@@ -21,6 +21,23 @@ const String _defaultPrefix = 'flutter.';
 // Serialize disk operations across plugin instances. In particular, a later
 // playback-position save must never be overwritten by an earlier async write.
 Future<void> _pendingWrite = Future<void>.value();
+final PathProviderWindows _defaultPathProvider = PathProviderWindows();
+final Expando<Future<String?>> _supportDirectories = Expando<Future<String?>>();
+
+// PathProviderWindows also performs synchronous Win32 calls (including EXE
+// version-resource reads). Resolve once, not on every playback-position save.
+Future<String?> _supportDirectory(PathProviderWindows provider) async {
+  final Future<String?> pending =
+      _supportDirectories[provider] ??= provider.getApplicationSupportPath();
+  try {
+    final String? directory = await pending;
+    if (directory == null) _supportDirectories[provider] = null;
+    return directory;
+  } catch (_) {
+    _supportDirectories[provider] = null;
+    rethrow;
+  }
+}
 
 /// The Windows implementation of [SharedPreferencesStorePlatform].
 ///
@@ -340,8 +357,8 @@ Future<File?> _getLocalDataFile(
   FileSystem fs = const LocalFileSystem(),
   PathProviderWindows? pathProvider,
 }) async {
-  pathProvider = pathProvider ?? PathProviderWindows();
-  final String? directory = await pathProvider.getApplicationSupportPath();
+  final String? directory =
+      await _supportDirectory(pathProvider ?? _defaultPathProvider);
   if (directory == null) {
     return null;
   }
