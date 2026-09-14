@@ -42,7 +42,7 @@ class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
   });
 
   final List<UnifiedMediaLibrarySection> sections;
-  final UnifiedMediaLibrarySection selectedSection;
+  final UnifiedMediaLibrarySection? selectedSection;
   final material.ValueChanged<String> onSectionSelected;
   final material.ValueChanged<List<String>> onSectionOrderChanged;
   final material.VoidCallback onRemoteAccess;
@@ -85,6 +85,19 @@ class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
   }
 }
 
+class AdaptiveMediaLibraryEmptyState extends material.StatelessWidget {
+  const AdaptiveMediaLibraryEmptyState({super.key});
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    return const NipaplayLargeScreenEmptyState(
+      icon: material.Icons.video_library_outlined,
+      title: '暂无可用的媒体库',
+      subtitle: '选择“添加媒体”连接媒体来源，或在“远程访问”中管理连接。',
+    );
+  }
+}
+
 bool _useTelevisionMediaLibraryLayout(material.BuildContext context) {
   return AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television ||
       NipaplayLargeScreenModeScope.isActiveOf(context);
@@ -102,7 +115,7 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
   });
 
   final List<UnifiedMediaLibrarySection> sections;
-  final UnifiedMediaLibrarySection selectedSection;
+  final UnifiedMediaLibrarySection? selectedSection;
   final material.ValueChanged<String> onSectionSelected;
   final material.ValueChanged<List<String>> onSectionOrderChanged;
   final material.VoidCallback onRemoteAccess;
@@ -111,25 +124,29 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
+    final selectedSection = this.selectedSection;
     return NipaplayLargeScreenModeScope(
       isActive: true,
       child: NipaplayLargeScreenPageScaffold(
         key: const material.ValueKey<String>('television-media-library'),
         title: '媒体库',
-        subtitle: '${selectedSection.label} · 使用方向键浏览，按确认键打开',
+        subtitle: selectedSection == null
+            ? '使用方向键选择媒体来源，按确认键连接'
+            : '${selectedSection.label} · 使用方向键浏览，按确认键打开',
         icon: material.Icons.video_library_rounded,
         padding: const material.EdgeInsets.fromLTRB(30, 24, 30, 30),
         headerBottomSpacing: 16,
         actions: [
-          NipaplayLargeScreenActionButton(
-            icon: material.Icons.swap_vert_rounded,
-            label: '调整顺序',
-            onPressed: () => _showSectionOrderEditor(
-              context,
-              sections,
-              onSectionOrderChanged,
+          if (sections.isNotEmpty)
+            NipaplayLargeScreenActionButton(
+              icon: material.Icons.swap_vert_rounded,
+              label: '调整顺序',
+              onPressed: () => _showSectionOrderEditor(
+                context,
+                sections,
+                onSectionOrderChanged,
+              ),
             ),
-          ),
           NipaplayLargeScreenActionButton(
             icon: material.Icons.link_rounded,
             label: '远程访问',
@@ -138,24 +155,27 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
           NipaplayLargeScreenActionButton(
             icon: material.Icons.add_to_queue_rounded,
             label: '添加媒体',
+            autofocus: selectedSection == null,
             onPressed: onAddMedia,
           ),
         ],
         child: material.Column(
           crossAxisAlignment: material.CrossAxisAlignment.stretch,
           children: [
-            NipaplayLargeScreenPanel(
-              padding: const material.EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
+            if (selectedSection != null) ...[
+              NipaplayLargeScreenPanel(
+                padding: const material.EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                child: _TelevisionMediaLibrarySectionBar(
+                  sections: sections,
+                  selectedSection: selectedSection,
+                  onSectionSelected: onSectionSelected,
+                ),
               ),
-              child: _TelevisionMediaLibrarySectionBar(
-                sections: sections,
-                selectedSection: selectedSection,
-                onSectionSelected: onSectionSelected,
-              ),
-            ),
-            const material.SizedBox(height: 16),
+              const material.SizedBox(height: 16),
+            ],
             // 将搜索框行和媒体项放在同一个遍历组中，
             // 确保从媒体项向上导航时先到达搜索框行，而不是跳到分区栏。
             material.Expanded(
@@ -441,7 +461,7 @@ class _DesktopMediaLibraryScaffold extends material.StatelessWidget {
   });
 
   final List<UnifiedMediaLibrarySection> sections;
-  final UnifiedMediaLibrarySection selectedSection;
+  final UnifiedMediaLibrarySection? selectedSection;
   final material.ValueChanged<String> onSectionSelected;
   final material.ValueChanged<List<String>> onSectionOrderChanged;
   final material.VoidCallback onRemoteAccess;
@@ -469,7 +489,7 @@ class _DesktopMediaLibraryScaffold extends material.StatelessWidget {
                       for (final section in sections)
                         _DesktopSectionButton(
                           section: section,
-                          selected: section.id == selectedSection.id,
+                          selected: section.id == selectedSection?.id,
                           onPressed: () => onSectionSelected(section.id),
                         ),
                     ],
@@ -477,31 +497,33 @@ class _DesktopMediaLibraryScaffold extends material.StatelessWidget {
                 ),
               ),
               const material.SizedBox(width: 8),
-              HoverScaleTextButton(
-                onPressed: () => _showSectionOrderEditor(
-                  context,
-                  sections,
-                  onSectionOrderChanged,
-                ),
-                idleColor: idleColor,
-                hoverColor: AppAccentColors.current,
-                padding: material.EdgeInsets.zero,
-                child: const material.Row(
-                  mainAxisSize: material.MainAxisSize.min,
-                  children: [
-                    material.Icon(material.Icons.swap_vert, size: 18),
-                    material.SizedBox(width: 6),
-                    material.Text(
-                      '排序',
-                      style: material.TextStyle(
-                        fontSize: 18,
-                        fontWeight: material.FontWeight.bold,
+              if (sections.isNotEmpty) ...[
+                HoverScaleTextButton(
+                  onPressed: () => _showSectionOrderEditor(
+                    context,
+                    sections,
+                    onSectionOrderChanged,
+                  ),
+                  idleColor: idleColor,
+                  hoverColor: AppAccentColors.current,
+                  padding: material.EdgeInsets.zero,
+                  child: const material.Row(
+                    mainAxisSize: material.MainAxisSize.min,
+                    children: [
+                      material.Icon(material.Icons.swap_vert, size: 18),
+                      material.SizedBox(width: 6),
+                      material.Text(
+                        '排序',
+                        style: material.TextStyle(
+                          fontSize: 18,
+                          fontWeight: material.FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const material.SizedBox(width: 12),
+                const material.SizedBox(width: 12),
+              ],
               HoverScaleTextButton(
                 onPressed: onRemoteAccess,
                 idleColor: idleColor,
@@ -630,53 +652,55 @@ class _CupertinoMediaLibraryScaffold extends material.StatelessWidget {
   });
 
   final List<UnifiedMediaLibrarySection> sections;
-  final UnifiedMediaLibrarySection selectedSection;
+  final UnifiedMediaLibrarySection? selectedSection;
   final material.ValueChanged<String> onSectionSelected;
   final material.ValueChanged<List<String>> onSectionOrderChanged;
   final material.Widget child;
 
   @override
   material.Widget build(material.BuildContext context) {
+    final selectedSection = this.selectedSection;
     return material.ColoredBox(
       color: material.Colors.transparent,
       child: material.Column(
         children: [
           const CupertinoAppPageHeader(title: '媒体库', bottomPadding: 8),
           const material.SizedBox(height: 8),
-          material.Padding(
-            padding: const material.EdgeInsets.symmetric(horizontal: 20),
-            child: material.Row(
-              children: [
-                material.Expanded(
-                  child: material.Align(
-                    alignment: material.Alignment.centerLeft,
-                    child: CupertinoMediaLibrarySectionPicker(
-                      sections: sections,
-                      selectedId: selectedSection.id,
-                      onSelected: onSectionSelected,
+          if (selectedSection != null)
+            material.Padding(
+              padding: const material.EdgeInsets.symmetric(horizontal: 20),
+              child: material.Row(
+                children: [
+                  material.Expanded(
+                    child: material.Align(
+                      alignment: material.Alignment.centerLeft,
+                      child: CupertinoMediaLibrarySectionPicker(
+                        sections: sections,
+                        selectedId: selectedSection.id,
+                        onSelected: onSectionSelected,
+                      ),
                     ),
                   ),
-                ),
-                cupertino.CupertinoButton(
-                  padding: const material.EdgeInsets.symmetric(horizontal: 8),
-                  onPressed: () => _showSectionOrderEditor(
-                    context,
-                    sections,
-                    onSectionOrderChanged,
+                  cupertino.CupertinoButton(
+                    padding: const material.EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: () => _showSectionOrderEditor(
+                      context,
+                      sections,
+                      onSectionOrderChanged,
+                    ),
+                    child: const material.Row(
+                      mainAxisSize: material.MainAxisSize.min,
+                      children: [
+                        material.Icon(cupertino.CupertinoIcons.sort_down,
+                            size: 18),
+                        material.SizedBox(width: 4),
+                        material.Text('排序'),
+                      ],
+                    ),
                   ),
-                  child: const material.Row(
-                    mainAxisSize: material.MainAxisSize.min,
-                    children: [
-                      material.Icon(cupertino.CupertinoIcons.sort_down,
-                          size: 18),
-                      material.SizedBox(width: 4),
-                      material.Text('排序'),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           const material.SizedBox(height: 4),
           material.Expanded(child: child),
         ],

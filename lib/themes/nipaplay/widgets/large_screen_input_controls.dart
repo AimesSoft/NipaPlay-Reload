@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 enum NipaplayLargeScreenInputCommand {
@@ -17,6 +18,7 @@ class NipaplayLargeScreenInputControls {
 
   static final Set<LogicalKeyboardKey> _toggleMenuKeys = {
     LogicalKeyboardKey.escape,
+    LogicalKeyboardKey.contextMenu,
     LogicalKeyboardKey.gameButtonSelect,
     LogicalKeyboardKey.gameButtonStart,
   };
@@ -55,6 +57,11 @@ class NipaplayLargeScreenInputControls {
     }
 
     final key = event.logicalKey;
+    // Android 遥控器也可能将返回键报告为 Escape；桌面仍保留 Esc 菜单快捷键。
+    if (key == LogicalKeyboardKey.escape &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      return NipaplayLargeScreenInputCommand.back;
+    }
     if (_toggleMenuKeys.contains(key)) {
       return NipaplayLargeScreenInputCommand.toggleMenu;
     }

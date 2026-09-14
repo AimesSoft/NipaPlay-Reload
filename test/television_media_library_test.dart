@@ -7,16 +7,22 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/media_source_option.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -164,6 +170,88 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('TV without media sources can open add media using the remote',
+      (tester) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => JellyfinProvider()),
+          ChangeNotifierProvider(create: (_) => EmbyProvider()),
+          ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
+          ChangeNotifierProvider(create: (_) => DandanplayRemoteProvider()),
+          ChangeNotifierProvider<WatchHistoryProvider>(
+            create: (_) => _LoadedEmptyWatchHistoryProvider(),
+          ),
+          ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
+        ],
+        child: _testApp(
+          home: const AppDisplaySurfaceScope(
+            surface: AppDisplaySurface.television,
+            child: AdaptiveMediaLibraryPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('媒体库'), findsOneWidget);
+    expect(find.text('暂无可用的媒体库'), findsOneWidget);
+    expect(find.text('远程访问'), findsOneWidget);
+    expect(find.text('添加媒体'), findsOneWidget);
+    expect(find.text('调整顺序'), findsNothing);
+    expect(find.text('本地媒体库'), findsNothing);
+
+    // 初始焦点应落在添加入口，无需鼠标即可走出空状态。
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('选择要连接的媒体来源'), findsOneWidget);
+    expect(find.text('Jellyfin'), findsOneWidget);
+    expect(find.text('Emby'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+        'empty large screen library keeps remote actions in $brightness',
+        (tester) async {
+      var remoteAccessCount = 0;
+      var addMediaCount = 0;
+      await tester.pumpWidget(
+        _testApp(
+          theme: ThemeData(brightness: brightness),
+          home: AppDisplaySurfaceScope(
+            surface: AppDisplaySurface.desktopTablet,
+            child: NipaplayLargeScreenModeScope(
+              isActive: true,
+              child: AdaptiveMediaLibraryScaffold(
+                sections: const [],
+                selectedSection: null,
+                onSectionSelected: (_) {},
+                onSectionOrderChanged: (_) {},
+                onRemoteAccess: () => remoteAccessCount++,
+                onAddMedia: () => addMediaCount++,
+                child: const AdaptiveMediaLibraryEmptyState(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('暂无可用的媒体库'), findsOneWidget);
+      expect(find.text('调整顺序'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(addMediaCount, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(remoteAccessCount, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('large screen host selection preserves mode across its route',
       (tester) async {
@@ -318,4 +406,15 @@ void main() {
         .decoration as BoxDecoration;
     expect(darkDecoration.color, const Color(0xFF181818));
   });
+}
+
+class _LoadedEmptyWatchHistoryProvider extends WatchHistoryProvider {
+  @override
+  bool get isLoaded => true;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  List<WatchHistoryItem> get history => const [];
 }

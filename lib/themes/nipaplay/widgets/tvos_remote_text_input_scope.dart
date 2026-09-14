@@ -10,8 +10,8 @@ import 'package:nipaplay/services/remote_text_input_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/remote_text_input_qr_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:qr_flutter/qr_flutter.dart';
 
 typedef TvOSRemoteInputRequestHandler = Future<void> Function(
   BuildContext context,
@@ -528,8 +528,9 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
         title: target.title,
         subtitle:
             'KEY ${session.displayKey} · ${target.fields.length} 项 · 10 分钟内有效',
-        maxWidth: 720,
-        maxHeightFactor: 0.84,
+        maxWidth: 960,
+        maxHeightFactor: 0.92,
+        compact: true,
         builder: (context) {
           routeContext = context;
           if (session.status == RemoteTextInputSessionStatus.submitted) {
@@ -539,7 +540,7 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
               }
             });
           }
-          return _TvOSRemoteTextInputQrView(
+          return RemoteTextInputQrView(
             inputUri: inputUri,
             displayKey: session.displayKey,
             fieldCount: target.fields.length,
@@ -569,88 +570,6 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
   @override
   Widget build(BuildContext context) {
     return widget.child;
-  }
-}
-
-class _TvOSRemoteTextInputQrView extends StatelessWidget {
-  const _TvOSRemoteTextInputQrView({
-    required this.inputUri,
-    required this.displayKey,
-    required this.fieldCount,
-  });
-
-  final Uri inputUri;
-  final String displayKey;
-  final int fieldCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = Theme.of(context).colorScheme.onSurface;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(34, 24, 34, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '使用手机扫描二维码输入',
-              style: TextStyle(
-                color: textColor,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              fieldCount > 1
-                  ? '一次填写 $fieldCount 项；NipaPlay 内扫码打开原生表单，系统相机扫码打开浏览器。'
-                  : 'NipaPlay 内扫码会打开原生输入菜单，系统相机扫码会打开浏览器。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: textColor.withValues(alpha: 0.66),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 22),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: QrImageView(
-                  data: inputUri.toString(),
-                  version: QrVersions.auto,
-                  size: 300,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'KEY $displayKey',
-              style: TextStyle(
-                color: textColor,
-                fontSize: 20,
-                letterSpacing: 2,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              inputUri.toString(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: textColor.withValues(alpha: 0.54),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
