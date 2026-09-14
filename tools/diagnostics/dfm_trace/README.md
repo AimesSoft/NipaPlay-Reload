@@ -36,6 +36,7 @@ python -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
 | Dart | payload_begin / encode_begin | emoji/载荷准备开始，以及 JSON 编码开始 |
 | Dart | send_begin / send_return | 编码完成后发送方法调用、收到返回；包括平台排队和原生同步等待 |
 | Dart | position_save_begin / position_save_prepared / position_save_end | 播放进度保存开始、位置字典编码完成、偏好存储返回；只记录进度，不记录文件路径。异步存储的总耗时不等于 UI 阻塞时间 |
+| Dart | position_save_error | 保存失败；记录对应进度，错误详情留在应用日志，不影响后续保存队列 |
 | Dart | flutter_frame | Flutter 原始 vsync/build/raster 时间戳；报告到达时间不能当成帧完成时间 |
 | Native | ffi_enter / enqueue | 原生调用入口及入队之前 |
 | Native | process_begin / process_end | 渲染线程处理帧数据；a 为处理成功标志 |
@@ -78,3 +79,19 @@ python tools/diagnostics/dfm_trace/analyze.py build/native-probe.jsonl
 900 帧均观察到处理、绘制提交及 GPU 完成，未报告日志丢失。首帧 `draw_begin → draw_submitted` 为 19.981 ms，第二帧 `enqueue → process_begin` 为 16.740 ms，时间线证明首帧占用渲染线程时，下一帧的同步调用确实在等待。此段发生在启动暖机，不能据此认定实际播放中的周期性停顿也来自同一原因。
 
 本次原生处理耗时中位数 0.024 ms，绘制提交中位数 0.331 ms，GPU 完成回调延迟中位数 0.306 ms、最大 10.073 ms。后者包含 CPU 回调派发延迟，并非纯 GPU 执行时间。结果用于确认日志能区分阶段，后续仍需实际视频场景的数据。
+
+## 第二次实机样本与编码隔离（2026-09-14）
+
+`dfm-20260914-160145-315.jsonl` 证明仅异步落盘仍不足够：3.946、5.946、7.952、9.953、11.952、13.957、15.956、17.957 秒开始的八次进度保存，都与 24–28 ms 的快照间隔尖峰重合。位置字典准备约 3.8–4.1 ms；之后整份偏好文件的 JSON 编码和 UTF-8 转换仍在 UI isolate 执行。未观察到抽样条目位置算法本身停住或反向的异常。
+
+这次修复把位置字典的读取后解析/修改/编码交给 `compute`，整个 read/modify/write 按请求顺序完成；Windows 偏好插件另将完整文件 JSON/UTF-8 编码放入 `Isolate.run`，主线程只接收最终字节并异步写入。正常退出先停止播放更新 Ticker，再等待最后位置和保存队列完成。原有文件格式、保存触发频率及弹幕时间推进逻辑不变。
+
+只读编码对照（可传入已有偏好 JSON 路径，不输出配置值；不传则使用合成数据）：
+
+```powershell
+dart run tools/diagnostics/dfm_trace/preferences_probe.dart path/to/shared_preferences.json
+```
+
+在同一份 2,451,782 字节数据上，预热后分别运行 20 次编码。Windows 基准程序临时请求 1 ms 定时器精度，退出时配对释放；用 5 ms 定时器观察事件循环能否运行。主线程编码：操作耗时中位数 23.803 ms，定时器最大间隔 31.411 ms，超过 11 ms 共 20 次；后台编码：操作耗时中位数 23.802 ms，定时器最大间隔 7.256 ms，超过 11 ms 为 0 次。这是独立 Dart 基准，不是 Flutter/视频/DWM 的帧率测量，不能替代修复版实机回归。
+
+实机验收要点：保存总耗时可能仍有二三十毫秒，但保存期间 tick、snapshot 和 raster 应持续推进；判断依据是原先与保存对应的帧间隔尖峰是否消失，而不是保存方法是否更快返回。

@@ -14,6 +14,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:shared_preferences_platform_interface/types.dart';
 
+import 'src/preferences_codec.dart';
+
 const String _defaultFileName = 'shared_preferences';
 
 const String _defaultPrefix = 'flutter.';
@@ -416,8 +418,8 @@ Future<bool> _writePreferences(
       if (!await localDataFile.exists()) {
         await localDataFile.create(recursive: true);
       }
-      final String stringMap = json.encode(snapshot);
-      await localDataFile.writeAsString(stringMap);
+      final bytes = await encodePreferences(snapshot);
+      await localDataFile.writeAsBytes(bytes);
     } catch (e) {
       debugPrint('Error saving preferences to disk: $e');
       return false;

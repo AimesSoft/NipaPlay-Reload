@@ -403,15 +403,14 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     Next2FrameTrace.recordPlaybackEvent(
         'position_save_begin', {'position_ms': position});
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final positions = prefs.getString(_videoPositionsKey) ?? '{}';
-      final Map<String, dynamic> positionMap =
-          Map<String, dynamic>.from(json.decode(positions));
-      positionMap[path] = position;
-      final encoded = json.encode(positionMap);
+      await PlaybackPositionStore.instance.save(path, position, onPrepared: () {
+        Next2FrameTrace.recordPlaybackEvent(
+            'position_save_prepared', {'position_ms': position});
+      });
+    } catch (error, stackTrace) {
       Next2FrameTrace.recordPlaybackEvent(
-          'position_save_prepared', {'position_ms': position});
-      await prefs.setString(_videoPositionsKey, encoded);
+          'position_save_error', {'position_ms': position});
+      debugPrint('保存播放进度失败: $error\n$stackTrace');
     } finally {
       Next2FrameTrace.recordPlaybackEvent(
           'position_save_end', {'position_ms': position});
@@ -420,6 +419,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）
   Future<int> _getVideoPosition(String path) async {
+    await PlaybackPositionStore.instance.flush();
     final prefs = await SharedPreferences.getInstance();
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
     final Map<String, dynamic> positionMap =

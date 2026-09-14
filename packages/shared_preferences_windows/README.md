@@ -24,7 +24,13 @@ This fork uses asynchronous file reads, existence checks, creation and writes.
 Writes capture their preference snapshot and run in invocation order; reads wait
 for pending writes. Public interfaces, filename, encoding and settings remain
 compatible. The application-support path is cached after its first successful
-lookup to avoid repeating synchronous Win32 EXE metadata queries. JSON encoding still runs on the caller isolate.
+lookup to avoid repeating synchronous Win32 EXE metadata queries.
+
+JSON escaping and UTF-8 conversion run in a short-lived worker isolate. It
+returns final bytes using Isolate.run's exit transfer; the caller writes those
+bytes asynchronously without re-encoding the large file. Snapshot capture stays
+on the caller isolate, and writes still complete in order. Read/decode at initial
+plugin load is unchanged and is not part of periodic playback saving.
 
 Run `flutter test --no-pub packages/shared_preferences_windows/test` from the
 application root. The slow-disk test blocks a write while proving the event loop

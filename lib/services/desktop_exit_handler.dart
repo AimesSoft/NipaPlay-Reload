@@ -16,6 +16,9 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/playback_position_store.dart';
 
 import 'desktop_exit_preferences.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -400,6 +403,17 @@ class DesktopExitHandler
   }
 
   Future<void> _prepareForExit() async {
+    try {
+      final context = _navigatorKey?.currentContext;
+      if (context != null && context.mounted) {
+        await Provider.of<VideoPlayerState>(context, listen: false)
+            .savePlaybackPositionForExit();
+      }
+      await PlaybackPositionStore.instance.flush();
+    } catch (error) {
+      debugPrint('[DesktopExitHandler] 保存播放进度失败: $error');
+    }
+
     try {
       await ServiceProvider.webServer.stopServer();
     } catch (_) {}

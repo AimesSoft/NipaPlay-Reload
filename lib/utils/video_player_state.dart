@@ -1,6 +1,7 @@
 library video_player_state;
 
 import 'package:nipaplay/danmaku_next/next2_frame_trace.dart';
+import 'package:nipaplay/services/playback_position_store.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -1738,9 +1739,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   @override
   void onWindowClose() async {
-    // Changed from onWindowClose() async
-    //debugPrint("VideoPlayerState: onWindowClose called. Saving position.");
-    _saveCurrentPositionToHistory(); // Removed await as the method likely returns void
+    await _saveCurrentPositionToHistory();
   }
 
   @override

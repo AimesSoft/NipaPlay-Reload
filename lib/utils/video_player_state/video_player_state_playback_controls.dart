@@ -790,10 +790,18 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // Do NOT call WakelockPlus.disable() here directly, _setStatus will handle it
   }
 
-  void _saveCurrentPositionToHistory() {
+  Future<void> _saveCurrentPositionToHistory() async {
     if (_currentVideoPath != null) {
-      _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+      await _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
     }
+    await PlaybackPositionStore.instance.flush();
+  }
+
+  /// Called only after the user has accepted exiting, before process shutdown.
+  Future<void> savePlaybackPositionForExit() async {
+    _uiUpdateTicker?.stop();
+    _uiUpdateTimer?.cancel();
+    await _saveCurrentPositionToHistory();
   }
 
   void _resetVideoState() {

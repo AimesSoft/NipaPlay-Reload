@@ -36,17 +36,15 @@ class AsyncOnlyFile implements File {
   Future<String> readAsString({Encoding encoding = utf8}) =>
       delegate.readAsString(encoding: encoding);
   @override
-  Future<File> writeAsString(String contents,
-      {FileMode mode = FileMode.write,
-      Encoding encoding = utf8,
-      bool flush = false}) async {
+  Future<File> writeAsBytes(List<int> bytes,
+      {FileMode mode = FileMode.write, bool flush = false}) async {
+    final contents = utf8.decode(bytes);
     writes.add(contents);
     if (writes.length == 1) {
       firstWrite.complete();
       await releaseWrite.future;
     }
-    await delegate.writeAsString(contents,
-        mode: mode, encoding: encoding, flush: flush);
+    await delegate.writeAsBytes(bytes, mode: mode, flush: flush);
     return this;
   }
 
