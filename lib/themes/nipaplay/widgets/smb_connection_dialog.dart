@@ -268,7 +268,13 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
       child: TextFormField(
         controller: controller,
         validator: validator,
-        keyboardType: keyboardType,
+        keyboardType: fieldId == 'password'
+            ? TextInputType.visiblePassword
+            : keyboardType,
+        autocorrect: fieldId != 'password',
+        enableSuggestions: fieldId != 'password',
+        smartDashesType: fieldId == 'password' ? SmartDashesType.disabled : null,
+        smartQuotesType: fieldId == 'password' ? SmartQuotesType.disabled : null,
         obscureText: obscureText,
         cursorColor: _accentColor,
         style: TextStyle(color: _textColor),

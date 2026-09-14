@@ -55,6 +55,10 @@ public class VolumeControllerPlugin: NSObject, FlutterPlugin, FlutterApplication
     }
   }
 
+  public func applicationDidEnterBackground(_ application: UIApplication) {
+    VolumeControllerPlugin.volumeController.suspend()
+  }
+
   public func applicationWillEnterForeground(_ application: UIApplication) {
     // On iOS 13 and above, the scene delegate's sceneWillEnterForeground will be called instead of this method.
     if #available(iOS 13.0, *) {
@@ -74,6 +78,10 @@ public class VolumeControllerPlugin: NSObject, FlutterPlugin, FlutterApplication
 
 @available(iOS 13.0, *)
 extension VolumeControllerPlugin: FlutterSceneLifeCycleDelegate {
+  public func sceneDidEnterBackground(_ scene: UIScene) {
+    VolumeControllerPlugin.volumeController.suspend()
+  }
+
   public func sceneWillEnterForeground(_ scene: UIScene) {
     guard VolumeControllerPlugin.volumeListener.isObservingVolume else {
       return

@@ -1,0 +1,21 @@
+[Unit]
+Description=NipaPlay Dandanplay API Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nipaplay-api
+Group=nipaplay-api
+EnvironmentFile=/etc/nipaplay-dandanplay-gateway.env
+ExecStart=/opt/nipaplay-dandanplay-gateway/nipaplay-dandanplay-gateway
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/nipaplay-dandanplay-gateway
+
+[Install]
+WantedBy=multi-user.target

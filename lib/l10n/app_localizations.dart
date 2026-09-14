@@ -3225,19 +3225,13 @@ abstract class AppLocalizations {
   /// No description provided for @networkServerDescriptionPrimary.
   ///
   /// In zh, this message translates to:
-  /// **'api.dandanplay.net（官方服务器，推荐使用）'**
+  /// **'使用弹弹play在线服务需要登录弹弹play账号。自定义第三方弹幕服务不受此限制。'**
   String get networkServerDescriptionPrimary;
-
-  /// No description provided for @networkServerDescriptionBackup.
-  ///
-  /// In zh, this message translates to:
-  /// **'139.224.252.88:16001（镜像服务器，主服务器无法访问时使用）'**
-  String get networkServerDescriptionBackup;
 
   /// No description provided for @networkServerSelectSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'选择弹弹play弹幕服务器。备用服务器可在主服务器无法访问时使用。'**
+  /// **'选择默认弹弹play服务或自定义第三方弹幕服务。'**
   String get networkServerSelectSubtitle;
 
   /// No description provided for @customServerWithValue.

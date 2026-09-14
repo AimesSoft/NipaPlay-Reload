@@ -15,6 +15,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:crypto/crypto.dart';
 
 /// 全量备份服务
@@ -32,6 +33,11 @@ import 'package:crypto/crypto.dart';
 /// }
 class FullBackupService {
   static const int _backupFormatVersion = 2;
+
+  FullBackupService({WebDAVService? webDavService})
+      : _webDavService = webDavService ?? WebDAVService.instance;
+
+  final WebDAVService _webDavService;
 
   // ==================== 导出（信息收集） ====================
 
@@ -148,11 +154,14 @@ class FullBackupService {
     final prefs = await SharedPreferences.getInstance();
     final result = <String, dynamic>{};
 
-    // 收集所有 SharedPreferences 中的设置项（排除媒体库和账户相关）
+    // 收集所有 SharedPreferences 中的设置项。媒体库和大部分账户数据由各自
+    // 分类处理；多端同步配置（含其 WebDAV 凭据）作为偏好设置完整备份。
     final allKeys = prefs.getKeys();
     final settingsKeys = allKeys.where((key) =>
-        !key.startsWith('incremental_sync_') && // 同步端点/凭证仅属于本机
-        !key.startsWith('auto_sync_') && // 自动同步开关与旧路径仅属于本机
+        (!key.startsWith('incremental_sync_') ||
+            AutoSyncSettings.fullBackupPreferenceKeys.contains(key)) &&
+        (!key.startsWith('auto_sync_') ||
+            AutoSyncSettings.fullBackupPreferenceKeys.contains(key)) &&
         !key.startsWith('dandanplay_') && // 账户相关单独处理
         !key.startsWith('server_profiles') && // 服务器配置属于媒体库
         key != 'video_positions' && // 播放位置属于观看历史
@@ -231,7 +240,7 @@ class FullBackupService {
 
     // 6. 收集 WebDAV 连接配置
     try {
-      final webdavService = WebDAVService.instance;
+      final webdavService = _webDavService;
       await webdavService.initialize();
       final webdavConnections = webdavService.connections;
       result['webdavConnections'] =
@@ -547,8 +556,8 @@ class FullBackupService {
         );
       }
 
-      result.success = true;
-      debugPrint('备份恢复完成');
+      _completeRestoreResult(result);
+      if (result.success) debugPrint('备份恢复完成');
     } catch (e) {
       debugPrint('导入备份失败: $e');
       result.success = false;
@@ -610,7 +619,7 @@ class FullBackupService {
             backupData['accounts'] as Map<String, dynamic>);
       }
 
-      result.success = true;
+      _completeRestoreResult(result);
     } catch (e) {
       debugPrint('从数据恢复备份失败: $e');
       result.success = false;
@@ -618,6 +627,24 @@ class FullBackupService {
     }
 
     return result;
+  }
+
+  void _completeRestoreResult(BackupRestoreResult result) {
+    final categoryResults = [
+      result.preferencesResult,
+      result.mediaLibrariesResult,
+      result.watchHistoryResult,
+      result.episodeMatchesResult,
+      result.accountsResult,
+    ];
+    for (final categoryResult in categoryResults) {
+      if (categoryResult != null && !categoryResult.success) {
+        result.success = false;
+        result.errorMessage = categoryResult.errorMessage ?? '部分备份数据恢复失败';
+        return;
+      }
+    }
+    result.success = true;
   }
 
   // ---------- 偏好设置恢复 ----------
@@ -750,31 +777,27 @@ class FullBackupService {
             'jellyfin_library_sort_settings', jellyfinSortSettings);
       }
 
-      // 5. 恢复 WebDAV 连接配置（合并：按 name 匹配，已存在则更新，不存在则新增）
+      // 5. 恢复 WebDAV 连接配置（按稳定 ID 合并，验证成功后才替换）
       final webdavConnectionsData =
           mediaLibrariesData['webdavConnections'] as List<dynamic>?;
       if (webdavConnectionsData != null && webdavConnectionsData.isNotEmpty) {
         try {
-          final webdavService = WebDAVService.instance;
+          final webdavService = _webDavService;
           await webdavService.initialize();
-          final existingConnections = webdavService.connections;
-          final existingNames = existingConnections.map((c) => c.name).toSet();
-
           for (final connData in webdavConnectionsData) {
-            try {
-              final connection =
-                  WebDAVConnection.fromJson(connData as Map<String, dynamic>);
-              if (existingNames.contains(connection.name)) {
-                await webdavService.removeConnection(connection.name);
-              }
-              await webdavService.addConnection(connection);
-            } catch (e) {
-              debugPrint('恢复单条WebDAV连接失败: $e');
+            final connection =
+                WebDAVConnection.fromJson(connData as Map<String, dynamic>);
+            final restored = await webdavService.upsertConnection(connection);
+            if (!restored) {
+              throw StateError(
+                'WebDAV连接 ${connection.name} 验证失败，已保留原有连接',
+              );
             }
           }
           debugPrint('恢复了 ${webdavConnectionsData.length} 个WebDAV连接');
         } catch (e) {
           debugPrint('恢复WebDAV连接配置失败: $e');
+          rethrow;
         }
       }
 

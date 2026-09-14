@@ -90,6 +90,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadInstantHidePlayerUiEnabled();
     await _loadPlayerTopButtonVisibilitySettings();
     await _loadChapterMarkersEnabled(); // 加载 MKV 章节标记开关
+    await loadIntroSkipEnabled(); // 加载跳过片头开关
     await _loadScreenshotSaveTarget();
     await _loadScreenshotSaveDirectory();
 
@@ -183,25 +184,23 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);
+      _volumeBoost = (prefs.getDouble('player_volume_boost') ?? 1.0).clamp(1.0, 2.0);
 
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _systemVolumeController ??= VolumeController.instance;
         _systemVolumeController!.showSystemUI = false;
         final currentSystemVolume = await _systemVolumeController!.getVolume();
-        final initialVolume =
-            (savedVolume ?? currentSystemVolume).clamp(0.0, 1.0);
+        // 系统音量由用户和系统管理，启动时只读取，不能恢复应用内的旧值。
+        final initialVolume = currentSystemVolume.clamp(0.0, 1.0);
         _currentVolume = initialVolume;
         _initialDragVolume = initialVolume;
-        if (savedVolume != null) {
-          await _setSystemVolume(initialVolume);
-        }
       } else {
         // Web 等不支持系统音量时：使用播放器内部音量
         final initialVolume = (savedVolume ?? player.volume).clamp(0.0, 1.0);
         _currentVolume = initialVolume;
         _initialDragVolume = initialVolume;
-        player.volume = initialVolume;
+        applyPlayerVolume();
       }
     } catch (e) {
       _currentVolume = 0.5; // Fallback

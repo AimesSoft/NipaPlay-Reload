@@ -59,6 +59,7 @@ class _AdaptiveMediaCollectionViewState
   MediaCollectionSort _sort = MediaCollectionSort.recentlyAdded;
   bool _isSyncing = false;
   bool _isLoadingWebCollection = false;
+  bool _requestedHistoryLoad = false;
   List<WatchHistoryItem> _webCollectionItems = const <WatchHistoryItem>[];
 
   @override
@@ -87,7 +88,12 @@ class _AdaptiveMediaCollectionViewState
   material.Widget build(material.BuildContext context) {
     return Consumer<WatchHistoryProvider>(
       builder: (context, provider, _) {
-        if (!provider.isLoaded && !provider.isLoading) {
+        // 只请求一次：loadHistory 失败时 isLoaded 会一直是 false，
+        // 在 build 里反复补load会变成每帧一次的重试风暴。
+        if (!_requestedHistoryLoad &&
+            !provider.isLoaded &&
+            !provider.isLoading) {
+          _requestedHistoryLoad = true;
           material.WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !provider.isLoaded) provider.loadHistory();
           });

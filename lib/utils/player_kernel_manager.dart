@@ -32,7 +32,6 @@ class PlayerKernelManager {
     final currentPosition = videoPlayerState.position;
     final currentDuration = videoPlayerState.duration;
     final currentProgress = videoPlayerState.progress;
-    final currentVolume = videoPlayerState.player.volume;
     final currentPlaybackRate = videoPlayerState.playbackRate;
     final wasPlaying = videoPlayerState.status == PlayerStatus.playing;
     final previousPlayer = videoPlayerState.player;
@@ -70,9 +69,7 @@ class PlayerKernelManager {
       if (videoPlayerState.isDisposed) return;
       await videoPlayerState.applySubtitleStylePreference();
       // 恢复音量到新播放器，避免默认 1.0 导致下次播放音量异常
-      if (!(Platform.isAndroid || Platform.isIOS)) {
-        videoPlayerState.player.volume = currentVolume;
-      }
+      videoPlayerState.applyPlayerVolume();
       debugPrint('[PlayerKernelManager] 已创建新的空播放器实例');
       return;
     }
@@ -111,14 +108,7 @@ class PlayerKernelManager {
 
     // 5. 恢复播放状态
     if (videoPlayerState.hasVideo) {
-      if (Platform.isAndroid || Platform.isIOS) {
-        // 移动端使用系统音量时，播放器内部音量保持 1.0，避免与系统音量叠乘
-        try {
-          videoPlayerState.player.volume = 1.0;
-        } catch (_) {}
-      } else {
-        videoPlayerState.player.volume = currentVolume;
-      }
+      videoPlayerState.applyPlayerVolume();
       // 恢复播放速度设置
       if (currentPlaybackRate != 1.0) {
         videoPlayerState.player.setPlaybackRate(currentPlaybackRate);

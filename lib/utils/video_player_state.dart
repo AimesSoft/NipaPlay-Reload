@@ -1,5 +1,6 @@
 library video_player_state;
 
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,13 @@ import 'package:path/path.dart' as p;
 import 'globals.dart' as globals;
 import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
+// 带前缀的完整导入：part 文件里的跳过片头逻辑要用 http.get 直接打
+// Bangumi / AniList 的公开接口（无需令牌，走 WebRemoteAccessService 代理）。
+import 'package:nipaplay/services/dandanplay_http_client.dart' as ddp_http;
+import 'package:nipaplay/services/dandanplay_http_client.dart'
+    show DandanplayLoginRequired;
+import 'package:nipaplay/widgets/dandanplay_login_notice.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
@@ -61,6 +69,13 @@ import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/services/intro_skip/skip_segment.dart';
+import 'package:nipaplay/services/intro_skip/danmaku_intro_detector.dart';
+import 'package:nipaplay/services/intro_skip/aniskip_service.dart';
+import 'package:nipaplay/services/intro_skip/skip_id_resolver.dart';
+import 'package:nipaplay/services/intro_skip/episode_number_extractor.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 
@@ -120,6 +135,7 @@ part 'video_player_state/video_player_state_streaming.dart';
 part 'video_player_state/video_player_state_navigation.dart';
 part 'video_player_state/video_player_state_lifecycle.dart';
 part 'video_player_state/video_player_state_chapters.dart';
+part 'video_player_state/video_player_state_intro_skip.dart';
 
 String _redactMediaUrlForLog(Object? value) {
   final text = value?.toString() ?? 'null';
@@ -256,6 +272,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int? _dandanplayLoginPromptGeneration;
 
   void _notifyListeners() {
     if (_isDisposed) {
@@ -300,6 +317,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _bufferedPositionMs = 0;
   // MKV 章节当前索引（-1=无章节/首章前；由 VideoPlayerStateChapters 维护）
   int _currentChapterIndex = -1;
+  // 跳过片头 / 片尾：按区间类型分槽存放的生效区间（由 VideoPlayerStateSkipSegments 维护）。
+  //
+  // 必须是「分槽」而不是单个字段：AniSkip 一次会同时给出 OP 和 ED 两段，
+  // 用单字段会让后写入的覆盖先写入的，导致片头区间凭空消失。
+  // 槽位内部再做 rank 合并（手动 > 媒体服务器 > AniSkip > 弹幕 > 启发式）。
+  final Map<SkipSegmentKind, SkipSegment> _skipSegments = {};
+  // 跳过片头功能总开关：控制是否分析弹幕并显示「跳过片头」按钮
+  final String _introSkipEnabledKey = 'intro_skip_enabled';
+  bool _introSkipEnabled = true; // 默认开启
   String? _error;
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
@@ -637,6 +663,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 从 historyItem 传入的弹幕 ID（用于保持弹幕关联）
   int? _episodeId; // 存储从 historyItem 传入的 episodeId
   int? _animeId; // 存储从 historyItem 传入的 animeId
+  // Bangumi 条目 ID：由弹弹play 剧集详情推导，用于解析 AniSkip 需要的 MAL ID
+  int? _bangumiId;
+  // 当前集数（1 起）：AniSkip 以集数为键，优先取服务端字段，其次从标题/文件名解析
+  int? _episodeNumber;
+  // 本番的 MAL ID（AniSkip 主键，经 AniList 从标题换得）
+  int? _animeMalId;
+  // 是否已尝试过解析 MAL ID：解析链路有多跳网络请求，失败是常态，
+  // 此标志保证一集只尝试一次，不因弹幕重复加载而反复打网。
+  bool _malIdResolved = false;
   WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
   PlaybackDetailContext? _playbackDetailContext;
   String? _currentMediaKey;
@@ -661,6 +696,26 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     milliseconds: 400,
   );
   final String _playerVolumeKey = 'player_volume';
+  double _volumeBoost = 1.0;
+  bool get supportsVolumeBoost =>
+      !kIsWeb &&
+      (player.getPlayerKernelName() == 'MDK' ||
+          player.getPlayerKernelName() == 'Media Kit');
+  double get volumeBoost => supportsVolumeBoost ? _volumeBoost : 1.0;
+
+  Future<void> setVolumeBoost(double value) async {
+    if (!supportsVolumeBoost || !value.isFinite) return;
+    _volumeBoost = value.clamp(1.0, 2.0);
+    applyPlayerVolume();
+    _notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('player_volume_boost', _volumeBoost);
+  }
+
+  void applyPlayerVolume() {
+    player.volume = (_useSystemVolume ? 1.0 : _currentVolume) * volumeBoost;
+  }
+
   double _currentVolume = 0.5; // Default volume
   double _initialDragVolume = 0.5;
   bool _isVolumeIndicatorVisible = false;
@@ -708,9 +763,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void _ensurePlayerVolumeMatchesPlatformPolicy() {
     if (!_useSystemVolume) return;
     try {
-      // 在移动端使用系统音量时，播放器内部音量应保持 1.0，避免与系统音量叠乘导致音量偏小。
-      if ((player.volume - 1.0).abs() > 0.0001) {
-        player.volume = 1.0;
+      // 系统音量只控制设备音量；额外增益仅应用在播放内核中。
+      if ((player.volume - volumeBoost).abs() > 0.0001) {
+        applyPlayerVolume();
       }
     } catch (_) {}
   }
@@ -840,6 +895,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _savePlayerVolumePreference(double volume) async {
+    if (_useSystemVolume) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_playerVolumeKey, volume.clamp(0.0, 1.0));
@@ -880,7 +936,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _setSystemVolume(double volume) async {
-    if (!_useSystemVolume) return;
+    if (!_useSystemVolume || _isDisposed) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.hidden ||
+        lifecycle == AppLifecycleState.detached) {
+      _pendingSystemVolume = null;
+      return;
+    }
     if (_systemVolumeController == null) return;
     _isSystemVolumeUpdating = true;
     try {

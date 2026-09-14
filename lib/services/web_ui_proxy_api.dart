@@ -1,8 +1,9 @@
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
+import 'package:nipaplay/utils/http_header_utils.dart';
 import 'package:shelf/shelf.dart';
 
 class WebUiProxyApi {
-  WebUiProxyApi({http.Client? client}) : _client = client ?? http.Client();
+  WebUiProxyApi({http.Client? client}) : _client = client ?? http.DandanplayHttpClient();
 
   final http.Client _client;
 
@@ -45,6 +46,8 @@ class WebUiProxyApi {
     http.StreamedResponse upstream;
     try {
       upstream = await _client.send(proxyRequest);
+    } on http.DandanplayLoginRequired catch (e) {
+      return Response(401, body: e.message);
     } catch (e) {
       return Response.internalServerError(body: 'Proxy request failed: $e');
     }
@@ -79,12 +82,17 @@ class WebUiProxyApi {
       }
       target[entry.key] = entry.value;
     }
-    target.removeWhere((key, _) => key.toLowerCase() == 'accept-encoding');
+    // 不要用 removeWhere：http 的 headers 是自定义 equals 的 LinkedHashMap，
+    // 删完再塞回同名 key 会踩到 dart-lang/sdk#64217。
+    removeHeader(target, 'accept-encoding');
     target['accept-encoding'] = 'identity';
   }
 
   void _stripHopByHop(Map<String, String> headers) {
-    headers.removeWhere((key, _) => _hopByHopHeaders.contains(key.toLowerCase()));
+    removeHeadersWhere(
+      headers,
+      (key, _) => _hopByHopHeaders.contains(key.toLowerCase()),
+    );
     headers.remove('content-length');
   }
 }

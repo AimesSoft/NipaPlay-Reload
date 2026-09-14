@@ -98,7 +98,7 @@ void main() {
     await DatabaseService.upsertAssetRecord(DbAssetRecord(hashPre16MiBMd5: hash));
     await DatabaseService.linkVideoAssetToEpisode(hash,
         (await DatabaseService.getCommonEpisodeId(ddp, 101))!);
-    expect(await DandanplayAuth.getAppSecret(), 'synthetic-review-secret');
+    expect(await DandanplayAuth.getAppSecret(), 'server-managed');
     final expectedSignature = base64Encode(sha256.convert(utf8.encode(
         'nipaplayv11700000000/api/v2/matchsynthetic-review-secret')).bytes);
     expect(DandanplayAuth.generateSignature(timestamp: 1700000000,

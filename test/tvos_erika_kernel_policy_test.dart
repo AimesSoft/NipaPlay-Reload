@@ -62,7 +62,7 @@ void main() {
     expect(danmaku, contains('!globals.isTvOS &&'));
   });
 
-  test('tvOS release pins the native Erika plugin and reports Erika', () {
+  test('tvOS release uses shared hosted Erika and reports Erika', () {
     final tvOSOverrides = File(
       'pubspec_overrides.tvos.yaml',
     ).readAsStringSync();
@@ -70,10 +70,7 @@ void main() {
       'lib/utils/system_resource_monitor.dart',
     ).readAsStringSync();
 
-    expect(
-      tvOSOverrides,
-      contains('ref: v0.1.6'),
-    );
+    expect(tvOSOverrides, isNot(contains('erika_flutter:')));
     expect(monitor, contains('_instance._updatePlayerKernelType();'));
     expect(monitor, contains("_instance._activeDecoder = 'Erika（等待媒体）';"));
 

@@ -6,7 +6,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
@@ -78,10 +78,14 @@ class WatchHistoryAutoMatchHelper {
 
     try {
       debugPrint('[WatchHistoryAutoMatch] 开始自动匹配: ${item.filePath}');
-      final videoInfo = await DandanplayService.getVideoInfo(trimmedPath);
+      final videoInfo = await DanmakuMatchingService.instance.getVideoInfo(
+        trimmedPath,
+      );
       final matches = videoInfo['matches'];
 
-      if (videoInfo['isMatched'] == true && matches is List && matches.isNotEmpty) {
+      if (videoInfo['isMatched'] == true &&
+          matches is List &&
+          matches.isNotEmpty) {
         final firstMatch = matches.first;
         if (firstMatch is! Map) {
           return item;
@@ -98,9 +102,8 @@ class WatchHistoryAutoMatchHelper {
             videoInfo['animeTitle'] ?? bestMatch['animeTitle'];
         final rawEpisodeTitle =
             bestMatch['episodeTitle'] ?? videoInfo['episodeTitle'];
-        final rawHash = videoInfo['fileHash'] ??
-            videoInfo['hash'] ??
-            item.videoHash;
+        final rawHash =
+            videoInfo['fileHash'] ?? videoInfo['hash'] ?? item.videoHash;
 
         final animeTitle = rawAnimeTitle?.toString();
         final episodeTitle = rawEpisodeTitle?.toString();
@@ -109,15 +112,13 @@ class WatchHistoryAutoMatchHelper {
         final updatedItem = item.copyWith(
           animeId: animeId,
           episodeId: episodeId,
-          animeName: animeTitle?.isNotEmpty == true
-              ? animeTitle
-              : item.animeName,
+          animeName:
+              animeTitle?.isNotEmpty == true ? animeTitle : item.animeName,
           episodeTitle: episodeTitle?.isNotEmpty == true
               ? episodeTitle
               : item.episodeTitle,
-          videoHash: hashString?.isNotEmpty == true
-              ? hashString
-              : item.videoHash,
+          videoHash:
+              hashString?.isNotEmpty == true ? hashString : item.videoHash,
         );
 
         await _persistMatchedHistory(context, updatedItem);
@@ -162,7 +163,8 @@ class WatchHistoryAutoMatchHelper {
       }
 
       final matched = await JellyfinDandanplayMatcher.instance
-          .createPlayableHistoryItem(context, episodeInfo, showMatchDialog: false);
+          .createPlayableHistoryItem(context, episodeInfo,
+              showMatchDialog: false);
       return _mergeMatchedHistoryItem(item, matched);
     }
 
@@ -184,7 +186,8 @@ class WatchHistoryAutoMatchHelper {
       }
 
       final matched = await EmbyDandanplayMatcher.instance
-          .createPlayableHistoryItem(context, episodeInfo, showMatchDialog: false);
+          .createPlayableHistoryItem(context, episodeInfo,
+              showMatchDialog: false);
       return _mergeMatchedHistoryItem(item, matched);
     }
 
@@ -211,7 +214,8 @@ class WatchHistoryAutoMatchHelper {
       episodeId: matched.episodeId,
       animeName: matched.animeName,
       episodeTitle: matched.episodeTitle,
-      videoHash: matchedHash?.isNotEmpty == true ? matchedHash : original.videoHash,
+      videoHash:
+          matchedHash?.isNotEmpty == true ? matchedHash : original.videoHash,
     );
   }
 
@@ -269,7 +273,8 @@ class WatchHistoryAutoMatchHelper {
     }
 
     try {
-      final episodeInfo = await jellyfinService.getEpisodeDetails(jellyfinEpisodeId);
+      final episodeInfo =
+          await jellyfinService.getEpisodeDetails(jellyfinEpisodeId);
       if (episodeInfo == null) {
         debugPrint('[WatchHistoryAutoMatch] 无法获取Jellyfin剧集详情，跳过映射写入');
         return;
@@ -281,7 +286,8 @@ class WatchHistoryAutoMatchHelper {
         return;
       }
 
-      final mappingId = await JellyfinEpisodeMappingService.instance.createOrUpdateAnimeMapping(
+      final mappingId = await JellyfinEpisodeMappingService.instance
+          .createOrUpdateAnimeMapping(
         jellyfinSeriesId: seriesId,
         jellyfinSeriesName: episodeInfo.seriesName ?? '',
         jellyfinSeasonId: episodeInfo.seasonId,
@@ -297,7 +303,8 @@ class WatchHistoryAutoMatchHelper {
         mappingId: mappingId,
         confirmed: true,
       );
-      debugPrint('[WatchHistoryAutoMatch] 已写入Jellyfin映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
+      debugPrint(
+          '[WatchHistoryAutoMatch] 已写入Jellyfin映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
     } catch (e) {
       debugPrint('[WatchHistoryAutoMatch] 保存Jellyfin映射失败: $e');
     }
@@ -333,7 +340,8 @@ class WatchHistoryAutoMatchHelper {
         return;
       }
 
-      final mappingId = await EmbyEpisodeMappingService.instance.createOrUpdateAnimeMapping(
+      final mappingId =
+          await EmbyEpisodeMappingService.instance.createOrUpdateAnimeMapping(
         embySeriesId: seriesId,
         embySeriesName: episodeInfo.seriesName ?? '',
         embySeasonId: episodeInfo.seasonId,
@@ -349,7 +357,8 @@ class WatchHistoryAutoMatchHelper {
         mappingId: mappingId,
         confirmed: true,
       );
-      debugPrint('[WatchHistoryAutoMatch] 已写入Emby映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
+      debugPrint(
+          '[WatchHistoryAutoMatch] 已写入Emby映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
     } catch (e) {
       debugPrint('[WatchHistoryAutoMatch] 保存Emby映射失败: $e');
     }

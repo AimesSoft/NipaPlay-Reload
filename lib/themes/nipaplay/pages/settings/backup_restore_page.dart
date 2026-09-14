@@ -892,6 +892,11 @@ class _SyncSettingsDialogState extends State<_SyncSettingsDialog> {
                             child: TextField(
                               controller: _passwordController,
                               obscureText: _obscurePassword,
+                              keyboardType: TextInputType.visiblePassword,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              smartDashesType: SmartDashesType.disabled,
+                              smartQuotesType: SmartQuotesType.disabled,
                               decoration: InputDecoration(
                                 labelText: '密码',
                                 prefixIcon: const Icon(Icons.lock_outline),

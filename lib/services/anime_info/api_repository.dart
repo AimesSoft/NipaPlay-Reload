@@ -3,7 +3,7 @@ part of 'anime_info_service.dart';
 
 class _APIRepository {
 
-  /// 访问 Dandanplay API: /api/v2/match
+  /// 通过统一弹幕匹配服务访问 Dandanplay
   /// 获取文件匹配的 Episode ID 和对应 Anime ID
   static Future<DandanplayFileMatchResult?> requestDandanplayFileMatch(DandanplayFileMatchArgument arg) async {
 
@@ -25,42 +25,11 @@ class _APIRepository {
       '大小: ${_val(_formatFileSize(arg.fileSize))}'
     );
 
-    const apiPath = '/api/v2/match';
-    final appSecret = await DandanplayService.getAppSecret();
-    final timestamp =
-        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-    final response = await http.post(
-      Uri.parse('${await DandanplayService.getApiBaseUrl()}$apiPath'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': DandanplayService.userAgent,
-        'X-AppId': DandanplayService.appId,
-        'X-Signature': DandanplayService.generateSignature(
-          DandanplayService.appId,
-          timestamp,
-          apiPath,
-          appSecret,
-        ),
-        'X-Timestamp': '$timestamp',
-      },
-      body: jsonEncode(<String, dynamic>{
-        'fileName': arg.fileName,
-        'fileHash': arg.fileHash,
-        'fileSize': arg.fileSize,
-        'matchMode': 'hashAndFileName',
-      }),
+    final decoded = await DanmakuMatchingService.instance.matchVideo(
+      fileName: arg.fileName,
+      fileHash: arg.fileHash,
+      fileSize: arg.fileSize,
     );
-    if (response.statusCode != 200) {
-      final error = response.headers['x-error-message'] ?? response.body;
-      // throw Exception('弹弹play 文件匹配失败 (${response.statusCode}): $error');
-      return end(null, 'HTTP ${response.statusCode}, 错误信息: $error');
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const FormatException('弹弹play 文件匹配响应格式无效');
-    }
     final matches = decoded['matches'];
     if (matches is! List) return end(null, '响应格式无效');
 
@@ -79,7 +48,7 @@ class _APIRepository {
         final result = DandanplayFileMatchResult(
           dandanplayAnimeId: animeId,
           dandanplayEpisodeId: episodeId,
-          danmakuOffset: match['shift'].toDouble(),
+          danmakuOffset: (match['shift'] as num?)?.toDouble() ?? 0,
         );
         return end(result, '匹配成功');
       }
@@ -238,7 +207,6 @@ class _APIRepository {
         'Accept': 'application/json',
         'User-Agent': DandanplayAuth.userAgent,
         'X-AppId': DandanplayAuth.appId,
-        'X-AppSecret': appSecret,
         'X-Signature': DandanplayAuth.generateSignature(
           timestamp: timestamp,
           apiPath: apiPath,

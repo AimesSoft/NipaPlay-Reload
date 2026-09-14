@@ -172,6 +172,9 @@ class HotkeyService extends ChangeNotifier {
       'toggle_danmaku': 'D',
       'volume_up': '↑',
       'volume_down': '↓',
+      'speed_up': ']',
+      'speed_down': '[',
+      'speed_reset': '退格',
       'previous_episode': 'Shift+←',
       'next_episode': 'Shift+→',
       'send_danmaku': 'C', // 添加发送弹幕快捷键
@@ -249,6 +252,10 @@ class HotkeyService extends ChangeNotifier {
 
     // 注册音量减少热键
     await _registerHotkey('volume_down', '音量-', _handleVolumeDown);
+
+    await _registerHotkey('speed_up', '倍速 +0.1', () => _changePlaybackRate(0.1));
+    await _registerHotkey('speed_down', '倍速 -0.1', () => _changePlaybackRate(-0.1));
+    await _registerHotkey('speed_reset', '恢复 1 倍速', () => _changePlaybackRate(null));
 
     // 注册上一集热键
     await _registerHotkey('previous_episode', '上一集', _handlePreviousEpisode);
@@ -484,6 +491,10 @@ class HotkeyService extends ChangeNotifier {
         return PhysicalKeyboardKey.end;
       case 'Tab':
         return PhysicalKeyboardKey.tab;
+      case '[':
+        return PhysicalKeyboardKey.bracketLeft;
+      case ']':
+        return PhysicalKeyboardKey.bracketRight;
       case '退格':
         return PhysicalKeyboardKey.backspace;
       case 'Del':
@@ -776,6 +787,15 @@ class HotkeyService extends ChangeNotifier {
     if (videoState != null) {
       videoState.toggleDanmakuVisible();
     }
+  }
+
+  void _changePlaybackRate(double? delta) {
+    final state = _getVideoPlayerState();
+    if (state == null || !state.hasVideo) return;
+    final rate = delta == null
+        ? 1.0
+        : ((state.playbackRate * 10).round() + (delta * 10).round()) / 10;
+    unawaited(state.setPlaybackRate(rate));
   }
 
   void _handleVolumeUp() {

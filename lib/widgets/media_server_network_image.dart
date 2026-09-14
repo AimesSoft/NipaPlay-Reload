@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 
 export 'package:nipaplay/services/media_server_image_loader.dart'
     show loadMediaServerImage;
@@ -165,7 +167,9 @@ class MediaServerAwareNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = Uri.parse(url);
-    if (isMediaServerImageUri(uri)) {
+    if (isMediaServerImageUri(uri) ||
+        NetworkSettings.isDandanplayServiceUri(
+            DandanplayHttpClient.targetUri(uri))) {
       return MediaServerNetworkImage(
         uri,
         width: width,
@@ -210,7 +214,9 @@ class MediaServerAwareCachedNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = Uri.parse(imageUrl);
-    if (isMediaServerImageUri(uri)) {
+    if (isMediaServerImageUri(uri) ||
+        NetworkSettings.isDandanplayServiceUri(
+            DandanplayHttpClient.targetUri(uri))) {
       return MediaServerNetworkImage(
         uri,
         width: width,

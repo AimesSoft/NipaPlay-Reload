@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import './dandanplay_service.dart';
@@ -31,7 +31,7 @@ class BangumiService {
   bool _isProcessingQueue = false;
 
   BangumiService._() {
-    _client = http.Client();
+    _client = http.DandanplayHttpClient();
   }
 
   // 根据番剧ID获取缓存时间
@@ -198,6 +198,10 @@ class BangumiService {
           throw Exception('HTTP请求失败: ${response.statusCode}');
         }
       } catch (e) {
+        if (e is http.DandanplayLoginRequired) {
+          item.completer.completeError(e);
+          return;
+        }
         retryCount++;
         if (retryCount == item.maxRetries) {
           item.completer.completeError(Exception('请求失败，已达到最大重试次数: $e'));

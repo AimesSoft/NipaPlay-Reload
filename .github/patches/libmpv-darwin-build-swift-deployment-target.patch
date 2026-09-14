@@ -1,0 +1,16 @@
+diff --git a/nix/packages/mk-pkg-mpv/default.nix b/nix/packages/mk-pkg-mpv/default.nix
+--- a/nix/packages/mk-pkg-mpv/default.nix
++++ b/nix/packages/mk-pkg-mpv/default.nix
+@@ -267,6 +267,12 @@
+     )
+ 
+     MACOS_OPTIONS=(
++      # mpv compiles Swift with a custom_target, not Meson's Swift language
++      # support. cross-files/* swift_args never reach that command. Pass the
++      # deployment target through mpv's own option for BOTH output slices.
++      # Otherwise swiftc defaults to the build host's OS and emits references
++      # to newer Swift runtime symbols (NipaPlay-Reload issue #476).
++      "-Dswift-flags=-target ${if arch == "amd64" then "x86_64" else "arm64"}-apple-macos11.0"
+       `# audio output features`
+       -Dcoreaudio=enabled `# CoreAudio audio output`
+ 

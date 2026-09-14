@@ -23,8 +23,8 @@ class _AnimeInfoRepository {
   /// - 将资产记录插入或更新到 asset 表
   ///
   /// - 尝试用 hash 查找 Dandanplay Episode ID:
-  /// - 如果没有找到 dandanplay epi id, 则继续尝试用文件信息访问 /api/v2/match API
-  /// - 特别的, 如果 forceMatch 为 true, 则无论如何都访问 /api/v2/match API
+  /// - 如果没有找到 dandanplay epi id, 则继续尝试用文件信息调用统一弹幕匹配服务
+  /// - 特别的, 如果 forceMatch 为 true, 则无论如何都调用统一弹幕匹配服务
   ///
   /// - 如果 API 匹配失败, 则打印提示信息并直接返回
   /// - 如果 API 匹配成功, 根据匹配到的 Dandanplay Episode ID 查询 dandanplay episode 表
@@ -80,7 +80,7 @@ class _AnimeInfoRepository {
       _printLine('[2/5] 资产尚未匹配 Dandanplay 剧集, 继续访问匹配 API');
     }
 
-    // 根据文件信息访问 /api/v2/match API, 获取匹配结果
+    // 根据文件信息调用统一弹幕匹配服务, 获取匹配结果
     final arg = fileInfo.toDandanplayFileMatchArgument();
     final res = await _APIRepository.requestDandanplayFileMatch(arg);
     if (res == null) {

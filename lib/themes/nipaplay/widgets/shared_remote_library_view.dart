@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
@@ -46,10 +48,40 @@ class SharedRemoteLibraryView extends StatefulWidget {
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
   static Color get _accentColor => AppAccentColors.current;
+
+  // “只看未观看”状态的持久化 Key
+  static const String _unwatchedFilterPrefsKey =
+      'shared_library_unwatched_only';
+
+  // 从本地存储恢复“只看未观看”开关状态（重开应用后保持上一次的状态）
+  Future<void> _restoreUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getBool(_unwatchedFilterPrefsKey);
+      if (saved == null || !mounted) return;
+      setState(() {
+        _showOnlyUnwatched = saved;
+      });
+    } catch (e) {
+      debugPrint('[共享媒体库] 恢复未观看过滤状态失败: $e');
+    }
+  }
+
+  // 将“只看未观看”开关状态写入本地存储
+  Future<void> _persistUnwatchedFilterState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_unwatchedFilterPrefsKey, _showOnlyUnwatched);
+    } catch (e) {
+      debugPrint('[共享媒体库] 保存未观看过滤状态失败: $e');
+    }
+  }
+
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
+  bool _showOnlyUnwatched = false;
   LibraryManagementViewMode _managementViewMode =
       LibraryManagementViewMode.icons;
   String? _managementLoadedHostId;
@@ -63,6 +95,25 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   @override
   bool get wantKeepAlive => true;
 
+  // 本地观看历史中已看过的番剧 ID（用于“只看未观看”过滤）
+  Set<int> _watchedAnimeIds() {
+    try {
+      final provider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      if (provider.isLoaded) {
+        return provider.history
+            .where((item) => item.animeId != null)
+            .map((item) => item.animeId!)
+            .toSet();
+      }
+    } catch (_) {
+      // Provider 不可用时退回到静态缓存
+    }
+    return WatchHistoryManager.getAllCachedHistory()
+        .where((item) => item.animeId != null)
+        .map((item) => item.animeId!)
+        .toSet();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +125,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         }
       });
     }
+    // 恢复“只看未观看”开关状态
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _restoreUnwatchedFilterState();
+      }
+    });
   }
 
   @override
@@ -107,6 +164,15 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             return folder.name.toLowerCase().contains(query) ||
                 folder.path.toLowerCase().contains(query);
           }).toList();
+        }
+
+        // 只看未观看过滤（基于本地观看历史，看过即视为已观看）
+        if (widget.mode == SharedRemoteViewMode.mediaLibrary &&
+            _showOnlyUnwatched) {
+          final watchedIds = _watchedAnimeIds();
+          animeSummaries = animeSummaries
+              .where((anime) => !watchedIds.contains(anime.animeId))
+              .toList();
         }
 
         // 排序逻辑
@@ -161,6 +227,15 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 });
               },
               showSort: true,
+              showUnwatchedOnly: isManagement ? null : _showOnlyUnwatched,
+              onToggleUnwatchedOnly: isManagement
+                  ? null
+                  : () {
+                      setState(() {
+                        _showOnlyUnwatched = !_showOnlyUnwatched;
+                      });
+                      _persistUnwatchedFilterState();
+                    },
               viewMode: isManagement ? _managementViewMode : null,
               onToggleViewMode: isManagement
                   ? () {
@@ -428,8 +503,48 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             icon: Icons.star_rounded,
             type: LocalLibrarySortType.rating,
           ),
+          const SizedBox(width: 10),
+          _buildLargeScreenUnwatchedChip(),
         ],
       ],
+    );
+  }
+
+  Widget _buildLargeScreenUnwatchedChip() {
+    final selected = _showOnlyUnwatched;
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: () {
+        setState(() {
+          _showOnlyUnwatched = !_showOnlyUnwatched;
+        });
+        _persistUnwatchedFilterState();
+      },
+      borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      focusScale: 1.04,
+      style: NipaplayLargeScreenFocusableStyle(
+        idleBackgroundDark: selected
+            ? _accentColor.withValues(alpha: 0.26)
+            : Colors.white.withValues(alpha: 0.09),
+        idleBackgroundLight: selected
+            ? _accentColor.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.82),
+        focusStrokeColor: selected ? _accentColor : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            selected ? Ionicons.eye_off_outline : Ionicons.eye_outline,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            '只看未观看',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
     );
   }
 
@@ -565,10 +680,18 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (animeSummaries.isEmpty) {
+      final filteredEmpty =
+          _showOnlyUnwatched && _searchController.text.trim().isEmpty;
       return NipaplayLargeScreenEmptyState(
-        icon: Ionicons.folder_open_outline,
-        title: provider.activeHost == null ? '请选择共享客户端' : '该客户端尚未扫描番剧',
-        subtitle: '切换客户端或进入库管理添加远程文件夹',
+        icon: filteredEmpty
+            ? Ionicons.eye_off_outline
+            : Ionicons.folder_open_outline,
+        title: filteredEmpty
+            ? '没有未观看的番剧'
+            : (provider.activeHost == null ? '请选择共享客户端' : '该客户端尚未扫描番剧'),
+        subtitle: filteredEmpty
+            ? '关闭“只看未观看”后可查看全部内容'
+            : '切换客户端或进入库管理添加远程文件夹',
       );
     }
 
@@ -1080,7 +1203,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (animeSummaries.isEmpty) {
-      return _buildEmptyLibraryPlaceholder(context, provider.activeHost);
+      return _buildEmptyLibraryPlaceholder(
+        context,
+        provider.activeHost,
+        filteredEmpty:
+            _showOnlyUnwatched && _searchController.text.trim().isEmpty,
+      );
     }
 
     final showSummary =
@@ -1672,15 +1800,30 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   }
 
   Widget _buildEmptyLibraryPlaceholder(
-      BuildContext context, SharedRemoteHost? host) {
+    BuildContext context,
+    SharedRemoteHost? host, {
+    bool filteredEmpty = false,
+  }) {
+    final String message;
+    if (host == null) {
+      message = '请选择一个共享客户端';
+    } else if (filteredEmpty) {
+      message = '没有未观看的番剧';
+    } else {
+      message = '该客户端尚未扫描任何番剧';
+    }
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Ionicons.folder_open_outline, color: Colors.white38, size: 48),
+          Icon(
+            filteredEmpty ? Ionicons.eye_off_outline : Ionicons.folder_open_outline,
+            color: Colors.white38,
+            size: 48,
+          ),
           SizedBox(height: 12),
           Text(
-            host == null ? '请选择一个共享客户端' : '该客户端尚未扫描任何番剧',
+            message,
             locale: const Locale('zh', 'CN'),
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white60),

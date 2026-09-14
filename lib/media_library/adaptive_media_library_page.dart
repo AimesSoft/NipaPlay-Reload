@@ -57,6 +57,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
   TabChangeNotifier? _tabChangeNotifier;
   CupertinoPageActionsController? _pageActionsController;
   bool _connectionsInitialized = false;
+  bool _requestedHistoryLoad = false;
   int _selectionRevision = 0;
   late final MediaLibrarySectionOrderStore _sectionOrderStore;
 
@@ -214,6 +215,12 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
     }
   }
 
+  bool _showLocalMediaLibrary() => shouldExposeLocalMediaLibrary(
+        isWeb: kIsWeb,
+        isTelevision: globals.isTelevision ||
+            AppDisplaySurfaceScope.of(context) == AppDisplaySurface.television,
+      );
+
   /// 构建当前可用的媒体库分区列表（与 build() 中逻辑一致）。
   List<UnifiedMediaLibrarySection> _buildCurrentSections() {
     // 需要从 Provider 读取状态，这里用与 build 相同的 Consumer 逻辑
@@ -227,10 +234,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
     return applyMediaLibrarySectionOrder(
       buildUnifiedMediaLibrarySections(
         MediaLibraryAvailability(
-          showLocal: shouldExposeLocalMediaLibrary(
-            isWeb: kIsWeb,
-            isTelevision: globals.isTelevision,
-          ),
+          showLocal: _showLocalMediaLibrary(),
           showWebDAVLibrary: watchHistoryProvider.isLoaded &&
               mediaLibraryHasItemsForSource(
                 watchHistoryProvider.history,
@@ -276,7 +280,12 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         watchHistoryProvider,
         _,
       ) {
-        if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
+        // 只请求一次：加载失败时 isLoaded 会一直是 false，
+        // 在 build 里反复补load会变成每帧一次的重试风暴。
+        if (!_requestedHistoryLoad &&
+            !watchHistoryProvider.isLoaded &&
+            !watchHistoryProvider.isLoading) {
+          _requestedHistoryLoad = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !watchHistoryProvider.isLoaded) {
               watchHistoryProvider.loadHistory();
@@ -287,10 +296,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         final sections = applyMediaLibrarySectionOrder(
           buildUnifiedMediaLibrarySections(
             MediaLibraryAvailability(
-              showLocal: shouldExposeLocalMediaLibrary(
-                isWeb: kIsWeb,
-                isTelevision: globals.isTelevision,
-              ),
+              showLocal: _showLocalMediaLibrary(),
               showWebDAVLibrary: watchHistoryProvider.isLoaded &&
                   mediaLibraryHasItemsForSource(
                     watchHistoryProvider.history,
@@ -318,15 +324,13 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
           _sectionOrderStore.sectionIds,
         );
 
-        if (sections.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
         final selectedIndex = mediaLibrarySectionIndexById(
           sections,
           _selectedSectionId,
         );
-        final selectedSection = sections[selectedIndex < 0 ? 0 : selectedIndex];
+        final selectedSection = sections.isEmpty
+            ? null
+            : sections[selectedIndex < 0 ? 0 : selectedIndex];
 
         return AdaptiveMediaLibraryScaffold(
           sections: sections,
@@ -335,17 +339,20 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
           onSectionOrderChanged: _setSectionOrder,
           onRemoteAccess: _openRemoteAccessSettings,
           onAddMedia: _showAddMedia,
-          child: AdaptiveMediaLibrarySectionContent(
-            section: selectedSection,
-            onPlayEpisode: _playHistoryItem,
-            onSourcesUpdated: _refreshSources,
-            managementViewMode: _managementViewMode,
-            onManagementViewModeChanged: (viewMode) {
-              if (viewMode != _managementViewMode) {
-                setState(() => _managementViewMode = viewMode);
-              }
-            },
-          ),
+          // TV 没有本地分区；尚未连接媒体源时仍需保留添加入口。
+          child: selectedSection == null
+              ? const AdaptiveMediaLibraryEmptyState()
+              : AdaptiveMediaLibrarySectionContent(
+                  section: selectedSection,
+                  onPlayEpisode: _playHistoryItem,
+                  onSourcesUpdated: _refreshSources,
+                  managementViewMode: _managementViewMode,
+                  onManagementViewModeChanged: (viewMode) {
+                    if (viewMode != _managementViewMode) {
+                      setState(() => _managementViewMode = viewMode);
+                    }
+                  },
+                ),
         );
       },
     );

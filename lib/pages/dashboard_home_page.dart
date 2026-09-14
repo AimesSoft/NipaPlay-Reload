@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';

@@ -18,6 +18,16 @@ on:
         default: false
         required: true
         type: boolean
+      run_ios:
+        description: 'Run unsigned iOS release build, including the Rust core'
+        default: false
+        required: true
+        type: boolean
+      run_web:
+        description: 'Run browser regression tests and embedded Web release build'
+        default: false
+        required: true
+        type: boolean
 permissions:
   contents: read
 
@@ -74,3 +84,29 @@ jobs:
     name: Linux amd64 Release Build
     if: github.event_name == 'workflow_dispatch' && inputs.run_linux
     uses: ./.github/workflows/build-linux.yml
+
+  build-ios:
+    name: iOS Release Build
+    if: github.event_name == 'workflow_dispatch' && inputs.run_ios
+    uses: ./.github/workflows/build-ios.yml
+
+  build-web:
+    name: Embedded Web Release Build
+    if: github.event_name == 'workflow_dispatch' && inputs.run_web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter Environment
+        uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Run browser regression tests
+        run: flutter test --no-pub --platform chrome test/potplayer_web_test.dart
+
+      - name: Build embedded Web application
+        run: flutter build web --no-pub

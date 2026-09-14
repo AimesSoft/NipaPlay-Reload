@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/media_server_transport.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 

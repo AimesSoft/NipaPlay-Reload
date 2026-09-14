@@ -262,29 +262,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       String filePath) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
-    final content = utf8.decode(bytes, allowMalformed: true);
-    final lowerPath = filePath.toLowerCase();
-
-    if (lowerPath.endsWith('.xml')) {
-      return _convertBilibiliXmlDanmakuToJson(content);
-    }
-
-    if (lowerPath.endsWith('.json')) {
-      final decoded = json.decode(content);
-      if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded.cast<String, dynamic>());
-      }
-      if (decoded is List) {
-        return <String, dynamic>{'comments': decoded};
-      }
-      throw Exception('JSON根节点必须是对象或数组');
-    }
-
-    throw Exception('不支持的文件格式: $filePath');
-  }
-
-  Map<String, dynamic> _convertBilibiliXmlDanmakuToJson(String xmlContent) {
-    return convertBilibiliXmlDanmakuToJson(xmlContent);
+    return compute(parseLocalDanmakuBytes, bytes);
   }
 
   int _countLocalDanmakuComments(Map<String, dynamic> jsonData) {
@@ -344,6 +322,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       debugPrint('清除之前的弹幕数据');
       _danmakuList.clear();
       _danmakuListVersion++;
+      clearSkipSegments();
       danmakuController?.clearDanmaku();
       if (canContinue()) {
         _notifyListeners();
@@ -417,12 +396,28 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (!canContinue()) return;
         _updateMergedDanmakuList();
 
+        // 弹幕到位后顺带推导片头区间（纯本地计算，失败静默降级）
+        if (canContinue()) {
+          detectIntroSkipFromDanmaku(_danmakuList);
+          // 同时问一路 AniSkip 社区标注（异步、失败静默；rank 高于弹幕，
+          // 若命中会覆盖弹幕推导的结果）
+          unawaited(fetchAniSkipSegments());
+        }
+
         if (canContinue()) {
           _notifyListeners();
         }
         return;
       }
 
+      final canDownload = await DanmakuMatchingService.instance.canAccess();
+      if (!canContinue()) return;
+      if (!canDownload) {
+        debugPrint('[弹幕访问] 未登录弹弹play，跳过在线弹幕下载');
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕下载');
+        unawaited(_promptDandanplayLogin());
+        return;
+      }
       debugPrint('缓存中没有找到弹幕，从网络加载中...');
       // 从网络加载弹幕
       final animeId = int.tryParse(animeIdStr) ?? 0;
@@ -485,6 +480,12 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (!canContinue()) return;
         _updateMergedDanmakuList();
 
+        // 弹幕到位后顺带推导片头区间（纯本地计算，失败静默降级）
+        if (canContinue()) {
+          detectIntroSkipFromDanmaku(_danmakuList);
+          unawaited(fetchAniSkipSegments());
+        }
+
         // 移除GPU弹幕字符集预构建调用
         if (canContinue()) {
           await _prebuildGPUDanmakuCharsetIfNeeded();
@@ -502,6 +503,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (canContinue()) {
           _setStatus(PlayerStatus.playing, message: '弹幕数据无效，跳过加载');
         }
+      }
+    } on DandanplayLoginRequired {
+      if (canContinue()) {
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕下载');
+        unawaited(_promptDandanplayLogin());
       }
     } catch (e, st) {
       debugPrint('加载弹幕失败: $e');

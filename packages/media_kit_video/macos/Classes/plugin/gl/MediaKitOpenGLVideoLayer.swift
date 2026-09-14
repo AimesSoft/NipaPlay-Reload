@@ -186,12 +186,10 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     self.consecutiveBlackFramebufferFrames = oldLayer.consecutiveBlackFramebufferFrames
     self.lastBlackFramebufferLogTime = oldLayer.lastBlackFramebufferLogTime
     super.init(layer: layer)
-    contentsFormat = oldLayer.contentsFormat
-    colorspace = oldLayer.colorspace
+    // Core Animation copies these properties in super.init(layer:).
+    // Presentation copies do not own CAOpenGLLayer's drawable state; invoking
+    // setColorspace here can dereference a null drawable during display changes.
     isInvalidated = true
-    if #available(macOS 10.15, *) {
-      wantsExtendedDynamicRangeContent = oldLayer.wantsExtendedDynamicRangeContent
-    }
   }
 
   required init?(coder: NSCoder) {
@@ -263,6 +261,10 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
       }
       return
     }
+    guard ownsRenderingResources, !isInvalidated else { return }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    defer { CATransaction.commit() }
     frame = hostView?.bounds ?? frame
     contentsScale = hostView?.window?.backingScaleFactor ??
       hostView?.window?.screen?.backingScaleFactor ??

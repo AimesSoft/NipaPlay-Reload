@@ -120,6 +120,10 @@ class WebDAVResolvedFile {
   });
 }
 
+typedef WebDAVConnectionValidator = Future<WebDAVConnection?> Function(
+  WebDAVConnection connection,
+);
+
 typedef _WebDAVDirectoryCacheKey = ({
   String name,
   String url,
@@ -130,6 +134,8 @@ typedef _WebDAVDirectoryCacheKey = ({
 
 class WebDAVService {
   static const String _connectionsKey = 'webdav_connections';
+  static const String _connectionTombstonesKey =
+      'incremental_sync_webdav_connection_tombstones';
   static const String _userAgent = 'WebDAVFS/3.0 (NipaPlay)';
   static const int _defaultTimeoutMs = 15000;
   static const String _legacyPropfindRequestBody =
@@ -180,22 +186,31 @@ class WebDAVService {
     return _instance!;
   }
 
-  WebDAVService._();
+  WebDAVService._({WebDAVConnectionValidator? connectionValidator})
+      : _connectionValidator = connectionValidator;
+
+  @visibleForTesting
+  WebDAVService.forTesting({WebDAVConnectionValidator? connectionValidator})
+      : this._(connectionValidator: connectionValidator);
 
   List<WebDAVConnection> _connections = [];
+  Map<String, String> _connectionTombstones = {};
+  final WebDAVConnectionValidator? _connectionValidator;
   final ProcessMemoryListCache<_WebDAVDirectoryCacheKey, WebDAVFile>
       _directoryCache =
       ProcessMemoryListCache<_WebDAVDirectoryCacheKey, WebDAVFile>();
 
   List<WebDAVConnection> get connections => List.unmodifiable(_connections);
+  Map<String, String> get connectionTombstones =>
+      Map.unmodifiable(_connectionTombstones);
 
   Future<void> initialize() async {
     await _loadConnections();
   }
 
   Future<void> _loadConnections() async {
+    final prefs = await SharedPreferences.getInstance();
     try {
-      final prefs = await SharedPreferences.getInstance();
       final connectionsJson = prefs.getString(_connectionsKey);
       if (connectionsJson != null) {
         final List<dynamic> decoded = json.decode(connectionsJson);
@@ -210,6 +225,22 @@ class WebDAVService {
     } catch (e) {
       print('加载WebDAV连接失败: $e');
     }
+    try {
+      final tombstonesJson = prefs.getString(_connectionTombstonesKey);
+      if (tombstonesJson == null || tombstonesJson.isEmpty) {
+        _connectionTombstones = {};
+      } else {
+        final decoded = json.decode(tombstonesJson);
+        _connectionTombstones = decoded is Map
+            ? decoded.map(
+                (key, value) => MapEntry(key.toString(), value.toString()),
+              )
+            : {};
+      }
+    } catch (e) {
+      print('加载WebDAV连接删除记录失败: $e');
+      _connectionTombstones = {};
+    }
   }
 
   Future<void> _saveConnections() async {
@@ -223,16 +254,42 @@ class WebDAVService {
     }
   }
 
+  Future<void> _saveConnectionTombstones() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _connectionTombstonesKey,
+      json.encode(_connectionTombstones),
+    );
+  }
+
   Future<bool> addConnection(WebDAVConnection connection) async {
+    return upsertConnection(connection);
+  }
+
+  /// Validates the replacement before mutating the currently saved connection.
+  /// A transient network failure therefore leaves the last working
+  /// configuration intact.
+  Future<bool> upsertConnection(WebDAVConnection connection) async {
     final normalized = _normalizeConnection(connection);
     try {
       final validated = await _validateConnection(normalized);
       if (validated == null) {
         return false;
       }
-      _connections.add(validated.copyWith(isConnected: true));
+      final saved = validated.copyWith(isConnected: true);
+      var index = _connections.indexWhere((item) => item.id == saved.id);
+      if (index == -1) {
+        index = _connections.indexWhere((item) => item.name == saved.name);
+      }
+      if (index == -1) {
+        _connections.add(saved);
+      } else {
+        _connections[index] = saved;
+      }
+      _connectionTombstones.remove(saved.id);
       clearDirectoryCache(connectionName: validated.name);
       await _saveConnections();
+      await _saveConnectionTombstones();
       return true;
     } catch (e) {
       print('添加WebDAV连接失败: $e');
@@ -241,9 +298,34 @@ class WebDAVService {
   }
 
   Future<void> removeConnection(String name) async {
+    final removed = _connections.where((conn) => conn.name == name).toList();
     _connections.removeWhere((conn) => conn.name == name);
+    final deletedAt = DateTime.now().toUtc().toIso8601String();
+    for (final connection in removed) {
+      _connectionTombstones[connection.id] = deletedAt;
+    }
     clearDirectoryCache(connectionName: name);
     await _saveConnections();
+    if (removed.isNotEmpty) await _saveConnectionTombstones();
+  }
+
+  /// Applies an explicit deletion received from the sync repository without
+  /// manufacturing a new local deletion timestamp.
+  Future<void> applySyncTombstone({
+    required String connectionId,
+    required String deletedAt,
+  }) async {
+    final removedNames = _connections
+        .where((connection) => connection.id == connectionId)
+        .map((connection) => connection.name)
+        .toList();
+    _connections.removeWhere((connection) => connection.id == connectionId);
+    _connectionTombstones[connectionId] = deletedAt;
+    for (final name in removedNames) {
+      clearDirectoryCache(connectionName: name);
+    }
+    await _saveConnections();
+    await _saveConnectionTombstones();
   }
 
   Future<bool> testConnection(WebDAVConnection connection) async {
@@ -255,6 +337,8 @@ class WebDAVService {
   Future<WebDAVConnection?> _validateConnection(
     WebDAVConnection connection,
   ) async {
+    final override = _connectionValidator;
+    if (override != null) return override(connection);
     final triedUrls = <String>{};
     final pending = <WebDAVConnection>[connection];
 

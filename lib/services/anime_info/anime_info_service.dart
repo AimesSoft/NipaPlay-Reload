@@ -3,12 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
+import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/models/database/anime_episode_relation.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';
-import 'package:nipaplay/services/dandanplay_service_io.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/anime_info_parse.dart';
 import 'package:nipaplay/utils/color.dart';
 import 'package:nipaplay/utils/dandanplay_auth.dart';

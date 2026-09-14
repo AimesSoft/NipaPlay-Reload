@@ -135,6 +135,9 @@ class AdaptiveTextFormField extends StatelessWidget {
   /// Used to enable/disable this form field auto validation and update its error text.
   final AutovalidateMode? autovalidateMode;
 
+  bool get _isPassword =>
+      obscureText || keyboardType == TextInputType.visiblePassword;
+
   @override
   Widget build(BuildContext context) {
     if (PlatformInfo.prefersCupertinoControls) {
@@ -158,7 +161,9 @@ class AdaptiveTextFormField extends StatelessWidget {
               controller: controller,
               focusNode: focusNode,
               placeholder: placeholder,
-              keyboardType: keyboardType,
+              keyboardType: _isPassword
+                  ? TextInputType.visiblePassword
+                  : keyboardType,
               textInputAction: textInputAction,
               textCapitalization: textCapitalization,
               style: style,
@@ -167,7 +172,10 @@ class AdaptiveTextFormField extends StatelessWidget {
               minLines: minLines,
               maxLength: maxLength,
               obscureText: obscureText,
-              autocorrect: autocorrect,
+              autocorrect: _isPassword ? false : autocorrect,
+              enableSuggestions: !_isPassword,
+              smartDashesType: _isPassword ? SmartDashesType.disabled : null,
+              smartQuotesType: _isPassword ? SmartQuotesType.disabled : null,
               autofocus: autofocus,
               enabled: enabled,
               readOnly: readOnly,
@@ -239,7 +247,7 @@ class AdaptiveTextFormField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       initialValue: initialValue,
-      keyboardType: keyboardType,
+      keyboardType: _isPassword ? TextInputType.visiblePassword : keyboardType,
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       style: style,
@@ -248,7 +256,10 @@ class AdaptiveTextFormField extends StatelessWidget {
       minLines: minLines,
       maxLength: maxLength,
       obscureText: obscureText,
-      autocorrect: autocorrect,
+      autocorrect: _isPassword ? false : autocorrect,
+      enableSuggestions: !_isPassword,
+      smartDashesType: _isPassword ? SmartDashesType.disabled : null,
+      smartQuotesType: _isPassword ? SmartQuotesType.disabled : null,
       autofocus: autofocus,
       enabled: enabled,
       readOnly: readOnly,

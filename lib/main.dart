@@ -1,4 +1,5 @@
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
+import 'package:nipaplay/services/password_input_mode_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -21,6 +22,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/android_tv_remote_key_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_actions.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
@@ -164,6 +166,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  PasswordInputModeService.instance.start();
   if (!kIsWeb && globals.supportsRustNativeBridge) {
     try {
       await ensureRustInitialized();
@@ -1902,7 +1905,13 @@ Widget _buildGlobalAppOverlay(
       globals.isTelevision ? TvOSRemoteTextInputScope(child: child) : child;
   return Stack(
     children: [
-      appChild,
+      if (globals.isAndroidTv)
+        NipaplayAndroidTvRemoteKeyScope(
+          navigatorKey: navigatorKey,
+          child: appChild,
+        )
+      else
+        appChild,
       const _SystemResourceOverlay(),
       if (isDragging) const DragDropOverlay(),
     ],

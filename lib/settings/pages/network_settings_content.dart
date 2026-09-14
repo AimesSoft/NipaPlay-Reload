@@ -185,9 +185,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
           children: [
             AdaptiveSettingsTile<void>.card(
               title: l10n.serverDescriptionTitle,
-              subtitle:
-                  '${l10n.serverBullet(l10n.primaryServer, l10n.networkServerDescriptionPrimary)}\n'
-                  '${l10n.serverBullet(l10n.backupServer, l10n.networkServerDescriptionBackup)}',
+              subtitle: l10n.networkServerDescriptionPrimary,
               icon: Ionicons.help_circle_outline,
               phoneIcon: cupertino.CupertinoIcons.question_circle,
               onTap: () {},
@@ -718,16 +716,15 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   ) {
     final items = [
       DropdownMenuItemData(
-        title: context.l10n.networkPrimaryServerRecommended,
+        title: _text(
+          context,
+          'NipaPlay 服务（推荐）',
+          'NipaPlay 服務（推薦）',
+          'NipaPlay Service (Recommended)',
+        ),
         value: NetworkSettings.primaryServer,
         isSelected: _currentServer == NetworkSettings.primaryServer,
         description: context.l10n.networkServerDescriptionPrimary,
-      ),
-      DropdownMenuItemData(
-        title: context.l10n.networkBackupServer,
-        value: NetworkSettings.backupServer,
-        isSelected: _currentServer == NetworkSettings.backupServer,
-        description: context.l10n.networkServerDescriptionBackup,
       ),
     ];
 
@@ -784,9 +781,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   String _getServerDisplayName(BuildContext context, String serverUrl) {
     switch (serverUrl) {
       case NetworkSettings.primaryServer:
-        return context.l10n.primaryServer;
-      case NetworkSettings.backupServer:
-        return context.l10n.backupServer;
+        return _text(context, 'NipaPlay 服务', 'NipaPlay 服務', 'NipaPlay Service');
       default:
         return serverUrl;
     }

@@ -117,12 +117,21 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
         return;
       }
 
+      final canMatch = await DanmakuMatchingService.instance.canAccess();
+      if (!canContinue()) return;
+      if (!canMatch) {
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕匹配');
+        unawaited(_promptDandanplayLogin());
+        return;
+      }
+
       _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
 
       // 使用超时处理网络请求
       try {
         //debugPrint('尝试获取视频信息...');
-        final videoInfo = await DandanplayService.getVideoInfo(videoPath)
+        final videoInfo = await DanmakuMatchingService.instance
+            .getVideoInfo(videoPath)
             .timeout(const Duration(seconds: 15), onTimeout: () {
           //debugPrint('获取视频信息超时');
           throw TimeoutException('连接服务器超时');
@@ -292,6 +301,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
             _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
           }
         }
+      } on DandanplayLoginRequired {
+        if (!canContinue()) return;
+        _addStatusMessage('未登录弹弹play，已跳过在线弹幕匹配');
+        unawaited(_promptDandanplayLogin());
       } catch (e) {
         if (!canContinue()) return;
         //debugPrint('视频识别网络错误: $e\n$s');
@@ -305,6 +318,36 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       if (!canContinue()) return;
       //debugPrint('识别视频或加载弹幕时发生严重错误: $e\n$s');
       rethrow;
+    }
+  }
+
+  /// Do not block video initialization or stack matching/download prompts.
+  Future<void> _promptDandanplayLogin() async {
+    final generation = _playbackGeneration;
+    final videoPath = _currentVideoPath;
+    bool canShow() =>
+        !_isDisposed &&
+        videoPath != null &&
+        _currentVideoPath == videoPath &&
+        _playbackGeneration == generation &&
+        _dandanplayLoginPromptGeneration != generation;
+    if (!canShow()) return;
+
+    // Playback may be changing the widget tree when matching is skipped.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!canShow()) return;
+    if (await DanmakuMatchingService.instance.canAccess()) return;
+    if (!canShow()) return;
+    final context = _context?.mounted == true
+        ? _context
+        : globals.navigatorKey.currentState?.overlay?.context;
+    if (context == null || !context.mounted) return;
+    _dandanplayLoginPromptGeneration = generation;
+    try {
+      await DandanplayLoginNotice.showIfNeeded(context);
+    } catch (e) {
+      // A presentation failure must never prevent video playback.
+      debugPrint('[弹幕访问] 无法显示登录提示: $e');
     }
   }
 

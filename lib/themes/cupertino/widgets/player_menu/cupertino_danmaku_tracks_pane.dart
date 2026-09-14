@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io' as io;
-
 import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
@@ -8,7 +5,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -31,56 +28,29 @@ class _CupertinoDanmakuTracksPaneState
 
   Future<void> _loadLocalDanmakuFile() async {
     if (_isLoadingLocal) return;
+    final videoState = widget.videoState;
+    final initialVideoPath = videoState.currentVideoPath;
     setState(() => _isLoadingLocal = true);
 
     try {
-      final jsonType = XTypeGroup(
-        label: 'JSON弹幕',
-        extensions: const ['json'],
-        uniformTypeIdentifiers: io.Platform.isIOS
-            ? ['public.json', 'public.text', 'public.plain-text']
-            : null,
-      );
-      final xmlType = XTypeGroup(
-        label: 'XML弹幕',
-        extensions: const ['xml'],
-        uniformTypeIdentifiers: io.Platform.isIOS
-            ? ['public.xml', 'public.text', 'public.plain-text']
-            : null,
+      final file = await openFile(
+        acceptedTypeGroups: localDanmakuFileTypes,
+        confirmButtonText: '选择弹幕文件',
       );
 
-      final file = await openFile(acceptedTypeGroups: [jsonType, xmlType]);
       if (file == null) return;
 
-      final fileBytes = await file.readAsBytes();
-      final content = utf8.decode(fileBytes);
-      final fileName = file.name.toLowerCase();
+      final jsonData = await readLocalDanmakuFile(file);
+      final commentCount = jsonData['count'] as int;
+      if (videoState.isDisposed ||
+          videoState.currentVideoPath != initialVideoPath) return;
 
-      Map<String, dynamic> jsonData;
-      if (fileName.endsWith('.xml')) {
-        jsonData = _convertXmlToJson(content);
-      } else {
-        final decoded = json.decode(content);
-        if (decoded is Map) {
-          jsonData = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
-        } else if (decoded is List) {
-          jsonData = {'comments': decoded};
-        } else {
-          throw Exception('JSON 文件格式不正确，根节点必须是对象或数组');
-        }
-      }
-
-      final commentCount = _countDanmakuComments(jsonData);
-      if (commentCount == 0) {
-        throw Exception('弹幕文件中没有弹幕数据');
-      }
-
-      final localTrackCount = widget.videoState.danmakuTracks.values
+      final localTrackCount = videoState.danmakuTracks.values
           .where((track) => track['source'] == 'local')
           .length;
       final trackName = '本地弹幕${localTrackCount + 1}';
 
-      await widget.videoState.loadDanmakuFromLocal(
+      await videoState.loadDanmakuFromLocal(
         jsonData,
         trackName: trackName,
       );
@@ -91,28 +61,6 @@ class _CupertinoDanmakuTracksPaneState
     } finally {
       if (mounted) setState(() => _isLoadingLocal = false);
     }
-  }
-
-  int _countDanmakuComments(Map<String, dynamic> jsonData) {
-    final comments = jsonData['comments'];
-    if (comments is List) return comments.length;
-
-    final data = jsonData['data'];
-    if (data is List) return data.length;
-    if (data is String) {
-      try {
-        final parsed = json.decode(data);
-        if (parsed is List) return parsed.length;
-      } catch (_) {
-        return 0;
-      }
-    }
-
-    return 0;
-  }
-
-  Map<String, dynamic> _convertXmlToJson(String xmlContent) {
-    return convertBilibiliXmlDanmakuToJson(xmlContent);
   }
 
   void _showMessage(String message) {

@@ -101,7 +101,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
       if (_mutedForExit) {
         if (!_useSystemVolume) {
-          player.volume = _currentVolume;
+          applyPlayerVolume();
           _logMacOSHdrResetTrace('restored player volume to $_currentVolume');
         }
         _mutedForExit = false;
@@ -592,7 +592,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // 兜底恢复：若 handleBackButton 静音后未经 resetPlayer 进入新一轮播放（如错误弹窗流程）
     if (_mutedForExit) {
       if (!_useSystemVolume) {
-        player.volume = _currentVolume;
+        applyPlayerVolume();
       }
       _mutedForExit = false;
     }
@@ -757,11 +757,21 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    // 跳过片头：连带清掉 ID 解析状态。
+    // 同一部番的 bangumiId / MAL ID 在切集时是稳定的，但缓存它们会让
+    // 「换一部番播放」时拿到上一部的 ID——而这里没有任何信息能可靠区分
+    // 「同番切集」和「换番重播」，所以一律清空重解析（Bangumi / AniList
+    // 各自有内存缓存兜底，重复解析几乎零成本）。
+    _bangumiId = null;
+    _episodeNumber = null;
+    _animeMalId = null;
+    _malIdResolved = false;
     _initialHistoryItem = null;
     _playbackDetailContext = null;
     _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
+    clearSkipSegments();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;
@@ -834,11 +844,21 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    // 跳过片头：连带清掉 ID 解析状态。
+    // 同一部番的 bangumiId / MAL ID 在切集时是稳定的，但缓存它们会让
+    // 「换一部番播放」时拿到上一部的 ID——而这里没有任何信息能可靠区分
+    // 「同番切集」和「换番重播」，所以一律清空重解析（Bangumi / AniList
+    // 各自有内存缓存兜底，重复解析几乎零成本）。
+    _bangumiId = null;
+    _episodeNumber = null;
+    _animeMalId = null;
+    _malIdResolved = false;
     _initialHistoryItem = null;
     _playbackDetailContext = null;
     _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
+    clearSkipSegments();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;
@@ -1260,7 +1280,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _queueSystemVolumeUpdate(newVolume);
       } else {
         // Web 等不支持系统音量时：使用播放器内部音量
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
     } catch (e) {
       //debugPrint("Failed to set system volume via player: $e");
@@ -1295,7 +1315,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _queueSystemVolumeUpdate(newVolume);
       } else {
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
 
       if (globals.isDesktop) {
@@ -1328,7 +1348,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _queueSystemVolumeUpdate(newVolume);
       } else {
-        player.volume = newVolume;
+        applyPlayerVolume();
       }
 
       if (globals.isDesktop) {

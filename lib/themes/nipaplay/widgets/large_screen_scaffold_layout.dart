@@ -1342,7 +1342,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
       ),
     );
     return NipaplayTvOSPopRouteGuard(
-      enabled: globals.isTelevision,
+      // Only Siri Remote MENU uses root popRoute to open the menu.
+      // Android BACK must retain its normal navigation/exit behavior.
+      enabled: globals.isTvOS,
       onRootPopRoute: _handleTvOSRootPopRoute,
       child: content,
     );

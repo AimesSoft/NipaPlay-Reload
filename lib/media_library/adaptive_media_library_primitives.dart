@@ -738,6 +738,9 @@ class _AdaptiveMediaTextFieldState
     if (mounted) setState(() {});
   }
 
+  bool get _isPassword => widget.obscureText ||
+      widget.keyboardType == material.TextInputType.visiblePassword;
+
   void _handleChanged(String value) {
     if (mounted) setState(() {});
     widget.onChanged?.call(value);
@@ -768,7 +771,13 @@ class _AdaptiveMediaTextFieldState
         placeholder: placeholder,
         style: widget.style,
         cursorColor: widget.cursorColor,
-        keyboardType: widget.keyboardType,
+        keyboardType: _isPassword
+            ? material.TextInputType.visiblePassword
+            : widget.keyboardType,
+        autocorrect: !_isPassword,
+        enableSuggestions: !_isPassword,
+        smartDashesType: _isPassword ? services.SmartDashesType.disabled : null,
+        smartQuotesType: _isPassword ? services.SmartQuotesType.disabled : null,
         minLines: widget.minLines,
         maxLines: widget.maxLines,
         obscureText: widget.obscureText,
@@ -832,7 +841,13 @@ class _AdaptiveMediaTextFieldState
         focusNode: _focusNode,
         style: style,
         cursorColor: widget.cursorColor,
-        keyboardType: widget.keyboardType,
+        keyboardType: _isPassword
+            ? material.TextInputType.visiblePassword
+            : widget.keyboardType,
+        autocorrect: !_isPassword,
+        enableSuggestions: !_isPassword,
+        smartDashesType: _isPassword ? services.SmartDashesType.disabled : null,
+        smartQuotesType: _isPassword ? services.SmartQuotesType.disabled : null,
         minLines: widget.minLines,
         maxLines: widget.maxLines,
         obscureText: widget.obscureText,
@@ -887,7 +902,13 @@ class _AdaptiveMediaTextFieldState
             backgroundCursorColor:
                 theme.colorScheme.onSurface.withValues(alpha: 0.4),
             selectionColor: theme.colorScheme.primary.withValues(alpha: 0.25),
-            keyboardType: widget.keyboardType,
+            keyboardType: _isPassword
+                ? material.TextInputType.visiblePassword
+                : widget.keyboardType,
+            autocorrect: !_isPassword,
+            enableSuggestions: !_isPassword,
+            smartDashesType: _isPassword ? services.SmartDashesType.disabled : null,
+            smartQuotesType: _isPassword ? services.SmartQuotesType.disabled : null,
             minLines: widget.minLines,
             maxLines: widget.maxLines,
             obscureText: widget.obscureText,

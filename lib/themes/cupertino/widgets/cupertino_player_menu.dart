@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_menu/player_quick_controls.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
@@ -133,7 +134,7 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
       grouped.putIfAbsent(item.category, () => []).add(item);
     }
 
-    final sections = <Widget>[];
+    final sections = <Widget>[const PlayerQuickControls(cupertino: true)];
     grouped.forEach((category, defs) {
       sections.add(
         AdaptivePlayerMenuSection(
