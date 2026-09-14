@@ -113,50 +113,93 @@ pub(super) fn next_deadline(deadline: Instant, period: Duration, now: Instant) -
 /// covered by a deadline. Late pulses cannot double-render a fallback's slot.
 pub(super) struct FramePacer {
     pub deadline: Option<Instant>,
-    last_draw: Option<Instant>,
-    last_pulse: Option<u64>,
-    pulse_pending: bool,
+    last_pulse_elapsed_us: Option<u64>,
+    last_pulse_slot: Option<u64>,
+    last_rendered_slot: Option<u64>,
+    pending_pulse_slot: Option<u64>,
+    reserved_slot: Option<u64>,
 }
 impl FramePacer {
     pub fn new() -> Self {
         Self {
             deadline: None,
-            last_draw: None,
-            last_pulse: None,
-            pulse_pending: false,
+            last_pulse_elapsed_us: None,
+            last_pulse_slot: None,
+            last_rendered_slot: None,
+            pending_pulse_slot: None,
+            reserved_slot: None,
         }
     }
     pub fn pulse(&mut self, arrived: Instant, elapsed_us: u64, period: Duration) {
-        if self.last_pulse == Some(elapsed_us) {
-            return;
+        let slot = match self.last_pulse_elapsed_us {
+            Some(previous) if elapsed_us == previous => return,
+            Some(previous) if elapsed_us < previous => self
+                .last_rendered_slot
+                .or(self.last_pulse_slot)
+                .unwrap_or(0)
+                .saturating_add(1),
+            Some(previous) => {
+                let delta_ns = (elapsed_us - previous) as u128 * 1_000;
+                let period_ns = period.as_nanos().max(1);
+                let advance = ((delta_ns + period_ns / 2) / period_ns).max(1) as u64;
+                self.last_pulse_slot.unwrap_or(0).saturating_add(advance)
+            }
+            None => self.last_rendered_slot.unwrap_or(0),
+        };
+        let first_pulse_after_fallback =
+            self.last_pulse_elapsed_us.is_none() && self.last_rendered_slot.is_some();
+        self.last_pulse_elapsed_us = Some(elapsed_us);
+        self.last_pulse_slot = Some(slot);
+        if !first_pulse_after_fallback
+            && self
+                .last_rendered_slot
+                .is_none_or(|rendered| slot > rendered)
+        {
+            self.pending_pulse_slot = Some(
+                self.pending_pulse_slot
+                    .map_or(slot, |pending| pending.max(slot)),
+            );
         }
-        self.last_pulse = Some(elapsed_us);
-        self.pulse_pending = true;
         // Leave a small arrival tolerance before declaring the next pulse lost.
         // This grace is applied once per real pulse, not on every fallback.
         self.deadline = Some(arrived + period + period.mul_f64(0.20));
     }
-    pub fn ready(&mut self, now: Instant, period: Duration) -> Option<bool> {
-        if self.pulse_pending {
-            self.pulse_pending = false;
+    pub fn ready(&mut self, now: Instant, _period: Duration) -> Option<bool> {
+        if let Some(slot) = self.pending_pulse_slot.take() {
             if self
-                .last_draw
-                .is_none_or(|last| now.saturating_duration_since(last) >= period.mul_f64(0.65))
+                .last_rendered_slot
+                .is_none_or(|rendered| slot > rendered)
             {
+                self.reserved_slot = Some(slot);
                 return Some(true);
             }
         }
         if self.deadline.is_none_or(|t| now >= t) {
+            let slot = self
+                .last_rendered_slot
+                .or(self.last_pulse_slot)
+                .unwrap_or(0)
+                .saturating_add(1);
+            self.reserved_slot = Some(slot);
             Some(false)
         } else {
             None
         }
     }
-    pub fn rendered(&mut self, now: Instant, period: Duration, vsync: bool) {
-        self.last_draw = Some(now);
-        if !vsync || self.deadline.is_none_or(|deadline| deadline <= now) {
+    pub fn rendered(&mut self, now: Instant, period: Duration) {
+        if let Some(slot) = self.reserved_slot.take() {
+            self.last_rendered_slot = Some(
+                self.last_rendered_slot
+                    .map_or(slot, |rendered| rendered.max(slot)),
+            );
+        }
+        if self.deadline.is_none_or(|deadline| deadline <= now) {
             self.deadline = Some(next_deadline(self.deadline.unwrap_or(now), period, now));
         }
+    }
+
+    pub fn render_slot(&self) -> Option<u64> {
+        self.reserved_slot
     }
 }
 
@@ -185,7 +228,7 @@ mod tests {
         pacer.pulse(start, 0, period);
         assert_eq!(pacer.ready(start, period), Some(true));
         let completed = start + Duration::from_millis(8);
-        pacer.rendered(completed, period, true);
+        pacer.rendered(completed, period);
         assert_eq!(pacer.ready(completed, period), None);
         assert_eq!(pacer.deadline, Some(start + Duration::from_millis(11)));
     }
@@ -196,11 +239,11 @@ mod tests {
         let mut pacer = FramePacer::new();
         pacer.pulse(start, 0, period);
         assert_eq!(pacer.ready(start, period), Some(true));
-        pacer.rendered(start, period, true);
+        pacer.rendered(start, period);
         // The next pulse is missing: the fallback fires with 1ms grace.
         let fallback = start + Duration::from_millis(6);
         assert_eq!(pacer.ready(fallback, period), Some(false));
-        pacer.rendered(fallback, period, false);
+        pacer.rendered(fallback, period);
         let late = start + Duration::from_millis(7);
         pacer.pulse(late, 5000, period);
         assert_eq!(pacer.ready(late, period), None);
@@ -216,12 +259,60 @@ mod tests {
         let mut pacer = FramePacer::new();
         pacer.pulse(start, 0, period);
         pacer.ready(start, period);
-        pacer.rendered(start, period, true);
+        pacer.rendered(start, period);
         for ms in [6, 11, 16, 21] {
             let now = start + Duration::from_millis(ms);
             assert_eq!(pacer.ready(now, period), Some(false));
-            pacer.rendered(now, period, false);
+            pacer.rendered(now, period);
         }
+    }
+    #[test]
+    fn jittered_valid_pulse_is_not_dropped_after_draw_completion() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 0, period);
+        assert_eq!(pacer.ready(start, period), Some(true));
+        pacer.rendered(start + Duration::from_micros(600), period);
+
+        // Only 3.4ms has passed since draw completion, but elapsed_us proves
+        // this is the next display slot and it must not be suppressed.
+        let jittered = start + Duration::from_millis(4);
+        pacer.pulse(jittered, 5_000, period);
+        assert_eq!(pacer.ready(jittered, period), Some(true));
+        pacer.rendered(jittered + Duration::from_micros(600), period);
+
+        let following = start + Duration::from_millis(10);
+        pacer.pulse(following, 10_000, period);
+        assert_eq!(pacer.ready(following, period), Some(true));
+    }
+    #[test]
+    fn elapsed_timeline_restart_starts_a_new_slot() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 20_000, period);
+        assert_eq!(pacer.ready(start, period), Some(true));
+        pacer.rendered(start, period);
+
+        pacer.pulse(start + period, 0, period);
+        assert_eq!(pacer.ready(start + period, period), Some(true));
+    }
+    #[test]
+    fn queued_pulses_coalesce_to_the_latest_slot_without_a_burst() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 0, period);
+        assert_eq!(pacer.ready(start, period), Some(true));
+        pacer.rendered(start, period);
+
+        pacer.pulse(start + period, 5_000, period);
+        pacer.pulse(start + period * 2, 10_000, period);
+        assert_eq!(pacer.ready(start + period * 2, period), Some(true));
+        assert_eq!(pacer.render_slot(), Some(2));
+        pacer.rendered(start + period * 2, period);
+        assert_eq!(pacer.ready(start + period * 2, period), None);
     }
     #[test]
     fn dart_gap_does_not_freeze_or_reset_motion() {

@@ -925,7 +925,7 @@ fn run_engine_loop(
                 renderer.diagnostic_render = render_trace;
                 if continuous {
                     super::diagnostics::record("pacing_draw", render_trace.0, render_trace.1,
-                        (pacing == Some(true)) as i64, 0);
+                        (pacing == Some(true)) as i64, pacer.render_slot().unwrap_or(0) as i64);
                     super::diagnostics::record("render_source", render_trace.0, render_trace.1,
                         diagnostic_frame.1 as i64, render_sequence);
                 }
@@ -944,8 +944,7 @@ fn run_engine_loop(
 
             has_pending_frame = false;
             if continuous {
-                pacer.rendered(std::time::Instant::now(), renderer.motion_clock.period,
-                    pacing == Some(true));
+                pacer.rendered(std::time::Instant::now(), renderer.motion_clock.period);
             } else {
                 pacer = motion::FramePacer::new();
             }

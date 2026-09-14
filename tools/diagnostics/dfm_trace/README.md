@@ -48,7 +48,7 @@ python -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
 | Native | pacing_mmcss | 连续动画启动时的 MMCSS 注册结果；a=1 表示注册成功 |
 | Native | vsync_pulse | 轻量 vsync 命令出队；a=Dart Ticker elapsed_us，b=原生入队至出队耗时（微秒） |
 | Native | pacing_wait_begin / pacing_wait_end | a=计划等待/实际等待微秒；begin.b=高精度后端可用，end.b=是否收到命令（0 为超时或断开） |
-| Native | pacing_draw | a=1 表示 vsync 驱动，a=0 表示原生截止时间兜底；与同 frame 的 draw_begin 关联 |
+| Native | pacing_draw | a=1 表示 vsync 驱动，a=0 表示原生截止时间兜底；b 为两者共用的逻辑帧槽，与同 frame 的 draw_begin 关联 |
 
 Native `t_us` 来自同一个 Rust Instant 原点。Dart `t_us` 来自 Timeline.now，Ticker elapsed 是另一条动画时间轴。跨域只通过帧号关联，不能直接相减；同域可以量化排队、阻塞和回调间隔。
 
