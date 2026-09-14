@@ -1,5 +1,7 @@
 library video_player_state;
 
+import 'package:nipaplay/danmaku_next/next2_frame_trace.dart';
+
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';

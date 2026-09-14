@@ -35,6 +35,7 @@ python -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
 | Dart | snapshot | 已计算位置；记录播放时间、最多三个滚动条目的匿名 ID/x/y/speed、刷新率/DPR/超采样 |
 | Dart | payload_begin / encode_begin | emoji/载荷准备开始，以及 JSON 编码开始 |
 | Dart | send_begin / send_return | 编码完成后发送方法调用、收到返回；包括平台排队和原生同步等待 |
+| Dart | position_save_begin / position_save_prepared / position_save_end | 播放进度保存开始、位置字典编码完成、偏好存储返回；只记录进度，不记录文件路径。异步存储的总耗时不等于 UI 阻塞时间 |
 | Dart | flutter_frame | Flutter 原始 vsync/build/raster 时间戳；报告到达时间不能当成帧完成时间 |
 | Native | ffi_enter / enqueue | 原生调用入口及入队之前 |
 | Native | process_begin / process_end | 渲染线程处理帧数据；a 为处理成功标志 |
@@ -47,7 +48,23 @@ Native `t_us` 来自同一个 Rust Instant 原点。Dart `t_us` 来自 Timeline.
 
 **texture_sample 不是物理呈现证明。** 当前是一张可被覆盖的共享纹理；记录的完成编号是请求时观察到的状态，并不证明 ANGLE/DWM 读取了该编号对应的像素。如果 Ticker/坐标/提交/GPU 完成都连续而用户仍观察到重复画面，需用实际呈现跟踪继续排查。
 
-目前单元测试验证日志/分析机制，并未在用户的 180 Hz 视频场景重现停顿；收到实机日志后再做根因判断。
+新版 `flutter_frame` 另有 `build_end_us`，用于区分 Dart 构建耗时与等待 raster 开始的时间；旧日志缺少该字段时不能把两段时间混为一谈。
+
+## 实机样本：周期停顿（2026-09-14）
+
+样本 `dfm-20260914-094404-465.jsonl` 未报告事件丢失。以下时间以第一条位置快照为零点，避开启动、暂停和纹理尺寸变化：
+
+| 下一快照时间（秒） | 帧号 | 快照间隔（ms） | 前一帧 Dart 方法调用往返（ms） |
+| --- | --- | --- | --- |
+| 4.060 | 619 | 29.14 | 25.21 |
+| 6.065 | 1000 | 31.82 | 25.84 |
+| 8.066 | 1371 | 29.02 | 24.72 |
+| 10.066 | 1740 | 31.56 | 25.30 |
+| 12.066 | 2106 | 29.39 | 26.41 |
+
+相同模式延续到约 22 秒。以帧 618 为例，原生 FFI 只耗时 0.111 ms，绘制提交 0.345 ms，GPU 完成回调延迟 1.597 ms；完成到纹理采样又隔了 23.254 ms。Dart 的 send_begin 后约 25 ms 没有事件，下一次 tick 的动画时间跨过 33.333 ms，位置相应推进。抽样条目没有在媒体时间推进时保持原坐标的异常。证据指向 Flutter 更新/采样侧停顿，而非这一周期内 Rust 布局或 GPU 工作量耗尽预算；尚不能证明实际显示器 Present 的内容。
+
+代码中每前进 2000 ms 保存位置一次（时间阈值 3000 ms 与位移阈值使用 OR），调用 SharedPreferencesWindows 2.4.1；该依赖最终同步执行整个偏好文件的 `writeAsStringSync`。修复将此读写路径改成异步并串行写入，保留文件格式。原日志没有存储阶段标记，因此“每个尖峰均由该同步写入引起”还需修复版实机对照；新增存储标记用于核实关联，不以方法返回 Future 作为非阻塞证明。
 
 ## Workflow DLL 原生验证（2026-09-14）
 

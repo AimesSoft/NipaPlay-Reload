@@ -1442,12 +1442,11 @@ packages:
     source: hosted
     version: "2.4.3"
   shared_preferences_windows:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: shared_preferences_windows
-      sha256: "94ef0f72b2d71bc3e700e025db3710911bd51a71cefb65cc609dd0d9a982e3c1"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/shared_preferences_windows"
+      relative: true
+    source: path
     version: "2.4.1"
   shelf:
     dependency: "direct main"

@@ -183,7 +183,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);
-      _volumeBoost = (prefs.getDouble('player_volume_boost') ?? 1.0).clamp(1.0, 2.0);
+      _volumeBoost =
+          (prefs.getDouble('player_volume_boost') ?? 1.0).clamp(1.0, 2.0);
 
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
@@ -399,12 +400,22 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   // 保存视频播放位置
   Future<void> _saveVideoPosition(String path, int position) async {
-    final prefs = await SharedPreferences.getInstance();
-    final positions = prefs.getString(_videoPositionsKey) ?? '{}';
-    final Map<String, dynamic> positionMap =
-        Map<String, dynamic>.from(json.decode(positions));
-    positionMap[path] = position;
-    await prefs.setString(_videoPositionsKey, json.encode(positionMap));
+    Next2FrameTrace.recordPlaybackEvent(
+        'position_save_begin', {'position_ms': position});
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final positions = prefs.getString(_videoPositionsKey) ?? '{}';
+      final Map<String, dynamic> positionMap =
+          Map<String, dynamic>.from(json.decode(positions));
+      positionMap[path] = position;
+      final encoded = json.encode(positionMap);
+      Next2FrameTrace.recordPlaybackEvent(
+          'position_save_prepared', {'position_ms': position});
+      await prefs.setString(_videoPositionsKey, encoded);
+    } finally {
+      Next2FrameTrace.recordPlaybackEvent(
+          'position_save_end', {'position_ms': position});
+    }
   }
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）

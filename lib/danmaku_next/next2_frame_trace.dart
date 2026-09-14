@@ -45,6 +45,14 @@ class Next2FrameTrace {
   int engine = 0;
   int _startedUs = 0;
   static int _nextFrame = 0;
+  static final Set<Next2FrameTrace> _active = {};
+
+  /// Correlate low-frequency playback work with the animation timeline.
+  static void recordPlaybackEvent(String event, Map<String, Object?> fields) {
+    for (final trace in _active) {
+      trace.add(event, fields);
+    }
+  }
 
   int nextFrame() => enabled ? ++_nextFrame : 0;
 
@@ -53,6 +61,7 @@ class Next2FrameTrace {
     engine = handle;
     if (enabled) return;
     enabled = true;
+    _active.add(this);
     _startedUs = developer.Timeline.now;
     _timings = (timings) {
       for (final timing in timings) {
@@ -60,6 +69,8 @@ class Next2FrameTrace {
           'vsync_us': timing.timestampInMicroseconds(FramePhase.vsyncStart),
           'build_start_us':
               timing.timestampInMicroseconds(FramePhase.buildStart),
+          'build_end_us':
+              timing.timestampInMicroseconds(FramePhase.buildFinish),
           'raster_start_us':
               timing.timestampInMicroseconds(FramePhase.rasterStart),
           'raster_end_us':
@@ -111,6 +122,7 @@ class Next2FrameTrace {
     if (!enabled) return;
     add('trace_stop', {});
     enabled = false;
+    _active.remove(this);
     _timer?.cancel();
     final callback = _timings;
     if (callback != null) {
