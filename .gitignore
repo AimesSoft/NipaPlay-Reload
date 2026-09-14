@@ -68,3 +68,4 @@ docs/error.txt
 # 忽略 errors 和 log
 android/.kotlin/errors
 *.log
+/.codex_work
