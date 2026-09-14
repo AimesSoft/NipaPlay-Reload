@@ -154,7 +154,7 @@ impl FramePacer {
     }
     pub fn rendered(&mut self, now: Instant, period: Duration, vsync: bool) {
         self.last_draw = Some(now);
-        if !vsync {
+        if !vsync || self.deadline.is_none_or(|deadline| deadline <= now) {
             self.deadline = Some(next_deadline(self.deadline.unwrap_or(now), period, now));
         }
     }
@@ -177,6 +177,18 @@ pub(super) fn sample_x(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn slow_submission_does_not_immediately_render_a_second_frame() {
+        let start = Instant::now();
+        let period = Duration::from_millis(5);
+        let mut pacer = FramePacer::new();
+        pacer.pulse(start, 0, period);
+        assert_eq!(pacer.ready(start, period), Some(true));
+        let completed = start + Duration::from_millis(8);
+        pacer.rendered(completed, period, true);
+        assert_eq!(pacer.ready(completed, period), None);
+        assert_eq!(pacer.deadline, Some(start + Duration::from_millis(11)));
+    }
     #[test]
     fn vsync_and_fallback_share_one_render_slot() {
         let start = Instant::now();
