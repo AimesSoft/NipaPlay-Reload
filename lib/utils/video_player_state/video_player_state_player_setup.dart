@@ -344,6 +344,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         resolvedDetailContext.subtitle;
     _episodeId = historyItem?.episodeId; // 保存从历史记录传入的 episodeId
     _animeId = historyItem?.animeId ?? resolvedDetailContext.animeId;
+
+    // 跳过片头：在这里也起一次 AniSkip。
+    // 弹幕加载完成后还会再起一次（那时 duration 就绪，能传 episodeLength
+    // 让服务端过滤片长不符的标注）。这里先起一份是为了兜底——弹幕可能因为
+    // 未登录弹弹play、番剧无弹幕等原因拿不到，而 AniSkip 只依赖 animeId + 集数，
+    // 不该被弹幕拖累。重复调用几乎零成本：_malIdResolved 标志保证只解析一次 ID，
+    // AniSkipService 也有结果缓存。
+    unawaited(fetchAniSkipSegments());
+
     String message = '正在初始化播放器: ${p.basename(videoPath)}';
     if (_animeTitle != null) {
       message = '正在初始化播放器: $_animeTitle $_episodeTitle';

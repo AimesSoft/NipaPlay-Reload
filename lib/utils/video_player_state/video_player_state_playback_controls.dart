@@ -757,11 +757,21 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    // 跳过片头：连带清掉 ID 解析状态。
+    // 同一部番的 bangumiId / MAL ID 在切集时是稳定的，但缓存它们会让
+    // 「换一部番播放」时拿到上一部的 ID——而这里没有任何信息能可靠区分
+    // 「同番切集」和「换番重播」，所以一律清空重解析（Bangumi / AniList
+    // 各自有内存缓存兜底，重复解析几乎零成本）。
+    _bangumiId = null;
+    _episodeNumber = null;
+    _animeMalId = null;
+    _malIdResolved = false;
     _initialHistoryItem = null;
     _playbackDetailContext = null;
     _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
+    clearSkipSegments();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;
@@ -834,11 +844,21 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    // 跳过片头：连带清掉 ID 解析状态。
+    // 同一部番的 bangumiId / MAL ID 在切集时是稳定的，但缓存它们会让
+    // 「换一部番播放」时拿到上一部的 ID——而这里没有任何信息能可靠区分
+    // 「同番切集」和「换番重播」，所以一律清空重解析（Bangumi / AniList
+    // 各自有内存缓存兜底，重复解析几乎零成本）。
+    _bangumiId = null;
+    _episodeNumber = null;
+    _animeMalId = null;
+    _malIdResolved = false;
     _initialHistoryItem = null;
     _playbackDetailContext = null;
     _playbackPlaylistCache.invalidate();
     _danmakuList.clear();
     _danmakuListVersion++;
+    clearSkipSegments();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;
