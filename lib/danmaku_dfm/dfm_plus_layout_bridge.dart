@@ -306,7 +306,9 @@ class DfmPlusLayoutBridge {
 
       if (pi.isScroll &&
           elapsed >= 0.0 &&
-          (pi.typeCode == 6 ? x > width : x < -pi.width)) continue;
+          (pi.typeCode == 6 ? x > width : x < -pi.width)) {
+        continue;
+      }
       if (pi.yPosition < 0.0) continue;
 
       // Reuse DanmakuContentItem from cache (avoids Color() allocation)
