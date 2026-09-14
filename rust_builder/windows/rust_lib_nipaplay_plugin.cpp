@@ -416,6 +416,15 @@ void RustLibNipaplayPlugin::HandleMethodCall(
     return;
   }
 
+  if (method_call.method_name() == "diagnosticsBatch") {
+    const auto json = ReadString(*args, "json");
+    if (json.size() <= 1024 * 1024 && next2_diagnostics_enabled()) {
+      next2_diagnostics_dart_batch(json.c_str());
+    }
+    result->Success();
+    return;
+  }
+
   result->NotImplemented();
 }
 
@@ -433,14 +442,6 @@ void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
     stop_tick_thread = surfaces_.empty();
   }
 
-  if (method_call.method_name() == "diagnosticsBatch") {
-    const auto json = ReadString(*args, "json");
-    if (json.size() <= 1024 * 1024 && next2_diagnostics_enabled()) {
-      next2_diagnostics_dart_batch(json.c_str());
-    }
-    result->Success();
-    return;
-  }
   // The notification thread takes mutex_ in Tick(). Never join it while that
   // mutex is held.
   if (stop_tick_thread) {
