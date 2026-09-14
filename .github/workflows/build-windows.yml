@@ -2,6 +2,12 @@ name: Build Windows
 
 on:
   workflow_call:
+    inputs:
+      zip_only:
+        description: 'Build and upload only the portable ZIP'
+        required: false
+        type: boolean
+        default: false
     outputs:
       version:
         description: '应用版本号'
@@ -45,14 +51,17 @@ jobs:
         run: python .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
       - name: Build Windows Package
+        id: package
         uses: ./.github/actions/build-windows
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          zip_only: ${{ inputs.zip_only }}
       
       - name: Clean flutter pub cache
         run: flutter pub cache clean
       
       - name: Upload Windows Artifacts
+        if: ${{ !inputs.zip_only }}
         uses: actions/upload-artifact@v4
         with:
           name: release-Windows-x64
@@ -60,9 +69,17 @@ jobs:
             build/windows/*
             !build/windows/symbols-windows
 
+      - name: Upload portable Windows ZIP
+        if: ${{ inputs.zip_only }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Windows-x64-zip
+          path: ${{ steps.package.outputs.zip-path }}
+          if-no-files-found: error
+
       - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && !inputs.zip_only }}
         with:
           name: dart-symbols-Windows
           path: build/symbols-windows/
