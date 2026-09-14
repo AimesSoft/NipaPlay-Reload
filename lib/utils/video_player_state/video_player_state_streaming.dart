@@ -505,7 +505,7 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
         (videoPath.contains('/Videos/') && videoPath.contains('/stream')) ||
         (videoPath.contains('MediaSourceId=') &&
-            videoPath.contains('api_key='));
+            (videoPath.contains('api_key=') || videoPath.contains('ApiKey=')));
 
     // 检查是否是Emby视频URL (多种可能格式)
     bool isEmbyStream = videoPath.startsWith('emby://') ||

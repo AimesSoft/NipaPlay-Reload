@@ -97,7 +97,8 @@ void main() {
     expect(embyRequests, hasLength(2));
     expect(jellyfinRequests, hasLength(2));
     expect(
-      [...embyRequests, ...jellyfinRequests].map((request) => request.userAgent),
+      [...embyRequests, ...jellyfinRequests]
+          .map((request) => request.userAgent),
       everyElement('SyncClient/4.0'),
     );
     expect(embyRequests.first.method, 'GET');
@@ -109,7 +110,14 @@ void main() {
     );
     expect(jellyfinRequests.first.method, 'GET');
     expect(jellyfinRequests.last.method, 'POST');
-    expect(jellyfinRequests.last.token, 'jellyfin-token');
+    expect(jellyfinRequests.last.token, isNull);
+    expect(
+      jellyfinRequests.map((request) => request.authorization),
+      everyElement(allOf(
+        startsWith('MediaBrowser '),
+        contains('Token="jellyfin-token"'),
+      )),
+    );
     expect(
       jsonDecode(jellyfinRequests.last.body),
       containsPair('PlaySessionId', 'jellyfin-session'),
@@ -132,7 +140,10 @@ void main() {
     final embyUserAgents = <String?>[];
     final jellyfinUserAgents = <String?>[];
     final embyServer = await _startSubtitleServer(embyUserAgents);
-    final jellyfinServer = await _startSubtitleServer(jellyfinUserAgents);
+    final jellyfinServer = await _startSubtitleServer(
+      jellyfinUserAgents,
+      requireJellyfinAuthorization: true,
+    );
     addTearDown(() => embyServer.close(force: true));
     addTearDown(() => jellyfinServer.close(force: true));
 
@@ -181,10 +192,26 @@ void main() {
   });
 }
 
-Future<HttpServer> _startSubtitleServer(List<String?> userAgents) async {
+Future<HttpServer> _startSubtitleServer(
+  List<String?> userAgents, {
+  bool requireJellyfinAuthorization = false,
+}) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((request) async {
     userAgents.add(request.headers.value(HttpHeaders.userAgentHeader));
+    if (requireJellyfinAuthorization) {
+      final authorized = request.uri.path.endsWith('/PlaybackInfo')
+          ? request.headers
+                  .value('authorization')
+                  ?.contains('Token="jellyfin-token"') ==
+              true
+          : request.uri.queryParameters['ApiKey'] == 'jellyfin-token';
+      if (!authorized) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
+    }
     if (request.uri.path.endsWith('/PlaybackInfo')) {
       request.response
         ..statusCode = HttpStatus.ok
@@ -216,6 +243,7 @@ Future<HttpServer> _startServer(
         uri: request.requestedUri,
         body: await utf8.decoder.bind(request).join(),
         token: request.headers.value('x-emby-token'),
+        authorization: request.headers.value('authorization'),
         userAgent: request.headers.value('user-agent'),
       ),
     );
@@ -234,6 +262,7 @@ class _RecordedRequest {
     required this.uri,
     required this.body,
     required this.token,
+    required this.authorization,
     required this.userAgent,
   });
 
@@ -241,6 +270,7 @@ class _RecordedRequest {
   final Uri uri;
   final String body;
   final String? token;
+  final String? authorization;
   final String? userAgent;
 }
 
