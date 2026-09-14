@@ -727,6 +727,22 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                 );
               },
             ),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile.toggle(
+                  title: '跳过片头提示',
+                  subtitle: '结合 AniSkip 社区标注与弹幕报点，在片头/片尾区间显示跳过按钮',
+                  icon: Ionicons.play_forward_outline,
+                  value: videoState.introSkipEnabled,
+                  onChanged: (bool value) async {
+                    await videoState.setIntroSkipEnabled(value);
+                  },
+                );
+              },
+            ),
             if (visibleKernelType == PlayerKernelType.mdk) ...[
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),

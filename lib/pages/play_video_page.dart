@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
+import 'package:nipaplay/widgets/intro_skip_button.dart';
+import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -1288,6 +1290,29 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           _buildPictureInPictureControls(videoState)
         else
           VideoControlsOverlay(compactPortrait: portraitUiScale < 0.999),
+        if (!isPictureInPicture)
+          Positioned(
+            right: 16.0 + horizontalCutoutInset,
+            bottom: isCompactPortrait ? 84.0 : 96.0,
+            child: AnimatedOpacity(
+              opacity: videoState.hasActiveSkipSegment && !uiLocked ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 180),
+              child: IgnorePointer(
+                ignoring: !(videoState.hasActiveSkipSegment && !uiLocked),
+                child: IntroSkipButton(
+                  // 片头 / 片尾共用这一个按钮，文案跟着当前命中的区间类型走
+                  label: videoState.activeSkipSegment?.kind ==
+                          SkipSegmentKind.ending
+                      ? '跳过片尾'
+                      : '跳过片头',
+                  onPressed: () {
+                    videoState.resetHideControlsTimer();
+                    unawaited(videoState.skipCurrentSegment());
+                  },
+                ),
+              ),
+            ),
+          ),
         if (uiLocked)
           Positioned.fill(
             child: GestureDetector(

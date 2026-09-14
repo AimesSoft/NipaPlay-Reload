@@ -322,6 +322,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       debugPrint('清除之前的弹幕数据');
       _danmakuList.clear();
       _danmakuListVersion++;
+      clearSkipSegments();
       danmakuController?.clearDanmaku();
       if (canContinue()) {
         _notifyListeners();
@@ -394,6 +395,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 重新计算合并后的弹幕列表
         if (!canContinue()) return;
         _updateMergedDanmakuList();
+
+        // 弹幕到位后顺带推导片头区间（纯本地计算，失败静默降级）
+        if (canContinue()) {
+          detectIntroSkipFromDanmaku(_danmakuList);
+          // 同时问一路 AniSkip 社区标注（异步、失败静默；rank 高于弹幕，
+          // 若命中会覆盖弹幕推导的结果）
+          unawaited(fetchAniSkipSegments());
+        }
 
         if (canContinue()) {
           _notifyListeners();
@@ -470,6 +479,12 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 重新计算合并后的弹幕列表
         if (!canContinue()) return;
         _updateMergedDanmakuList();
+
+        // 弹幕到位后顺带推导片头区间（纯本地计算，失败静默降级）
+        if (canContinue()) {
+          detectIntroSkipFromDanmaku(_danmakuList);
+          unawaited(fetchAniSkipSegments());
+        }
 
         // 移除GPU弹幕字符集预构建调用
         if (canContinue()) {

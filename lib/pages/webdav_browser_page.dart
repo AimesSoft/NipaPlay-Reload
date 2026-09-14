@@ -15,6 +15,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/intro_skip/episode_number_extractor.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
@@ -39,12 +40,7 @@ class WebDAVBrowserPage extends StatefulWidget {
 }
 
 class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
-  // 静态正则表达式常量，用于提取集数（避免重复创建）
-  static final _seasonEpisodeRegex = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})');
-  static final _chineseEpisodeRegex = RegExp(r'第(\d{1,3})[话集]');
-  static final _epNumberRegex = RegExp(r'[Ee][Pp]?(\d{1,3})');
-  static final _bracketNumberRegex = RegExp(r'[\[【](\d{1,3})[\]】]');
-  static final _delimiterNumberRegex = RegExp(r'[-_](\d{1,3})[-_\.\[]');
+  // 集数 / 季度解析统一走 EpisodeNumberExtractor（全项目唯一一套片源命名正则）
 
   // 当前选中的服务器连接
   WebDAVConnection? _currentConnection;
@@ -410,49 +406,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   }
 
   /// 从文件名中提取集数
-  /// 支持多种格式：S01E12、第12集、EP12、[12]、_12_ 等
-  int? _extractEpisodeNumber(String fileName) {
-    // 尝试匹配 S01E12 格式
-    final seasonEpisodeMatch = _seasonEpisodeRegex.firstMatch(fileName);
-    if (seasonEpisodeMatch != null) {
-      return int.tryParse(seasonEpisodeMatch.group(2)!);
-    }
-
-    // 尝试匹配 第N集/第N话 格式
-    final chineseMatch = _chineseEpisodeRegex.firstMatch(fileName);
-    if (chineseMatch != null) {
-      return int.tryParse(chineseMatch.group(1)!);
-    }
-
-    // 尝试匹配 EP12 / E12 格式
-    final epMatch = _epNumberRegex.firstMatch(fileName);
-    if (epMatch != null) {
-      return int.tryParse(epMatch.group(1)!);
-    }
-
-    // 尝试匹配 [12] 或 【12】 格式
-    final bracketMatch = _bracketNumberRegex.firstMatch(fileName);
-    if (bracketMatch != null) {
-      return int.tryParse(bracketMatch.group(1)!);
-    }
-
-    // 尝试匹配 -12- 或 _12_ 格式（在分隔符之间的数字）
-    final delimiterMatch = _delimiterNumberRegex.firstMatch(fileName);
-    if (delimiterMatch != null) {
-      return int.tryParse(delimiterMatch.group(1)!);
-    }
-
-    return null;
-  }
+  /// 支持多种格式：S01E12、第12集、EP12、[12]、_12_ 等（详见 EpisodeNumberExtractor）
+  int? _extractEpisodeNumber(String fileName) =>
+      EpisodeNumberExtractor.extract(fileName);
 
   /// 从文件名中提取 Season 数字 (S01 → 1, S2 → 2)
-  int? _extractSeasonNumber(String fileName) {
-    final match = _seasonEpisodeRegex.firstMatch(fileName);
-    if (match != null) {
-      return int.tryParse(match.group(1)!);
-    }
-    return null;
-  }
+  int? _extractSeasonNumber(String fileName) =>
+      EpisodeNumberExtractor.extractSeason(fileName);
 
   Future<void> _showServerSelector() async {
     final connections = WebDAVService.instance.connections;
@@ -945,9 +905,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final isDirectory = file.isDirectory;
     String? seasonEpisode;
     if (!isDirectory) {
-      final match = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,2})').firstMatch(file.name);
-      if (match != null) {
-        seasonEpisode = 'S${match.group(1)}E${match.group(2)}';
+      final parts = EpisodeNumberExtractor.seasonEpisode(file.name);
+      if (parts != null) {
+        seasonEpisode = 'S${parts.season}E${parts.episode}';
       }
     }
 
@@ -1434,9 +1394,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     // 提取 SxxExx 季集信息
     String? seasonEpisode;
     if (!isDirectory) {
-      final match = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,2})').firstMatch(file.name);
-      if (match != null) {
-        seasonEpisode = 'S${match.group(1)}E${match.group(2)}';
+      final parts = EpisodeNumberExtractor.seasonEpisode(file.name);
+      if (parts != null) {
+        seasonEpisode = 'S${parts.season}E${parts.episode}';
       }
     }
 
