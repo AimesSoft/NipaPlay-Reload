@@ -84,6 +84,11 @@ def analyze(records):
             native_frames[event["event"]].add((event.get("engine"), event["frame"]))
     prepared = native_frames["process_end"]
     drawn = native_frames["draw_submitted"]
+    # Continuous mode can draw many textures from one source packet. Source and
+    # render IDs intentionally differ; GPU/texture timings use render IDs.
+    for event in native:
+        if event.get("event") == "render_source" and (event.get("engine"), event.get("frame")) in drawn:
+            drawn.add((event.get("engine"), event.get("a")))
     coalesced = sorted(prepared - drawn)
     repeated_observations = 0
     previous = {}
@@ -109,6 +114,7 @@ def analyze(records):
             last_positions[key] = (event["media_s"], item["x"])
 
     return {
+        "continuous_render_count": sum(e.get("event") == "render_source" for e in native),
         "loss": dict(loss), "stages": stages, "gaps": gaps,
         "longest_stage_samples": sorted(long_frames, key=lambda e: e["duration_ms"], reverse=True)[:25],
         "prepared_without_draw": {"count": len(coalesced), "first_20": coalesced[:20]},

@@ -60,6 +60,30 @@ extern "C" {
 const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
+
+// Scope the Windows timer request to a live continuous-animation engine. This
+// also improves the channel's deadline wait; default Windows waits can otherwise
+// round a 4-6ms display period up to the system's ~15.6ms timer quantum.
+struct MotionTimerResolution;
+#[cfg(target_os = "windows")]
+#[link(name = "winmm")]
+extern "system" {
+    fn timeBeginPeriod(period: u32) -> u32;
+    fn timeEndPeriod(period: u32) -> u32;
+}
+impl MotionTimerResolution {
+    fn acquire() -> Option<Self> {
+        #[cfg(target_os = "windows")]
+        if unsafe { timeBeginPeriod(1) } != 0 { return None; }
+        Some(Self)
+    }
+}
+impl Drop for MotionTimerResolution {
+    fn drop(&mut self) {
+        #[cfg(target_os = "windows")]
+        unsafe { timeEndPeriod(1); }
+    }
+}
 const BASE_ATLAS_SIZE: u32 = 8192;
 const MSDF_RANGE: f64 = super::DANMAKU_MSDF_RANGE;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
@@ -700,6 +724,11 @@ fn run_engine_loop(
     let mut has_pending_frame = false;
 
     let mut diagnostic_frame = (0u64, 0u64);
+    let mut render_deadline: Option<std::time::Instant> = None;
+    let mut motion_revision = 0;
+    let mut motion_period = TICK_INTERVAL;
+    let mut timer_resolution = None;
+    let mut render_sequence = 0i64;
 
     while running {
         // Drain completed async glyph prefetches before any command/draw this
@@ -707,6 +736,14 @@ fn run_engine_loop(
         // needed by `draw_to_present`. Non-blocking; cheap when empty.
         renderer.drain_prefetch(ctx.queue.as_ref());
         let mut received_command = false;
+        let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
+        if continuous && renderer.needs_interpolation_render() {
+            if timer_resolution.is_none() {
+                timer_resolution = MotionTimerResolution::acquire();
+            }
+        } else {
+            timer_resolution = None;
+        }
 
         loop {
             let recv_result = if received_command {
@@ -715,7 +752,11 @@ fn run_engine_loop(
                     mpsc::TryRecvError::Disconnected => mpsc::RecvTimeoutError::Disconnected,
                 })
             } else {
-                cmd_rx.recv_timeout(TICK_INTERVAL)
+                let wait = if continuous && (has_pending_frame || renderer.needs_interpolation_render()) {
+                    render_deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
+                        .unwrap_or(Duration::ZERO)
+                } else { TICK_INTERVAL };
+                cmd_rx.recv_timeout(wait)
             };
 
             let cmd = match recv_result {
@@ -850,6 +891,10 @@ fn run_engine_loop(
                     break;
                 }
             }
+            // A continuously arriving command stream must not starve rendering.
+            if render_deadline.is_some_and(|t| std::time::Instant::now() >= t) {
+                break;
+            }
         }
 
         if !running {
@@ -863,22 +908,48 @@ fn run_engine_loop(
         // load. draw_to_present recomputes interp_dt internally, advancing
         // scroll items between Dart submissions (30fps submit → ~60fps motion).
         let needs_interp = renderer.needs_interpolation_render();
-        if has_pending_frame || needs_interp {
+        let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
+        if motion_revision != renderer.motion_clock.revision || motion_period != renderer.motion_clock.period {
+            motion_revision = renderer.motion_clock.revision;
+            motion_period = renderer.motion_clock.period;
+            render_deadline = None;
+        }
+        let now = std::time::Instant::now();
+        let due = !continuous || render_deadline.is_none_or(|t| now >= t);
+        if (has_pending_frame || needs_interp) && due {
             if let Some(target) = present_target.as_mut() {
-                super::diagnostics::record("draw_begin", diagnostic_frame.0, diagnostic_frame.1, 0, 0);
+                render_sequence += 1;
+                // Distinguish source packets from autonomous render frames in
+                // completion/texture traces. Otherwise every interpolated frame
+                // would look like a duplicate of the last Dart source packet.
+                let render_trace = if continuous && diagnostic_frame.1 != 0 {
+                    (diagnostic_frame.0, (1u64 << 62) | render_sequence as u64)
+                } else { diagnostic_frame };
+                renderer.diagnostic_render = render_trace;
+                if continuous {
+                    super::diagnostics::record("render_source", render_trace.0, render_trace.1,
+                        diagnostic_frame.1 as i64, render_sequence);
+                }
+                super::diagnostics::record("draw_begin", render_trace.0, render_trace.1, render_sequence, continuous as i64);
                 renderer.draw_to_present(target);
-                super::diagnostics::record("draw_submitted", diagnostic_frame.0, diagnostic_frame.1, 0, 0);
+                super::diagnostics::record("draw_submitted", render_trace.0, render_trace.1, 0, 0);
                 signal_frame_ready(
                     ctx.queue.as_ref(),
                     &completion,
                     &ctx.completion_driver,
-                    diagnostic_frame,
+                    render_trace,
                 );
             } else {
                 completion.begin_generation();
             }
 
             has_pending_frame = false;
+            if continuous {
+                render_deadline = Some(motion::next_deadline(render_deadline.unwrap_or(now),
+                    renderer.motion_clock.period, std::time::Instant::now()));
+            } else {
+                render_deadline = None;
+            }
         }
     }
 }

@@ -10,6 +10,9 @@ class PositionedDanmakuItem {
   double y;
   double offstageX;
   final double time; // The original time of the danmaku
+  /// Stable within one prepared layout, used by continuous native animation.
+  final int? motionId;
+  final double? endMediaSeconds;
 
   /// 滚动弹幕的水平移动速度（像素/秒）。
   /// Painter 利用此值做增量定位，避免绝对位置计算在倍速下因帧间隔
@@ -40,6 +43,8 @@ class PositionedDanmakuItem {
     required this.y,
     required this.offstageX,
     required this.time,
+    this.motionId,
+    this.endMediaSeconds,
     this.scrollSpeed = 0.0,
     this.width = 0.0,
     this.typeCode = 0,

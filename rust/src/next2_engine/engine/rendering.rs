@@ -1201,6 +1201,8 @@ struct Next2Renderer {
     /// DFM+ submits absolute coordinates sampled on Flutter's vsync. In that
     /// mode native wall-clock interpolation would introduce a second clock.
     motion_mode: MotionMode,
+    motion_clock: motion::MotionClock,
+    diagnostic_render: (u64, u64),
     width: u32,
     height: u32,
     shadow_mask_texture: wgpu::Texture,

@@ -215,6 +215,11 @@ class Next2TextureBridge {
       'font_size_multiplier': item.content.fontSizeMultiplier,
       'is_me': item.content.isMe,
       'width': item.width * scaleX,
+      if (item.motionId != null) ...{
+        'motion_id': item.motionId,
+        'start_media_s': item.time,
+        'end_media_s': item.endMediaSeconds,
+      },
       // Mirror Next2EmojiPipeline._signedScrollSpeed so the fallback path
       // (framePayload == null) stays consistent with the production path.
       // playbackRate folds video speed into the velocity so native

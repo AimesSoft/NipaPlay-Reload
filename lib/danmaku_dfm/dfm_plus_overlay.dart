@@ -94,7 +94,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
   double _danmakuSupersample = 0.0;
-  double _diagnosticRefreshRate = 0.0;
+  double _displayRefreshRate = 0.0;
   Locale? _danmakuLocale;
 
   /// Tracks whether the native scene is currently empty. Lets us skip the
@@ -132,35 +132,20 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     return widget.scrollDurationSeconds * scale;
   }
 
-  // ── Vsync display-time model ──
-  // Keep a continuously advancing display media time that is driven by the
-  // the Ticker's vsync delta, not by every coarse playbackTimeMs tick.
-  //
-  //   displayMediaTime += wallDt * playbackRate
-  //
-  // playbackTimeMs is used only to correct drift (or snap on seek), instead of
-  // re-anchoring on every media-clock tick. This avoids quantizing 120Hz motion
-  // back to the media clock's lower update rate, which looks like a sticky /
-  // 60Hz-ish texture movement even when frames are being produced at 120Hz.
+  // Source snapshots use a monotonic clock anchored to playbackTimeMs.
+  // Rust owns the display-rate clock and samples between these sparse updates.
   final Stopwatch _timingClock = Stopwatch()..start();
 
   /// Ticker elapsed captured at the vsync callback entry point. It remains
   /// independent of async layout, emoji and GPU submission latency.
   int _vsyncElapsedUs = 0;
 
-  /// Continuous media time used for layout. Advances by vsync timeline dt at
-  /// EXACTLY playbackRate — monotonic non-decreasing between snaps, never
-  /// modulated, so danmaku on-screen speed is always consistent and matches the
-  /// decoder (which always plays at playbackRate). The authoritative media
-  /// clock (playbackTimeMs) is used only to snap on seeks/loops — NOT to pace
-  /// the display clock, because the upstream progressively corrects
-  /// playbackTimeMs toward the decoder (slowing/freezing it after a
-  /// seek/buffer), and following or yanking back to that held clock caused the
-  /// "creep slowly" and "scroll-to-middle-then-snap-back" (twitch) symptoms.
+  /// Media reference for each source snapshot. Ordinary packet arrivals never
+  /// reset native position; seeks explicitly advance the timeline epoch.
   double _displayMediaTime = 0.0;
 
   /// Wall-clock microseconds of the previous display-time update.
-  int _lastDisplayVsyncUs = 0;
+  int _lastDisplayWallUs = 0;
 
   /// Whether _displayMediaTime has been initialized from playbackTimeMs.
   bool _displayTimeInitialized = false;
@@ -172,9 +157,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// the media clock is held during an upstream correction.
   double _lastMediaTimeSec = double.nan;
 
-  /// Per-frame vsync dt cap. Prevents a long app stall/backgrounding event from
-  /// jumping danmaku far ahead; playbackTimeMs will snap/correct us afterward.
+  /// Long suspension guard for source anchors, not a per-render-frame dt cap.
   static const double _maxFrameDtSec = 0.2;
+  static const double _motionLookaheadSec = 0.250;
+  static const int _motionSubmitIntervalUs = 50000;
+  int _lastMotionSubmitWallUs = -_motionSubmitIntervalUs;
+  int _timelineEpoch = 0;
+  int _motionCommandVersion = 0;
 
   /// Drift / mediaTime-jump threshold for a one-shot position snap. Because
   /// layout is a pure function of time (x = width - speed * (t - item.time)),
@@ -208,8 +197,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// configure. Reset to false when configure runs.
   bool _initialPrefetchDone = false;
 
-  /// Ticker elapsed is the sole continuous motion clock. Unlike a Stopwatch
-  /// sampled after async work, it represents the display's vsync timeline.
   late final Ticker _vsyncTicker;
 
   @override
@@ -238,6 +225,17 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   @override
   void didUpdateWidget(covariant DfmPlusOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.isPlaying != widget.isPlaying ||
+        oldWidget.isVisible != widget.isVisible ||
+        oldWidget.playbackRate != widget.playbackRate ||
+        oldWidget.timeOffset != widget.timeOffset) {
+      _motionCommandVersion++;
+      _lastMotionSubmitWallUs = -_motionSubmitIntervalUs;
+      _queueUpdate();
+    }
+    if (oldWidget.timeOffset != widget.timeOffset) {
+      _timelineEpoch++;
+    }
     final contentChanged =
         oldWidget.danmakuListVersion != widget.danmakuListVersion;
     final layoutConfigChanged =
@@ -255,6 +253,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
             oldWidget.maxLinesPerType != widget.maxLinesPerType ||
             !listEquals(oldWidget.blockWords, widget.blockWords);
     if (contentChanged || layoutConfigChanged) {
+      _motionCommandVersion++;
       // A content-only revision can atomically replace the prepared layout
       // without clearing the native scene or re-running first-frame prewarm.
       // Never downgrade an already-pending full reconfigure to a hot reload.
@@ -293,7 +292,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
     // ── Playback rate change: reset wall dt baseline ──
     if (oldWidget.playbackRate != widget.playbackRate) {
-      _resetDisplayTimeToMedia();
+      final nowUs = _timingClock.elapsedMicroseconds;
+      if (oldWidget.isPlaying) {
+        _displayMediaTime += ((nowUs - _lastDisplayWallUs) / 1000000.0)
+                .clamp(0.0, _maxFrameDtSec) *
+            oldWidget.playbackRate;
+      }
+      _lastDisplayWallUs = nowUs;
     }
 
     // ── isPlaying transition: reset wall dt baseline ──
@@ -308,9 +313,11 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// vsync baseline. Used for first frame, seek, resume, and clock source
   /// changes. This is a hard reset, not the normal playback correction path.
   void _resetDisplayTimeToMedia() {
+    _timelineEpoch++;
+    _motionCommandVersion++;
     final mediaTime = widget.playbackTimeMs.value / 1000.0;
     _displayMediaTime = mediaTime;
-    _lastDisplayVsyncUs = _vsyncElapsedUs;
+    _lastDisplayWallUs = _timingClock.elapsedMicroseconds;
     _lastMediaTimeSec = mediaTime;
     _displayTimeInitialized = true;
   }
@@ -351,12 +358,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
               (oldSize.width - layoutSize.width).abs() >= 2.0 ||
               (oldSize.height - layoutSize.height).abs() >= 2.0) {
             _forceLayout = true;
+            _motionCommandVersion++;
           }
         }
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
-        _diagnosticRefreshRate = View.of(context).display.refreshRate;
+        _displayRefreshRate = View.of(context).display.refreshRate;
         final supersample =
             context.watch<SettingsProvider>().danmakuSupersample;
         final locale = Localizations.maybeLocaleOf(context);
@@ -368,6 +376,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         if (_danmakuLocale != locale) {
           _danmakuLocale = locale;
           _forceLayout = true;
+          _motionCommandVersion++;
           _queueUpdate();
         }
 
@@ -419,13 +428,23 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         'queued': _updateQueued
       });
     }
-    _queueUpdate();
+    // Native owns every animation frame. Dart only refreshes the 250ms scene
+    // window and clock anchor; a missing Ticker no longer freezes the texture.
+    if (_timingClock.elapsedMicroseconds - _lastMotionSubmitWallUs >=
+            _motionSubmitIntervalUs ||
+        _forceLayout) {
+      _queueUpdate();
+    }
   }
 
   void _onPlaybackTimeChanged() {
-    // During playback, the next vsync observes authoritative media time and
-    // handles seek/drift. Do not create a second, off-vsync animation stream.
-    if (!widget.isPlaying || !_vsyncTicker.isActive) {
+    // Seek packets should bypass the normal 50ms scene refresh interval.
+    final mediaTime = widget.playbackTimeMs.value / 1000.0;
+    final jump = _lastMediaTimeSec.isFinite &&
+        ((mediaTime < _lastMediaTimeSec - _snapThresholdSec) ||
+            (mediaTime > _displayMediaTime + _snapThresholdSec));
+    if (jump || !widget.isPlaying || !_vsyncTicker.isActive) {
+      if (jump) _motionCommandVersion++;
       _queueUpdate();
     }
   }
@@ -439,14 +458,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     Future.microtask(_runUpdateLoop);
   }
 
-  /// Update loop: layout is synchronous (Dart-side), so the per-frame
-  /// position computation has zero async overhead. Only configure() and
-  /// texture upload remain async.
-  ///
-  /// Uses the Ticker timeline: accumulates vsync dt since last
-  /// playbackTimeMs update to create a vsync-rate smooth time value.
-  /// The existing absolute-position layout() handles the rest naturally
-  /// — no per-item drift correction needed.
+  /// Refreshes native scene membership and its media-time reference. The Rust
+  /// renderer advances existing/future items independently of this update loop.
   Future<void> _runUpdateLoop() async {
     _updateScheduled = false;
     if (_updateInFlight) {
@@ -463,12 +476,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         }
 
         // ── Continuous display-time update ──
-        final currentWallUs = _vsyncElapsedUs;
+        final currentWallUs = _timingClock.elapsedMicroseconds;
         final double mediaTime = widget.playbackTimeMs.value / 1000.0;
 
         if (!_displayTimeInitialized) {
           _displayMediaTime = mediaTime;
-          _lastDisplayVsyncUs = currentWallUs;
+          _lastDisplayWallUs = currentWallUs;
           _lastMediaTimeSec = mediaTime;
           _displayTimeInitialized = true;
         }
@@ -480,12 +493,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // decoder). Because the display clock paces the decoder, any drift
         // accumulated while the media clock is held returns to 0 on its own
         // when the decoder catches up — no backward correction needed.
-        if (widget.isPlaying && currentWallUs > _lastDisplayVsyncUs) {
-          final deltaUs = currentWallUs - _lastDisplayVsyncUs;
+        if (widget.isPlaying && currentWallUs > _lastDisplayWallUs) {
+          final deltaUs = currentWallUs - _lastDisplayWallUs;
           final dt = (deltaUs / 1000000.0).clamp(0.0, _maxFrameDtSec);
           _displayMediaTime += dt * widget.playbackRate;
         }
-        _lastDisplayVsyncUs = currentWallUs;
+        _lastDisplayWallUs = currentWallUs;
 
         // ── Snaps: one-shot position jumps, never rate modulation ──
         // A snap is a single-frame position jump; the per-frame advance rate
@@ -504,16 +517,18 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // monotonic between snaps.
         final drift = mediaTime - _displayMediaTime;
         if (drift > _snapThresholdSec) {
+          _timelineEpoch++;
           _displayMediaTime = mediaTime;
           if (drift >= _hardResyncThresholdSec) {
-            _lastDisplayVsyncUs = currentWallUs;
+            _lastDisplayWallUs = currentWallUs;
           }
         }
         final double mediaDelta = mediaTime - _lastMediaTimeSec;
         if (mediaDelta < -_snapThresholdSec) {
+          _timelineEpoch++;
           _displayMediaTime = mediaTime;
           if (mediaDelta <= -_hardResyncThresholdSec) {
-            _lastDisplayVsyncUs = currentWallUs;
+            _lastDisplayWallUs = currentWallUs;
           }
         }
         _lastMediaTimeSec = mediaTime;
@@ -562,14 +577,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           }
         }
 
-        // ── Layout with interpolated time ──
-        // The interpolatedTime advances smoothly every vsync frame.
-        // layout() computes absolute positions from it naturally:
-        //   x = width - speed * (interpolatedTime - item.time)
-        // We submit every available vsync frame. The in-flight gate coalesces
-        // callbacks while native submission is busy and renders the latest time.
+        // Include future items so native activation does not wait for Dart.
         final layoutStartUs = _timingClock.elapsedMicroseconds;
-        final frame = _bridge.layout(interpolatedTime);
+        final frame = _bridge.layout(interpolatedTime,
+            lookaheadSeconds: _motionLookaheadSec * widget.playbackRate);
         final diagnosticFrameId = _textureBridge.trace.nextFrame();
         if (_textureBridge.trace.enabled) {
           _textureBridge.trace.add(
@@ -579,9 +590,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
                 'media_s': interpolatedTime,
                 'count': frame.length,
                 'playing': widget.isPlaying,
-            'refresh_hz': _diagnosticRefreshRate,
-            'supersample': _danmakuSupersample,
-            'dpr': _lastDevicePixelRatio,
+                'refresh_hz': _displayRefreshRate,
+                'supersample': _danmakuSupersample,
+                'dpr': _lastDevicePixelRatio,
                 'samples': frame
                     .where((item) => item.typeCode == 1 || item.typeCode == 6)
                     .take(3)
@@ -615,6 +626,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final submitStartUs = _timingClock.elapsedMicroseconds;
         await _tryUpdateTexture(
           frame,
+          mediaSeconds: interpolatedTime,
+          snapshotWallUs: _lastDisplayWallUs,
           diagnosticFrameId: diagnosticFrameId,
           prefetchChars: prefetchChars,
           isInitialPrefetch: isInitialPrefetch,
@@ -626,7 +639,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           submitMs: submitMs,
         );
         _initialPrefetchDone = true;
-        widget.onLayoutCalculated?.call(frame);
+        widget.onLayoutCalculated?.call(frame
+            .where((item) => item.time <= interpolatedTime)
+            .toList(growable: false));
       }
     } catch (_) {
       // Keep overlay alive and retry on next frame.
@@ -641,6 +656,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   Future<bool> _tryUpdateTexture(
     List<PositionedDanmakuItem> frame, {
+    required double mediaSeconds,
+    required int snapshotWallUs,
     String? prefetchChars,
     bool isInitialPrefetch = false,
     int diagnosticFrameId = 0,
@@ -648,6 +665,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     if (!Next2TextureBridge.isSupported || _layoutSize.isEmpty) {
       return false;
     }
+    final commandVersion = _motionCommandVersion;
+    final epoch = _timelineEpoch;
+    final rate = widget.playbackRate;
+    final playing = widget.isPlaying && widget.isVisible;
 
     // Use cached DPR from build() instead of reading platformDispatcher.views
     // directly. On Windows, DPR can micro-jitter when the window loses focus,
@@ -803,9 +824,27 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleY: heightScale,
       fontScale: fontScale,
       locale: _danmakuLocale,
-      playbackRate: widget.playbackRate,
+      // Continuous mode expresses velocity per MEDIA second. Native applies
+      // playback rate once, in its shared clock, including pause and resume.
+      playbackRate: 1.0,
       prefetchChars: effectivePrefetch,
     );
+
+    if (!mounted ||
+        commandVersion != _motionCommandVersion ||
+        epoch != _timelineEpoch) {
+      _queueUpdate();
+      return false;
+    }
+    final clockPayload = <String, dynamic>{
+      'epoch': epoch,
+      'media_s': mediaSeconds,
+      'age_s': (_timingClock.elapsedMicroseconds - snapshotWallUs) / 1000000.0,
+      'rate': rate,
+      'playing': playing,
+      'refresh_hz': _displayRefreshRate,
+      'valid_until_s': mediaSeconds + _motionLookaheadSec * rate,
+    };
 
     final pushed = await _textureBridge.setFrame(
       items: frame,
@@ -819,12 +858,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleY: heightScale,
       fontScale: fontScale,
       playbackRate: widget.playbackRate,
-      motionMode: 'vsync_snapshot',
-      framePayload: prepared.toJson(),
+      motionMode: 'continuous_anchor',
+      framePayload: {...prepared.toJson(), 'motion_clock': clockPayload},
       diagnosticFrameId: diagnosticFrameId,
     );
 
     if (pushed) {
+      _lastMotionSubmitWallUs = snapshotWallUs;
       _emojiPipeline.markAtlasSynced();
       if (frame.isEmpty) {
         _sceneCleared = true; // scene now confirmed empty

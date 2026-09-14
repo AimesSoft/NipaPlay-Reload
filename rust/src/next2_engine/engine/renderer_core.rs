@@ -390,6 +390,8 @@ impl Next2Renderer {
             last_submit_instant: None,
             submit_interval_ema: 0.0,
             motion_mode: MotionMode::LegacyInterpolation,
+            motion_clock: motion::MotionClock::new(std::time::Instant::now()),
+            diagnostic_render: (0, 0),
         })
     }
 
@@ -445,6 +447,11 @@ impl Next2Renderer {
             Ok(parsed) => parsed,
             Err(_) => return false,
         };
+        if parsed.motion_mode == MotionMode::ContinuousAnchor
+            && parsed.motion_clock.as_ref().is_none_or(|clock|
+                !clock.media_s.is_finite() || !clock.valid_until_s.is_finite()) {
+            return false;
+        }
 
         let font_key = custom_font_key(custom_font.as_ref());
         if self.atlas.font_key != font_key {
@@ -474,6 +481,11 @@ impl Next2Renderer {
         let font_size = input.font_size.max(1.0);
 
         self.motion_mode = parsed.motion_mode;
+        if let Some(clock) = parsed.motion_clock.filter(|_| self.motion_mode == MotionMode::ContinuousAnchor) {
+            self.motion_clock.anchor(std::time::Instant::now(), clock.epoch,
+                clock.media_s, clock.age_s, clock.rate, clock.playing,
+                clock.refresh_hz, clock.valid_until_s);
+        }
         for item in parsed.items {
             let tokens =
                 normalize_tokens(item.tokens, item.text.as_str(), item.count_text.as_deref());
@@ -487,6 +499,9 @@ impl Next2Renderer {
                 shadow_style,
                 opacity,
                 scroll_speed: item.scroll_speed as f32,
+                motion_id: item.motion_id,
+                start_media_s: item.start_media_s,
+                end_media_s: item.end_media_s,
                 is_me: item.is_me,
                 width: item.width.max(0.0) as f32,
             });

@@ -4,6 +4,8 @@ struct FramePayload {
     #[serde(default)]
     motion_mode: MotionMode,
     #[serde(default)]
+    motion_clock: Option<MotionClockPayload>,
+    #[serde(default)]
     emoji_glyphs: Option<Vec<FrameEmojiGlyphPayload>>,
     /// Chars to prefetch-rasterize asynchronously (lookahead pre-warming).
     /// Each char is dispatched via `atlas.request_rasterize` at the current
@@ -19,6 +21,18 @@ enum MotionMode {
     #[default]
     LegacyInterpolation,
     VsyncSnapshot,
+    ContinuousAnchor,
+}
+
+#[derive(Deserialize)]
+struct MotionClockPayload {
+    epoch: u64,
+    media_s: f64,
+    age_s: f64,
+    rate: f64,
+    playing: bool,
+    refresh_hz: f64,
+    valid_until_s: f64,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +53,12 @@ struct FrameItemPayload {
     /// behavior; also the path taken by Next2 which doesn't send it).
     #[serde(default)]
     scroll_speed: f64,
+    #[serde(default)]
+    motion_id: Option<u64>,
+    #[serde(default)]
+    start_media_s: Option<f64>,
+    #[serde(default)]
+    end_media_s: Option<f64>,
     /// Marks a locally-sent danmaku. Rendered with a rectangular highlight.
     #[serde(default)]
     is_me: bool,
@@ -84,6 +104,9 @@ struct FrameItem {
     opacity: f32,
     /// Signed scroll velocity (texture px/s). 0 = static, no interpolation.
     scroll_speed: f32,
+    motion_id: Option<u64>,
+    start_media_s: Option<f64>,
+    end_media_s: Option<f64>,
     is_me: bool,
     width: f32,
 }

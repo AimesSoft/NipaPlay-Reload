@@ -3,6 +3,21 @@ from analyze import analyze
 
 
 class TraceTests(unittest.TestCase):
+    def test_continuous_frames_share_source_but_not_completion_identity(self):
+        records = [{"event": "process_end", "engine": 1, "frame": 7, "t_us": 1}]
+        for frame, time in [(101, 1000), (102, 6000), (103, 11000)]:
+            records += [
+                {"event": "render_source", "engine": 1, "frame": frame, "a": 7, "t_us": time},
+                {"event": "draw_submitted", "engine": 1, "frame": frame, "t_us": time + 100},
+                {"event": "gpu_complete", "engine": 1, "frame": frame, "t_us": time + 500},
+                {"event": "texture_sample", "engine": 1, "frame": frame, "t_us": time + 1000},
+            ]
+        report = analyze(records)
+        self.assertEqual(report["prepared_without_draw"]["count"], 0)
+        self.assertEqual(report["repeated_latest_completion_at_texture_callback"], 0)
+        self.assertEqual(report["continuous_render_count"], 3)
+        self.assertEqual(report["stages"]["gpu_completion_latency"]["count"], 3)
+
     def test_distinguishes_wait_from_gpu_latency_with_separate_clocks(self):
         records = [
             {"event": name, "engine": 1, "frame": 7, "t_us": time}

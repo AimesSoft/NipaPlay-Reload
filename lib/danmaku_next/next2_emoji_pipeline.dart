@@ -135,6 +135,11 @@ class Next2EmojiPipeline {
         'font_size_multiplier': item.content.fontSizeMultiplier,
         'is_me': item.content.isMe,
         'width': item.width * scaleX,
+        if (item.motionId != null) ...{
+          'motion_id': item.motionId,
+          'start_media_s': item.time,
+          'end_media_s': item.endMediaSeconds,
+        },
         // Signed scroll velocity in TEXTURE px/s (RL<0, LR>0, static=0).
         // Lets the native renderer interpolate `x_render = x + scroll_speed*dt`
         // between Dart submissions, so 30fps submits yield smooth 60/120fps
