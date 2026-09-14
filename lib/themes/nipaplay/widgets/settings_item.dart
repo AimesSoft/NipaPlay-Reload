@@ -48,6 +48,9 @@ class SettingsItem extends StatelessWidget {
   /// 设置项描述
   final String? subtitle;
 
+  /// 自定义副标题 Widget（优先于 [subtitle] 渲染）
+  final Widget? subtitleWidget;
+
   /// 设置项类型
   final SettingsItemType type;
 
@@ -117,6 +120,7 @@ class SettingsItem extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.subtitleWidget,
     required this.type,
     this.icon,
     this.enabled = true,
@@ -148,6 +152,7 @@ class SettingsItem extends StatelessWidget {
   factory SettingsItem.dropdown({
     required String title,
     String? subtitle,
+    Widget? subtitleWidget,
     IconData? icon,
     bool enabled = true,
     required List<DropdownMenuItemData> items,
@@ -157,6 +162,7 @@ class SettingsItem extends StatelessWidget {
     return SettingsItem(
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       enabled: enabled,
       type: SettingsItemType.dropdown,
@@ -170,6 +176,7 @@ class SettingsItem extends StatelessWidget {
   factory SettingsItem.toggle({
     required String title,
     String? subtitle,
+    Widget? subtitleWidget,
     IconData? icon,
     bool enabled = true,
     required bool value,
@@ -178,6 +185,7 @@ class SettingsItem extends StatelessWidget {
     return SettingsItem(
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       enabled: enabled,
       type: SettingsItemType.toggle,
@@ -190,6 +198,7 @@ class SettingsItem extends StatelessWidget {
   factory SettingsItem.button({
     required String title,
     String? subtitle,
+    Widget? subtitleWidget,
     IconData? icon,
     bool enabled = true,
     required VoidCallback onTap,
@@ -199,6 +208,7 @@ class SettingsItem extends StatelessWidget {
     return SettingsItem(
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       enabled: enabled,
       type: SettingsItemType.button,
@@ -212,6 +222,7 @@ class SettingsItem extends StatelessWidget {
   factory SettingsItem.slider({
     required String title,
     String? subtitle,
+    Widget? subtitleWidget,
     IconData? icon,
     bool enabled = true,
     required double value,
@@ -224,6 +235,7 @@ class SettingsItem extends StatelessWidget {
     return SettingsItem(
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       enabled: enabled,
       type: SettingsItemType.slider,
@@ -240,6 +252,7 @@ class SettingsItem extends StatelessWidget {
   factory SettingsItem.hotkey({
     required String title,
     String? subtitle,
+    Widget? subtitleWidget,
     IconData? icon,
     bool enabled = true,
     required String hotkeyText,
@@ -249,6 +262,7 @@ class SettingsItem extends StatelessWidget {
     return SettingsItem(
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       enabled: enabled,
       type: SettingsItemType.hotkey,
@@ -471,7 +485,7 @@ class SettingsItem extends StatelessWidget {
         return _buildLargeScreenRow(
           context,
           trailing: dropdown,
-          customSubtitle: _buildDropdownSubtitle(context),
+          customSubtitle: subtitleWidget ?? _buildDropdownSubtitle(context),
         );
       case SettingsItemType.toggle:
         final currentValue = switchValue ?? false;
@@ -483,6 +497,7 @@ class SettingsItem extends StatelessWidget {
               onChanged: enabled ? onSwitchChanged : null,
             ),
           ),
+          customSubtitle: subtitleWidget,
           onActivate: onSwitchChanged != null
               ? () {
                   final newValue = !currentValue;
@@ -509,6 +524,7 @@ class SettingsItem extends StatelessWidget {
             color: trailingColor,
             size: 24,
           ),
+          customSubtitle: subtitleWidget,
           onActivate: onTap,
           isDestructiveAction: isDestructive,
         );
@@ -562,6 +578,7 @@ class SettingsItem extends StatelessWidget {
               ),
             ),
           ),
+          customSubtitle: subtitleWidget,
           onActivate: onHotkeyTap,
         );
     }
@@ -594,7 +611,7 @@ class SettingsItem extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: _buildDropdownSubtitle(context),
+          subtitle: subtitleWidget ?? _buildDropdownSubtitle(context),
           trailing: enabled && dropdownItems != null
               ? ConstrainedBox(
                   constraints: BoxConstraints(
@@ -626,17 +643,18 @@ class SettingsItem extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: subtitle != null
-              ? Text(
-                  subtitle!,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: enabled
-                        ? colorScheme.onSurface.withOpacity(0.7)
-                        : colorScheme.onSurface.withOpacity(0.38),
-                  ),
-                )
-              : null,
+          subtitle: subtitleWidget ??
+              (subtitle != null
+                  ? Text(
+                      subtitle!,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: enabled
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : colorScheme.onSurface.withOpacity(0.38),
+                      ),
+                    )
+                  : null),
           trailing: FluentSettingsSwitch(
             value: currentValue,
             onChanged: enabled ? onSwitchChanged : null,
@@ -661,17 +679,18 @@ class SettingsItem extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: subtitle != null
-              ? Text(
-                  subtitle!,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: enabled
-                        ? colorScheme.onSurface.withOpacity(0.7)
-                        : colorScheme.onSurface.withOpacity(0.38),
-                  ),
-                )
-              : null,
+          subtitle: subtitleWidget ??
+              (subtitle != null
+                  ? Text(
+                      subtitle!,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: enabled
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : colorScheme.onSurface.withOpacity(0.38),
+                      ),
+                    )
+                  : null),
           trailing: Icon(
             trailingIcon ?? Ionicons.chevron_forward_outline,
             color: isDestructive
@@ -709,17 +728,18 @@ class SettingsItem extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              subtitle: subtitle != null
-                  ? Text(
-                      subtitle!,
-                      locale: const Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                        color: enabled
-                            ? colorScheme.onSurface.withOpacity(0.7)
-                            : colorScheme.onSurface.withOpacity(0.38),
-                      ),
-                    )
-                  : null,
+              subtitle: subtitleWidget ??
+                  (subtitle != null
+                      ? Text(
+                          subtitle!,
+                          locale: const Locale("zh-Hans", "zh"),
+                          style: TextStyle(
+                            color: enabled
+                                ? colorScheme.onSurface.withOpacity(0.7)
+                                : colorScheme.onSurface.withOpacity(0.38),
+                          ),
+                        )
+                      : null),
               trailing: Text(
                 sliderLabelFormatter?.call(sliderValue ?? 0) ??
                     (sliderValue ?? 0).toStringAsFixed(1),
@@ -790,17 +810,18 @@ class SettingsItem extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: subtitle != null
-              ? Text(
-                  subtitle!,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: enabled
-                        ? colorScheme.onSurface.withOpacity(0.7)
-                        : colorScheme.onSurface.withOpacity(0.38),
-                  ),
-                )
-              : null,
+          subtitle: subtitleWidget ??
+              (subtitle != null
+                  ? Text(
+                      subtitle!,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: enabled
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : colorScheme.onSurface.withOpacity(0.38),
+                      ),
+                    )
+                  : null),
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(

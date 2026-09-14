@@ -32,6 +32,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.subtitleWidget,
     this.icon,
     this.phoneIcon,
     required this.type,
@@ -61,6 +62,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -72,6 +74,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -86,6 +89,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -97,6 +101,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -111,6 +116,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -123,6 +129,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -138,6 +145,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -150,6 +158,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -164,6 +173,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -178,6 +188,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -195,6 +206,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
     material.Key? key,
     required String title,
     String? subtitle,
+    material.Widget? subtitleWidget,
     material.IconData? icon,
     material.IconData? phoneIcon,
     bool enabled = true,
@@ -206,6 +218,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
       key: key,
       title: title,
       subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
       icon: icon,
       phoneIcon: phoneIcon,
       enabled: enabled,
@@ -218,6 +231,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
 
   final String title;
   final String? subtitle;
+  final material.Widget? subtitleWidget;
   final material.IconData? icon;
   final material.IconData? phoneIcon;
   final SettingsItemType type;
@@ -257,6 +271,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         return SettingsItem.dropdown(
           title: title,
           subtitle: subtitle,
+          subtitleWidget: subtitleWidget,
           icon: icon,
           enabled: enabled,
           items: dropdownItems ?? <DropdownMenuItemData<T>>[],
@@ -267,6 +282,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         return SettingsItem.toggle(
           title: title,
           subtitle: subtitle,
+          subtitleWidget: subtitleWidget,
           icon: icon,
           enabled: enabled,
           value: switchValue ?? false,
@@ -276,6 +292,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         return SettingsItem.button(
           title: title,
           subtitle: subtitle,
+          subtitleWidget: subtitleWidget,
           icon: icon,
           enabled: enabled,
           onTap: onTap ?? () {},
@@ -286,6 +303,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         return SettingsItem.slider(
           title: title,
           subtitle: subtitle,
+          subtitleWidget: subtitleWidget,
           icon: icon,
           enabled: enabled,
           value: sliderValue ?? sliderMin ?? 0,
@@ -299,6 +317,7 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
         return SettingsItem.hotkey(
           title: title,
           subtitle: subtitle,
+          subtitleWidget: subtitleWidget,
           icon: icon,
           enabled: enabled,
           hotkeyText: hotkeyText ?? '',
@@ -383,6 +402,9 @@ class AdaptiveSettingsTile<T> extends material.StatelessWidget {
   }
 
   material.Widget? _buildPhoneSubtitle() {
+    if (subtitleWidget != null) {
+      return subtitleWidget;
+    }
     if (subtitle == null || subtitle!.trim().isEmpty) {
       return null;
     }
