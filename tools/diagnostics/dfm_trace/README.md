@@ -48,3 +48,16 @@ Native `t_us` 来自同一个 Rust Instant 原点。Dart `t_us` 来自 Timeline.
 **texture_sample 不是物理呈现证明。** 当前是一张可被覆盖的共享纹理；记录的完成编号是请求时观察到的状态，并不证明 ANGLE/DWM 读取了该编号对应的像素。如果 Ticker/坐标/提交/GPU 完成都连续而用户仍观察到重复画面，需用实际呈现跟踪继续排查。
 
 目前单元测试验证日志/分析机制，并未在用户的 180 Hz 视频场景重现停顿；收到实机日志后再做根因判断。
+
+## Workflow DLL 原生验证（2026-09-14）
+
+使用成功构建 `34793771057` 的 DLL，运行 `native_probe.py`：180 次/秒目标节奏，900 次提交，60 条测试文字，1920×1080 纹理（对应 1280×720 的 1.5× 超采样）。该程序只运行原生管线，没有 Flutter 窗口、视频解码或实际 Present，不能作为完整播放器帧率基准。
+
+```powershell
+python tools/diagnostics/dfm_trace/native_probe.py path/to/rust_lib_nipaplay.dll build/native-probe.jsonl
+python tools/diagnostics/dfm_trace/analyze.py build/native-probe.jsonl
+```
+
+900 帧均观察到处理、绘制提交及 GPU 完成，未报告日志丢失。首帧 `draw_begin → draw_submitted` 为 19.981 ms，第二帧 `enqueue → process_begin` 为 16.740 ms，时间线证明首帧占用渲染线程时，下一帧的同步调用确实在等待。此段发生在启动暖机，不能据此认定实际播放中的周期性停顿也来自同一原因。
+
+本次原生处理耗时中位数 0.024 ms，绘制提交中位数 0.331 ms，GPU 完成回调延迟中位数 0.306 ms、最大 10.073 ms。后者包含 CPU 回调派发延迟，并非纯 GPU 执行时间。结果用于确认日志能区分阶段，后续仍需实际视频场景的数据。
