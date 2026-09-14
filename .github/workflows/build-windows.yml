@@ -71,6 +71,8 @@ jobs:
       - name: Build Windows Package
         id: package
         uses: ./.github/actions/build-windows
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
           zip_only: ${{ inputs.zip_only }}
