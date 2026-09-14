@@ -44,10 +44,17 @@ python -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
 | Native | gpu_complete | wgpu 完成回调执行；a=完成序号，b=纹理代；包含回调派发延迟 |
 | Native | notify_begin / notify_end | MarkTextureFrameAvailable 前后；frame=最新观察到的完成编号，a=最新提交编号 |
 | Native | texture_sample | Flutter 请求共享纹理描述符；frame/a 同上 |
+| Native | pacing_wait_backend | 渲染线程启动时记录；a=1 表示高精度 waitable timer 和命令事件创建成功，否则退回普通通道等待 |
+| Native | pacing_mmcss | 连续动画启动时的 MMCSS 注册结果；a=1 表示注册成功 |
+| Native | vsync_pulse | 轻量 vsync 命令出队；a=Dart Ticker elapsed_us，b=原生入队至出队耗时（微秒） |
+| Native | pacing_wait_begin / pacing_wait_end | a=计划等待/实际等待微秒；begin.b=高精度后端可用，end.b=是否收到命令（0 为超时或断开） |
+| Native | pacing_draw | a=1 表示 vsync 驱动，a=0 表示原生截止时间兜底；与同 frame 的 draw_begin 关联 |
 
 Native `t_us` 来自同一个 Rust Instant 原点。Dart `t_us` 来自 Timeline.now，Ticker elapsed 是另一条动画时间轴。跨域只通过帧号关联，不能直接相减；同域可以量化排队、阻塞和回调间隔。
 
 **texture_sample 不是物理呈现证明。** 当前是一张可被覆盖的共享纹理；记录的完成编号是请求时观察到的状态，并不证明 ANGLE/DWM 读取了该编号对应的像素。如果 Ticker/坐标/提交/GPU 完成都连续而用户仍观察到重复画面，需用实际呈现跟踪继续排查。
+
+连续运动模式以 `render_source` 关联原生绘制编号与低频 Dart 场景编号。场景约每 50ms 提交一次，不应再把 process 间隔当作动画帧间隔。先检查 draw_begin 间隔，再沿 pacing_wait_end、vsync_pulse、draw_submitted、gpu_complete 和 texture_sample 定位长间隔。等待超时事件应与同引擎前一个 wait_begin 配对，实际减计划才是等待迟到量；收到命令时提前返回属于正常唤醒。vsync 和超时兜底共用一个出帧状态，不是两条并行绘制流。高精度定时探针仅测独立线程唤醒，不能证明 Flutter/DWM 上屏稳定。
 
 新版 `flutter_frame` 另有 `build_end_us`，用于区分 Dart 构建耗时与等待 raster 开始的时间；旧日志缺少该字段时不能把两段时间混为一谈。
 

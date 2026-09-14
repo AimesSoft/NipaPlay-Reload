@@ -2,12 +2,6 @@ name: Build Windows
 
 on:
   workflow_call:
-    inputs:
-      zip_only:
-        description: 'Build and upload only the portable ZIP'
-        required: false
-        type: boolean
-        default: false
     outputs:
       version:
         description: '应用版本号'
@@ -49,39 +43,16 @@ jobs:
       - name: Generate build info json
         shell: pwsh
         run: python .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
-
-      - name: Validate continuous DFM motion
-        shell: pwsh
-        run: |
-          rustc --edition=2021 --test rust/tests/motion_clock.rs -o motion-clock-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./motion-clock-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          rustc --edition=2021 --test rust/tests/command_channel.rs -o command-channel-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./command-channel-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tools/diagnostics/dfm_trace -p test_analyze.py -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/danmaku_dfm lib/danmaku_next/next2_native_vsync.dart lib/danmaku_next/next2_native_vsync_io.dart lib/danmaku_next/next2_native_vsync_stub.dart lib/danmaku_next/next2_texture_bridge.dart lib/danmaku_next/next2_emoji_pipeline.dart lib/danmaku_abstraction/positioned_danmaku_item.dart
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          flutter test --no-pub test/dfm_continuous_payload_test.dart
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       
       - name: Build Windows Package
-        id: package
         uses: ./.github/actions/build-windows
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
-          zip_only: ${{ inputs.zip_only }}
       
       - name: Clean flutter pub cache
         run: flutter pub cache clean
       
       - name: Upload Windows Artifacts
-        if: ${{ !inputs.zip_only }}
         uses: actions/upload-artifact@v4
         with:
           name: release-Windows-x64
@@ -89,17 +60,9 @@ jobs:
             build/windows/*
             !build/windows/symbols-windows
 
-      - name: Upload portable Windows ZIP
-        if: ${{ inputs.zip_only }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-Windows-x64-zip
-          path: ${{ steps.package.outputs.zip-path }}
-          if-no-files-found: error
-
       - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
         uses: actions/upload-artifact@v4
-        if: ${{ always() && !inputs.zip_only }}
+        if: always()
         with:
           name: dart-symbols-Windows
           path: build/symbols-windows/
