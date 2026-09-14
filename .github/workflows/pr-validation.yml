@@ -53,6 +53,14 @@ jobs:
         if: steps.detect_tests.outputs.has_tests == 'true'
         run: flutter test --no-pub --reporter expanded
 
+      - name: Run isolated data preservation tests
+        env:
+          NIPAPLAY_DATA_SAFETY_ROOT: ${{ runner.temp }}/nipaplay-data-safety
+          XDG_DATA_HOME: ${{ runner.temp }}/nipaplay-data-safety/xdg-data
+          XDG_CACHE_HOME: ${{ runner.temp }}/nipaplay-data-safety/xdg-cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/nipaplay-data-safety/xdg-config
+        run: flutter test --no-pub --reporter expanded test/database/data_safety_test.dart
+
       - name: Skip flutter test
         if: steps.detect_tests.outputs.has_tests != 'true'
         run: echo "No root-level *_test.dart files found. Skipping flutter test."
