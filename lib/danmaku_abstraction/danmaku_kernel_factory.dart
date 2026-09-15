@@ -30,7 +30,7 @@ enum DanmakuRenderEngine {
 
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
-  // Default to Next2 where it is supported; fall back to NipaPlay Next on Web.
+  // Default to DFM+ where it is supported; fall back to NipaPlay Next on Web.
   static DanmakuRenderEngine _cachedEngine = _defaultEngine;
   static bool _initialized = false;
   static String? _selectedPluginRendererId;
@@ -42,7 +42,7 @@ class DanmakuKernelFactory {
   static DanmakuRenderEngine get _defaultEngine =>
       Next2PlatformSupport.isKernelSupported &&
               !isLinuxNvidiaGraphicsStackActive()
-          ? DanmakuRenderEngine.next2
+          ? DanmakuRenderEngine.dfmPlus
           : DanmakuRenderEngine.nipaplayNext;
 
   static bool get isNextPlusPlusEnabled => _enableNextPlusPlus;

@@ -1248,7 +1248,6 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   bool _isDfmStartupMessageMode() =>
       !kIsWeb &&
-      Platform.isWindows &&
       DanmakuKernelFactory.activePluginRenderer == null &&
       DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
 
