@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show PlatformInt64Util;
 
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/services/backup_category.dart';
@@ -156,10 +158,10 @@ class IncrementalSyncNativeCodec {
         includeWatchHistory: request.includeWatchHistory,
         includeEpisodeMatches: request.includeEpisodeMatches,
         includeAccounts: request.includeAccounts,
-        batchSize: request.batchSize,
+        batchSize: PlatformInt64Util.from(request.batchSize),
       );
       return FullBackupNativeRestorePlan(
-        version: result.version,
+        version: result.version.toInt(),
         timestamp: result.timestamp,
         appVersion: result.appVersion,
         preferencesJson: result.preferencesJson,
@@ -167,8 +169,8 @@ class IncrementalSyncNativeCodec {
         accountsJson: result.accountsJson,
         watchHistoryBatches: result.watchHistoryBatches,
         episodeMatchBatches: result.episodeMatchBatches,
-        invalidWatchHistoryCount: result.invalidWatchHistoryCount,
-        invalidEpisodeMatchCount: result.invalidEpisodeMatchCount,
+        invalidWatchHistoryCount: result.invalidWatchHistoryCount.toInt(),
+        invalidEpisodeMatchCount: result.invalidEpisodeMatchCount.toInt(),
         usedRust: true,
       );
     }
@@ -233,7 +235,7 @@ class IncrementalSyncNativeCodec {
         snapshotBytes: snapshotBytes,
         expectedSha256: expectedSha256,
         expectedRepositoryId: expectedRepositoryId,
-        expectedSnapshotVersion: expectedSnapshotVersion,
+        expectedSnapshotVersion: PlatformInt64Util.from(expectedSnapshotVersion),
       );
       return _stateFromJsonMap(await compute(
         _decodeJsonMap,
@@ -278,7 +280,7 @@ class IncrementalSyncNativeCodec {
                   expectedId: patch.expectedId,
                 ))
             .toList(),
-        maximumSnapshotVersion: maximumSnapshotVersion,
+        maximumSnapshotVersion: PlatformInt64Util.from(maximumSnapshotVersion),
       );
       return IncrementalSyncNativePatchResult(
         state: _stateFromJsonMap(await compute(

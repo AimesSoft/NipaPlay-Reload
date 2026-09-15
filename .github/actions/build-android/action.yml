@@ -25,6 +25,9 @@ runs:
   steps:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        # The legacy "tools" package is no longer available from sdkmanager.
+        packages: platform-tools
 
     - name: Setup Rust for Android
       if: env.ERIKA_PREBUILT != '1' || env.ERIKA_FORCE_SOURCE_BUILD == '1'
