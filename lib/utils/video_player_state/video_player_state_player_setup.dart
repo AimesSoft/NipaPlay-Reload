@@ -84,6 +84,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     final initializationGeneration = _playbackGeneration;
     _playbackDetailContext = resolvedDetailContext;
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
+    _isStartupMessageFlowActive = true;
     _initialHistoryItem = historyItem;
     _currentMediaKey = mediaKey ?? MediaIdentityResolver.forPath(videoPath);
 
@@ -126,24 +127,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
-      _statusMessages.add('正在准备流媒体播放...');
-      _notifyListeners();
+      _addStatusMessage('正在准备流媒体播放...');
     } else if (isNewRemotePath) {
       debugPrint('检测到远程媒体库路径: $videoPath');
-      _statusMessages.add('正在准备远程媒体播放...');
-      _notifyListeners();
+      _addStatusMessage('正在准备远程媒体播放...');
     } else if (isJellyfinStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint(
         '检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl',
       );
-      _statusMessages.add('正在准备Jellyfin流媒体播放...');
-      _notifyListeners();
+      _addStatusMessage('正在准备Jellyfin流媒体播放...');
     } else if (isEmbyStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint('检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
-      _statusMessages.add('正在准备Emby流媒体播放...');
-      _notifyListeners();
+      _addStatusMessage('正在准备Emby流媒体播放...');
     }
 
     if (!kIsWeb &&
@@ -368,8 +365,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       if (localFontsFolder != null) {
         // 检测到本地 fonts 文件夹，直接设置路径并立即应用
         _subtitleFontDir = localFontsFolder;
-        _statusMessages.add('发现Fonts目录，已自动配置字幕字体');
-        _notifyListeners();
+        debugPrint('发现Fonts目录，已自动配置字幕字体');
         debugPrint('[VideoPlayerState] 已设置本地fonts: $_subtitleFontDir');
         // 立即设置mpv字体目录，确保自动配置生效
         player.setProperty('sub-fonts-dir', localFontsFolder);
@@ -1022,10 +1018,19 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
         final gateToken = _beginDfmStartupGate();
         _setStatus(PlayerStatus.loading, message: '正在预热弹幕字形...');
-        await _waitForDfmStartupGate(gateToken);
+        final prewarmReady = await _waitForDfmStartupGate(gateToken);
         if (_isDisposed || initializationGeneration != _playbackGeneration) {
           return;
         }
+        if (prewarmReady) {
+          // Keep the final completion marker visible for at least one frame
+          // before the loading layer gives way to playback.
+          await Future<void>.delayed(const Duration(milliseconds: 180));
+        }
+      }
+
+      if (forceDfmDanmakuBeforePlayback) {
+        _finishDfmStartupMessage(successful: _danmakuList.isNotEmpty);
       }
 
       // 设置进入最终加载阶段，以优化动画性能

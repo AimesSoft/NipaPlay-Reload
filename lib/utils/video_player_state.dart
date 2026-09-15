@@ -283,6 +283,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void>? _playerKernelSwapDrain;
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
+  bool _isStartupMessageFlowActive = false;
   bool _showControls = true;
   bool _showRightMenu = false; // 控制右侧菜单显示状态
   final String _desktopHoverSettingsMenuEnabledKey =
@@ -988,6 +989,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void completeDfmStartupGate(int token) {
     if (!_isDfmStartupGatePending || token != _dfmStartupGateToken) return;
+    _finishDfmStartupMessage(successful: true);
     final completer = _dfmStartupGateCompleter;
     if (completer != null && !completer.isCompleted) {
       completer.complete();
@@ -1020,6 +1022,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       ready = token == _dfmStartupGateToken && !_isDisposed;
     } on TimeoutException {
       debugPrint('DFM+ startup prewarm timed out; continuing playback');
+      _finishDfmStartupMessage(successful: false);
     } finally {
       if (token == _dfmStartupGateToken) {
         _dfmStartupGateCompleter = null;
@@ -1028,6 +1031,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     }
     return ready;
+  }
+
+  void _finishDfmStartupMessage({required bool successful}) {
+    const pending = '全舰弹幕装填...';
+    final index = _statusMessages.lastIndexOf(pending);
+    if (index < 0) return;
+    _statusMessages[index] = '$pending${successful ? '[完成]' : '[失败]'}';
+    _notifyListeners();
   }
 
   bool get showRightMenu => _showRightMenu;

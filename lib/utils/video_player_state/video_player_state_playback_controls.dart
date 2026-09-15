@@ -303,15 +303,18 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       });
     }
 
+    if (newStatus == PlayerStatus.loading) {
+      _isStartupMessageFlowActive = true;
+    }
     if (clearPreviousMessages) {
       _statusMessages.clear();
     }
     if (message != null && message.isNotEmpty) {
-      _statusMessages.add(message);
-      // Optionally, limit the number of messages stored
-      // if (_statusMessages.length > 10) {
-      //   _statusMessages.removeAt(0);
-      // }
+      if (_isStartupMessageFlowActive) {
+        _recordStartupStatusMessage(message);
+      } else {
+        _statusMessages.add(message);
+      }
     }
 
     final preservePlaybackStatus = _isBackgroundDanmakuLoading &&
@@ -319,12 +322,22 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         (newStatus == PlayerStatus.recognizing ||
             newStatus == PlayerStatus.ready ||
             newStatus == PlayerStatus.playing);
-    if (preservePlaybackStatus) {
+    final preserveStartupLoadingStatus = _isStartupMessageFlowActive &&
+        (_status == PlayerStatus.loading ||
+            _status == PlayerStatus.recognizing) &&
+        newStatus == PlayerStatus.playing;
+    if (preservePlaybackStatus || preserveStartupLoadingStatus) {
       _notifyListeners();
       return;
     }
 
     _status = newStatus;
+    if (newStatus == PlayerStatus.ready ||
+        newStatus == PlayerStatus.error ||
+        newStatus == PlayerStatus.idle ||
+        newStatus == PlayerStatus.disposed) {
+      _isStartupMessageFlowActive = false;
+    }
 
     // Wakelock logic
     if (_status == PlayerStatus.playing) {
@@ -716,6 +729,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   void _clearPreviousVideoState() {
     _cancelDfmStartupGate();
+    _isStartupMessageFlowActive = false;
     _playbackGeneration++;
     _isBackgroundDanmakuLoading = false;
     // ════════════════════════════════════════════════════════════════════
@@ -1224,8 +1238,134 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   // 添加单个状态消息的方法
   void _addStatusMessage(String message) {
-    _statusMessages.add(message);
+    if (_isStartupMessageFlowActive) {
+      _recordStartupStatusMessage(message);
+    } else {
+      _statusMessages.add(message);
+    }
     _notifyListeners();
+  }
+
+  bool _isDfmStartupMessageMode() =>
+      !kIsWeb &&
+      Platform.isWindows &&
+      DanmakuKernelFactory.activePluginRenderer == null &&
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
+
+  bool _isDanmakuStartupMessage(String message) {
+    return message.contains('弹幕') ||
+        message.contains('识别视频') ||
+        message.contains('视频识别');
+  }
+
+  bool _isFailedStartupMessage(String message) {
+    return message.contains('失败') ||
+        message.contains('无法') ||
+        message.contains('无效') ||
+        message.contains('未匹配') ||
+        message.contains('未找到') ||
+        message.contains('未登录') ||
+        message.contains('跳过');
+  }
+
+  bool _isCompletedStartupMessage(String message) {
+    return message.contains('完成') ||
+        message.contains('成功') ||
+        message.startsWith('已自动加载');
+  }
+
+  String _asStartupProgress(String message) {
+    final base = message.trim().replaceFirst(RegExp(r'[.…]+$'), '');
+    return '$base...';
+  }
+
+  bool _isPendingStartupMessage(String message) {
+    return message.endsWith('...') &&
+        !message.endsWith('...[完成]') &&
+        !message.endsWith('...[失败]');
+  }
+
+  void _finishLatestStartupMessage({required bool successful}) {
+    if (_statusMessages.isEmpty) return;
+    final index = _statusMessages.length - 1;
+    final current = _statusMessages[index];
+    if (!_isPendingStartupMessage(current)) return;
+    _statusMessages[index] = '$current${successful ? '[完成]' : '[失败]'}';
+  }
+
+  void _startStartupMessage(String message) {
+    final progress = _asStartupProgress(message);
+    if (_statusMessages.isNotEmpty && _statusMessages.last == progress) return;
+    if (_statusMessages.isNotEmpty &&
+        _isPendingStartupMessage(_statusMessages.last) &&
+        progress.startsWith('正在初始化播放器') &&
+        _statusMessages.last.startsWith('正在初始化播放器')) {
+      return;
+    }
+    _finishLatestStartupMessage(successful: true);
+    _statusMessages.add(progress);
+  }
+
+  String _failedStageFor(String message) {
+    if (message.contains('识别') || message.contains('匹配')) {
+      return '正在识别视频...';
+    }
+    if (message.contains('弹幕')) return '正在加载弹幕...';
+    return _asStartupProgress(message);
+  }
+
+  void _recordStartupStatusMessage(String message) {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+
+    final isDanmaku = _isDanmakuStartupMessage(trimmed);
+    if (_isDfmStartupMessageMode() && isDanmaku) {
+      const stage = '全舰弹幕装填...';
+      var stageIndex = _statusMessages.lastIndexWhere(
+        (entry) => entry.startsWith(stage),
+      );
+      if (stageIndex < 0) {
+        _startStartupMessage(stage);
+        stageIndex = _statusMessages.length - 1;
+      } else if (!_isFailedStartupMessage(trimmed) &&
+          _statusMessages[stageIndex].endsWith('[失败]')) {
+        // A later fallback source can recover a failed online attempt. Reuse
+        // the same condensed DFM line while that fallback is still working.
+        _statusMessages[stageIndex] = stage;
+      }
+      if (_isFailedStartupMessage(trimmed)) {
+        if (_statusMessages[stageIndex] == stage) {
+          _statusMessages[stageIndex] = '$stage[失败]';
+        }
+      }
+      return;
+    }
+
+    if (trimmed.startsWith('视频识别成功，正在加载弹幕')) {
+      _finishLatestStartupMessage(successful: true);
+      _startStartupMessage('正在加载弹幕...');
+      return;
+    }
+    if (_isFailedStartupMessage(trimmed)) {
+      final failedStage = _failedStageFor(trimmed);
+      final activeIsStartupPreparation = _statusMessages.isNotEmpty &&
+          _isPendingStartupMessage(_statusMessages.last) &&
+          (_statusMessages.last.contains('初始化播放器') ||
+              _statusMessages.last.contains('准备') ||
+              _statusMessages.last.contains('媒体播放'));
+      if (_statusMessages.isEmpty ||
+          !_isPendingStartupMessage(_statusMessages.last) ||
+          activeIsStartupPreparation) {
+        _startStartupMessage(failedStage);
+      }
+      _finishLatestStartupMessage(successful: false);
+      return;
+    }
+    if (_isCompletedStartupMessage(trimmed) || trimmed == '准备就绪') {
+      _finishLatestStartupMessage(successful: true);
+      return;
+    }
+    _startStartupMessage(trimmed);
   }
 
   // 清除所有状态消息的方法
