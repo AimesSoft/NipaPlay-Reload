@@ -389,6 +389,9 @@ fn create_linux_gl_device_context(loader: GlProcLoader) -> Result<Arc<EngineDevi
     Ok(Arc::new(EngineDeviceContext {
         device: Arc::new(device),
         queue: Arc::new(queue),
+        // The external GL context belongs to the platform render thread.
+        // render_linux_gl_texture polls this device on that same thread.
+        completion_driver: None,
     }))
 }
 
@@ -546,7 +549,7 @@ struct EngineDeviceContext {
     adapter: Arc<wgpu::Adapter>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
-    completion_driver: GpuCompletionDriver,
+    completion_driver: Option<GpuCompletionDriver>,
 }
 
 static DEVICE_CONTEXT: OnceLock<Result<Arc<EngineDeviceContext>, String>> = OnceLock::new();
@@ -600,7 +603,7 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
             adapter,
             device,
             queue: Arc::new(queue),
-            completion_driver,
+            completion_driver: Some(completion_driver),
         }))
     });
 
@@ -705,6 +708,12 @@ fn run_engine_loop(
     completion: Arc<FrameCompletionState>,
     cmd_rx: command_channel::Receiver<EngineCommand>,
 ) {
+    // Only device_context() is used by the worker-driven engine loop. External
+    // GL contexts use render_linux_gl_texture and never enter this path.
+    let completion_driver = ctx
+        .completion_driver
+        .as_ref()
+        .expect("engine loop requires a GPU completion driver");
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
         Ok(renderer) => renderer,
         Err(_) => return,
@@ -919,7 +928,7 @@ fn run_engine_loop(
                 signal_frame_ready(
                     ctx.queue.as_ref(),
                     &completion,
-                    &ctx.completion_driver,
+                    completion_driver,
                 );
             } else {
                 completion.begin_generation();

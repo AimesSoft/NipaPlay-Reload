@@ -78,6 +78,7 @@ jobs:
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
 
       - name: Pre-download Gradle Wrapper
+        if: hashFiles('android/gradlew') != ''
         run: |
           cd android
           chmod +x ./gradlew
