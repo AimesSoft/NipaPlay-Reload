@@ -303,7 +303,7 @@ class JellyfinPlaybackSyncService {
     final url = '${_jellyfinService.serverUrl}$endpoint';
     final headers = {
       'Content-Type': 'application/json',
-      'X-Emby-Token': _jellyfinService.accessToken!,
+      ...await _jellyfinService.buildAuthorizationHeaders(),
     };
 
     final request = http.Request(method.toUpperCase(), Uri.parse(url))

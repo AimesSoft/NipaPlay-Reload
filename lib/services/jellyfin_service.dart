@@ -40,6 +40,10 @@ class JellyfinService extends MediaServerServiceBase
   @override
   String get serviceType => 'jellyfin';
 
+  // Jellyfin 12 disables the legacy X-Emby authorization headers by default.
+  @override
+  String get authorizationHeaderName => 'Authorization';
+
   @override
   String get prefsKeyPrefix => 'jellyfin';
 
@@ -279,13 +283,12 @@ class JellyfinService extends MediaServerServiceBase
   /// 执行完整的认证流程
   Future<void> _performAuthentication(
       String serverUrl, String username, String password) async {
-    final clientInfo = await getClientInfo();
     final authResponse = await sendRequestFollowingRedirects(
       Uri.parse('$serverUrl/Users/AuthenticateByName'),
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Emby-Authorization': clientInfo,
+        ...await buildAuthorizationHeaders(includeToken: false),
       },
       body: json.encode({
         'Username': username,
@@ -1274,7 +1277,7 @@ class JellyfinService extends MediaServerServiceBase
       'MediaSourceId': resolvedMediaSourceId,
       if (playSessionId != null && playSessionId.isNotEmpty)
         'PlaySessionId': playSessionId,
-      if (_accessToken != null) 'api_key': _accessToken!,
+      if (_accessToken != null) 'ApiKey': _accessToken!,
     };
     final uri = Uri.parse('$_serverUrl/Videos/$itemId/stream')
         .replace(queryParameters: params);
@@ -1290,7 +1293,7 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     final params = <String, String>{
-      'api_key': _accessToken!,
+      'ApiKey': _accessToken!,
       // HLS master.m3u8 需要 MediaSourceId（大多数情况下与 itemId 相同）
       'MediaSourceId': itemId,
       // 指定分片容器，Jellyfin 默认 HLS TS 更通用
@@ -1327,7 +1330,7 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     final params = <String, String>{
-      'api_key': _accessToken!,
+      'ApiKey': _accessToken!,
       'mediaSourceId': itemId, // 修正参数名
       'segmentContainer': 'ts',
     };
@@ -1592,7 +1595,7 @@ class JellyfinService extends MediaServerServiceBase
             if (isExternal) {
               final mediaSourceId = mediaSource['Id'];
               final subtitleUrl =
-                  '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$realIndex/Stream.$codec?api_key=$_accessToken';
+                  '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$realIndex/Stream.$codec?ApiKey=$_accessToken';
               trackInfo['downloadUrl'] = subtitleUrl;
             }
 
@@ -1643,7 +1646,7 @@ class JellyfinService extends MediaServerServiceBase
 
       // 构建字幕下载URL
       final subtitleUrl =
-          '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
+          '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?ApiKey=$_accessToken';
 
       debugPrint(
         'JellyfinService: 下载字幕文件: ${Uri.parse(subtitleUrl).replace(queryParameters: const <String, String>{})}',

@@ -39,6 +39,9 @@ abstract class MediaServerServiceBase {
   bool get alwaysIncludeContentType => false;
   String get notConnectedMessage;
 
+  @protected
+  String get authorizationHeaderName => 'X-Emby-Authorization';
+
   String? get serverUrl;
   set serverUrl(String? value);
   String? get username;
@@ -804,12 +807,22 @@ abstract class MediaServerServiceBase {
     return Uri.parse('$resolvedBase$normalizedPath');
   }
 
-  Future<Map<String, String>> _buildAuthHeaders(bool hasBody) async {
+  /// Shared by API requests and playback reporting. Login omits any old token.
+  Future<Map<String, String>> buildAuthorizationHeaders({
+    bool includeToken = true,
+  }) async {
     final clientInfo = await getClientInfo();
-    final authHeader = '$clientInfo, Token=\"$accessToken\"';
-    final headers = <String, String>{
-      'X-Emby-Authorization': authHeader,
+    final token = accessToken;
+    return {
+      authorizationHeaderName:
+          includeToken && token != null && token.isNotEmpty
+              ? '$clientInfo, Token="$token"'
+              : clientInfo,
     };
+  }
+
+  Future<Map<String, String>> _buildAuthHeaders(bool hasBody) async {
+    final headers = await buildAuthorizationHeaders();
 
     if (alwaysIncludeContentType || hasBody) {
       headers['Content-Type'] = 'application/json';
