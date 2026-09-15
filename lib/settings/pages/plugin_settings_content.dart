@@ -172,7 +172,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
         pluginService.getAvailableUpdateVersion(plugin.manifest.id);
     return AdaptiveSettingsTile<bool>.toggle(
       title: plugin.manifest.name,
-      subtitle: _pluginSubtitle(context, plugin, updateVersion),
+      subtitleWidget: _pluginSubtitleWidget(context, plugin, updateVersion),
       icon: Ionicons.extension_puzzle_outline,
       phoneIcon: cupertino.CupertinoIcons.cube_box,
       value: plugin.enabled,
@@ -1027,42 +1027,79 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
     return null;
   }
 
-  String _pluginSubtitle(
+  Widget _pluginSubtitleWidget(
     BuildContext context,
     PluginDescriptor plugin,
     String? updateVersion,
   ) {
-    final subtitle = StringBuffer()
-      ..write('v${plugin.manifest.version} · ${plugin.manifest.author}');
+    final textColor = Theme.of(context)
+        .colorScheme
+        .onSurface
+        .withValues(alpha: 0.7);
+    final style = TextStyle(color: textColor);
+    final children = <Widget>[
+      Text(
+        'v${plugin.manifest.version} · ${plugin.manifest.author}',
+        style: style,
+      ),
+    ];
     if (updateVersion != null) {
-      subtitle
-        ..write('\n')
-        ..write(_pluginUpdateAvailable(context, updateVersion));
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: _pluginUpdateBadge(context, updateVersion),
+        ),
+      );
     }
-    if (plugin.manifest.description.isNotEmpty) {
-      subtitle
-        ..write('\n')
-        ..write(plugin.manifest.description);
+    void addLine(String line) {
+      if (line.trim().isNotEmpty) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(line, style: style),
+          ),
+        );
+      }
     }
+
+    addLine(plugin.manifest.description);
     if (plugin.manifest.github != null && plugin.manifest.github!.isNotEmpty) {
-      subtitle
-        ..write('\nGitHub: ')
-        ..write(plugin.manifest.github);
+      addLine('GitHub: ${plugin.manifest.github}');
     }
     if (plugin.errorMessage != null && plugin.errorMessage!.isNotEmpty) {
-      subtitle
-        ..write('\n')
-        ..write(_pluginLoadFailed(context, plugin.errorMessage!));
+      addLine(_pluginLoadFailed(context, plugin.errorMessage!));
     }
     if (plugin.uiEntries.isNotEmpty) {
-      subtitle
-        ..write('\n')
-        ..write(_pluginActionChooseHint(context))
-        ..write('（')
-        ..write(plugin.uiEntries.length)
-        ..write('）');
+      addLine('${_pluginActionChooseHint(context)}（${plugin.uiEntries.length}）');
     }
-    return subtitle.toString();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  Widget _pluginUpdateBadge(BuildContext context, String version) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color background =
+        isDark ? const Color(0xFF2E7D32) : const Color(0xFF66BB6A);
+    final Color textColor = isDark ? Colors.white : const Color(0xFF12301A);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        _pluginUpdateAvailable(context, version),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1.2,
+        ),
+      ),
+    );
   }
 
   String _importPluginTitle(BuildContext context) =>

@@ -922,6 +922,10 @@ impl Next2GlyphAtlas {
         self.msdf_worker.submit_async(ch, quantized_size);
     }
 
+    fn pending_prefetch_count(&self) -> usize {
+        self.pending.len()
+    }
+
     /// Drain completed async prefetch results and upload them to the atlas.
     /// Called on the render thread at the top of each engine loop iteration.
     /// Returns the number of results processed.
@@ -1198,6 +1202,10 @@ struct Next2Renderer {
     /// double-rendering phase jitter (visible as 时快时慢 speed variation).
     /// Enabled only when Dart feeds slower than the tick (~30fps submit).
     submit_interval_ema: f32,
+    /// DFM+ submits absolute coordinates sampled on Flutter's vsync. In that
+    /// mode native wall-clock interpolation would introduce a second clock.
+    motion_mode: MotionMode,
+    motion_clock: motion::MotionClock,
     width: u32,
     height: u32,
     shadow_mask_texture: wgpu::Texture,

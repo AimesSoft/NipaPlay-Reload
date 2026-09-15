@@ -5,7 +5,9 @@ use std::ffi::{c_char, CString};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
@@ -58,6 +60,7 @@ extern "C" {
 const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
+
 const BASE_ATLAS_SIZE: u32 = 8192;
 const MSDF_RANGE: f64 = super::DANMAKU_MSDF_RANGE;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
@@ -100,6 +103,7 @@ pub struct DxgiSharedTextureInfo {
 }
 
 pub enum EngineCommand {
+    Vsync { arrived: std::time::Instant, elapsed_us: u64 },
     AttachPresentTexture {
         raw_target_ptr: usize,
         width: u32,
@@ -122,12 +126,15 @@ pub enum EngineCommand {
         input: RenderFrameInput,
         reply: mpsc::Sender<bool>,
     },
+    QueryPrefetchPending {
+        reply: mpsc::Sender<usize>,
+    },
     Stop,
 }
 
 pub struct EngineEntry {
-    pub cmd_tx: mpsc::Sender<EngineCommand>,
-    pub frame_ready: Arc<AtomicBool>,
+    pub cmd_tx: command_channel::Sender<EngineCommand>,
+    pub completion: Arc<FrameCompletionState>,
     pub mtl_device_ptr: usize,
 }
 
@@ -159,7 +166,7 @@ pub fn lookup_engine(handle: u64) -> Option<EngineEntry> {
     let entry = guard.get(&handle)?;
     Some(EngineEntry {
         cmd_tx: entry.cmd_tx.clone(),
-        frame_ready: Arc::clone(&entry.frame_ready),
+        completion: Arc::clone(&entry.completion),
         mtl_device_ptr: entry.mtl_device_ptr,
     })
 }
@@ -176,7 +183,18 @@ pub fn poll_frame_ready(handle: u64) -> bool {
     let Some(entry) = lookup_engine(handle) else {
         return false;
     };
-    entry.frame_ready.swap(false, Ordering::AcqRel)
+    entry.completion.consume()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn query_prefetch_pending(handle: u64) -> Option<usize> {
+    let entry = lookup_engine(handle)?;
+    let (reply_tx, reply_rx) = mpsc::channel();
+    entry
+        .cmd_tx
+        .send(EngineCommand::QueryPrefetchPending { reply: reply_tx })
+        .ok()?;
+    reply_rx.recv_timeout(Duration::from_secs(2)).ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -478,15 +496,15 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
 
     let mtl_device_ptr = extract_mtl_device_ptr(ctx.device.as_ref()) as usize;
 
-    let (cmd_tx, cmd_rx) = mpsc::channel::<EngineCommand>();
-    let frame_ready = Arc::new(AtomicBool::new(false));
-    let frame_ready_thread = Arc::clone(&frame_ready);
+    let (cmd_tx, cmd_rx) = command_channel::channel::<EngineCommand>();
+    let completion = Arc::new(FrameCompletionState::new());
+    let completion_thread = Arc::clone(&completion);
 
     thread::Builder::new()
         .name("next2-engine".to_string())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_engine_loop(ctx, width, height, frame_ready_thread, cmd_rx);
+                run_engine_loop(ctx, width, height, completion_thread, cmd_rx);
             }));
             if let Err(e) = result {
                 if let Some(s) = e.downcast_ref::<String>() {
@@ -513,7 +531,7 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
         handle,
         EngineEntry {
             cmd_tx,
-            frame_ready,
+            completion,
             mtl_device_ptr,
         },
     );
@@ -528,6 +546,7 @@ struct EngineDeviceContext {
     adapter: Arc<wgpu::Adapter>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
+    completion_driver: GpuCompletionDriver,
 }
 
 static DEVICE_CONTEXT: OnceLock<Result<Arc<EngineDeviceContext>, String>> = OnceLock::new();
@@ -572,13 +591,16 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
             eprintln!("wgpu uncaptured error: {err}");
         }));
 
+        let device = Arc::new(device);
+        let completion_driver = GpuCompletionDriver::start(Arc::clone(&device))?;
         Ok(Arc::new(EngineDeviceContext {
             #[cfg(target_os = "android")]
             instance,
             #[cfg(target_os = "android")]
             adapter,
-            device: Arc::new(device),
+            device,
             queue: Arc::new(queue),
+            completion_driver,
         }))
     });
 
@@ -680,8 +702,8 @@ fn run_engine_loop(
     ctx: Arc<EngineDeviceContext>,
     mut width: u32,
     mut height: u32,
-    frame_ready: Arc<AtomicBool>,
-    cmd_rx: mpsc::Receiver<EngineCommand>,
+    completion: Arc<FrameCompletionState>,
+    cmd_rx: command_channel::Receiver<EngineCommand>,
 ) {
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
         Ok(renderer) => renderer,
@@ -691,12 +713,29 @@ fn run_engine_loop(
     let mut running = true;
     let mut has_pending_frame = false;
 
+    let mut pacer = motion::FramePacer::new();
+    let mut motion_revision = 0;
+    let mut motion_period = TICK_INTERVAL;
+    let mut multimedia_scheduling = None;
+    let mut multimedia_attempted = false;
+
     while running {
         // Drain completed async glyph prefetches before any command/draw this
         // iteration, so prefetched glyphs land in the atlas before they're
         // needed by `draw_to_present`. Non-blocking; cheap when empty.
         renderer.drain_prefetch(ctx.queue.as_ref());
         let mut received_command = false;
+        let mut commands_drained = 0;
+        let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
+        if continuous && renderer.needs_interpolation_render() {
+            if !multimedia_attempted {
+                multimedia_scheduling = command_channel::MultimediaScheduling::acquire();
+                multimedia_attempted = true;
+            }
+        } else {
+            drop(multimedia_scheduling.take());
+            multimedia_attempted = false;
+        }
 
         loop {
             let recv_result = if received_command {
@@ -705,7 +744,11 @@ fn run_engine_loop(
                     mpsc::TryRecvError::Disconnected => mpsc::RecvTimeoutError::Disconnected,
                 })
             } else {
-                cmd_rx.recv_timeout(TICK_INTERVAL)
+                let wait = if continuous && (has_pending_frame || renderer.needs_interpolation_render()) {
+                    pacer.deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
+                        .unwrap_or(Duration::ZERO)
+                } else { TICK_INTERVAL };
+                cmd_rx.recv_timeout(wait)
             };
 
             let cmd = match recv_result {
@@ -718,7 +761,13 @@ fn run_engine_loop(
             };
 
             received_command = true;
+            commands_drained += 1;
             match cmd {
+                EngineCommand::Vsync { arrived, elapsed_us } => {
+                    if renderer.motion_mode == MotionMode::ContinuousAnchor {
+                        pacer.pulse(arrived, elapsed_us, renderer.motion_clock.period);
+                    }
+                }
                 EngineCommand::AttachPresentTexture {
                     raw_target_ptr,
                     width: w,
@@ -769,6 +818,7 @@ fn run_engine_loop(
                     if !attached {
                         continue;
                     }
+                    completion.begin_generation();
                     width = w.max(1);
                     height = h.max(1);
                     let _ = renderer.resize(width, height);
@@ -785,6 +835,7 @@ fn run_engine_loop(
                     let response = if let Some((target, shared_handle)) =
                         create_dx12_shared_present_texture(ctx.device.as_ref(), w, h)
                     {
+                        completion.begin_generation();
                         present_target = Some(target);
                         width = w;
                         height = h;
@@ -805,6 +856,7 @@ fn run_engine_loop(
                     width: w,
                     height: h,
                 } => {
+                    completion.begin_generation();
                     width = w.max(1);
                     height = h.max(1);
                     let _ = renderer.resize(width, height);
@@ -827,10 +879,18 @@ fn run_engine_loop(
                         has_pending_frame = true;
                     }
                 }
+                EngineCommand::QueryPrefetchPending { reply } => {
+                    let _ = reply.send(renderer.pending_prefetch_count());
+                }
                 EngineCommand::Stop => {
+                    completion.close();
                     running = false;
                     break;
                 }
+            }
+            // A continuously arriving command stream must not starve rendering.
+            if commands_drained >= 64 {
+                break;
             }
         }
 
@@ -838,22 +898,39 @@ fn run_engine_loop(
             break;
         }
 
-        // Re-render not only on a freshly submitted frame, but also on idle
-        // 16ms ticks while scroll interpolation is active. needs_interpolation_render
-        // is true only when there are scroll items AND a frame was submitted
-        // within the last 50ms — so paused/empty scenes add no continuous GPU
-        // load. draw_to_present recomputes interp_dt internally, advancing
-        // scroll items between Dart submissions (30fps submit → ~60fps motion).
+        // Real vsync and deadline fallback share a single pacing state. Source
+        // packets update the scene without adding an independent render stream.
         let needs_interp = renderer.needs_interpolation_render();
-        if has_pending_frame || needs_interp {
+        let continuous = renderer.motion_mode == MotionMode::ContinuousAnchor;
+        if motion_revision != renderer.motion_clock.revision || motion_period != renderer.motion_clock.period {
+            motion_revision = renderer.motion_clock.revision;
+            motion_period = renderer.motion_clock.period;
+            pacer = motion::FramePacer::new();
+        }
+        let now = std::time::Instant::now();
+        let due = if continuous {
+            pacer.ready(now, renderer.motion_clock.period).is_some()
+        } else {
+            true
+        };
+        if (has_pending_frame || needs_interp) && due {
             if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
-                signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
+                signal_frame_ready(
+                    ctx.queue.as_ref(),
+                    &completion,
+                    &ctx.completion_driver,
+                );
             } else {
-                frame_ready.store(false, Ordering::Release);
+                completion.begin_generation();
             }
 
             has_pending_frame = false;
+            if continuous {
+                pacer.rendered(std::time::Instant::now(), renderer.motion_clock.period);
+            } else {
+                pacer = motion::FramePacer::new();
+            }
         }
     }
 }

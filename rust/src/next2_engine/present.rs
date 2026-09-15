@@ -1,5 +1,6 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
+use super::engine::{FrameCompletionState, GpuCompletionDriver};
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use metal::foreign_types::ForeignType;
@@ -177,13 +178,15 @@ fn create_android_surface(
     }
 }
 
-pub(crate) fn signal_frame_ready(queue: &wgpu::Queue, frame_ready: Arc<AtomicBool>) {
-    frame_ready.store(false, Ordering::Release);
-    let _ = queue.submit(std::iter::empty::<wgpu::CommandBuffer>());
-    let frame_ready_done = Arc::clone(&frame_ready);
-    queue.on_submitted_work_done(move || {
-        frame_ready_done.store(true, Ordering::Release);
-    });
+pub(crate) fn signal_frame_ready(
+    queue: &wgpu::Queue,
+    completion: &Arc<FrameCompletionState>,
+    driver: &GpuCompletionDriver,
+) {
+    // draw_to_present has already submitted the real command buffer. Register
+    // against that submission; never clear an older completion here because
+    // the platform consumer may not have observed it yet.
+    completion.register_submission(queue, driver);
 }
 
 #[cfg(target_os = "android")]

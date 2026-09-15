@@ -1,3 +1,8 @@
+include!("engine/frame_completion.rs");
+#[path = "engine/motion.rs"]
+mod motion;
+#[path = "engine/command_channel.rs"]
+mod command_channel;
 include!("engine/runtime.rs");
 include!("engine/rendering.rs");
 include!("engine/renderer_core.rs");

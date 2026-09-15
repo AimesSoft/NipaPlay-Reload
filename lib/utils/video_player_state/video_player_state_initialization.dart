@@ -184,7 +184,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);
-      _volumeBoost = (prefs.getDouble('player_volume_boost') ?? 1.0).clamp(1.0, 2.0);
+      _volumeBoost =
+          (prefs.getDouble('player_volume_boost') ?? 1.0).clamp(1.0, 2.0);
 
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
@@ -400,16 +401,16 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   // 保存视频播放位置
   Future<void> _saveVideoPosition(String path, int position) async {
-    final prefs = await SharedPreferences.getInstance();
-    final positions = prefs.getString(_videoPositionsKey) ?? '{}';
-    final Map<String, dynamic> positionMap =
-        Map<String, dynamic>.from(json.decode(positions));
-    positionMap[path] = position;
-    await prefs.setString(_videoPositionsKey, json.encode(positionMap));
+    try {
+      await PlaybackPositionStore.instance.save(path, position);
+    } catch (error, stackTrace) {
+      debugPrint('保存播放进度失败: $error\n$stackTrace');
+    }
   }
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）
   Future<int> _getVideoPosition(String path) async {
+    await PlaybackPositionStore.instance.flush();
     final prefs = await SharedPreferences.getInstance();
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
     final Map<String, dynamic> positionMap =

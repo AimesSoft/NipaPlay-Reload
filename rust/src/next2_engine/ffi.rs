@@ -23,6 +23,17 @@ fn parse_c_string(ptr: *const c_char) -> Option<String> {
     c_str.to_str().ok().map(ToOwned::to_owned)
 }
 
+/// Nonblocking vsync notification: no JSON, layout, or GPU work on the caller.
+#[cfg(target_os = "windows")]
+#[no_mangle]
+pub extern "C" fn next2_engine_vsync(handle: u64, elapsed_us: u64) -> u8 {
+    std::panic::catch_unwind(|| {
+        lookup_engine(handle).is_some_and(|entry| entry.cmd_tx.send(EngineCommand::Vsync {
+            arrived: std::time::Instant::now(), elapsed_us,
+        }).is_ok()) as u8
+    }).unwrap_or(0)
+}
+
 #[no_mangle]
 pub extern "C" fn next2_engine_create(width: u32, height: u32) -> u64 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -86,6 +97,40 @@ pub extern "C" fn next2_engine_poll_frame_ready(handle: u64) -> bool {
                 .unwrap_or("unknown");
             n2log(&format!("FFI poll_frame_ready PANIC: {msg}"));
             false
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[no_mangle]
+pub extern "C" fn next2_engine_prefetch_pending(handle: u64) -> i64 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        super::engine::query_prefetch_pending(handle)
+            .and_then(|count| i64::try_from(count).ok())
+            .unwrap_or(-1)
+    }));
+    result.unwrap_or(-1)
+}
+
+#[cfg(target_os = "windows")]
+#[no_mangle]
+pub extern "C" fn next2_engine_set_frame_ready_event(handle: u64, event_handle: usize) -> u8 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        lookup_engine(handle)
+            .map(|entry| entry.completion.bind_windows_event(event_handle))
+            .unwrap_or(false)
+    }));
+    match result {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI set_frame_ready_event PANIC: {msg}"));
+            0
         }
     }
 }
@@ -203,6 +248,7 @@ pub extern "C" fn next2_engine_dispose(handle: u64) {
         let Some(entry) = remove_engine(handle) else {
             return;
         };
+        entry.completion.close();
         let _ = entry.cmd_tx.send(EngineCommand::Stop);
     }
 }

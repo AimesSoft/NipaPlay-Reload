@@ -111,9 +111,9 @@ void main() {
       'lib/utils/video_player_state/video_player_state_player_setup.dart',
     ).readAsStringSync();
 
-    expect(source, contains('if (!fastPlaybackStartup)'));
+    expect(source, contains('if (!fastPlaybackStartup'));
     expect(source, contains('await loadInitialDanmaku();'));
-    expect(source, contains('if (fastPlaybackStartup)'));
+    expect(source, contains('if (fastPlaybackStartup'));
     expect(source, contains('_startBackgroundDanmakuLoading('));
     expect(source, contains('if (_status == PlayerStatus.playing) break;'));
     expect(source, contains('generation != _playbackGeneration'));

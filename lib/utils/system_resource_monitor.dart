@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' show FramePhase;
+import 'frame_rate_sampler.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -29,8 +31,6 @@ class SystemResourceMonitor {
   double _fps = 0.0;
   double? _gpuUsage;
   String _thermalState = 'N/A';
-  double? _dfmLayoutMs;
-  double? _dfmSubmitMs;
 
   String _activeDecoder = '未知';
   String _mdkVersion = '未知';
@@ -43,9 +43,9 @@ class SystemResourceMonitor {
   int _consumerCount = 0;
   int _monitoringGeneration = 0;
 
-  int _frameCount = 0;
+  final FrameRateSampler _frameRateSampler = FrameRateSampler();
   final Stopwatch _fpsClock = Stopwatch();
-  int _lastFpsSampleUs = 0;
+  int _lastTimingReportUs = 0;
   TimingsCallback? _timingsCallback;
 
   bool _rustPerformanceAvailable = false;
@@ -63,8 +63,6 @@ class SystemResourceMonitor {
   double get fps => _fps;
   double? get gpuUsage => _gpuUsage;
   String get thermalState => _thermalState;
-  double? get dfmLayoutMs => _dfmLayoutMs;
-  double? get dfmSubmitMs => _dfmSubmitMs;
 
   String get activeDecoder => _activeDecoder;
   String get mdkVersion => _mdkVersion;
@@ -195,30 +193,36 @@ class SystemResourceMonitor {
 
   void _initFpsMeasurement() {
     _removeFpsTimingsCallback();
-    _frameCount = 0;
+    _frameRateSampler.reset();
     _fps = 0.0;
     _fpsClock
       ..reset()
       ..start();
-    _lastFpsSampleUs = 0;
+    _lastTimingReportUs = 0;
 
     // Count frames that actually completed the Flutter rendering pipeline.
     // A dedicated Ticker would continuously request frames itself, inflating
     // the reported FPS and adding load to the workload being measured.
     _timingsCallback = (List<FrameTiming> timings) {
-      _frameCount += timings.length;
+      if (timings.isEmpty) return;
+      for (final timing in timings) {
+        _frameRateSampler.addTimestamp(
+          timing.timestampInMicroseconds(FramePhase.rasterFinish),
+        );
+      }
+      _fps = _frameRateSampler.fps;
+      _lastTimingReportUs = _fpsClock.elapsedMicroseconds;
     };
     SchedulerBinding.instance.addTimingsCallback(_timingsCallback!);
 
     _fpsTimer?.cancel();
     _fpsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final nowUs = _fpsClock.elapsedMicroseconds;
-      final elapsedUs = nowUs - _lastFpsSampleUs;
-
-      if (elapsedUs > 0) {
-        _fps = _frameCount * 1000000 / elapsedUs;
-        _frameCount = 0;
-        _lastFpsSampleUs = nowUs;
+      // Release reports are batched for about one second. This timer only
+      // expires stale data; callback arrival time must never determine FPS.
+      if (nowUs - _lastTimingReportUs > 3000000) {
+        _fps = 0;
+        _frameRateSampler.reset();
       }
     });
   }
@@ -278,21 +282,6 @@ class SystemResourceMonitor {
       debugPrint('读取 iOS thermalState 失败: $e');
       _thermalState = 'N/A';
     }
-  }
-
-  void recordDfmFrameTimings({
-    required double layoutMs,
-    required double submitMs,
-  }) {
-    const alpha = 0.15;
-    _dfmLayoutMs = _smoothedMetric(_dfmLayoutMs, layoutMs, alpha);
-    _dfmSubmitMs = _smoothedMetric(_dfmSubmitMs, submitMs, alpha);
-  }
-
-  double _smoothedMetric(double? previous, double sample, double alpha) {
-    if (!sample.isFinite || sample < 0) return previous ?? 0.0;
-    if (previous == null) return sample;
-    return previous + (sample - previous) * alpha;
   }
 
   Future<void> _updateFromRustSamples() async {
@@ -377,8 +366,8 @@ class SystemResourceMonitor {
 
     _removeFpsTimingsCallback();
     _fpsClock.stop();
-    _frameCount = 0;
-    _lastFpsSampleUs = 0;
+    _frameRateSampler.reset();
+    _lastTimingReportUs = 0;
     _fps = 0.0;
 
     _lastCpuTimestampMs = 0;

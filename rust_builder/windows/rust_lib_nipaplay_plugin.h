@@ -1,6 +1,8 @@
 #ifndef FLUTTER_PLUGIN_RUST_LIB_NIPAPLAY_PLUGIN_H_
 #define FLUTTER_PLUGIN_RUST_LIB_NIPAPLAY_PLUGIN_H_
 
+#include <Windows.h>
+
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/texture_registrar.h>
@@ -47,6 +49,8 @@ class RustLibNipaplayPlugin : public flutter::Plugin {
   std::mutex mutex_;
   std::thread tick_thread_;
   std::atomic<bool> tick_running_{false};
+  HANDLE frame_ready_event_ = nullptr;
+  HANDLE stop_event_ = nullptr;
 };
 
 }  // namespace rust_lib_nipaplay

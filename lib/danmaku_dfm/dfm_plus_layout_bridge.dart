@@ -241,7 +241,8 @@ class DfmPlusLayoutBridge {
   /// binary search for visible window + per-item x/y computation.
   /// Object reuse: PositionedDanmakuItem and DanmakuContentItem are cached
   /// and mutated in-place, avoiding per-frame allocation and GC pressure.
-  List<PositionedDanmakuItem> layout(double currentTimeSeconds) {
+  List<PositionedDanmakuItem> layout(double currentTimeSeconds,
+      {double lookaheadSeconds = 0.0}) {
     final prepared = _prepared;
     if (prepared == null) {
       return const [];
@@ -256,7 +257,8 @@ class DfmPlusLayoutBridge {
 
     final windowStart = currentTimeSeconds - maxDur;
     final startIdx = _lowerBound(itemTimes, windowStart);
-    final endIdx = _upperBound(itemTimes, currentTimeSeconds);
+    final endIdx =
+        _upperBound(itemTimes, currentTimeSeconds + lookaheadSeconds);
 
     // Soft-prune caches that drifted beyond the visible window on long
     // videos (P2-8). Clears only when caches hold far more than the current
@@ -279,9 +281,9 @@ class DfmPlusLayoutBridge {
     for (int i = startIdx; i < endIdx; i++) {
       final pi = items[i];
       final elapsed = currentTimeSeconds - pi.timeSeconds;
-      if (elapsed < 0.0) continue;
+      if (elapsed < -lookaheadSeconds) continue;
 
-      if (!pi.isScroll && elapsed > pi.durationSeconds) continue;
+      if (elapsed > pi.durationSeconds) continue;
 
       double x;
       double offstageX;
@@ -302,7 +304,11 @@ class DfmPlusLayoutBridge {
         offstageX = width;
       }
 
-      if (pi.isScroll && x < -pi.width) continue;
+      if (pi.isScroll &&
+          elapsed >= 0.0 &&
+          (pi.typeCode == 6 ? x > width : x < -pi.width)) {
+        continue;
+      }
       if (pi.yPosition < 0.0) continue;
 
       // Reuse DanmakuContentItem from cache (avoids Color() allocation)
@@ -327,6 +333,7 @@ class DfmPlusLayoutBridge {
                 y: pi.yPosition,
                 offstageX: offstageX,
                 time: pi.timeSeconds,
+                endMediaSeconds: pi.timeSeconds + pi.durationSeconds,
                 scrollSpeed: pi.isScroll ? pi.scrollSpeed : 0.0,
                 width: pi.width,
                 typeCode: pi.typeCode,

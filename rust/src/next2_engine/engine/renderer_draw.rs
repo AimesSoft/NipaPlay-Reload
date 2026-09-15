@@ -423,6 +423,15 @@ impl Next2Renderer {
     /// build_vertices, guaranteeing we stop re-rendering exactly when motion
     /// would freeze anyway.
     fn needs_interpolation_render(&self) -> bool {
+        if self.motion_mode == MotionMode::ContinuousAnchor {
+            // Include future/static items: their activation and expiration also
+            // need to proceed while Dart is unavailable. One last draw clears
+            // the scene when the delivered lookahead is exhausted.
+            return self.motion_clock.playing && !self.frame_items.is_empty();
+        }
+        if self.motion_mode == MotionMode::VsyncSnapshot {
+            return false;
+        }
         // Submit-rate adaptive gate. Only fill between submissions when Dart
         // feeds slower than our 16ms tick (~30fps submit). When Dart sustains
         // ~1 submit/tick (ema <= 20ms, healthy 60fps), idle interp is
@@ -456,8 +465,20 @@ impl Next2Renderer {
         // arrives for >50ms (pause / upstream stall) dt clamps to 0, freezing
         // motion on the last submission without needing a pause command.
         let elapsed = self.submit_instant.elapsed().as_secs_f32();
-        self.interp_dt = if elapsed < 0.050 { elapsed } else { 0.0 };
+        self.interp_dt = if self.motion_mode == MotionMode::LegacyInterpolation
+            && elapsed < 0.050
+        {
+            elapsed
+        } else {
+            0.0
+        };
         let interp_dt = self.interp_dt as f64;
+        let continuous = self.motion_mode == MotionMode::ContinuousAnchor;
+        let motion_now = std::time::Instant::now();
+        let media = self.motion_clock.media_at(motion_now);
+        if continuous && self.motion_clock.playing && !self.motion_clock.active(motion_now) {
+            self.frame_items.clear();
+        }
 
         // Take `frame_items` out of `self` so the loop body can borrow `self`
         // mutably (push_quad / push_shadow_quad / atlas.entry_for all need
@@ -466,6 +487,12 @@ impl Next2Renderer {
         // Vec plus every token's String on every frame.
         let frame_items = std::mem::take(&mut self.frame_items);
         for item in &frame_items {
+            let x = if continuous {
+                let Some(x) = motion::sample_x(item.x, item.scroll_speed as f64,
+                    self.motion_clock.snapshot_media, media, item.start_media_s, item.end_media_s)
+                    else { continue; };
+                x
+            } else { item.x + item.scroll_speed as f64 * interp_dt };
             let outline_px =
                 super::resolve_danmaku_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
@@ -478,7 +505,7 @@ impl Next2Renderer {
                 shadow.opacity * item.opacity * SHADOW_ALPHA_SCALE,
             ];
 
-            let mut cursor_x = (item.x + item.scroll_speed as f64 * interp_dt) as f32;
+            let mut cursor_x = x as f32;
             let item_left = cursor_x;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);

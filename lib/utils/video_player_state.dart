@@ -1,5 +1,7 @@
 library video_player_state;
 
+import 'package:nipaplay/services/playback_position_store.dart';
+
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -272,6 +274,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int _dfmStartupGateToken = 0;
+  Completer<void>? _dfmStartupGateCompleter;
+  bool _isDfmStartupGatePending = false;
   int? _dandanplayLoginPromptGeneration;
 
   void _notifyListeners() {
@@ -288,6 +293,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void>? _playerKernelSwapDrain;
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
+  bool _isStartupMessageFlowActive = false;
   bool _showControls = true;
   bool _showRightMenu = false; // 控制右侧菜单显示状态
   final String _desktopHoverSettingsMenuEnabledKey =
@@ -1006,6 +1012,63 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   bool get isDisposed => _isDisposed;
+  int get dfmStartupGateToken => _dfmStartupGateToken;
+  bool get isDfmStartupGatePending => _isDfmStartupGatePending;
+
+  void completeDfmStartupGate(int token) {
+    if (!_isDfmStartupGatePending || token != _dfmStartupGateToken) return;
+    _finishDfmStartupMessage(successful: true);
+    final completer = _dfmStartupGateCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  int _beginDfmStartupGate() {
+    _cancelDfmStartupGate();
+    _dfmStartupGateToken++;
+    _dfmStartupGateCompleter = Completer<void>();
+    _isDfmStartupGatePending = true;
+    return _dfmStartupGateToken;
+  }
+
+  void _cancelDfmStartupGate() {
+    final completer = _dfmStartupGateCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+    _dfmStartupGateCompleter = null;
+    _isDfmStartupGatePending = false;
+  }
+
+  Future<bool> _waitForDfmStartupGate(int token) async {
+    final completer = _dfmStartupGateCompleter;
+    if (completer == null || token != _dfmStartupGateToken) return false;
+    var ready = false;
+    try {
+      await completer.future.timeout(const Duration(seconds: 4));
+      ready = token == _dfmStartupGateToken && !_isDisposed;
+    } on TimeoutException {
+      debugPrint('DFM+ startup prewarm timed out; continuing playback');
+      _finishDfmStartupMessage(successful: false);
+    } finally {
+      if (token == _dfmStartupGateToken) {
+        _dfmStartupGateCompleter = null;
+        _isDfmStartupGatePending = false;
+        _notifyListeners();
+      }
+    }
+    return ready;
+  }
+
+  void _finishDfmStartupMessage({required bool successful}) {
+    const pending = '全舰弹幕装填...';
+    final index = _statusMessages.lastIndexOf(pending);
+    if (index < 0) return;
+    _statusMessages[index] = '$pending${successful ? '[完成]' : '[失败]'}';
+    _notifyListeners();
+  }
+
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get instantHidePlayerUiEnabled => _instantHidePlayerUiEnabled;
@@ -1591,6 +1654,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+    _cancelDfmStartupGate();
 
     if (_currentVideoPath != null) {
       unawaited(
@@ -1765,9 +1829,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   @override
   void onWindowClose() async {
-    // Changed from onWindowClose() async
-    //debugPrint("VideoPlayerState: onWindowClose called. Saving position.");
-    _saveCurrentPositionToHistory(); // Removed await as the method likely returns void
+    await _saveCurrentPositionToHistory();
   }
 
   @override

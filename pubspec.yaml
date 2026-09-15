@@ -300,6 +300,9 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
+  # Windows upstream 2.4.1 writes preferences synchronously on the UI isolate.
+  shared_preferences_windows:
+    path: packages/shared_preferences_windows
   # HarmonyOS-only dependency forks live in pubspec_overrides.ohos.yaml and
   # Linux 3.47-only forks live in pubspec_overrides.linux.yaml. Keeping both
   # profiles out of this shared graph lets every platform use its pinned SDK.

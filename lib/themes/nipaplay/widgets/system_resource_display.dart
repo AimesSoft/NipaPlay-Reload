@@ -28,8 +28,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _fps = 0.0;
   double? _gpuUsage;
   String _thermalState = 'N/A';
-  double? _dfmLayoutMs;
-  double? _dfmSubmitMs;
   String _activeDecoder = '未知';
   String _playerKernelType = '未知';
   String _danmakuKernelType = '未知';
@@ -87,8 +85,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         _fps = SystemResourceMonitor().fps;
         _gpuUsage = SystemResourceMonitor().gpuUsage;
         _thermalState = SystemResourceMonitor().thermalState;
-        _dfmLayoutMs = SystemResourceMonitor().dfmLayoutMs;
-        _dfmSubmitMs = SystemResourceMonitor().dfmSubmitMs;
         _activeDecoder = SystemResourceMonitor().activeDecoder;
         _playerKernelType = SystemResourceMonitor().playerKernelType;
         _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
@@ -219,7 +215,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         const gpuBase = Color(0xFF9A67FF);
         const fpsBase = Color(0xFF46D27A);
         const thermalBase = Color(0xFFFF6D7A);
-        const timingBase = Color(0xFF7FD9C4);
         const decBase = Color(0xFFFF9850);
         const playerBase = Color(0xFF5E9BFF);
         const danmakuBase = Color(0xFFFF6EBF);
@@ -306,18 +301,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             baseStyle: baseTextStyle,
             compact: true,
           ),
-          if (_danmakuKernelType == 'DFM+' &&
-              _dfmLayoutMs != null &&
-              _dfmSubmitMs != null)
-            _segment(
-              label: 'DFM L/S',
-              value:
-                  '${_dfmLayoutMs!.toStringAsFixed(2)}/${_dfmSubmitMs!.toStringAsFixed(2)}ms',
-              labelColor: _shade(timingBase, 0.28),
-              valueColor: _shade(timingBase, 0.04),
-              baseStyle: baseTextStyle,
-              compact: true,
-            ),
           if (showDetail)
             _segment(
               label: 'DEC',

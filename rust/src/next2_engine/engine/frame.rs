@@ -2,6 +2,10 @@
 struct FramePayload {
     items: Vec<FrameItemPayload>,
     #[serde(default)]
+    motion_mode: MotionMode,
+    #[serde(default)]
+    motion_clock: Option<MotionClockPayload>,
+    #[serde(default)]
     emoji_glyphs: Option<Vec<FrameEmojiGlyphPayload>>,
     /// Chars to prefetch-rasterize asynchronously (lookahead pre-warming).
     /// Each char is dispatched via `atlas.request_rasterize` at the current
@@ -9,6 +13,26 @@ struct FramePayload {
     /// only the delta (chars not yet prefetched) to keep payload small.
     #[serde(default)]
     prefetch_chars: Option<String>,
+}
+
+#[derive(Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum MotionMode {
+    #[default]
+    LegacyInterpolation,
+    VsyncSnapshot,
+    ContinuousAnchor,
+}
+
+#[derive(Deserialize)]
+struct MotionClockPayload {
+    epoch: u64,
+    media_s: f64,
+    age_s: f64,
+    rate: f64,
+    playing: bool,
+    refresh_hz: f64,
+    valid_until_s: f64,
 }
 
 #[derive(Deserialize)]
@@ -29,6 +53,10 @@ struct FrameItemPayload {
     /// behavior; also the path taken by Next2 which doesn't send it).
     #[serde(default)]
     scroll_speed: f64,
+    #[serde(default)]
+    start_media_s: Option<f64>,
+    #[serde(default)]
+    end_media_s: Option<f64>,
     /// Marks a locally-sent danmaku. Rendered with a rectangular highlight.
     #[serde(default)]
     is_me: bool,
@@ -74,6 +102,8 @@ struct FrameItem {
     opacity: f32,
     /// Signed scroll velocity (texture px/s). 0 = static, no interpolation.
     scroll_speed: f32,
+    start_media_s: Option<f64>,
+    end_media_s: Option<f64>,
     is_me: bool,
     width: f32,
 }
@@ -150,4 +180,22 @@ fn decode_emoji_rasters(payloads: &[FrameEmojiGlyphPayload]) -> Vec<EmojiRasterD
         });
     }
     out
+}
+
+#[cfg(test)]
+mod frame_payload_tests {
+    use super::*;
+
+    #[test]
+    fn old_payloads_keep_legacy_interpolation() {
+        let payload: FramePayload = serde_json::from_str(r#"{"items":[]}"#).unwrap();
+        assert!(payload.motion_mode == MotionMode::LegacyInterpolation);
+    }
+
+    #[test]
+    fn dfm_payload_selects_vsync_snapshot_motion() {
+        let payload: FramePayload =
+            serde_json::from_str(r#"{"items":[],"motion_mode":"vsync_snapshot"}"#).unwrap();
+        assert!(payload.motion_mode == MotionMode::VsyncSnapshot);
+    }
 }
