@@ -251,6 +251,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         case LocalLibrarySortType.dateAdded:
           // 远程服务目前没有统一的添加日期，这里暂不做变动或使用原始顺序
           break;
+        case LocalLibrarySortType.comprehensive:
+          // 远程媒体库不支持新内容基线，综合排序退化为原始顺序
+          break;
         case LocalLibrarySortType.rating:
           break;
       }

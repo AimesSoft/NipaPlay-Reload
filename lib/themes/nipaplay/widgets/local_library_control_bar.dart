@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum LocalLibrarySortType {
+  comprehensive,
   name,
   dateAdded,
   rating,
@@ -55,6 +56,7 @@ class LocalLibraryControlBar extends StatefulWidget {
   final VoidCallback? onBack;
   final String? title;
   final bool showSort;
+  final bool showComprehensiveSort;
   final List<LocalLibraryActionControl>? trailingActions;
   final LibraryManagementViewMode? viewMode;
   final VoidCallback? onToggleViewMode;
@@ -72,6 +74,7 @@ class LocalLibraryControlBar extends StatefulWidget {
     this.onBack,
     this.title,
     this.showSort = true,
+    this.showComprehensiveSort = false,
     this.trailingActions,
     this.viewMode,
     this.onToggleViewMode,
@@ -205,6 +208,13 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               dropdownKey: _dropdownKey,
               onItemSelected: widget.onSortChanged!,
               items: [
+                if (widget.showComprehensiveSort)
+                  DropdownMenuItemData(
+                    title: '综合排序',
+                    value: LocalLibrarySortType.comprehensive,
+                    isSelected:
+                        currentSort == LocalLibrarySortType.comprehensive,
+                  ),
                 DropdownMenuItemData(
                   title: '最近观看',
                   value: LocalLibrarySortType.dateAdded,
@@ -270,6 +280,8 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   Future<void> _showPhoneSortMenu(BuildContext context) async {
     final showUnwatched = widget.showUnwatchedOnly != null;
     final sortEntries = <(LocalLibrarySortType, String)>[
+      if (widget.showComprehensiveSort)
+        (LocalLibrarySortType.comprehensive, '综合排序'),
       (LocalLibrarySortType.dateAdded, '最近观看'),
       (LocalLibrarySortType.name, '名称排序'),
       (LocalLibrarySortType.rating, '评分排序'),

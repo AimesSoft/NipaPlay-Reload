@@ -16,6 +16,8 @@ class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
   bool _isLoading = false;
   bool _isLoaded = false;
+  // 加载进行中又收到刷新请求时置位，当前加载结束后补加载一次
+  bool _reloadQueued = false;
   final FilePickerService _filePickerService = FilePickerService();
   final WatchHistoryDatabase _database = WatchHistoryDatabase.instance;
   static const double _completionProgressThreshold = 0.90;
@@ -60,13 +62,20 @@ class WatchHistoryProvider extends ChangeNotifier {
 
     if (_scanService!.scanJustCompleted) {
       //debugPrint('WatchHistoryProvider: 检测到扫描完成，自动刷新历史记录');
+      unawaited(_handleScanCompleted());
+    }
+  }
 
-      // 延迟刷新，确保扫描结果已保存到数据库
-      Future.delayed(const Duration(milliseconds: 100), () {
-        refresh();
-        // 确认扫描完成事件已处理
-        _scanService!.acknowledgeScanCompleted();
-      });
+  // 扫描完成后刷新历史记录：必须等刷新真正结束后再确认事件，
+  // 否则刷新与其他加载撞车时事件会被静默丢弃（媒体库要重启才更新）。
+  Future<void> _handleScanCompleted() async {
+    // 延迟刷新，确保扫描结果已保存到数据库
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    try {
+      await refreshAfterScan();
+    } finally {
+      // 确认扫描完成事件已处理
+      _scanService?.acknowledgeScanCompleted();
     }
   }
 
@@ -80,7 +89,12 @@ class WatchHistoryProvider extends ChangeNotifier {
   }
 
   Future<void> loadHistory() async {
-    if (_isLoading) return;
+    if (_isLoading) {
+      // 已有一次加载在进行（例如扫描完成刷新与其他刷新同时发生）：
+      // 排队再补加载一次，避免刷新请求被静默丢弃导致媒体库不更新。
+      _reloadQueued = true;
+      return;
+    }
     _isLoading = true;
     notifyListeners();
 
@@ -148,6 +162,12 @@ class WatchHistoryProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+
+    // 加载期间又有刷新请求到达：补加载一次，保证媒体库拿到最新数据
+    if (_reloadQueued) {
+      _reloadQueued = false;
+      unawaited(loadHistory());
+    }
   }
 
   // 验证文件路径并修复iOS路径问题
@@ -343,6 +363,13 @@ class WatchHistoryProvider extends ChangeNotifier {
   // 刷新历史记录
   Future<void> refresh() async {
     await loadHistory();
+  }
+
+  // 扫描完成后的刷新：文件可能被移出后又移回，
+  // 之前被判为“无效”而缓存的路径需要重新检查，否则回归的视频仍会被隐藏。
+  Future<void> refreshAfterScan() async {
+    clearInvalidPathCache();
+    await refresh();
   }
 
   // 添加或更新历史记录

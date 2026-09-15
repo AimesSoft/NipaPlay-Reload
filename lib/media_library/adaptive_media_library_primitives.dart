@@ -1069,3 +1069,55 @@ class _NipaplayIndeterminateProgressState
     );
   }
 }
+
+/// 媒体库卡片右上角的红色 NEW 标识。
+/// 用于标记有新集数的番剧或新加入媒体库的番剧。
+class MediaLibraryNewBadge extends material.StatelessWidget {
+  const MediaLibraryNewBadge({
+    super.key,
+    this.top = 6,
+    this.right = 6,
+    this.fontSize = 11,
+  });
+
+  final double top;
+  final double right;
+  final double fontSize;
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    return material.Positioned(
+      top: top,
+      right: right,
+      child: material.DecoratedBox(
+        decoration: material.BoxDecoration(
+          color: material.Colors.red.shade600,
+          borderRadius: material.BorderRadius.circular(5),
+          boxShadow: [
+            material.BoxShadow(
+              color: material.Colors.black.withValues(alpha: 0.28),
+              blurRadius: 4,
+              offset: const material.Offset(0, 1),
+            ),
+          ],
+        ),
+        child: material.Padding(
+          padding: const material.EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 3,
+          ),
+          child: material.Text(
+            'NEW',
+            style: material.TextStyle(
+              color: material.Colors.white,
+              fontSize: fontSize,
+              fontWeight: material.FontWeight.w800,
+              height: 1.0,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

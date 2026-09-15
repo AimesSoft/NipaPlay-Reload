@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:intl/intl.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 /// Cupertino风格的番剧卡片控件
@@ -32,6 +33,9 @@ class CupertinoAnimeCard extends StatelessWidget {
   /// 简介
   final String? summary;
 
+  /// 是否显示红色 NEW 标识（新番剧 / 有新集数）
+  final bool showNewBadge;
+
   const CupertinoAnimeCard({
     super.key,
     required this.title,
@@ -43,6 +47,7 @@ class CupertinoAnimeCard extends StatelessWidget {
     this.sourceLabel,
     this.rating,
     this.summary,
+    this.showNewBadge = false,
   });
 
   @override
@@ -97,7 +102,13 @@ class CupertinoAnimeCard extends StatelessWidget {
                 child: SizedBox(
                   width: 120,
                   height: 168,
-                  child: _buildPosterImage(context),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildPosterImage(context),
+                      if (showNewBadge) const MediaLibraryNewBadge(),
+                    ],
+                  ),
                 ),
               ),
             ),

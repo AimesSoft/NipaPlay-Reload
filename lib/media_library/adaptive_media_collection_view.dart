@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/cupertino.dart' as cupertino;
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
@@ -31,7 +33,170 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
-enum MediaCollectionSort { recentlyAdded, name }
+enum MediaCollectionSort { comprehensive, recentlyAdded, name }
+
+/// 媒体库“新内容”追踪器。
+///
+/// 为每个数据源（本地 / WebDAV / SMB）持久化保存一份基线：
+/// 记录每部番剧已被用户浏览时在库中的集数。
+/// * 基线里不存在的番剧 => 新番剧；
+/// * 当前集数多于基线记录 => 有新集数。
+/// NEW 标识只有在用户点开对应番剧详情后才会消除，并立即更新持久化基线；
+/// 停留浏览或离开媒体库都不会清除，直到用户真正点开该番剧。
+/// 番剧从媒体库消失（文件被移出）时会自动从基线剔除，以后重新出现仍算新内容。
+/// 首次安装 / 升级后首次运行时只静默建立基线、不显示 NEW，避免整个媒体库都被标记。
+class LibraryNewContentTracker {
+  LibraryNewContentTracker._();
+
+  static final LibraryNewContentTracker instance =
+      LibraryNewContentTracker._();
+
+  static const String _baselineKey = 'library_new_content_baseline_v1';
+
+  final Map<String, Map<int, int>> _baselines = {};
+  final Set<String> _loadedSources = <String>{};
+  final Set<String> _initializedSources = <String>{};
+
+  String _sourceKey(UnifiedMediaLibrarySource source) {
+    return switch (source) {
+      UnifiedMediaLibrarySource.local => 'local',
+      UnifiedMediaLibrarySource.webdav => 'webdav',
+      UnifiedMediaLibrarySource.smb => 'smb',
+    };
+  }
+
+  bool isReady(UnifiedMediaLibrarySource source) {
+    return _loadedSources.contains(_sourceKey(source));
+  }
+
+  /// 该数据源是否已完成首次基线建立。
+  bool isInitialized(UnifiedMediaLibrarySource source) {
+    return _initializedSources.contains(_sourceKey(source));
+  }
+
+  Future<void> load(UnifiedMediaLibrarySource source) async {
+    final key = _sourceKey(source);
+    if (_loadedSources.contains(key)) return;
+
+    final baseline = <int, int>{};
+    var initialized = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_baselineKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = json.decode(raw);
+        if (decoded is Map) {
+          final sourceMap = decoded[key];
+          if (sourceMap is Map) {
+            sourceMap.forEach((k, v) {
+              final animeId = int.tryParse('$k');
+              if (animeId != null && v is num && v >= 0) {
+                baseline[animeId] = v.toInt();
+              }
+            });
+          }
+          initialized = decoded['__initialized_$key'] == true;
+        }
+      }
+    } catch (e) {
+      debugPrint('加载媒体库新内容基线失败: $e');
+    }
+
+    _baselines[key] = baseline;
+    _loadedSources.add(key);
+    if (initialized) _initializedSources.add(key);
+  }
+
+  /// 判断某部番剧是否为新番剧或包含新集数。
+  bool hasNewContent(
+    UnifiedMediaLibrarySource source,
+    int animeId,
+    int currentEpisodeCount,
+  ) {
+    if (currentEpisodeCount <= 0) return false;
+    final key = _sourceKey(source);
+    if (!_loadedSources.contains(key) ||
+        !_initializedSources.contains(key)) {
+      return false;
+    }
+    final previous = _baselines[key]?[animeId];
+    return previous == null || currentEpisodeCount > previous;
+  }
+
+  /// 用户点开某部番剧详情后，单独把它标记为已浏览并立即持久化基线。
+  /// 该番剧的 NEW 标识从此消除，直到将来再次出现新番剧/新集数。
+  Future<void> markAnimeSeen(
+    UnifiedMediaLibrarySource source,
+    int animeId,
+    int currentEpisodeCount,
+  ) async {
+    final key = _sourceKey(source);
+    (_baselines[key] ??= <int, int>{})[animeId] = currentEpisodeCount;
+    _initializedSources.add(key);
+    await _persistSource(source);
+  }
+
+  /// 用当前媒体库快照整体建立/刷新基线并持久化（用于首次运行静默建立基线）。
+  Future<void> syncBaseline(
+    UnifiedMediaLibrarySource source,
+    Map<int, int> currentEpisodeCounts,
+  ) async {
+    final key = _sourceKey(source);
+    _baselines[key] = Map<int, int>.of(currentEpisodeCounts);
+    _loadedSources.add(key);
+    _initializedSources.add(key);
+    await _persistSource(source);
+  }
+
+  /// 把媒体库里已经消失的番剧（文件被移出文件夹）从基线中剔除，
+  /// 这样同一部番剧以后重新出现时才能再次被判定为新内容。
+  /// 只删除缺失项、不新增现有项，因此不会误清当前仍带 NEW 的番剧。
+  /// 返回是否发生了剔除（调用方据此决定是否持久化）。
+  bool pruneMissing(
+    UnifiedMediaLibrarySource source,
+    Set<int> presentAnimeIds,
+  ) {
+    final key = _sourceKey(source);
+    final baseline = _baselines[key];
+    if (baseline == null || baseline.isEmpty) return false;
+    final staleIds = baseline.keys
+        .where((id) => !presentAnimeIds.contains(id))
+        .toList(growable: false);
+    if (staleIds.isEmpty) return false;
+    for (final id in staleIds) {
+      baseline.remove(id);
+    }
+    return true;
+  }
+
+  /// 持久化指定数据源当前的内存基线。
+  Future<void> persist(UnifiedMediaLibrarySource source) async {
+    await _persistSource(source);
+  }
+
+  /// 把指定数据源当前的内存基线合并写入 SharedPreferences。
+  Future<void> _persistSource(UnifiedMediaLibrarySource source) async {
+    final key = _sourceKey(source);
+    final current = _baselines[key] ?? const <int, int>{};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final all = <String, dynamic>{};
+      final raw = prefs.getString(_baselineKey);
+      if (raw != null && raw.isNotEmpty) {
+        final existing = json.decode(raw);
+        if (existing is Map) {
+          all.addAll(Map<String, dynamic>.from(existing));
+        }
+      }
+      all[key] =
+          current.map((k, v) => MapEntry<String, dynamic>('$k', v));
+      all['__initialized_$key'] = true;
+      await prefs.setString(_baselineKey, json.encode(all));
+    } catch (e) {
+      debugPrint('保存媒体库新内容基线失败: $e');
+    }
+  }
+}
 
 class AdaptiveMediaCollectionView extends material.StatefulWidget {
   const AdaptiveMediaCollectionView({
@@ -56,11 +221,19 @@ class _AdaptiveMediaCollectionViewState
   final Map<int, Future<BangumiAnime>> _detailRequests =
       <int, Future<BangumiAnime>>{};
   String _query = '';
-  MediaCollectionSort _sort = MediaCollectionSort.recentlyAdded;
+  MediaCollectionSort _sort = MediaCollectionSort.comprehensive;
   bool _isSyncing = false;
   bool _isLoadingWebCollection = false;
   bool _requestedHistoryLoad = false;
   List<WatchHistoryItem> _webCollectionItems = const <WatchHistoryItem>[];
+
+  // 每部番剧当前在库中的集数，以及带有 NEW 标识的番剧集合。
+  Map<int, int> _episodeCounts = const <int, int>{};
+  Set<int> _newAnimeIds = const <int>{};
+  // 首次运行静默建立基线只执行一次
+  bool _baselineBootstrapped = false;
+  final LibraryNewContentTracker _newContentTracker =
+      LibraryNewContentTracker.instance;
 
   @override
   void initState() {
@@ -70,10 +243,18 @@ class _AdaptiveMediaCollectionViewState
         if (mounted) _loadWebCollection();
       });
     }
+    unawaited(_loadNewContentBaseline());
+  }
+
+  Future<void> _loadNewContentBaseline() async {
+    await _newContentTracker.load(widget.source);
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
   void dispose() {
+    // NEW 标识只在用户点开对应番剧后才消除，离开页面不更新基线。
     _searchController.dispose();
     super.dispose();
   }
@@ -106,6 +287,8 @@ class _AdaptiveMediaCollectionViewState
                     provider.history,
                     widget.source,
                   );
+        _episodeCounts = _episodeCountByAnime(provider.history);
+        _recomputeNewContentState();
         final filteredItems = _filterAndSort(allItems);
         for (final item in filteredItems) {
           _ensureDetail(item.animeId!);
@@ -131,6 +314,7 @@ class _AdaptiveMediaCollectionViewState
                 items: filteredItems,
                 allHistory: provider.history,
                 details: _details,
+                newAnimeIds: _newAnimeIds,
                 onRefresh: _sync,
                 onTap: _openAnimeDetail,
               ),
@@ -141,6 +325,66 @@ class _AdaptiveMediaCollectionViewState
     );
   }
 
+  Map<int, int> _episodeCountByAnime(List<WatchHistoryItem> history) {
+    final counts = <int, int>{};
+    for (final item in history) {
+      if (!mediaLibraryItemMatchesSource(item, widget.source,
+          includeClearedMatchInfo: true)) {
+        continue;
+      }
+      final animeId = item.animeId;
+      if (animeId == null) continue;
+      counts[animeId] = (counts[animeId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// 依据持久化基线重新计算 NEW 集合。
+  /// 该方法在 build 中调用，不能触发 setState。
+  void _recomputeNewContentState() {
+    if (!_newContentTracker.isReady(widget.source)) {
+      _newAnimeIds = const <int>{};
+      return;
+    }
+    // 首次运行（基线尚未建立）：用当前库快照静默建立基线，不显示任何 NEW；
+    // 之后只有真正新增的番剧或集数才会被标记。
+    if (!_newContentTracker.isInitialized(widget.source)) {
+      _newAnimeIds = const <int>{};
+      if (!_baselineBootstrapped && _episodeCounts.isNotEmpty) {
+        _baselineBootstrapped = true;
+        unawaited(
+          _newContentTracker.syncBaseline(widget.source, _episodeCounts),
+        );
+      }
+      return;
+    }
+    // NEW 标识会一直保留，直到用户点开对应番剧详情，不会随时间自动消失。
+    // 先把已从媒体库消失的番剧（文件被移出）移出基线：
+    // 它们将来重新出现时应再次算作新内容。仅在快照非空时执行，
+    // 避免历史尚未加载（空列表）时误把整个基线清空。
+    if (_episodeCounts.isNotEmpty) {
+      final pruned = _newContentTracker.pruneMissing(
+        widget.source,
+        _episodeCounts.keys.toSet(),
+      );
+      if (pruned) {
+        unawaited(_newContentTracker.persist(widget.source));
+      }
+    }
+    _newAnimeIds = _episodeCounts.entries
+        .where((entry) => _newContentTracker.hasNewContent(
+              widget.source,
+              entry.key,
+              entry.value,
+            ))
+        .map((entry) => entry.key)
+        .toSet();
+  }
+
+  bool _hasNewBadge(int? animeId) {
+    return animeId != null && _newAnimeIds.contains(animeId);
+  }
+
   List<WatchHistoryItem> _filterAndSort(List<WatchHistoryItem> items) {
     final query = _query.trim().toLowerCase();
     final filtered = items.where((item) {
@@ -148,10 +392,25 @@ class _AdaptiveMediaCollectionViewState
       return item.animeName.toLowerCase().contains(query) ||
           (item.episodeTitle?.toLowerCase().contains(query) ?? false);
     }).toList();
-    if (_sort == MediaCollectionSort.name) {
-      filtered.sort((a, b) => a.animeName.compareTo(b.animeName));
+    switch (_sort) {
+      case MediaCollectionSort.name:
+        filtered.sort((a, b) => a.animeName.compareTo(b.animeName));
+      case MediaCollectionSort.recentlyAdded:
+        // mediaLibraryLatestItemsByAnime 已按最近观看时间降序排列，保持原顺序。
+        break;
+      case MediaCollectionSort.comprehensive:
+        filtered.sort(_compareComprehensive);
     }
     return filtered;
+  }
+
+  /// 综合排序：带 NEW 标识的内容（新番剧 / 新集数）优先，
+  /// 其余按最近观看时间由近到远排列。
+  int _compareComprehensive(WatchHistoryItem a, WatchHistoryItem b) {
+    final aRank = _hasNewBadge(a.animeId) ? 0 : 1;
+    final bRank = _hasNewBadge(b.animeId) ? 0 : 1;
+    if (aRank != bRank) return aRank - bRank;
+    return b.lastWatchTime.compareTo(a.lastWatchTime);
   }
 
   void _ensureDetail(int animeId) {
@@ -233,6 +492,19 @@ class _AdaptiveMediaCollectionViewState
   }
 
   Future<void> _openAnimeDetail(WatchHistoryItem item) async {
+    // 用户点开详情即视为已知晓该番剧的新内容：立即消除 NEW 标识并持久化基线。
+    // 这是 NEW 标识唯一的消除方式。
+    final animeId = item.animeId;
+    if (animeId != null && _newAnimeIds.contains(animeId)) {
+      unawaited(
+        _newContentTracker.markAnimeSeen(
+          widget.source,
+          animeId,
+          _episodeCounts[animeId] ?? 0,
+        ),
+      );
+      setState(() => _newAnimeIds = {..._newAnimeIds}..remove(animeId));
+    }
     final provider = context.read<WatchHistoryProvider>();
     final episodes = provider.history
         .where((candidate) =>
@@ -384,15 +656,10 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
     return LocalLibraryControlBar(
       title: sourceLabel,
       searchController: controller,
-      currentSort: sort == MediaCollectionSort.name
-          ? LocalLibrarySortType.name
-          : LocalLibrarySortType.dateAdded,
+      showComprehensiveSort: true,
+      currentSort: _toLocalSortType(sort),
       onSearchChanged: onSearchChanged,
-      onSortChanged: (value) => onSortChanged(
-        value == LocalLibrarySortType.name
-            ? MediaCollectionSort.name
-            : MediaCollectionSort.recentlyAdded,
-      ),
+      onSortChanged: (value) => onSortChanged(_fromLocalSortType(value)),
       trailingActions: [
         LocalLibraryActionControl(
           label: isSyncing ? '同步中' : '同步$sourceLabel',
@@ -404,6 +671,26 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
     );
   }
 
+  LocalLibrarySortType _toLocalSortType(MediaCollectionSort sort) {
+    return switch (sort) {
+      MediaCollectionSort.comprehensive =>
+        LocalLibrarySortType.comprehensive,
+      MediaCollectionSort.name => LocalLibrarySortType.name,
+      MediaCollectionSort.recentlyAdded => LocalLibrarySortType.dateAdded,
+    };
+  }
+
+  MediaCollectionSort _fromLocalSortType(LocalLibrarySortType sort) {
+    return switch (sort) {
+      LocalLibrarySortType.comprehensive =>
+        MediaCollectionSort.comprehensive,
+      LocalLibrarySortType.name => MediaCollectionSort.name,
+      LocalLibrarySortType.dateAdded ||
+      LocalLibrarySortType.rating =>
+        MediaCollectionSort.recentlyAdded,
+    };
+  }
+
   Future<void> _showPhoneSort(material.BuildContext context) async {
     final selected =
         await CupertinoBottomSheet.showSelection<MediaCollectionSort>(
@@ -411,7 +698,12 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
       title: '媒体库排序',
       options: [
         CupertinoBottomSheetOption(
-          label: '最近添加',
+          label: '综合排序',
+          value: MediaCollectionSort.comprehensive,
+          selected: sort == MediaCollectionSort.comprehensive,
+        ),
+        CupertinoBottomSheetOption(
+          label: '最近观看',
           value: MediaCollectionSort.recentlyAdded,
           selected: sort == MediaCollectionSort.recentlyAdded,
         ),
@@ -452,11 +744,16 @@ class _TelevisionMediaCollectionControlBar extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    final nextSort = sort == MediaCollectionSort.recentlyAdded
-        ? MediaCollectionSort.name
-        : MediaCollectionSort.recentlyAdded;
-    final sortLabel =
-        sort == MediaCollectionSort.recentlyAdded ? '最近添加' : '名称排序';
+    final nextSort = switch (sort) {
+      MediaCollectionSort.comprehensive => MediaCollectionSort.recentlyAdded,
+      MediaCollectionSort.recentlyAdded => MediaCollectionSort.name,
+      MediaCollectionSort.name => MediaCollectionSort.comprehensive,
+    };
+    final sortLabel = switch (sort) {
+      MediaCollectionSort.comprehensive => '综合排序',
+      MediaCollectionSort.recentlyAdded => '最近观看',
+      MediaCollectionSort.name => '名称排序',
+    };
     return material.Padding(
       padding: const material.EdgeInsets.only(bottom: 14),
       child: NipaplayLargeScreenPanel(
@@ -509,6 +806,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     required this.items,
     required this.allHistory,
     required this.details,
+    required this.newAnimeIds,
     required this.onRefresh,
     required this.onTap,
   });
@@ -519,6 +817,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   final List<WatchHistoryItem> items;
   final List<WatchHistoryItem> allHistory;
   final Map<int, BangumiAnime> details;
+  final Set<int> newAnimeIds;
   final Future<void> Function() onRefresh;
   final material.ValueChanged<WatchHistoryItem> onTap;
 
@@ -587,6 +886,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 source: sourceLabel,
                 enableBackgroundBlur: false,
                 enableBackdropImage: false,
+                showNewBadge: newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               ),
             );
@@ -638,6 +938,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 sourceLabel: sourceLabel,
                 rating: detail?.rating,
                 summary: detail?.summary,
+                showNewBadge: newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               );
             },
@@ -696,6 +997,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           source: AnimeCard.getSourceFromFilePath(item.filePath),
           summary: detail?.summary,
           progress: _watchProgress(item.animeId!, detail),
+          showNewBadge: newAnimeIds.contains(item.animeId),
           onTap: () => onTap(item),
         );
       },

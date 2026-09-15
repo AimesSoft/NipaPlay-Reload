@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
@@ -28,6 +29,7 @@ class HorizontalAnimeCard extends StatelessWidget {
   final String? summary;
   final String? progress; // 新增：观看进度
   final String? badgeText;
+  final bool showNewBadge;
   final VoidCallback onTap;
 
   const HorizontalAnimeCard({
@@ -40,6 +42,7 @@ class HorizontalAnimeCard extends StatelessWidget {
     this.summary,
     this.progress,
     this.badgeText,
+    this.showNewBadge = false,
   });
 
   Widget _buildCover() {
@@ -101,6 +104,7 @@ class HorizontalAnimeCard extends StatelessWidget {
               ),
             ),
           ),
+        if (showNewBadge) const MediaLibraryNewBadge(top: 7, right: 7),
       ],
     );
   }
