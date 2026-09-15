@@ -1,0 +1,41 @@
+name: Build Windows (manual)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      FVP_DEPS_URL: https://sourceforge.net/projects/mdk-sdk/files/nightly
+      FVP_DEPS_LATEST: 0
+      ERIKA_PREBUILT: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        shell: pwsh
+        run: python .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Build Windows Package
+        id: build
+        uses: ./.github/actions/build-windows
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+
+      - name: Upload release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: NipaPlay-Windows-x64
+          path: build/windows/*.zip
+          if-no-files-found: error
