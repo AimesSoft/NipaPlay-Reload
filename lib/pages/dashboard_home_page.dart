@@ -1035,8 +1035,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeroBanner(isPhone: false),
-                    const SizedBox(height: 24),
+                    // 主页顶部推荐区（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+                    if (_isAnyHomeHeroWidgetVisible(false)) ...[
+                      _buildHeroBanner(isPhone: false),
+                      const SizedBox(height: 24),
+                    ],
                     ...configuredSections,
                     const SizedBox(height: 56),
                   ],
@@ -1073,10 +1076,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 大海报推荐区域
-                  _buildHeroBanner(isPhone: isPhone),
-
-                  SizedBox(height: isPhone ? 16 : 32),
+                  // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+                  if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
+                    _buildHeroBanner(isPhone: isPhone),
+                    SizedBox(height: isPhone ? 16 : 32),
+                  ],
                   ...configuredSections,
 
                   // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
