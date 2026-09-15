@@ -391,7 +391,6 @@ impl Next2Renderer {
             submit_interval_ema: 0.0,
             motion_mode: MotionMode::LegacyInterpolation,
             motion_clock: motion::MotionClock::new(std::time::Instant::now()),
-            diagnostic_render: (0, 0),
         })
     }
 
@@ -503,7 +502,6 @@ impl Next2Renderer {
                 shadow_style,
                 opacity,
                 scroll_speed: item.scroll_speed as f32,
-                motion_id: item.motion_id,
                 start_media_s: item.start_media_s,
                 end_media_s: item.end_media_s,
                 is_me: item.is_me,

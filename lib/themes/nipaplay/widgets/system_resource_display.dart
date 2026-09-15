@@ -26,11 +26,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _cpuUsage = 0.0;
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
-  double _maxFrameGapMs = 0.0;
   double? _gpuUsage;
   String _thermalState = 'N/A';
-  double? _dfmLayoutMs;
-  double? _dfmSubmitMs;
   String _activeDecoder = '未知';
   String _playerKernelType = '未知';
   String _danmakuKernelType = '未知';
@@ -86,11 +83,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         _cpuUsage = SystemResourceMonitor().cpuUsage;
         _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
         _fps = SystemResourceMonitor().fps;
-        _maxFrameGapMs = SystemResourceMonitor().maxFrameGapMs;
         _gpuUsage = SystemResourceMonitor().gpuUsage;
         _thermalState = SystemResourceMonitor().thermalState;
-        _dfmLayoutMs = SystemResourceMonitor().dfmLayoutMs;
-        _dfmSubmitMs = SystemResourceMonitor().dfmSubmitMs;
         _activeDecoder = SystemResourceMonitor().activeDecoder;
         _playerKernelType = SystemResourceMonitor().playerKernelType;
         _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
@@ -221,7 +215,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         const gpuBase = Color(0xFF9A67FF);
         const fpsBase = Color(0xFF46D27A);
         const thermalBase = Color(0xFFFF6D7A);
-        const timingBase = Color(0xFF7FD9C4);
         const decBase = Color(0xFFFF9850);
         const playerBase = Color(0xFF5E9BFF);
         const danmakuBase = Color(0xFFFF6EBF);
@@ -308,33 +301,6 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             baseStyle: baseTextStyle,
             compact: true,
           ),
-          if (_danmakuKernelType == 'DFM+')
-            Tooltip(
-              message:
-                  '最近统计窗口内 Flutter 光栅完成帧的最大间隔；180 Hz 的一个刷新周期约为 5.56 ms。此值不代表显示器实际呈现耗时。',
-              child: _segment(
-                label: 'FRAME GAP MAX',
-                value: _maxFrameGapMs > 0
-                    ? '${_maxFrameGapMs.toStringAsFixed(2)}ms'
-                    : 'N/A',
-                labelColor: _shade(timingBase, 0.28),
-                valueColor: _shade(timingBase, 0.04),
-                baseStyle: baseTextStyle,
-                compact: true,
-              ),
-            ),
-          if (_danmakuKernelType == 'DFM+' &&
-              _dfmLayoutMs != null &&
-              _dfmSubmitMs != null)
-            _segment(
-              label: 'DFM L/S',
-              value:
-                  '${_dfmLayoutMs!.toStringAsFixed(2)}/${_dfmSubmitMs!.toStringAsFixed(2)}ms',
-              labelColor: _shade(timingBase, 0.28),
-              valueColor: _shade(timingBase, 0.04),
-              baseStyle: baseTextStyle,
-              compact: true,
-            ),
           if (showDetail)
             _segment(
               label: 'DEC',

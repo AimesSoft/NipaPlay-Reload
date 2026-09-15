@@ -476,11 +476,6 @@ impl Next2Renderer {
         let continuous = self.motion_mode == MotionMode::ContinuousAnchor;
         let motion_now = std::time::Instant::now();
         let media = self.motion_clock.media_at(motion_now);
-        if continuous {
-            super::diagnostics::record("motion_clock_sample", self.diagnostic_render.0,
-                self.diagnostic_render.1, (media * 1_000_000.0) as i64,
-                self.motion_clock.revision as i64);
-        }
         if continuous && self.motion_clock.playing && !self.motion_clock.active(motion_now) {
             self.frame_items.clear();
         }
@@ -511,11 +506,6 @@ impl Next2Renderer {
             ];
 
             let mut cursor_x = x as f32;
-            if continuous && self.vertices.is_empty() {
-                super::diagnostics::record("motion_sample", self.diagnostic_render.0,
-                    self.diagnostic_render.1, item.motion_id.unwrap_or(0) as i64,
-                    (cursor_x as f64 * 1_000_000.0) as i64);
-            }
             let item_left = cursor_x;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);

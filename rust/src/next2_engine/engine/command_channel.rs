@@ -55,16 +55,6 @@ impl<T> Receiver<T> {
     pub fn try_recv(&self) -> Result<T, mpsc::TryRecvError> {
         self.inner.try_recv()
     }
-    pub fn precise(&self) -> bool {
-        #[cfg(target_os = "windows")]
-        {
-            self.timer.is_some() && self.wake.event.is_some()
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            false
-        }
-    }
     pub fn recv_timeout(&self, timeout: Duration) -> Result<T, mpsc::RecvTimeoutError> {
         #[cfg(target_os = "windows")]
         if let (Some(event), Some(timer)) = (&self.wake.event, &self.timer) {
@@ -281,29 +271,5 @@ mod tests {
         );
         tx.send(100).unwrap();
         assert_eq!(rx.recv_timeout(Duration::from_millis(50)), Ok(100));
-    }
-    #[test]
-    #[ignore = "reports real scheduler latency; not a deterministic CI threshold"]
-    fn deadline_probe() {
-        let (_tx, rx) = channel::<()>();
-        let _mmcss = MultimediaScheduling::acquire();
-        println!("high_resolution_wait={}", rx.precise());
-        let period = Duration::from_secs_f64(1.0 / 180.0);
-        let mut deadline = Instant::now() + period;
-        let mut lateness = Vec::new();
-        for _ in 0..540 {
-            let _ = rx.recv_timeout(deadline.saturating_duration_since(Instant::now()));
-            let now = Instant::now();
-            lateness.push(now.saturating_duration_since(deadline).as_micros());
-            deadline += period;
-            while deadline <= now {
-                deadline += period;
-            }
-        }
-        lateness.sort();
-        println!(
-            "deadline_lateness_us p50={} p95={} p99={} max={}",
-            lateness[270], lateness[513], lateness[534], lateness[539]
-        );
     }
 }

@@ -31,8 +31,6 @@ class SystemResourceMonitor {
   double _fps = 0.0;
   double? _gpuUsage;
   String _thermalState = 'N/A';
-  double? _dfmLayoutMs;
-  double? _dfmSubmitMs;
 
   String _activeDecoder = '未知';
   String _mdkVersion = '未知';
@@ -63,11 +61,8 @@ class SystemResourceMonitor {
   double get cpuUsage => _cpuUsage;
   double get memoryUsageMB => _memoryUsageMB;
   double get fps => _fps;
-  double get maxFrameGapMs => _frameRateSampler.maxFrameGapMs;
   double? get gpuUsage => _gpuUsage;
   String get thermalState => _thermalState;
-  double? get dfmLayoutMs => _dfmLayoutMs;
-  double? get dfmSubmitMs => _dfmSubmitMs;
 
   String get activeDecoder => _activeDecoder;
   String get mdkVersion => _mdkVersion;
@@ -287,21 +282,6 @@ class SystemResourceMonitor {
       debugPrint('读取 iOS thermalState 失败: $e');
       _thermalState = 'N/A';
     }
-  }
-
-  void recordDfmFrameTimings({
-    required double layoutMs,
-    required double submitMs,
-  }) {
-    const alpha = 0.15;
-    _dfmLayoutMs = _smoothedMetric(_dfmLayoutMs, layoutMs, alpha);
-    _dfmSubmitMs = _smoothedMetric(_dfmSubmitMs, submitMs, alpha);
-  }
-
-  double _smoothedMetric(double? previous, double sample, double alpha) {
-    if (!sample.isFinite || sample < 0) return previous ?? 0.0;
-    if (previous == null) return sample;
-    return previous + (sample - previous) * alpha;
   }
 
   Future<void> _updateFromRustSamples() async {

@@ -1,6 +1,5 @@
 library video_player_state;
 
-import 'package:nipaplay/danmaku_next/next2_frame_trace.dart';
 import 'package:nipaplay/services/playback_position_store.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';

@@ -54,8 +54,6 @@ struct FrameItemPayload {
     #[serde(default)]
     scroll_speed: f64,
     #[serde(default)]
-    motion_id: Option<u64>,
-    #[serde(default)]
     start_media_s: Option<f64>,
     #[serde(default)]
     end_media_s: Option<f64>,
@@ -104,7 +102,6 @@ struct FrameItem {
     opacity: f32,
     /// Signed scroll velocity (texture px/s). 0 = static, no interpolation.
     scroll_speed: f32,
-    motion_id: Option<u64>,
     start_media_s: Option<f64>,
     end_media_s: Option<f64>,
     is_me: bool,

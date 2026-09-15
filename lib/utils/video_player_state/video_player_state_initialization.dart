@@ -400,20 +400,10 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   // 保存视频播放位置
   Future<void> _saveVideoPosition(String path, int position) async {
-    Next2FrameTrace.recordPlaybackEvent(
-        'position_save_begin', {'position_ms': position});
     try {
-      await PlaybackPositionStore.instance.save(path, position, onPrepared: () {
-        Next2FrameTrace.recordPlaybackEvent(
-            'position_save_prepared', {'position_ms': position});
-      });
+      await PlaybackPositionStore.instance.save(path, position);
     } catch (error, stackTrace) {
-      Next2FrameTrace.recordPlaybackEvent(
-          'position_save_error', {'position_ms': position});
       debugPrint('保存播放进度失败: $error\n$stackTrace');
-    } finally {
-      Next2FrameTrace.recordPlaybackEvent(
-          'position_save_end', {'position_ms': position});
     }
   }
 

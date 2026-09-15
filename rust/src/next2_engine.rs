@@ -1,6 +1,5 @@
 pub(crate) mod engine;
 pub mod ffi;
-pub(crate) mod diagnostics;
 
 mod present;
 

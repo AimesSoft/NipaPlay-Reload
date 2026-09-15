@@ -5,7 +5,6 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
-import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:provider/provider.dart';
@@ -431,13 +430,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   void _onVsync(Duration elapsed) {
     _vsyncElapsedUs = elapsed.inMicroseconds;
     _textureBridge.signalVsync(_vsyncElapsedUs);
-    if (_textureBridge.trace.enabled) {
-      _textureBridge.trace.add('tick', {
-        'elapsed_us': _vsyncElapsedUs,
-        'in_flight': _updateInFlight,
-        'queued': _updateQueued
-      });
-    }
     // The lightweight signal above aligns native rendering to real vsync.
     // Scene/clock updates remain sparse; native deadlines cover missing ticks.
     if (_timingClock.elapsedMicroseconds - _lastMotionSubmitWallUs >=
@@ -588,38 +580,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         }
 
         // Include future items so native activation does not wait for Dart.
-        final layoutStartUs = _timingClock.elapsedMicroseconds;
         final frame = _bridge.layout(interpolatedTime,
             lookaheadSeconds: _motionLookaheadSec * widget.playbackRate);
-        final diagnosticFrameId = _textureBridge.trace.nextFrame();
-        if (_textureBridge.trace.enabled) {
-          _textureBridge.trace.add(
-              'snapshot',
-              {
-                'elapsed_us': currentWallUs,
-                'media_s': interpolatedTime,
-                'count': frame.length,
-                'playing': widget.isPlaying,
-                'refresh_hz': _displayRefreshRate,
-                'supersample': _danmakuSupersample,
-                'dpr': _lastDevicePixelRatio,
-                'samples': frame
-                    .where((item) => item.typeCode == 1 || item.typeCode == 6)
-                    .take(3)
-                    .map((item) => {
-                          'id': identityHashCode(item.content),
-                          'x': item.x,
-                          'y': item.y,
-                          'time': item.time,
-                          'speed': item.scrollSpeed,
-                          'type': item.typeCode,
-                        })
-                    .toList(growable: false),
-              },
-              frame: diagnosticFrameId);
-        }
-        final layoutMs =
-            (_timingClock.elapsedMicroseconds - layoutStartUs) / 1000.0;
 
         // Lookahead prefetch: dispatch chars from danmaku entering the screen
         // in the next few seconds to the Rust MSDF workers (async), so glyphs
@@ -633,20 +595,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final String? prefetchChars =
             _bridge.prefetchChars(_displayMediaTime, prefetchLookahead);
 
-        final submitStartUs = _timingClock.elapsedMicroseconds;
         await _tryUpdateTexture(
           frame,
           mediaSeconds: interpolatedTime,
           snapshotWallUs: _lastDisplayWallUs,
-          diagnosticFrameId: diagnosticFrameId,
           prefetchChars: prefetchChars,
           isInitialPrefetch: isInitialPrefetch,
-        );
-        final submitMs =
-            (_timingClock.elapsedMicroseconds - submitStartUs) / 1000.0;
-        SystemResourceMonitor().recordDfmFrameTimings(
-          layoutMs: layoutMs,
-          submitMs: submitMs,
         );
         _initialPrefetchDone = true;
         widget.onLayoutCalculated?.call(frame
@@ -655,9 +609,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       }
     } catch (_) {
       // Keep overlay alive and retry on next frame.
-      if (_textureBridge.trace.enabled) {
-        _textureBridge.trace.add('update_error', {});
-      }
       _queueUpdate();
     } finally {
       _updateInFlight = false;
@@ -670,7 +621,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     required int snapshotWallUs,
     String? prefetchChars,
     bool isInitialPrefetch = false,
-    int diagnosticFrameId = 0,
   }) async {
     if (!Next2TextureBridge.isSupported || _layoutSize.isEmpty) {
       return false;
@@ -843,9 +793,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         _reportStartupReady(startupGateToken);
       }
       if (_sceneCleared) {
-        if (_textureBridge.trace.enabled) {
-          _textureBridge.trace.add('empty_skip', {}, frame: diagnosticFrameId);
-        }
         return true;
       }
       // Fall through: send one empty setFrame to clear the scene.
@@ -853,9 +800,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       _sceneCleared = false;
     }
 
-    if (_textureBridge.trace.enabled) {
-      _textureBridge.trace.add('payload_begin', {}, frame: diagnosticFrameId);
-    }
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
       fontSize: widget.fontSize,
@@ -902,7 +846,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       playbackRate: widget.playbackRate,
       motionMode: 'continuous_anchor',
       framePayload: {...prepared.toJson(), 'motion_clock': clockPayload},
-      diagnosticFrameId: diagnosticFrameId,
     );
 
     if (pushed) {

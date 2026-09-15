@@ -135,8 +135,7 @@ class Next2EmojiPipeline {
         'font_size_multiplier': item.content.fontSizeMultiplier,
         'is_me': item.content.isMe,
         'width': item.width * scaleX,
-        if (item.motionId != null) ...{
-          'motion_id': item.motionId,
+        if (item.endMediaSeconds != null) ...{
           'start_media_s': item.time,
           'end_media_s': item.endMediaSeconds,
         },

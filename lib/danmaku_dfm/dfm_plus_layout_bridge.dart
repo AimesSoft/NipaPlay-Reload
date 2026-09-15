@@ -333,7 +333,6 @@ class DfmPlusLayoutBridge {
                 y: pi.yPosition,
                 offstageX: offstageX,
                 time: pi.timeSeconds,
-                motionId: i,
                 endMediaSeconds: pi.timeSeconds + pi.durationSeconds,
                 scrollSpeed: pi.isScroll ? pi.scrollSpeed : 0.0,
                 width: pi.width,

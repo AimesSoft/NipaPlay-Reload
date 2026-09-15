@@ -197,10 +197,6 @@ impl FramePacer {
             self.deadline = Some(next_deadline(self.deadline.unwrap_or(now), period, now));
         }
     }
-
-    pub fn render_slot(&self) -> Option<u64> {
-        self.reserved_slot
-    }
 }
 
 pub(super) fn sample_x(
@@ -310,7 +306,6 @@ mod tests {
         pacer.pulse(start + period, 5_000, period);
         pacer.pulse(start + period * 2, 10_000, period);
         assert_eq!(pacer.ready(start + period * 2, period), Some(true));
-        assert_eq!(pacer.render_slot(), Some(2));
         pacer.rendered(start + period * 2, period);
         assert_eq!(pacer.ready(start + period * 2, period), None);
     }

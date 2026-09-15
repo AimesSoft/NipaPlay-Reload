@@ -85,8 +85,6 @@ const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 
 #[derive(Clone)]
 pub struct RenderFrameInput {
-    pub diagnostic_engine: u64,
-    pub diagnostic_id: u64,
     pub frame_json: String,
     pub font_size: f32,
     pub outline_width: f32,
@@ -715,14 +713,11 @@ fn run_engine_loop(
     let mut running = true;
     let mut has_pending_frame = false;
 
-    let mut diagnostic_frame = (0u64, 0u64);
     let mut pacer = motion::FramePacer::new();
     let mut motion_revision = 0;
     let mut motion_period = TICK_INTERVAL;
     let mut multimedia_scheduling = None;
     let mut multimedia_attempted = false;
-    let mut render_sequence = 0i64;
-    super::diagnostics::record("pacing_wait_backend", 0, 0, cmd_rx.precise() as i64, 0);
 
     while running {
         // Drain completed async glyph prefetches before any command/draw this
@@ -736,8 +731,6 @@ fn run_engine_loop(
             if !multimedia_attempted {
                 multimedia_scheduling = command_channel::MultimediaScheduling::acquire();
                 multimedia_attempted = true;
-                super::diagnostics::record("pacing_mmcss", diagnostic_frame.0, 0,
-                    multimedia_scheduling.is_some() as i64, 0);
             }
         } else {
             drop(multimedia_scheduling.take());
@@ -755,14 +748,7 @@ fn run_engine_loop(
                     pacer.deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
                         .unwrap_or(Duration::ZERO)
                 } else { TICK_INTERVAL };
-                let wait_start = std::time::Instant::now();
-                super::diagnostics::record("pacing_wait_begin", diagnostic_frame.0, 0,
-                    wait.as_micros() as i64, cmd_rx.precise() as i64);
-                let received = cmd_rx.recv_timeout(wait);
-                let spent = wait_start.elapsed();
-                super::diagnostics::record("pacing_wait_end", diagnostic_frame.0, 0,
-                    spent.as_micros() as i64, received.is_ok() as i64);
-                received
+                cmd_rx.recv_timeout(wait)
             };
 
             let cmd = match recv_result {
@@ -780,8 +766,6 @@ fn run_engine_loop(
                 EngineCommand::Vsync { arrived, elapsed_us } => {
                     if renderer.motion_mode == MotionMode::ContinuousAnchor {
                         pacer.pulse(arrived, elapsed_us, renderer.motion_clock.period);
-                        super::diagnostics::record("vsync_pulse", diagnostic_frame.0, 0,
-                            elapsed_us as i64, arrived.elapsed().as_micros() as i64);
                     }
                 }
                 EngineCommand::AttachPresentTexture {
@@ -883,8 +867,6 @@ fn run_engine_loop(
                     has_pending_frame = true;
                 }
                 EngineCommand::SetFrame { input, reply } => {
-                    let trace_frame = (input.diagnostic_engine, input.diagnostic_id);
-                    super::diagnostics::record("process_begin", trace_frame.0, trace_frame.1, 0, 0);
                     let font_source = load_custom_font_source(
                         input.custom_font_family.as_str(),
                         input.custom_font_file_path.as_str(),
@@ -892,10 +874,8 @@ fn run_engine_loop(
                     .ok()
                     .flatten();
                     let ok = renderer.update_frame(input, font_source);
-                    super::diagnostics::record("process_end", trace_frame.0, trace_frame.1, ok as i64, 0);
                     let _ = reply.send(ok);
                     if ok {
-                        diagnostic_frame = trace_frame;
                         has_pending_frame = true;
                     }
                 }
@@ -928,32 +908,18 @@ fn run_engine_loop(
             pacer = motion::FramePacer::new();
         }
         let now = std::time::Instant::now();
-        let pacing = if continuous { pacer.ready(now, renderer.motion_clock.period) } else { Some(false) };
-        let due = pacing.is_some();
+        let due = if continuous {
+            pacer.ready(now, renderer.motion_clock.period).is_some()
+        } else {
+            true
+        };
         if (has_pending_frame || needs_interp) && due {
             if let Some(target) = present_target.as_mut() {
-                render_sequence += 1;
-                // Distinguish source packets from autonomous render frames in
-                // completion/texture traces. Otherwise every interpolated frame
-                // would look like a duplicate of the last Dart source packet.
-                let render_trace = if continuous && diagnostic_frame.1 != 0 {
-                    (diagnostic_frame.0, (1u64 << 62) | render_sequence as u64)
-                } else { diagnostic_frame };
-                renderer.diagnostic_render = render_trace;
-                if continuous {
-                    super::diagnostics::record("pacing_draw", render_trace.0, render_trace.1,
-                        (pacing == Some(true)) as i64, pacer.render_slot().unwrap_or(0) as i64);
-                    super::diagnostics::record("render_source", render_trace.0, render_trace.1,
-                        diagnostic_frame.1 as i64, render_sequence);
-                }
-                super::diagnostics::record("draw_begin", render_trace.0, render_trace.1, render_sequence, continuous as i64);
                 renderer.draw_to_present(target);
-                super::diagnostics::record("draw_submitted", render_trace.0, render_trace.1, 0, 0);
                 signal_frame_ready(
                     ctx.queue.as_ref(),
                     &completion,
                     &ctx.completion_driver,
-                    render_trace,
                 );
             } else {
                 completion.begin_generation();
