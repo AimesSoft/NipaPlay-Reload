@@ -715,6 +715,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _clearPreviousVideoState() {
+    _cancelDfmStartupGate();
     _playbackGeneration++;
     _isBackgroundDanmakuLoading = false;
     // ════════════════════════════════════════════════════════════════════

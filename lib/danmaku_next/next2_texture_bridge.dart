@@ -23,6 +23,16 @@ class Next2TextureInfo {
   final bool isNewEngine;
 }
 
+class Next2DfmPrewarmState {
+  const Next2DfmPrewarmState({
+    required this.publishedFrameSerial,
+    required this.pendingGlyphs,
+  });
+
+  final int publishedFrameSerial;
+  final int pendingGlyphs;
+}
+
 class Next2TextureBridge {
   static const MethodChannel _channel = MethodChannel('nipaplay/next2_texture');
 
@@ -163,6 +173,67 @@ class Next2TextureBridge {
     }
 
     return ok == true;
+  }
+
+  Future<Next2DfmPrewarmState?> getDfmPrewarmState() async {
+    final engineHandle = _engineHandle;
+    if (!isSupported || engineHandle == null || engineHandle <= 0) {
+      return null;
+    }
+    try {
+      final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'getDfmPrewarmState',
+        <String, dynamic>{'engineHandle': engineHandle},
+      );
+      if (raw == null) return null;
+      final serial = (raw['publishedFrameSerial'] as num?)?.toInt();
+      final pending = (raw['pendingGlyphs'] as num?)?.toInt();
+      if (serial == null || pending == null) return null;
+      return Next2DfmPrewarmState(
+        publishedFrameSerial: serial,
+        pendingGlyphs: pending,
+      );
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (e) {
+      if (e.code == 'plugin_detached' ||
+          e.code == 'surface_disposed' ||
+          e.code == 'engine_unavailable') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<Next2DfmPrewarmState?> waitForDfmPrewarm({
+    required int publishedAfter,
+    required Duration timeout,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final state = await getDfmPrewarmState();
+      if (state == null) return null;
+      if (state.pendingGlyphs == 0 &&
+          state.publishedFrameSerial > publishedAfter) {
+        return state;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+    }
+    return null;
+  }
+
+  Future<bool> waitForDfmFramePublished({
+    required int publishedAfter,
+    required Duration timeout,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final state = await getDfmPrewarmState();
+      if (state == null) return false;
+      if (state.publishedFrameSerial > publishedAfter) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+    }
+    return false;
   }
 
   Future<void> resetScene() async {

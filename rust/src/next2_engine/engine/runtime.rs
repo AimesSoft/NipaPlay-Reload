@@ -128,6 +128,9 @@ pub enum EngineCommand {
         input: RenderFrameInput,
         reply: mpsc::Sender<bool>,
     },
+    QueryPrefetchPending {
+        reply: mpsc::Sender<usize>,
+    },
     Stop,
 }
 
@@ -183,6 +186,17 @@ pub fn poll_frame_ready(handle: u64) -> bool {
         return false;
     };
     entry.completion.consume()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn query_prefetch_pending(handle: u64) -> Option<usize> {
+    let entry = lookup_engine(handle)?;
+    let (reply_tx, reply_rx) = mpsc::channel();
+    entry
+        .cmd_tx
+        .send(EngineCommand::QueryPrefetchPending { reply: reply_tx })
+        .ok()?;
+    reply_rx.recv_timeout(Duration::from_secs(2)).ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -884,6 +898,9 @@ fn run_engine_loop(
                         diagnostic_frame = trace_frame;
                         has_pending_frame = true;
                     }
+                }
+                EngineCommand::QueryPrefetchPending { reply } => {
+                    let _ = reply.send(renderer.pending_prefetch_count());
                 }
                 EngineCommand::Stop => {
                     completion.close();

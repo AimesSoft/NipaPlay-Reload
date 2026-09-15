@@ -442,6 +442,10 @@ impl Next2Renderer {
         self.atlas.drain_prefetch(queue);
     }
 
+    pub(crate) fn pending_prefetch_count(&self) -> usize {
+        self.atlas.pending_prefetch_count()
+    }
+
     fn update_frame(&mut self, input: RenderFrameInput, custom_font: Option<FontSource>) -> bool {
         let parsed = match serde_json::from_str::<FramePayload>(&input.frame_json) {
             Ok(parsed) => parsed,

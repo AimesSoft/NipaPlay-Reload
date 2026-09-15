@@ -1087,7 +1087,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               videoState,
             );
 
-            if (!videoState.hasVideo && !shouldKeepNativeSurface) {
+            if (!videoState.hasVideo &&
+                !videoState.isDfmStartupGatePending &&
+                !shouldKeepNativeSurface) {
               final placeholder =
                   widget.emptyPlaceholder ?? const VideoUploadUI();
               return Stack(
@@ -1179,7 +1181,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       ),
                                     ),
-                                    if (videoState.hasVideo &&
+                                    if ((videoState.hasVideo ||
+                                            videoState
+                                                .isDfmStartupGatePending) &&
                                         videoState.danmakuVisible)
                                       Positioned.fill(
                                         child: IgnorePointer(
@@ -1265,7 +1269,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                      if (videoState.hasVideo &&
+                                      if ((videoState.hasVideo ||
+                                              videoState
+                                                  .isDfmStartupGatePending) &&
                                           videoState.danmakuVisible)
                                         Positioned.fill(
                                           child: IgnorePointer(

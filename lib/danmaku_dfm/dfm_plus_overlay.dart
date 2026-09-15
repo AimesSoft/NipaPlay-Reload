@@ -36,6 +36,8 @@ class DfmPlusOverlay extends StatefulWidget {
     this.maxLinesPerType,
     this.blockWords = const [],
     this.onLayoutCalculated,
+    this.startupGateToken = 0,
+    this.onStartupReady,
     required this.isPlaying,
     required this.playbackRate,
   });
@@ -61,6 +63,8 @@ class DfmPlusOverlay extends StatefulWidget {
   final int? maxLinesPerType;
   final List<String> blockWords;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
+  final int startupGateToken;
+  final ValueChanged<int>? onStartupReady;
   final bool isPlaying;
   final double playbackRate;
 
@@ -196,6 +200,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// Whether the initial large-window prefetch has been done since the last
   /// configure. Reset to false when configure runs.
   bool _initialPrefetchDone = false;
+  int _reportedStartupGateToken = 0;
 
   late final Ticker _vsyncTicker;
 
@@ -274,6 +279,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       oldWidget.playbackTimeMs.removeListener(_onPlaybackTimeChanged);
       widget.playbackTimeMs.addListener(_onPlaybackTimeChanged);
       _resetDisplayTimeToMedia();
+      _queueUpdate();
+    }
+
+    if (oldWidget.startupGateToken != widget.startupGateToken) {
       _queueUpdate();
     }
 
@@ -668,6 +677,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     }
     final commandVersion = _motionCommandVersion;
     final epoch = _timelineEpoch;
+    final startupGateToken = widget.startupGateToken;
+    final startupGatePending = startupGateToken > 0 &&
+        startupGateToken != _reportedStartupGateToken &&
+        widget.onStartupReady != null;
     final rate = widget.playbackRate;
     final playing = widget.isPlaying && widget.isVisible;
 
@@ -761,38 +774,37 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       }
     }
 
-    // ── Empty-frame short-circuit ──
-    // With no visible danmaku, skip the per-vsync buildPayload (allocation)
-    // + jsonEncode + MethodChannel hop. We push exactly ONE empty setFrame
-    // to clear the previous frame's content, then short-circuit until
-    // content returns. The scene-cleared state is tracked so we never leave
-    // stale danmaku on screen and never re-clear an already-empty scene.
-    if (frame.isEmpty) {
-      if (_sceneCleared) {
-        if (_textureBridge.trace.enabled) {
-          _textureBridge.trace.add('empty_skip', {}, frame: diagnosticFrameId);
-        }
-        return true; // already clear — nothing to submit this vsync
-      }
-      // Fall through: send one empty setFrame to clear the scene.
-    } else {
-      _sceneCleared = false;
-    }
-
     final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
     final heightScale =
         pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
     final fontScale =
         ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 
-    // Texture 就绪后先投递首屏字符给 worker，再立即提交首帧。不要在这里
-    // 固定等待：等待期间坐标会过期，并把传输延迟变化转换成水平抖动。
+    // During ordinary playback prefetch remains fire-and-forget. During the
+    // startup gate we wait behind the loading overlay until every requested
+    // glyph has landed in this same engine's atlas and the empty prewarm frame
+    // has been published. That leaves no older completion which could be
+    // mistaken for the first content frame below.
     String? effectivePrefetch = prefetchChars;
-    if (isInitialPrefetch &&
-        effectivePrefetch != null &&
-        effectivePrefetch.isNotEmpty) {
+    if (isInitialPrefetch && frame.isNotEmpty) {
+      final initialChars = StringBuffer(effectivePrefetch ?? '');
+      for (final item in frame) {
+        initialChars.write(item.content.text);
+        final countText = item.content.countText;
+        if (countText != null) initialChars.write(countText);
+      }
+      effectivePrefetch = initialChars.toString();
+    }
+    var startupPrewarmComplete = !startupGatePending;
+    if ((isInitialPrefetch &&
+            effectivePrefetch != null &&
+            effectivePrefetch.isNotEmpty) ||
+        startupGatePending) {
+      final beforePrewarm =
+          startupGatePending ? await _textureBridge.getDfmPrewarmState() : null;
+      var prewarmSubmitted = false;
       try {
-        await _textureBridge.setFrame(
+        prewarmSubmitted = await _textureBridge.setFrame(
           items: const <PositionedDanmakuItem>[],
           fontSize: widget.fontSize,
           outlineWidth: widget.outlineWidth,
@@ -807,12 +819,38 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           motionMode: 'vsync_snapshot',
           framePayload: <String, dynamic>{
             'items': const <Map<String, dynamic>>[],
-            'prefetch_chars': effectivePrefetch,
+            if (effectivePrefetch != null && effectivePrefetch.isNotEmpty)
+              'prefetch_chars': effectivePrefetch,
           },
         );
       } catch (_) {}
       if (!mounted) return false;
+      if (startupGatePending && prewarmSubmitted && beforePrewarm != null) {
+        final drained = await _textureBridge.waitForDfmPrewarm(
+          publishedAfter: beforePrewarm.publishedFrameSerial,
+          timeout: const Duration(seconds: 2),
+        );
+        startupPrewarmComplete = drained != null;
+      }
       effectivePrefetch = null;
+    }
+
+    // ── Empty-frame short-circuit ──
+    // Initial prefetch intentionally runs before this branch, so a quiet first
+    // frame can still warm comments that enter during the opening seconds.
+    if (frame.isEmpty) {
+      if (startupGatePending && startupPrewarmComplete) {
+        _reportStartupReady(startupGateToken);
+      }
+      if (_sceneCleared) {
+        if (_textureBridge.trace.enabled) {
+          _textureBridge.trace.add('empty_skip', {}, frame: diagnosticFrameId);
+        }
+        return true;
+      }
+      // Fall through: send one empty setFrame to clear the scene.
+    } else {
+      _sceneCleared = false;
     }
 
     if (_textureBridge.trace.enabled) {
@@ -847,6 +885,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       'valid_until_s': mediaSeconds + _motionLookaheadSec * rate,
     };
 
+    final beforeContent = startupGatePending && startupPrewarmComplete
+        ? await _textureBridge.getDfmPrewarmState()
+        : null;
     final pushed = await _textureBridge.setFrame(
       items: frame,
       fontSize: widget.fontSize,
@@ -870,10 +911,30 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       if (frame.isEmpty) {
         _sceneCleared = true; // scene now confirmed empty
       }
+      if (startupGatePending &&
+          startupPrewarmComplete &&
+          beforeContent != null &&
+          await _textureBridge.waitForDfmFramePublished(
+            publishedAfter: beforeContent.publishedFrameSerial,
+            timeout: const Duration(seconds: 1),
+          )) {
+        _reportStartupReady(startupGateToken);
+      }
     } else {
       _emojiPipeline.markAtlasDirty();
     }
 
     return pushed;
+  }
+
+  void _reportStartupReady(int token) {
+    if (!mounted ||
+        token <= 0 ||
+        token != widget.startupGateToken ||
+        token == _reportedStartupGateToken) {
+      return;
+    }
+    _reportedStartupGateToken = token;
+    widget.onStartupReady?.call(token);
   }
 }

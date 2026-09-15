@@ -101,6 +101,17 @@ pub extern "C" fn next2_engine_poll_frame_ready(handle: u64) -> bool {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
+#[no_mangle]
+pub extern "C" fn next2_engine_prefetch_pending(handle: u64) -> i64 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        super::engine::query_prefetch_pending(handle)
+            .and_then(|count| i64::try_from(count).ok())
+            .unwrap_or(-1)
+    }));
+    result.unwrap_or(-1)
+}
+
 #[cfg(target_os = "windows")]
 #[no_mangle]
 pub extern "C" fn next2_engine_set_frame_ready_event(handle: u64, event_handle: usize) -> u8 {

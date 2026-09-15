@@ -922,6 +922,10 @@ impl Next2GlyphAtlas {
         self.msdf_worker.submit_async(ch, quantized_size);
     }
 
+    fn pending_prefetch_count(&self) -> usize {
+        self.pending.len()
+    }
+
     /// Drain completed async prefetch results and upload them to the atlas.
     /// Called on the render thread at the top of each engine loop iteration.
     /// Returns the number of results processed.

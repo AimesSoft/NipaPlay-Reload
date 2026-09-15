@@ -351,6 +351,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _setStatus(PlayerStatus.loading, message: message);
     final fastPlaybackStartup =
         _context?.read<SettingsProvider>().fastPlaybackStartup ?? false;
+    final forceDfmDanmakuBeforePlayback = !kIsWeb &&
+        Platform.isWindows &&
+        DanmakuKernelFactory.activePluginRenderer == null &&
+        DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.dfmPlus;
 
     // 检测本地 fonts 文件夹
     if (!kIsWeb &&
@@ -996,8 +1000,32 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _updateMergedDanmakuList();
       }
 
-      if (!fastPlaybackStartup) {
+      if (!fastPlaybackStartup || forceDfmDanmakuBeforePlayback) {
         await loadInitialDanmaku();
+      }
+
+      final shouldGateDfmStartup = forceDfmDanmakuBeforePlayback &&
+          !isNativeDanmakuActive &&
+          _danmakuVisible &&
+          _danmakuList.isNotEmpty &&
+          !_isDisposed &&
+          initializationGeneration == _playbackGeneration;
+      if (shouldGateDfmStartup) {
+        // Some player backends may auto-resume after opening/seeking. Keep the
+        // media clock paused while the loading layer mounts the real DFM+
+        // instance, fills its glyph atlas, and publishes its first frame.
+        if (player.state == PlaybackState.playing) {
+          await player.pauseDirectly();
+        }
+        if (_isDisposed || initializationGeneration != _playbackGeneration) {
+          return;
+        }
+        final gateToken = _beginDfmStartupGate();
+        _setStatus(PlayerStatus.loading, message: '正在预热弹幕字形...');
+        await _waitForDfmStartupGate(gateToken);
+        if (_isDisposed || initializationGeneration != _playbackGeneration) {
+          return;
+        }
       }
 
       // 设置进入最终加载阶段，以优化动画性能
@@ -1067,7 +1095,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
-      if (fastPlaybackStartup) {
+      if (fastPlaybackStartup && !forceDfmDanmakuBeforePlayback) {
         _startBackgroundDanmakuLoading(videoPath, loadInitialDanmaku);
       }
 

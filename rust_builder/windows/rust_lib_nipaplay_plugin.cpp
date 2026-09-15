@@ -15,6 +15,7 @@ uint64_t next2_engine_create(uint32_t width, uint32_t height);
 uint8_t next2_engine_resize(uint64_t handle, uint32_t width, uint32_t height);
 void next2_engine_dispose(uint64_t handle);
 bool next2_engine_poll_frame_ready(uint64_t handle);
+int64_t next2_engine_prefetch_pending(uint64_t handle);
 uint8_t next2_engine_set_frame_ready_event(uint64_t handle,
                                            uintptr_t event_handle);
 uint8_t next2_engine_create_dxgi_shared_texture(uint64_t handle,
@@ -192,6 +193,7 @@ struct RustLibNipaplayPlugin::SurfaceState {
   uint32_t height = 0;
   uint64_t engine_handle = 0;
   int64_t texture_id = -1;
+  int64_t published_frame_serial = 0;
   std::unique_ptr<TextureBinding> binding;
   std::unique_ptr<flutter::TextureVariant> texture_variant;
 
@@ -398,6 +400,43 @@ void RustLibNipaplayPlugin::HandleMethodCall(
     return;
   }
 
+  if (method_call.method_name() == "getDfmPrewarmState") {
+    const uint64_t handle = ReadU64(*args, "engineHandle", 0);
+    if (handle == 0) {
+      result->Error("invalid_arguments", "Missing engineHandle");
+      return;
+    }
+
+    int64_t published_frame_serial = -1;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      for (const auto& kv : surfaces_) {
+        if (kv.second->engine_handle == handle) {
+          published_frame_serial = kv.second->published_frame_serial;
+          break;
+        }
+      }
+    }
+    if (published_frame_serial < 0) {
+      result->Error("surface_disposed", "DFM surface is no longer available");
+      return;
+    }
+
+    const int64_t pending_glyphs = next2_engine_prefetch_pending(handle);
+    if (pending_glyphs < 0) {
+      result->Error("engine_unavailable", "DFM engine is no longer available");
+      return;
+    }
+
+    flutter::EncodableMap response;
+    response[flutter::EncodableValue("publishedFrameSerial")] =
+        flutter::EncodableValue(published_frame_serial);
+    response[flutter::EncodableValue("pendingGlyphs")] =
+        flutter::EncodableValue(pending_glyphs);
+    result->Success(flutter::EncodableValue(response));
+    return;
+  }
+
   if (method_call.method_name() == "resetScene") {
     const uint64_t handle = ReadU64(*args, "engineHandle", 0);
     if (handle == 0) {
@@ -493,6 +532,7 @@ void RustLibNipaplayPlugin::Tick() {
     }
     next2_diagnostics_texture_event(state->engine_handle, 2);
     texture_registrar_->MarkTextureFrameAvailable(state->texture_id);
+    state->published_frame_serial++;
     next2_diagnostics_texture_event(state->engine_handle, 3);
   }
 }
