@@ -2,6 +2,7 @@ import 'dart:io'; // Required for File
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -25,6 +26,7 @@ class AnimeCard extends StatefulWidget {
   final bool enableShadow; // 新增：是否启用阴影
   final double backgroundBlurSigma; // 新增：背景模糊强度（sigma）
   final bool enableBackdropImage; // 新增：是否启用背景图层
+  final bool showNewBadge; // 新番剧 / 有新集数时显示红色 NEW 标识
 
   const AnimeCard({
     super.key,
@@ -41,6 +43,7 @@ class AnimeCard extends StatefulWidget {
     this.enableShadow = true,
     this.backgroundBlurSigma = 20.0,
     this.enableBackdropImage = true,
+    this.showNewBadge = false,
   });
 
   // 根据filePath获取来源信息
@@ -263,7 +266,9 @@ class _AnimeCardState extends State<AnimeCard> {
           _buildImage(context, false),
 
           // 状态图标 (移至右上角)
-          if (widget.isOnAir)
+          if (widget.showNewBadge)
+            const MediaLibraryNewBadge()
+          else if (widget.isOnAir)
             Positioned(
               top: 6,
               right: 6,
