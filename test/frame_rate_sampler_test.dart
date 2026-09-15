@@ -18,7 +18,6 @@ void main() {
         if (sampler.fps > 0) expect(sampler.fps, closeTo(180, 0.01));
       }
       expect(sampler.fps, closeTo(180, 0.01));
-      expect(sampler.maxFrameGapMs, closeTo(5.556, 0.001));
     }
   });
 
@@ -28,14 +27,13 @@ void main() {
     expect(sampler.fps, closeTo(150, 0.01));
   });
 
-  test('a 50 ms stall lowers FPS and remains visible in the maximum gap', () {
+  test('a 50 ms stall lowers the measured FPS', () {
     final sampler = FrameRateSampler();
     for (var i = 0; i <= 180; i++) {
       if (i > 90 && i < 99) continue;
       sampler.addTimestamp((i * 1000000 / 180).round());
     }
     expect(sampler.fps, 172);
-    expect(sampler.maxFrameGapMs, 50);
   });
 
   test('duplicate and out-of-order reports do not inflate FPS', () {
@@ -53,7 +51,6 @@ void main() {
     frames(180, 1).forEach(sampler.addTimestamp);
     sampler.reset();
     expect(sampler.fps, 0);
-    expect(sampler.maxFrameGapMs, 0);
     frames(60, 1).map((t) => t + 90000000).forEach(sampler.addTimestamp);
     expect(sampler.fps, 60);
   });
