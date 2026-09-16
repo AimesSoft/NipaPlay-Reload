@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
@@ -174,10 +175,39 @@ class ScanService with ChangeNotifier {
   int get totalFilesFound => _totalFilesFound;
 
   ScanService() {
-    _loadScannedFolders();
+    // 媒体文件夹列表从 SharedPreferences 异步加载，
+    // 保留这个 Future，等它加载完成后再触发启动智能刷新。
+    final foldersLoaded = _loadScannedFolders();
     _loadSubFolderHashCache();
     // 启动时自动检测变化
     _performStartupChangeDetection();
+    // 启动时自动进行一次媒体库智能刷新（与本地库管理页的"智能刷新"按钮相同）
+    unawaited(_startupSmartRefresh(foldersLoaded));
+  }
+
+  /// 启动时自动执行一次媒体库智能刷新。
+  ///
+  /// 等待已添加的媒体文件夹列表加载完成后执行 [rescanAllFolders]：
+  /// 先用 Rust 快速比对每个文件夹的文件差异，只重新扫描真正发生变化的
+  /// 文件夹；所有文件夹均无变化时会立即结束，不会造成额外开销。
+  /// Web 平台、没有已添加文件夹或已有扫描任务进行中时自动跳过。
+  Future<void> _startupSmartRefresh(Future<void> foldersLoaded) async {
+    if (kIsWeb) return;
+    try {
+      await foldersLoaded;
+    } catch (_) {
+      // 文件夹列表加载失败时静默放弃本次自动刷新
+      return;
+    }
+    if (_scannedFolders.isEmpty || _isScanning) return;
+    // 短暂延迟，让主界面先完成首帧渲染，避免差异比对与启动 I/O 争抢资源
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (_isScanning) return;
+    try {
+      await rescanAllFolders();
+    } catch (e) {
+      debugPrint('启动时自动智能刷新失败: $e');
+    }
   }
 
   bool _isAndroidSafPath(String path) {

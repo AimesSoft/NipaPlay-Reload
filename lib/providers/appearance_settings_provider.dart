@@ -40,6 +40,12 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _folderNameDisplayModeKey = 'folder_name_display_mode';
   static const String _diffuseLowResolutionPostersKey =
       'diffuse_low_resolution_recommendation_posters';
+  // 主页顶部推荐区三个控件的显隐
+  static const String _showHomeHeroBannerKey = 'show_home_hero_banner';
+  static const String _showHomeHeroSideCardTopKey =
+      'show_home_hero_side_card_top';
+  static const String _showHomeHeroSideCardBottomKey =
+      'show_home_hero_side_card_bottom';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -57,6 +63,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late AppAccentColorPreset _accentColorPreset;
   late FolderNameDisplayMode _folderNameDisplayMode;
   late bool _diffuseLowResolutionPosters;
+  late bool _showHomeHeroBanner; // 主页顶部左侧大幅推荐轮播横幅
+  late bool _showHomeHeroSideCardTop; // 主页顶部右侧上方推荐小卡片
+  late bool _showHomeHeroSideCardBottom; // 主页顶部右侧下方推荐小卡片
 
   // 获取设置值
   // 页面滑动动画始终启用
@@ -72,6 +81,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
   FolderNameDisplayMode get folderNameDisplayMode => _folderNameDisplayMode;
   bool get diffuseLowResolutionPosters => _diffuseLowResolutionPosters;
+  bool get showHomeHeroBanner => _showHomeHeroBanner;
+  bool get showHomeHeroSideCardTop => _showHomeHeroSideCardTop;
+  bool get showHomeHeroSideCardBottom => _showHomeHeroSideCardBottom;
 
   /// 目录名称最大行数：省略号模式为 1，多行模式为 null（不限制，完整显示）
   int? get folderNameMaxLines =>
@@ -95,6 +107,10 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _accentColorPreset = AppAccentColorPreset.rose;
     _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
     _diffuseLowResolutionPosters = true;
+    // 主页顶部三个推荐控件默认全部显示
+    _showHomeHeroBanner = true;
+    _showHomeHeroSideCardTop = true;
+    _showHomeHeroSideCardBottom = true;
     AppAccentColors.setCurrent(_accentColorPreset);
     _loadSettings();
   }
@@ -125,6 +141,11 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       _diffuseLowResolutionPosters =
           prefs.getBool(_diffuseLowResolutionPostersKey) ?? true;
+      _showHomeHeroBanner = prefs.getBool(_showHomeHeroBannerKey) ?? true;
+      _showHomeHeroSideCardTop =
+          prefs.getBool(_showHomeHeroSideCardTopKey) ?? true;
+      _showHomeHeroSideCardBottom =
+          prefs.getBool(_showHomeHeroSideCardBottomKey) ?? true;
       _accentColorPreset = AppAccentColorPreset.fromStorageKey(
         prefs.getString(_accentColorPresetKey),
       );
@@ -316,6 +337,51 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_diffuseLowResolutionPostersKey, value);
     } catch (e) {
       debugPrint('保存低清推荐海报晕染设置时出错: $e');
+    }
+  }
+
+  // 设置主页顶部大幅推荐轮播横幅是否显示
+  Future<void> setShowHomeHeroBanner(bool value) async {
+    if (_showHomeHeroBanner == value) return;
+
+    _showHomeHeroBanner = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showHomeHeroBannerKey, value);
+    } catch (e) {
+      debugPrint('保存主页推荐轮播大图显示设置时出错: $e');
+    }
+  }
+
+  // 设置主页顶部右侧上方推荐小卡片是否显示
+  Future<void> setShowHomeHeroSideCardTop(bool value) async {
+    if (_showHomeHeroSideCardTop == value) return;
+
+    _showHomeHeroSideCardTop = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showHomeHeroSideCardTopKey, value);
+    } catch (e) {
+      debugPrint('保存主页上方推荐小卡片显示设置时出错: $e');
+    }
+  }
+
+  // 设置主页顶部右侧下方推荐小卡片是否显示
+  Future<void> setShowHomeHeroSideCardBottom(bool value) async {
+    if (_showHomeHeroSideCardBottom == value) return;
+
+    _showHomeHeroSideCardBottom = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showHomeHeroSideCardBottomKey, value);
+    } catch (e) {
+      debugPrint('保存主页下方推荐小卡片显示设置时出错: $e');
     }
   }
 }

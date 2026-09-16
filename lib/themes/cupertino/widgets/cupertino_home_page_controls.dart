@@ -138,6 +138,10 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
   }
 
   Widget _buildCupertinoHero() {
+    // 外观设置中关闭了主页推荐轮播大图时不占用空间
+    if (!context.watch<AppearanceSettingsProvider>().showHomeHeroBanner) {
+      return const SizedBox.shrink();
+    }
     if (_isLoadingRecommended && _recommendedItems.isEmpty) {
       return const SizedBox(
         height: 236,

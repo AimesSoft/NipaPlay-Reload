@@ -346,6 +346,67 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           ),
         ],
       ),
+      const SizedBox(height: 16),
+      AdaptiveSettingsSection(
+        children: [
+          AdaptiveSettingsTile<bool>.toggle(
+            title: _text(
+              context,
+              '首页推荐轮播大图',
+              '首頁推薦輪播大圖',
+              'Home Hero Banner',
+            ),
+            subtitle: _text(
+              context,
+              '主页顶部左侧的大幅推荐轮播横幅',
+              '主頁頂部左側的大幅推薦輪播橫幅',
+              'Show the large rotating recommendation banner at the top of Home.',
+            ),
+            icon: Icons.image_outlined,
+            phoneIcon: cupertino.CupertinoIcons.collections,
+            value: appearanceSettings.showHomeHeroBanner,
+            onChanged: appearanceSettings.setShowHomeHeroBanner,
+          ),
+          if (!globals.isPhone)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '首页推荐小卡片（上方）',
+                '首頁推薦小卡片（上方）',
+                'Home Side Card (Top)',
+              ),
+              subtitle: _text(
+                context,
+                '主页顶部右上角的推荐小卡片（仅桌面/平板布局）',
+                '主頁頂部右上角的推薦小卡片（僅桌面/平板佈局）',
+                'Show the top small recommendation card on Home (desktop/tablet layout).',
+              ),
+              icon: Icons.photo_library_outlined,
+              phoneIcon: cupertino.CupertinoIcons.rectangle_stack,
+              value: appearanceSettings.showHomeHeroSideCardTop,
+              onChanged: appearanceSettings.setShowHomeHeroSideCardTop,
+            ),
+          if (!globals.isPhone)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(
+                context,
+                '首页推荐小卡片（下方）',
+                '首頁推薦小卡片（下方）',
+                'Home Side Card (Bottom)',
+              ),
+              subtitle: _text(
+                context,
+                '主页顶部右下角的推荐小卡片（仅桌面/平板布局）',
+                '主頁頂部右下角的推薦小卡片（僅桌面/平板佈局）',
+                'Show the bottom small recommendation card on Home (desktop/tablet layout).',
+              ),
+              icon: Icons.photo_outlined,
+              phoneIcon: cupertino.CupertinoIcons.square_stack_3d_up,
+              value: appearanceSettings.showHomeHeroSideCardBottom,
+              onChanged: appearanceSettings.setShowHomeHeroSideCardBottom,
+            ),
+        ],
+      ),
       if (!globals.isTelevision) ...[
         const SizedBox(height: 16),
         AdaptiveSettingsDragList<HomeSectionType>(
