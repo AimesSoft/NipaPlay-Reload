@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_linux
   desktop_drop
   dynamic_color
   file_selector_linux
@@ -14,6 +15,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   rust_lib_nipaplay
   screen_retriever_linux
   tray_manager
+  universal_gamepad
   url_launcher_linux
   volume_controller
   window_manager

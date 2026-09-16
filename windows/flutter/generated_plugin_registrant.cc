@@ -6,6 +6,7 @@
 
 #include "generated_plugin_registrant.h"
 
+#include <audioplayers_windows/audioplayers_windows_plugin.h>
 #include <battery_plus/battery_plus_windows_plugin.h>
 #include <dart_ipc/dart_ipc_plugin_c_api.h>
 #include <desktop_drop/desktop_drop_plugin.h>
@@ -22,11 +23,14 @@
 #include <screen_brightness_windows/screen_brightness_windows_plugin.h>
 #include <screen_retriever_windows/screen_retriever_windows_plugin_c_api.h>
 #include <tray_manager/tray_manager_plugin.h>
+#include <universal_gamepad/gamepad_plugin_c_api.h>
 #include <url_launcher_windows/url_launcher_windows.h>
 #include <volume_controller/volume_controller_plugin_c_api.h>
 #include <window_manager/window_manager_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
+  AudioplayersWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("AudioplayersWindowsPlugin"));
   BatteryPlusWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("BatteryPlusWindowsPlugin"));
   DartIpcPluginCApiRegisterWithRegistrar(
@@ -59,6 +63,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
   TrayManagerPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("TrayManagerPlugin"));
+  GamepadPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("GamepadPluginCApi"));
   UrlLauncherWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("UrlLauncherWindows"));
   VolumeControllerPluginCApiRegisterWithRegistrar(
