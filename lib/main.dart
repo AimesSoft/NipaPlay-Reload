@@ -104,6 +104,7 @@ import 'constants/settings_keys.dart';
 import 'player_abstraction/media_kit_player_adapter.dart';
 import 'utils/launch_file_handler.dart';
 import 'utils/linux_system_font_loader.dart';
+import 'utils/fluent_icon_font_loader.dart';
 import 'utils/app_theme.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
@@ -166,6 +167,12 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await FluentIconFontLoader.instance.ensureLoaded();
+  } catch (error, stackTrace) {
+    debugPrint('Fluent 图标字体初始化失败，进入个人中心时将重试: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
   PasswordInputModeService.instance.start();
   if (!kIsWeb && globals.supportsRustNativeBridge) {
     try {

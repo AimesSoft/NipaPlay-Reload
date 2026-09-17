@@ -11,7 +11,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -374,65 +373,29 @@ class _SharedRemoteLanScanDialogContentState
     _cancelScan(updateState: true);
     setState(() {
       _isAdding = true;
+      _errorMessage = null;
     });
 
     try {
-      final normalized = _normalizeBaseUrl(host.baseUrl);
-      SharedRemoteHost? existing;
-      for (final current in widget.provider.hosts) {
-        if (_normalizeBaseUrl(current.baseUrl) == normalized) {
-          existing = current;
-          break;
-        }
-      }
-
-      if (existing != null) {
-        await widget.provider.setActiveHost(existing.id);
-      } else {
-        final displayName = (host.hostname?.trim().isNotEmpty ?? false)
+      await widget.provider.connectOrActivateHost(
+        displayName: (host.hostname?.trim().isNotEmpty ?? false)
             ? host.hostname!.trim()
-            : normalized;
-        await widget.provider
-            .addHost(displayName: displayName, baseUrl: normalized);
-      }
+            : host.baseUrl,
+        baseUrl: host.baseUrl,
+      );
 
       if (!mounted) return;
       BlurSnackBar.show(context, '已连接到共享客户端');
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '添加失败：$e');
+      final message = '连接失败：$e';
+      BlurSnackBar.show(context, message);
       setState(() {
+        _errorMessage = message;
         _isAdding = false;
       });
     }
-  }
-
-  String _normalizeBaseUrl(String url) {
-    var normalized = url.trim();
-    if (!normalized.startsWith('http://') &&
-        !normalized.startsWith('https://')) {
-      normalized = 'http://$normalized';
-    }
-    if (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-    try {
-      final uri = Uri.parse(normalized);
-      final host = uri.host;
-      final isLocalHost = host == 'localhost' || host == '127.0.0.1';
-      final isLocal =
-          isLocalHost || _isPrivateIpv4(host) || host.endsWith('.local');
-      if (!uri.hasPort && uri.scheme == 'http' && isLocal) {
-        normalized = uri.replace(port: 1180).toString();
-      }
-    } catch (_) {
-      // ignore
-    }
-    if (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-    return normalized;
   }
 
   @override

@@ -20,6 +20,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
+import 'package:nipaplay/utils/fluent_icon_font_loader.dart';
 import 'package:nipaplay/widgets/user_activity/adaptive_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,6 +42,21 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
 
   bool get _isPhoneSurface =>
       AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_ensureFluentIconFonts());
+  }
+
+  Future<void> _ensureFluentIconFonts() async {
+    try {
+      await FluentIconFontLoader.instance.ensureLoaded();
+    } catch (error, stackTrace) {
+      debugPrint('个人中心加载 Fluent 图标字体失败: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
 
   @override
   void showMessage(String message) {
