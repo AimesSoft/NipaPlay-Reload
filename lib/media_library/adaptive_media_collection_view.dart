@@ -52,8 +52,13 @@ class LibraryNewContentTracker {
       LibraryNewContentTracker._();
 
   static const String _baselineKey = 'library_new_content_baseline_v1';
+  static const String _discoveredAtKey =
+      'library_new_content_discovered_v1';
 
   final Map<String, Map<int, int>> _baselines = {};
+  // 每部番剧当前 NEW 内容的「首次发现时间」（毫秒时间戳）。
+  // 综合排序据此让新内容在发现时排到最前，之后随最近观看时间自然下沉。
+  final Map<String, Map<int, int>> _discoveredAtMillis = {};
   final Set<String> _loadedSources = <String>{};
   final Set<String> _initializedSources = <String>{};
 
@@ -79,6 +84,7 @@ class LibraryNewContentTracker {
     if (_loadedSources.contains(key)) return;
 
     final baseline = <int, int>{};
+    final discoveredAt = <int, int>{};
     var initialized = false;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -98,11 +104,27 @@ class LibraryNewContentTracker {
           initialized = decoded['__initialized_$key'] == true;
         }
       }
+      final discoveredRaw = prefs.getString(_discoveredAtKey);
+      if (discoveredRaw != null && discoveredRaw.isNotEmpty) {
+        final discoveredDecoded = json.decode(discoveredRaw);
+        if (discoveredDecoded is Map) {
+          final discoveredMap = discoveredDecoded[key];
+          if (discoveredMap is Map) {
+            discoveredMap.forEach((k, v) {
+              final animeId = int.tryParse('$k');
+              if (animeId != null && v is num && v > 0) {
+                discoveredAt[animeId] = v.toInt();
+              }
+            });
+          }
+        }
+      }
     } catch (e) {
       debugPrint('加载媒体库新内容基线失败: $e');
     }
 
     _baselines[key] = baseline;
+    _discoveredAtMillis[key] = discoveredAt;
     _loadedSources.add(key);
     if (initialized) _initializedSources.add(key);
   }
@@ -123,6 +145,25 @@ class LibraryNewContentTracker {
     return previous == null || currentEpisodeCount > previous;
   }
 
+  /// 返回某部番剧当前 NEW 内容的首次发现时间（毫秒时间戳）；无记录返回 null。
+  int? discoveredAt(UnifiedMediaLibrarySource source, int animeId) {
+    return _discoveredAtMillis[_sourceKey(source)]?[animeId];
+  }
+
+  /// 记录 NEW 内容的首次发现时间；已有记录时不覆盖，
+  /// 保证番剧只在真正首次发现时跳到最前，之后随时间自然下沉。
+  /// 返回是否新增了记录（调用方据此决定是否持久化）。
+  bool ensureDiscoveredAt(
+    UnifiedMediaLibrarySource source,
+    int animeId,
+    int millis,
+  ) {
+    final map = _discoveredAtMillis[_sourceKey(source)] ??= <int, int>{};
+    if (map.containsKey(animeId)) return false;
+    map[animeId] = millis;
+    return true;
+  }
+
   /// 用户点开某部番剧详情后，单独把它标记为已浏览并立即持久化基线。
   /// 该番剧的 NEW 标识从此消除，直到将来再次出现新番剧/新集数。
   Future<void> markAnimeSeen(
@@ -132,6 +173,8 @@ class LibraryNewContentTracker {
   ) async {
     final key = _sourceKey(source);
     (_baselines[key] ??= <int, int>{})[animeId] = currentEpisodeCount;
+    // NEW 已消除，发现时间一并移除，排序回归最近观看时间。
+    _discoveredAtMillis[key]?.remove(animeId);
     _initializedSources.add(key);
     await _persistSource(source);
   }
@@ -143,6 +186,8 @@ class LibraryNewContentTracker {
   ) async {
     final key = _sourceKey(source);
     _baselines[key] = Map<int, int>.of(currentEpisodeCounts);
+    // 首次建立基线不显示 NEW，也不应有任何发现时间。
+    _discoveredAtMillis[key] = <int, int>{};
     _loadedSources.add(key);
     _initializedSources.add(key);
     await _persistSource(source);
@@ -157,16 +202,33 @@ class LibraryNewContentTracker {
     Set<int> presentAnimeIds,
   ) {
     final key = _sourceKey(source);
+    var changed = false;
     final baseline = _baselines[key];
-    if (baseline == null || baseline.isEmpty) return false;
-    final staleIds = baseline.keys
-        .where((id) => !presentAnimeIds.contains(id))
-        .toList(growable: false);
-    if (staleIds.isEmpty) return false;
-    for (final id in staleIds) {
-      baseline.remove(id);
+    if (baseline != null && baseline.isNotEmpty) {
+      final staleIds = baseline.keys
+          .where((id) => !presentAnimeIds.contains(id))
+          .toList(growable: false);
+      if (staleIds.isNotEmpty) {
+        for (final id in staleIds) {
+          baseline.remove(id);
+        }
+        changed = true;
+      }
     }
-    return true;
+    // 发现时间表也要独立剔除：全新番剧尚未写入基线，只存在于发现时间表里。
+    final discovered = _discoveredAtMillis[key];
+    if (discovered != null && discovered.isNotEmpty) {
+      final staleDiscovered = discovered.keys
+          .where((id) => !presentAnimeIds.contains(id))
+          .toList(growable: false);
+      if (staleDiscovered.isNotEmpty) {
+        for (final id in staleDiscovered) {
+          discovered.remove(id);
+        }
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /// 持久化指定数据源当前的内存基线。
@@ -174,10 +236,11 @@ class LibraryNewContentTracker {
     await _persistSource(source);
   }
 
-  /// 把指定数据源当前的内存基线合并写入 SharedPreferences。
+  /// 把指定数据源当前的内存基线和发现时间合并写入 SharedPreferences。
   Future<void> _persistSource(UnifiedMediaLibrarySource source) async {
     final key = _sourceKey(source);
     final current = _baselines[key] ?? const <int, int>{};
+    final currentDiscovered = _discoveredAtMillis[key] ?? const <int, int>{};
     try {
       final prefs = await SharedPreferences.getInstance();
       final all = <String, dynamic>{};
@@ -192,6 +255,20 @@ class LibraryNewContentTracker {
           current.map((k, v) => MapEntry<String, dynamic>('$k', v));
       all['__initialized_$key'] = true;
       await prefs.setString(_baselineKey, json.encode(all));
+
+      final discoveredAll = <String, dynamic>{};
+      final discoveredRaw = prefs.getString(_discoveredAtKey);
+      if (discoveredRaw != null && discoveredRaw.isNotEmpty) {
+        final discoveredExisting = json.decode(discoveredRaw);
+        if (discoveredExisting is Map) {
+          discoveredAll
+              .addAll(Map<String, dynamic>.from(discoveredExisting));
+        }
+      }
+      discoveredAll[key] = currentDiscovered
+          .map((k, v) => MapEntry<String, dynamic>('$k', v));
+      await prefs.setString(
+          _discoveredAtKey, json.encode(discoveredAll));
     } catch (e) {
       debugPrint('保存媒体库新内容基线失败: $e');
     }
@@ -230,6 +307,13 @@ class _AdaptiveMediaCollectionViewState
   // 每部番剧当前在库中的集数，以及带有 NEW 标识的番剧集合。
   Map<int, int> _episodeCounts = const <int, int>{};
   Set<int> _newAnimeIds = const <int>{};
+  // 每个 NEW 番剧的首次发现时间（毫秒时间戳），供综合排序使用。
+  Map<int, int> _newDiscoveredAtMillis = const <int, int>{};
+  // 每部番剧最近一次被点开详情的时间：用于「最近观看」和「综合」排序，
+  // 只要点开过就把该番剧排到前面，不强制要求实际播放。
+  final Map<int, DateTime> _lastOpenTime = <int, DateTime>{};
+  // 排序兜底时间：从未点开过详情的番剧统一排最后。
+  static final DateTime _epoch = DateTime.fromMillisecondsSinceEpoch(0);
   // 首次运行静默建立基线只执行一次
   bool _baselineBootstrapped = false;
   final LibraryNewContentTracker _newContentTracker =
@@ -289,7 +373,8 @@ class _AdaptiveMediaCollectionViewState
                   );
         _episodeCounts = _episodeCountByAnime(provider.history);
         _recomputeNewContentState();
-        final filteredItems = _filterAndSort(allItems);
+        final filteredItems =
+            _filterAndSort(allItems, _lastOpenTime);
         for (final item in filteredItems) {
           _ensureDetail(item.animeId!);
         }
@@ -344,12 +429,14 @@ class _AdaptiveMediaCollectionViewState
   void _recomputeNewContentState() {
     if (!_newContentTracker.isReady(widget.source)) {
       _newAnimeIds = const <int>{};
+      _newDiscoveredAtMillis = const <int, int>{};
       return;
     }
     // 首次运行（基线尚未建立）：用当前库快照静默建立基线，不显示任何 NEW；
     // 之后只有真正新增的番剧或集数才会被标记。
     if (!_newContentTracker.isInitialized(widget.source)) {
       _newAnimeIds = const <int>{};
+      _newDiscoveredAtMillis = const <int, int>{};
       if (!_baselineBootstrapped && _episodeCounts.isNotEmpty) {
         _baselineBootstrapped = true;
         unawaited(
@@ -379,13 +466,29 @@ class _AdaptiveMediaCollectionViewState
             ))
         .map((entry) => entry.key)
         .toSet();
+    // 记录每个 NEW 番剧的首次发现时间：只在第一次发现时写入并持久化，
+    // 综合排序据此把它排到最前，之后随最近观看时间自然下沉。
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    var discoveredChanged = false;
+    final discoveredMap = <int, int>{};
+    for (final animeId in _newAnimeIds) {
+      if (_newContentTracker.ensureDiscoveredAt(
+          widget.source, animeId, nowMillis)) {
+        discoveredChanged = true;
+      }
+      final at = _newContentTracker.discoveredAt(widget.source, animeId);
+      if (at != null) discoveredMap[animeId] = at;
+    }
+    _newDiscoveredAtMillis = discoveredMap;
+    if (discoveredChanged) {
+      unawaited(_newContentTracker.persist(widget.source));
+    }
   }
 
-  bool _hasNewBadge(int? animeId) {
-    return animeId != null && _newAnimeIds.contains(animeId);
-  }
-
-  List<WatchHistoryItem> _filterAndSort(List<WatchHistoryItem> items) {
+  List<WatchHistoryItem> _filterAndSort(
+    List<WatchHistoryItem> items,
+    Map<int, DateTime> lastOpenTime,
+  ) {
     final query = _query.trim().toLowerCase();
     final filtered = items.where((item) {
       if (query.isEmpty) return true;
@@ -396,21 +499,55 @@ class _AdaptiveMediaCollectionViewState
       case MediaCollectionSort.name:
         filtered.sort((a, b) => a.animeName.compareTo(b.animeName));
       case MediaCollectionSort.recentlyAdded:
-        // mediaLibraryLatestItemsByAnime 已按最近观看时间降序排列，保持原顺序。
-        break;
+        // 最近观看：仅按「最近点开详情时间」降序，不使用真实播放时间。
+        // 点开过番剧详情的排前面，从未点开过的排最后。
+        filtered.sort((a, b) {
+          final aEffective = _effectiveRecentlyWatchedTime(a, lastOpenTime);
+          final bEffective = _effectiveRecentlyWatchedTime(b, lastOpenTime);
+          return bEffective.compareTo(aEffective);
+        });
       case MediaCollectionSort.comprehensive:
         filtered.sort(_compareComprehensive);
     }
     return filtered;
   }
 
-  /// 综合排序：带 NEW 标识的内容（新番剧 / 新集数）优先，
-  /// 其余按最近观看时间由近到远排列。
+  /// 最近观看排序的有效时间：最近点开详情时间。
+  /// 未点开过详情的返回 epoch（排最后），不使用真实观看时间。
+  DateTime _effectiveRecentlyWatchedTime(
+    WatchHistoryItem item,
+    Map<int, DateTime> lastOpenTime,
+  ) {
+    return item.animeId != null
+        ? (lastOpenTime[item.animeId] ?? _epoch)
+        : _epoch;
+  }
+
+  /// 综合排序：番剧更新（NEW 发现）前移、点击番剧（点开详情）前移。
+  /// 排序时间取「最近点开详情时间」与「NEW 首次发现时间」的较新者，
+  /// 不使用真实观看时间。
   int _compareComprehensive(WatchHistoryItem a, WatchHistoryItem b) {
-    final aRank = _hasNewBadge(a.animeId) ? 0 : 1;
-    final bRank = _hasNewBadge(b.animeId) ? 0 : 1;
-    if (aRank != bRank) return aRank - bRank;
-    return b.lastWatchTime.compareTo(a.lastWatchTime);
+    final aEffective = _effectiveComprehensiveTime(a);
+    final bEffective = _effectiveComprehensiveTime(b);
+    return bEffective.compareTo(aEffective);
+  }
+
+  /// 综合排序的有效时间：最近点开、NEW 发现两者取较新者。
+  /// 两者都没有时返回 0（排最后）。
+  int _effectiveComprehensiveTime(WatchHistoryItem item) {
+    var effective = 0;
+    if (item.animeId != null) {
+      final open = _lastOpenTime[item.animeId];
+      if (open != null) {
+        final openMillis = open.millisecondsSinceEpoch;
+        if (openMillis > effective) effective = openMillis;
+      }
+      final discovered = _newDiscoveredAtMillis[item.animeId];
+      if (discovered != null && discovered > effective) {
+        effective = discovered;
+      }
+    }
+    return effective;
   }
 
   void _ensureDetail(int animeId) {
@@ -492,6 +629,12 @@ class _AdaptiveMediaCollectionViewState
   }
 
   Future<void> _openAnimeDetail(WatchHistoryItem item) async {
+    // 记录「最近点开详情」时间，供最近观看 / 综合排序使用：
+    // 只要点开过番剧，就把它排到前面。
+    final openAnimeId = item.animeId;
+    if (openAnimeId != null) {
+      _lastOpenTime[openAnimeId] = DateTime.now();
+    }
     // 用户点开详情即视为已知晓该番剧的新内容：立即消除 NEW 标识并持久化基线。
     // 这是 NEW 标识唯一的消除方式。
     final animeId = item.animeId;
@@ -503,7 +646,10 @@ class _AdaptiveMediaCollectionViewState
           _episodeCounts[animeId] ?? 0,
         ),
       );
-      setState(() => _newAnimeIds = {..._newAnimeIds}..remove(animeId));
+      setState(() {
+        _newAnimeIds = {..._newAnimeIds}..remove(animeId);
+        _newDiscoveredAtMillis = {..._newDiscoveredAtMillis}..remove(animeId);
+      });
     }
     final provider = context.read<WatchHistoryProvider>();
     final episodes = provider.history
@@ -585,6 +731,8 @@ class _AdaptiveMediaCollectionViewState
     }
 
     if (result != null) widget.onPlayEpisode(result);
+    // 详情页关闭后重排：点开时间已记录，番剧应移动到「最近观看」靠前位置。
+    if (mounted) setState(() {});
   }
 
   static String _title(WatchHistoryItem item, BangumiAnime? detail) {
