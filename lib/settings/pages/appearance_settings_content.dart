@@ -554,6 +554,9 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 ),
                 icon: Ionicons.water_outline,
                 phoneIcon: cupertino.CupertinoIcons.drop,
+                // 这是全屏 BackdropFilter，σ 越高每帧重算的填充率开销越大；
+                // glassmorphism 还会把纵向 σ 再翻倍。低端电视 GPU 扛不住
+                // σ≥50 的档位，电视上只保留到「高」。
                 items: [
                   _blurItem(context, settingsProvider, '无', '無', 'None', 0),
                   _blurItem(
@@ -573,22 +576,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                     15,
                   ),
                   _blurItem(context, settingsProvider, '高', '高', 'High', 25),
-                  _blurItem(
-                    context,
-                    settingsProvider,
-                    '超级',
-                    '超級',
-                    'Super',
-                    50,
-                  ),
-                  _blurItem(
-                    context,
-                    settingsProvider,
-                    '梦幻',
-                    '夢幻',
-                    'Dreamy',
-                    100,
-                  ),
+                  if (!globals.isTelevision) ...[
+                    _blurItem(
+                      context,
+                      settingsProvider,
+                      '超级',
+                      '超級',
+                      'Super',
+                      50,
+                    ),
+                    _blurItem(
+                      context,
+                      settingsProvider,
+                      '梦幻',
+                      '夢幻',
+                      'Dreamy',
+                      100,
+                    ),
+                  ],
                 ],
                 onChanged: (blur) {
                   settingsProvider.setBlurPower(blur.toDouble());

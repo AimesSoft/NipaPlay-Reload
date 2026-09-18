@@ -804,6 +804,22 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     return _largeScreenTextColor.withValues(alpha: 0.10);
   }
 
+  /// 按需为详情页背景图套一层模糊，并在电视上跳过。
+  ///
+  /// [enabled] 为 false 时直接返回 child，不再挂 σ0 的 ImageFilter 图层
+  /// （那会白白引入一次离屏合成）。
+  Widget _wrapDetailBackdropBlur({
+    required bool enabled,
+    required Widget child,
+  }) {
+    if (!enabled) return child;
+    if (globals.isTelevision) return child;
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+      child: child,
+    );
+  }
+
   Widget _buildLargeScreenBackdrop({required Widget child}) {
     final backdropUrl = _getBackdropUrl();
     final posterUrl = _getPosterUrl(width: 900);
@@ -820,14 +836,21 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         ),
         if (imageUrl.isNotEmpty)
           Positioned.fill(
-            child: ImageFiltered(
-              imageFilter: blurImage
-                  ? ImageFilter.blur(sigmaX: 34, sigmaY: 34)
-                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+            // 三点修复：
+            // 1) blurImage 为 false 时原实现仍会挂一个 σ0 的 ImageFilter 图层
+            //    （一次无意义的离屏合成），这里直接退化为普通图片；
+            // 2) 电视上跳过 σ34 的全屏模糊 —— 每帧重算，纯填充率开销；
+            // 3) 限制解码尺寸：这张图要么被 σ34 抹平、要么只做背景，
+            //    没有理由按原始分辨率解码。
+            child: _wrapDetailBackdropBlur(
+              enabled: blurImage,
               child: CachedNetworkImageWidget(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
+                // 保持原契约：详情页的大图走统一加载通道（见
+                // test/media_server_image_loader_test.dart 的源码级断言）。
                 shouldCompress: false,
+                memCacheWidth: 480,
                 loadMode: CachedImageLoadMode.hybrid,
               ),
             ),
@@ -1405,8 +1428,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         enableAnimation: enableAnimation,
         isDesktopOrTablet: isDesktopOrTablet,
         infoView: RepaintBoundary(child: _buildInfoView()),
-        episodesView:
-            _isPlayableItem ? null : RepaintBoundary(child: _buildEpisodesView()),
+        episodesView: _isPlayableItem
+            ? null
+            : RepaintBoundary(child: _buildEpisodesView()),
         desktopView: (isDesktopOrTablet && !_isPlayableItem)
             ? _buildDesktopTabletLayout()
             : null,

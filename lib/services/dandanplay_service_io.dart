@@ -74,7 +74,8 @@ class DandanplayService {
 
   /// Only the Dandanplay provider requires a Dandanplay account.
   static Future<bool> canAccessCurrentServer() async {
-    return !NetworkSettings.isDandanplayServiceUri(Uri.parse(await getApiBaseUrl())) ||
+    return !NetworkSettings.isDandanplayServiceUri(
+            Uri.parse(await getApiBaseUrl())) ||
         authorizationHeaders.isNotEmpty;
   }
 
@@ -165,6 +166,11 @@ class DandanplayService {
     return {'response': response, 'requestMethod': methodUsed};
   }
 
+  /// 启动时 Token 加载（含可能的续期请求）的最长等待时间。
+  ///
+  /// 这一步在首帧之前的关键路径上，慢网络下会让启动界面长时间不消失。
+  static const Duration _tokenLoadTimeout = Duration(seconds: 5);
+
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     // 新版由服务端保管 AppSecret，清理旧版本曾缓存到本地的副本。
@@ -173,7 +179,15 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     _loadLinkedBangumiFromPrefs(prefs);
-    await loadToken();
+    // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
+    // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
+    // 续期交由后续请求自然重试，不阻塞首帧。
+    await loadToken().timeout(
+      _tokenLoadTimeout,
+      onTimeout: () {
+        debugPrint('[弹弹play服务] Token 加载超时，跳过本次续期');
+      },
+    );
   }
 
   static Future<void> refreshWebApiBaseUrl({bool syncLogin = true}) async {

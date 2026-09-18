@@ -15,6 +15,21 @@ class SettingsProvider with ChangeNotifier {
   static const double _defaultBlur = 0.0;
   static const String _blurPowerKey = 'blurPower';
 
+  /// 电视设备上的模糊强度上限。
+  ///
+  /// 背景毛玻璃是一次全屏 BackdropFilter，每帧都要重算；glassmorphism 还会把
+  /// 纵向 sigma 再乘以 2。低端电视 GPU（Mali-450 级别）在 σ≥50 时会明显掉帧，
+  /// 因此即便用户此前在别的设备上存过更大的值，这里也要夹住。
+  static const double _tvMaxBlurPower = 25.0;
+
+  static double get _maxBlurPower =>
+      globals.isTelevision ? _tvMaxBlurPower : 100.0;
+
+  static double _clampBlurPower(double value) {
+    if (value.isNaN) return _defaultBlur;
+    return value.clamp(0.0, _maxBlurPower).toDouble();
+  }
+
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
@@ -72,7 +87,9 @@ class SettingsProvider with ChangeNotifier {
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();
     // Load blur power, defaulting to 0.0 if not set (无模糊)
-    _blurPower = _prefs.getDouble(_blurPowerKey) ?? _defaultBlur;
+    _blurPower = _clampBlurPower(
+      _prefs.getDouble(_blurPowerKey) ?? _defaultBlur,
+    );
     // 当用户仍为“自动语言”且系统为繁中时，首次默认关闭“弹幕转简体”。
     final savedDanmakuConvert =
         _prefs.getBool(SettingsKeys.danmakuConvertToSimplified);
@@ -188,7 +205,7 @@ class SettingsProvider with ChangeNotifier {
 
   /// Sets a specific blur power value.
   Future<void> setBlurPower(double value) async {
-    _blurPower = value;
+    _blurPower = _clampBlurPower(value);
     await _prefs.setDouble(_blurPowerKey, _blurPower);
     notifyListeners();
   }

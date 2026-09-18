@@ -20,6 +20,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 
 const double _kLargeScreenEpisodeCardWidth = 250;
 const double _kLargeScreenEpisodeCardGap = 10;
@@ -1250,19 +1251,28 @@ class _NipaplayLargeScreenAnimeDetailPageState
                       children: [
                         if (coverImageUrl.isNotEmpty)
                           Positioned.fill(
-                            child: ImageFiltered(
-                              imageFilter:
-                                  ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                              child: Opacity(
-                                opacity: isDark ? 0.25 : 0.35,
-                                child: CachedNetworkImageWidget(
-                                  imageUrl: coverImageUrl,
-                                  fit: BoxFit.cover,
-                                  shouldCompress: false,
-                                  loadMode: CachedImageLoadMode.hybrid,
-                                ),
-                              ),
-                            ),
+                            // 这层只是给面板垫一层模糊的封面氛围色。
+                            // 原实现解码整张封面（shouldCompress: false）再每帧做
+                            // σ40 模糊 + Opacity，在电视 GPU 上是持续的全屏
+                            // saveLayer 开销。电视上直接省略，非电视上把解码尺寸
+                            // 压到 240px 宽——反正它会被 σ40 抹平，细节没有意义。
+                            child: TvSafeBackdropFilter.shouldSkipBlur
+                                ? const SizedBox.shrink()
+                                : ImageFiltered(
+                                    imageFilter: ui.ImageFilter.blur(
+                                      sigmaX: 40,
+                                      sigmaY: 40,
+                                    ),
+                                    child: Opacity(
+                                      opacity: isDark ? 0.25 : 0.35,
+                                      child: CachedNetworkImageWidget(
+                                        imageUrl: coverImageUrl,
+                                        fit: BoxFit.cover,
+                                        memCacheWidth: 240,
+                                        loadMode: CachedImageLoadMode.hybrid,
+                                      ),
+                                    ),
+                                  ),
                           ),
                         Positioned.fill(
                           child: Container(

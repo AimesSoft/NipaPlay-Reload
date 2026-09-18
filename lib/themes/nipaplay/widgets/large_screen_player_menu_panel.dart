@@ -8,6 +8,7 @@ import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_pane_host.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -89,7 +90,8 @@ class _NipaplayLargeScreenPlayerMenuPanelState
         child: FocusTraversalGroup(
           policy: ReadingOrderTraversalPolicy(),
           child: ClipRect(
-            child: BackdropFilter(
+            // 面板底色是 72% 黑，已经足够不透明；电视上跳过 σ28 模糊。
+            child: TvSafeBackdropFilter(
               filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
               child: Container(
                 width: kNipaplayLargeScreenPlayerMenuPanelWidth,

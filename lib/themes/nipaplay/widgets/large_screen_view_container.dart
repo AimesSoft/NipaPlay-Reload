@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 /// 大屏幕模式下承载二级页面的统一容器。
@@ -88,7 +89,9 @@ class NipaplayLargeScreenViewContainer extends StatelessWidget {
         children: [
           Positioned.fill(
             child: ClipRect(
-              child: BackdropFilter(
+              // 电视上跳过全屏 σ26 的 backdrop 模糊（每帧重算，纯填充率开销），
+              // 保留下方的半透明底色即可。
+              child: TvSafeBackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
                 child: ColoredBox(
                   color: isDark
@@ -141,9 +144,16 @@ class NipaplayLargeScreenViewContainer extends StatelessWidget {
                           color: Colors.black.withValues(
                             alpha: isDark ? 0.42 : 0.18,
                           ),
-                          blurRadius: 54,
-                          spreadRadius: 4,
-                          offset: const Offset(0, 22),
+                          // blurRadius 54 + spread 4 是一次覆盖整个面板的遮罩模糊，
+                          // 在电视 GPU 上代价很高。电视上收敛到 12/0。
+                          blurRadius:
+                              TvSafeBackdropFilter.shouldSkipBlur ? 12 : 54,
+                          spreadRadius:
+                              TvSafeBackdropFilter.shouldSkipBlur ? 0 : 4,
+                          offset: Offset(
+                            0,
+                            TvSafeBackdropFilter.shouldSkipBlur ? 8 : 22,
+                          ),
                         ),
                       ],
                     ),

@@ -13,11 +13,31 @@ export 'package:nipaplay/services/media_server_image_loader.dart'
 typedef MediaServerImageLoader = Future<Uint8List> Function(Uri uri);
 
 const int _maxMemoryCachedImages = 200;
+
+/// 字节预算：200 张未解码的 JPEG/PNG 原始字节在低端设备上也可能是几十 MB。
+const int _maxMemoryCachedBytes = 12 * 1024 * 1024;
+
 final Map<(String, MediaServerImageLoader), Future<Uint8List>> _imageByteCache =
     {};
 
+/// 每个条目已下载完成的字节数；键被移除时同步扣减。
+final Map<(String, MediaServerImageLoader), int> _imageByteSizes = {};
+int _imageByteCacheBytes = 0;
+
 void clearMediaServerImageMemoryCache() {
   _imageByteCache.clear();
+  _imageByteSizes.clear();
+  _imageByteCacheBytes = 0;
+}
+
+/// 移除一个条目并同步维护字节统计。
+void _removeCachedImage((String, MediaServerImageLoader) key) {
+  _imageByteCache.remove(key);
+  final size = _imageByteSizes.remove(key);
+  if (size != null) {
+    _imageByteCacheBytes -= size;
+    if (_imageByteCacheBytes < 0) _imageByteCacheBytes = 0;
+  }
 }
 
 Future<Uint8List> _loadCachedImage(
@@ -27,24 +47,45 @@ Future<Uint8List> _loadCachedImage(
   final key = (uri.toString(), loader);
   final cached = _imageByteCache[key];
   if (cached != null) {
+    // 命中后重新插入，使 Map 的插入顺序等价于 LRU（Dart Map 保持插入序）。
+    _imageByteCache.remove(key);
+    _imageByteCache[key] = cached;
     return cached;
   }
   if (_imageByteCache.length >= _maxMemoryCachedImages) {
-    _imageByteCache.remove(_imageByteCache.keys.first);
+    _removeCachedImage(_imageByteCache.keys.first);
   }
   final completer = Completer<Uint8List>();
   final future = completer.future;
   _imageByteCache[key] = future;
   Future<Uint8List>.sync(() => loader(uri)).then(
-    completer.complete,
+    (bytes) {
+      // 只有当条目仍在缓存里时才计入统计（可能已被预算淘汰）。
+      if (identical(_imageByteCache[key], future)) {
+        _imageByteSizes[key] = bytes.length;
+        _imageByteCacheBytes += bytes.length;
+        _enforceImageByteBudget();
+      }
+      completer.complete(bytes);
+    },
     onError: (Object error, StackTrace stackTrace) {
       if (identical(_imageByteCache[key], future)) {
-        _imageByteCache.remove(key);
+        _removeCachedImage(key);
       }
       completer.completeError(error, stackTrace);
     },
   );
   return future;
+}
+
+/// 按字节预算淘汰最久未使用的条目（保留至少一个，避免刚插入就被清掉）。
+void _enforceImageByteBudget() {
+  while (_imageByteCacheBytes > _maxMemoryCachedBytes &&
+      _imageByteCache.length > 1) {
+    final oldestKey = _imageByteCache.keys.first;
+    // 未完成的条目没有字节记账，移除时不会扣减，因此循环仍会推进。
+    _removeCachedImage(oldestKey);
+  }
 }
 
 class MediaServerNetworkImage extends StatefulWidget {
@@ -59,6 +100,8 @@ class MediaServerNetworkImage extends StatefulWidget {
     this.loadingBuilder,
     this.loader,
     this.useMemoryCache = true,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   final Uri uri;
@@ -70,6 +113,13 @@ class MediaServerNetworkImage extends StatefulWidget {
   final ImageLoadingBuilder? loadingBuilder;
   final MediaServerImageLoader? loader;
   final bool useMemoryCache;
+
+  /// 解码宽度（物理像素）。媒体服务器的海报常常是 1000px+，如果只在
+  /// 80×45 的槽位里显示，按原始分辨率解码会白占几 MB 内存并拖慢主 isolate。
+  final int? cacheWidth;
+
+  /// 解码高度（物理像素），语义同 [cacheWidth]。
+  final int? cacheHeight;
 
   @override
   State<MediaServerNetworkImage> createState() =>
@@ -116,6 +166,8 @@ class _MediaServerNetworkImageState extends State<MediaServerNetworkImage> {
             height: widget.height,
             fit: widget.fit,
             filterQuality: widget.filterQuality,
+            cacheWidth: widget.cacheWidth,
+            cacheHeight: widget.cacheHeight,
             errorBuilder: widget.errorBuilder,
           );
           return widget.loadingBuilder?.call(context, image, null) ?? image;
@@ -153,6 +205,8 @@ class MediaServerAwareNetworkImage extends StatelessWidget {
     this.errorBuilder,
     this.loadingBuilder,
     this.loader,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   final String url;
@@ -163,6 +217,8 @@ class MediaServerAwareNetworkImage extends StatelessWidget {
   final ImageErrorWidgetBuilder? errorBuilder;
   final ImageLoadingBuilder? loadingBuilder;
   final MediaServerImageLoader? loader;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +235,8 @@ class MediaServerAwareNetworkImage extends StatelessWidget {
         errorBuilder: errorBuilder,
         loadingBuilder: loadingBuilder,
         loader: loader,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
       );
     }
     return Image.network(
@@ -187,6 +245,8 @@ class MediaServerAwareNetworkImage extends StatelessWidget {
       height: height,
       fit: fit,
       filterQuality: filterQuality,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       errorBuilder: errorBuilder,
       loadingBuilder: loadingBuilder,
     );
@@ -202,6 +262,8 @@ class MediaServerAwareCachedNetworkImage extends StatelessWidget {
     this.fit,
     this.errorWidget,
     this.loader,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   final String imageUrl;
@@ -210,6 +272,8 @@ class MediaServerAwareCachedNetworkImage extends StatelessWidget {
   final BoxFit? fit;
   final Widget Function(BuildContext, String, Object)? errorWidget;
   final MediaServerImageLoader? loader;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +287,8 @@ class MediaServerAwareCachedNetworkImage extends StatelessWidget {
         height: height,
         fit: fit,
         loader: loader,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         errorBuilder: (context, error, _) =>
             errorWidget?.call(context, imageUrl, error) ??
             const SizedBox.shrink(),
@@ -233,6 +299,8 @@ class MediaServerAwareCachedNetworkImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      memCacheWidth: cacheWidth,
+      memCacheHeight: cacheHeight,
       errorWidget: errorWidget,
     );
   }

@@ -593,7 +593,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       sourceLabel = '本地';
       // 观看历史如果有animeId也可以尝试获取简介
       if (_isValidAnimeId(item.animeId)) {
-        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
+        detailFuture = _animeDetailsFuture(item.animeId!);
       }
     } else if (item is LocalAnimeItem) {
       name = item.animeName;
@@ -606,7 +606,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       sourceLabel = '本地';
 
       if (_isValidAnimeId(item.animeId)) {
-        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
+        detailFuture = _animeDetailsFuture(item.animeId!);
       }
     } else if (item is DandanplayRemoteAnimeGroup) {
       name = item.title;
@@ -616,7 +616,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       sourceLabel = '弹弹play';
       rating = null;
       if (_isValidAnimeId(item.animeId)) {
-        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
+        detailFuture = _animeDetailsFuture(item.animeId!);
       }
     } else if (item is BangumiAnime) {
       name = item.nameCn.isNotEmpty ? item.nameCn : item.name;
@@ -625,7 +625,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       sourceLabel = 'Bangumi';
       rating = item.rating;
       // 动画详情通常需要异步获取更详细的简介
-      detailFuture = BangumiService.instance.getAnimeDetails(item.id);
+      detailFuture = _animeDetailsFuture(item.id);
     }
 
     final bool showSummary =

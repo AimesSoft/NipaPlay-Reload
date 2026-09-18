@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
 
@@ -12,6 +13,14 @@ enum CachedImageLoadMode {
   legacy,
 }
 
+/// [CachedNetworkImageWidget.fadeDuration] 的默认值哨兵。
+///
+/// 调用方不传 [fadeDuration] 时会落到这个值；在电视设备上我们把它解析为
+/// [Duration.zero]，跳过每个图片一次 300ms 的不透明度过渡
+/// （每次过渡都是一层 OpacityLayer，网格里会叠加成明显的合成开销）。
+/// 调用方显式给出别的时长时一律尊重。
+const Duration _kDefaultImageFadeDuration = Duration(milliseconds: 300);
+
 class CachedNetworkImageWidget extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
@@ -20,8 +29,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Widget Function(BuildContext, Object)? errorBuilder;
   final bool shouldRelease;
   final Duration fadeDuration;
-  final bool shouldCompress;  // 新增参数，控制是否压缩图片
-  final bool delayLoad;  // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
+  final bool shouldCompress; // 新增参数，控制是否压缩图片
+  final bool delayLoad; // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
   final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
   final int? memCacheWidth; // 新增：指定内存缓存宽度（用于解码降采样）
   final int? memCacheHeight; // 新增：指定内存缓存高度（用于解码降采样）
@@ -38,9 +47,9 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.height,
     this.errorBuilder,
     this.shouldRelease = true,
-    this.fadeDuration = const Duration(milliseconds: 300),
-    this.shouldCompress = true,  // 默认为true，保持原有行为
-    this.delayLoad = false,  // 默认false，不延迟加载
+    this.fadeDuration = _kDefaultImageFadeDuration,
+    this.shouldCompress = true, // 默认为true，保持原有行为
+    this.delayLoad = false, // 默认false，不延迟加载
     this.loadMode = CachedImageLoadMode.hybrid, // 默认使用混合模式
     this.memCacheWidth,
     this.memCacheHeight,
@@ -51,7 +60,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
   });
 
   @override
-  State<CachedNetworkImageWidget> createState() => _CachedNetworkImageWidgetState();
+  State<CachedNetworkImageWidget> createState() =>
+      _CachedNetworkImageWidgetState();
 }
 
 class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
@@ -61,6 +71,17 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   bool _isDisposed = false;
   ui.Image? _basicImage; // 基础图片
   bool _hasRetriedLowRes = false;
+
+  /// 本次解码的目标尺寸（物理像素），null 表示无法推导。
+  (int?, int?)? _decodeTarget;
+
+  /// 自动推导解码尺寸时的单边上限。
+  ///
+  /// 正常调用方都会显式传 memCacheWidth/Height；这个上限只用于兜底，
+  /// 防止某个遗漏的调用方在低端设备上触发整图解码。
+  /// 取 1080 是因为首页 hero 横幅是整屏宽（1080p 电视就是 1080 物理像素），
+  /// 再低会明显损失画质；而它已经足以挡住 2000px+ 的原始海报。
+  static const int _maxAutoDecodeEdge = 1080;
 
   @override
   void initState() {
@@ -92,21 +113,26 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     if (_currentUrl == widget.imageUrl || _isDisposed) return;
     _currentUrl = widget.imageUrl;
     _hasRetriedLowRes = false;
-    
+
+    final target = _resolveDecodeTarget();
+    _decodeTarget = target;
+    final int? targetWidth = target?.$1;
+    final int? targetHeight = target?.$2;
+
     // 旧版：仅使用缓存管理器单通道加载
     if (widget.loadMode == CachedImageLoadMode.legacy) {
       _imageFuture = ImageCacheManager.instance.loadImage(
         widget.imageUrl,
-        targetWidth: widget.memCacheWidth,
-        targetHeight: widget.memCacheHeight,
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
       );
       return;
     }
 
     final cachedImage = ImageCacheManager.instance.getCachedImage(
       widget.imageUrl,
-      targetWidth: widget.memCacheWidth,
-      targetHeight: widget.memCacheHeight,
+      targetWidth: targetWidth,
+      targetHeight: targetHeight,
     );
 
     if (cachedImage != null) {
@@ -115,17 +141,66 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       // 混合模式：立即拉取基础图 + 异步加载高清图
       _loadBasicImage();
     }
-    
+
     // 异步加载高清图片
     if (widget.shouldCompress) {
       _imageFuture = ImageCacheManager.instance.loadImage(
         widget.imageUrl,
-        targetWidth: widget.memCacheWidth,
-        targetHeight: widget.memCacheHeight,
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
       );
     } else {
       _imageFuture = _loadOriginalImage(widget.imageUrl);
     }
+  }
+
+  /// 解析本次解码的目标尺寸（物理像素）。
+  ///
+  /// 低端设备（尤其 32 位安卓电视）上，把一张 1000px+ 的海报原尺寸解码出来
+  /// 再缩到 190×286 的格子里，是纯粹的内存与 CPU 浪费：一次整图 RGBA 分配
+  /// （可达数 MB）加几十毫秒主 isolate 解码。
+  ///
+  /// 优先使用调用方显式给出的 [CachedNetworkImageWidget.memCacheWidth] /
+  /// [CachedNetworkImageWidget.memCacheHeight]（这些值按约定已经是物理像素）；
+  /// 两者都缺失时用组件的布局尺寸 × 设备像素比推导，并受
+  /// [_maxAutoDecodeEdge] 上限约束，保证任何调用方都不会意外触发整图解码。
+  (int?, int?)? _resolveDecodeTarget() {
+    double ratio = 1.0;
+    try {
+      ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    } catch (_) {
+      // 无 MediaQuery（例如被单独挂载）时退回 1.0。
+    }
+
+    int? width = widget.memCacheWidth;
+    int? height = widget.memCacheHeight;
+
+    if (width == null || height == null) {
+      final double? logicalWidth =
+          widget.width != null && widget.width!.isFinite ? widget.width : null;
+      final double? logicalHeight =
+          widget.height != null && widget.height!.isFinite
+              ? widget.height
+              : null;
+      if (logicalWidth != null && logicalHeight != null) {
+        width ??= (logicalWidth * ratio).round();
+        height ??= (logicalHeight * ratio).round();
+      }
+    }
+
+    if (width != null && width <= 0) width = null;
+    if (height != null && height <= 0) height = null;
+    if (width == null && height == null) return null;
+
+    // 安全上限：即便调用方给了离谱的尺寸，也不做无意义的全尺寸解码。
+    if (width != null && width > _maxAutoDecodeEdge) {
+      width = _maxAutoDecodeEdge;
+    }
+    if (height != null && height > _maxAutoDecodeEdge) {
+      height = _maxAutoDecodeEdge;
+    }
+
+    return (width, height);
   }
 
   // 新增方法：立即加载基础图片
@@ -134,12 +209,16 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     if (widget.delayLoad) {
       await Future.delayed(const Duration(milliseconds: 1500));
     }
-    
+
     try {
       final imageBytes = await loadNetworkImageBytes(
         Uri.parse(widget.imageUrl),
       );
-      final codec = await ui.instantiateImageCodec(imageBytes);
+      final codec = await ui.instantiateImageCodec(
+        imageBytes,
+        targetWidth: _decodeTarget?.$1,
+        targetHeight: _decodeTarget?.$2,
+      );
       final frame = await codec.getNextFrame();
 
       // 如果组件还在使用，更新基础图片
@@ -156,7 +235,11 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   // 新增方法：直接加载原始图片，不进行压缩
   Future<ui.Image> _loadOriginalImage(String imageUrl) async {
     final imageBytes = await loadNetworkImageBytes(Uri.parse(imageUrl));
-    final codec = await ui.instantiateImageCodec(imageBytes);
+    final codec = await ui.instantiateImageCodec(
+      imageBytes,
+      targetWidth: _decodeTarget?.$1,
+      targetHeight: _decodeTarget?.$2,
+    );
     final frame = await codec.getNextFrame();
     return frame.image;
   }
@@ -166,7 +249,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     if (_isDisposed || !mounted || image == null) {
       return null;
     }
-    
+
     try {
       // 检查图片是否仍然有效
       final width = image.width;
@@ -202,7 +285,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     return Size(width, height);
   }
 
-  bool _shouldApplyBlur(ui.Image image, Size? displaySize, BuildContext context) {
+  bool _shouldApplyBlur(
+      ui.Image image, Size? displaySize, BuildContext context) {
     if (!widget.blurIfLowRes && !widget.forceBlur) {
       return false;
     }
@@ -304,8 +388,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                     setState(() {
                       _imageFuture = ImageCacheManager.instance.loadImage(
                         widget.imageUrl,
-                        targetWidth: widget.memCacheWidth,
-                        targetHeight: widget.memCacheHeight,
+                        targetWidth: _decodeTarget?.$1,
+                        targetHeight: _decodeTarget?.$2,
                         forceRefresh: true,
                       );
                     });
@@ -337,30 +421,37 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                   });
                 }
 
-                final imageWidget = widget.fadeDuration.inMilliseconds == 0 || !snapshot.hasData
-                    ? SizedBox(
-                        width: widget.width,
-                        height: widget.height,
-                        child: SafeRawImage(
-                          image: selectedImage,
-                          fit: widget.fit,
-                        ),
-                      )
-                    : AnimatedOpacity(
-                        opacity: _isImageLoaded ? 1.0 : 0.0,
-                        duration: widget.fadeDuration,
-                        curve: Curves.easeInOut,
-                        child: SizedBox(
-                          width: widget.width,
-                          height: widget.height,
-                          child: SafeRawImage(
-                            image: selectedImage,
-                            fit: widget.fit,
-                          ),
-                        ),
-                      );
+                final effectiveFade =
+                    widget.fadeDuration == _kDefaultImageFadeDuration &&
+                            shouldSkipTvBackdropBlur
+                        ? Duration.zero
+                        : widget.fadeDuration;
+                final imageWidget =
+                    effectiveFade.inMilliseconds == 0 || !snapshot.hasData
+                        ? SizedBox(
+                            width: widget.width,
+                            height: widget.height,
+                            child: SafeRawImage(
+                              image: selectedImage,
+                              fit: widget.fit,
+                            ),
+                          )
+                        : AnimatedOpacity(
+                            opacity: _isImageLoaded ? 1.0 : 0.0,
+                            duration: effectiveFade,
+                            curve: Curves.easeInOut,
+                            child: SizedBox(
+                              width: widget.width,
+                              height: widget.height,
+                              child: SafeRawImage(
+                                image: selectedImage,
+                                fit: widget.fit,
+                              ),
+                            ),
+                          );
 
-                return _wrapWithBlurIfNeeded(imageWidget, selectedImage, displaySize, context);
+                return _wrapWithBlurIfNeeded(
+                    imageWidget, selectedImage, displaySize, context);
               }
 
               return LoadingPlaceholder(
@@ -395,7 +486,7 @@ class SafeRawImage extends StatelessWidget {
     try {
       // 再次检查图片有效性
       final _ = image!.width;
-      
+
       return RawImage(
         image: image,
         fit: fit,
@@ -405,4 +496,4 @@ class SafeRawImage extends StatelessWidget {
       return const SizedBox.shrink();
     }
   }
-} 
+}
