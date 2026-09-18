@@ -148,7 +148,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     }
 
     // 为每个候选项目升级图片
-    final upgradeFutures = <Future<void>>[];
+    final upgradeFutures = <Future<_UpgradedRecommendation?>>[];
 
     for (int i = 0;
         i < candidates.length && i < currentItems.length && i < indices.length;
@@ -156,16 +156,37 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       final candidate = candidates[i];
       final currentItem = currentItems[i];
       final targetIndex = indices[i];
-      upgradeFutures
-          .add(_upgradeItemToHighQuality(candidate, currentItem, targetIndex));
+      upgradeFutures.add(
+        _upgradeItemToHighQuality(candidate, currentItem, targetIndex),
+      );
     }
 
-    // 异步处理所有升级，不阻塞UI
-    unawaited(Future.wait(upgradeFutures, eagerError: false));
+    // 等所有升级都完成，再一次性 setState。
+    //
+    // 原实现让每个升级各自 setState：首页有 7 个推荐位就会触发 7 次整棵树
+    // （含全部区块与横向轨道）的重建，低端电视上这一串重建本身就是可见卡顿。
+    // 合并成一次后行为不变，重建次数降为 1 次。
+    final results = await Future.wait(upgradeFutures, eagerError: false);
+    if (!mounted) return;
+
+    final applied = <int, RecommendedItem>{};
+    for (final result in results) {
+      if (result == null) continue;
+      applied[result.index] = result.item;
+    }
+    if (applied.isEmpty) return;
+
+    setState(() {
+      for (final entry in applied.entries) {
+        if (entry.key < _recommendedItems.length) {
+          _recommendedItems[entry.key] = entry.value;
+        }
+      }
+    });
   }
 
   // 升级单个项目为高清图片
-  Future<void> _upgradeItemToHighQuality(
+  Future<_UpgradedRecommendation?> _upgradeItemToHighQuality(
       dynamic candidate, RecommendedItem currentItem, int index) async {
     try {
       RecommendedItem? upgradedItem;
@@ -365,17 +386,13 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         }
       }
 
-      // 如果有升级版本，更新UI
-      if (upgradedItem != null && mounted) {
-        setState(() {
-          if (index < _recommendedItems.length) {
-            _recommendedItems[index] = upgradedItem!;
-          }
-        });
-
-        // CachedNetworkImageWidget 会自动处理图片预加载和缓存
+      // 升级结果交回调用方，由它合并成一次 setState。
+      // CachedNetworkImageWidget 会自动处理图片预加载和缓存。
+      if (upgradedItem != null) {
+        return _UpgradedRecommendation(index: index, item: upgradedItem);
       }
     } catch (_) {}
+    return null;
   }
 
   // 经验性判断一个图片URL是否"看起来"是高清图

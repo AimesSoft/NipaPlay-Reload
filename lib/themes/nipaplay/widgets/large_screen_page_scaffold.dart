@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -240,7 +241,8 @@ class NipaplayLargeScreenPanel extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       clipBehavior: clipBehavior,
-      child: BackdropFilter(
+      // 电视上跳过 σ22 的面板模糊；面板自身已有半透明背景色。
+      child: TvSafeBackdropFilter(
         filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
         child: Container(
           padding: padding,

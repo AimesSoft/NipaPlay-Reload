@@ -82,6 +82,14 @@ part '../themes/nipaplay/widgets/dashboard_home_page_random_recommendations.dart
 part '../themes/nipaplay/widgets/dashboard_home_page_trending.dart';
 part '../themes/cupertino/widgets/cupertino_home_page_controls.dart';
 
+/// 一次推荐位封面升级的结果，用于把多次 setState 合并成一次。
+class _UpgradedRecommendation {
+  const _UpgradedRecommendation({required this.index, required this.item});
+
+  final int index;
+  final RecommendedItem item;
+}
+
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});
 
@@ -208,6 +216,33 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   // 本地媒体库图片持久化缓存（与 MediaLibraryPage 复用同一前缀）
   final Map<int, String> _localImageCache = {};
+
+  /// 番剧详情的 Future 备忘。
+  ///
+  /// `FutureBuilder` 的 future 一旦在 build 里现场创建，每次重建都会重新发起
+  /// 一次请求，并把已解析的快照丢掉（表现为卡片简介反复闪回空态）。
+  /// 首页是 eager 构建的整棵树，重建很频繁，因此必须按 animeId 缓存 Future。
+  final Map<int, Future<BangumiAnime>> _animeDetailFutures = {};
+
+  /// 取得（或创建）某个番剧详情的共享 Future。
+  Future<BangumiAnime> _animeDetailsFuture(int animeId) {
+    final existing = _animeDetailFutures[animeId];
+    if (existing != null) return existing;
+
+    late final Future<BangumiAnime> request;
+    request = BangumiService.instance.getAnimeDetails(animeId).catchError(
+      (Object error, StackTrace stackTrace) {
+        // 失败时丢弃缓存，下一次重建可以重试，而不是永久缓存一个失败态。
+        if (identical(_animeDetailFutures[animeId], request)) {
+          _animeDetailFutures.remove(animeId);
+        }
+        throw error;
+      },
+    );
+    _animeDetailFutures[animeId] = request;
+    return request;
+  }
+
   static const String _localPrefsKeyPrefix = 'media_library_image_url_';
   bool _isLoadingLocalImages = false;
   bool _isLoadingDandanImages = false;

@@ -3,27 +3,14 @@ import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
-import 'package:image/image.dart' as img;
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'storage_service.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
-
-// 用于在 isolate 中处理图片的函数
-Future<Uint8List> _processImageInIsolate(Uint8List imageData) async {
-  // 使用image包解码图片
-  final image = img.decodeImage(imageData);
-  if (image == null) {
-    throw Exception('Failed to decode image');
-  }
-
-  // 直接返回原始图片数据
-  return imageData;
-}
 
 class ImageCacheManager {
   static final ImageCacheManager instance = ImageCacheManager._();
@@ -31,7 +18,32 @@ class ImageCacheManager {
   final Map<String, Completer<ui.Image>> _loading = {};
   final Map<String, int> _refCount = {};
   final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
+
+  /// 每张缓存图片的估算字节数，以及总量。
+  /// 解码后的 ui.Image 像素位于 native/external 内存，不受 Dart GC 管理，
+  /// 在 32 位设备（低端安卓电视）上必须有硬上限，否则地址空间会被耗尽。
+  final Map<String, int> _bytes = {};
+  int _totalBytes = 0;
+
+  /// 默认内存上限：低内存设备更保守。
+  static int get _defaultMaxBytes {
+    if (kIsWeb) return 32 * 1024 * 1024;
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        // 32 位低端电视/盒子按低内存设备处理。
+        return 32 * 1024 * 1024;
+      }
+    } catch (_) {
+      // defaultTargetPlatform 在极端早期阶段可能不可用，退回默认值。
+    }
+    return 64 * 1024 * 1024;
+  }
+
+  /// 当前内存预算，测试可覆盖。
+  static int maxBytes = _defaultMaxBytes;
+
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
+  static const Duration _evictionProtectionWindow = Duration(seconds: 2);
   static const Duration _diskCleanupInterval = Duration(hours: 12);
   static const Duration _compressedImageMaxAge = Duration(days: 30);
   static const Duration _thumbnailMaxAge = Duration(days: 30);
@@ -41,6 +53,18 @@ class ImageCacheManager {
   bool _isClearingCache = false;
   Timer? _cleanupTimer;
   DateTime? _lastDiskCleanupAt;
+
+  /// 当前缓存占用的估算字节数（测试与调试用）。
+  int get currentCacheBytes => _totalBytes;
+
+  /// 当前缓存的图片张数（测试与调试用）。
+  int get currentCacheCount => _cache.length;
+
+  /// 估算一张解码后位图的字节数，向上取整到 4 字节像素对齐。
+  static int _estimateImageBytes(ui.Image image) {
+    final int stride = ((image.width * 4) + 3) & ~3;
+    return stride * image.height;
+  }
 
   ImageCacheManager._() {
     _initCacheDir();
@@ -136,9 +160,7 @@ class ImageCacheManager {
             final frame = await codec.getNextFrame();
             final image = frame.image;
 
-            _cache[cacheKey] = image;
-            _refCount[cacheKey] = 1;
-            _lastAccessed[cacheKey] = DateTime.now();
+            _store(cacheKey, image);
             completer.complete(image);
             return; // 加载成功，退出IIFE
           }
@@ -147,19 +169,21 @@ class ImageCacheManager {
         // 从网络下载
         final downloadedBytes = await loadNetworkImageBytes(Uri.parse(url));
 
-        // 在单独的 isolate 中处理图片
-        final processedBytes =
-            await compute(_processImageInIsolate, downloadedBytes);
-
-        // 保存到本地缓存 (只保存原图)
+        // 保存到本地缓存 (只保存原图数据)
+        //
+        // 注意：这里曾经先用 package:image 在 compute isolate 里完整解码一次，
+        // 目的只是"校验图片"，然后丢弃结果、原样返回原始字节。纯 Dart 解码一张
+        // 1080p JPEG 在低端设备上要几百毫秒并产生一次整图 RGBA 分配，加上
+        // isolate 启动和字节缓冲跨 isolate 拷贝，产出为零。真正的解码由下面
+        // instantiateImageCodec 完成，它本身就是流式的，也能做降采样。
         if (!kIsWeb) {
           final cacheFile = await _getCacheFile(url);
-          await cacheFile.writeAsBytes(processedBytes);
+          await cacheFile.writeAsBytes(downloadedBytes);
         }
 
         // 解码图片数据
         final codec = await ui.instantiateImageCodec(
-          processedBytes,
+          downloadedBytes,
           targetWidth: targetWidth,
           targetHeight: targetHeight,
         );
@@ -167,9 +191,7 @@ class ImageCacheManager {
         final uiImage = frame.image;
 
         // 存入内存缓存
-        _cache[cacheKey] = uiImage;
-        _refCount[cacheKey] = 1;
-        _lastAccessed[cacheKey] = DateTime.now();
+        _store(cacheKey, uiImage);
         completer.complete(uiImage);
       } catch (e) {
         // 如果发生任何错误，都通过completer报告
@@ -182,6 +204,102 @@ class ImageCacheManager {
 
     // 立即返回completer.future
     return completer.future;
+  }
+
+  /// 记录一张新解码的图片并维护字节预算。
+  void _store(String cacheKey, ui.Image image) {
+    _dropBytes(cacheKey);
+    _cache[cacheKey] = image;
+    _refCount[cacheKey] = 1;
+    _lastAccessed[cacheKey] = DateTime.now();
+    _bytes[cacheKey] = _estimateImageBytes(image);
+    _totalBytes += _bytes[cacheKey]!;
+    _enforceByteBudget();
+  }
+
+  /// 从字节统计中移除一个键（不 dispose，由调用方决定）。
+  void _dropBytes(String cacheKey) {
+    final removed = _bytes.remove(cacheKey);
+    if (removed != null) {
+      _totalBytes -= removed;
+      if (_totalBytes < 0) _totalBytes = 0;
+    }
+  }
+
+  /// 真正释放一张图片，同步清理所有索引。
+  ///
+  /// 只有在确认没有 widget 仍持有该句柄时才可调用（例如字节预算淘汰时）。
+  void _disposeEntry(String cacheKey) {
+    final image = _cache.remove(cacheKey);
+    _dropBytes(cacheKey);
+    _refCount.remove(cacheKey);
+    _lastAccessed.remove(cacheKey);
+    if (image != null) {
+      try {
+        image.dispose();
+      } catch (_) {
+        // 已被释放或正被其它层持有，忽略即可。
+      }
+    }
+  }
+
+  /// 超出字节预算时按 LRU 淘汰。
+  ///
+  /// 关键点：必须无视 `_refCount`。历史实现里 refCount 只在**缓存命中**时递增，
+  /// 而唯一的递减点几乎从不被调用，因此 refCount 只增不减，任何"仅淘汰 refCount<=0"
+  /// 的策略在真实使用中等同于"永不淘汰"，最终耗尽 32 位设备的地址空间。
+  /// 这里改为以最后访问时间为准的 LRU；最近被访问过的图片（很可能正在被绘制）
+  /// 受到 [_evictionProtectionWindow] 保护。
+  void _enforceByteBudget() {
+    final budget = maxBytes;
+    if (budget <= 0) return;
+    if (_totalBytes <= budget) return;
+
+    final now = DateTime.now();
+    final candidates = <String>[];
+    for (final key in _cache.keys) {
+      final lastAccessed = _lastAccessed[key];
+      final isRecentlyUsed = lastAccessed != null &&
+          now.difference(lastAccessed) < _evictionProtectionWindow;
+      // 正在加载中的条目没有句柄被外部持有，随时可淘汰。
+      if (!isRecentlyUsed || _loading.containsKey(key)) {
+        candidates.add(key);
+      }
+    }
+
+    // 最久未访问的先淘汰，配平到预算的 80%，避免每存一张就淘汰一次。
+    candidates.sort((a, b) {
+      final la = _lastAccessed[a];
+      final lb = _lastAccessed[b];
+      if (la == null && lb == null) return 0;
+      if (la == null) return -1;
+      if (lb == null) return 1;
+      return la.compareTo(lb);
+    });
+
+    final target = (budget * 0.8).round();
+    for (final key in candidates) {
+      if (_totalBytes <= target) break;
+      _disposeEntry(key);
+    }
+  }
+
+  /// 系统内存压力下的紧急释放：只保留最近仍在使用的少量图片。
+  ///
+  /// 由 App 生命周期（didHaveMemoryPressure / onTrimMemory）调用。
+  void handleMemoryPressure() {
+    if (kIsWeb) return;
+    final now = DateTime.now();
+    final evictable = <String>[];
+    for (final key in _cache.keys) {
+      final lastAccessed = _lastAccessed[key];
+      final isRecentlyUsed = lastAccessed != null &&
+          now.difference(lastAccessed) < _evictionProtectionWindow;
+      if (!isRecentlyUsed) evictable.add(key);
+    }
+    for (final key in evictable) {
+      _disposeEntry(key);
+    }
   }
 
   Future<void> preloadImages(List<String> urls) async {
@@ -199,10 +317,13 @@ class ImageCacheManager {
         }
 
         // 创建加载任务
-        final future = loadImage(url).catchError((e) {
-          //////debugPrint('预加载图片失败: $url, 错误: $e');
-          failedUrls.add(url);
-        });
+        final future = loadImage(url).then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            //////debugPrint('预加载图片失败: $url, 错误: $error');
+            failedUrls.add(url);
+          },
+        );
         futures.add(future);
       } catch (e) {
         //////debugPrint('预加载图片时发生错误: $url, 错误: $e');
@@ -214,21 +335,33 @@ class ImageCacheManager {
     await Future.wait(futures, eagerError: false);
 
     if (failedUrls.isNotEmpty) {
-      //////debugPrint('以下图片预加载失败:');
-      for (final url in failedUrls) {
-        //////debugPrint('- $url');
-      }
+      //////debugPrint('以下图片预加载失败: ${failedUrls.length} 张');
     }
   }
 
+  /// 递减某张图片的引用计数。
+  ///
+  /// [url] 是原始 URL；同一 URL 可能以多个降采样尺寸缓存
+  /// （见 [_getCacheKeyWithDimensions]），因此需要匹配所有尺寸变体，
+  /// 否则 releaseImage 会命中不到条目、计数永远不回落。
   void releaseImage(String url) {
-    // 简化释放逻辑，不立即释放图片，由定期清理处理
-    if (_refCount.containsKey(url)) {
-      _refCount[url] = (_refCount[url]! - 1);
-      if (_refCount[url]! <= 0) {
-        _refCount.remove(url);
-        // 标记最后访问时间为过去，让定期清理处理
-        _lastAccessed[url] = DateTime.now().subtract(const Duration(hours: 1));
+    final prefix = '${url}_w';
+    final keys = <String>{
+      if (_refCount.containsKey(url) || _cache.containsKey(url)) url,
+      for (final key in _refCount.keys)
+        if (key.startsWith(prefix)) key,
+    };
+
+    for (final key in keys) {
+      final count = _refCount[key];
+      if (count == null) continue;
+      final next = count - 1;
+      if (next <= 0) {
+        _refCount.remove(key);
+        // 标记为久未访问，让字节预算与定期清理优先处理它。
+        _lastAccessed[key] = DateTime.now().subtract(const Duration(hours: 1));
+      } else {
+        _refCount[key] = next;
       }
     }
   }
@@ -257,22 +390,9 @@ class ImageCacheManager {
       }
     }
 
-    // 安全释放过期图片
+    // 安全释放过期图片（_disposeEntry 同步维护字节统计）
     for (final url in expiredUrls) {
-      try {
-        final image = _cache[url];
-        if (image != null) {
-          image.dispose();
-          _cache.remove(url);
-        }
-        _lastAccessed.remove(url);
-        _refCount.remove(url);
-      } catch (e) {
-        // 图片已被释放或其他错误，仅移除引用
-        _cache.remove(url);
-        _lastAccessed.remove(url);
-        _refCount.remove(url);
-      }
+      _disposeEntry(url);
     }
   }
 
@@ -371,6 +491,8 @@ class ImageCacheManager {
     _loading.clear();
     _refCount.clear();
     _lastAccessed.clear();
+    _bytes.clear();
+    _totalBytes = 0;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
   }
@@ -381,14 +503,18 @@ class ImageCacheManager {
 
     try {
       // 清除内存缓存
-      // RawImage 等仍可能持有缓存中的 ui.Image，不能销毁正在显示的句柄。
-      // 保留有引用的图片和正在进行的加载，仅清理闲置图片。
-      for (final key in _cache.keys.toList()) {
-        if ((_refCount[key] ?? 0) > 0) continue;
-        _cache.remove(key)?.dispose();
-        _refCount.remove(key);
-        _lastAccessed.remove(key);
+      //
+      // 这是用户显式触发的"清空缓存"，必须真正清空：历史实现跳过所有
+      // refCount > 0 的条目，而 refCount 只增不减，导致用户点了清空之后
+      // 内存占用毫无变化。此处改为全部释放，并同步重置字节统计。
+      final keys = _cache.keys.toList();
+      for (final key in keys) {
+        _disposeEntry(key);
       }
+      _refCount.clear();
+      _lastAccessed.clear();
+      _bytes.clear();
+      _totalBytes = 0;
 
       if (!kIsWeb) {
         await _initCacheDir();

@@ -1514,6 +1514,10 @@ class _TagSearchModalState extends State<TagSearchModal> {
               : anime.imageUrl!,
           fit: BoxFit.cover,
           loadMode: CachedImageLoadMode.legacy,
+          // 80×45 的缩略图槽位，按 2 倍像素密度解码即可，
+          // 没必要为它保留一张原始分辨率的位图。
+          memCacheWidth: 160,
+          memCacheHeight: 90,
           errorBuilder: (context, error) => placeholder,
         ),
       ),

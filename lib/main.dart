@@ -18,6 +18,7 @@ import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/image_cache_memory_pressure_handler.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
@@ -388,11 +389,13 @@ void main(List<String> args) async {
         final manageStatus = await Permission.manageExternalStorage.status;
         debugPrint("当前管理存储权限状态: $manageStatus");
 
-        if (manageStatus.isDenied) {
+        // 只在"还能弹窗"时请求：已永久拒绝（用户选了不再询问）就不再打扰，
+        // 避免每次冷启动都卡在系统设置页前面。
+        if (!manageStatus.isGranted && !manageStatus.isPermanentlyDenied) {
           final newStatus = await Permission.manageExternalStorage.request();
           debugPrint("请求后管理存储权限状态: $newStatus");
 
-          if (newStatus.isDenied || newStatus.isPermanentlyDenied) {
+          if (!newStatus.isGranted) {
             debugPrint("警告: 未获得管理存储权限，某些功能可能受限");
           }
         }
@@ -577,54 +580,62 @@ void main(List<String> args) async {
     }
 
     runDesktopMultiWindowApp(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => BottomBarProvider()),
-          ChangeNotifierProvider(create: (_) => WebDAVQuickAccessProvider()),
-          ChangeNotifierProvider(create: (_) => AppLanguageProvider()),
-          ChangeNotifierProvider(create: (_) => SettingsProvider()),
-          ChangeNotifierProvider(create: (_) => VideoPlayerState()),
-          ChangeNotifierProvider(
-            create: (context) => ThemeNotifier(
-              initialThemeMode: initialThemeMode,
-              initialBackgroundImageMode: globals.backgroundImageMode,
-              initialCustomBackgroundPath: globals.customBackgroundPath,
-              initialAnimeDetailDisplayMode: savedDetailMode,
-              initialBackgroundImageRenderMode: savedBackgroundRenderMode,
-              initialBackgroundImageOverlayOpacity:
-                  savedBackgroundOverlayOpacity,
+      // 图片缓存持有的是 native/external 内存，Dart GC 不会主动归还；
+      // 这里挂上系统内存压力与生命周期回调，在低端设备上及时释放。
+      ImageCacheMemoryPressureHandler(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => BottomBarProvider()),
+            ChangeNotifierProvider(create: (_) => WebDAVQuickAccessProvider()),
+            ChangeNotifierProvider(create: (_) => AppLanguageProvider()),
+            ChangeNotifierProvider(create: (_) => SettingsProvider()),
+            ChangeNotifierProvider(create: (_) => VideoPlayerState()),
+            ChangeNotifierProvider(
+              create: (context) => ThemeNotifier(
+                initialThemeMode: initialThemeMode,
+                initialBackgroundImageMode: globals.backgroundImageMode,
+                initialCustomBackgroundPath: globals.customBackgroundPath,
+                initialAnimeDetailDisplayMode: savedDetailMode,
+                initialBackgroundImageRenderMode: savedBackgroundRenderMode,
+                initialBackgroundImageOverlayOpacity:
+                    savedBackgroundOverlayOpacity,
+              ),
             ),
+            ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
+            // 统一使用 ServiceProvider 中的全局实例，避免重复初始化与事件风暴
+            ChangeNotifierProvider.value(
+                value: ServiceProvider.watchHistoryProvider),
+            ChangeNotifierProvider.value(value: ServiceProvider.scanService),
+            ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
+            ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+            ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
+            ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
+            ChangeNotifierProvider(
+                create: (_) => RemoteAccessSettingsProvider()),
+            ChangeNotifierProvider(create: (_) => PluginService()),
+            ChangeNotifierProvider(
+                create: (_) => HomeSectionsSettingsProvider()),
+            ChangeNotifierProvider(create: (_) => UIThemeProvider()),
+            ChangeNotifierProvider(
+                create: (_) => SharedRemoteLibraryProvider()),
+            ChangeNotifierProvider(create: (_) => JellyfinTranscodeProvider()),
+            ChangeNotifierProvider(create: (_) => EmbyTranscodeProvider()),
+            ChangeNotifierProvider(
+              create: (_) => ThemeBackgroundRevealProvider(),
+            ),
+            ChangeNotifierProvider.value(value: debugLogService),
+            ChangeNotifierProvider.value(
+                value: ServiceProvider.jellyfinProvider),
+            ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
+            ChangeNotifierProvider.value(
+                value: ServiceProvider.dandanplayRemoteProvider),
+            ChangeNotifierProvider(
+              create: (_) => LargeScreenUiSfxService(),
+            ),
+          ],
+          child: DesktopMultiWindowHost(
+            child: NipaPlayApp(launchFilePath: launchFilePath),
           ),
-          ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
-          // 统一使用 ServiceProvider 中的全局实例，避免重复初始化与事件风暴
-          ChangeNotifierProvider.value(
-              value: ServiceProvider.watchHistoryProvider),
-          ChangeNotifierProvider.value(value: ServiceProvider.scanService),
-          ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
-          ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
-          ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
-          ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
-          ChangeNotifierProvider(create: (_) => RemoteAccessSettingsProvider()),
-          ChangeNotifierProvider(create: (_) => PluginService()),
-          ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
-          ChangeNotifierProvider(create: (_) => UIThemeProvider()),
-          ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
-          ChangeNotifierProvider(create: (_) => JellyfinTranscodeProvider()),
-          ChangeNotifierProvider(create: (_) => EmbyTranscodeProvider()),
-          ChangeNotifierProvider(
-            create: (_) => ThemeBackgroundRevealProvider(),
-          ),
-          ChangeNotifierProvider.value(value: debugLogService),
-          ChangeNotifierProvider.value(value: ServiceProvider.jellyfinProvider),
-          ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
-          ChangeNotifierProvider.value(
-              value: ServiceProvider.dandanplayRemoteProvider),
-          ChangeNotifierProvider(
-            create: (_) => LargeScreenUiSfxService(),
-          ),
-        ],
-        child: DesktopMultiWindowHost(
-          child: NipaPlayApp(launchFilePath: launchFilePath),
         ),
       ),
     );
@@ -1265,9 +1276,15 @@ class MainPageState extends State<MainPage>
     try {
       _downloaderSettingsProvider =
           Provider.of<DownloaderSettingsProvider>(context, listen: false);
-      while (!_downloaderSettingsProvider!.isLoaded) {
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-      }
+      // 等待首次加载完成。原实现是 `while (!isLoaded) await 16ms` 的忙等：
+      // 一旦加载失败，isLoaded 永远不会变成 true，这里就退化成永不退出的
+      // 60Hz 轮询，会直接卡住整个启动流程，而且没有任何超时兜底。
+      await _downloaderSettingsProvider!.loaded.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          debugPrint('等待下载器设置超时，使用当前值继续启动');
+        },
+      );
       _showDownloaderTab = _canShowDownloaderTab;
       _downloaderSettingsProvider!.addListener(_onDownloaderSettingsChanged);
     } catch (e) {

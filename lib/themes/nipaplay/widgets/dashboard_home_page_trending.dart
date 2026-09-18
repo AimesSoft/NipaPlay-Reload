@@ -662,7 +662,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
     }
 
     return FutureBuilder<BangumiAnime>(
-      future: BangumiService.instance.getAnimeDetails(anime.id),
+      future: _animeDetailsFuture(anime.id),
       builder: (context, snapshot) => buildCard(snapshot.data?.summary),
     );
   }

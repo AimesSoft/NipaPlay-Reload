@@ -28,6 +28,15 @@ class AnimeCard extends StatefulWidget {
   final bool enableBackdropImage; // 新增：是否启用背景图层
   final bool showNewBadge; // 新番剧 / 有新集数时显示红色 NEW 标识
 
+  /// 网络封面图的解码宽度（物理像素）。
+  ///
+  /// 传 null 时由 [CachedNetworkImageWidget] 按布局尺寸自动推导。显式指定可以让
+  /// 列表在低端设备上避免按原始分辨率解码整张海报（一次可达数 MB 的位图）。
+  final int? imageDecodeWidth;
+
+  /// 网络封面图的解码高度（物理像素），语义同 [imageDecodeWidth]。
+  final int? imageDecodeHeight;
+
   const AnimeCard({
     super.key,
     required this.name,
@@ -44,6 +53,8 @@ class AnimeCard extends StatefulWidget {
     this.backgroundBlurSigma = 20.0,
     this.enableBackdropImage = true,
     this.showNewBadge = false,
+    this.imageDecodeWidth,
+    this.imageDecodeHeight,
   });
 
   // 根据filePath获取来源信息
@@ -161,7 +172,15 @@ class _AnimeCardState extends State<AnimeCard> {
         // 网格场景禁用淡入动画，减少saveLayer
         fadeDuration: Duration.zero,
         delayLoad: widget.delayLoad, // 使用延迟加载参数
-        loadMode: CachedImageLoadMode.legacy, // 番剧卡片统一使用legacy模式，避免海报突然切换
+        // 默认走 hybrid（基础图 + 高清图），它同样遵守下面的解码尺寸；
+        // 只有调用方显式要求时才回退到 legacy。
+        loadMode: widget.useLegacyImageLoadMode
+            ? CachedImageLoadMode.legacy
+            : CachedImageLoadMode.hybrid,
+        // 关键：把解码尺寸限制在格子实际需要的范围内。缺省时由
+        // CachedNetworkImageWidget 按布局尺寸推导，不会退回整图解码。
+        memCacheWidth: widget.imageDecodeWidth,
+        memCacheHeight: widget.imageDecodeHeight,
         errorBuilder: (context, error) {
           return _buildPlaceholder(context);
         },
@@ -174,7 +193,9 @@ class _AnimeCardState extends State<AnimeCard> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        cacheWidth: isBackground ? 150 : 300, // 背景图可以更小以节省内存
+        cacheWidth: isBackground
+            ? 150
+            : (widget.imageDecodeWidth ?? 300), // 背景图可以更小以节省内存
         errorBuilder: (context, error, stackTrace) {
           return _buildPlaceholder(context);
         },

@@ -16,6 +16,29 @@ import 'package:nipaplay/services/media_server_playback_client.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'media_server_service_base.dart';
 
+/// 在后台 isolate 里完成 `json.decode` + 逐条 `fromJson`。
+///
+/// Emby 的媒体库接口同样使用 `Recursive=true&Limit=99999`，响应体可达几十 MB。
+/// 在主 isolate 上解析会让 UI 整段卡死，因此把纯 CPU 的解码与建模挪出主线程。
+List<EmbyMediaItem> _decodeEmbyItems(String body) {
+  final data = json.decode(body);
+  final List<dynamic> items = data['Items'] ?? const [];
+  return items
+      .map((item) => EmbyMediaItem.fromJson(item))
+      .toList(growable: true);
+}
+
+/// 小于该长度的响应直接在主 isolate 解析，避免为小请求白付一次 isolate 启动开销。
+const int _kEmbyInlineDecodeLimit = 64 * 1024;
+
+/// 解析 `/Items` 响应，大响应自动转到后台 isolate。
+Future<List<EmbyMediaItem>> _decodeEmbyItemsMaybeIsolated(String body) {
+  if (body.length < _kEmbyInlineDecodeLimit) {
+    return Future.value(_decodeEmbyItems(body));
+  }
+  return compute(_decodeEmbyItems, body);
+}
+
 class EmbyService extends MediaServerServiceBase
     implements MediaServerPlaybackClient {
   static final EmbyService instance = EmbyService._internal();
@@ -534,11 +557,7 @@ class EmbyService extends MediaServerServiceBase
           '/emby/Users/$_userId/Items?$queryString');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> items = data['Items'] ?? [];
-
-        final results =
-            items.map((item) => EmbyMediaItem.fromJson(item)).toList();
+        final results = await _decodeEmbyItemsMaybeIsolated(response.body);
 
         results.sort((a, b) {
           if (a.isFolder != b.isFolder) {
@@ -598,10 +617,7 @@ class EmbyService extends MediaServerServiceBase
           '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> items = data['Items'];
-
-        return items.map((item) => EmbyMediaItem.fromJson(item)).toList();
+        return _decodeEmbyItemsMaybeIsolated(response.body);
       }
     } catch (e) {
       print('Error fetching media items for library $libraryId: $e');
@@ -647,10 +663,7 @@ class EmbyService extends MediaServerServiceBase
           '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> items = data['Items'];
-
-        return items.map((item) => EmbyMediaItem.fromJson(item)).toList();
+        return _decodeEmbyItemsMaybeIsolated(response.body);
       }
     } catch (e) {
       print('Error fetching random media items for library $libraryId: $e');
@@ -718,12 +731,10 @@ class EmbyService extends MediaServerServiceBase
             final response = await _makeAuthenticatedRequest(fullPath);
 
             if (response.statusCode == 200) {
-              final data = json.decode(response.body);
-              if (data['Items'] != null) {
-                final items = data['Items'] as List;
-                allItems.addAll(
-                    items.map((item) => EmbyMediaItem.fromJson(item)).toList());
-              }
+              // Limit=99999 的整库拉取，解析交给后台 isolate。
+              final libraryItems =
+                  await _decodeEmbyItemsMaybeIsolated(response.body);
+              allItems.addAll(libraryItems);
             } else {
               print(
                   'Error fetching Emby items for library $libraryId: ${response.statusCode} - ${response.body}');

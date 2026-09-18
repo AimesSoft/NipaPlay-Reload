@@ -48,8 +48,7 @@ enum MediaCollectionSort { comprehensive, recentlyAdded, name }
 class LibraryNewContentTracker {
   LibraryNewContentTracker._();
 
-  static final LibraryNewContentTracker instance =
-      LibraryNewContentTracker._();
+  static final LibraryNewContentTracker instance = LibraryNewContentTracker._();
 
   static const String _baselineKey = 'library_new_content_baseline_v1';
   static const String _discoveredAtKey =
@@ -137,8 +136,7 @@ class LibraryNewContentTracker {
   ) {
     if (currentEpisodeCount <= 0) return false;
     final key = _sourceKey(source);
-    if (!_loadedSources.contains(key) ||
-        !_initializedSources.contains(key)) {
+    if (!_loadedSources.contains(key) || !_initializedSources.contains(key)) {
       return false;
     }
     final previous = _baselines[key]?[animeId];
@@ -251,8 +249,7 @@ class LibraryNewContentTracker {
           all.addAll(Map<String, dynamic>.from(existing));
         }
       }
-      all[key] =
-          current.map((k, v) => MapEntry<String, dynamic>('$k', v));
+      all[key] = current.map((k, v) => MapEntry<String, dynamic>('$k', v));
       all['__initialized_$key'] = true;
       await prefs.setString(_baselineKey, json.encode(all));
 
@@ -723,8 +720,7 @@ class _AdaptiveMediaCollectionViewState
         previousFocus.canRequestFocus &&
         result == null) {
       material.WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            previousFocus.canRequestFocus) {
+        if (mounted && previousFocus.canRequestFocus) {
           previousFocus.requestFocus();
         }
       });
@@ -821,8 +817,7 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
 
   LocalLibrarySortType _toLocalSortType(MediaCollectionSort sort) {
     return switch (sort) {
-      MediaCollectionSort.comprehensive =>
-        LocalLibrarySortType.comprehensive,
+      MediaCollectionSort.comprehensive => LocalLibrarySortType.comprehensive,
       MediaCollectionSort.name => LocalLibrarySortType.name,
       MediaCollectionSort.recentlyAdded => LocalLibrarySortType.dateAdded,
     };
@@ -830,8 +825,7 @@ class AdaptiveMediaCollectionControlBar extends material.StatelessWidget {
 
   MediaCollectionSort _fromLocalSortType(LocalLibrarySortType sort) {
     return switch (sort) {
-      LocalLibrarySortType.comprehensive =>
-        MediaCollectionSort.comprehensive,
+      LocalLibrarySortType.comprehensive => MediaCollectionSort.comprehensive,
       LocalLibrarySortType.name => MediaCollectionSort.name,
       LocalLibrarySortType.dateAdded ||
       LocalLibrarySortType.rating =>
@@ -1034,6 +1028,14 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 source: sourceLabel,
                 enableBackgroundBlur: false,
                 enableBackdropImage: false,
+                // 每张卡的 8px 阴影都是一次遮罩模糊；电视网格一屏十几张，
+                // 滚动时逐帧重绘。电视上不需要这层装饰。
+                enableShadow: false,
+                // 电视网格的格子约 190 逻辑像素宽、海报区不足 270 高。
+                // 显式限制解码尺寸，避免在低端盒子上按原始分辨率解码整张海报
+                // （一次可达数 MB，且解码本身要几十毫秒主 isolate CPU）。
+                imageDecodeWidth: 400,
+                imageDecodeHeight: 560,
                 showNewBadge: newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               ),

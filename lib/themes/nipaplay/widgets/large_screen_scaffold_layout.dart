@@ -20,6 +20,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:provider/provider.dart';
 
 enum NipaplayLargeScreenPlayerMenuTarget { revealControls, openPlayerMenu }
@@ -1184,7 +1185,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
                   _closeTabPanel();
                 },
                 child: ClipRect(
-                  child: BackdropFilter(
+                  // 侧栏打开时这是全屏 σ25 的 backdrop 模糊，而且侧栏自身的
+                  // 开合动画会让它每帧重算。电视上直接跳过。
+                  child: TvSafeBackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                     child: ColoredBox(
                       color: widget.isDarkMode

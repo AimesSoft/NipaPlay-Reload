@@ -531,12 +531,10 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
             );
           } else if (item is SharedRemoteAnimeSummary) {
-            final title = (item.nameCn?.isNotEmpty == true)
-                ? item.nameCn!
-                : item.name;
-            final subtitle = (item.summary?.isNotEmpty == true)
-                ? item.summary!
-                : '远程共享媒体';
+            final title =
+                (item.nameCn?.isNotEmpty == true) ? item.nameCn! : item.name;
+            final subtitle =
+                (item.summary?.isNotEmpty == true) ? item.summary! : '远程共享媒体';
             final coverUrl = _normalizeRecommendationImageUrl(item.imageUrl);
             return RecommendedItem(
               id: 'shared:${item.animeId}',
@@ -961,8 +959,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
 
     const int maxConcurrent = 3;
     final inflight = <Future<void>>[];
-    int processedCount = 0;
     int updatedCount = 0;
+    // 进度刷新节流：原实现按"每 5 个"触发，处理慢时可以变成每秒多次整树重建。
+    // 改为按时间节流，最多约 5 次/秒。
+    const Duration progressThrottle = Duration(milliseconds: 200);
+    DateTime lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
     for (final item in _localAnimeItems) {
       final id = item.animeId;
@@ -1031,10 +1032,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               }
             }
           }
-          processedCount++;
         } catch (_) {
           // 静默失败，避免刷屏
-          processedCount++;
         }
       }
 
@@ -1047,8 +1046,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       if (inflight.length >= maxConcurrent) {
         try {
           await Future.any(inflight);
-          // 每处理几个项目就更新一次UI，而不是等全部完成
-          if (updatedCount > 0 && processedCount % 5 == 0 && mounted) {
+          // 每处理几个项目就更新一次UI，而不是等全部完成（按时间节流）
+          final now = DateTime.now();
+          if (updatedCount > 0 &&
+              mounted &&
+              now.difference(lastProgressUpdate) >= progressThrottle) {
+            lastProgressUpdate = now;
             setState(() {});
           }
         } catch (_) {}

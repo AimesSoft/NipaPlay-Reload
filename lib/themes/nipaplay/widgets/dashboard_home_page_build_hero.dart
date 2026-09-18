@@ -147,16 +147,14 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                       children: [
                         if (showSideCardTop)
                           Expanded(
-                              child:
-                                  _buildSmallRecommendationCard(items[5], 5))
+                              child: _buildSmallRecommendationCard(items[5], 5))
                         else
                           const Spacer(),
                         if (showSideCardTop && showSideCardBottom)
                           const SizedBox(height: 8),
                         if (showSideCardBottom)
                           Expanded(
-                              child:
-                                  _buildSmallRecommendationCard(items[6], 6))
+                              child: _buildSmallRecommendationCard(items[6], 6))
                         else
                           const Spacer(),
                       ],
@@ -206,6 +204,10 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  // 整屏宽的横幅：显式给出解码尺寸，既保证画质，
+                  // 又避免在低端电视上按原始分辨率解码整张背景图。
+                  memCacheWidth: 1280,
+                  memCacheHeight: 720,
                   delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                   blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
                   forceBlur: item.source != RecommendedItemSource.dandanplay

@@ -179,7 +179,21 @@ class WatchHistoryProvider extends ChangeNotifier {
     List<WatchHistoryItem> validItems = [];
     List<String> invalidPaths = [];
 
+    // 每处理若干条就让出一次事件循环。
+    //
+    // 这里对每条历史都做一次文件存在性检查（走异步 I/O，但仍是串行的）。
+    // 历史上千条时，即使单次很快，连续 await 也会长时间占用主 isolate，
+    // 让启动阶段的首帧与交互被推迟。定期让出可保持界面可响应。
+    const int yieldInterval = 50;
+    int processedSinceYield = 0;
+
     for (var item in items) {
+      processedSinceYield++;
+      if (processedSinceYield >= yieldInterval) {
+        processedSinceYield = 0;
+        await Future<void>.delayed(Duration.zero);
+      }
+
       bool fileExists = false;
       String originalPath = item.filePath;
 

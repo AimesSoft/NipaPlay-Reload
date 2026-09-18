@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_network_status.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
@@ -185,7 +186,8 @@ class _NipaplayLargeScreenTopStatusOverlayState
     return SizedBox(
       height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
-        child: BackdropFilter(
+        // 电视上跳过 σ25 的常驻顶栏模糊（每帧重算）。
+        child: TvSafeBackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: DecoratedBox(
             decoration: BoxDecoration(

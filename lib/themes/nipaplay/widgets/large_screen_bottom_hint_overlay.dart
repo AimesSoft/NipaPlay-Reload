@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 
 const double kNipaplayLargeScreenBottomHintHeight = 56;
 
@@ -81,7 +82,8 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     return SizedBox(
       height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
-        child: BackdropFilter(
+        // 电视上跳过 σ25 的常驻底栏模糊（每帧重算）。
+        child: TvSafeBackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: DecoratedBox(
             decoration: BoxDecoration(
