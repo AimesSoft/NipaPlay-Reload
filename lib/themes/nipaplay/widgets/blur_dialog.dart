@@ -18,6 +18,8 @@ class BlurDialog {
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
+    double? desktopMaxWidth,
+    double? desktopMaxHeightFactor,
   }) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -41,6 +43,8 @@ class BlurDialog {
       actions: actions,
       backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
+      maxWidth: desktopMaxWidth,
+      maxHeightFactor: desktopMaxHeightFactor,
     );
   }
 
@@ -52,6 +56,8 @@ class BlurDialog {
     List<Widget>? actions,
     Color? backgroundColor,
     bool barrierDismissible = true,
+    double? maxWidth,
+    double? maxHeightFactor,
   }) {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
@@ -66,7 +72,7 @@ class BlurDialog {
         builder: (BuildContext dialogContext) {
           final screenSize = MediaQuery.of(dialogContext).size;
           final dialogWidth =
-              globals.DialogSizes.getDialogWidth(screenSize.width);
+              maxWidth ?? globals.DialogSizes.getDialogWidth(screenSize.width);
           final keyboardHeight = MediaQuery.of(dialogContext).viewInsets.bottom;
           final shortestSide = screenSize.shortestSide;
           final bool isRealPhone = globals.isPhone && shortestSide < 600;
@@ -86,7 +92,7 @@ class BlurDialog {
 
           return NipaplayWindowScaffold(
             maxWidth: dialogWidth,
-            maxHeightFactor: isRealPhone ? 0.85 : 0.8,
+            maxHeightFactor: maxHeightFactor ?? (isRealPhone ? 0.85 : 0.8),
             onClose: barrierDismissible
                 ? () => Navigator.of(dialogContext).maybePop()
                 : null,

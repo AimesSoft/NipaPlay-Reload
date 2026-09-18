@@ -30,6 +30,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/media_capture_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_scope.dart';
@@ -293,7 +294,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     if (!SystemShareService.isSupported) return;
 
     final currentVideoPath = videoState.currentVideoPath;
-    final currentActualUrl = videoState.currentActualPlayUrl;
+    final currentActualUrl = videoState.currentResolvedMediaSource;
 
     String? filePath;
     String? url;
@@ -306,7 +307,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       } else if (scheme == 'jellyfin' || scheme == 'emby') {
         url = currentActualUrl;
       } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
-        url = currentVideoPath;
+        url = currentActualUrl;
       } else {
         filePath = currentVideoPath;
       }
@@ -342,72 +343,30 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
-  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
+  Future<void> _captureScreenshot(
+    VideoPlayerState videoState,
+    ScreenshotSaveTarget target, {
+    required bool includeDanmaku,
+    required bool includeSubtitles,
+  }) async {
     if (kIsWeb) return;
     if (!videoState.hasVideo) return;
 
     try {
-      if (Platform.isIOS) {
-        final colorScheme = Theme.of(context).colorScheme;
-        final actionColor = colorScheme.onSurface.withOpacity(0.82);
-        final cancelColor = colorScheme.onSurface.withOpacity(0.58);
-        String? destination;
-        switch (videoState.screenshotSaveTarget) {
-          case ScreenshotSaveTarget.photos:
-            destination = 'photos';
-            break;
-          case ScreenshotSaveTarget.file:
-            destination = 'file';
-            break;
-          case ScreenshotSaveTarget.ask:
-            destination = await BlurDialog.show<String>(
-              context: context,
-              title: '保存截图',
-              content: '请选择保存位置',
-              actions: [
-                HoverScaleTextButton(
-                  onPressed: () => Navigator.of(context).pop('photos'),
-                  child: Text(
-                    '相册',
-                    style: TextStyle(color: actionColor),
-                  ),
-                ),
-                HoverScaleTextButton(
-                  onPressed: () => Navigator.of(context).pop('file'),
-                  child: Text(
-                    '文件',
-                    style: TextStyle(color: actionColor),
-                  ),
-                ),
-                HoverScaleTextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    '取消',
-                    style: TextStyle(color: cancelColor),
-                  ),
-                ),
-              ],
-              barrierDismissible: !_shouldDisableDialogDismiss(videoState),
-            );
-            break;
-        }
-
+      if (Platform.isIOS && target == ScreenshotSaveTarget.photos) {
+        final ok = await videoState.captureScreenshotToPhotos(
+          includeDanmaku: includeDanmaku,
+          includeSubtitles: includeSubtitles,
+        );
         if (!mounted) return;
-        if (destination == null) return;
-
-        if (destination == 'photos') {
-          final ok = await videoState.captureScreenshotToPhotos();
-          if (!mounted) return;
-          if (ok) {
-            BlurSnackBar.show(context, '截图已保存到相册');
-          } else {
-            BlurSnackBar.show(context, '截图失败');
-          }
-          return;
-        }
+        BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
+        return;
       }
 
-      final path = await videoState.captureScreenshot();
+      final path = await videoState.captureScreenshot(
+        includeDanmaku: includeDanmaku,
+        includeSubtitles: includeSubtitles,
+      );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
@@ -953,7 +912,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton =
         SystemShareService.isSupported && !globals.isDesktop;
-    final bool showScreenshotButton = !kIsWeb && globals.isMobilePlatform;
+    final bool showScreenshotButton = !kIsWeb;
     final bool showAirPlayButton =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     final detachedWindow = DesktopMultiWindow.maybeControllerOf(context);
@@ -1213,11 +1172,29 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               defaultTargetPlatform == TargetPlatform.iOS)
                             const SizedBox(width: 12),
                           ShadowActionButton(
-                            tooltip: '截图',
+                            tooltip: '画面截取',
                             icon: Icons.camera_alt_outlined,
                             onPressed: () {
                               videoState.resetHideControlsTimer();
-                              _captureScreenshot(videoState);
+                              unawaited(
+                                showMediaCaptureDialog(
+                                  context: context,
+                                  videoState: videoState,
+                                  onCaptureImage: (
+                                    target, {
+                                    required includeDanmaku,
+                                    required includeSubtitles,
+                                  }) =>
+                                      _captureScreenshot(
+                                    videoState,
+                                    target,
+                                    includeDanmaku: includeDanmaku,
+                                    includeSubtitles: includeSubtitles,
+                                  ),
+                                  barrierDismissible:
+                                      !_shouldDisableDialogDismiss(videoState),
+                                ),
+                              );
                             },
                           ),
                         ],

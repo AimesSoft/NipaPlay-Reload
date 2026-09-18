@@ -284,7 +284,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
     // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL
     if (isNewRemotePath &&
-        (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
+        (resolvedActualPlayUrl == null ||
+            resolvedActualPlayUrl.isEmpty ||
+            MediaSourceUtils.isNewWebDavPath(resolvedActualPlayUrl) ||
+            MediaSourceUtils.isNewSmbPath(resolvedActualPlayUrl))) {
       try {
         if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
           resolvedActualPlayUrl =

@@ -31,6 +31,7 @@ import 'danmaku_density_bar.dart';
 import 'speed_boost_indicator.dart';
 import 'loading_overlay.dart';
 import 'macos_hdr_probe_overlay.dart';
+import 'media_capture_dialog.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'base_settings_menu.dart';
@@ -829,7 +830,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!SystemShareService.isSupported) return;
 
     final currentVideoPath = videoState.currentVideoPath;
-    final currentActualUrl = videoState.currentActualPlayUrl;
+    final currentActualUrl = videoState.currentResolvedMediaSource;
 
     String? filePath;
     String? url;
@@ -842,7 +843,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       } else if (scheme == 'jellyfin' || scheme == 'emby') {
         url = currentActualUrl;
       } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
-        url = currentVideoPath;
+        url = currentActualUrl;
       } else {
         filePath = currentVideoPath;
       }
@@ -933,9 +934,28 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     _playbackInfoOverlay = null;
   }
 
-  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
+  Future<void> _captureScreenshot(
+    VideoPlayerState videoState,
+    ScreenshotSaveTarget target, {
+    required bool includeDanmaku,
+    required bool includeSubtitles,
+  }) async {
     try {
-      final path = await videoState.captureScreenshot();
+      if (!kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.iOS &&
+          target == ScreenshotSaveTarget.photos) {
+        final ok = await videoState.captureScreenshotToPhotos(
+          includeDanmaku: includeDanmaku,
+          includeSubtitles: includeSubtitles,
+        );
+        if (!mounted) return;
+        BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
+        return;
+      }
+      final path = await videoState.captureScreenshot(
+        includeDanmaku: includeDanmaku,
+        includeSubtitles: includeSubtitles,
+      );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
@@ -1024,9 +1044,25 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       ),
       ContextMenuAction(
         icon: Icons.camera_alt_outlined,
-        label: '截图',
+        label: '画面截取',
         enabled: videoState.hasVideo,
-        onPressed: () => unawaited(_captureScreenshot(videoState)),
+        onPressed: () => unawaited(
+          showMediaCaptureDialog(
+            context: context,
+            videoState: videoState,
+            onCaptureImage: (
+              target, {
+              required includeDanmaku,
+              required includeSubtitles,
+            }) =>
+                _captureScreenshot(
+              videoState,
+              target,
+              includeDanmaku: includeDanmaku,
+              includeSubtitles: includeSubtitles,
+            ),
+          ),
+        ),
       ),
       ContextMenuAction(
         icon: Icons.double_arrow_rounded,
@@ -1184,7 +1220,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     if ((videoState.hasVideo ||
                                             videoState
                                                 .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible)
+                                        videoState.danmakuVisible &&
+                                        videoState
+                                            .screenshotCaptureIncludesDanmaku)
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
@@ -1197,7 +1235,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                    if (videoState.hasVideo)
+                                    if (videoState.hasVideo &&
+                                        videoState
+                                            .screenshotCaptureIncludesSubtitles)
                                       Positioned.fill(
                                         child: Consumer<VideoPlayerState>(
                                           builder: (context, videoState, _) {
@@ -1272,7 +1312,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       if ((videoState.hasVideo ||
                                               videoState
                                                   .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible)
+                                          videoState.danmakuVisible &&
+                                          videoState
+                                              .screenshotCaptureIncludesDanmaku)
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,
@@ -1286,7 +1328,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                             ),
                                           ),
                                         ),
-                                      if (videoState.hasVideo)
+                                      if (videoState.hasVideo &&
+                                          videoState
+                                              .screenshotCaptureIncludesSubtitles)
                                         Positioned.fill(
                                           child: Consumer<VideoPlayerState>(
                                             builder: (context, videoState, _) {

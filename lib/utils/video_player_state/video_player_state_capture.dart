@@ -465,8 +465,14 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     }
   }
 
-  Future<String?> captureScreenshot() async {
-    final bytes = await _captureScreenshotPngBytes();
+  Future<String?> captureScreenshot({
+    bool includeDanmaku = true,
+    bool includeSubtitles = true,
+  }) async {
+    final bytes = await _captureScreenshotPngBytes(
+      includeDanmaku: includeDanmaku,
+      includeSubtitles: includeSubtitles,
+    );
     if (bytes == null || bytes.isEmpty) return null;
 
     try {
@@ -481,19 +487,38 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     }
   }
 
-  Future<bool> captureScreenshotToPhotos() async {
+  Future<bool> captureScreenshotToPhotos({
+    bool includeDanmaku = true,
+    bool includeSubtitles = true,
+  }) async {
     if (kIsWeb) return false;
     if (!Platform.isIOS) return false;
     if (!hasVideo) return false;
 
-    final bytes = await _captureScreenshotPngBytes();
+    final bytes = await _captureScreenshotPngBytes(
+      includeDanmaku: includeDanmaku,
+      includeSubtitles: includeSubtitles,
+    );
     if (bytes == null || bytes.isEmpty) return false;
 
     await PhotoLibraryService.saveImageToPhotos(bytes);
     return true;
   }
 
-  Future<Uint8List?> _captureScreenshotPngBytes() async {
+  Future<Uint8List?> captureScreenshotPreview({
+    bool includeDanmaku = true,
+    bool includeSubtitles = true,
+  }) {
+    return _captureScreenshotPngBytes(
+      includeDanmaku: includeDanmaku,
+      includeSubtitles: includeSubtitles,
+    );
+  }
+
+  Future<Uint8List?> _captureScreenshotPngBytes({
+    required bool includeDanmaku,
+    required bool includeSubtitles,
+  }) async {
     if (kIsWeb) return null;
     if (!hasVideo) return null;
 
@@ -535,9 +560,27 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     }
 
     _isCapturingScreenshot = true;
+    final previousIncludeDanmaku = _screenshotCaptureIncludesDanmaku;
+    final previousIncludeSubtitles = _screenshotCaptureIncludesSubtitles;
+    final previousSubtitleTracks = List<int>.from(player.activeSubtitleTracks);
+    _screenshotCaptureIncludesDanmaku = includeDanmaku;
+    _screenshotCaptureIncludesSubtitles = includeSubtitles;
+    if (!includeSubtitles && previousSubtitleTracks.isNotEmpty) {
+      // Native player subtitles are rendered into the video surface rather
+      // than ExternalSubtitleOverlay. Disable the actual subtitle track for
+      // the captured frame, then restore the selection in finally.
+      player.activeSubtitleTracks = const <int>[];
+    }
+    _notifyListeners();
     try {
       // 确保当前帧已渲染完成
       await SchedulerBinding.instance.endOfFrame;
+      if (!includeSubtitles && previousSubtitleTracks.isNotEmpty) {
+        // Track changes may cross an asynchronous player bridge. Give the
+        // texture one additional frame to present without subtitles.
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await SchedulerBinding.instance.endOfFrame;
+      }
 
       final devicePixelRatio =
           MediaQuery.maybeOf(boundaryContext)?.devicePixelRatio ?? 1.0;
@@ -558,7 +601,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       debugPrint('截图失败: $e');
       return null;
     } finally {
+      if (!includeSubtitles && previousSubtitleTracks.isNotEmpty) {
+        player.activeSubtitleTracks = previousSubtitleTracks;
+      }
+      _screenshotCaptureIncludesDanmaku = previousIncludeDanmaku;
+      _screenshotCaptureIncludesSubtitles = previousIncludeSubtitles;
       _isCapturingScreenshot = false;
+      _notifyListeners();
     }
   }
 

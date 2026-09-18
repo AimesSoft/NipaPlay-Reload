@@ -504,8 +504,7 @@ class _NipaplayErikaWindowOverlayVideoViewState
         if (visible) {
           _cutoutOwners[onFrameRectChanged] = _cutoutOwner;
           onFrameRectChanged(flutterCutout);
-        } else if (identical(
-            _cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
+        } else if (identical(_cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
           _cutoutOwners[onFrameRectChanged] = null;
           onFrameRectChanged(null);
         }
@@ -576,7 +575,8 @@ class ErikaPlayerAdapter
         AbstractPlayer,
         AsyncDisposablePlayer,
         AsyncSeekPlayer,
-        AsyncExternalSubtitlePlayer {
+        AsyncExternalSubtitlePlayer,
+        GifExportCapablePlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
@@ -670,6 +670,48 @@ class ErikaPlayerAdapter
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.android ||
           _isHarmonyOS);
+
+  @override
+  bool get supportsGifExport => supportsHeadlessGifExport;
+
+  static bool get supportsHeadlessGifExport =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+  @override
+  Future<GifExportResult> exportGif(GifExportRequest request) =>
+      exportGifHeadless(request);
+
+  static Future<GifExportResult> exportGifHeadless(
+    GifExportRequest request,
+  ) async {
+    if (!supportsHeadlessGifExport) {
+      throw UnsupportedError(
+        'Erika GIF export is currently connected on macOS only.',
+      );
+    }
+    final exported = await ErikaPlayer.exportGif(
+      ErikaGifExportOptions(
+        inputUri: request.inputUri,
+        outputPath: request.outputPath,
+        start: request.start,
+        end: request.end,
+        framesPerSecond: request.framesPerSecond,
+        outputWidth: request.outputWidth,
+        outputHeight: request.outputHeight,
+        quality: request.quality == GifExportQuality.high
+            ? ErikaGifExportQuality.high
+            : ErikaGifExportQuality.normal,
+        httpHeaders: request.httpHeaders,
+      ),
+    );
+    return GifExportResult(
+      outputPath: exported.outputPath,
+      width: exported.width,
+      height: exported.height,
+      frameCount: exported.frameCount,
+      fileSize: exported.fileSize,
+    );
+  }
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
