@@ -11,6 +11,7 @@ import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/nipaplay_server_router.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -155,7 +156,8 @@ class DandanplayService {
     }
 
     if (_baseUrl.isEmpty || explicitOverride == null) {
-      _baseUrl = await NetworkSettings.getDandanplayServer();
+      // 自动模式下由路由器按 IP 归属地/可达性挑选主或备用网关。
+      _baseUrl = await NipaplayServerRouter.instance.effectiveServer();
     }
   }
 

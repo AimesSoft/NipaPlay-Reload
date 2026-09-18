@@ -1,0 +1,20 @@
+[Unit]
+Description=NipaPlay Client Region Resolver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/nipaplay-region
+Environment=REGION_LISTEN_HOST=127.0.0.1
+Environment=REGION_LISTEN_PORT=18100
+ExecStart=/usr/bin/python3 /opt/nipaplay-region/region_service.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

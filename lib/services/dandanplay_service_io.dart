@@ -15,6 +15,7 @@ import 'android_saf_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/nipaplay_server_router.dart';
 import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
 import 'package:nipaplay/src/rust/rust_init.dart';
 
@@ -194,14 +195,17 @@ class DandanplayService {
     return;
   }
 
-  /// 获取弹幕相关 API 基础 URL（包含用户自定义设置）
+  /// 获取弹幕相关 API 基础 URL（包含用户自定义设置与主/备用自动选择）
   static Future<String> getApiBaseUrl() async {
-    return await NetworkSettings.getDandanplayServer();
+    return await NipaplayServerRouter.instance.effectiveServer();
   }
 
-  /// 获取账号相关 API 基础 URL（固定官方服务器）
+  /// 获取账号相关 API 基础 URL。
+  ///
+  /// 网关是弹弹play上游的透明代理，账号接口同样受主/备自动选择影响，
+  /// 否则国内用户登录仍会走不稳定的香港线路。
   static Future<String> getAccountApiBaseUrl() async {
-    return NetworkSettings.primaryServer;
+    return await NipaplayServerRouter.instance.effectiveServer();
   }
 
   // 预加载最近更新的动画数据
