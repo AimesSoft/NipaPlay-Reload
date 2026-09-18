@@ -71,7 +71,7 @@ class ServerConnectivityService {
   Future<bool> _checkDandanplay(String serverUrl) async {
     // Check our gateway itself without spending an upstream API request or
     // reporting a healthy server as offline just because the user logged out.
-    if (serverUrl == NetworkSettings.primaryServer) {
+    if (NetworkSettings.isOfficialServer(serverUrl)) {
       try {
         final response = await http
             .get(Uri.parse('$serverUrl/healthz'))

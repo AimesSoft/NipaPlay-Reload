@@ -7,6 +7,7 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay/services/nipaplay_server_router.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -40,9 +41,14 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   String _currentServer = '';
   String _currentBangumiServer = '';
+  DandanplayServerMode _currentMode = DandanplayServerMode.auto;
+  ServerRoutingSnapshot? _routing;
   bool _isLoading = true;
   bool _isSavingCustom = false;
   bool _isSavingBangumiCustom = false;
+
+  /// 下拉菜单里代表「自动选择」的哨兵值（不是合法 URL）。
+  static const String _autoOptionValue = '__nipaplay_auto_server__';
 
   @override
   void initState() {
@@ -51,6 +57,9 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     _connectivity.dandanplayNotifier.addListener(_onConnectivityChanged);
     _connectivity.bangumiNotifier.addListener(_onConnectivityChanged);
     _connectivity.checkingNotifier.addListener(_onConnectivityChanged);
+    NipaplayServerRouter.instance.snapshotNotifier.addListener(
+      _onRoutingChanged,
+    );
   }
 
   @override
@@ -58,6 +67,9 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     _connectivity.dandanplayNotifier.removeListener(_onConnectivityChanged);
     _connectivity.bangumiNotifier.removeListener(_onConnectivityChanged);
     _connectivity.checkingNotifier.removeListener(_onConnectivityChanged);
+    NipaplayServerRouter.instance.snapshotNotifier.removeListener(
+      _onRoutingChanged,
+    );
     super.dispose();
   }
 
@@ -66,8 +78,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     final l10n = context.l10n;
 
     if (_isLoading) {
-      return AdaptiveSettingsPage(
-        children: const [Center(child: CircularProgressIndicator())],
+      return const AdaptiveSettingsPage(
+        children: [Center(child: CircularProgressIndicator())],
       );
     }
 
@@ -81,7 +93,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               icon: Ionicons.wifi_outline,
               phoneIcon: cupertino.CupertinoIcons.wifi,
               enabled: !_connectivity.isChecking,
-              onTap: _connectivity.checkConnectivity,
+              onTap: _runDiagnostics,
             ),
           ],
         ),
@@ -108,9 +120,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
           children: [
             AdaptiveSettingsTile<String>.dropdown(
               title: l10n.dandanplayServer,
-              subtitle: l10n.currentServer(
-                _getServerDisplayName(context, _currentServer),
-              ),
+              subtitle: _serverSubtitle(context),
               icon: Ionicons.server_outline,
               phoneIcon: cupertino.CupertinoIcons.cloud,
               items: _serverDropdownItems(context),
@@ -200,36 +210,74 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     if (mounted) setState(() {});
   }
 
+  void _onRoutingChanged() {
+    if (!mounted) return;
+    setState(() {
+      _routing = NipaplayServerRouter.instance.snapshot;
+    });
+  }
+
+  /// 网络诊断：自动模式下先重新判定主/备用线路，再检测连通性。
+  Future<void> _runDiagnostics() async {
+    if (_currentMode == DandanplayServerMode.auto) {
+      await NipaplayServerRouter.instance.refresh();
+    }
+    await _connectivity.checkConnectivity();
+    if (!mounted) return;
+    final mode = await NetworkSettings.getDandanplayServerMode();
+    final server = await NipaplayServerRouter.instance.effectiveServer();
+    if (!mounted) return;
+    setState(() {
+      _currentMode = mode;
+      _currentServer = server;
+      _routing = NipaplayServerRouter.instance.snapshot;
+    });
+  }
+
   Future<void> _loadCurrentServer() async {
-    final server = await NetworkSettings.getDandanplayServer();
+    final mode = await NetworkSettings.getDandanplayServerMode();
+    // 自动模式下顺带刷新一次判定，让界面能显示真实选中的线路。
+    final server = await NipaplayServerRouter.instance.effectiveServer();
     final bangumiServer = await NetworkSettings.getBangumiServer();
     if (!mounted) return;
     setState(() {
+      _currentMode = mode;
       _currentServer = server;
       _currentBangumiServer = bangumiServer;
+      _routing = NipaplayServerRouter.instance.snapshot;
       _isLoading = false;
     });
   }
 
-  Future<void> _changeServer(String serverUrl) async {
-    final message = context.l10n.networkServerSwitchedTo(
-      _getServerDisplayName(context, serverUrl),
-    );
-    await NetworkSettings.setDandanplayServer(serverUrl);
+  Future<void> _changeServer(String optionValue) async {
+    if (optionValue == _autoOptionValue) {
+      await NetworkSettings.setDandanplayServerMode(
+        DandanplayServerMode.auto,
+      );
+    } else {
+      await NetworkSettings.setDandanplayServer(optionValue);
+    }
+    if (!mounted) return;
+    final mode = await NetworkSettings.getDandanplayServerMode();
+    final server = await NipaplayServerRouter.instance.effectiveServer();
     if (!mounted) return;
     setState(() {
-      _currentServer = serverUrl;
+      _currentMode = mode;
+      _currentServer = server;
     });
     AdaptiveSnackBar.show(
       context,
-      message: message,
+      message: context.l10n.networkServerSwitchedTo(
+        _getServerDisplayName(context, optionValue),
+      ),
       type: AdaptiveSnackBarType.success,
     );
   }
 
   Future<void> _editDandanplayServer() async {
-    final initialValue =
-        NetworkSettings.isCustomServer(_currentServer) ? _currentServer : '';
+    // 切到自动/固定模式后仍保留用户填过的自定义地址，这里回填便于再次修改。
+    final initialValue = await NetworkSettings.getCustomServer();
+    if (!mounted) return;
     final title = _text(
       context,
       '自定义弹弹play API 服务器',
@@ -248,6 +296,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     if (input == null) return;
 
     if (input.isEmpty) {
+      // 留空表示清除自定义服务器并回到自动选择。
+      await NetworkSettings.clearCustomServer();
       await _resetDandanplayServer();
       return;
     }
@@ -266,9 +316,11 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     });
     try {
       await NetworkSettings.setDandanplayServer(input);
-      final server = await NetworkSettings.getDandanplayServer();
+      final mode = await NetworkSettings.getDandanplayServerMode();
+      final server = await NipaplayServerRouter.instance.effectiveServer();
       if (!mounted) return;
       setState(() {
+        _currentMode = mode;
         _currentServer = server;
       });
       AdaptiveSnackBar.show(
@@ -367,9 +419,11 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     });
     try {
       await NetworkSettings.resetToDefaultServer();
-      final server = await NetworkSettings.getDandanplayServer();
+      final mode = await NetworkSettings.getDandanplayServerMode();
+      final server = await NipaplayServerRouter.instance.effectiveServer();
       if (!mounted) return;
       setState(() {
+        _currentMode = mode;
         _currentServer = server;
       });
       AdaptiveSnackBar.show(
@@ -714,21 +768,44 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   List<DropdownMenuItemData<String>> _serverDropdownItems(
     BuildContext context,
   ) {
-    final items = [
+    final items = <DropdownMenuItemData<String>>[
       DropdownMenuItemData(
         title: _text(
           context,
-          'NipaPlay 服务（推荐）',
-          'NipaPlay 服務（推薦）',
-          'NipaPlay Service (Recommended)',
+          '自动选择（推荐）',
+          '自動選擇（推薦）',
+          'Automatic (Recommended)',
         ),
-        value: NetworkSettings.primaryServer,
-        isSelected: _currentServer == NetworkSettings.primaryServer,
-        description: context.l10n.networkServerDescriptionPrimary,
+        value: _autoOptionValue,
+        isSelected: _currentMode == DandanplayServerMode.auto,
+        description: _autoDescription(context),
+      ),
+      DropdownMenuItemData(
+        title: _text(
+          context,
+          '香港服务器（域名）',
+          '香港伺服器（網域）',
+          'Hong Kong Server (Domain)',
+        ),
+        value: NetworkSettings.hongKongServer,
+        isSelected: _currentMode == DandanplayServerMode.hongKong,
+        description: NetworkSettings.hongKongServer,
+      ),
+      DropdownMenuItemData(
+        title: _text(
+          context,
+          '国内服务器（IP 直连）',
+          '國內伺服器（IP 直連）',
+          'China Server (Direct IP)',
+        ),
+        value: NetworkSettings.chinaServer,
+        isSelected: _currentMode == DandanplayServerMode.china,
+        description: NetworkSettings.chinaServer,
       ),
     ];
 
-    if (NetworkSettings.isCustomServer(_currentServer)) {
+    if (_currentMode == DandanplayServerMode.custom &&
+        _currentServer.isNotEmpty) {
       items.add(
         DropdownMenuItemData(
           title: context.l10n.customServerWithValue(_currentServer),
@@ -741,11 +818,60 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     return items;
   }
 
+  /// 自动模式下的说明文本，展示依据（IP 归属地）与当前实际线路。
+  String _autoDescription(BuildContext context) {
+    final base = _text(
+      context,
+      '按 IP 归属地自动选择国内或香港服务器，并在线路异常时自动切换备用服务器',
+      '依 IP 歸屬地自動選擇國內或香港伺服器，並在線路異常時自動切換備用伺服器',
+      'Pick the China or Hong Kong server by IP region, with automatic failover.',
+    );
+    final routing = _routing;
+    if (routing == null || routing.detectedRegion == null) {
+      return base;
+    }
+    final regionText =
+        routing.detectedRegion == NetworkSettings.autoRegionChina
+            ? _text(context, '已判定为国内网络', '已判定為國內網路', 'Region: China')
+            : _text(context, '已判定为海外网络', '已判定為海外網路', 'Region: Overseas');
+    return '$base\n$regionText';
+  }
+
+  /// 服务器选择项下方的摘要，自动模式会带上当前生效线路。
+  String _serverSubtitle(BuildContext context) {
+    switch (_currentMode) {
+      case DandanplayServerMode.auto:
+        final parts = <String>[
+          _text(context, '自动选择', '自動選擇', 'Automatic'),
+          '${_text(context, '当前', '目前', 'Current')}: '
+              '${_getServerDisplayName(context, _currentServer)}',
+        ];
+        if (_routing?.failoverActive == true) {
+          parts.add(
+            _text(
+              context,
+              '线路异常，已临时切换备用服务器',
+              '線路異常，已臨時切換備用伺服器',
+              'Failover active.',
+            ),
+          );
+        }
+        return parts.join('\n');
+      case DandanplayServerMode.hongKong:
+      case DandanplayServerMode.china:
+      case DandanplayServerMode.custom:
+        return context.l10n.currentServer(
+          _getServerDisplayName(context, _currentServer),
+        );
+    }
+  }
+
   String _diagnosticsSubtitle(BuildContext context) {
     final checkingText = _connectivity.isChecking
         ? _text(context, '检测中…', '檢測中…', 'Checking...')
         : _text(context, '点击重新检测', '點擊重新檢測', 'Tap to check again');
-    return '弹弹play: ${_statusText(context, _connectivity.dandanplayAvailable)}\n'
+    return '${_getServerDisplayName(context, _currentServer)}\n'
+        '弹弹play: ${_statusText(context, _connectivity.dandanplayAvailable)}\n'
         'Bangumi: ${_statusText(context, _connectivity.bangumiAvailable)}\n'
         '$checkingText';
   }
@@ -779,12 +905,26 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
   }
 
   String _getServerDisplayName(BuildContext context, String serverUrl) {
-    switch (serverUrl) {
-      case NetworkSettings.primaryServer:
-        return _text(context, 'NipaPlay 服务', 'NipaPlay 服務', 'NipaPlay Service');
-      default:
-        return serverUrl;
+    if (serverUrl == _autoOptionValue) {
+      return _text(context, '自动选择', '自動選擇', 'Automatic');
     }
+    if (serverUrl == NetworkSettings.hongKongServer) {
+      return _text(
+        context,
+        '香港服务器',
+        '香港伺服器',
+        'Hong Kong Server',
+      );
+    }
+    if (serverUrl == NetworkSettings.chinaServer) {
+      return _text(
+        context,
+        '国内服务器',
+        '國內伺服器',
+        'China Server',
+      );
+    }
+    return serverUrl;
   }
 
   String _text(

@@ -69,15 +69,23 @@ void main() {
   });
 
   group('Dandanplay gateway migration', () {
-    test('only the guarded gateway is offered as a built-in server', () {
+    test('both official gateways are offered as built-in servers', () {
       expect(
         NetworkSettings.getAvailableServers().map((server) => server['url']),
-        [NetworkSettings.primaryServer],
+        [
+          NetworkSettings.hongKongServer,
+          NetworkSettings.chinaServer,
+        ],
       );
     });
 
-    test('uses the NipaPlay gateway by default', () async {
+    test('defaults to automatic selection resolving to the Hong Kong gateway',
+        () async {
       SharedPreferences.setMockInitialValues({});
+      expect(
+        await NetworkSettings.getDandanplayServerMode(),
+        DandanplayServerMode.auto,
+      );
       expect(
         await NetworkSettings.getDandanplayServer(),
         NetworkSettings.primaryServer,

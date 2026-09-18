@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/search_model.dart';
+import 'package:nipaplay/services/nipaplay_server_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RandomRecommendationService {
@@ -11,14 +12,21 @@ class RandomRecommendationService {
   static final RandomRecommendationService instance =
       RandomRecommendationService._();
 
-  static const String _endpoint =
-      'https://nipaplay.aimes-soft.com/api/random-recommendations';
+  static const String _endpointPath = '/api/random-recommendations';
   static const String _cacheKey = 'daily_random_recommendations_cache';
   static const Duration _requestTimeout = Duration(seconds: 8);
 
+  /// 随机推荐只部署在官方站点上，因此跟随官方主/备用线路，
+  /// 但不受用户自填的第三方弹弹play网关影响。
+  Future<String> resolveEndpoint() async {
+    final siteBase = await NipaplayServerRouter.instance.officialSiteBase();
+    return '$siteBase$_endpointPath';
+  }
+
   Future<DailyRandomRecommendations> fetchDailyRecommendations() async {
     try {
-      final response = await http.get(Uri.parse(_endpoint),
+      final endpoint = await resolveEndpoint();
+      final response = await http.get(Uri.parse(endpoint),
           headers: {'Accept': 'application/json'}).timeout(_requestTimeout);
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
