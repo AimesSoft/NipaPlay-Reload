@@ -41,6 +41,55 @@ abstract interface class MediaLoadAwarePlayer {
   Future<bool> retryCurrentMediaLoad();
 }
 
+enum GifExportQuality { normal, high }
+
+@immutable
+class GifExportRequest {
+  const GifExportRequest({
+    required this.inputUri,
+    required this.outputPath,
+    required this.start,
+    required this.end,
+    required this.framesPerSecond,
+    required this.outputWidth,
+    required this.outputHeight,
+    this.quality = GifExportQuality.normal,
+    this.httpHeaders = const <String, String>{},
+  });
+
+  final String inputUri;
+  final String outputPath;
+  final Duration start;
+  final Duration end;
+  final int framesPerSecond;
+  final int outputWidth;
+  final int outputHeight;
+  final GifExportQuality quality;
+  final Map<String, String> httpHeaders;
+}
+
+@immutable
+class GifExportResult {
+  const GifExportResult({
+    required this.outputPath,
+    required this.width,
+    required this.height,
+    required this.frameCount,
+    required this.fileSize,
+  });
+
+  final String outputPath;
+  final int width;
+  final int height;
+  final int frameCount;
+  final int fileSize;
+}
+
+abstract interface class GifExportCapablePlayer {
+  bool get supportsGifExport;
+  Future<GifExportResult> exportGif(GifExportRequest request);
+}
+
 abstract class AbstractPlayer {
   // Properties
   double get volume;

@@ -7,6 +7,10 @@ export './abstract_player.dart'
         AsyncDisposablePlayer,
         AsyncExternalSubtitlePlayer,
         AsyncSeekPlayer,
+        GifExportCapablePlayer,
+        GifExportQuality,
+        GifExportRequest,
+        GifExportResult,
         MediaLoadAwarePlayer,
         networkMediaLoadMaxAttempts;
 export './player_factory.dart'
@@ -265,6 +269,29 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
 
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) =>
       _delegate.snapshot(width: width, height: height);
+
+  bool get supportsGifExport {
+    final delegate = _delegate;
+    return (delegate is core_player.GifExportCapablePlayer &&
+            (delegate as core_player.GifExportCapablePlayer)
+                .supportsGifExport) ||
+        ErikaPlayerAdapter.supportsHeadlessGifExport;
+  }
+
+  Future<core_player.GifExportResult> exportGif(
+    core_player.GifExportRequest request,
+  ) {
+    final delegate = _delegate;
+    if (delegate is core_player.GifExportCapablePlayer &&
+        (delegate as core_player.GifExportCapablePlayer).supportsGifExport) {
+      return (delegate as core_player.GifExportCapablePlayer)
+          .exportGif(request);
+    }
+    if (ErikaPlayerAdapter.supportsHeadlessGifExport) {
+      return ErikaPlayerAdapter.exportGifHeadless(request);
+    }
+    throw UnsupportedError('The active player kernel cannot export GIF files.');
+  }
 
   // Delegate new methods for DecoderManager
   void setDecoders(MediaType type, List<String> decoders) {

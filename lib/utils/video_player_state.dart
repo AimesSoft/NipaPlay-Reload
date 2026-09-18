@@ -395,6 +395,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final GlobalKey screenshotBoundaryKey = GlobalKey(
     debugLabel: 'player_screenshot_boundary',
   );
+  bool _screenshotCaptureIncludesDanmaku = true;
+  bool _screenshotCaptureIncludesSubtitles = true;
   bool _isCapturingScreenshot = false;
 
   // 添加重置标志，防止在重置过程中更新历史记录
@@ -1105,6 +1107,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
+  bool get screenshotCaptureIncludesDanmaku =>
+      _screenshotCaptureIncludesDanmaku;
+  bool get screenshotCaptureIncludesSubtitles =>
+      _screenshotCaptureIncludesSubtitles;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1477,6 +1483,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get currentVideoPath => _currentVideoPath;
   String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+  String? get currentResolvedMediaSource {
+    final actual = _currentActualPlayUrl?.trim();
+    if (actual != null && actual.isNotEmpty) {
+      final resolved = MediaSourceUtils.resolveRemotePathToUrl(actual);
+      if (resolved != null && resolved.trim().isNotEmpty) return resolved;
+    }
+
+    final identityPath = _currentVideoPath?.trim();
+    if (identityPath == null || identityPath.isEmpty) return null;
+    return MediaSourceUtils.resolveRemotePathToUrl(identityPath);
+  }
+
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>
       _currentEmbyTrackSelection;
