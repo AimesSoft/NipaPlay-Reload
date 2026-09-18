@@ -329,6 +329,7 @@ void main() {
                   items: <WatchHistoryItem>[item],
                   allHistory: <WatchHistoryItem>[item],
                   details: const {},
+                  newAnimeIds: const <int>{},
                   onRefresh: () async {},
                   onTap: (_) {},
                 ),
