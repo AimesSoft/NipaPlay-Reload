@@ -202,8 +202,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ## 开发计划 (Roadmap)
 
 - [x] 评论区功能完善
-- [ ] 云媒体库挂载 (FTP)
-- [ ] 视频片段导出 (GIF)
+- [x] 视频片段导出 (GIF)
 - [x] 内置下载器及远程控制
 - [x] 在线 URL 播放优化
 - [ ] Webview 弹幕刮削
