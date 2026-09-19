@@ -358,14 +358,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: true, lastError: null);
       _cancelLibraryRetry(resetAttempts: true);
-    } catch (e, stackTrace) {
+    } catch (e, _) {
       if (!_isCurrentLibraryRequest(host, requestId)) return;
       debugPrint('[共享媒体] 请求失败: $e');
       debugPrint('[共享媒体] 错误类型: ${e.runtimeType}');
       if (e is TimeoutException) {
-        debugPrint('ℹ️ [共享媒体] 请求超时，将自动重试');
-      } else {
-        debugPrint('[共享媒体] 堆栈跟踪:\n$stackTrace');
+        debugPrint('[共享媒体] 请求超时，将自动重试');
       }
 
       String friendlyError;
@@ -539,10 +537,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       return episodeList;
-    } catch (e, stackTrace) {
+    } catch (e, _) {
       debugPrint('[剧集加载] 失败: $e');
       debugPrint('[剧集加载] 错误类型: ${e.runtimeType}');
-      debugPrint('[剧集加载] 堆栈:\n$stackTrace');
 
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection')) {
