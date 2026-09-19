@@ -483,17 +483,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
   Future<void> applyHardwareDecoderPreference() async {
-    if (kIsWeb || _isDisposed) return;
-    final kernelName = player.getPlayerKernelName();
-    if (kernelName == 'MDK') {
-      await _decoderManager.applyHardwareDecodingPreference(
-        _useHardwareDecoder,
-      );
-    } else if (kernelName == 'Media Kit') {
-      final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
-      player.setProperty('hwdec', hwdecValue);
+      if (kIsWeb || _isDisposed) return;
+      final kernelName = player.getPlayerKernelName();
+      if (kernelName == 'MDK') {
+        await _decoderManager.applyHardwareDecodingPreference(
+          _useHardwareDecoder,
+        );
+      } else if (kernelName == 'Media Kit') {
+        final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
+        player.setProperty('hwdec', hwdecValue);
+        // libmpv 的解码器由 hwdec 属性控制（不 setDecoders）；但资源监视器
+        // 的解码器信息来自 DecoderManager，需同步更新，否则开关后仍显示旧的
+        // "硬解 - VT（尝试）"。setDecoders 对 media_kit 仅存 map，无副作用。
+        await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+      }
     }
-  }
 
   // 播放速度相关方法
 
