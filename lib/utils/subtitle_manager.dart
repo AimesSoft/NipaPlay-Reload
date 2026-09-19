@@ -271,6 +271,19 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  Future<void> _removeVideoSubtitleMapping(String videoPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
+      final mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
+      if (mappingMap.remove(videoPath) != null) {
+        await prefs.setString(_videoSubtitleMapKey, json.encode(mappingMap));
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 移除视频字幕映射失败: $e');
+    }
+  }
+
   // 获取视频对应的字幕路径
   Future<String?> getVideoSubtitlePath(String videoPath) async {
     try {
@@ -289,6 +302,15 @@ class SubtitleManager extends ChangeNotifier {
         final subtitleFile = File(subtitlePath);
         if (!subtitleFile.existsSync()) {
           debugPrint('SubtitleManager: 记录的字幕文件不存在: $subtitlePath');
+          return null;
+        }
+        // 旧版本缓存文件名是 sha1 hash（如 95042d....srt），改名后旧文件
+        // 仍存在但路径过期——命中即视为失效走候选重新下载，否则一直挂旧文件
+        // （表现为"清缓存重新加载后才正常"）。
+        final base = p.basename(subtitlePath).toLowerCase();
+        if (RegExp(r'^[0-9a-f]{40}\.[a-z0-9]+$').hasMatch(base)) {
+          debugPrint('SubtitleManager: 记录的字幕为旧 hash 缓存名，忽略: $subtitlePath');
+          await _removeVideoSubtitleMapping(videoPath);
           return null;
         }
       }
