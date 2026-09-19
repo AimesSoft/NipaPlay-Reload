@@ -150,7 +150,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
         isPlaying: videoState.status == PlayerStatus.playing,
         fontSize: getFontSize(videoState) * widget.danmakuScale,
-        isVisible: videoState.danmakuVisible,
+        isVisible: videoState.danmakuVisible &&
+            videoState.screenshotCaptureIncludesDanmaku,
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
@@ -165,7 +166,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
           isPlaying: videoState.status == PlayerStatus.playing,
           fontSize: getFontSize(videoState) * widget.danmakuScale,
-          isVisible: videoState.danmakuVisible,
+          isVisible: videoState.danmakuVisible &&
+            videoState.screenshotCaptureIncludesDanmaku,
           opacity: videoState.mappedDanmakuOpacity,
         );
       },

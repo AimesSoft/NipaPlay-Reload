@@ -41,6 +41,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
         if (!videoState.shouldRenderCurrentExternalSubtitleInApp()) {
           return const SizedBox.shrink();
         }
+        if (!videoState.screenshotCaptureIncludesSubtitles) {
+          // 截图设置「隐藏字幕」：截图帧不叠加外挂字幕叠层
+          return const SizedBox.shrink();
+        }
         final paths = videoState.activeExternalSubtitlePaths;
         if (paths.isEmpty) {
           return const SizedBox.shrink();
