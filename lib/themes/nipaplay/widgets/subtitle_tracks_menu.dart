@@ -774,8 +774,16 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                               onTap: () async {
                                 await RemoteSubtitleService.instance
                                     .clearSubtitleCache();
+                                // 清完重新走自动检测：当前视频字幕立即重新
+                                // 下载并挂载（不需要重开视频）。
+                                final vp =
+                                    videoState.currentVideoPath;
+                                if (vp != null && vp.isNotEmpty) {
+                                  await videoState.redetectAndLoadSubtitle(vp);
+                                }
                                 if (context.mounted) {
-                                  BlurSnackBar.show(context, '已清除字幕缓存');
+                                  BlurSnackBar.show(
+                                      context, '已清除字幕缓存并重新加载');
                                 }
                               },
                               padding: const EdgeInsets.symmetric(

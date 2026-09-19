@@ -276,6 +276,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _subtitleManager.clearSubtitleTrackInfo();
   }
 
+  /// 重新触发自动检测并加载字幕（清除字幕缓存后调用）
+  Future<void> redetectAndLoadSubtitle(String videoPath) =>
+      _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
+
   // 自动检测并加载同名字幕文件
   Future<void> _autoDetectAndLoadSubtitle(String videoPath) async {
     // 此方法不再需要，我们使用subtitleManager的方法代替
