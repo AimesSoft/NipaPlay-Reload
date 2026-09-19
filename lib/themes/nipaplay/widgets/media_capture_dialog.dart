@@ -97,9 +97,12 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     _heightController = TextEditingController(text: '${size.$2}');
     final supportsCompositedScreenshot =
         widget.videoState.player.getPlayerKernelName() != 'Erika';
-    _includeDanmaku =
-        supportsCompositedScreenshot && widget.videoState.danmakuVisible;
-    _includeSubtitles = supportsCompositedScreenshot;
+    // 初值来自截图设置页(而非每次弹窗都重置);同时受内核合成截图能力约束
+    _includeDanmaku = supportsCompositedScreenshot &&
+        widget.videoState.screenshotCaptureIncludesDanmaku &&
+        widget.videoState.danmakuVisible;
+    _includeSubtitles = supportsCompositedScreenshot &&
+        widget.videoState.screenshotCaptureIncludesSubtitles;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_refreshImagePreview());
     });

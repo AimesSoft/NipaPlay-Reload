@@ -343,7 +343,53 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
-  Future<void> _captureScreenshot(
+  /// 按 NipaPlay 截图设置直拍（保存目标/包含弹幕字幕均来自设置页）。
+  Future<void> _captureScreenshotWithSettings(VideoPlayerState videoState) async {
+    if (kIsWeb) return;
+    if (!videoState.hasVideo) return;
+
+    final target = videoState.screenshotSaveTarget;
+    final includeDanmaku = videoState.screenshotCaptureIncludesDanmaku;
+    final includeSubtitles = videoState.screenshotCaptureIncludesSubtitles;
+    try {
+      if (Platform.isIOS && target == ScreenshotSaveTarget.photos) {
+        final ok = await videoState.captureScreenshotToPhotos(
+          includeDanmaku: includeDanmaku,
+          includeSubtitles: includeSubtitles,
+        );
+        if (!mounted) return;
+        BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
+        return;
+      }
+      if (target == ScreenshotSaveTarget.ask) {
+        // 未固定保存目标时退回旧行为：弹对话框让用户选择
+        await showMediaCaptureDialog(
+          context: context,
+          videoState: videoState,
+          onCaptureImage: (t, {required includeDanmaku, required includeSubtitles}) =>
+              _captureScreenshotToTarget(
+            videoState,
+            t,
+            includeDanmaku: includeDanmaku,
+            includeSubtitles: includeSubtitles,
+          ),
+          barrierDismissible: !_shouldDisableDialogDismiss(videoState),
+        );
+        return;
+      }
+      await _captureScreenshotToTarget(
+        videoState,
+        target,
+        includeDanmaku: includeDanmaku,
+        includeSubtitles: includeSubtitles,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '截图失败: $e');
+    }
+  }
+
+  Future<void> _captureScreenshotToTarget(
     VideoPlayerState videoState,
     ScreenshotSaveTarget target, {
     required bool includeDanmaku,
@@ -1172,9 +1218,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               defaultTargetPlatform == TargetPlatform.iOS)
                             const SizedBox(width: 12),
                           ShadowActionButton(
-                            tooltip: '画面截取',
+                            tooltip: '截图（长按：GIF 与画面截取设置）',
                             icon: Icons.camera_alt_outlined,
+                            // 单击：按设置页的截图设定直接截图
                             onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              unawaited(_captureScreenshotWithSettings(videoState));
+                            },
+                            // 长按：才弹出 GIF/画面截取设置对话框
+                            onLongPress: () {
                               videoState.resetHideControlsTimer();
                               unawaited(
                                 showMediaCaptureDialog(
@@ -1185,7 +1237,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                     required includeDanmaku,
                                     required includeSubtitles,
                                   }) =>
-                                      _captureScreenshot(
+                                      _captureScreenshotToTarget(
                                     videoState,
                                     target,
                                     includeDanmaku: includeDanmaku,

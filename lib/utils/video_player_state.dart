@@ -449,6 +449,8 @@ int _exactEndStreak = 0;
   // 截图/GIF 导出时是否包含弹幕与字幕（由截图对话框临时切换）
   bool _screenshotCaptureIncludesDanmaku = true;
   bool _screenshotCaptureIncludesSubtitles = true;
+  final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
+  final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
   bool get screenshotCaptureIncludesDanmaku =>
       _screenshotCaptureIncludesDanmaku;
   bool get screenshotCaptureIncludesSubtitles =>

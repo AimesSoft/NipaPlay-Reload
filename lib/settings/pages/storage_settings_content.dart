@@ -166,6 +166,28 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                 );
               },
             ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含弹幕',
+                subtitle: '关闭后截图不叠加当前弹幕',
+                icon: Icons.subtitles_outlined,
+                phoneIcon: cupertino.CupertinoIcons.chat_bubble,
+                value: videoState.screenshotCaptureIncludesDanmaku,
+                onChanged: videoState.setScreenshotCaptureIncludesDanmaku,
+              ),
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含字幕',
+                subtitle: '关闭后截图不叠加内嵌与外挂字幕',
+                icon: Icons.closed_caption_outlined,
+                phoneIcon: cupertino.CupertinoIcons.text_bubble,
+                value: videoState.screenshotCaptureIncludesSubtitles,
+                onChanged: videoState.setScreenshotCaptureIncludesSubtitles,
+              ),
+            ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.clearImageCache,
               subtitle: _isClearingImageCache

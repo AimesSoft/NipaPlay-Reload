@@ -44,6 +44,13 @@ class ImageCacheManager {
 
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
   static const Duration _evictionProtectionWindow = Duration(seconds: 2);
+  /// 淘汰的正本延迟释放窗口：条目从索引摘除后，其 ui.Image 可能仍被
+  /// 显示中的 widget 持有（RawImage 绘制时会 clone）。立即 dispose 会让
+  /// 后台内存压力淘汰的图片在回前台重建时抛
+  /// "Cannot clone a disposed image" 并显示为灰块。
+  static const Duration _retireGracePeriod = Duration(seconds: 60);
+  final List<ui.Image> _retiredImages = [];
+  Timer? _retireTimer;
   static const Duration _diskCleanupInterval = Duration(hours: 12);
   static const Duration _compressedImageMaxAge = Duration(days: 30);
   static const Duration _thumbnailMaxAge = Duration(days: 30);
@@ -235,6 +242,21 @@ class ImageCacheManager {
     _refCount.remove(cacheKey);
     _lastAccessed.remove(cacheKey);
     if (image != null) {
+      _retireImage(image);
+    }
+  }
+
+  /// 延迟释放淘汰的正本：给仍持有引用的显示层留出安全窗口。
+  void _retireImage(ui.Image image) {
+    _retiredImages.add(image);
+    _retireTimer ??= Timer(_retireGracePeriod, _flushRetiredImages);
+  }
+
+  void _flushRetiredImages() {
+    _retireTimer = null;
+    final images = List<ui.Image>.from(_retiredImages);
+    _retiredImages.clear();
+    for (final image in images) {
       try {
         image.dispose();
       } catch (_) {
@@ -369,6 +391,7 @@ class ImageCacheManager {
   // 定期清理机制
   void _startPeriodicCleanup() {
     _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      _flushRetiredImages();
       _cleanupExpiredImages();
       _maybeCleanupDiskCaches();
     });
@@ -478,13 +501,9 @@ class ImageCacheManager {
   }
 
   void clear() {
-    // 先释放所有图片资源
+    // 正本统一走延迟释放，避免显示中的 widget 拿到 disposed 句柄
     for (final image in _cache.values) {
-      try {
-        image.dispose();
-      } catch (e) {
-        //////debugPrint('释放图片资源时出错: $e');
-      }
+      _retireImage(image);
     }
     // 清除缓存
     _cache.clear();

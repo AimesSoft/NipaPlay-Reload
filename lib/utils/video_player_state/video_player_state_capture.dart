@@ -467,12 +467,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<String?> captureScreenshot({
-    bool includeDanmaku = true,
-    bool includeSubtitles = true,
+    bool? includeDanmaku,
+    bool? includeSubtitles,
   }) async {
     final bytes = await _captureScreenshotJpegBytes(
-      includeDanmaku: includeDanmaku,
-      includeSubtitles: includeSubtitles,
+      // 未显式传参时回退到截图设置页的开关
+      includeDanmaku: includeDanmaku ?? _screenshotCaptureIncludesDanmaku,
+      includeSubtitles: includeSubtitles ?? _screenshotCaptureIncludesSubtitles,
     );
     if (bytes == null || bytes.isEmpty) return null;
 
@@ -489,9 +490,11 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<bool> captureScreenshotToPhotos({
-    bool includeDanmaku = true,
-    bool includeSubtitles = true,
+    bool? includeDanmaku,
+    bool? includeSubtitles,
   }) async {
+    includeDanmaku ??= _screenshotCaptureIncludesDanmaku;
+    includeSubtitles ??= _screenshotCaptureIncludesSubtitles;
     if (kIsWeb) return false;
     if (!Platform.isIOS) return false;
     if (!hasVideo) return false;
