@@ -323,7 +323,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     });
 
     try {
-      print('🧪 开始测试WebDAV连接...');
+      print('开始测试WebDAV连接...');
 
       String connectionName = _nameController.text.trim();
 
@@ -351,7 +351,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         password: _passwordController.text.trim(),
       );
 
-      print('📋 连接信息:');
+      print('连接信息:');
       print('  名称: ${connection.name}');
       print('  地址: ${connection.url}');
       print('  用户名: ${connection.username}');
@@ -369,8 +369,8 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         }
       }
     } catch (e, stackTrace) {
-      print('❌ 测试连接时发生异常: $e');
-      print('📍 异常堆栈: $stackTrace');
+      print('测试连接时发生异常: $e');
+      print('异常堆栈: $stackTrace');
       if (mounted) {
         BlurSnackBar.show(context, '连接测试异常：$e');
       }

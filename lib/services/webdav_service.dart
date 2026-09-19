@@ -400,12 +400,12 @@ class WebDAVService {
           return null;
         }
 
-        print('❌ WebDAV连接测试失败: $e');
-        print('📍 堆栈: ${e.stackTrace}');
+        print('WebDAV连接测试失败: $e');
+        print('堆栈: ${e.stackTrace}');
         return null;
       } catch (e, stackTrace) {
-        print('❌ WebDAV连接测试失败: $e');
-        print('📍 堆栈: $stackTrace');
+        print('WebDAV连接测试失败: $e');
+        print('堆栈: $stackTrace');
         final fallbackConnection = await _legacyTestConnection(current);
         if (fallbackConnection != null) {
           return fallbackConnection;
@@ -414,7 +414,7 @@ class WebDAVService {
       }
     }
 
-    print('⚠️ WebDAV连接测试已尝试所有候选URL，但均失败');
+    print('WebDAV连接测试已尝试所有候选URL，但均失败');
     return null;
   }
 
@@ -496,12 +496,12 @@ class WebDAVService {
         );
         return _normalizeLegacyList(normalizedConnection, files);
       }
-      print('❌ 获取WebDAV目录内容失败: $e');
-      print('📍 堆栈: ${e.stackTrace}');
+      print('获取WebDAV目录内容失败: $e');
+      print('堆栈: ${e.stackTrace}');
       rethrow;
     } catch (e, stackTrace) {
-      print('❌ 获取WebDAV目录内容失败: $e');
-      print('📍 堆栈: $stackTrace');
+      print('获取WebDAV目录内容失败: $e');
+      print('堆栈: $stackTrace');
       final files = await _legacyListDirectory(
         normalizedConnection,
         normalizedPath,
@@ -774,7 +774,7 @@ class WebDAVService {
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       if (statusCode == 405 || statusCode == 501) {
-        print('⚠️ WebDAV服务器不支持OPTIONS (状态码: $statusCode)，跳过该错误');
+        print('WebDAV服务器不支持OPTIONS (状态码: $statusCode)，跳过该错误');
         return;
       }
       rethrow;
@@ -923,7 +923,7 @@ class WebDAVService {
 
       addUrl(trimmedUrl);
       if (normalizedUrl.isNotEmpty && normalizedUrl != trimmedUrl) {
-        print('🔧 自动调整WebDAV地址为目录格式: $normalizedUrl');
+        print('自动调整WebDAV地址为目录格式: $normalizedUrl');
       }
       addUrl(normalizedUrl);
 
@@ -934,12 +934,12 @@ class WebDAVService {
           .toList();
       final heuristicSet = heuristicUrls.toSet();
       if (heuristicUrls.isNotEmpty) {
-        print('🔎 已自动添加常见WebDAV子路径候选: ${heuristicUrls.join(', ')}');
+        print('已自动添加常见WebDAV子路径候选: ${heuristicUrls.join(', ')}');
         urlsToTry.addAll(heuristicUrls);
       }
 
       if (urlsToTry.isEmpty) {
-        print('❌ URL格式错误: 地址为空');
+        print('URL格式错误: 地址为空');
         return null;
       }
 
@@ -949,11 +949,11 @@ class WebDAVService {
       for (var index = 0; index < urlsToTry.length; index++) {
         final currentUrl = urlsToTry[index];
         if (index == 0) {
-          print('🔍 测试WebDAV连接: $currentUrl');
+          print('测试WebDAV连接: $currentUrl');
         } else if (heuristicSet.contains(currentUrl)) {
-          print('🔁 尝试常见WebDAV路径: $currentUrl');
+          print('尝试常见WebDAV路径: $currentUrl');
         } else {
-          print('🔁 尝试使用规范化地址: $currentUrl');
+          print('尝试使用规范化地址: $currentUrl');
         }
 
         final outcome = await _legacyAttemptConnection(
@@ -965,24 +965,24 @@ class WebDAVService {
 
         if (outcome == _LegacyAttemptOutcome.success) {
           if (heuristicSet.contains(currentUrl)) {
-            print('ℹ️ 常见WebDAV路径尝试成功');
+            print('常见WebDAV路径尝试成功');
           } else if (index > 0) {
-            print('ℹ️ 使用规范化地址完成连接测试');
+            print('使用规范化地址完成连接测试');
           }
           return connection.copyWith(url: currentUrl);
         }
 
         if (outcome == _LegacyAttemptOutcome.fatal) {
-          print('❌ WebDAV连接失败 (已终止尝试)');
+          print('WebDAV连接失败 (已终止尝试)');
           return null;
         }
       }
 
-      print('❌ WebDAV连接失败，所有尝试均未成功');
+      print('WebDAV连接失败，所有尝试均未成功');
       return null;
     } catch (e, stackTrace) {
-      print('❌ 兼容模式测试WebDAV连接异常: $e');
-      print('📍 堆栈: $stackTrace');
+      print('兼容模式测试WebDAV连接异常: $e');
+      print('堆栈: $stackTrace');
       return null;
     }
   }
@@ -996,27 +996,27 @@ class WebDAVService {
     Uri uri;
     try {
       uri = Uri.parse(url);
-      print('✅ URL解析成功: ${uri.toString()}');
+      print('URL解析成功: ${uri.toString()}');
       print('  协议: ${uri.scheme}');
       print('  主机: ${uri.host}');
       print('  端口: ${uri.port}');
       print('  路径: ${uri.path}');
     } catch (e) {
-      print('❌ URL格式错误: $e');
+      print('URL格式错误: $e');
       return _LegacyAttemptOutcome.fatal;
     }
 
     if (uri.scheme != 'http' && uri.scheme != 'https') {
-      print('❌ 不支持的协议: ${uri.scheme}，仅支持 http 和 https');
+      print('不支持的协议: ${uri.scheme}，仅支持 http 和 https');
       return _LegacyAttemptOutcome.fatal;
     }
 
     String? credentials;
     if (username.isNotEmpty || password.isNotEmpty) {
       credentials = base64Encode(utf8.encode('$username:$password'));
-      print('🔐 认证信息已准备 (用户名: $username)');
+      print('认证信息已准备 (用户名: $username)');
     } else {
-      print('ℹ️ 未提供认证信息，尝试匿名访问');
+      print('未提供认证信息，尝试匿名访问');
     }
 
     for (final variant in _propfindVariants) {
@@ -1026,7 +1026,7 @@ class WebDAVService {
         if (variant.contentType != null && variant.contentType!.isNotEmpty)
           'Content-Type=${variant.contentType}'
       ].join(', ');
-      print('🧪 使用PROPFIND变体: $variantDescription');
+      print('使用PROPFIND变体: $variantDescription');
 
       final headers = <String, String>{
         'User-Agent': _userAgent,
@@ -1052,14 +1052,14 @@ class WebDAVService {
       }
 
       try {
-        print('📡 发送WebDAV PROPFIND请求...');
+        print('发送WebDAV PROPFIND请求...');
         final response = await _sendRequest(
           request,
           timeout: const Duration(seconds: 15),
         );
 
-        print('📥 收到响应: ${response.statusCode}');
-        print('📄 响应头: ${response.headers}');
+        print('收到响应: ${response.statusCode}');
+        print('响应头: ${response.headers}');
 
         final isSuccess = response.statusCode == 207 ||
             response.statusCode == 200 ||
@@ -1067,27 +1067,27 @@ class WebDAVService {
             response.statusCode == 302;
 
         if (isSuccess) {
-          print('✅ WebDAV连接成功! (变体: $variantDescription)');
+          print('WebDAV连接成功! (变体: $variantDescription)');
           return _LegacyAttemptOutcome.success;
         }
 
         if (response.statusCode == 401) {
-          print('❌ 认证失败 (401)，请检查用户名和密码');
+          print('认证失败 (401)，请检查用户名和密码');
           return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 403) {
-          print('❌ 访问被拒绝 (403)，请检查权限设置');
+          print('访问被拒绝 (403)，请检查权限设置');
           return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 404) {
-          print('❌ 路径不存在 (404)，请检查WebDAV路径');
+          print('路径不存在 (404)，请检查WebDAV路径');
           return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 405) {
-          print('⚠️ 方法不被允许 (405)，服务器可能不支持PROPFIND，尝试OPTIONS...');
+          print('方法不被允许 (405)，服务器可能不支持PROPFIND，尝试OPTIONS...');
           final fallbackConnection = baseConnection.copyWith(url: url);
           final optionsSuccess =
               await _legacyTestWithOptions(fallbackConnection);
@@ -1097,13 +1097,13 @@ class WebDAVService {
         }
 
         if (response.statusCode >= 500) {
-          print('❌ 服务器错误 (${response.statusCode})，尝试其它PROPFIND变体...');
+          print('服务器错误 (${response.statusCode})，尝试其它PROPFIND变体...');
           continue;
         }
 
-        print('❌ WebDAV连接失败 (状态码: ${response.statusCode})，尝试其它PROPFIND变体...');
+        print('WebDAV连接失败 (状态码: ${response.statusCode})，尝试其它PROPFIND变体...');
       } catch (e) {
-        print('❌ 发送PROPFIND请求失败: $e');
+        print('发送PROPFIND请求失败: $e');
         if (e.toString().contains('FormatException')) {
           return _LegacyAttemptOutcome.fatal;
         }
@@ -1119,7 +1119,7 @@ class WebDAVService {
 
   Future<bool> _legacyTestWithOptions(WebDAVConnection connection) async {
     try {
-      print('🔄 尝试OPTIONS方法测试连接...');
+      print('尝试OPTIONS方法测试连接...');
       final uri = Uri.parse(connection.url);
 
       final headers = <String, String>{
@@ -1144,8 +1144,8 @@ class WebDAVService {
         timeout: const Duration(seconds: 10),
       );
 
-      print('📥 OPTIONS响应: ${response.statusCode}');
-      print('📄 支持的方法: ${response.headers['allow'] ?? 'unknown'}');
+      print('OPTIONS响应: ${response.statusCode}');
+      print('支持的方法: ${response.headers['allow'] ?? 'unknown'}');
 
       final isSuccess =
           response.statusCode == 200 || response.statusCode == 204;
@@ -1153,7 +1153,7 @@ class WebDAVService {
 
       return isSuccess;
     } catch (e) {
-      print('❌ OPTIONS方法也失败: $e');
+      print('OPTIONS方法也失败: $e');
       return false;
     }
   }
@@ -1162,7 +1162,7 @@ class WebDAVService {
       WebDAVConnection connection, String path,
       {bool includeAllFiles = false}) async {
     try {
-      print('📂 使用兼容模式获取WebDAV目录内容: ${connection.name}:$path');
+      print('使用兼容模式获取WebDAV目录内容: ${connection.name}:$path');
 
       Uri uri;
       if (path == '/' || path.isEmpty) {
@@ -1180,7 +1180,7 @@ class WebDAVService {
             Uri.parse('${connection.url.replaceAll(RegExp(r'/$'), '')}/$path');
       }
 
-      print('🔗 兼容模式请求URL: $uri');
+      print('兼容模式请求URL: $uri');
 
       final request = http.Request('PROPFIND', uri);
       request.persistentConnection = false;
@@ -1211,22 +1211,22 @@ class WebDAVService {
   </D:prop>
 </D:propfind>''');
 
-      print('📡 兼容模式发送PROPFIND请求...');
+      print('兼容模式发送PROPFIND请求...');
       final response = await _sendRequest(
         request,
         timeout: const Duration(seconds: 30),
       );
       final responseBody = response.body;
 
-      print('📥 兼容模式响应: ${response.statusCode}');
-      print('📄 响应体长度: ${responseBody.length}');
+      print('兼容模式响应: ${response.statusCode}');
+      print('响应体长度: ${responseBody.length}');
 
       if (responseBody.length < 2000) {
-        print('📄 响应体内容: $responseBody');
+        print('响应体内容: $responseBody');
       }
 
       if (response.statusCode != 207 && response.statusCode != 200) {
-        print('❌ PROPFIND失败: ${response.statusCode}');
+        print('PROPFIND失败: ${response.statusCode}');
         throw Exception('WebDAV PROPFIND failed: ${response.statusCode}');
       }
 
@@ -1236,12 +1236,12 @@ class WebDAVService {
         responseByteLength: response.bodyBytes.length,
         includeAllFiles: includeAllFiles,
       );
-      print('📁 兼容模式解析到 ${files.length} 个项目');
+      print('兼容模式解析到 ${files.length} 个项目');
 
       return files;
     } catch (e, stackTrace) {
-      print('❌ 兼容模式获取WebDAV目录内容失败: $e');
-      print('📍 堆栈: $stackTrace');
+      print('兼容模式获取WebDAV目录内容失败: $e');
+      print('堆栈: $stackTrace');
       rethrow;
     }
   }
@@ -1302,7 +1302,7 @@ class WebDAVService {
     final List<WebDAVFile> files = [];
 
     try {
-      print('🔍 开始解析WebDAV响应...');
+      print('开始解析WebDAV响应...');
       print(
         '📄 原始XML前500字符: ${xmlResponse.substring(0, xmlResponse.length > 500 ? 500 : xmlResponse.length)}',
       );
@@ -1326,11 +1326,11 @@ class WebDAVService {
             .cast<XmlElement>();
       }
 
-      print('📋 找到 ${responses.length} 个response元素');
+      print('找到 ${responses.length} 个response元素');
 
       if (responses.isEmpty) {
-        print('⚠️ 未找到任何response元素，打印完整XML结构：');
-        print('📄 完整XML: $xmlResponse');
+        print('未找到任何response元素，打印完整XML结构：');
+        print('完整XML: $xmlResponse');
         return files;
       }
 
@@ -1354,7 +1354,7 @@ class WebDAVService {
           }
 
           if (hrefElements.isEmpty) {
-            print('⚠️ 跳过：没有href元素');
+            print('跳过：没有href元素');
             continue;
           }
 
@@ -1389,7 +1389,7 @@ class WebDAVService {
           }
 
           if (propstatElements.isEmpty) {
-            print('⚠️ 跳过：没有propstat元素');
+            print('跳过：没有propstat元素');
             continue;
           }
 
@@ -1413,7 +1413,7 @@ class WebDAVService {
           }
 
           if (propElements.isEmpty) {
-            print('⚠️ 跳过：没有prop元素');
+            print('跳过：没有prop元素');
             continue;
           }
 
@@ -1535,7 +1535,7 @@ class WebDAVService {
             try {
               lastModified = HttpDate.parse(lastModifiedElements.first.text);
             } catch (e) {
-              print('⚠️ 解析修改时间失败: $e');
+              print('解析修改时间失败: $e');
             }
           }
 
@@ -1551,15 +1551,15 @@ class WebDAVService {
             files.add(webDavFile);
           }
         } catch (e) {
-          print('❌ 解析单个response失败: $e');
+          print('解析单个response失败: $e');
           continue;
         }
       }
 
-      print('📊 解析完成，共 ${files.length} 个有效项目');
+      print('解析完成，共 ${files.length} 个有效项目');
     } catch (e) {
-      print('❌ 解析WebDAV响应失败: $e');
-      print('📄 完整XML: $xmlResponse');
+      print('解析WebDAV响应失败: $e');
+      print('完整XML: $xmlResponse');
     }
 
     return files;
