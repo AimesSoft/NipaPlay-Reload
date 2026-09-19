@@ -130,6 +130,11 @@ runs:
     
     - name: Pre-download FVP mdk-sdk (workaround symlink extraction issue)
       shell: pwsh
+      env:
+        # 脚本在 SourceForge 全部失败时会回退查询 GitHub Releases API；
+        # 不注入 token 时使用未认证额度（runner 共享 IP 每小时 60 次），极易
+        # 403 rate limit。注入内置 GITHUB_TOKEN 后额度提升到每小时 1000 次。
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         # FVP's deps.cmake extracts mdk-sdk into CMAKE_CURRENT_SOURCE_DIR, which
         # resolves through Flutter's .plugin_symlinks to a UNC path (\\?\D:\...).

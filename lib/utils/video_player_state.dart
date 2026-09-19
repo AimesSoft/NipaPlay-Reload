@@ -417,6 +417,9 @@ int _exactEndStreak = 0;
     debugLabel: 'player_screenshot_boundary',
   );
   bool _isCapturingScreenshot = false;
+  // 截图时临时控制是否包含弹幕/字幕，截取完成后恢复原值。
+  bool _screenshotCaptureIncludesDanmaku = true;
+  bool _screenshotCaptureIncludesSubtitles = true;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
@@ -1523,6 +1526,18 @@ int _exactEndStreak = 0;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+  // 当前媒体源解析后的可访问 URL：优先实际播放地址，其次回退到视频标识路径。
+  String? get currentResolvedMediaSource {
+    final actual = _currentActualPlayUrl?.trim();
+    if (actual != null && actual.isNotEmpty) {
+      final resolved = MediaSourceUtils.resolveRemotePathToUrl(actual);
+      if (resolved != null && resolved.trim().isNotEmpty) return resolved;
+    }
+
+    final identityPath = _currentVideoPath?.trim();
+    if (identityPath == null || identityPath.isEmpty) return null;
+    return MediaSourceUtils.resolveRemotePathToUrl(identityPath);
+  }
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>
       _currentEmbyTrackSelection;
