@@ -405,9 +405,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           e.toString().contains('Connection refused') ||
               e.toString().contains('errno = 61');
       if (connectionRefused) {
-        // 端口无服务（Connection refused）：继续重试只会刷日志，
-        // 停止自动重试，等用户手动刷新/切换主机时再连。
-        _errorMessage = '$friendlyError\n（端口无响应，已停止自动重试，可手动刷新）';
+        // 端口无服务（Connection refused）：主机配置已失效，继续重试只会
+        // 刷日志占后台。自动移除该主机并切到下一个可用主机——用户只需
+        // 保留可达的（如 30000），失效的旧 host（如 :100）不再出现。
+        _errorMessage = '$friendlyError\n（端口无响应，已移除该主机）';
+        await removeHost(host.id);
       } else {
         final retryDelay = _scheduleLibraryRetry(host);
         _errorMessage = '$friendlyError\n将在 ${retryDelay.inSeconds} 秒后自动重试';
