@@ -1682,7 +1682,7 @@ class ErikaPlayerAdapter
     required String userEvent,
   }) {
     _stallNudgeAttempted = true;
-    debugPrint('[Erika] $debugDetail，自动执行 pause→play 快速唤醒');
+    debugPrint('[Erika] $debugDetail，自动执行 pauseplay 快速唤醒');
     logPlayerEvent(
       'Erika',
       '$userEvent，自动执行 pause→play 唤醒',
@@ -1704,9 +1704,9 @@ class ErikaPlayerAdapter
     try {
       await _player.pause();
       await _player.play();
-      debugPrint('[Erika] pause→play 快速唤醒已下发');
+      debugPrint('[Erika] pauseplay 快速唤醒已下发');
     } catch (error) {
-      debugPrint('[Erika] pause→play 快速唤醒失败: $error');
+      debugPrint('[Erika] pauseplay 快速唤醒失败: $error');
     }
   }
 

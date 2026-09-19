@@ -405,7 +405,7 @@ class JellyfinEpisodeMappingService {
       }
 
       if (currentMappingResults.isEmpty) {
-        debugPrint('[映射服务] ❌ 未找到当前剧集的映射记录');
+        debugPrint('[映射服务]  未找到当前剧集的映射记录');
         return null;
       }
 
@@ -422,7 +422,7 @@ class JellyfinEpisodeMappingService {
       debugPrint('[映射服务] - 映射ID: $mappingId');
 
       if (currentJellyfinIndexNumber == null || seriesId == null) {
-        debugPrint('[映射服务] ❌ 当前剧集映射缺少必要信息');
+        debugPrint('[映射服务]  当前剧集映射缺少必要信息');
         return null;
       }
 
@@ -443,7 +443,7 @@ class JellyfinEpisodeMappingService {
 
       if (nextMappingResults.isNotEmpty) {
         final nextMapping = nextMappingResults.first;
-        debugPrint('[映射服务] ✅ 找到下一集的现有映射: $nextMapping');
+        debugPrint('[映射服务]  找到下一集的现有映射: $nextMapping');
         debugPrint('[映射服务] - 下一集集号: ${nextMapping['jellyfin_index_number']}');
         debugPrint('[映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
         return Map<String, dynamic>.from(nextMapping);
@@ -488,13 +488,13 @@ class JellyfinEpisodeMappingService {
           'mapping_id': mappingId,
           'confirmed': 0, // 标记为预测映射
         };
-        debugPrint('[映射服务] ✅ 返回推算的映射: $predictedMapping');
+        debugPrint('[映射服务]  返回推算的映射: $predictedMapping');
         return predictedMapping;
       } else {
-        debugPrint('[映射服务] ❌ 没有已有映射记录，无法推算');
+        debugPrint('[映射服务]  没有已有映射记录，无法推算');
       }
 
-      debugPrint('[映射服务] ❌ 未找到下一集的有效映射');
+      debugPrint('[映射服务]  未找到下一集的有效映射');
       debugPrint('[映射服务] ========== 查找下一集映射结束 ==========');
       return null;
     } catch (e) {

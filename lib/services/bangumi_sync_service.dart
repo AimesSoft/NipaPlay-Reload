@@ -278,7 +278,7 @@ class BangumiSyncService {
           }
           
           if (shouldUpdate) {
-            debugPrint('[Bangumi同步] 需要更新收藏状态: $currentType → $targetCollectionType');
+            debugPrint('[Bangumi同步] 需要更新收藏状态: $currentType  $targetCollectionType');
           } else {
             debugPrint('[Bangumi同步] 无需更新收藏状态: 当前状态优先级更高或相等');
             targetCollectionType = currentType; // 保持原有状态
@@ -414,16 +414,16 @@ class BangumiSyncService {
             
             if (sort != null && sort == watchHistoryItem.episodeId) {
               matchedBangumiEpisode = bangumiEp;
-              _debugLog(animeId, '[Bangumi同步] ✓ 匹配成功: 本地集=${watchHistoryItem.episodeId}, Bangumi集=${sort}, ID=${bangumiEp['id']}');
+              _debugLog(animeId, '[Bangumi同步]  匹配成功: 本地集=${watchHistoryItem.episodeId}, Bangumi集=${sort}, ID=${bangumiEp['id']}');
               break;
             }
           }
           
           if (matchedBangumiEpisode == null) {
-            _debugLog(animeId, '[Bangumi同步] ✗ 未找到匹配: 本地集=${watchHistoryItem.episodeId}, 进度=${(watchHistoryItem.watchProgress * 100).toStringAsFixed(1)}%');
+            _debugLog(animeId, '[Bangumi同步]  未找到匹配: 本地集=${watchHistoryItem.episodeId}, 进度=${(watchHistoryItem.watchProgress * 100).toStringAsFixed(1)}%');
           }
         } else {
-          _debugLog(animeId, '[Bangumi同步] ✗ 跳过: episodeId为null');
+          _debugLog(animeId, '[Bangumi同步]  跳过: episodeId为null');
         }
 
         if (matchedBangumiEpisode != null) {
@@ -440,9 +440,9 @@ class BangumiSyncService {
               });
               syncedEpisodeCount++;
               final typeStr = episodeType == 1 ? '想看' : '看过';
-              _debugLog(animeId, '[Bangumi同步] ➤ 将同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 类型=$typeStr($episodeType), 进度=$progress%');
+              _debugLog(animeId, '[Bangumi同步]  将同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 类型=$typeStr($episodeType), 进度=$progress%');
             } else {
-              _debugLog(animeId, '[Bangumi同步] ⊘ 跳过同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 进度=$progress%（阈值: ≤10%想看, ≥80%看过, 其他不同步）');
+              _debugLog(animeId, '[Bangumi同步]  跳过同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 进度=$progress%（阈值: ≤10%想看, ≥80%看过, 其他不同步）');
             }
           }
         }

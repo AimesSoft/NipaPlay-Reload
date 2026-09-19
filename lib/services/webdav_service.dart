@@ -384,7 +384,7 @@ class WebDAVService {
               .toList();
           if (candidates.isNotEmpty) {
             print(
-                '🔎 PROPFIND 405，尝试常见WebDAV子路径: ${candidates.map((c) => c.url).join(', ')}');
+                ' PROPFIND 405，尝试常见WebDAV子路径: ${candidates.map((c) => c.url).join(', ')}');
             pending.addAll(candidates);
             continue;
           }
@@ -392,7 +392,7 @@ class WebDAVService {
 
         if (_shouldFallbackOnDioException(e)) {
           print(
-              '🔁 webdav_client 连接测试失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
+              ' webdav_client 连接测试失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
           final fallbackConnection = await _legacyTestConnection(current);
           if (fallbackConnection != null) {
             return fallbackConnection;
@@ -488,7 +488,7 @@ class WebDAVService {
     } on DioException catch (e) {
       if (_shouldFallbackOnDioException(e)) {
         print(
-            '🔁 webdav_client 列目录失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
+            ' webdav_client 列目录失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
         final files = await _legacyListDirectory(
           normalizedConnection,
           normalizedPath,
@@ -831,7 +831,7 @@ class WebDAVService {
     final downgradedConnection =
         connection.copyWith(url: downgradedUri.toString());
     print(
-        '⚙️ 检测到HTTPS握手失败 (${e.error ?? e.message})，自动降级为HTTP: ${downgradedConnection.url}');
+        ' 检测到HTTPS握手失败 (${e.error ?? e.message})，自动降级为HTTP: ${downgradedConnection.url}');
     return downgradedConnection;
   }
 
@@ -1149,7 +1149,7 @@ class WebDAVService {
 
       final isSuccess =
           response.statusCode == 200 || response.statusCode == 204;
-      print(isSuccess ? '✅ OPTIONS连接成功!' : '❌ OPTIONS连接失败');
+      print(isSuccess ? ' OPTIONS连接成功!' : ' OPTIONS连接失败');
 
       return isSuccess;
     } catch (e) {
@@ -1304,7 +1304,7 @@ class WebDAVService {
     try {
       print('开始解析WebDAV响应...');
       print(
-        '📄 原始XML前500字符: ${xmlResponse.substring(0, xmlResponse.length > 500 ? 500 : xmlResponse.length)}',
+        ' 原始XML前500字符: ${xmlResponse.substring(0, xmlResponse.length > 500 ? 500 : xmlResponse.length)}',
       );
 
       final document = XmlDocument.parse(xmlResponse);

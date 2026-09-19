@@ -445,7 +445,7 @@ class DanmakuAtlasPainter extends CustomPainter {
           final now = DateTime.now().millisecondsSinceEpoch;
           if (now - _lastDiagPaintCausalTimeMs >= 500) { // 限流500ms
             _lastDiagPaintCausalTimeMs = now;
-            debugPrint('[PAINT-CAUSAL-CHAIN] ✅ CONFIRMED: rawDt=0 caused by paint overhead '
+            debugPrint('[PAINT-CAUSAL-CHAIN]  CONFIRMED: rawDt=0 caused by paint overhead '
                 'lastPaint=${_lastPaintDurationUs}μs(${(_lastPaintDurationUs / 1000).toStringAsFixed(1)}ms) '
                 'deltaUs=$deltaUs '
                 '→ paint耗时>16ms→vsync miss→deltaUs>100ms→rawDt=0→displayX frozen→STUTTER');
@@ -617,7 +617,7 @@ class DanmakuAtlasPainter extends CustomPainter {
     // ── playbackRate 变化检测 ──
     if (playbackRate != _lastDiagPlaybackRate) {
       if (!kReleaseMode) {
-        debugPrint('[ATLAS-DIAG] RATE CHANGE: $_lastDiagPlaybackRate → $playbackRate');
+        debugPrint('[ATLAS-DIAG] RATE CHANGE: $_lastDiagPlaybackRate  $playbackRate');
       }
       _lastDiagPlaybackRate = playbackRate;
       for (final item in items) {
@@ -634,7 +634,7 @@ class DanmakuAtlasPainter extends CustomPainter {
     if (isPlaying != _lastIsPlaying) {
       if (!kReleaseMode) {
         final deltaPtm = (playbackTimeMs.value - _lastDiagPlaybackTimeMsValue).abs();
-        debugPrint('[PAUSE-RESUME] isPlaying: $_lastIsPlaying → $isPlaying '
+        debugPrint('[PAUSE-RESUME] isPlaying: $_lastIsPlaying  $isPlaying '
             'ptm=${playbackTimeMs.value.toStringAsFixed(0)}ms '
             'deltaPtm=${deltaPtm.toStringAsFixed(0)}ms');
       }

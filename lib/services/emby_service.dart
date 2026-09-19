@@ -1000,11 +1000,11 @@ class EmbyService extends MediaServerServiceBase
         debugPrint('[EmbyService] 解析到的数据键: ${data.keys.toList()}');
         return EmbyEpisodeInfo.fromJson(data);
       } else {
-        debugPrint('[EmbyService] ❌ API请求失败: HTTP ${response.statusCode}');
+        debugPrint('[EmbyService]  API请求失败: HTTP ${response.statusCode}');
         debugPrint('[EmbyService] 错误响应内容: ${response.body}');
       }
     } catch (e, stackTrace) {
-      debugPrint('[EmbyService] ❌ 获取剧集详情时出错: $e');
+      debugPrint('[EmbyService]  获取剧集详情时出错: $e');
       print('Stack trace: $stackTrace');
     }
 

@@ -80,20 +80,41 @@ class DebugLogService extends ChangeNotifier {
   }
 
   /// 拦截debugPrint调用
-  void _interceptDebugPrint(String? message, {int? wrapWidth}) {
-    // 调用原始的debugPrint
-    _originalDebugPrint?.call(message, wrapWidth: wrapWidth);
+    void _interceptDebugPrint(String? message, {int? wrapWidth}) {
+      // 调用原始的debugPrint
+      _originalDebugPrint?.call(message, wrapWidth: wrapWidth);
 
-    // 收集日志
-    if (_isCollecting && message != null) {
-      _addLogEntry(LogEntry(
-        timestamp: DateTime.now(),
-        message: message,
-        level: 'DEBUG',
-        tag: _extractTag(message),
-      ));
+      // 收集日志
+      if (_isCollecting && message != null) {
+        _addLogEntry(LogEntry(
+          timestamp: DateTime.now(),
+          message: message,
+          level: _classifyLevel(message),
+          tag: _extractTag(message),
+        ));
+      }
     }
-  }
+
+    /// 按消息特征自动分级：ERROR / WARN / INFO（DEBUG 由显式 LogEntry 保留）。
+    String _classifyLevel(String message) {
+      final m = message.toLowerCase();
+      if (m.contains('exception') ||
+          m.contains('error') ||
+          m.contains('fatal') ||
+          m.contains('crash') ||
+          m.contains('失败') ||
+          m.contains('错误')) {
+        return 'ERROR';
+      }
+      if (m.contains('warn') ||
+          m.contains('警告') ||
+          m.contains('超时') ||
+          m.contains('无法') ||
+          m.contains('已停止自动重试')) {
+        return 'WARN';
+      }
+      return 'INFO';
+    }
 
   /// 从消息中提取标签
   String _extractTag(String message) {

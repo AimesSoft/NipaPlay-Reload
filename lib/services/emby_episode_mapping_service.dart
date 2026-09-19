@@ -419,7 +419,7 @@ class EmbyEpisodeMappingService {
       }
 
       if (currentMappingResults.isEmpty) {
-        debugPrint('[Emby映射服务] ❌ 未找到当前剧集的映射记录');
+        debugPrint('[Emby映射服务]  未找到当前剧集的映射记录');
         return null;
       }
 
@@ -436,7 +436,7 @@ class EmbyEpisodeMappingService {
       debugPrint('[Emby映射服务] - 映射ID: $mappingId');
 
       if (currentEmbyIndexNumber == null || seriesId == null) {
-        debugPrint('[Emby映射服务] ❌ 当前剧集映射缺少必要信息');
+        debugPrint('[Emby映射服务]  当前剧集映射缺少必要信息');
         return null;
       }
 
@@ -457,7 +457,7 @@ class EmbyEpisodeMappingService {
 
       if (nextMappingResults.isNotEmpty) {
         final nextMapping = nextMappingResults.first;
-        debugPrint('[Emby映射服务] ✅ 找到下一集的现有映射: $nextMapping');
+        debugPrint('[Emby映射服务]  找到下一集的现有映射: $nextMapping');
         debugPrint('[Emby映射服务] - 下一集集号: ${nextMapping['emby_index_number']}');
         debugPrint('[Emby映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
         return Map<String, dynamic>.from(nextMapping);
@@ -502,13 +502,13 @@ class EmbyEpisodeMappingService {
           'mapping_id': mappingId,
           'confirmed': 0, // 标记为预测映射
         };
-        debugPrint('[Emby映射服务] ✅ 返回推算的映射: $predictedMapping');
+        debugPrint('[Emby映射服务]  返回推算的映射: $predictedMapping');
         return predictedMapping;
       } else {
-        debugPrint('[Emby映射服务] ❌ 没有已有映射记录，无法推算');
+        debugPrint('[Emby映射服务]  没有已有映射记录，无法推算');
       }
 
-      debugPrint('[Emby映射服务] ❌ 未找到下一集的有效映射');
+      debugPrint('[Emby映射服务]  未找到下一集的有效映射');
       debugPrint('[Emby映射服务] ========== 查找下一集映射结束 ==========');
       return null;
     } catch (e) {

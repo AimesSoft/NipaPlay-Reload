@@ -161,7 +161,7 @@ class SkipIdResolver {
       for (final variant in variants) {
         final outcome = await _searchAniList(variant, premiereYear);
         if (outcome.malId != null) {
-          debugPrint('[跳过片头] "$variant" → MAL ${outcome.malId}');
+          debugPrint('[跳过片头] "$variant"  MAL ${outcome.malId}');
           return outcome;
         }
         if (!outcome.definitive) definitive = false;

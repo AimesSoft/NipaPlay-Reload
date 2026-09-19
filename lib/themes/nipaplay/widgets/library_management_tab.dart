@@ -4681,7 +4681,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             // 保存更新后的历史记录
             await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
 
-            debugPrint('✅ 成功更新弹幕匹配信息：');
+            debugPrint(' 成功更新弹幕匹配信息：');
             debugPrint('   文件：$fileName');
             debugPrint('   动画：$animeTitle');
             debugPrint('   集数：$episodeTitle');
@@ -4703,20 +4703,20 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               }
             }
           } catch (e) {
-            debugPrint('❌ 更新弹幕匹配信息失败：$e');
+            debugPrint(' 更新弹幕匹配信息失败：$e');
             if (mounted) {
               BlurSnackBar.show(context, '更新弹幕信息失败：$e');
             }
           }
         } else {
-          debugPrint('⚠️ 弹幕匹配结果缺少必要信息');
+          debugPrint(' 弹幕匹配结果缺少必要信息');
           if (mounted) {
             BlurSnackBar.show(context, '弹幕匹配结果无效');
           }
         }
       }
     } catch (e) {
-      debugPrint('❌ 显示手动匹配弹幕对话框失败：$e');
+      debugPrint(' 显示手动匹配弹幕对话框失败：$e');
       if (mounted) {
         BlurSnackBar.show(context, '打开弹幕匹配对话框失败：$e');
       }
@@ -4791,7 +4791,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         // 保存更新后的历史记录
         await WatchHistoryManager.addOrUpdateHistory(clearedHistory);
 
-        debugPrint('✅ 成功移除扫描结果：$fileName');
+        debugPrint(' 成功移除扫描结果：$fileName');
 
         // 显示成功提示
         if (mounted) {
@@ -4804,7 +4804,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           _refreshExpandedFolderContents(p.dirname(filePath));
         }
       } catch (e) {
-        debugPrint('❌ 移除扫描结果失败：$e');
+        debugPrint(' 移除扫描结果失败：$e');
         if (mounted) {
           BlurSnackBar.show(context, '移除扫描结果失败：$e');
         }
