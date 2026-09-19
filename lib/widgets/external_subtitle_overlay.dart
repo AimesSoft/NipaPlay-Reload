@@ -651,15 +651,15 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   }
 }
 
-  /// 叠层字幕的填充样式（字体受"样式覆盖=自定义样式"门控）
-  TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
-    final fontsApply = videoState.subtitleOverrideMode ==
-        SubtitleStyleOverrideMode.force;
-    final fontNames = videoState.subtitleFontName
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+  /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
+    /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
+    TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
+      final fontNames = videoState.subtitleFontName
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      final fontsApply = fontNames.isNotEmpty;
 
     return TextStyle(
       fontSize: fontSize,
