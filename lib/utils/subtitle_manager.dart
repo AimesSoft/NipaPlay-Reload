@@ -1342,10 +1342,14 @@ class SubtitleManager extends ChangeNotifier {
             // 保存这个自动找到的字幕路径，下次可以直接使用
             saveVideoSubtitleMapping(videoPath, cachedPath);
 
-            // 其余候选也叠加挂载（ass/srt 都进字幕轨道，用户可切换）。
-            // 只对评分第一走上面的字体预取/映射持久化流程。
+            // 其余候选也叠加挂载（SRT/VTT 走叠层可共存多挂）。
+            // 内核轨 ASS/SSA 不自动叠加：mpv sid 单轨显示，多挂只有最后
+            // 一条可见，制造"挂了两条 ASS 只显示一条"的困惑；ASS 走评分第一，
+            // 需要更多 ASS 可手动多挂（内核限制：仍只显示最后一条）。
             for (final other in candidates) {
               if (identical(other, selected)) continue;
+              final otherExt = other.extension.toLowerCase();
+              if (otherExt == '.ass' || otherExt == '.ssa') continue;
               try {
                 final otherPath = await RemoteSubtitleService.instance
                     .ensureSubtitleCached(other);
