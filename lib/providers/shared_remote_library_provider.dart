@@ -199,36 +199,53 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   }
 
   Future<SharedRemoteHost> connectOrActivateHost({
-    required String displayName,
-    required String baseUrl,
-  }) async {
-    final normalizedUrl = _normalizeBaseUrl(baseUrl);
-    for (var i = 0; i < _hosts.length; i++) {
-      final host = _hosts[i];
-      if (_normalizeBaseUrl(host.baseUrl) != normalizedUrl) continue;
+      required String displayName,
+      required String baseUrl,
+    }) async {
+      final normalizedUrl = _normalizeBaseUrl(baseUrl);
+      for (var i = 0; i < _hosts.length; i++) {
+        final host = _hosts[i];
+        if (_normalizeBaseUrl(host.baseUrl) != normalizedUrl) continue;
 
-      var shouldPersist = false;
-      final trimmedName = displayName.trim();
-      if (trimmedName.isNotEmpty &&
-          trimmedName != normalizedUrl &&
-          (host.displayName.trim().isEmpty ||
-              host.displayName == host.baseUrl)) {
-        _hosts[i] = host.copyWith(displayName: trimmedName);
-        shouldPersist = true;
+        var shouldPersist = false;
+        final trimmedName = displayName.trim();
+        if (trimmedName.isNotEmpty &&
+            trimmedName != normalizedUrl &&
+            (host.displayName.trim().isEmpty ||
+                host.displayName == host.baseUrl)) {
+          _hosts[i] = host.copyWith(displayName: trimmedName);
+          shouldPersist = true;
+        }
+        if (shouldPersist) {
+          await _persistHosts();
+          notifyListeners();
+        }
+        final hostId = _hosts[i].id;
+        await setActiveHost(hostId);
+        return _requireConnectedHost(hostId);
       }
-      if (shouldPersist) {
-        await _persistHosts();
-        notifyListeners();
+
+      // 同 IP 复用：自动发现/遥控握手带来的 host 若 IP 与用户手动配置的
+      // 已有主机相同（端口可能不同，如广播旧端口 :100 vs 用户配置 :30000），
+      // 不添加新条目——直接用用户配置的主机，避免失效旧 host 混入列表。
+      final normalizedUri = Uri.tryParse(normalizedUrl);
+      if (normalizedUri != null && normalizedUri.host.isNotEmpty) {
+        for (var i = 0; i < _hosts.length; i++) {
+          final existingUri =
+              Uri.tryParse(_normalizeBaseUrl(_hosts[i].baseUrl));
+          if (existingUri != null &&
+              existingUri.host == normalizedUri.host) {
+            final hostId = _hosts[i].id;
+            await setActiveHost(hostId);
+            return _requireConnectedHost(hostId);
+          }
+        }
       }
-      final hostId = _hosts[i].id;
-      await setActiveHost(hostId);
-      return _requireConnectedHost(hostId);
+
+      final host =
+          await addHost(displayName: displayName, baseUrl: normalizedUrl);
+      return _requireConnectedHost(host.id);
     }
-
-    final host =
-        await addHost(displayName: displayName, baseUrl: normalizedUrl);
-    return _requireConnectedHost(host.id);
-  }
 
   SharedRemoteHost _requireConnectedHost(String hostId) {
     final host = _hosts.firstWhere((current) => current.id == hostId);
