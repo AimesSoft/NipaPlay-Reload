@@ -646,7 +646,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
     final directory = Directory(path);
     if (!await directory.exists()) {
-      await directory.create(recursive: true);
+      try {
+        await directory.create(recursive: true);
+      } catch (_) {
+        // 目标路径不可创建（如 iOS 沙盒根 Operation not permitted）：
+        // 回退并缓存默认目录，避免每次截图都重复尝试失败路径。
+        final fallback = (await _getDefaultScreenshotSaveDirectory()).path;
+        _screenshotSaveDirectory = fallback;
+        return fallback;
+      }
     }
     return directory.path;
   }

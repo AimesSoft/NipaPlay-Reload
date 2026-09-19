@@ -98,6 +98,17 @@ class DebugLogService extends ChangeNotifier {
     /// 按消息特征自动分级：ERROR / WARN / INFO（DEBUG 由显式 LogEntry 保留）。
     String _classifyLevel(String message) {
       final m = message.toLowerCase();
+      // 正常业务响应与设计内回退不算错误：
+      // - 404 多为"未收藏/未找到"的正常业务响应
+      // - C++ 解析 fallback 到 Dart 是设计内的回退机制
+      // - 截图目录/公网IP失败有默认回退路径，属网络/环境问题
+      if (m.contains('404') ||
+          m.contains('falling back') ||
+          m.contains('回退到默认') ||
+          m.contains('创建截图目录失败') ||
+          m.contains('获取公网ip出错')) {
+        return 'WARN';
+      }
       if (m.contains('exception') ||
           m.contains('error') ||
           m.contains('fatal') ||

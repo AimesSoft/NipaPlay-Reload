@@ -97,11 +97,12 @@ class PlayerKernelManager {
     await videoPlayerState.applySubtitleStylePreference();
     if (videoPlayerState.isDisposed) return;
 
-    // 4. 重新初始化播放
+    // 4. 重新初始化播放（autoPlay=false：切换后保持暂停，避免"播一下又停"）
     await videoPlayerState.initializePlayer(
       currentPath,
       historyItem: historyItem,
       resetManualDanmakuOffset: false,
+      autoPlay: false,
     );
     if (videoPlayerState.isDisposed) return;
 

@@ -27,6 +27,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
+    bool autoPlay = true,
   }) async {
     _playbackErrorDialogRequested = false;
     final isRequestedEmbyStream = videoPath.startsWith('emby://');
@@ -474,6 +475,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 准备播放器
       mediaPrepareStarted = true;
       await player.prepare();
+      // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
+      // 切换内核场景（autoPlay=false）要尽早暂停，避免"放一秒钟有声音
+      // 才暂停"——即使内核尚未完全就绪也先尝试 pause，尾部还有兜底。
+      if (!autoPlay) {
+        try {
+          player.pause();
+        } catch (_) {}
+      }
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
           videoPath.startsWith('emby://');
       final bool isNetworkMedia = isMediaServer ||
@@ -541,6 +550,13 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             break;
           }
         }
+      }
+      // 切换内核场景兜底：媒体就绪后再暂停一次（早期 pause 可能被
+      // 内核就绪流程覆盖）。
+      if (!autoPlay) {
+        try {
+          player.pause();
+        } catch (_) {}
       }
       mediaPrepareCompleted = true;
 
