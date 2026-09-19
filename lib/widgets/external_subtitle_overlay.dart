@@ -72,7 +72,11 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
       path: path,
     );
 
-    if (subtitleText.trim().isEmpty || videoState.subtitleOpacity <= 0) {
+    // 内核轨字幕（libmpv ASS/SSA）：文本由 libass 内核渲染，叠层不显示文本，
+    // 但需要同款交互层（长按出框/拖动/功能区），不能 shrink。
+    final bool isKernelTrack = !videoState.externalSubtitleRenderedInApp(path);
+    if ((subtitleText.trim().isEmpty && !isKernelTrack) ||
+        videoState.subtitleOpacity <= 0) {
       return const SizedBox.shrink();
     }
 
@@ -139,7 +143,20 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
             shadows: null,
           );
 
-          final Widget textBox = ConstrainedBox(
+          final Widget textBox = isKernelTrack
+              // 内核轨：透明占位（与 SRT 同尺寸），文本由内核 libass 渲染
+              ? Opacity(
+                  opacity: 0,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: 120,
+                      maxWidth: width * 0.9,
+                      minHeight: 36,
+                    ),
+                    child: const SizedBox.shrink(),
+                  ),
+                )
+              : ConstrainedBox(
             constraints: BoxConstraints(minWidth: 120, maxWidth: width * 0.9),
             child: _subtitleBgEnabled
                 ? Container(
@@ -178,8 +195,12 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                 setState(() => _editingPath = path);
                 videoState.setSubtitleEditBoxVisible(true);
                 _longPressMoved = false;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+                _dragStartPosition = isKernelTrack
+                    ? videoState.subtitlePosition
+                    : videoState.pathSubtitlePosition(path);
+                _dragStartMarginX = isKernelTrack
+                    ? 0.0
+                    : videoState.pathSubtitleMarginX(path);
                 videoState.setSubtitleDragActive(true);
               },
               onLongPressMoveUpdate: (details) {
@@ -191,13 +212,20 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                 _dragStartMarginX = (_dragStartMarginX +
                         details.offsetFromOrigin.dx)
                     .clamp(-500.0, 500.0);
-                v.setPathSubtitleMarginX(path, _dragStartMarginX);
+                if (!isKernelTrack) {
+                  v.setPathSubtitleMarginX(path, _dragStartMarginX);
+                }
                 final stageH = MediaQuery.of(context).size.height;
                 _dragStartPosition = (_dragStartPosition +
                         details.offsetFromOrigin.dy / stageH * 100)
                     .clamp(VideoPlayerState.minSubtitlePosition,
                         VideoPlayerState.maxSubtitlePosition);
-                v.setPathSubtitlePosition(path, _dragStartPosition);
+                if (isKernelTrack) {
+                  // 内核轨 ASS：位置是全局 sub-pos
+                  v.setSubtitlePosition(_dragStartPosition);
+                } else {
+                  v.setPathSubtitlePosition(path, _dragStartPosition);
+                }
               },
               onLongPressEnd: (_) {
                 videoState.setSubtitleDragActive(false);
@@ -223,24 +251,36 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
               },
               onPanDown: (_) {
                 _panDragActive = true;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+                _dragStartPosition = isKernelTrack
+                    ? videoState.subtitlePosition
+                    : videoState.pathSubtitlePosition(path);
+                _dragStartMarginX = isKernelTrack
+                    ? 0.0
+                    : videoState.pathSubtitleMarginX(path);
                 videoState.setSubtitleDragActive(true);
               },
               onPanUpdate: (details) {
                 final v = videoState;
-                _dragStartMarginX += details.delta.dx;
-                v.setPathSubtitleMarginX(
-                  path,
-                  _dragStartMarginX.clamp(-500.0, 500.0),
-                );
                 final stageH = MediaQuery.of(context).size.height;
                 _dragStartPosition += details.delta.dy / stageH * 100;
-                v.setPathSubtitlePosition(
-                  path,
-                  _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
-                      VideoPlayerState.maxSubtitlePosition),
-                );
+                if (isKernelTrack) {
+                  // 内核轨 ASS：位置是全局 sub-pos
+                  v.setSubtitlePosition(_dragStartPosition.clamp(
+                      VideoPlayerState.minSubtitlePosition,
+                      VideoPlayerState.maxSubtitlePosition));
+                } else {
+                  _dragStartMarginX += details.delta.dx;
+                  v.setPathSubtitleMarginX(
+                    path,
+                    _dragStartMarginX.clamp(-500.0, 500.0),
+                  );
+                  v.setPathSubtitlePosition(
+                    path,
+                    _dragStartPosition.clamp(
+                        VideoPlayerState.minSubtitlePosition,
+                        VideoPlayerState.maxSubtitlePosition),
+                  );
+                }
               },
               onPanEnd: (_) {
                 _panDragActive = false;
@@ -251,8 +291,12 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
               onLongPressStart: (details) {
                 debugPrint('[SubtitleOverlay] 长按开始 path=$path');
                 _longPressMoved = false;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+                _dragStartPosition = isKernelTrack
+                    ? videoState.subtitlePosition
+                    : videoState.pathSubtitlePosition(path);
+                _dragStartMarginX = isKernelTrack
+                    ? 0.0
+                    : videoState.pathSubtitleMarginX(path);
                 videoState.setSubtitleDragActive(true);
               },
               onLongPressMoveUpdate: (details) {
@@ -371,8 +415,9 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
               child: Align(
                 alignment: Alignment(
                   _resolveHorizontalAlignment(videoState.subtitleAlignX),
-                  _resolveVerticalAlignment(
-                      videoState.pathSubtitlePosition(path)),
+                  _resolveVerticalAlignment(isKernelTrack
+                      ? videoState.subtitlePosition
+                      : videoState.pathSubtitlePosition(path)),
                 ),
                 child: Transform.translate(
                   offset: Offset(
