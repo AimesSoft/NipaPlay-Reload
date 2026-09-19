@@ -33,7 +33,8 @@ class PlayerFactory {
   static const String _macOSNativeVideoEnabledKey =
       'macos_native_video_enabled';
   static const String _androidAudioOutputKey = 'android_audio_output';
-  static const String _erikaAndroidOutputModeKey = 'erika_android_output_mode';
+    static const String _erikaAndroidOutputModeKey = 'erika_android_output_mode';
+    static const String _libmpvHwdecModeKey = 'libmpv_hwdec_mode';
   static const int defaultPrecacheBufferSizeMb = 32;
   static const int minPrecacheBufferSizeMb = 4;
   static const int maxPrecacheBufferSizeMb = 512;
@@ -46,7 +47,8 @@ class PlayerFactory {
   static String _cachedCustomPlayerUA = ''; // 自定义播放器 UA，空=用内核默认
   static String _cachedHttpProxy = '';
   static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
-  static bool _hasLoadedSettings = false;
+    static bool _hasLoadedSettings = false;
+    static String _cachedLibmpvHwdecMode = 'auto-copy';
 
   // 添加一个StreamController来广播内核切换事件
   static final StreamController<PlayerKernelType> _kernelChangeController =
@@ -452,6 +454,21 @@ class PlayerFactory {
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());
       //   throw UnimplementedError('Other player types not yet supported.');
+    }
+  }
+
+  static String get getLibmpvHwdecMode =>
+      _cachedLibmpvHwdecMode;
+
+  /// libmpv(Media Kit) 硬件解码模式：'auto-copy'(copy-back，默认) 或
+  /// 'videotoolbox'(直接输出，省内存但 iOS 渲染可能黑屏，可回退)。
+  static Future<void> saveLibmpvHwdecMode(String mode) async {
+    _cachedLibmpvHwdecMode = mode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_libmpvHwdecModeKey, mode);
+    } catch (e) {
+      debugPrint('[PlayerFactory] 保存 libmpv 硬解模式出错: $e');
     }
   }
 

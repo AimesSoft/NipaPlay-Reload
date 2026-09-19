@@ -28,13 +28,15 @@ class PlayerSettingsContent extends StatefulWidget {
 
 class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
-  bool _macOSNativeVideoEnabled = false;
-  String _androidAudioOutput = 'opensles';
-  PlayerErikaAndroidOutputMode _erikaAndroidOutputMode =
-      PlayerErikaAndroidOutputMode.sdr;
+    bool _macOSNativeVideoEnabled = false;
+    String _androidAudioOutput = 'opensles';
+    String _libmpvHwdecMode = 'auto-copy';
+    PlayerErikaAndroidOutputMode _erikaAndroidOutputMode =
+        PlayerErikaAndroidOutputMode.sdr;
 
-  // 为BlurDropdown添加GlobalKey
-  final GlobalKey _playerKernelDropdownKey = GlobalKey();
+    // 为BlurDropdown添加GlobalKey
+    final GlobalKey _playerKernelDropdownKey = GlobalKey();
+    final GlobalKey _libmpvHwdecDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
   final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
   final GlobalKey _erikaAndroidOutputDropdownKey = GlobalKey();
@@ -71,10 +73,31 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadPlayerKernelSettings();
-    _loadMacOSNativeVideoSettings();
-    _loadAndroidAudioOutputSettings();
-    _loadErikaAndroidOutputSettings();
-  }
+        _loadMacOSNativeVideoSettings();
+        _loadAndroidAudioOutputSettings();
+        _loadErikaAndroidOutputSettings();
+        _loadLibmpvHwdecModeSetting();
+      }
+
+      Future<void> _loadLibmpvHwdecModeSetting() async {
+        final mode = PlayerFactory.getLibmpvHwdecMode;
+        if (!mounted) return;
+        setState(() {
+          _libmpvHwdecMode = mode;
+        });
+      }
+
+      Future<void> _saveLibmpvHwdecModeSetting(String mode) async {
+        await PlayerFactory.saveLibmpvHwdecMode(mode);
+        if (!mounted) return;
+        setState(() {
+          _libmpvHwdecMode = mode;
+        });
+        BlurSnackBar.show(
+          context,
+          'Libmpv 硬解模式已切换，重新加载播放后生效',
+        );
+      }
 
   Future<void> _loadPlayerKernelSettings() async {
     // 直接从PlayerFactory获取当前内核类型
@@ -432,8 +455,8 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),
               if (!kIsWeb && Platform.isAndroid) ...[
-                AdaptiveSettingsTile.dropdown(
-                  title: 'Erika Android 输出',
+                              AdaptiveSettingsTile.dropdown(
+                                title: 'Erika Android 输出',
                   subtitle: '选择兼容 SDR，或在支持的 HDR 设备上启用扩展线性 scRGB',
                   icon: Ionicons.color_filter_outline,
                   items: [
@@ -463,9 +486,38 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     color: colorScheme.onSurface.withValues(alpha: 0.12),
                     height: 1),
               ],
-            ],
-            if (visibleKernelType == PlayerKernelType.mdk ||
-                visibleKernelType == PlayerKernelType.mediaKit) ...[
+                          ],
+                          if (visibleKernelType == PlayerKernelType.mediaKit) ...[
+                            AdaptiveSettingsTile.dropdown(
+                              title: 'Libmpv 硬件解码模式',
+                              subtitle: '自动(copy-back)：硬解帧拷回内存渲染，兼容性最好（默认）；直接输出(VideoToolbox)：硬解帧直接输出，省内存，若黑屏可切回',
+                              icon: Ionicons.videocam_outline,
+                              items: [
+                                DropdownMenuItemData(
+                                  title: '自动（copy-back，默认）',
+                                  value: 'auto-copy',
+                                  isSelected: _libmpvHwdecMode == 'auto-copy',
+                                  description: '硬解帧拷回内存渲染，兼容性最好',
+                                ),
+                                DropdownMenuItemData(
+                                  title: '直接输出（VideoToolbox）',
+                                  value: 'videotoolbox',
+                                  isSelected: _libmpvHwdecMode == 'videotoolbox',
+                                  description: '硬解帧直接输出，省内存；部分渲染路径可能黑屏',
+                                ),
+                              ],
+                              onChanged: (dynamic value) async {
+                                if (value is! String) return;
+                                await _saveLibmpvHwdecModeSetting(value);
+                              },
+                              dropdownKey: _libmpvHwdecDropdownKey,
+                            ),
+                            Divider(
+                                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                                height: 1),
+                          ],
+                          if (visibleKernelType == PlayerKernelType.mdk ||
+                              visibleKernelType == PlayerKernelType.mediaKit) ...[
               Consumer<VideoPlayerState>(
                 builder: (context, videoState, child) {
                   return AdaptiveSettingsTile.toggle(

@@ -879,11 +879,14 @@ class MediaKitPlayerAdapter
         return;
       }
       if (defaultTargetPlatform == TargetPlatform.android) {
-        (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
-      } else {
-        // 对于其他平台，'auto-copy' 仍然是一个好的通用选择
-        (_player.platform as dynamic)?.setProperty('hwdec', 'auto-copy');
-      }
+              (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
+            } else {
+              // 其他平台（iOS 等）：读用户设置——'auto-copy'(copy-back，默认) 或
+              // 'videotoolbox'(直接输出，省内存，可回退)。
+              final hwdecMode = PlayerFactory.getLibmpvHwdecMode;
+              (_player.platform as dynamic)?.setProperty('hwdec', hwdecMode);
+              _properties['hwdec'] = hwdecMode;
+            }
     } catch (e) {
       debugPrint('MediaKit: 设置硬件解码模式失败: $e');
     }
