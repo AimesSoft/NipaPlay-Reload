@@ -151,7 +151,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         isPlaying: videoState.status == PlayerStatus.playing,
         fontSize: getFontSize(videoState) * widget.danmakuScale,
         isVisible: videoState.danmakuVisible &&
-            videoState.screenshotCaptureIncludesDanmaku,
+            !videoState.shouldHideDanmakuForScreenshot,
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
@@ -167,7 +167,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           isPlaying: videoState.status == PlayerStatus.playing,
           fontSize: getFontSize(videoState) * widget.danmakuScale,
           isVisible: videoState.danmakuVisible &&
-            videoState.screenshotCaptureIncludesDanmaku,
+              !videoState.shouldHideDanmakuForScreenshot,
           opacity: videoState.mappedDanmakuOpacity,
         );
       },

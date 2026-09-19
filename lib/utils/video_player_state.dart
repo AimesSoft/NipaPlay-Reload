@@ -456,6 +456,13 @@ int _exactEndStreak = 0;
   bool get screenshotCaptureIncludesSubtitles =>
       _screenshotCaptureIncludesSubtitles;
 
+  // 截图帧合成期间（_isCapturingScreenshot=true）且设置不含弹幕/字幕时，
+  // 弹幕层与字幕叠层临时隐藏——只影响截图帧，不影响正常观看。
+  bool get shouldHideDanmakuForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesDanmaku;
+  bool get shouldHideSubtitlesForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesSubtitles;
+
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
   final String _lastVideoKey = 'last_video_path';

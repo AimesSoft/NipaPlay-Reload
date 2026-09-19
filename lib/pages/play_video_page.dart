@@ -373,7 +373,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             includeDanmaku: includeDanmaku,
             includeSubtitles: includeSubtitles,
           ),
-          barrierDismissible: !_shouldDisableDialogDismiss(videoState),
+          barrierDismissible: true,
         );
         return;
       }
@@ -1243,8 +1243,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                     includeDanmaku: includeDanmaku,
                                     includeSubtitles: includeSubtitles,
                                   ),
-                                  barrierDismissible:
-                                      !_shouldDisableDialogDismiss(videoState),
+                                  barrierDismissible: true,
                                 ),
                               );
                             },
