@@ -33,8 +33,7 @@ class PlayerKernelManager {
     final currentDuration = videoPlayerState.duration;
     final currentProgress = videoPlayerState.progress;
     final currentPlaybackRate = videoPlayerState.playbackRate;
-    final wasPlaying = videoPlayerState.status == PlayerStatus.playing;
-    final previousPlayer = videoPlayerState.player;
+        final previousPlayer = videoPlayerState.player;
     final historyItem = WatchHistoryItem(
       filePath: currentPath ?? '',
       animeName: videoPlayerState.animeTitle ?? '',
@@ -115,12 +114,11 @@ class PlayerKernelManager {
         debugPrint('[PlayerKernelManager] 恢复播放速度设置: ${currentPlaybackRate}x');
       }
       videoPlayerState.seekTo(currentPosition);
-      if (wasPlaying) {
-        videoPlayerState.play();
-      } else {
-        videoPlayerState.pause();
-      }
-      debugPrint('[PlayerKernelManager] 播放器内核热切换完成，已恢复播放状态');
+            // 切换后不自动恢复播放：新内核刚创建，立即 play 会"播一下又暂停"
+            // （内核未就绪状态机自动暂停），突兀且无意义。切完保持暂停，
+            // 用户想继续播放时手动点播放即可。
+            videoPlayerState.pause();
+            debugPrint('[PlayerKernelManager] 播放器内核热切换完成（暂停态，等待用户播放）');
     } else {
       debugPrint('[PlayerKernelManager] 播放器内核热切换完成，但未能恢复播放（可能视频加载失败）');
     }

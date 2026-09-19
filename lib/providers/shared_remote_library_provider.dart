@@ -418,10 +418,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _animeSummaries = [];
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
-      final connectionRefused =
-          e.toString().contains('Connection refused') ||
-              e.toString().contains('errno = 61');
-      if (connectionRefused) {
+      final connectionFailed = e.toString().contains('Connection refused') ||
+                e.toString().contains('Connection failed') ||
+                e.toString().contains('Host is down') ||
+                e.toString().contains('errno = 61') ||
+                e.toString().contains('errno = 64') ||
+                e.toString().contains('errno = 65') ||
+                e.toString().contains('errno = 60');
+            if (connectionFailed) {
         // 端口无服务（Connection refused）：主机配置已失效，继续重试只会
         // 刷日志占后台。自动移除该主机并切到下一个可用主机——用户只需
         // 保留可达的（如 30000），失效的旧 host（如 :100）不再出现。
