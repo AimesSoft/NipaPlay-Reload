@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'loading_placeholder.dart';
 
 // 图片加载模式
@@ -109,31 +110,33 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     super.dispose();
   }
 
-  void _loadImage() {
-    if (_currentUrl == widget.imageUrl || _isDisposed) return;
-    _currentUrl = widget.imageUrl;
-    _hasRetriedLowRes = false;
+  void _loadImage() async {
+      if (_currentUrl == widget.imageUrl || _isDisposed) return;
+      _currentUrl = widget.imageUrl;
+      _hasRetriedLowRes = false;
 
-    final target = _resolveDecodeTarget();
-    _decodeTarget = target;
-    final int? targetWidth = target?.$1;
-    final int? targetHeight = target?.$2;
+      final resolvedUrl = await _resolveImageUrl(widget.imageUrl);
 
-    // 旧版：仅使用缓存管理器单通道加载
-    if (widget.loadMode == CachedImageLoadMode.legacy) {
-      _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
+      final target = _resolveDecodeTarget();
+      _decodeTarget = target;
+      final int? targetWidth = target?.$1;
+      final int? targetHeight = target?.$2;
+
+      // 旧版：仅使用缓存管理器单通道加载
+      if (widget.loadMode == CachedImageLoadMode.legacy) {
+        _imageFuture = ImageCacheManager.instance.loadImage(
+          resolvedUrl,
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        );
+        return;
+      }
+
+      final cachedImage = ImageCacheManager.instance.getCachedImage(
+        resolvedUrl,
         targetWidth: targetWidth,
         targetHeight: targetHeight,
       );
-      return;
-    }
-
-    final cachedImage = ImageCacheManager.instance.getCachedImage(
-      widget.imageUrl,
-      targetWidth: targetWidth,
-      targetHeight: targetHeight,
-    );
 
     if (cachedImage != null) {
       _basicImage = cachedImage;
@@ -145,12 +148,12 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     // 异步加载高清图片
     if (widget.shouldCompress) {
       _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
+        resolvedUrl,
         targetWidth: targetWidth,
         targetHeight: targetHeight,
       );
     } else {
-      _imageFuture = _loadOriginalImage(widget.imageUrl);
+      _imageFuture = _loadOriginalImage(resolvedUrl);
     }
   }
 
@@ -203,17 +206,38 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     return (width, height);
   }
 
-  // 新增方法：立即加载基础图片
-  void _loadBasicImage() async {
+  /// 应用自定义 Bangumi API 服务器：api.bgm.tv 的图片/请求在部分网络环境
+    /// 直连超时（errno 60），用户配置的三合一反代服务器可正常加载。
+    Future<String> _resolveImageUrl(String url) async {
+      if (!url.startsWith('https://api.bgm.tv') &&
+          !url.startsWith('http://api.bgm.tv')) {
+        return url;
+      }
+      try {
+        final custom = await NetworkSettings.getBangumiServer();
+        if (custom.isNotEmpty &&
+            custom != 'https://api.bgm.tv' &&
+            custom != 'http://api.bgm.tv') {
+          return url
+              .replaceFirst('https://api.bgm.tv', custom)
+              .replaceFirst('http://api.bgm.tv', custom);
+        }
+      } catch (_) {}
+      return url;
+    }
+
+    // 新增方法：立即加载基础图片
+    void _loadBasicImage() async {
     // 🔥 根据delayLoad参数决定是否延迟（避免与HEAD验证竞争）
     if (widget.delayLoad) {
       await Future.delayed(const Duration(milliseconds: 1500));
     }
 
     try {
-      final imageBytes = await loadNetworkImageBytes(
-        Uri.parse(widget.imageUrl),
-      );
+          final resolvedUrl = await _resolveImageUrl(widget.imageUrl);
+          final imageBytes = await loadNetworkImageBytes(
+            Uri.parse(resolvedUrl),
+          );
       final codec = await ui.instantiateImageCodec(
         imageBytes,
         targetWidth: _decodeTarget?.$1,
