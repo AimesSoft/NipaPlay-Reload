@@ -224,6 +224,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   double pathSubtitlePosition(String path) =>
       _subtitleManager.pathPosition(path);
 
+  /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，libmpv ASS）
+  bool externalSubtitleRenderedInApp(String path) =>
+      _subtitleManager.externalSubtitleRenderedInApp(path);
+
   void setPathSubtitlePosition(String path, double position) {
     _subtitleManager.setPathPosition(path, position);
     _notifyListeners();

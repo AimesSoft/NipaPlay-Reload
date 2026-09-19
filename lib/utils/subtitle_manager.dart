@@ -195,6 +195,15 @@ class SubtitleManager extends ChangeNotifier {
     final state = _ensurePathDisplayState(path);
     state['position'] = position;
     unawaited(_savePathDisplayState(path));
+    // 内核轨字幕（libmpv ASS/SSA）：位置同步 mpv sub-pos（libass 渲染）
+    if (!_shouldRenderExternalSubtitleInApp(path)) {
+      try {
+        _player.setProperty(
+            'sub-pos', position.round().clamp(0, 100).toString());
+      } catch (e) {
+        debugPrint('SubtitleManager: 内核字幕位置同步失败: $e');
+      }
+    }
     notifyListeners();
   }
 
@@ -764,6 +773,10 @@ class SubtitleManager extends ChangeNotifier {
     debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
   }
 
+  /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，如 libmpv 的 ASS/SSA）
+  bool externalSubtitleRenderedInApp(String path) =>
+      _shouldRenderExternalSubtitleInApp(path);
+
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
     // 其他仍在叠加的字幕块跟着消失（旧实现读单条当前路径）。
@@ -862,6 +875,16 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     _player.setMedia(path, MediaType.subtitle);
+    // libmpv 内核轨：挂载后应用持久化的全局字幕位置（sub-pos），
+    // 否则内核 ASS 用 mpv 默认位置，滑块设置的 0-100 不生效。
+    if (_player.getPlayerKernelName() == 'Media Kit') {
+      try {
+        _player.setProperty(
+            'sub-pos', globalPositionSeed.round().clamp(0, 100).toString());
+      } catch (e) {
+        debugPrint('SubtitleManager: 内核字幕初始位置应用失败: $e');
+      }
+    }
     _erikaSubtitleTrace(
       'loadExternalSubtitleIntoPlayer setMedia returned token=$loadToken '
       'active=${_player.activeSubtitleTracks} '
