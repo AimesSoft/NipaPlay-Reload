@@ -10,6 +10,7 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/player_event_log.dart';
 import 'dart:async'; // 导入dart:async库
 
 // Define available player types if you plan to support more than one.
@@ -124,6 +125,12 @@ class PlayerFactory {
       );
       _cachedCustomPlayerUA =
           prefs.getString(SettingsKeys.customPlayerUA) ?? '';
+      final resolvedKernel = _cachedKernelType;
+      logPlayerEvent(
+        'Kernel',
+        '当前播放器内核: ${resolvedKernel?.name ?? _defaultKernelType.name}'
+        '${globals.isTvOS ? '（tvOS 强制 Erika）' : ''}',
+      );
       _cachedHttpProxy =
           (prefs.getString(SettingsKeys.playerHttpProxy) ?? '').trim();
       AppHttpProxy.set(_cachedHttpProxy);
@@ -463,6 +470,7 @@ class PlayerFactory {
       await prefs.setInt(_playerKernelTypeKey, type.index);
       _cachedKernelType = type;
       debugPrint('[PlayerFactory] 保存内核设置: ${type.toString()}');
+      logPlayerEvent('Kernel', '用户切换播放器内核: ${type.name}');
 
       // 更新系统资源监视器的播放器内核类型
       String kernelTypeName;

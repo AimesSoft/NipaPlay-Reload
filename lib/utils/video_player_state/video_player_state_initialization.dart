@@ -212,6 +212,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   void startBrightnessDrag() {
     if (!globals.isMobilePlatform) return;
+    if (_subtitleDragActive) return; // 字幕拖动中不响应亮度手势
     // Refresh _initialDragBrightness with the most up-to-date _currentBrightness
     // This handles cases where brightness might have been changed by other means
     // or if a previous drag was interrupted.

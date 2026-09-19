@@ -631,7 +631,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                         ),
                                                       ),
                                                       const Text(
-                                                        ' → ',
+                                                        '  ',
                                                         locale: Locale(
                                                             "zh-Hans", "zh"),
                                                         style: TextStyle(
@@ -791,7 +791,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                           ),
                                                         ),
                                                         Text(
-                                                          ' → ',
+                                                          '  ',
                                                           locale: Locale(
                                                               "zh-Hans", "zh"),
                                                           style: TextStyle(
