@@ -408,16 +408,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> _loadHardwareDecoderSetting() async {
-    if (kIsWeb) return;
-    final prefs = await SharedPreferences.getInstance();
-    final resolved = prefs.getBool(_useHardwareDecoderKey) ?? true;
-    final bool changed = resolved != _useHardwareDecoder;
-    _useHardwareDecoder = resolved;
-    await applyHardwareDecoderPreference();
-    if (changed) {
-      _notifyListeners();
+      if (kIsWeb) return;
+      final prefs = await SharedPreferences.getInstance();
+      final resolved = prefs.getBool(_useHardwareDecoderKey) ?? true;
+      final bool changed = resolved != _useHardwareDecoder;
+      _useHardwareDecoder = resolved;
+      PlayerFactory.setUseHardwareDecoder(resolved);
+      await applyHardwareDecoderPreference();
+      if (changed) {
+        _notifyListeners();
+      }
     }
-  }
 
   // 设置弹幕堆叠
   Future<void> setDanmakuStacking(bool stacking) async {
@@ -461,15 +462,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> setHardwareDecoderEnabled(bool enabled) async {
-    if (_useHardwareDecoder == enabled) {
-      return;
+      if (_useHardwareDecoder == enabled) {
+        return;
+      }
+      _useHardwareDecoder = enabled;
+      PlayerFactory.setUseHardwareDecoder(enabled);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_useHardwareDecoderKey, enabled);
+      await applyHardwareDecoderPreference();
+      _notifyListeners();
     }
-    _useHardwareDecoder = enabled;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useHardwareDecoderKey, enabled);
-    await applyHardwareDecoderPreference();
-    _notifyListeners();
-  }
 
   String _resolveMpvHwdecValue() {
     if (Platform.isAndroid) {

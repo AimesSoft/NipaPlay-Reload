@@ -48,7 +48,16 @@ class PlayerFactory {
   static String _cachedHttpProxy = '';
   static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
     static bool _hasLoadedSettings = false;
-    static String _cachedLibmpvHwdecMode = 'auto-copy';
+      static String _cachedLibmpvHwdecMode = 'auto-copy';
+      // 硬件解码总开关（VideoPlayerState 的 useHardwareDecoder 桥接，播放器
+      // 构造时需知道——否则 _initializeHardwareDecoding 会无条件开硬解覆盖）。
+      static bool _cachedUseHardwareDecoder = true;
+
+      static bool getUseHardwareDecoder() => _cachedUseHardwareDecoder;
+
+      static void setUseHardwareDecoder(bool enabled) {
+        _cachedUseHardwareDecoder = enabled;
+      }
 
   // 添加一个StreamController来广播内核切换事件
   static final StreamController<PlayerKernelType> _kernelChangeController =
