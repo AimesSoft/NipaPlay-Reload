@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import './abstract_player.dart';
 import './player_data_models.dart';
 import './player_enums.dart';
+import 'package:nipaplay/utils/player_event_log.dart';
 
 class _ErikaDanmakuConfigPatch {
   _ErikaDanmakuConfigPatch({
@@ -266,6 +267,19 @@ class _NipaplayErikaWindowOverlayVideoViewState
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // iOS 回前台后原生 overlay 视图可能已被系统回收，而 Flutter 侧矩形没变、
+    // 帧签名相同 -> 轮询早退从不重发，画面黑屏（音频/字幕仍在跑）。
+    // 强制清签名 + 重绑 surface + 强制发一帧。
+    if (state == AppLifecycleState.resumed && mounted) {
+      _isBound = false;
+      _lastFrameSignature = null;
+      _scheduleAttach();
+      _scheduleFrameUpdate(force: true);
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_captureWindowTarget()) {
@@ -504,7 +518,8 @@ class _NipaplayErikaWindowOverlayVideoViewState
         if (visible) {
           _cutoutOwners[onFrameRectChanged] = _cutoutOwner;
           onFrameRectChanged(flutterCutout);
-        } else if (identical(_cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
+        } else if (identical(
+            _cutoutOwners[onFrameRectChanged], _cutoutOwner)) {
           _cutoutOwners[onFrameRectChanged] = null;
           onFrameRectChanged(null);
         }
@@ -576,7 +591,7 @@ class ErikaPlayerAdapter
         AsyncDisposablePlayer,
         AsyncSeekPlayer,
         AsyncExternalSubtitlePlayer,
-        GifExportCapablePlayer {
+        MediaLoadAwarePlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
@@ -618,9 +633,53 @@ class ErikaPlayerAdapter
   String? _lastNativeError;
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
+  Future<void>? _inFlightPlay;
   int? _pendingSeekTargetMs;
   DateTime? _seekFenceUntil;
   bool _disposed = false;
+
+  // ---- 回前台播放停滞自愈 ----
+  //
+  // Erika 内核（Rust；iOS/tvOS/macOS 走 Metal、Windows 走 D3D11、Android 走
+  // wgpu）在移动端退后台后，回前台的 Play 可能被内核静默忽略或时钟停摆：
+  // seek 能同步出帧，但播放管线不再推进。原生内核无法在 Dart 侧直接修复，
+  // 这里用“原生位置事件是否仍在流动”作为活性信号，检测到停滞就重开当前
+  // 媒体并续播（retryCurrentMediaLoad）。
+  static bool get _isMobileKernelPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          _isHarmonyOS);
+
+  static const Duration _playbackWatchdogDelay = Duration(seconds: 3);
+  // 原生位置事件静默多久视为停摆。内核停摆时 seek 仍可能产生零星事件
+  // （拖动能出帧），但事件流会停止；因此按“最近一次事件距今”判断，
+  // 而不是与布防时刻的事件计数比较——否则布防后发生的 seek 事件会把
+  // 停摆误判为正常播放。
+  static const Duration _stallEventSilenceThreshold = Duration(
+    milliseconds: 2500,
+  );
+  static const int _maxConsecutiveStallRecoveries = 3;
+
+  Timer? _playbackWatchdogTimer;
+  // 仅由原生 positionChanged 事件递增/刷新，seek/play 的本地时间戳不影响它。
+  int _positionEventCount = 0;
+  DateTime? _lastNativePositionEventAt;
+  int _stallRecoveryCount = 0;
+  bool _stallNudgeAttempted = false;
+  bool _stallRecoveryInFlight = false;
+  // 渲染帧活性监控：内核停摆的一种形态是“位置事件仍在发、画面帧已停”
+  // （回前台黑屏但字幕在播），位置静默检测对它失明。改用 presenter 统计
+  // 的 renderedVideoFrames 是否推进作为视频管线的真活性信号。
+  Timer? _frameActivityTimer;
+  int? _lastRenderedFramesSample;
+
+  // 重开媒体后需要恢复的会话级状态（弹幕/外挂字幕/字幕缩放等）。
+  String? _lastExternalSubtitlePath;
+  String? _lastDanmakuJson;
+  bool? _lastDanmakuEnabled;
+  Duration? _lastDanmakuGlobalOffset;
+  double? _lastSubtitleScale;
 
   static const Duration _danmakuConfigCoalesceDelay = Duration(
     milliseconds: 50,
@@ -671,48 +730,6 @@ class ErikaPlayerAdapter
           defaultTargetPlatform == TargetPlatform.android ||
           _isHarmonyOS);
 
-  @override
-  bool get supportsGifExport => supportsHeadlessGifExport;
-
-  static bool get supportsHeadlessGifExport =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
-
-  @override
-  Future<GifExportResult> exportGif(GifExportRequest request) =>
-      exportGifHeadless(request);
-
-  static Future<GifExportResult> exportGifHeadless(
-    GifExportRequest request,
-  ) async {
-    if (!supportsHeadlessGifExport) {
-      throw UnsupportedError(
-        'Erika GIF export is currently connected on macOS only.',
-      );
-    }
-    final exported = await ErikaPlayer.exportGif(
-      ErikaGifExportOptions(
-        inputUri: request.inputUri,
-        outputPath: request.outputPath,
-        start: request.start,
-        end: request.end,
-        framesPerSecond: request.framesPerSecond,
-        outputWidth: request.outputWidth,
-        outputHeight: request.outputHeight,
-        quality: request.quality == GifExportQuality.high
-            ? ErikaGifExportQuality.high
-            : ErikaGifExportQuality.normal,
-        httpHeaders: request.httpHeaders,
-      ),
-    );
-    return GifExportResult(
-      outputPath: exported.outputPath,
-      width: exported.width,
-      height: exported.height,
-      frameCount: exported.frameCount,
-      fileSize: exported.fileSize,
-    );
-  }
-
   bool get prefersPlatformVideoSurface => _isSupported;
 
   bool get usesWindowOverlayVideoSurface =>
@@ -749,6 +766,9 @@ class ErikaPlayerAdapter
     }
     switch (value) {
       case PlayerPlaybackState.playing:
+        // 同步置位表达意图：后续的 pauseDirectly 不再被旧状态门拦下，
+        // 而是通过在途 play 等待 + 原生命令顺序保证最终暂停生效。
+        _state = PlayerPlaybackState.playing;
         _dispatchStateCommand('play', playDirectly);
         break;
       case PlayerPlaybackState.paused:
@@ -757,6 +777,10 @@ class ErikaPlayerAdapter
       case PlayerPlaybackState.stopped:
         _state = PlayerPlaybackState.stopped;
         _lastPositionMs = 0;
+        _playbackWatchdogTimer?.cancel();
+        _stopFrameActivityMonitor();
+        _positionEventCount = 0;
+        _lastNativePositionEventAt = null;
         _dispatchStateCommand('stop', _player.stop);
         break;
     }
@@ -887,6 +911,22 @@ class ErikaPlayerAdapter
       _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
       _externalSubtitleGeneration++;
+      // 新媒体会话：丢弃上一个媒体的弹幕/外挂字幕缓存，停掉停滞看门狗，
+      // 并复位活性信号（跨媒体累计会让“每媒体设防”与静默判定失真——
+      // 换集后新媒体起播缓冲超过静默阈值会被误判为停滞）。
+      _playbackWatchdogTimer?.cancel();
+      _stopFrameActivityMonitor();
+      _stallRecoveryCount = 0;
+      _stallNudgeAttempted = false;
+      _positionEventCount = 0;
+      _lastNativePositionEventAt = null;
+      _lastExternalSubtitlePath = null;
+      _lastDanmakuJson = null;
+      _lastDanmakuEnabled = null;
+      _lastDanmakuGlobalOffset = null;
+      // open() 会重置内核侧弹幕配置：清掉去重快照，让下一次配置全量下发，
+      // 否则切集后设置未变时配置被差量去重为空补丁，新媒体样式回退内核默认。
+      _lastAppliedDanmakuConfig = null;
     }
   }
 
@@ -896,6 +936,8 @@ class ErikaPlayerAdapter
     if (_media.isEmpty) {
       return;
     }
+    _playbackWatchdogTimer?.cancel();
+    _stopFrameActivityMonitor();
     await _player.ensureCreated();
     await _player.open(_media);
     _subtitleTrace('prepare open complete media=$_media');
@@ -942,6 +984,9 @@ class ErikaPlayerAdapter
     _disposed = true;
     _danmakuConfigTimer?.cancel();
     _danmakuConfigTimer = null;
+    _playbackWatchdogTimer?.cancel();
+    _stopFrameActivityMonitor();
+    _playbackWatchdogTimer = null;
     for (final completer in _pendingDanmakuConfigCompleters) {
       if (!completer.isCompleted) {
         completer.complete();
@@ -1026,6 +1071,7 @@ class ErikaPlayerAdapter
       case 'sub-scale':
         final scale = double.tryParse(value);
         if (scale != null && scale.isFinite) {
+          _lastSubtitleScale = scale;
           unawaited(
             _player.setSubtitleScale(scale).catchError((Object error) {
               debugPrint('Erika: set subtitle scale failed: $error');
@@ -1051,16 +1097,44 @@ class ErikaPlayerAdapter
   @override
   Future<void> playDirectly() async {
     _ensureSupported();
+    final playFuture = _executePlay();
+    _inFlightPlay = playFuture;
+    try {
+      await playFuture;
+    } finally {
+      if (identical(_inFlightPlay, playFuture)) {
+        _inFlightPlay = null;
+      }
+    }
+  }
+
+  Future<void> _executePlay() async {
     await _player.ensureCreated();
     await _player.play();
     _state = PlayerPlaybackState.playing;
     _lastPositionUpdate = DateTime.now();
+    _armPlaybackWatchdog();
   }
 
   @override
   Future<void> pauseDirectly() async {
     _ensureSupported();
-    if (_state != PlayerPlaybackState.playing) {
+    _playbackWatchdogTimer?.cancel();
+    _stopFrameActivityMonitor();
+    // 等待在途 play 完成后再下发原生 pause：暂停态 seek 的
+    // play→(延迟)→pause 序列必须保证原生命令顺序（方法通道按调用序
+    // 投递），否则 pause 会先于 play 到达内核、被随后完成的 play 覆盖，
+    // 视频意外转为播放。
+    final inFlight = _inFlightPlay;
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {}
+      if (_disposed) {
+        return;
+      }
+    }
+    if (_state == PlayerPlaybackState.stopped) {
       return;
     }
     await _player.ensureCreated();
@@ -1105,6 +1179,7 @@ class ErikaPlayerAdapter
     if (!_isSupported || _disposed) {
       return Future<void>.value();
     }
+    _lastExternalSubtitlePath = path;
     final generation = ++_externalSubtitleGeneration;
     final previousOperation = _externalSubtitleOperation;
     final operation = () async {
@@ -1280,13 +1355,15 @@ class ErikaPlayerAdapter
     if (!_isSupported) {
       return;
     }
-    await _player.loadDanmakuJson(jsonEncode(danmakuList));
+    _lastDanmakuJson = jsonEncode(danmakuList);
+    await _player.loadDanmakuJson(_lastDanmakuJson!);
   }
 
   Future<void> clearDanmaku() async {
     if (!_isSupported) {
       return;
     }
+    _lastDanmakuJson = null;
     await _player.clearDanmaku();
   }
 
@@ -1294,6 +1371,7 @@ class ErikaPlayerAdapter
     if (!_isSupported) {
       return;
     }
+    _lastDanmakuEnabled = enabled;
     await _player.setDanmakuEnabled(enabled);
   }
 
@@ -1301,6 +1379,7 @@ class ErikaPlayerAdapter
     if (!_isSupported) {
       return;
     }
+    _lastDanmakuGlobalOffset = offset;
     await _player.setDanmakuGlobalOffset(offset);
   }
 
@@ -1443,6 +1522,334 @@ class ErikaPlayerAdapter
       if (_pendingDanmakuConfig != null) {
         _scheduleDanmakuConfigFlush();
       }
+    }
+  }
+
+  // ---- 回前台播放停滞自愈（MediaLoadAwarePlayer） ----
+
+  /// Play 命令成功返回后布防：若事件静默超过 [_stallEventSilenceThreshold]
+  /// 且仍处于 playing 状态，先 pauseplay 快速唤醒，无效再重开媒体自愈。
+  ///
+  /// 只在“本媒体曾收到过原生位置事件”的 Play 上设防，避免误伤首次起播时的
+  /// 网络缓冲（首次起播没有事件是正常的）；回前台恢复、后台后手动点播等都
+  /// 满足该前提。桌面端（窗口 overlay）不涉及本问题，保持关闭。
+  void _armPlaybackWatchdog({bool resetNudgeAttempt = true}) {
+    if (!_isMobileKernelPlatform || _disposed) {
+      return;
+    }
+    _playbackWatchdogTimer?.cancel();
+    if (resetNudgeAttempt) {
+      _stallNudgeAttempted = false;
+    }
+    if (_positionEventCount == 0) {
+      return;
+    }
+    _playbackWatchdogTimer = Timer(_playbackWatchdogDelay, () {
+      _handlePlaybackWatchdogFired();
+    });
+    // 同时启动渲染帧活性监控：位置事件静默检测对“黑屏但位置事件仍在发”
+    // 的停摆形态失明，渲染帧计数才是视频管线的真活性。
+    _startFrameActivityMonitor();
+  }
+
+  /// 每 2.5 秒采样一次 presenter 渲染帧计数；playing 状态下连续两次采样
+  /// 帧数无推进即判定视频管线停摆，走与位置静默相同的自愈路径。
+  void _startFrameActivityMonitor() {
+    _frameActivityTimer?.cancel();
+    _lastRenderedFramesSample = null;
+    _frameActivityTimer = Timer.periodic(
+      const Duration(milliseconds: 2500),
+      (_) => unawaited(_checkFrameActivity()),
+    );
+  }
+
+  void _stopFrameActivityMonitor() {
+    _frameActivityTimer?.cancel();
+    _frameActivityTimer = null;
+    _lastRenderedFramesSample = null;
+  }
+
+  Future<void> _checkFrameActivity() async {
+    if (_disposed || _stallRecoveryInFlight) {
+      return;
+    }
+    if (_state != PlayerPlaybackState.playing) {
+      return;
+    }
+    final int? rendered;
+    try {
+      final stats = await _player.getPresenterStats();
+      rendered = stats.renderedVideoFrames;
+    } catch (_) {
+      return;
+    }
+    if (_disposed || rendered == null || rendered <= 0) {
+      return;
+    }
+    final previous = _lastRenderedFramesSample;
+    _lastRenderedFramesSample = rendered;
+    if (previous == null || rendered != previous) {
+      // 帧在推进 = 播放正常，清掉停滞计数。
+      _stallRecoveryCount = 0;
+      _stallNudgeAttempted = false;
+      return;
+    }
+    if (_stallNudgeAttempted) {
+      return; // 已唤醒过一轮，交给位置静默/重开流程处理，避免重复计数。
+    }
+    _stallNudgeAttempted = true;
+    debugPrint(
+      '[Erika] playing 状态下渲染帧数无推进($previous)，判定视频管线停摆，'
+      '自动执行 pause→play 唤醒',
+    );
+    logPlayerEvent(
+      'Erika',
+      '检测到回前台画面停滞（渲染帧无推进），自动执行 pause→play 唤醒',
+      level: 'WARN',
+    );
+    unawaited(
+      _nudgeStalledPlayback().whenComplete(() {
+        _armPlaybackWatchdog(resetNudgeAttempt: false);
+      }),
+    );
+  }
+
+  void _handlePlaybackWatchdogFired() {
+    if (_disposed || _stallRecoveryInFlight) {
+      return;
+    }
+    if (_state != PlayerPlaybackState.playing) {
+      return;
+    }
+    final lastEventAt = _lastNativePositionEventAt;
+    final silence = lastEventAt == null
+        ? null
+        : DateTime.now().difference(lastEventAt);
+    if (silence != null && silence < _stallEventSilenceThreshold) {
+      // 内核仍在产生位置事件 = 播放正常，同时清掉连续自愈计数。
+      _stallRecoveryCount = 0;
+      _stallNudgeAttempted = false;
+      return;
+    }
+    final fenceUntil = _seekFenceUntil;
+    if (fenceUntil != null && DateTime.now().isBefore(fenceUntil)) {
+      // 用户正在拖动/强制刷新帧，等 fence 过期后再复查。
+      _armPlaybackWatchdog();
+      return;
+    }
+    if (!_stallNudgeAttempted) {
+      // 第一优先：pauseplay 快速唤醒（回前台实测有效，比重开媒体快得多）。
+      _stallNudgeAttempted = true;
+      debugPrint(
+        '[Erika] Play 后位置事件静默 ${silence?.inMilliseconds ?? -1}ms，'
+        '执行 pauseplay 快速唤醒',
+      );
+      logPlayerEvent(
+        'Erika',
+        '检测到回前台播放停滞（${_playbackWatchdogDelay.inSeconds}s 无位置事件），'
+        '自动执行 pauseplay 唤醒',
+        level: 'WARN',
+      );
+      unawaited(
+        _nudgeStalledPlayback().whenComplete(() {
+          // 唤醒成功则下一轮看门狗判定为健康；仍无效则进入重开流程。
+          _armPlaybackWatchdog(resetNudgeAttempt: false);
+        }),
+      );
+      return;
+    }
+    if (_stallRecoveryCount >= _maxConsecutiveStallRecoveries) {
+      debugPrint(
+        '[Erika] 已连续自愈 $_stallRecoveryCount 次仍无位置事件，停止自动恢复',
+      );
+      return;
+    }
+    _stallRecoveryCount += 1;
+    unawaited(_recoverStalledPlayback());
+  }
+
+  /// 轻量唤醒：原生 pauseplay。回前台后内核时钟停摆时，用户手动“暂停再
+  /// 播放”能恢复，这里自动做同样的事，免去用户手动操作。
+  Future<void> _nudgeStalledPlayback() async {
+    if (_disposed) {
+      return;
+    }
+    try {
+      await _player.pause();
+      await _player.play();
+      debugPrint('[Erika] pauseplay 快速唤醒已下发');
+    } catch (error) {
+      debugPrint('[Erika] pauseplay 快速唤醒失败: $error');
+    }
+  }
+
+  Future<void> _recoverStalledPlayback() async {
+    if (_stallRecoveryInFlight || _disposed) {
+      return;
+    }
+    _stallRecoveryInFlight = true;
+    try {
+      final wasPlaying = _state == PlayerPlaybackState.playing;
+      debugPrint(
+        '[Erika] Play 后 ${_playbackWatchdogDelay.inSeconds}s 无原生位置事件，'
+        '判定播放停摆，重开媒体自愈（第 $_stallRecoveryCount 次）',
+      );
+      logPlayerEvent(
+        'Erika',
+        '快速唤醒无效，重开媒体自愈（第 $_stallRecoveryCount 次）',
+        level: 'WARN',
+      );
+      final recovered = await retryCurrentMediaLoad();
+      if (!recovered || _disposed || !wasPlaying) {
+        return;
+      }
+      await playDirectly();
+      debugPrint('[Erika] 停滞自愈完成，播放已重新拉起');
+      logPlayerEvent('Erika', '停滞自愈完成，播放已自动恢复');
+    } catch (error) {
+      debugPrint('[Erika] 停滞自愈失败: $error');
+      logPlayerEvent('Erika', '停滞自愈失败: $error', level: 'ERROR');
+    } finally {
+      _stallRecoveryInFlight = false;
+    }
+  }
+
+  @override
+  bool get isMediaReady => _mediaInfo.duration > 0;
+
+  @override
+  bool get hasReceivedRealPosition => _positionEventCount > 0;
+
+  @override
+  bool get hasMediaLoadFailed => _mediaInfo.specificErrorMessage != null;
+
+  @override
+  String? get mediaLoadError =>
+      _mediaInfo.specificErrorMessage ?? _lastNativeError;
+
+  @override
+  Future<bool> waitUntilMediaReady({required Duration timeout}) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!_disposed) {
+      if (_mediaInfo.duration > 0) {
+        return true;
+      }
+      if (!DateTime.now().isBefore(deadline)) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return !_disposed && _mediaInfo.duration > 0;
+  }
+
+  /// 重开当前媒体以恢复停摆的内核播放管线，并把播放位置恢复到最后已知处。
+  ///
+  /// 与 media_kit 的同名方法语义对齐：只负责重载，不自动播放，由调用方决定
+  /// 是否续播。重开成功后会恢复音量/倍速/字幕缩放/弹幕（列表+配置）与外挂
+  /// 字幕，位置通过内部 seekAndWait 恢复（含 seek fence 保护）。
+  @override
+  Future<bool> retryCurrentMediaLoad() async {
+    if (!_isSupported || _disposed || _media.isEmpty) {
+      return false;
+    }
+    _playbackWatchdogTimer?.cancel();
+    _stopFrameActivityMonitor();
+    final restorePositionMs = _lastPositionMs;
+    // open() 会重置内核侧弹幕配置：先截获当前配置用于重放，同时清空去重
+    // 快照，保证重放后的下一次常规配置下发也不会被差量去重吞掉。
+    final configToReplay = _lastAppliedDanmakuConfig;
+    _lastAppliedDanmakuConfig = null;
+    debugPrint(
+      '[Erika] retryCurrentMediaLoad: 重开 media=$_media '
+      'restorePos=${restorePositionMs}ms',
+    );
+    try {
+      await _player.ensureCreated();
+      // 会话级媒体信息按“新一次 Open”处理，避免沿用旧 duration 导致就绪
+      // 判定直接误报为已就绪。
+      _mediaInfo = PlayerMediaInfo(duration: 0);
+      _externalSubtitleTrackIds.clear();
+      _externalSubtitleGeneration++;
+      _activeSubtitleTracks = const <int>[];
+      await _player.open(_media);
+      final ready = await waitUntilMediaReady(timeout: const Duration(seconds: 5));
+      if (_disposed) {
+        return false;
+      }
+      if (!ready) {
+        debugPrint('[Erika] 重开后媒体未在超时内就绪，仍继续尝试恢复播放');
+      }
+      if (restorePositionMs > 0) {
+        await seekAndWait(position: restorePositionMs);
+      }
+      unawaited(_player.setVolume(_volume));
+      unawaited(_player.setPlaybackRate(_playbackRate));
+      final subtitleScale = _lastSubtitleScale;
+      if (subtitleScale != null) {
+        unawaited(
+          _player.setSubtitleScale(subtitleScale).catchError((Object error) {
+            debugPrint('[Erika] 自愈恢复字幕缩放失败: $error');
+          }),
+        );
+      }
+      final danmakuJson = _lastDanmakuJson;
+      if (danmakuJson != null && danmakuJson.isNotEmpty) {
+        unawaited(
+          _player.loadDanmakuJson(danmakuJson).catchError((Object error) {
+            debugPrint('[Erika] 自愈恢复弹幕列表失败: $error');
+          }),
+        );
+        final danmakuOffset = _lastDanmakuGlobalOffset;
+        if (danmakuOffset != null) {
+          unawaited(
+            _player.setDanmakuGlobalOffset(danmakuOffset).catchError((_) {}),
+          );
+        }
+        final danmakuEnabled = _lastDanmakuEnabled;
+        if (danmakuEnabled != null) {
+          unawaited(
+            _player.setDanmakuEnabled(danmakuEnabled).catchError((_) {}),
+          );
+        }
+      }
+      final appliedConfig = configToReplay;
+      if (appliedConfig != null && !appliedConfig.isEmpty) {
+        unawaited(
+          _player
+              .setDanmakuConfig(
+                enabled: appliedConfig.enabled,
+                fontSize: appliedConfig.fontSize,
+                opacity: appliedConfig.opacity,
+                displayArea: appliedConfig.displayArea,
+                scrollDurationSeconds: appliedConfig.scrollDurationSeconds,
+                scrollSpeedFactor: appliedConfig.scrollSpeedFactor,
+                trackGapRatio: appliedConfig.trackGapRatio,
+                outlineWidth: appliedConfig.outlineWidth,
+                shadowStyle: appliedConfig.shadowStyle,
+                customFontFamily: appliedConfig.customFontFamily,
+                customFontFilePath: appliedConfig.customFontFilePath,
+                mergeDuplicates: appliedConfig.mergeDuplicates,
+                allowStacking: appliedConfig.allowStacking,
+                maxQuantity: appliedConfig.maxQuantity,
+                maxLinesPerMode: appliedConfig.maxLinesPerMode,
+                blockTop: appliedConfig.blockTop,
+                blockBottom: appliedConfig.blockBottom,
+                blockScroll: appliedConfig.blockScroll,
+                blockWords: appliedConfig.blockWords,
+              )
+              .catchError((Object error) {
+                debugPrint('[Erika] 自愈恢复弹幕配置失败: $error');
+              }),
+        );
+      }
+      final subtitlePath = _lastExternalSubtitlePath;
+      if (subtitlePath != null && subtitlePath.trim().isNotEmpty) {
+        await setExternalSubtitleAsync(subtitlePath);
+      }
+      return true;
+    } catch (error) {
+      debugPrint('[Erika] retryCurrentMediaLoad 失败: $error');
+      return false;
     }
   }
 
@@ -1648,6 +2055,9 @@ class ErikaPlayerAdapter
 
     if (event.kind == ErikaEventKind.positionChanged &&
         event.position >= Duration.zero) {
+      // 活性信号：任何原生位置事件都证明播放管线仍在推进（含 seek 回报）。
+      _positionEventCount++;
+      _lastNativePositionEventAt = DateTime.now();
       final eventPositionMs = event.position.inMilliseconds;
       final now = DateTime.now();
       final seekTarget = _pendingSeekTargetMs;
