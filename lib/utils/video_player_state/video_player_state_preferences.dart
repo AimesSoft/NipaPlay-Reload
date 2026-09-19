@@ -2427,7 +2427,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
         return;
       }
-      if (playerKernelName != 'Media Kit') {
+      if (playerKernelName != 'Media Kit' && playerKernelName != 'MDK') {
         return;
       }
       player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));

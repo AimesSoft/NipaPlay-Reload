@@ -758,7 +758,10 @@ class SubtitleManager extends ChangeNotifier {
     // 其他内核（Erika 等）对外挂 ASS 支持差 -> 走 App 叠层纯文本保证可显示。
     if (extension == '.ass' || extension == '.ssa') {
       try {
-        return _player.getPlayerKernelName() != 'Media Kit';
+        final kernel = _player.getPlayerKernelName();
+        // libmpv(Media Kit)/MDK 内核走内核轨由 libass 渲染，保留特效样式；
+        // Erika 等内核挂载不了外挂 ASS 轨 -> 走 App 叠层纯文本保证可显示。
+        return kernel != 'Media Kit' && kernel != 'MDK';
       } catch (_) {
         return true;
       }
