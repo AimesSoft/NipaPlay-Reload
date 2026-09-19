@@ -188,7 +188,7 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
   );
 }
 
-class MdkPlayerAdapter implements AbstractPlayer {
+class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   late mdk.Player _mdkPlayer;
   double _playbackRate = 1.0;
   List<String> _videoDecoders = const [];
@@ -480,7 +480,16 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  void dispose() => _mdkPlayer.dispose();
+    void dispose() => _mdkPlayer.dispose();
+
+    /// 异步释放：native 释放可能阻塞主线程（MDK 切换 libmpv 时旧内核
+    /// 同步 dispose 卡死过）。先让出一帧再执行，保证事件循环/超时能运转，
+    /// 切换流程的 5s 兜底才真正有效。
+    @override
+    Future<void> disposeAsync() async {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+      dispose();
+    }
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {

@@ -127,41 +127,34 @@ class PlayerKernelManager {
   }
 
   static Future<void> _disposePlayerForHotSwap(
-    Player player, {
-    required Duration timeout,
-  }) async {
-    final kernelName = player.getPlayerKernelName();
-    debugPrint(
-      '[PlayerKernelManager] Waiting for old player teardown before hot swap: '
-      'kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
-    );
-    try {
-      await player.disposeAsync().timeout(timeout);
+      Player player, {
+      required Duration timeout,
+    }) async {
+      final kernelName = player.getPlayerKernelName();
       debugPrint(
-        '[PlayerKernelManager] Old player teardown completed: '
-        'kernel=$kernelName',
+        '[PlayerKernelManager] Waiting for old player teardown before hot swap: '
+        'kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
       );
-    } on TimeoutException catch (_, stackTrace) {
-      final error = TimeoutException(
-        'Old player teardown timed out after ${timeout.inMilliseconds}ms; '
-        'replacement creation was aborted to avoid overlapping resources.',
-        timeout,
-      );
-      debugPrint(
-        '[PlayerKernelManager] Native/backend player teardown timed out; '
-        'replacement creation aborted: kernel=$kernelName '
-        'timeoutMs=${timeout.inMilliseconds}\n$stackTrace',
-      );
-      Error.throwWithStackTrace(error, stackTrace);
-    } catch (error, stackTrace) {
-      debugPrint(
-        '[PlayerKernelManager] Native/backend player teardown failed; '
-        'replacement creation aborted: kernel=$kernelName '
-        '$error\n$stackTrace',
-      );
-      Error.throwWithStackTrace(error, stackTrace);
+      try {
+        await player.disposeAsync().timeout(timeout);
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown completed: '
+          'kernel=$kernelName',
+        );
+      } on TimeoutException catch (_) {
+        // 旧内核 native 释放卡住时不中断切换：继续创建新播放器，
+        // 否则用户切内核会永久卡死（旧对象由 GC/后续路径兜底）。
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown timed out; continuing swap '
+          'to avoid deadlock: kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
+        );
+      } catch (error) {
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown failed; continuing swap: '
+          'kernel=$kernelName $error',
+        );
+      }
     }
-  }
 
   /// 为VideoPlayerState执行弹幕内核热切换
   static void performDanmakuKernelHotSwap(
