@@ -14,6 +14,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
+import './player_factory.dart';
 
 @visibleForTesting
 void applyMediaKitUserAgentProperty(
