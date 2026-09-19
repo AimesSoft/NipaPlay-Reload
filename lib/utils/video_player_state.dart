@@ -223,6 +223,35 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
 
 enum ScreenshotSaveTarget { ask, photos, file }
 
+/// 截图保存质量档（JPEG 质量；体积与清晰度取舍）
+enum ScreenshotQuality { standard, high, ultra, max }
+
+extension ScreenshotQualityDisplay on ScreenshotQuality {
+  static ScreenshotQuality fromPrefs(int? value) {
+    if (value == null) return ScreenshotQuality.ultra;
+    if (value < 0 || value >= ScreenshotQuality.values.length) {
+      return ScreenshotQuality.ultra;
+    }
+    return ScreenshotQuality.values[value];
+  }
+
+  int get prefsValue => index;
+
+  int get jpegQuality => switch (this) {
+        ScreenshotQuality.standard => 70,
+        ScreenshotQuality.high => 85,
+        ScreenshotQuality.ultra => 92,
+        ScreenshotQuality.max => 100,
+      };
+
+  String get label => switch (this) {
+        ScreenshotQuality.standard => '标准（体积最小）',
+        ScreenshotQuality.high => '高清（推荐）',
+        ScreenshotQuality.ultra => '超清（默认）',
+        ScreenshotQuality.max => '极致（接近无损）',
+      };
+}
+
 extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
   static ScreenshotSaveTarget fromPrefs(int? value) {
     if (value == null) return ScreenshotSaveTarget.ask;
@@ -417,6 +446,13 @@ int _exactEndStreak = 0;
     debugLabel: 'player_screenshot_boundary',
   );
   bool _isCapturingScreenshot = false;
+  // 截图/GIF 导出时是否包含弹幕与字幕（由截图对话框临时切换）
+  bool _screenshotCaptureIncludesDanmaku = true;
+  bool _screenshotCaptureIncludesSubtitles = true;
+  bool get screenshotCaptureIncludesDanmaku =>
+      _screenshotCaptureIncludesDanmaku;
+  bool get screenshotCaptureIncludesSubtitles =>
+      _screenshotCaptureIncludesSubtitles;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
@@ -429,6 +465,8 @@ int _exactEndStreak = 0;
   final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
   ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
+  final String _screenshotQualityKey = 'screenshot_quality';
+  ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -1138,6 +1176,7 @@ int _exactEndStreak = 0;
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
+  ScreenshotQuality get screenshotQuality => _screenshotQuality;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1523,6 +1562,20 @@ int _exactEndStreak = 0;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+
+  /// 当前已解析的媒体源 URL（实际播放地址优先，回退视频路径）；
+  /// 截图/GIF 导出等需要直链的功能使用。
+  String? get currentResolvedMediaSource {
+    final actual = _currentActualPlayUrl?.trim();
+    if (actual != null && actual.isNotEmpty) {
+      final resolved = MediaSourceUtils.resolveRemotePathToUrl(actual);
+      if (resolved != null && resolved.trim().isNotEmpty) return resolved;
+    }
+
+    final identityPath = _currentVideoPath?.trim();
+    if (identityPath == null || identityPath.isEmpty) return null;
+    return MediaSourceUtils.resolveRemotePathToUrl(identityPath);
+  }
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>
       _currentEmbyTrackSelection;

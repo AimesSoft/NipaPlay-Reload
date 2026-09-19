@@ -87,57 +87,8 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
               .clamp(14.0, 72.0)
               .toDouble();
 
-          final fillStyle = TextStyle(
-            fontSize: fontSize,
-            fontWeight:
-                videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
-            fontStyle: videoState.subtitleItalic
-                ? FontStyle.italic
-                : FontStyle.normal,
-            color: videoState.subtitleColor,
-            height: 1.28,
-            // 字体仅在 样式覆盖=自定义样式 时应用（用户指定：保持原样/
-            // 仅缩放/自动模式下外挂字幕不套用所选字体，使用默认字体）。
-            fontFamily: videoState.subtitleOverrideMode ==
-                    SubtitleStyleOverrideMode.force
-                ? (videoState.subtitleFontName.isNotEmpty
-                    ? videoState.subtitleFontName.split(',').first.trim()
-                    : null)
-                : null,
-            fontFamilyFallback: videoState.subtitleOverrideMode ==
-                    SubtitleStyleOverrideMode.force
-                ? (videoState.subtitleFontName.contains(',')
-                    ? videoState.subtitleFontName
-                        .split(',')
-                        .skip(1)
-                        .map((e) => e.trim())
-                        .where((e) => e.isNotEmpty)
-                        .toList()
-                    : null)
-                : null,
-            shadows: videoState.subtitleShadowOffset > 0
-                ? [
-                    Shadow(
-                      color: videoState.subtitleShadowColor,
-                      offset: Offset(0, videoState.subtitleShadowOffset),
-                      blurRadius: videoState.subtitleShadowOffset * 2,
-                    ),
-                  ]
-                : null,
-          );
-
-          final borderPaint = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeJoin = StrokeJoin.round
-            ..strokeWidth =
-                videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
-            ..color = videoState.subtitleBorderColor;
-
-          final borderStyle = fillStyle.copyWith(
-            foreground: borderPaint,
-            color: null,
-            shadows: null,
-          );
+          final fillStyle = _buildFillStyle(videoState, fontSize);
+          final borderStyle = _buildBorderStyle(videoState, fillStyle);
 
           final Widget textBox = ConstrainedBox(
             constraints: BoxConstraints(minWidth: 120, maxWidth: width * 0.9),
@@ -694,6 +645,57 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     return (normalized / 100) * 2.0 - 1.0;
   }
 }
+
+  /// 叠层字幕的填充样式（字体受"样式覆盖=自定义样式"门控）
+  TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
+    final fontsApply = videoState.subtitleOverrideMode ==
+        SubtitleStyleOverrideMode.force;
+    final fontNames = videoState.subtitleFontName
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight:
+          videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
+      fontStyle:
+          videoState.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+      color: videoState.subtitleColor,
+      height: 1.28,
+      fontFamily: fontsApply && fontNames.isNotEmpty ? fontNames.first : null,
+      fontFamilyFallback: fontsApply && fontNames.length > 1
+          ? fontNames.sublist(1)
+          : null,
+      shadows: videoState.subtitleShadowOffset > 0
+          ? [
+              Shadow(
+                color: videoState.subtitleShadowColor,
+                offset: Offset(0, videoState.subtitleShadowOffset),
+                blurRadius: videoState.subtitleShadowOffset * 2,
+              ),
+            ]
+          : null,
+    );
+  }
+
+  /// 叠层字幕的描边样式（填充样式的前景描边变体）
+  TextStyle _buildBorderStyle(
+      VideoPlayerState videoState, TextStyle fillStyle) {
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth =
+          videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
+      ..color = videoState.subtitleBorderColor;
+
+    return fillStyle.copyWith(
+      foreground: borderPaint,
+      color: null,
+      shadows: null,
+    );
+  }
 
 class _OutlinedSubtitleText extends StatelessWidget {
   final String text;

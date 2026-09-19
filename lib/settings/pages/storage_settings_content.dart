@@ -146,6 +146,26 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                   );
                 },
               ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile<ScreenshotQuality>.dropdown(
+                  title: '截图质量',
+                  subtitle: 'JPEG 质量：体积约为 PNG 的十分之一',
+                  icon: Icons.high_quality,
+                  phoneIcon: cupertino.CupertinoIcons.gauge,
+                  items: [
+                    for (final q in ScreenshotQuality.values)
+                      DropdownMenuItemData(
+                        title: q.label,
+                        value: q,
+                        isSelected: videoState.screenshotQuality == q,
+                        description: 'JPEG ${q.jpegQuality}',
+                      ),
+                  ],
+                  onChanged: videoState.setScreenshotQuality,
+                );
+              },
+            ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.clearImageCache,
               subtitle: _isClearingImageCache

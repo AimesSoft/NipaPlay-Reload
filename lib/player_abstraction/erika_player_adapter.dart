@@ -591,7 +591,8 @@ class ErikaPlayerAdapter
         AsyncDisposablePlayer,
         AsyncSeekPlayer,
         AsyncExternalSubtitlePlayer,
-        MediaLoadAwarePlayer {
+        MediaLoadAwarePlayer,
+        GifExportCapablePlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
@@ -729,6 +730,33 @@ class ErikaPlayerAdapter
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.android ||
           _isHarmonyOS);
+
+  // GIF 导出依赖内核的 ErikaPlayer.exportGif API，该 API 尚未随
+  // erika_flutter 发布（上游媒体对话框已引用但内核未提供）。在 API
+  // 落地前如实声明不支持，UI 据此隐藏导出入口。
+  static bool get supportsHeadlessGifExport => false;
+
+  @override
+  bool get supportsGifExport => supportsHeadlessGifExport;
+
+  /// 历史入口：player_abstraction 在内核 API 可用前按能力位路由到这里。
+  /// 与 supportsHeadlessGifExport=false 一致，永远抛错，不会被正常触达。
+  static Future<GifExportResult> exportGifHeadless(
+    GifExportRequest request,
+  ) async {
+    throw UnsupportedError(
+      'Erika GIF export requires an erika_flutter release that provides '
+      'ErikaPlayer.exportGif, which is not available yet.',
+    );
+  }
+
+  @override
+  Future<GifExportResult> exportGif(GifExportRequest request) async {
+    throw UnsupportedError(
+      'Erika GIF export requires an erika_flutter release that provides '
+      'ErikaPlayer.exportGif, which is not available yet.',
+    );
+  }
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
@@ -1528,7 +1556,7 @@ class ErikaPlayerAdapter
   // ---- 回前台播放停滞自愈（MediaLoadAwarePlayer） ----
 
   /// Play 命令成功返回后布防：若事件静默超过 [_stallEventSilenceThreshold]
-  /// 且仍处于 playing 状态，先 pauseplay 快速唤醒，无效再重开媒体自愈。
+  /// 且仍处于 playing 状态，先 pause→play 快速唤醒，无效再重开媒体自愈。
   ///
   /// 只在“本媒体曾收到过原生位置事件”的 Play 上设防，避免误伤首次起播时的
   /// 网络缓冲（首次起播没有事件是正常的）；回前台恢复、后台后手动点播等都
@@ -1597,20 +1625,9 @@ class ErikaPlayerAdapter
     if (_stallNudgeAttempted) {
       return; // 已唤醒过一轮，交给位置静默/重开流程处理，避免重复计数。
     }
-    _stallNudgeAttempted = true;
-    debugPrint(
-      '[Erika] playing 状态下渲染帧数无推进($previous)，判定视频管线停摆，'
-      '自动执行 pause→play 唤醒',
-    );
-    logPlayerEvent(
-      'Erika',
-      '检测到回前台画面停滞（渲染帧无推进），自动执行 pause→play 唤醒',
-      level: 'WARN',
-    );
-    unawaited(
-      _nudgeStalledPlayback().whenComplete(() {
-        _armPlaybackWatchdog(resetNudgeAttempt: false);
-      }),
+    _beginStallNudge(
+      debugDetail: 'playing 状态下渲染帧数无推进($previous)',
+      userEvent: '检测到回前台画面停滞（渲染帧无推进）',
     );
   }
 
@@ -1638,23 +1655,13 @@ class ErikaPlayerAdapter
       return;
     }
     if (!_stallNudgeAttempted) {
-      // 第一优先：pauseplay 快速唤醒（回前台实测有效，比重开媒体快得多）。
-      _stallNudgeAttempted = true;
-      debugPrint(
-        '[Erika] Play 后位置事件静默 ${silence?.inMilliseconds ?? -1}ms，'
-        '执行 pauseplay 快速唤醒',
-      );
-      logPlayerEvent(
-        'Erika',
-        '检测到回前台播放停滞（${_playbackWatchdogDelay.inSeconds}s 无位置事件），'
-        '自动执行 pauseplay 唤醒',
-        level: 'WARN',
-      );
-      unawaited(
-        _nudgeStalledPlayback().whenComplete(() {
-          // 唤醒成功则下一轮看门狗判定为健康；仍无效则进入重开流程。
-          _armPlaybackWatchdog(resetNudgeAttempt: false);
-        }),
+      // 第一优先：pause→play 快速唤醒（回前台实测有效，比重开媒体快得多）；
+      // 唤醒成功则下一轮判定为健康，仍无效则进入重开流程。
+      _beginStallNudge(
+        debugDetail:
+            'Play 后位置事件静默 ${silence?.inMilliseconds ?? -1}ms',
+        userEvent: '检测到回前台播放停滞'
+            '（${_playbackWatchdogDelay.inSeconds}s 无位置事件）',
       );
       return;
     }
@@ -1668,7 +1675,27 @@ class ErikaPlayerAdapter
     unawaited(_recoverStalledPlayback());
   }
 
-  /// 轻量唤醒：原生 pauseplay。回前台后内核时钟停摆时，用户手动“暂停再
+  /// 两个停摆检测器（位置事件静默 / 渲染帧停滞）共用的唤醒入口：
+  /// 标记唤醒已尝试、写日志、下发原生 pause→play，完成后重布防复查。
+  void _beginStallNudge({
+    required String debugDetail,
+    required String userEvent,
+  }) {
+    _stallNudgeAttempted = true;
+    debugPrint('[Erika] $debugDetail，自动执行 pause→play 快速唤醒');
+    logPlayerEvent(
+      'Erika',
+      '$userEvent，自动执行 pause→play 唤醒',
+      level: 'WARN',
+    );
+    unawaited(
+      _nudgeStalledPlayback().whenComplete(() {
+        _armPlaybackWatchdog(resetNudgeAttempt: false);
+      }),
+    );
+  }
+
+  /// 轻量唤醒：原生 pause→play。回前台后内核时钟停摆时，用户手动“暂停再
   /// 播放”能恢复，这里自动做同样的事，免去用户手动操作。
   Future<void> _nudgeStalledPlayback() async {
     if (_disposed) {
@@ -1677,9 +1704,9 @@ class ErikaPlayerAdapter
     try {
       await _player.pause();
       await _player.play();
-      debugPrint('[Erika] pauseplay 快速唤醒已下发');
+      debugPrint('[Erika] pause→play 快速唤醒已下发');
     } catch (error) {
-      debugPrint('[Erika] pauseplay 快速唤醒失败: $error');
+      debugPrint('[Erika] pause→play 快速唤醒失败: $error');
     }
   }
 

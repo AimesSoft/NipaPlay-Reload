@@ -26,6 +26,7 @@ const int _thumbnailMaxHeight = 240;
 const int _thumbnailMaxWidth = 480;
 const int _thumbnailJpegQuality = 70;
 
+
 extension VideoPlayerStateCapture on VideoPlayerState {
   bool _isPngBytes(Uint8List bytes) {
     return bytes.length >= 8 &&
@@ -469,7 +470,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     bool includeDanmaku = true,
     bool includeSubtitles = true,
   }) async {
-    final bytes = await _captureScreenshotPngBytes(
+    final bytes = await _captureScreenshotJpegBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
@@ -495,7 +496,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     if (!Platform.isIOS) return false;
     if (!hasVideo) return false;
 
-    final bytes = await _captureScreenshotPngBytes(
+    final bytes = await _captureScreenshotJpegBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
@@ -509,13 +510,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     bool includeDanmaku = true,
     bool includeSubtitles = true,
   }) {
-    return _captureScreenshotPngBytes(
+    return _captureScreenshotJpegBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
   }
 
-  Future<Uint8List?> _captureScreenshotPngBytes({
+  Future<Uint8List?> _captureScreenshotJpegBytes({
     required bool includeDanmaku,
     required bool includeSubtitles,
   }) async {
@@ -588,15 +589,29 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final pixelRatio = devicePixelRatio.clamp(1.0, 2.0);
 
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      // JPEG(92) 而非 PNG：1080p 帧的 PNG 可达 10MB 级，JPEG 同画质约
+      // 0.3~1MB；RGBA 原始字节经 image 包编码，透明区域按黑底压实。
+      final rgbaData =
+          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final imageWidth = image.width;
+      final imageHeight = image.height;
       image.dispose();
 
-      if (byteData == null) {
+      if (rgbaData == null) {
         debugPrint('截图失败: image.toByteData 返回 null');
         return null;
       }
 
-      return byteData.buffer.asUint8List();
+      final rgba = rgbaData.buffer.asUint8List();
+      final decoded = img.Image.fromBytes(
+        width: imageWidth,
+        height: imageHeight,
+        bytes: rgba.buffer,
+        numChannels: 4,
+      );
+      final jpegBytes =
+          img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality);
+      return Uint8List.fromList(jpegBytes);
     } catch (e) {
       debugPrint('截图失败: $e');
       return null;
@@ -653,7 +668,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
     final now = DateTime.now();
     final timestamp = _formatTimestamp(now);
-    return '${baseName}_$timestamp.png';
+    return '${baseName}_$timestamp.jpg';
   }
 
   String _formatTimestamp(DateTime time) {

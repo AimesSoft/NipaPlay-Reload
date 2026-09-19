@@ -120,12 +120,18 @@ class SubtitleManager extends ChangeNotifier {
   double globalPositionSeed = 90.0;
   double globalMarginSeed = 0.0;
 
+  /// 新字幕块的默认显示状态（当前全局种子位置；延迟从 0 开始）。
+  /// staggerDepth>0 时按叠加深度上移 20（90/70/50），避免完全重叠。
+  Map<String, double> _defaultDisplayState({int staggerDepth = 0}) =>
+      <String, double>{
+        'delay': 0.0,
+        'position':
+            (globalPositionSeed - 20 * staggerDepth).clamp(30.0, 100.0),
+        'marginX': globalMarginSeed,
+      };
+
   Map<String, double> _ensurePathDisplayState(String path) {
-    return _pathDisplayState.putIfAbsent(path, () => <String, double>{
-          'delay': 0.0,
-          'position': globalPositionSeed,
-          'marginX': globalMarginSeed,
-        });
+    return _pathDisplayState.putIfAbsent(path, _defaultDisplayState);
   }
 
   /// 全局滑块变化时同步所有已激活字幕块（滑块=全局控制；
@@ -681,15 +687,12 @@ class SubtitleManager extends ChangeNotifier {
     if (_activeExternalSubtitlePaths.contains(path)) {
       return;
     }
-    // 多条叠加时默认位置自动错开 20（90/70/50...），避免互相完全重叠
-    if (!_pathDisplayState.containsKey(path)) {
-      final depth = _activeExternalSubtitlePaths.length;
-      _pathDisplayState[path] = <String, double>{
-        'delay': 0.0,
-        'position': (globalPositionSeed - 20 * depth).clamp(30.0, 100.0),
-        'marginX': globalMarginSeed,
-      };
-    }
+    // 未有记忆状态时按叠加深度错开默认位置
+    _pathDisplayState.putIfAbsent(
+      path,
+      () => _defaultDisplayState(
+          staggerDepth: _activeExternalSubtitlePaths.length),
+    );
     _activeExternalSubtitlePaths.add(path);
     unawaited(_loadPathDisplayState(path));
     _currentExternalSubtitlePath = path;

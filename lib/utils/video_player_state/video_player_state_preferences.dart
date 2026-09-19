@@ -2711,6 +2711,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getInt(_screenshotSaveTargetKey);
       _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
+    _screenshotQuality =
+        ScreenshotQualityDisplay.fromPrefs(prefs.getInt(_screenshotQualityKey));
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2727,6 +2729,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotQuality(ScreenshotQuality quality) async {
+    if (_screenshotQuality == quality) return;
+    _screenshotQuality = quality;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_screenshotQualityKey, quality.prefsValue);
+    logPlayerEvent(
+      'Player',
+      '截图质量已设置为 ${quality.label}（JPEG ${quality.jpegQuality}）',
+    );
     _notifyListeners();
   }
 
