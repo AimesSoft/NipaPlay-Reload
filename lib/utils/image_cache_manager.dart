@@ -44,13 +44,6 @@ class ImageCacheManager {
 
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
   static const Duration _evictionProtectionWindow = Duration(seconds: 2);
-  /// 淘汰的正本延迟释放窗口：条目从索引摘除后，其 ui.Image 可能仍被
-  /// 显示中的 widget 持有（RawImage 绘制时会 clone）。立即 dispose 会让
-  /// 后台内存压力淘汰的图片在回前台重建时抛
-  /// "Cannot clone a disposed image" 并显示为灰块。
-  static const Duration _retireGracePeriod = Duration(seconds: 60);
-  final List<ui.Image> _retiredImages = [];
-  Timer? _retireTimer;
   static const Duration _diskCleanupInterval = Duration(hours: 12);
   static const Duration _compressedImageMaxAge = Duration(days: 30);
   static const Duration _thumbnailMaxAge = Duration(days: 30);
@@ -233,36 +226,18 @@ class ImageCacheManager {
     }
   }
 
-  /// 真正释放一张图片，同步清理所有索引。
+  /// 从缓存中摘除一张图片并清理索引。
   ///
-  /// 只有在确认没有 widget 仍持有该句柄时才可调用（例如字节预算淘汰时）。
+  /// 不主动 dispose：ui.Image 带 native finalizer，最后一个 Dart 引用消失后
+  /// 由 engine 回收。显示中的 widget（RawImage 绘制时会 clone）只要还持有
+  /// 引用就不会被回收；手动立即/延迟 dispose 会让仍被绘制的图片抛
+  /// "Cannot clone a disposed image"（回前台重建灰块）。字节预算只做摘索引，
+  /// 内存实际由 GC 兜底回收。
   void _disposeEntry(String cacheKey) {
-    final image = _cache.remove(cacheKey);
+    _cache.remove(cacheKey);
     _dropBytes(cacheKey);
     _refCount.remove(cacheKey);
     _lastAccessed.remove(cacheKey);
-    if (image != null) {
-      _retireImage(image);
-    }
-  }
-
-  /// 延迟释放淘汰的正本：给仍持有引用的显示层留出安全窗口。
-  void _retireImage(ui.Image image) {
-    _retiredImages.add(image);
-    _retireTimer ??= Timer(_retireGracePeriod, _flushRetiredImages);
-  }
-
-  void _flushRetiredImages() {
-    _retireTimer = null;
-    final images = List<ui.Image>.from(_retiredImages);
-    _retiredImages.clear();
-    for (final image in images) {
-      try {
-        image.dispose();
-      } catch (_) {
-        // 已被释放或正被其它层持有，忽略即可。
-      }
-    }
   }
 
   /// 超出字节预算时按 LRU 淘汰。
@@ -391,7 +366,6 @@ class ImageCacheManager {
   // 定期清理机制
   void _startPeriodicCleanup() {
     _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      _flushRetiredImages();
       _cleanupExpiredImages();
       _maybeCleanupDiskCaches();
     });
@@ -501,11 +475,8 @@ class ImageCacheManager {
   }
 
   void clear() {
-    // 正本统一走延迟释放，避免显示中的 widget 拿到 disposed 句柄
-    for (final image in _cache.values) {
-      _retireImage(image);
-    }
-    // 清除缓存
+    // 不主动 dispose（同 _disposeEntry 注释）：持有引用的 widget 靠 native
+    // finalizer 兜底，避免回前台 "Cannot clone a disposed image" 灰块。
     _cache.clear();
     _loading.clear();
     _refCount.clear();
