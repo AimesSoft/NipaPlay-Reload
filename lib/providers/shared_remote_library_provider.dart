@@ -321,18 +321,18 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes');
-      debugPrint('📡 [共享媒体] 开始请求: $uri');
-      debugPrint('📡 [共享媒体] 主机信息: ${host.displayName} (${host.baseUrl})');
+      debugPrint('[共享媒体] 开始请求: $uri');
+      debugPrint('[共享媒体] 主机信息: ${host.displayName} (${host.baseUrl})');
 
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
       if (!_isCurrentLibraryRequest(host, requestId)) return;
 
-      debugPrint('📡 [共享媒体] 响应状态码: ${response.statusCode}');
+      debugPrint('[共享媒体] 响应状态码: ${response.statusCode}');
 
       if (response.statusCode != 200) {
         debugPrint(
-            '❌ [共享媒体] HTTP错误: ${response.statusCode}, body: ${response.body}');
+            '[共享媒体] HTTP错误: ${response.statusCode}, body: ${response.body}');
         throw Exception('HTTP ${response.statusCode}');
       }
 
@@ -341,7 +341,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       final items =
           (payload['items'] ?? payload['data'] ?? []) as List<dynamic>;
 
-      debugPrint('✅ [共享媒体] 成功获取 ${items.length} 个番剧');
+      debugPrint('[共享媒体] 成功获取 ${items.length} 个番剧');
 
       _animeSummaries = items.map((item) {
         final data = Map<String, dynamic>.from(item as Map<String, dynamic>);
@@ -360,12 +360,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _cancelLibraryRetry(resetAttempts: true);
     } catch (e, stackTrace) {
       if (!_isCurrentLibraryRequest(host, requestId)) return;
-      debugPrint('❌ [共享媒体] 请求失败: $e');
-      debugPrint('❌ [共享媒体] 错误类型: ${e.runtimeType}');
+      debugPrint('[共享媒体] 请求失败: $e');
+      debugPrint('[共享媒体] 错误类型: ${e.runtimeType}');
       if (e is TimeoutException) {
         debugPrint('ℹ️ [共享媒体] 请求超时，将自动重试');
       } else {
-        debugPrint('❌ [共享媒体] 堆栈跟踪:\n$stackTrace');
+        debugPrint('[共享媒体] 堆栈跟踪:\n$stackTrace');
       }
 
       String friendlyError;
@@ -376,19 +376,19 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         if (e.toString().contains('No route to host') ||
             e.toString().contains('errno = 65')) {
           friendlyError = '无法连接到主机 ${host.baseUrl}\n错误详情: $e';
-          debugPrint('🔍 [共享媒体诊断] 网络路由问题，可能原因：');
+          debugPrint('[共享媒体诊断] 网络路由问题，可能原因：');
           debugPrint('  1. 设备不在同一局域网');
           debugPrint('  2. 主机IP变更了');
           debugPrint('  3. 防火墙阻止连接');
         } else if (e.toString().contains('Connection refused')) {
           friendlyError = '连接被拒绝，请确认主机已开启远程访问服务';
-          debugPrint('🔍 [共享媒体诊断] 端口拒绝连接，可能原因：');
+          debugPrint('[共享媒体诊断] 端口拒绝连接，可能原因：');
           debugPrint('  1. 远程访问服务未启动');
           debugPrint('  2. 端口号错误');
         } else if (e.toString().contains('timed out') ||
             e.toString().contains('TimeoutException')) {
           friendlyError = '连接超时，请检查网络连接或主机是否在线';
-          debugPrint('🔍 [共享媒体诊断] 连接超时，可能原因：');
+          debugPrint('[共享媒体诊断] 连接超时，可能原因：');
           debugPrint('  1. 网络延迟过高');
           debugPrint('  2. 主机负载过高');
           debugPrint('  3. 主机未响应');
@@ -442,7 +442,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     const delays = [1, 2, 4, 8, 16, 30];
     final delay = Duration(seconds: delays[_libraryRetryAttempt]);
     if (_libraryRetryAttempt < delays.length - 1) _libraryRetryAttempt++;
-    debugPrint('⏳ [共享媒体] ${delay.inSeconds} 秒后自动重试: ${host.baseUrl}');
+    debugPrint('[共享媒体] ${delay.inSeconds} 秒后自动重试: ${host.baseUrl}');
     _libraryRetryTimer = Timer(delay, () {
       _libraryRetryTimer = null;
       if (!_disposed &&
@@ -490,15 +490,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     try {
       final uri =
           Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
-      debugPrint('📡 [剧集加载] 请求: $uri');
+      debugPrint('[剧集加载] 请求: $uri');
 
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
-      debugPrint('📡 [剧集加载] 响应状态码: ${response.statusCode}');
+      debugPrint('[剧集加载] 响应状态码: ${response.statusCode}');
 
       if (response.statusCode != 200) {
-        debugPrint('❌ [剧集加载] HTTP错误: ${response.statusCode}');
+        debugPrint('[剧集加载] HTTP错误: ${response.statusCode}');
         throw Exception('HTTP ${response.statusCode}');
       }
 
@@ -512,7 +512,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
               SharedRemoteEpisode.fromJson(episode as Map<String, dynamic>))
           .toList();
 
-      debugPrint('✅ [剧集加载] 成功获取 ${episodeList.length} 集');
+      debugPrint('[剧集加载] 成功获取 ${episodeList.length} 集');
 
       _episodeCache[animeId] = episodeList;
 
@@ -540,9 +540,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       return episodeList;
     } catch (e, stackTrace) {
-      debugPrint('❌ [剧集加载] 失败: $e');
-      debugPrint('❌ [剧集加载] 错误类型: ${e.runtimeType}');
-      debugPrint('❌ [剧集加载] 堆栈:\n$stackTrace');
+      debugPrint('[剧集加载] 失败: $e');
+      debugPrint('[剧集加载] 错误类型: ${e.runtimeType}');
+      debugPrint('[剧集加载] 堆栈:\n$stackTrace');
 
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection')) {
