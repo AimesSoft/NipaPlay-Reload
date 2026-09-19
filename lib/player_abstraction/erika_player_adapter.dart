@@ -735,6 +735,9 @@ class ErikaPlayerAdapter
   bool get usesWindowOverlayVideoSurface =>
       _isSupported &&
       defaultTargetPlatform != TargetPlatform.android &&
+      // Windows 走 Flutter 纹理表面（见 buildPlatformVideoSurface），不再
+      // 使用独立 HWND overlay，因此全屏时不需要透明挖孔/underlay 处理。
+      defaultTargetPlatform != TargetPlatform.windows &&
       !_isHarmonyOS;
 
   @override
@@ -1049,6 +1052,19 @@ class ErikaPlayerAdapter
     }
   }
 
+  // Erika 的无头 GIF 导出 API 在当前依赖版本中不可用，而 player_abstraction
+  // 的统一接口仍通过这两个静态成员兜底。一律声明为不支持并抛出明确异常，
+  // 保持工程可编译；待 Erika GIF API 正式发布并锁定后再接入。
+  static bool get supportsHeadlessGifExport => false;
+
+  static Future<GifExportResult> exportGifHeadless(
+    GifExportRequest request,
+  ) async {
+    throw UnsupportedError(
+      'Erika headless GIF export is unavailable in the pinned Erika version.',
+    );
+  }
+
   @override
   void setDecoders(PlayerMediaType type, List<String> decoders) {
     _decoders[type] = List<String>.from(decoders);
@@ -1331,6 +1347,20 @@ class ErikaPlayerAdapter
         player: _player,
         debugLabel: debugLabel,
         onPlatformViewIdChanged: onPlatformViewIdChanged,
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      // Windows 改用 Flutter 纹理表面（ErikaTextureVideoView：可共享的
+      // D3D11 纹理，SDR，由 Flutter 引擎统一合成）。
+      // 原先的独立 HWND overlay 路径在窗口全屏切换（窗口样式/父级关系改变）
+      // 时原生合成树会永久挂起：画面定格、声音与控制正常，退出全屏也无法
+      // 恢复。Flutter 纹理只是普通 widget，全屏对它仅意味着布局约束变化，
+      // 由 Flutter 自动重建/缩放，不存在独立窗口被挂死的问题。
+      // 代价：该路径为 SDR，不支持原生 HDR；macOS 仍保留 overlay 路径。
+      return ErikaTextureVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onTextureIdChanged: onPlatformViewIdChanged,
       );
     }
     return _NipaplayErikaWindowOverlayVideoView(
