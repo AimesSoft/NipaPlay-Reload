@@ -882,12 +882,9 @@ class MediaKitPlayerAdapter
       if (defaultTargetPlatform == TargetPlatform.android) {
               (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
             } else {
-              // 其他平台（iOS 等）：尊重「硬件解码」总开关——关闭时强制软解，
-              // 开启时用 libmpv_hwdec_mode（copy-back 默认 / VideoToolbox 直接，
-              // 可回退）。
-              final hwdecMode = PlayerFactory.getUseHardwareDecoder()
-                  ? PlayerFactory.getLibmpvHwdecMode
-                  : 'no';
+              // 其他平台（iOS 等）：尊重「硬件解码」总开关——关闭时强制软解。
+              final hwdecMode =
+                  PlayerFactory.getUseHardwareDecoder() ? 'auto-copy' : 'no';
               (_player.platform as dynamic)?.setProperty('hwdec', hwdecMode);
               _properties['hwdec'] = hwdecMode;
             }

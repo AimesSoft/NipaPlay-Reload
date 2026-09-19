@@ -30,13 +30,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
     bool _macOSNativeVideoEnabled = false;
     String _androidAudioOutput = 'opensles';
-    String _libmpvHwdecMode = 'auto-copy';
     PlayerErikaAndroidOutputMode _erikaAndroidOutputMode =
         PlayerErikaAndroidOutputMode.sdr;
 
     // 为BlurDropdown添加GlobalKey
     final GlobalKey _playerKernelDropdownKey = GlobalKey();
-    final GlobalKey _libmpvHwdecDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
   final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
   final GlobalKey _erikaAndroidOutputDropdownKey = GlobalKey();
@@ -76,30 +74,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
         _loadMacOSNativeVideoSettings();
         _loadAndroidAudioOutputSettings();
         _loadErikaAndroidOutputSettings();
-        _loadLibmpvHwdecModeSetting();
       }
-
-      Future<void> _loadLibmpvHwdecModeSetting() async {
-        final mode = PlayerFactory.getLibmpvHwdecMode;
-        if (!mounted) return;
-        setState(() {
-          _libmpvHwdecMode = mode;
-        });
-      }
-
-      Future<void> _saveLibmpvHwdecModeSetting(String mode) async {
-          await PlayerFactory.saveLibmpvHwdecMode(mode);
-          // 立即应用到当前播放器（无需重建）：setProperty hwdec 对 libmpv 动态生效
-          context.read<VideoPlayerState>().applyHardwareDecoderPreference();
-          if (!mounted) return;
-          setState(() {
-            _libmpvHwdecMode = mode;
-          });
-          BlurSnackBar.show(
-            context,
-            'Libmpv 硬解模式已切换并应用到当前播放',
-          );
-        }
 
   Future<void> _loadPlayerKernelSettings() async {
     // 直接从PlayerFactory获取当前内核类型
@@ -488,40 +463,6 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     color: colorScheme.onSurface.withValues(alpha: 0.12),
                     height: 1),
               ],
-                          ],
-                          if (visibleKernelType == PlayerKernelType.mediaKit &&
-                                                    !kIsWeb &&
-                                                    Platform.isAndroid) ...[
-                                                      // iOS libmpv 用 vo=libmpv（平台 surface），不支持
-                                                      // videotoolbox 直接输出（直通需 gpu vo 纹理互操作），
-                                                      // 会回退 copy-back，因此仅 Android 提供该选项。
-                                                      AdaptiveSettingsTile.dropdown(
-                              title: 'Libmpv 硬件解码模式',
-                              subtitle: '自动(copy-back)：硬解帧拷回内存渲染，兼容性最好（默认）；直接输出(VideoToolbox)：硬解帧直接输出，省内存，若黑屏可切回',
-                              icon: Ionicons.videocam_outline,
-                              items: [
-                                DropdownMenuItemData(
-                                  title: '自动（copy-back，默认）',
-                                  value: 'auto-copy',
-                                  isSelected: _libmpvHwdecMode == 'auto-copy',
-                                  description: '硬解帧拷回内存渲染，兼容性最好',
-                                ),
-                                DropdownMenuItemData(
-                                  title: '直接输出（VideoToolbox）',
-                                  value: 'videotoolbox',
-                                  isSelected: _libmpvHwdecMode == 'videotoolbox',
-                                  description: '硬解帧直接输出，省内存；部分渲染路径可能黑屏',
-                                ),
-                              ],
-                              onChanged: (dynamic value) async {
-                                if (value is! String) return;
-                                await _saveLibmpvHwdecModeSetting(value);
-                              },
-                              dropdownKey: _libmpvHwdecDropdownKey,
-                            ),
-                            Divider(
-                                color: colorScheme.onSurface.withValues(alpha: 0.12),
-                                height: 1),
                           ],
                           if (visibleKernelType == PlayerKernelType.mdk ||
                               visibleKernelType == PlayerKernelType.mediaKit) ...[

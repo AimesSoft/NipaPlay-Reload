@@ -477,9 +477,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       if (Platform.isAndroid) {
         return 'mediacodec-copy';
       }
-      // 非 Android（iOS 等）：读用户配置——'auto-copy'(copy-back，默认) 或
-      // 'videotoolbox'(直接输出，省内存，可回退)；切换后立即生效。
-      return PlayerFactory.getLibmpvHwdecMode;
+      // 非 Android（iOS 等）：iOS libmpv 用 vo=libmpv，videotoolbox 直接输出
+      // 会回退 copy-back，统一用 auto-copy（copy-back）保证兼容。
+      return 'auto-copy';
     }
 
   Future<void> applyHardwareDecoderPreference() async {
