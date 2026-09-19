@@ -92,6 +92,18 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         final List<dynamic> decoded = json.decode(subtitlesJson);
         _externalSubtitles =
             decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+        // 清理旧缓存残留：hash 文件名时代保存的路径（95042d....srt 等）
+        // 文件已不存在，过滤掉避免轨道列表出现不明字幕。
+        final staleCount = _externalSubtitles.length;
+        _externalSubtitles.removeWhere((s) {
+          final path = s['path'] as String?;
+          return path == null ||
+              path.isEmpty ||
+              !File(path).existsSync();
+        });
+        if (_externalSubtitles.length != staleCount) {
+          await _saveExternalSubtitles(videoState.currentVideoPath ?? '');
+        }
       }
 
       // 合并当前已激活的外部字幕：自动加载挂载的不在持久化列表里，
