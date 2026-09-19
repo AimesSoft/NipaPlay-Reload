@@ -401,8 +401,17 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _animeSummaries = [];
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
-      final retryDelay = _scheduleLibraryRetry(host);
-      _errorMessage = '$friendlyError\n将在 ${retryDelay.inSeconds} 秒后自动重试';
+      final connectionRefused =
+          e.toString().contains('Connection refused') ||
+              e.toString().contains('errno = 61');
+      if (connectionRefused) {
+        // 端口无服务（Connection refused）：继续重试只会刷日志，
+        // 停止自动重试，等用户手动刷新/切换主机时再连。
+        _errorMessage = '$friendlyError\n（端口无响应，已停止自动重试，可手动刷新）';
+      } else {
+        final retryDelay = _scheduleLibraryRetry(host);
+        _errorMessage = '$friendlyError\n将在 ${retryDelay.inSeconds} 秒后自动重试';
+      }
     } finally {
       if (_isCurrentLibraryRequest(host, requestId)) {
         _isLoading = false;
@@ -438,8 +447,13 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   Duration _scheduleLibraryRetry(SharedRemoteHost host) {
     _cancelLibraryRetry();
     const delays = [1, 2, 4, 8, 16, 30];
+    if (_libraryRetryAttempt >= delays.length) {
+      // 重试次数用尽：停止自动重试（用户手动刷新/切换主机可恢复）。
+      debugPrint('[共享媒体] 重试次数用尽，停止自动重试: ${host.baseUrl}');
+      return Duration.zero;
+    }
     final delay = Duration(seconds: delays[_libraryRetryAttempt]);
-    if (_libraryRetryAttempt < delays.length - 1) _libraryRetryAttempt++;
+    _libraryRetryAttempt++;
     debugPrint('[共享媒体] ${delay.inSeconds} 秒后自动重试: ${host.baseUrl}');
     _libraryRetryTimer = Timer(delay, () {
       _libraryRetryTimer = null;
