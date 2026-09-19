@@ -68,7 +68,7 @@ jobs:
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-ios.yml
     with:
-      upload-to-app-store: true
+      upload-to-app-store: ${{ inputs.submit_ios_for_review }}
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}

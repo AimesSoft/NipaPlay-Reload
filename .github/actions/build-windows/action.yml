@@ -187,6 +187,8 @@ runs:
         }
 
         $candidates = @(
+          # GitHub releases 为主源(sourceforge 对 GitHub runner 返回 403)
+          "https://github.com/wang-bin/mdk-sdk/releases/latest/download/$mdkSdkPkg",
           "https://sourceforge.net/projects/mdk-sdk/files/nightly/$mdkSdkPkg/download",
           "https://downloads.sourceforge.net/project/mdk-sdk/nightly/$mdkSdkPkg",
           "https://master.dl.sourceforge.net/project/mdk-sdk/nightly/$mdkSdkPkg"
