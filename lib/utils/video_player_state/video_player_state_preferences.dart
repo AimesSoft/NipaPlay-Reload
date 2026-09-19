@@ -602,7 +602,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     // 保存当前播放速度，以便长按结束时恢复
     _normalPlaybackRate = _playbackRate;
 
-    // ✅ P6修复：速率变化前重设锚点，防止 playbackTimeMs 跳变
+    //  P6修复：速率变化前重设锚点，防止 playbackTimeMs 跳变
     // 根因：smoothMs = anchorMs + elapsedDelta * newRate，elapsedDelta是旧速率期间积累的，
     // 乘以新速率会导致 playbackTimeMs 瞬间跳变 elapsedDelta*(newRate-oldRate)。
     // 修复：将锚点重设到当前 playbackTimeMs 和 elapsed，使新速率从当前位置平滑推进。
@@ -611,11 +611,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final predictedJumpMs =
           elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
       debugPrint(
-          '[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
+          '[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x  ${_speedBoostRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_JUMP=${predictedJumpMs.toStringAsFixed(1)}ms '
-          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)}  ANCHOR RESET to ptm');
     }
     _smoothAnchorMs = _playbackTimeMs.value;
     _smoothAnchorElapsedUs = _lastElapsedUs;
@@ -633,19 +633,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   void stopSpeedBoost() {
     if (!hasVideo || !_isSpeedBoostActive) return;
 
-    // ✅ P6修复：速率变化前重设锚点，防止 smoothMs 增速骤降导致 drift
-    // 根因：2x→1x时 smoothMs = anchorMs + elapsedDelta*1.0（之前*2.0），
-    // playbackTimeMs几乎不推进 → playerMs以1x继续推进 → 大drift → FORWARD SNAP
+    //  P6修复：速率变化前重设锚点，防止 smoothMs 增速骤降导致 drift
+    // 根因：2x1x时 smoothMs = anchorMs + elapsedDelta*1.0（之前*2.0），
+    // playbackTimeMs几乎不推进  playerMs以1x继续推进  大drift  FORWARD SNAP
     if (!kReleaseMode) {
       final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
       final predictedDriftMs =
           elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
       debugPrint(
-          '[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
+          '[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x  ${_normalPlaybackRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_DRIFT=${predictedDriftMs.toStringAsFixed(1)}ms '
-          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)}  ANCHOR RESET to ptm');
     }
     _smoothAnchorMs = _playbackTimeMs.value;
     _smoothAnchorElapsedUs = _lastElapsedUs;
@@ -1508,17 +1508,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final bytes = await sourceFile.readAsBytes();
       if (bytes.isEmpty) return null;
 
-      final supportDir = await path_provider.getApplicationSupportDirectory();
-      final fontsDir = Directory(p.join(supportDir.path, 'danmaku_fonts'));
+      // 与字幕字体共用一个字体库目录（subtitle_fonts）：弹幕/字幕/外挂
+      // 字幕三处设置导入的字体集中于此，各选择器都能看到同一份字体库。
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
       await fontsDir.create(recursive: true);
 
-      final ext = p.extension(sourcePath).toLowerCase();
-      final baseName = p.basenameWithoutExtension(sourcePath);
-      final hash = sha1.convert(bytes).toString().substring(0, 12);
-      final fileName = '${baseName}_$hash$ext';
+      final fileName = p.basename(sourcePath);
       final destPath = p.join(fontsDir.path, fileName);
       final destFile = File(destPath);
-      if (!await destFile.exists()) {
+      if (!await destFile.exists() ||
+          await destFile.length() != bytes.length) {
         await destFile.writeAsBytes(bytes, flush: true);
       }
       return destPath;
@@ -1829,6 +1829,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       prefs.getDouble(_subtitleScaleKey) ??
           VideoPlayerState.defaultSubtitleScale,
     );
+    _srtSubtitleScale = _clampSubtitleScale(
+        prefs.getDouble(_srtSubtitleScaleKey) ??
+            VideoPlayerState.defaultSubtitleScale);
+    _srtSubtitleDelaySeconds = prefs.getDouble(_srtSubtitleDelayKey) ??
+        VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitlePosition = _clampSubtitlePosition(
@@ -1868,10 +1873,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
-              _subtitleOverrideModeKey,
-            ) ??
-            VideoPlayerState.defaultSubtitleOverrideMode.index)
-        .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+            _subtitleOverrideModeKey,
+          ) ??
+          VideoPlayerState.defaultSubtitleOverrideMode.index)
+      .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+    // 跨会话恢复的已选字体必须在启动时注册进引擎，否则叠层 fontFamily
+    // 静默回退默认字体（用户感知：选了字体但没生效）。
+    unawaited(ensureSelectedSubtitleFontsRegistered());
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -1888,6 +1896,26 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+    /// 设置 SRT 独立字号（不碰内核/内嵌字号）
+    Future<void> setSrtSubtitleScale(double scale) async {
+      final resolved = _clampSubtitleScale(scale);
+      if ((_srtSubtitleScale - resolved).abs() < 0.0001) return;
+      _srtSubtitleScale = resolved;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_srtSubtitleScaleKey, resolved);
+      _notifyListeners();
+    }
+
+  /// 设置 SRT 独立时轴偏移（秒）
+  Future<void> setSrtSubtitleDelaySeconds(double seconds) async {
+    final clamped = _resolveSubtitleDelaySecondsForCurrentVideo(seconds);
+    if (_srtSubtitleDelaySeconds == clamped) return;
+    _srtSubtitleDelaySeconds = clamped;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_srtSubtitleDelayKey, clamped);
+    _notifyListeners();
+  }
+
   Future<void> setSubtitleDelaySeconds(double seconds) async {
     if ((_subtitleDelaySeconds - seconds).abs() < 0.0001) {
       return;
@@ -1899,6 +1927,29 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+
+  /// 位置/边距/对齐改动后强制 libass 重新排版（mpv 需 seek 触发字幕重渲染，否则要重载视频才生效）
+  void _refreshSubtitleLayout() {
+    if (kIsWeb || _isDisposed) return;
+    // App 内叠层字幕（SRT/VTT/ASS）的位置是 Flutter UI 层，不占内核轨：
+    // 拖动/调整时无需 seek 内核，seek 反而造成卡顿跳帧（libmpv 实测拖不动）。
+    final extPath = getActiveExternalSubtitlePath();
+    if (extPath != null && extPath.isNotEmpty) {
+      final ext = extPath.toLowerCase();
+      if (ext.endsWith('.srt') || ext.endsWith('.vtt') ||
+          ext.endsWith('.ass') || ext.endsWith('.ssa')) {
+        return;
+      }
+    }
+    try {
+      final pos = _position.inMilliseconds;
+      if (pos <= 0) return;
+      player.seek(position: pos);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 字幕布局刷新失败: $e');
+    }
+  }
+
   Future<void> setSubtitlePosition(double position) async {
     final resolved = _clampSubtitlePosition(position);
     if ((_subtitlePosition - resolved).abs() < 0.0001) {
@@ -1907,7 +1958,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitlePosition = resolved;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitlePositionKey, resolved);
+    // 全局滑块同步所有已激活的叠层字幕块（滑块=全局控制，
+    // 单块长按拖动=逐条微调）；同时更新种子供新激活块继承。
+    _subtitleManager.globalPositionSeed = resolved;
+    _subtitleManager.applyGlobalDisplayPosition(
+        resolved, _subtitleMarginX);
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1917,6 +1978,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignXKey, align.index);
     await applySubtitleStylePreference();
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1926,6 +1988,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignYKey, align.index);
     await applySubtitleStylePreference();
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1934,7 +1997,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleMarginX = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginXKey, value);
+    _subtitleManager.globalMarginSeed = value;
+    _subtitleManager.applyGlobalDisplayPosition(
+        _subtitlePosition, value);
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1943,7 +2014,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleMarginY = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginYKey, value);
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -2028,6 +2104,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleFontName = trimmed;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_subtitleFontNameKey, trimmed);
+    // 多选字体在叠层渲染前必须已注册进引擎，否则 fontFamily 静默回退。
+    unawaited(ensureSelectedSubtitleFontsRegistered());
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2041,7 +2119,133 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
-  Future<void> importSubtitleFontFile(String sourcePath) async {
+  /// 列出 subtitle_fonts 字体库中的字体文件名（不含扩展名），用于选择字体样式。
+  Future<List<String>> listSubtitleFonts() async {
+    // extension 内不能非限定引用宿主类的静态成员，必须带 VideoPlayerState. 前缀。
+    final cached = VideoPlayerState._cachedSubtitleFontNames;
+    if (cached != null) return cached;
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      if (!await fontsDir.exists()) return const [];
+      final names = <String>[];
+      await for (final entity in fontsDir.list()) {
+        if (entity is File) {
+          final ext = p.extension(entity.path).toLowerCase();
+          if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+            names.add(p.basenameWithoutExtension(entity.path));
+          }
+        }
+      }
+      names.sort();
+      VideoPlayerState._cachedSubtitleFontNames = names;
+      return names;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 列出字体库失败: $e');
+      return const [];
+    }
+  }
+
+  /// 清空 subtitle_fonts 字体缓存目录并重置字体设置（导入/远程下载的字体全删）。
+  Future<void> clearSubtitleFontCache() async {
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      if (await fontsDir.exists()) {
+        await fontsDir.delete(recursive: true);
+      }
+      _subtitleFontDir = '';
+      _subtitleFontName = '';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_subtitleFontDirKey, '');
+      await prefs.setString(_subtitleFontNameKey, '');
+      await applySubtitleStylePreference();
+      _notifyListeners();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 清除字幕字体缓存失败: $e');
+    }
+  }
+
+  /// 将字幕字体注册到 Flutter（overlay 的 fontFamily 才能生效，否则 Text 不渲染）
+  Future<String?> _registerSubtitleRuntimeFont(String filePath) async {
+    if (kIsWeb) return null;
+    if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
+        .contains(filePath)) {
+      return p.basenameWithoutExtension(filePath);
+    }
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return null;
+      final family = p.basenameWithoutExtension(filePath);
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return null;
+      final loader = FontLoader(family);
+      loader.addFont(
+        Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))),
+      );
+      await loader.load();
+      VideoPlayerState._registeredSubtitleRuntimeFontPaths.add(filePath);
+      return family;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 注册字幕字体失败: $e');
+      return null;
+    }
+  }
+
+  /// 确保当前多选的字幕字体已注册进 Flutter 引擎。
+  ///
+  /// 远程下载/历史缓存的字体文件从未走过 import 流程时，overlay 的
+  /// fontFamily 会静默回退到默认字体——用户感知就是“选了字体没生效”。
+  /// 在设置面板打开与字体选择变更时调用。
+  Future<void> ensureSelectedSubtitleFontsRegistered() async {
+    if (kIsWeb) return;
+    final dir = _subtitleFontDir.trim();
+    if (dir.isEmpty) return;
+    final selected = _subtitleFontName
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (selected.isEmpty) return;
+    var missing = 0;
+    for (final family in selected) {
+      final candidates = <String>[
+        '$family.ttf',
+        '$family.otf',
+        '$family.ttc',
+      ];
+      File? match;
+      for (final name in candidates) {
+        final file = File(p.join(dir, name));
+        if (file.existsSync()) {
+          match = file;
+          break;
+        }
+      }
+      if (match == null) {
+        missing++;
+        continue;
+      }
+      if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
+          .contains(match.path)) {
+        continue;
+      }
+      final registered = await _registerSubtitleRuntimeFont(match.path);
+      if (registered == null) {
+        missing++;
+      }
+    }
+    if (missing > 0 && !VideoPlayerState._subtitleFontRegistrationWarned) {
+      VideoPlayerState._subtitleFontRegistrationWarned = true;
+      debugPrint(
+        '[VideoPlayerState] 有 $missing 个已选字幕字体未能注册（文件缺失或解析失败），'
+        '渲染将回退默认字体',
+      );
+    }
+  }
+
+  Future<void> importSubtitleFontFile(String sourcePath,
+      {bool applyName = true}) async {
     if (sourcePath.isEmpty) return;
     try {
       final baseDir = await StorageService.getAppStorageDirectory();
@@ -2050,11 +2254,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final fileName = p.basename(sourcePath);
       final destPath = p.join(fontsDir.path, fileName);
       await File(sourcePath).copy(destPath);
+      await _registerSubtitleRuntimeFont(destPath);
       _subtitleFontDir = fontsDir.path;
-      _subtitleFontName = p.basenameWithoutExtension(destPath);
+      if (applyName) {
+        _subtitleFontName = p.basenameWithoutExtension(destPath);
+      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
-      await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+      if (applyName) {
+        await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+      }
       await applySubtitleStylePreference();
       _notifyListeners();
     } catch (e) {
@@ -2097,6 +2306,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         final fileName = p.basename(file.path);
         final destPath = p.join(fontsDir.path, fileName);
         await file.copy(destPath);
+        await _registerSubtitleRuntimeFont(destPath);
         copiedCount++;
       }
 
@@ -2203,13 +2413,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
+    // 叠层字幕(SRT/VTT)样式在 Flutter UI 层，不设内核属性（sub-margin-x 限制0~300，拖拽负值报错/卡热切换）；
+    // 但混挂内核轨 ASS 时仍需继续设置 sub-pos/sub-delay 等，否则位置滑块/延迟对内核字幕不生效。
+    final hasKernelExternalSubtitle = activeExternalSubtitlePaths
+        .any((p) => !externalSubtitleRenderedInApp(p));
+    if (shouldRenderCurrentExternalSubtitleInApp() &&
+        !hasKernelExternalSubtitle) {
+      return;
+    }
     try {
       final playerKernelName = player.getPlayerKernelName();
       if (playerKernelName == 'Erika') {
         player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
         return;
       }
-      if (playerKernelName != 'Media Kit') {
+      if (playerKernelName != 'Media Kit' && playerKernelName != 'MDK') {
         return;
       }
       player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
@@ -2246,6 +2464,26 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       String? effectiveFontDir;
       String? localFontsFolder;
       final hadPreviousFontDir = _subtitleFontDir.isNotEmpty;
+
+      // 字体仅在“自定义样式”(force) 模式下生效；其他模式清空自定义字体
+      final fontOverrideActive =
+          _subtitleOverrideMode == SubtitleStyleOverrideMode.force;
+      if (!fontOverrideActive) {
+        if (hadPreviousFontDir) {
+          player.setProperty('sub-fonts-dir', '');
+          if (defaultTargetPlatform == TargetPlatform.iOS) {
+            player.setProperty('sub-file-paths', '');
+          }
+          _subtitleFontDir = '';
+        }
+        final resolvedDefaultFont = _defaultSubtitleFontNameForPlatform();
+        player.setProperty('sub-font', resolvedDefaultFont);
+        player.setProperty(
+          'sub-ass-override',
+          _subtitleOverrideModeToMpv(_subtitleOverrideMode),
+        );
+        return;
+      }
 
       if (_currentVideoPath != null &&
           !_currentVideoPath!.startsWith('http') &&
