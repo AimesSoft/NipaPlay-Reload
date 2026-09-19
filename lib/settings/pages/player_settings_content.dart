@@ -88,16 +88,18 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
       }
 
       Future<void> _saveLibmpvHwdecModeSetting(String mode) async {
-        await PlayerFactory.saveLibmpvHwdecMode(mode);
-        if (!mounted) return;
-        setState(() {
-          _libmpvHwdecMode = mode;
-        });
-        BlurSnackBar.show(
-          context,
-          'Libmpv 硬解模式已切换，重新加载播放后生效',
-        );
-      }
+          await PlayerFactory.saveLibmpvHwdecMode(mode);
+          // 立即应用到当前播放器（无需重建）：setProperty hwdec 对 libmpv 动态生效
+          context.read<VideoPlayerState>().applyHardwareDecoderPreference();
+          if (!mounted) return;
+          setState(() {
+            _libmpvHwdecMode = mode;
+          });
+          BlurSnackBar.show(
+            context,
+            'Libmpv 硬解模式已切换并应用到当前播放',
+          );
+        }
 
   Future<void> _loadPlayerKernelSettings() async {
     // 直接从PlayerFactory获取当前内核类型

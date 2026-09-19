@@ -474,11 +474,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
   String _resolveMpvHwdecValue() {
-    if (Platform.isAndroid) {
-      return 'mediacodec-copy';
+      if (Platform.isAndroid) {
+        return 'mediacodec-copy';
+      }
+      // 非 Android（iOS 等）：读用户配置——'auto-copy'(copy-back，默认) 或
+      // 'videotoolbox'(直接输出，省内存，可回退)；切换后立即生效。
+      return PlayerFactory.getLibmpvHwdecMode;
     }
-    return 'auto-copy';
-  }
 
   Future<void> applyHardwareDecoderPreference() async {
     if (kIsWeb || _isDisposed) return;
