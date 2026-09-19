@@ -284,7 +284,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
     // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL
     if (isNewRemotePath &&
-        (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
+        (resolvedActualPlayUrl == null ||
+            resolvedActualPlayUrl.isEmpty ||
+            MediaSourceUtils.isNewWebDavPath(resolvedActualPlayUrl) ||
+            MediaSourceUtils.isNewSmbPath(resolvedActualPlayUrl))) {
       try {
         if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
           resolvedActualPlayUrl =
@@ -763,7 +766,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         //debugPrint('8. 恢复上次播放位置...');
         // [VIDEO-OPEN-PTM-DIAG] 根因2诊断：追踪视频打开时 playbackTimeMs 的时序
         // 假设：player.seek() 不更新 _playbackTimeMs/_smoothAnchorMs/_seekTargetMs，
-        // 导致 Ticker 首帧锚定时 playbackTimeMs=0  弹幕从头播放
+        // 导致 Ticker 首帧锚定时 playbackTimeMs=0 → 弹幕从头播放
         if (!kReleaseMode) {
           debugPrint('[VIDEO-OPEN-PTM-DIAG] BEFORE player.seek: '
               'playbackTimeMs=${_playbackTimeMs.value.toStringAsFixed(1)} '
@@ -771,7 +774,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
               '_seekTargetMs=$_seekTargetMs '
               '_lastRawPlayerMs=$_lastRawPlayerMs '
-              ' player.seek() does NOT update ptm/anchor fields');
+              '← player.seek() does NOT update ptm/anchor fields');
         }
         // 先设置播放位置
         // Erika's native seek crosses an asynchronous platform bridge and
@@ -780,8 +783,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // the first play command and leave the surface without a current frame
         // until the user seeks again.
         await player.seekAndWait(position: lastPosition);
-        //  Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
-        // 导致 Ticker 首帧锚定到 playbackTimeMs=0  弹幕从头播放 + 回弹。
+        // ✅ Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
+        // 导致 Ticker 首帧锚定到 playbackTimeMs=0 → 弹幕从头播放 + 回弹。
         // 手动更新所有锚点字段，与 seekTo() 保持一致。
         _playbackTimeMs.value = lastPosition.toDouble();
         _smoothAnchorMs = lastPosition.toDouble();
@@ -805,7 +808,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
               '_seekTargetMs=$_seekTargetMs '
               '_lastRawPlayerMs=$_lastRawPlayerMs '
-              ' anchor fields NOW updated correctly');
+              '← anchor fields NOW updated correctly');
         }
       } else {
         _position = Duration.zero;
