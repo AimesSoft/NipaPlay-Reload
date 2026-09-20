@@ -1833,12 +1833,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   String _defaultSubtitleFontNameForPlatform() {
-    if (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'Droid Sans Fallback';
+      // 返回空 = 让内核/libass 用内置默认字体。
+      // 旧值 'Droid Sans Fallback' 在 iOS/Android 系统里并不存在，显式设置
+      // 这个无效字体名会让 libass 加载失败——切换自动/自定义样式后内嵌轨道
+      // 字幕消失（切回自动也不恢复）。
+      return '';
     }
-    return 'subfont';
-  }
 
   Future<void> _loadSubtitleSettings() async {
     final prefs = await SharedPreferences.getInstance();
