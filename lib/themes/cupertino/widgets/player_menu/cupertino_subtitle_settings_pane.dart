@@ -907,151 +907,153 @@ class _CupertinoSubtitleSettingsPaneState
       trailing: SizedBox(
         width: 120,
         child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    GestureDetector(
-                                          onTap: () {
-                                                                  // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
-                                                                  // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
-                                                                  // 顺序反了会导致第一次应用的是输入框旧值。
-                                                                  _showColorPickerDialog(context, color, (picked) {
-                                                                    debugPrint(
-                                                                      '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
-                                                                    );
-                                                                    onSubmit(_colorToHex(picked));
-                                                                    controller.text = _colorToHex(picked);
-                                                                  });
-                                                                },
-                                          behavior: HitTestBehavior.opaque,
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(6),
-                                            child: Container(
-                                              width: 16,
-                                              height: 16,
-                                              decoration: BoxDecoration(
-                                                color: color,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: CupertinoColors.systemGrey),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-            const SizedBox(width: 8),
-                                    SizedBox(
-                                                  width: 110,
-                                                  child: AdaptivePlayerMenuTextField(
-                                                    controller: controller,
-                                                    focusNode: focusNode,
-                                                    placeholder: '#FFFFFF',
-                                                    textStyle: const TextStyle(
-                                                                                                          color: CupertinoColors.white,
-                                                                                                          fontSize: 14,
-                                                                                                        ),
-                                                    onSubmitted: onSubmit,
-                                                    // 输入即应用：hex 完整时立即生效（解析失败忽略），
-                                                    // 避免移动端不按回车就"输入后没应用"
-                                                    onChanged: onSubmit,
-                                                  ),
-                                                ),
-                      ],
-                    ),
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            GestureDetector(
+              onTap: () {
+                // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
+                // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
+                // 顺序反了会导致第一次应用的是输入框旧值。
+                _showColorPickerDialog(context, color, (picked) {
+                  debugPrint(
+                    '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
+                  );
+                  onSubmit(_colorToHex(picked));
+                  controller.text = _colorToHex(picked);
+                });
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: CupertinoColors.systemGrey),
                   ),
-                );
-              }
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 110,
+              child: AdaptivePlayerMenuTextField(
+                controller: controller,
+                focusNode: focusNode,
+                placeholder: '#FFFFFF',
+                textStyle: const TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 14,
+                ),
+                onSubmitted: onSubmit,
+                // 输入即应用：hex 完整时立即生效（解析失败忽略），
+                // 避免移动端不按回车就"输入后没应用"
+                onChanged: onSubmit,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-              /// 全色调色板对话框（HSV 三滑块：色相/饱和度/亮度 + 实时预览）
-              Future<void> _showColorPickerDialog(
-                              BuildContext context,
-                              Color initial,
-                              ValueChanged<Color> onPicked,
-                            ) async {
-                              var hsv = HSVColor.fromColor(initial);
-                              final picked = await showCupertinoDialog<Color>(
-                                context: context,
-                                builder: (dialogContext) {
-                                  return StatefulBuilder(
-                                    builder: (dialogContext, setDialogState) {
-                                      return CupertinoAlertDialog(
-                                        title: const Text('选择颜色'),
-                                        content: SizedBox(
-                                          width: 300,
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Container(
-                                                width: double.infinity,
-                                                height: 40,
-                                                decoration: BoxDecoration(
-                                                  color: hsv.toColor(),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: CupertinoColors.systemGrey),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 12),
-                                              _buildHsvSliderRow(
-                                                '色相',
-                                                hsv.hue,
-                                                0,
-                                                360,
-                                                (v) => setDialogState(() => hsv = hsv.withHue(v)),
-                                              ),
-                                              _buildHsvSliderRow(
-                                                '饱和',
-                                                hsv.saturation,
-                                                0,
-                                                1,
-                                                (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
-                                              ),
-                                              _buildHsvSliderRow(
-                                                '亮度',
-                                                hsv.value,
-                                                0,
-                                                1,
-                                                (v) => setDialogState(() => hsv = hsv.withValue(v)),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        actions: [
-                                          CupertinoButton(
-                                            onPressed: () => Navigator.pop(dialogContext),
-                                            child: const Text('取消'),
-                                          ),
-                                          CupertinoButton(
-                                            onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
-                                            child: const Text('确定'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              );
-                              if (picked != null) {
-                                onPicked(picked);
-                              }
-                            }
+  /// 全色调色板对话框（HSV 三滑块：色相/饱和度/亮度 + 实时预览）
+  Future<void> _showColorPickerDialog(
+    BuildContext context,
+    Color initial,
+    ValueChanged<Color> onPicked,
+  ) async {
+    var hsv = HSVColor.fromColor(initial);
+    final picked = await showCupertinoDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return CupertinoAlertDialog(
+              title: const Text('选择颜色'),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: hsv.toColor(),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: CupertinoColors.systemGrey),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildHsvSliderRow(
+                      '色相',
+                      hsv.hue,
+                      0,
+                      360,
+                      (v) => setDialogState(() => hsv = hsv.withHue(v)),
+                    ),
+                    _buildHsvSliderRow(
+                      '饱和',
+                      hsv.saturation,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
+                    ),
+                    _buildHsvSliderRow(
+                      '亮度',
+                      hsv.value,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withValue(v)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                CupertinoButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                CupertinoButton(
+                  onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
+                  child: const Text('确定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (picked != null) {
+      onPicked(picked);
+    }
+  }
 
-                            Widget _buildHsvSliderRow(
-                              String label,
-                              double value,
-                              double min,
-                              double max,
-                              ValueChanged<double> onChanged,
-                            ) {
-                              return Row(
-                                children: [
-                                  SizedBox(width: 36, child: Text(label, style: const TextStyle(fontSize: 13))),
-                                  Expanded(
-                                    child: CupertinoSlider(
-                                      value: value.clamp(min, max),
-                                      min: min,
-                                      max: max,
-                                      onChanged: onChanged,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-            }
+  Widget _buildHsvSliderRow(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+            width: 36,
+            child: Text(label, style: const TextStyle(fontSize: 13))),
+        Expanded(
+          child: CupertinoSlider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}

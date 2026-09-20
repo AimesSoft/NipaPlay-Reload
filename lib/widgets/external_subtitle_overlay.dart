@@ -14,7 +14,8 @@ class ExternalSubtitleOverlay extends StatefulWidget {
   });
 
   @override
-  State<ExternalSubtitleOverlay> createState() => _ExternalSubtitleOverlayState();
+  State<ExternalSubtitleOverlay> createState() =>
+      _ExternalSubtitleOverlayState();
 }
 
 class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
@@ -22,13 +23,13 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   // _editingPath = 当前出框编辑的字幕路径；null = 全部隐藏（不拦截
   // 播放器手势：长按倍速/拖动 seek 直达播放器）。
   String? _editingPath;
-  bool _longPressMoved = false;  // 长按期间是否发生拖动
-  bool _panDragActive = false;  // Pan fallback: 长按未识别前移动也能拖
-  double _dragStartPosition = 100.0;  // 长按起点字幕垂直位置
-  double _dragStartMarginX = 0.0;    // 长按起点水平边距
+  bool _longPressMoved = false; // 长按期间是否发生拖动
+  bool _panDragActive = false; // Pan fallback: 长按未识别前移动也能拖
+  double _dragStartPosition = 100.0; // 长按起点字幕垂直位置
+  double _dragStartMarginX = 0.0; // 长按起点水平边距
   /// 字幕背景（功能区按钮切换；默认无背景）
   bool _subtitleBgEnabled = false;
-  Timer? _twoFingerTimer;  // 双指长按识别定时器
+  Timer? _twoFingerTimer; // 双指长按识别定时器
   // 字幕轴同步诊断去重
   String _lastLoggedCueKey = '';
   int _lastSyncLogAtMs = 0;
@@ -84,264 +85,263 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     final isEditingThis = _editingPath == path;
     return LayoutBuilder(
       builder: (context, constraints) {
-          final width = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : MediaQuery.of(context).size.width;
-          final baseFontSize = (width * 0.03).clamp(18.0, 42.0).toDouble();
-          final fontSize = (baseFontSize * videoState.srtSubtitleScale)
-              .clamp(14.0, 72.0)
-              .toDouble();
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.of(context).size.width;
+        final baseFontSize = (width * 0.03).clamp(18.0, 42.0).toDouble();
+        final fontSize = (baseFontSize * videoState.srtSubtitleScale)
+            .clamp(14.0, 72.0)
+            .toDouble();
 
-          final fillStyle = _buildFillStyle(videoState, fontSize);
-          final borderStyle = _buildBorderStyle(videoState, fillStyle);
+        final fillStyle = _buildFillStyle(videoState, fontSize);
+        final borderStyle = _buildBorderStyle(videoState, fillStyle);
 
-          final Widget textBox = ConstrainedBox(
-            constraints: BoxConstraints(minWidth: 120, maxWidth: width * 0.9),
-            child: _subtitleBgEnabled
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0x99000000),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: _OutlinedSubtitleText(
-                      text: subtitleText,
-                      fillStyle: fillStyle,
-                      borderStyle: borderStyle,
-                      showBorder: videoState.subtitleBorderSize > 0,
-                      textAlign: _resolveTextAlign(videoState.subtitleAlignX),
-                    ),
-                  )
-                : _OutlinedSubtitleText(
+        final Widget textBox = ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 120, maxWidth: width * 0.9),
+          child: _subtitleBgEnabled
+              ? Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x99000000),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: _OutlinedSubtitleText(
                     text: subtitleText,
                     fillStyle: fillStyle,
                     borderStyle: borderStyle,
                     showBorder: videoState.subtitleBorderSize > 0,
                     textAlign: _resolveTextAlign(videoState.subtitleAlignX),
                   ),
-          );
+                )
+              : _OutlinedSubtitleText(
+                  text: subtitleText,
+                  fillStyle: fillStyle,
+                  borderStyle: borderStyle,
+                  showBorder: videoState.subtitleBorderSize > 0,
+                  textAlign: _resolveTextAlign(videoState.subtitleAlignX),
+                ),
+        );
 
-          Widget positionedContent;
-          if (!isEditingThis) {
-            // 未出框：长按出框并可顺势拖动调位置（这是字幕区专属手势，
-            // 会盖过播放器的长按倍速——倍速请在字幕文本之外长按）；
-            // 单击/拖动等其他手势全部透传给播放器。
-            positionedContent = GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPressStart: (details) {
-                debugPrint('[SubtitleOverlay] 长按出框 path=$path');
-                setState(() => _editingPath = path);
-                videoState.setSubtitleEditBoxVisible(true);
-                _longPressMoved = false;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
-                videoState.setSubtitleDragActive(true);
-              },
-              onLongPressMoveUpdate: (details) {
-                if (details.offsetFromOrigin.distance > 8) {
-                  _longPressMoved = true;
-                }
-                if (!_longPressMoved) return;
-                final v = videoState;
-                _dragStartMarginX = (_dragStartMarginX +
-                        details.offsetFromOrigin.dx)
-                    .clamp(-500.0, 500.0);
-                v.setPathSubtitleMarginX(path, _dragStartMarginX);
-                final stageH = MediaQuery.of(context).size.height;
-                _dragStartPosition = (_dragStartPosition +
+        Widget positionedContent;
+        if (!isEditingThis) {
+          // 未出框：长按出框并可顺势拖动调位置（这是字幕区专属手势，
+          // 会盖过播放器的长按倍速——倍速请在字幕文本之外长按）；
+          // 单击/拖动等其他手势全部透传给播放器。
+          positionedContent = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (details) {
+              debugPrint('[SubtitleOverlay] 长按出框 path=$path');
+              setState(() => _editingPath = path);
+              videoState.setSubtitleEditBoxVisible(true);
+              _longPressMoved = false;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              videoState.setSubtitleDragActive(true);
+            },
+            onLongPressMoveUpdate: (details) {
+              if (details.offsetFromOrigin.distance > 8) {
+                _longPressMoved = true;
+              }
+              if (!_longPressMoved) return;
+              final v = videoState;
+              _dragStartMarginX =
+                  (_dragStartMarginX + details.offsetFromOrigin.dx)
+                      .clamp(-500.0, 500.0);
+              v.setPathSubtitleMarginX(path, _dragStartMarginX);
+              final stageH = MediaQuery.of(context).size.height;
+              _dragStartPosition = (_dragStartPosition +
+                      details.offsetFromOrigin.dy / stageH * 100)
+                  .clamp(VideoPlayerState.minSubtitlePosition,
+                      VideoPlayerState.maxSubtitlePosition);
+              v.setPathSubtitlePosition(path, _dragStartPosition);
+            },
+            onLongPressEnd: (_) {
+              videoState.setSubtitleDragActive(false);
+              if (_longPressMoved) {
+                // 拖动过 -> 松手即收框
+                setState(() => _editingPath = null);
+                videoState.setSubtitleEditBoxVisible(false);
+              }
+            },
+            child: textBox,
+          );
+        } else {
+          // 编辑态：完整拖动/面板交互（仅作用于当前这条字幕）
+          final Widget dragArea = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (_) {
+              // 点击框内非按钮处 -> 收框
+              // onPanDown 无条件已置 dragActive=true，此处必须复位，
+              // 否则残留 true 会拦截播放器长按倍速（video_player_ui 653 行）。
+              setState(() => _editingPath = null);
+              videoState.setSubtitleEditBoxVisible(false);
+              videoState.setSubtitleDragActive(false);
+            },
+            onPanDown: (_) {
+              _panDragActive = true;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              videoState.setSubtitleDragActive(true);
+            },
+            onPanUpdate: (details) {
+              final v = videoState;
+              _dragStartMarginX += details.delta.dx;
+              v.setPathSubtitleMarginX(
+                path,
+                _dragStartMarginX.clamp(-500.0, 500.0),
+              );
+              final stageH = MediaQuery.of(context).size.height;
+              _dragStartPosition += details.delta.dy / stageH * 100;
+              v.setPathSubtitlePosition(
+                path,
+                _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
+                    VideoPlayerState.maxSubtitlePosition),
+              );
+            },
+            onPanEnd: (_) {
+              _panDragActive = false;
+              videoState.setSubtitleDragActive(false);
+              setState(() => _editingPath = null);
+              videoState.setSubtitleEditBoxVisible(false);
+            },
+            onLongPressStart: (details) {
+              debugPrint('[SubtitleOverlay] 长按开始 path=$path');
+              _longPressMoved = false;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              videoState.setSubtitleDragActive(true);
+            },
+            onLongPressMoveUpdate: (details) {
+              if (details.offsetFromOrigin.distance > 8) {
+                _longPressMoved = true;
+              }
+              if (!_longPressMoved) return;
+              final v = videoState;
+              // 用起点+累计偏移，避免 position+offset 反复叠加导致拖不到底
+              v.setPathSubtitleMarginX(
+                path,
+                (_dragStartMarginX + details.offsetFromOrigin.dx)
+                    .clamp(-500.0, 500.0),
+              );
+              final stageH = MediaQuery.of(context).size.height;
+              v.setPathSubtitlePosition(
+                path,
+                (_dragStartPosition +
                         details.offsetFromOrigin.dy / stageH * 100)
                     .clamp(VideoPlayerState.minSubtitlePosition,
-                        VideoPlayerState.maxSubtitlePosition);
-                v.setPathSubtitlePosition(path, _dragStartPosition);
-              },
-              onLongPressEnd: (_) {
-                videoState.setSubtitleDragActive(false);
-                if (_longPressMoved) {
-                  // 拖动过 -> 松手即收框
-                  setState(() => _editingPath = null);
-                  videoState.setSubtitleEditBoxVisible(false);
-                }
-              },
-              child: textBox,
-            );
-          } else {
-            // 编辑态：完整拖动/面板交互（仅作用于当前这条字幕）
-            final Widget dragArea = GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: (_) {
-                // 点击框内非按钮处 -> 收框
-                // onPanDown 无条件已置 dragActive=true，此处必须复位，
-                // 否则残留 true 会拦截播放器长按倍速（video_player_ui 653 行）。
+                        VideoPlayerState.maxSubtitlePosition),
+              );
+            },
+            onLongPressEnd: (_) {
+              videoState.setSubtitleDragActive(false);
+              if (_longPressMoved) {
+                // 拖动过 -> 松手即锁定收框
                 setState(() => _editingPath = null);
                 videoState.setSubtitleEditBoxVisible(false);
-                videoState.setSubtitleDragActive(false);
-              },
-              onPanDown: (_) {
-                _panDragActive = true;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
-                videoState.setSubtitleDragActive(true);
-              },
-              onPanUpdate: (details) {
-                final v = videoState;
-                _dragStartMarginX += details.delta.dx;
-                v.setPathSubtitleMarginX(
-                  path,
-                  _dragStartMarginX.clamp(-500.0, 500.0),
-                );
-                final stageH = MediaQuery.of(context).size.height;
-                _dragStartPosition += details.delta.dy / stageH * 100;
-                v.setPathSubtitlePosition(
-                  path,
-                  _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
-                      VideoPlayerState.maxSubtitlePosition),
-                );
-              },
-              onPanEnd: (_) {
-                _panDragActive = false;
-                videoState.setSubtitleDragActive(false);
-                setState(() => _editingPath = null);
-                videoState.setSubtitleEditBoxVisible(false);
-              },
-              onLongPressStart: (details) {
-                debugPrint('[SubtitleOverlay] 长按开始 path=$path');
-                _longPressMoved = false;
-                _dragStartPosition = videoState.pathSubtitlePosition(path);
-                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
-                videoState.setSubtitleDragActive(true);
-              },
-              onLongPressMoveUpdate: (details) {
-                if (details.offsetFromOrigin.distance > 8) {
-                  _longPressMoved = true;
-                }
-                if (!_longPressMoved) return;
-                final v = videoState;
-                // 用起点+累计偏移，避免 position+offset 反复叠加导致拖不到底
-                v.setPathSubtitleMarginX(
-                  path,
-                  (_dragStartMarginX + details.offsetFromOrigin.dx)
-                      .clamp(-500.0, 500.0),
-                );
-                final stageH = MediaQuery.of(context).size.height;
-                v.setPathSubtitlePosition(
-                  path,
-                  (_dragStartPosition +
-                          details.offsetFromOrigin.dy / stageH * 100)
-                      .clamp(VideoPlayerState.minSubtitlePosition,
-                          VideoPlayerState.maxSubtitlePosition),
-                );
-              },
-              onLongPressEnd: (_) {
-                videoState.setSubtitleDragActive(false);
-                if (_longPressMoved) {
-                  // 拖动过 -> 松手即锁定收框
-                  setState(() => _editingPath = null);
-                  videoState.setSubtitleEditBoxVisible(false);
-                }
-                // 原地长按 -> 保持框（双指长按/设置钮弹面板）
-              },
-              onScaleStart: (details) {
-                if (details.pointerCount >= 2) {
-                  _twoFingerTimer?.cancel();
-                  _twoFingerTimer = Timer(const Duration(milliseconds: 450),
-                      () {
-                    debugPrint('[SubtitleOverlay] 双指长按触发设置面板');
-                    _showSubtitleSettingsPanel(context, videoState, path);
-                  });
-                }
-              },
-              onScaleUpdate: (_) {
+              }
+              // 原地长按 -> 保持框（双指长按/设置钮弹面板）
+            },
+            onScaleStart: (details) {
+              if (details.pointerCount >= 2) {
                 _twoFingerTimer?.cancel();
-                _twoFingerTimer = null;
-              },
-              onScaleEnd: (_) {
-                _twoFingerTimer?.cancel();
-                _twoFingerTimer = null;
-              },
-              child: textBox,
-            );
+                _twoFingerTimer = Timer(const Duration(milliseconds: 450), () {
+                  debugPrint('[SubtitleOverlay] 双指长按触发设置面板');
+                  _showSubtitleSettingsPanel(context, videoState, path);
+                });
+              }
+            },
+            onScaleUpdate: (_) {
+              _twoFingerTimer?.cancel();
+              _twoFingerTimer = null;
+            },
+            onScaleEnd: (_) {
+              _twoFingerTimer?.cancel();
+              _twoFingerTimer = null;
+            },
+            child: textBox,
+          );
 
-            final Widget boxLayer = Stack(
-              clipBehavior: Clip.none,
-              children: [
-                dragArea,
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0x99FFFFFF),
-                          width: 1,
-                        ),
+          final Widget boxLayer = Stack(
+            clipBehavior: Clip.none,
+            children: [
+              dragArea,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: const Color(0x99FFFFFF),
+                        width: 1,
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  left: 2,
-                  top: 2,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      debugPrint('[SubtitleOverlay] 点击设置按钮');
-                      _showSubtitleSettingsPanel(context, videoState, path);
-                    },
-                    child: const Icon(
-                      Icons.tune,
-                      size: 18,
-                      color: Color(0xFFFFFFFF),
-                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                    ),
+              ),
+              Positioned(
+                left: 2,
+                top: 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    debugPrint('[SubtitleOverlay] 点击设置按钮');
+                    _showSubtitleSettingsPanel(context, videoState, path);
+                  },
+                  child: const Icon(
+                    Icons.tune,
+                    size: 18,
+                    color: Color(0xFFFFFFFF),
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black)],
                   ),
-                ),
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      debugPrint('[SubtitleOverlay] 点击背景切换按钮');
-                      setState(() {
-                        _subtitleBgEnabled = !_subtitleBgEnabled;
-                      });
-                    },
-                    child: const Icon(
-                      Icons.format_color_fill,
-                      size: 18,
-                      color: Color(0xFFFFFFFF),
-                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                    ),
-                  ),
-                ),
-              ],
-            );
-
-            positionedContent = boxLayer;
-          }
-
-          return Opacity(
-            opacity: videoState.subtitleOpacity.clamp(0.0, 1.0).toDouble(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Align(
-                alignment: Alignment(
-                  _resolveHorizontalAlignment(videoState.subtitleAlignX),
-                  _resolveVerticalAlignment(
-                      videoState.pathSubtitlePosition(path)),
-                ),
-                child: Transform.translate(
-                                  offset: Offset(
-                                    videoState.pathSubtitleMarginX(path),
-                                    0, // 外挂垂直位移独立（pathSubtitlePosition 控制），不跟随全局垂直边距滑块
-                                  ),
-                  child: positionedContent,
                 ),
               ),
-            ),
+              Positioned(
+                right: 2,
+                top: 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    debugPrint('[SubtitleOverlay] 点击背景切换按钮');
+                    setState(() {
+                      _subtitleBgEnabled = !_subtitleBgEnabled;
+                    });
+                  },
+                  child: const Icon(
+                    Icons.format_color_fill,
+                    size: 18,
+                    color: Color(0xFFFFFFFF),
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                  ),
+                ),
+              ),
+            ],
           );
-        },
-      );
+
+          positionedContent = boxLayer;
+        }
+
+        return Opacity(
+          opacity: videoState.subtitleOpacity.clamp(0.0, 1.0).toDouble(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Align(
+              alignment: Alignment(
+                _resolveHorizontalAlignment(videoState.subtitleAlignX),
+                _resolveVerticalAlignment(
+                    videoState.pathSubtitlePosition(path)),
+              ),
+              child: Transform.translate(
+                offset: Offset(
+                  videoState.pathSubtitleMarginX(path),
+                  0, // 外挂垂直位移独立（pathSubtitlePosition 控制），不跟随全局垂直边距滑块
+                ),
+                child: positionedContent,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// 长按/双指/设置钮弹出的字幕设置面板（按字幕路径独立调时轴延迟）
@@ -368,11 +368,19 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
           previewValue.value = value;
           delayController.text = _formatDelayInputText(value);
         }
+
         // 常用字幕颜色调色板
         const palette = <Color>[
-          Colors.white, Colors.black, Colors.yellow, Colors.cyan,
-          Color(0xFFFFD54F), Color(0xFFFF8A65), Color(0xFFAED581),
-          Color(0xFF81D4FA), Color(0xFFF48FB1), Color(0xFFB39DDB),
+          Colors.white,
+          Colors.black,
+          Colors.yellow,
+          Colors.cyan,
+          Color(0xFFFFD54F),
+          Color(0xFFFF8A65),
+          Color(0xFFAED581),
+          Color(0xFF81D4FA),
+          Color(0xFFF48FB1),
+          Color(0xFFB39DDB),
         ];
         // 键盘弹出时把整块内容抬到键盘上方：底部内边距 = 键盘高度
         return Padding(
@@ -427,19 +435,16 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                               color: Colors.white, fontSize: 14),
                           decoration: InputDecoration(
                             hintText: '例如 -12.5 或 8',
-                            hintStyle:
-                                const TextStyle(color: Colors.white38),
+                            hintStyle: const TextStyle(color: Colors.white38),
                             labelText: '秒',
-                            labelStyle:
-                                const TextStyle(color: Colors.white60),
+                            labelStyle: const TextStyle(color: Colors.white60),
                             enabledBorder: OutlineInputBorder(
                               borderSide:
                                   const BorderSide(color: Colors.white24),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderSide:
-                                  const BorderSide(color: Colors.amber),
+                              borderSide: const BorderSide(color: Colors.amber),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             isDense: true,
@@ -467,8 +472,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                   ),
                   const SizedBox(height: 14),
                   Text('外挂字幕字号（不影响内嵌字幕）',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 13)),
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 4),
                   Consumer<VideoPlayerState>(
                     builder: (context, vs, _) {
@@ -507,8 +511,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                               for (final f in fonts)
                                 FilterChip(
                                   label: Text(f,
-                                      style:
-                                          const TextStyle(fontSize: 12)),
+                                      style: const TextStyle(fontSize: 12)),
                                   selected: selected.contains(f),
                                   onSelected: (sel) {
                                     final next = sel
@@ -516,7 +519,8 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                                         : selected
                                             .where((e) => e != f)
                                             .join(',');
-                                    videoState.setExternalSubtitleFontName(next);
+                                    videoState
+                                        .setExternalSubtitleFontName(next);
                                   },
                                 ),
                             ],
@@ -538,7 +542,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                           for (final color in palette)
                             GestureDetector(
                               onTap: () =>
-                                                                videoState.setExternalSubtitleColor(color),
+                                  videoState.setExternalSubtitleColor(color),
                               child: Container(
                                 width: 30,
                                 height: 30,
@@ -546,38 +550,39 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                                   color: color,
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                                                      color: vs.externalSubtitleColor.toARGB32() ==
-                                                                              color.toARGB32()
-                                                                          ? Colors.amber
-                                                                          : Colors.white24,
+                                    color:
+                                        vs.externalSubtitleColor.toARGB32() ==
+                                                color.toARGB32()
+                                            ? Colors.amber
+                                            : Colors.white24,
                                     width: 2,
                                   ),
                                 ),
                               ),
                             ),
                         ],
-                                              );
-                                            },
-                                          ),
-                                          const SizedBox(height: 8),
-                                          GestureDetector(
-                                            onTap: () => _showHsvPicker(context, videoState),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.palette, size: 16, color: Colors.white70),
-                                                SizedBox(width: 6),
-                                                Text(
-                                                  '全色调色盘',
-                                                  style: TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _showHsvPicker(context, videoState),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.palette, size: 16, color: Colors.white70),
+                        SizedBox(width: 6),
+                        Text(
+                          '全色调色盘',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -617,12 +622,13 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     return videoState.listSubtitleFonts();
   }
 
-
   String _formatDelayInputText(double value) {
     if (value.abs() < 0.0001) return '0';
     var text = value.toStringAsFixed(3);
     if (text.contains('.')) {
-      text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+      text = text
+          .replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
     }
     return text;
   }
@@ -668,28 +674,26 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     return (normalized / 100) * 2.0 - 1.0;
   }
 
-    /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
-    /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
-    TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
-      final fontNames = videoState.externalSubtitleFontName
-                .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      final fontsApply = fontNames.isNotEmpty;
+  /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
+  /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
+  TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
+    final fontNames = videoState.externalSubtitleFontName
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final fontsApply = fontNames.isNotEmpty;
 
     return TextStyle(
       fontSize: fontSize,
-      fontWeight:
-          videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
+      fontWeight: videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
       fontStyle:
           videoState.subtitleItalic ? FontStyle.italic : FontStyle.normal,
       color: videoState.externalSubtitleColor,
       height: 1.28,
       fontFamily: fontsApply && fontNames.isNotEmpty ? fontNames.first : null,
-      fontFamilyFallback: fontsApply && fontNames.length > 1
-          ? fontNames.sublist(1)
-          : null,
+      fontFamilyFallback:
+          fontsApply && fontNames.length > 1 ? fontNames.sublist(1) : null,
       shadows: videoState.subtitleShadowOffset > 0
           ? [
               Shadow(
@@ -708,119 +712,118 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
-            ..strokeWidth =
-                videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
-            // 外挂叠层描边固定黑色（独立于播放器设置/内嵌描边）
-            ..color = const Color(0xFF000000);
+      ..strokeWidth = videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
+      // 外挂叠层描边固定黑色（独立于播放器设置/内嵌描边）
+      ..color = const Color(0xFF000000);
 
     return fillStyle.copyWith(
-          foreground: borderPaint,
-          color: null,
-          shadows: null,
-        );
-      }
+      foreground: borderPaint,
+      color: null,
+      shadows: null,
+    );
+  }
 
-      /// 全色调色盘（HSV 三滑块：色相/饱和度/亮度 + 实时预览），
-      /// 外挂叠层专属——选色应用 externalSubtitleColor
-      Future<void> _showHsvPicker(
-        BuildContext context,
-        VideoPlayerState videoState,
-      ) async {
-        var hsv = HSVColor.fromColor(videoState.externalSubtitleColor);
-        final picked = await showDialog<Color>(
-          context: context,
-          builder: (dialogContext) {
-            return StatefulBuilder(
-              builder: (dialogContext, setDialogState) {
-                return AlertDialog(
-                  title: const Text('选择颜色'),
-                  content: SizedBox(
-                    width: 300,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: hsv.toColor(),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildHsvSliderRow(
-                          '色相',
-                          hsv.hue,
-                          0,
-                          360,
-                          (v) => setDialogState(() => hsv = hsv.withHue(v)),
-                        ),
-                        _buildHsvSliderRow(
-                          '饱和',
-                          hsv.saturation,
-                          0,
-                          1,
-                          (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
-                        ),
-                        _buildHsvSliderRow(
-                          '亮度',
-                          hsv.value,
-                          0,
-                          1,
-                          (v) => setDialogState(() => hsv = hsv.withValue(v)),
-                        ),
-                      ],
+  /// 全色调色盘（HSV 三滑块：色相/饱和度/亮度 + 实时预览），
+  /// 外挂叠层专属——选色应用 externalSubtitleColor
+  Future<void> _showHsvPicker(
+    BuildContext context,
+    VideoPlayerState videoState,
+  ) async {
+    var hsv = HSVColor.fromColor(videoState.externalSubtitleColor);
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('选择颜色'),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: hsv.toColor(),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey),
+                      ),
                     ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('取消'),
+                    const SizedBox(height: 12),
+                    _buildHsvSliderRow(
+                      '色相',
+                      hsv.hue,
+                      0,
+                      360,
+                      (v) => setDialogState(() => hsv = hsv.withHue(v)),
                     ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
-                      child: const Text('确定'),
+                    _buildHsvSliderRow(
+                      '饱和',
+                      hsv.saturation,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
+                    ),
+                    _buildHsvSliderRow(
+                      '亮度',
+                      hsv.value,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withValue(v)),
                     ),
                   ],
-                );
-              },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
+                  child: const Text('确定'),
+                ),
+              ],
             );
           },
         );
-        if (picked != null) {
-          videoState.setExternalSubtitleColor(picked);
-        }
-      }
-
-      Widget _buildHsvSliderRow(
-        String label,
-        double value,
-        double min,
-        double max,
-        ValueChanged<double> onChanged,
-      ) {
-        return Row(
-          children: [
-            SizedBox(
-              width: 36,
-              child: Text(label, style: const TextStyle(fontSize: 13)),
-            ),
-            Expanded(
-              child: Slider(
-                value: value.clamp(min, max),
-                min: min,
-                max: max,
-                onChanged: onChanged,
-              ),
-            ),
-          ],
-        );
-      }
+      },
+    );
+    if (picked != null) {
+      videoState.setExternalSubtitleColor(picked);
     }
+  }
 
-    class _OutlinedSubtitleText extends StatelessWidget {
+  Widget _buildHsvSliderRow(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          child: Text(label, style: const TextStyle(fontSize: 13)),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OutlinedSubtitleText extends StatelessWidget {
   final String text;
   final TextStyle fillStyle;
   final TextStyle borderStyle;
