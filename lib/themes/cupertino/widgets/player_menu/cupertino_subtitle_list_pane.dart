@@ -133,6 +133,9 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
           _isLoading = false;
         });
 
+        // 解析完成后再取一次播放位置：打开面板到解析完成之间播放会推进，
+        // 用打开时的旧位置会定位到第 0 秒附近（用户反馈"打开后默认从第0秒显示"）。
+        _currentTimeMs = widget.videoState.position.inMilliseconds;
         final nearestIndex = _findNearestSubtitleIndex(_currentTimeMs);
         _initializeVisibleWindow(nearestIndex);
       } else {

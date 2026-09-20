@@ -195,6 +195,9 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
               return;
             }
 
+            // 解析完成后再取一次播放位置：打开面板到解析完成之间播放会推进，
+            // 用打开时的旧位置会定位到第 0 秒附近（用户反馈"打开后默认从第0秒显示"）。
+            _currentTimeMs = videoState.position.inMilliseconds;
             // 找到当前时间最接近的字幕索引
             final nearestIndex = _findNearestSubtitleIndex(_currentTimeMs);
 
