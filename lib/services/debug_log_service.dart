@@ -124,8 +124,26 @@ class DebugLogService extends ChangeNotifier {
           m.contains('已停止自动重试')) {
         return 'WARN';
       }
+      // DEBUG：高频详细调试输出（播放位置/帧/缓存/订阅/纹理等）——
+      // 与一般 INFO（请求/设置/状态等）区分，便于按级别过滤。
+      if (m.contains('pos=') ||
+          m.contains('位置') ||
+          m.contains('帧') ||
+          m.contains('frame') ||
+          m.contains('缓存') ||
+          m.contains('cache') ||
+          m.contains('订阅') ||
+          m.contains('tick') ||
+          m.contains('音量') ||
+          m.contains('倍速') ||
+          m.contains('纹理') ||
+          m.contains('texture') ||
+          m.contains('snapshot') ||
+          m.contains('timer')) {
+        return 'DEBUG';
+      }
       return 'INFO';
-    }
+      }
 
   /// 从消息中提取标签
   String _extractTag(String message) {
