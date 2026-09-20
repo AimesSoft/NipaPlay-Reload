@@ -30,6 +30,7 @@ class PlayerKernelManager {
     // 1. 保存当前播放状态
     final currentPath = videoPlayerState.currentVideoPath;
     final currentPosition = videoPlayerState.position;
+    debugPrint('[PlayerKernelManager] 切换捕获 position=${currentPosition.inMilliseconds}ms');
     final currentDuration = videoPlayerState.duration;
     final currentProgress = videoPlayerState.progress;
     final currentPlaybackRate = videoPlayerState.playbackRate;
@@ -119,6 +120,7 @@ class PlayerKernelManager {
         debugPrint('[PlayerKernelManager] 恢复播放速度设置: ${currentPlaybackRate}x');
       }
       videoPlayerState.seekTo(currentPosition);
+      debugPrint('[PlayerKernelManager] 切换后 seekTo=${currentPosition.inMilliseconds}ms 内核=${videoPlayerState.player.getPlayerKernelName()}');
             // 切换后不自动恢复播放：新内核刚创建，立即 play 会"播一下又暂停"
             // （内核未就绪状态机自动暂停），突兀且无意义。切完保持暂停，
             // 用户想继续播放时手动点播放即可。
