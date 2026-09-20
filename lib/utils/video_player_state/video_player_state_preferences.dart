@@ -489,15 +489,22 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         await _decoderManager.applyHardwareDecodingPreference(
           _useHardwareDecoder,
         );
-        // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效）
-        if (_softDecodePixelFormat.isNotEmpty) {
-          try {
-            player.setProperty(
-              'video.decoder',
-              'pixel_format=$_softDecodePixelFormat',
-            );
-          } catch (_) {}
-        }
+        // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效；
+                // 硬解输出由硬件决定，pixel_format 不适用）
+                if (_softDecodePixelFormat.isNotEmpty) {
+                  try {
+                    player.setProperty(
+                      'video.decoder',
+                      'pixel_format=$_softDecodePixelFormat',
+                    );
+                  } catch (_) {}
+                  debugPrint('[Decoder] 软解颜色格式已应用: $_softDecodePixelFormat');
+                } else {
+                  debugPrint('[Decoder] 软解颜色格式: 自动（内核默认）');
+                }
+                SystemResourceMonitor().setPixelFormat(
+                  _softDecodePixelFormat.isEmpty ? 'auto' : _softDecodePixelFormat,
+                );
       } else if (kernelName == 'Media Kit') {
         final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
         player.setProperty('hwdec', hwdecValue);

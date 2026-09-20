@@ -487,11 +487,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                                     ),
                                     Consumer<VideoPlayerState>(
                                       builder: (context, videoState, child) {
-                                        String label = '自动（内核默认）';
-                                        final fmt = videoState.softDecodePixelFormat;
-                                        if (fmt == 'yuv420p') label = 'YUV 4:2:0 (yuv420p)';
-                                        if (fmt == 'nv12') label = 'NV12';
-                                        if (fmt == 'rgb0') label = 'RGB (rgb0)';
+                                        String label = '自动';
+                                                                          final fmt = videoState.softDecodePixelFormat;
+                                                                          if (fmt == 'yuv420p') label = '4:2:0';
+                                                                          if (fmt == 'nv12') label = 'NV12';
+                                                                          if (fmt == 'rgb0') label = 'RGB';
                                         return AdaptiveSettingsTile.dropdown(
                                           title: '软解颜色格式',
                                                                                     subtitle: '软件解码输出像素格式，个别片源颜色异常时可切换试',
@@ -504,11 +504,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                                               description: '内核默认输出格式',
                                             ),
                                             DropdownMenuItemData(
-                                              title: 'YUV 4:2:0',
-                                              value: 'yuv420p',
-                                              isSelected: fmt == 'yuv420p',
-                                              description: '标准视频输出格式',
-                                            ),
+                                                                                          title: '4:2:0',
+                                                                                          value: 'yuv420p',
+                                                                                          isSelected: fmt == 'yuv420p',
+                                                                                          description: '标准视频输出格式',
+                                                                                        ),
                                             DropdownMenuItemData(
                                               title: 'NV12',
                                               value: 'nv12',

@@ -29,7 +29,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double? _gpuUsage;
   String _thermalState = 'N/A';
   String _activeDecoder = '未知';
-  String _playerKernelType = '未知';
+    String _pixelFormat = '';
+    String _playerKernelType = '未知';
   String _danmakuKernelType = '未知';
 
   bool get _isMacOSNativeVideoActive {
@@ -86,6 +87,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         _gpuUsage = SystemResourceMonitor().gpuUsage;
         _thermalState = SystemResourceMonitor().thermalState;
         _activeDecoder = SystemResourceMonitor().activeDecoder;
+        _pixelFormat = SystemResourceMonitor().pixelFormat;
         _playerKernelType = SystemResourceMonitor().playerKernelType;
         _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
       });
@@ -302,14 +304,16 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             compact: true,
           ),
           if (showDetail)
-            _segment(
-              label: 'DEC',
-              value: _activeDecoder,
-              labelColor: _shade(decBase, 0.28),
-              valueColor: _shade(decBase, 0.06),
-              baseStyle: baseTextStyle,
-              compact: true,
-            ),
+                      _segment(
+                        label: 'DEC',
+                        value: _pixelFormat.isEmpty
+                            ? _activeDecoder
+                            : '$_activeDecoder $_pixelFormat',
+                        labelColor: _shade(decBase, 0.28),
+                        valueColor: _shade(decBase, 0.06),
+                        baseStyle: baseTextStyle,
+                        compact: true,
+                      ),
           if (showDetail)
             _segment(
               label: 'P',

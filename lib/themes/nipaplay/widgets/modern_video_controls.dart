@@ -828,33 +828,41 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       ),
                                       onTap: () {
                                         final buttonBox =
-                                            context.findRenderObject()
-                                                as RenderBox?;
-                                        final overlay =
-                                            Overlay.of(context).context
-                                                .findRenderObject()
-                                                as RenderBox?;
-                                        if (buttonBox == null ||
-                                            overlay == null) {
-                                          return;
-                                        }
-                                        showMenu<VideoAspectMode>(
-                                          context: context,
-                                          position: RelativeRect.fromRect(
-                                            Rect.fromLTWH(
-                                              0,
-                                              0,
-                                              overlay.size.width,
-                                              overlay.size.height,
-                                            ),
-                                            Rect.fromPoints(
-                                              buttonBox.localToGlobal(
-                                                  Offset.zero),
-                                              buttonBox.localToGlobal(buttonBox
-                                                  .size
-                                                  .bottomRight(Offset.zero)),
-                                            ),
-                                          ),
+                                                                                    context.findRenderObject()
+                                                                                        as RenderBox?;
+                                                                                final overlayBox =
+                                                                                    Overlay.of(context).context
+                                                                                        .findRenderObject()
+                                                                                        as RenderBox?;
+                                                                                if (buttonBox == null ||
+                                                                                    overlayBox == null) {
+                                                                                  return;
+                                                                                }
+                                                                                // 锚点：按钮位置转换到 overlay 坐标系，菜单贴在按钮旁
+                                                                                final topLeft = overlayBox.globalToLocal(
+                                                                                  buttonBox.localToGlobal(
+                                                                                      Offset.zero),
+                                                                                );
+                                                                                final bottomRight = overlayBox
+                                                                                    .globalToLocal(
+                                                                                  buttonBox.localToGlobal(buttonBox
+                                                                                      .size
+                                                                                      .bottomRight(Offset.zero)),
+                                                                                );
+                                                                                showMenu<VideoAspectMode>(
+                                                                                  context: context,
+                                                                                  position: RelativeRect.fromRect(
+                                                                                    Rect.fromLTRB(
+                                                                                      0,
+                                                                                      0,
+                                                                                      overlayBox.size.width,
+                                                                                      overlayBox.size.height,
+                                                                                    ),
+                                                                                    Rect.fromPoints(
+                                                                                      topLeft,
+                                                                                      bottomRight,
+                                                                                    ),
+                                                                                  ),
                                           items: [
                                             for (final m
                                                 in VideoAspectMode.values)
