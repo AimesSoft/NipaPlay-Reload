@@ -1987,21 +1987,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     try {
       final pos = _position.inMilliseconds;
-      if (pos <= 0) return;
-      player.seek(position: pos);
+            if (pos <= 0) return;
+            debugPrint('[SubtitlePos] 布局刷新 seek pos=$pos kernel=${player.getPlayerKernelName()}');
+            player.seek(position: pos);
     } catch (e) {
       debugPrint('[VideoPlayerState] 字幕布局刷新失败: $e');
     }
   }
 
   Future<void> setSubtitlePosition(double position) async {
-    final resolved = _clampSubtitlePosition(position);
-    if ((_subtitlePosition - resolved).abs() < 0.0001) {
-      return;
-    }
-    _subtitlePosition = resolved;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitlePositionKey, resolved);
+      final resolved = _clampSubtitlePosition(position);
+      if ((_subtitlePosition - resolved).abs() < 0.0001) {
+        return;
+      }
+      _subtitlePosition = resolved;
+      debugPrint('[SubtitlePos] 设置 sub-pos=$resolved kernel=${player.getPlayerKernelName()}');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_subtitlePositionKey, resolved);
     // 全局滑块同步所有已激活的叠层字幕块（滑块=全局控制，
     // 单块长按拖动=逐条微调）；同时更新种子供新激活块继承。
     _subtitleManager.globalPositionSeed = resolved;
