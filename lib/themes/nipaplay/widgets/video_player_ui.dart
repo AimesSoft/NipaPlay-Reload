@@ -375,11 +375,25 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         return _buildVideoSurface(videoState, textureId);
       case VideoAspectMode.cover:
               // 填充：视频等比放大填满区域，超出部分裁剪（无黑边）。
-              // SizedBox.expand 给 FittedBox 铺满约束，否则纹理无尺寸上限会黑屏。
-              return SizedBox.expand(
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: _buildVideoSurface(videoState, textureId),
+              // mdk 纹理在 FittedBox 缩放下不渲染（黑屏）——改用 Transform.scale
+              // 放大（渲染变换，mdk 兼容），外层 ClipRect 裁剪超出部分。
+              final videoAspect =
+                  videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+              final size = MediaQuery.of(context).size;
+              final screenAspect =
+                  size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+              final scale = screenAspect > videoAspect
+                  ? screenAspect / videoAspect
+                  : videoAspect / screenAspect;
+              return ClipRect(
+                child: Transform.scale(
+                  scale: scale,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: videoAspect,
+                      child: _buildVideoSurface(videoState, textureId),
+                    ),
+                  ),
                 ),
               );
       case VideoAspectMode.ratio16x9:
