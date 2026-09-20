@@ -32,6 +32,10 @@ extension VideoPlayerStateLifecycle on VideoPlayerState {
       // 仅 iOS：Android libmpv 上这组 seek(-90ms)+seek(回) 会打乱外挂字幕
       // 轨道时间轴（字幕整体偏移，只能重开视频）。
       if (Platform.isIOS && hasVideo && _position.inMilliseconds > 0) {
+        // iOS 后台久后系统回收视频表面/GPU 上下文，纹理失效——回前台
+        // 先重建纹理（updateTexture），再刷新帧（seek）强制重绘画面，
+        // 否则画面黑屏但声音/弹幕照常（mdk 长时间后台回前台必现）。
+        unawaited(player.updateTexture().catchError((_) {}));
         Future<void>.delayed(const Duration(milliseconds: 200), () {
           if (!hasVideo) return;
           final pos = _position.inMilliseconds;
