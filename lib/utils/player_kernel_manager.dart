@@ -144,18 +144,29 @@ class PlayerKernelManager {
           '[PlayerKernelManager] Old player teardown completed: '
           'kernel=$kernelName',
         );
-      } on TimeoutException catch (_) {
-        // 旧内核 native 释放卡住时不中断切换：继续创建新播放器，
-        // 否则用户切内核会永久卡死（旧对象由 GC/后续路径兜底）。
-        debugPrint(
-          '[PlayerKernelManager] Old player teardown timed out; continuing swap '
-          'to avoid deadlock: kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
+      } on TimeoutException catch (_, stackTrace) {
+        // 回退到上游 .6 逻辑：旧内核释放超时直接中止切换（throw），
+        // 不再"继续创建新播放器"——旧资源未释放就建新的会造成资源重叠，
+        // mdk 关软解看一半再切 libmpv 时 app 卡死（用户已复现）。
+        // 切换失败但 UI 不卡，比静默卡死好；异常由调用方兜底提示。
+        final error = TimeoutException(
+          'Old player teardown timed out after ${timeout.inMilliseconds}ms; '
+          'replacement creation was aborted to avoid overlapping resources.',
+          timeout,
         );
-      } catch (error) {
         debugPrint(
-          '[PlayerKernelManager] Old player teardown failed; continuing swap: '
-          'kernel=$kernelName $error',
+          '[PlayerKernelManager] Native/backend player teardown timed out; '
+          'replacement creation aborted: kernel=$kernelName '
+          'timeoutMs=${timeout.inMilliseconds}\n$stackTrace',
         );
+        Error.throwWithStackTrace(error, stackTrace);
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[PlayerKernelManager] Native/backend player teardown failed; '
+          'replacement creation aborted: kernel=$kernelName '
+          '$error\n$stackTrace',
+        );
+        Error.throwWithStackTrace(error, stackTrace);
       }
     }
 
