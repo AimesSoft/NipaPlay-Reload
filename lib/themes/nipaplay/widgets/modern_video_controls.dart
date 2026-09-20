@@ -81,19 +81,27 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isAspectModeHovered = false;
 
   static String _aspectModeLabel(VideoAspectMode mode) {
-    switch (mode) {
-      case VideoAspectMode.contain:
-        return '适应';
-      case VideoAspectMode.cover:
-        return '填充';
-      case VideoAspectMode.fill:
-        return '拉伸';
-      case VideoAspectMode.ratio16x9:
-        return '16:9';
-      case VideoAspectMode.ratio4x3:
-        return '4:3';
+      switch (mode) {
+        case VideoAspectMode.contain:
+          return '适应';
+        case VideoAspectMode.cover:
+          return '裁剪';
+        case VideoAspectMode.fill:
+          return '拉伸';
+        case VideoAspectMode.fitWidth:
+          return '等宽';
+        case VideoAspectMode.fitHeight:
+          return '等高';
+        case VideoAspectMode.none:
+          return '原始';
+        case VideoAspectMode.scaleDown:
+          return '限制';
+        case VideoAspectMode.ratio16x9:
+          return '16:9';
+        case VideoAspectMode.ratio4x3:
+          return '4:3';
+      }
     }
-  }
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');

@@ -304,6 +304,10 @@ enum VideoAspectMode {
   contain,
   cover,
   fill,
+  fitWidth,
+  fitHeight,
+  none,
+  scaleDown,
   ratio16x9,
   ratio4x3,
 }

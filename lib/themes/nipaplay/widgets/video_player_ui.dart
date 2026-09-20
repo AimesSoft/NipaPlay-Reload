@@ -386,16 +386,60 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                   ? screenAspect / videoAspect
                   : videoAspect / screenAspect;
               return ClipRect(
-                child: Transform.scale(
-                  scale: scale,
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: videoAspect,
-                      child: _buildVideoSurface(videoState, textureId),
-                    ),
-                  ),
-                ),
-              );
+                        child: Transform.scale(
+                          scale: scale,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: videoAspect,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.fitWidth:
+                      // 等宽：视频宽铺满（高可超裁）——Transform.scale（mdk 兼容）
+                      final vaw = videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+                      final szw = MediaQuery.of(context).size;
+                      final saw = szw.width > 0 && szw.height > 0 ? szw.width / szw.height : 16 / 9;
+                      final scaleW = saw > vaw ? 1.0 : vaw / saw;
+                      return ClipRect(
+                        child: Transform.scale(
+                          scale: scaleW,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: vaw,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.fitHeight:
+                      // 等高：视频高铺满（宽可超裁）——Transform.scale（mdk 兼容）
+                      final vah = videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+                      final szh = MediaQuery.of(context).size;
+                      final sah = szh.width > 0 && szh.height > 0 ? szh.width / szh.height : 16 / 9;
+                      final scaleH = sah < vah ? 1.0 : sah / vah;
+                      return ClipRect(
+                        child: Transform.scale(
+                          scale: scaleH,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: vah,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.none:
+                    case VideoAspectMode.scaleDown:
+                      // 原始/限制：简化按比例显示（不等比放大的完整语义需内核适配，
+                      // 当前保持 contain 比例显示，避免黑屏）
+                      return Center(
+                        child: AspectRatio(
+                          aspectRatio: videoState.aspectRatio,
+                          child: _buildVideoSurface(videoState, textureId),
+                        ),
+                      );
       case VideoAspectMode.ratio16x9:
         return Center(
           child: AspectRatio(
