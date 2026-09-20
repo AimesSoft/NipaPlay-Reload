@@ -46,6 +46,10 @@ void main() {
 
   testWidgets('desktop network settings validate and save the HTTP proxy',
       (tester) async {
+    tester.view.physicalSize = const Size(1024, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     try {
       SharedPreferences.setMockInitialValues({});
