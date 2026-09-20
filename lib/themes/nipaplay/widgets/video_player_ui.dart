@@ -364,6 +364,47 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
   }
 
+  /// 按画面尺寸模式构建视频表面：适应(contain黑边)/填充(cover裁剪)/
+  /// 拉伸(fill变形)/16:9/4:3(强制比例)
+  Widget _buildVideoSurfaceWithAspectMode(
+      VideoPlayerState videoState, int? textureId) {
+    final mode = videoState.videoAspectMode;
+    switch (mode) {
+      case VideoAspectMode.fill:
+        // 拉伸：直接铺满显示区域（画面变形）
+        return _buildVideoSurface(videoState, textureId);
+      case VideoAspectMode.cover:
+        // 填充：视频等比放大填满区域，超出部分裁剪（无黑边）
+        return FittedBox(
+          fit: BoxFit.cover,
+          child: _buildVideoSurface(videoState, textureId),
+        );
+      case VideoAspectMode.ratio16x9:
+        return Center(
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+      case VideoAspectMode.ratio4x3:
+        return Center(
+          child: AspectRatio(
+            aspectRatio: 4 / 3,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+      case VideoAspectMode.contain:
+      default:
+        // 适应：保持视频原始比例，居中显示（上下/左右黑边）
+        return Center(
+          child: AspectRatio(
+            aspectRatio: videoState.aspectRatio,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+    }
+  }
+
   void _updateMacOSNativeVideoViewId(int? viewId) {
     if (!mounted || _macosNativeVideoViewId == viewId) {
       return;
@@ -415,12 +456,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       return _buildVideoSurface(videoState, textureId);
     }
 
-    final surface = Center(
-      child: AspectRatio(
-        aspectRatio: videoState.aspectRatio,
-        child: _buildVideoSurface(videoState, textureId),
-      ),
-    );
+    final surface = _buildVideoSurfaceWithAspectMode(videoState, textureId);
     return ColoredBox(color: Colors.black, child: surface);
   }
 

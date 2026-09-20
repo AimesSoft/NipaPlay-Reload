@@ -298,6 +298,15 @@ class _VideoDimensionSnapshot {
       displayHeight! > 0;
 }
 
+/// 视频画面尺寸模式：适应(contain)/填充(cover裁剪)/拉伸(fill变形)/16:9/4:3
+enum VideoAspectMode {
+  contain,
+  cover,
+  fill,
+  ratio16x9,
+  ratio4x3,
+}
+
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
@@ -451,6 +460,9 @@ int _exactEndStreak = 0;
   bool _screenshotCaptureIncludesSubtitles = true;
   // 截图时裁剪视频画面外的黑边（letterbox/pillarbox），默认开启
   bool _screenshotCropLetterbox = true;
+  // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
+  VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  final String _videoAspectModeKey = 'video_aspect_mode';
   final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
   final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
   final String _screenshotCropLetterboxKey = 'screenshot_crop_letterbox';

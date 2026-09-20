@@ -2727,6 +2727,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         prefs.getBool(_screenshotIncludeSubtitlesKey) ?? true;
     _screenshotCropLetterbox =
         prefs.getBool(_screenshotCropLetterboxKey) ?? true;
+    final aspectModeName = prefs.getString(_videoAspectModeKey);
+    _videoAspectMode = VideoAspectMode.values.firstWhere(
+      (m) => m.name == aspectModeName,
+      orElse: () => VideoAspectMode.contain,
+    );
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2771,6 +2776,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _screenshotCropLetterbox = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_screenshotCropLetterboxKey, value);
+    _notifyListeners();
+  }
+
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
+
+  Future<void> setVideoAspectMode(VideoAspectMode mode) async {
+    if (_videoAspectMode == mode) return;
+    _videoAspectMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_videoAspectModeKey, mode.name);
     _notifyListeners();
   }
 
