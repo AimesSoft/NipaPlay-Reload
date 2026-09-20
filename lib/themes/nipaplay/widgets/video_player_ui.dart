@@ -374,11 +374,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         // 拉伸：直接铺满显示区域（画面变形）
         return _buildVideoSurface(videoState, textureId);
       case VideoAspectMode.cover:
-        // 填充：视频等比放大填满区域，超出部分裁剪（无黑边）
-        return FittedBox(
-          fit: BoxFit.cover,
-          child: _buildVideoSurface(videoState, textureId),
-        );
+              // 填充：视频等比放大填满区域，超出部分裁剪（无黑边）。
+              // SizedBox.expand 给 FittedBox 铺满约束，否则纹理无尺寸上限会黑屏。
+              return SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: _buildVideoSurface(videoState, textureId),
+                ),
+              );
       case VideoAspectMode.ratio16x9:
         return Center(
           child: AspectRatio(

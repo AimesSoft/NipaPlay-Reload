@@ -911,12 +911,17 @@ class _CupertinoSubtitleSettingsPaneState
                   children: [
                     GestureDetector(
                       onTap: () {
-                        // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用
-                        _showColorPickerDialog(context, color, (picked) {
-                          controller.text = _colorToHex(picked);
-                          onSubmit(_colorToHex(picked));
-                        });
-                      },
+                                              // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
+                                              // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
+                                              // 顺序反了会导致第一次应用的是输入框旧值。
+                                              _showColorPickerDialog(context, color, (picked) {
+                                                debugPrint(
+                                                  '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
+                                                );
+                                                onSubmit(_colorToHex(picked));
+                                                controller.text = _colorToHex(picked);
+                                              });
+                                            },
                       child: Container(
                         width: 16,
                         height: 16,

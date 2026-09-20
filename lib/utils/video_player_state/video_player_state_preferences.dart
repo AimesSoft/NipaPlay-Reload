@@ -2807,17 +2807,40 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   /// 软解输出颜色格式（空=内核默认；mdk 走 video.decoder 属性）
-  String get softDecodePixelFormat => _softDecodePixelFormat;
+    String get softDecodePixelFormat => _softDecodePixelFormat;
 
-  Future<void> setSoftDecodePixelFormat(String value) async {
-    final normalized = value.trim();
-    if (_softDecodePixelFormat == normalized) return;
-    _softDecodePixelFormat = normalized;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_softDecodePixelFormatKey, normalized);
-    await applyHardwareDecoderPreference();
-    _notifyListeners();
-  }
+    Future<void> setSoftDecodePixelFormat(String value) async {
+      final normalized = value.trim();
+      if (_softDecodePixelFormat == normalized) return;
+      _softDecodePixelFormat = normalized;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_softDecodePixelFormatKey, normalized);
+      await applyHardwareDecoderPreference();
+      // 颜色格式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
+      final path = currentVideoPath;
+      if (path != null && path.isNotEmpty && hasVideo) {
+        final posMs = _position.inMilliseconds;
+        final history = WatchHistoryItem(
+          filePath: path,
+          animeName: animeTitle ?? '',
+          episodeTitle: episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          lastPosition: posMs,
+          duration: duration.inMilliseconds,
+          watchProgress: progress,
+          lastWatchTime: DateTime.now(),
+        );
+        await initializePlayer(
+          path,
+          historyItem: history,
+          resetManualDanmakuOffset: false,
+          autoPlay: false,
+        );
+        debugPrint('[Decoder] 颜色格式切换，已重载视频以应用 pixel_format=$normalized');
+      }
+      _notifyListeners();
+    }
 
   Future<void> setScreenshotCaptureIncludesSubtitles(bool value) async {
     if (_screenshotCaptureIncludesSubtitles == value) return;
