@@ -10,7 +10,6 @@ import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 添加新的�
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
-import 'blur_snackbar.dart';
 import 'video_progress_bar.dart';
 import 'control_shadow.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
@@ -78,8 +77,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isPipHovered = false;
   bool _isDanmakuPressed = false;
   bool _isDanmakuHovered = false;
-  bool _isAlignSubtitlePressed = false;
-  bool _isAlignSubtitleHovered = false;
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -804,40 +801,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                     if (DesktopPlayerWindowService
                                         .isFeatureEnabled)
                                       const SizedBox(width: 12),
-
-                                    // 字幕对齐按钮（暂停在某句台词处点按：以播放位置为
-                                    // 语音时机基准，自动计算并应用该字幕的时轴偏移）
-                                    _buildControlButton(
-                                      icon: const Icon(
-                                        Icons.vertical_align_center,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                      onTap: () {
-                                        final delta = videoState
-                                            .alignExternalSubtitleToPosition();
-                                        if (delta == null) {
-                                          BlurSnackBar.show(
-                                            context,
-                                            '未命中当前外挂字幕，请暂停在字幕上再对齐',
-                                          );
-                                        } else {
-                                          BlurSnackBar.show(
-                                            context,
-                                            '字幕已对齐偏移 ${delta.toStringAsFixed(2)}s',
-                                          );
-                                        }
-                                      },
-                                      isPressed: _isAlignSubtitlePressed,
-                                      isHovered: _isAlignSubtitleHovered,
-                                      onHover: (value) => setState(() =>
-                                          _isAlignSubtitleHovered = value),
-                                      onPressed: (value) => setState(() =>
-                                          _isAlignSubtitlePressed = value),
-                                      tooltip: '对齐字幕（暂停处点按）',
-                                    ),
-
-                                    const SizedBox(width: 8),
 
                                     // 弹幕开关按钮
                                     _buildControlButton(

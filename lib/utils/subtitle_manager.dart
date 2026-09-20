@@ -868,20 +868,6 @@ class SubtitleManager extends ChangeNotifier {
     return activeContents.join('\n');
   }
 
-  /// 查询指定时间点命中的字幕 cue 起点（用于字幕对齐：播放位置 - cue 起点 = 时轴偏移）。
-  int? pathCueStartMsAt(String path, int positionMs) {
-    if (!_shouldRenderExternalSubtitleInApp(path)) return null;
-    final cachedEntries = _subtitleCache[path];
-    if (cachedEntries == null || cachedEntries.isEmpty) return null;
-    for (final entry in cachedEntries) {
-      if (entry is! SubtitleEntry) continue;
-      if (positionMs >= entry.startTimeMs && positionMs < entry.endTimeMs) {
-        return entry.startTimeMs;
-      }
-    }
-    return null;
-  }
-
   List<String> _snapshotCurrentSubtitleTrackSignatures() {
     final tracks = _player.mediaInfo.subtitle;
     if (tracks == null || tracks.isEmpty) {
