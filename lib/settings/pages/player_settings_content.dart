@@ -550,15 +550,22 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                                             ),
                                           ],
                                           onChanged: (value) {
-                                                                final picked = value ?? '';
-                                                                if (videoState.softDecodePixelFormat == picked) return;
-                                                                videoState.setSoftDecodePixelFormat(picked);
-                                                                if (!context.mounted) return;
-                                                                BlurSnackBar.show(
-                                                                  context,
-                                                                  '软解颜色格式已设为 $label',
-                                                                );
-                                                              },
+                                                                                                          final picked = value ?? '';
+                                                                                                          final pickedLabel = picked == 'yuv420p'
+                                                                                                              ? '4:2:0'
+                                                                                                              : picked == 'nv12'
+                                                                                                                  ? 'NV12'
+                                                                                                                  : picked == 'rgb0'
+                                                                                                                      ? 'RGB'
+                                                                                                                      : '自动';
+                                                                                                          if (videoState.softDecodePixelFormat == picked) return;
+                                                                                                          videoState.setSoftDecodePixelFormat(picked);
+                                                                                                          if (!context.mounted) return;
+                                                                                                          BlurSnackBar.show(
+                                                                                                            context,
+                                                                                                            '软解颜色格式已设为 $pickedLabel',
+                                                                                                          );
+                                                                                                        },
                                                               dropdownKey: _softDecodePixelFormatDropdownKey,
                                                             );
                                                           },

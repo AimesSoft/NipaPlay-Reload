@@ -1973,29 +1973,25 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
 
   /// 位置/边距/对齐改动后强制 libass 重新排版（mpv 需 seek 触发字幕重渲染，否则要重载视频才生效）
-  void _refreshSubtitleLayout() {
-    if (kIsWeb || _isDisposed) return;
-    // App 内叠层字幕（SRT/VTT/ASS）的位置是 Flutter UI 层，不占内核轨：
-    // 拖动/调整时无需 seek 内核，seek 反而造成卡顿跳帧（libmpv 实测拖不动）。
-    final extPath = getActiveExternalSubtitlePath();
-    if (extPath != null && extPath.isNotEmpty) {
-      final ext = extPath.toLowerCase();
-      if (ext.endsWith('.srt') || ext.endsWith('.vtt') ||
-          ext.endsWith('.ass') || ext.endsWith('.ssa')) {
-        return;
+    void _refreshSubtitleLayout() {
+      if (kIsWeb || _isDisposed) return;
+      // App 内叠层字幕（SRT/VTT/ASS）的位置是 Flutter UI 层，不占内核轨：
+      // 拖动/调整时无需 seek 内核，seek 反而造成卡顿跳帧（libmpv 实测拖不动）。
+      final extPath = getActiveExternalSubtitlePath();
+      if (extPath != null && extPath.isNotEmpty) {
+        final ext = extPath.toLowerCase();
+        if (ext.endsWith('.srt') || ext.endsWith('.vtt') ||
+            ext.endsWith('.ass') || ext.endsWith('.ssa')) {
+          return;
+        }
       }
-    }
-    try {
-      final pos = _position.inMilliseconds;
-            if (pos <= 0) return;
-            debugPrint('[SubtitlePos] 布局刷新 seek pos=$pos kernel=${player.getPlayerKernelName()}');
-            player.seek(position: pos);
-    } catch (e) {
-      debugPrint('[VideoPlayerState] 字幕布局刷新失败: $e');
-    }
-  }
+      // 内嵌轨（简日双语 mkv 等）：同样不 seek。mdk/libass 的 sub-pos/边距
+            // 属性走 setProperty 热更新即可生效，seek 会打断解码/渲染队列导致
+            // 拖滑块画面冻结（音频继续走）。仅内核不支持热更新时才需要 seek。
+            return;
+          }
 
-  Future<void> setSubtitlePosition(double position) async {
+        Future<void> setSubtitlePosition(double position) async {
       final resolved = _clampSubtitlePosition(position);
       if ((_subtitlePosition - resolved).abs() < 0.0001) {
         return;
