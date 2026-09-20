@@ -708,8 +708,12 @@ int _exactEndStreak = 0;
   bool _subtitleBold = false;
   bool _subtitleItalic = false;
   int _subtitleColorValue = defaultSubtitleColorValue;
-  int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
-  int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
+    int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    // 外挂叠层独立颜色（默认白）——长按外挂的调色板设这里，
+    // 不影响字幕设置面板颜色（那只管内嵌轨 sub-color）
+    int _externalSubtitleColorValue = 0xFFFFFFFF;
+    final String _externalSubtitleColorKey = 'external_subtitle_color';
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
@@ -1562,8 +1566,9 @@ int _exactEndStreak = 0;
   bool get subtitleBold => _subtitleBold;
   bool get subtitleItalic => _subtitleItalic;
   Color get subtitleColor => Color(_subtitleColorValue);
-  Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
-  Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
+    Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
   String get subtitleFontName => _subtitleFontName;
   String get subtitleFontDir => _subtitleFontDir;
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;

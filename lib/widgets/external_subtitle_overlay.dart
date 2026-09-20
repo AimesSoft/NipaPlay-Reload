@@ -538,7 +538,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                           for (final color in palette)
                             GestureDetector(
                               onTap: () =>
-                                  videoState.setSubtitleColor(color),
+                                                                videoState.setExternalSubtitleColor(color),
                               child: Container(
                                 width: 30,
                                 height: 30,
@@ -667,7 +667,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
           videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
       fontStyle:
           videoState.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-      color: videoState.subtitleColor,
+      color: videoState.externalSubtitleColor,
       height: 1.28,
       fontFamily: fontsApply && fontNames.isNotEmpty ? fontNames.first : null,
       fontFamilyFallback: fontsApply && fontNames.length > 1

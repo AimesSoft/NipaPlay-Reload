@@ -1911,8 +1911,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleBorderColorValue = prefs.getInt(_subtitleBorderColorKey) ??
         VideoPlayerState.defaultSubtitleBorderColorValue;
     _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
-        VideoPlayerState.defaultSubtitleShadowColorValue;
-    _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
+            VideoPlayerState.defaultSubtitleShadowColorValue;
+        _externalSubtitleColorValue =
+            prefs.getInt(_externalSubtitleColorKey) ?? 0xFFFFFFFF;
+        _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
             _subtitleOverrideModeKey,
@@ -2110,6 +2112,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_subtitleItalicKey, value);
     await applySubtitleStylePreference();
+    _notifyListeners();
+  }
+
+  /// 外挂叠层独立颜色（长按外挂调色板设这里；不影响内嵌/字幕设置面板）
+  Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
+
+  Future<void> setExternalSubtitleColor(Color color) async {
+    if (_externalSubtitleColorValue == color.value) return;
+    _externalSubtitleColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_externalSubtitleColorKey, color.value);
     _notifyListeners();
   }
 
@@ -2491,13 +2504,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         'sub-shadow-offset',
         _subtitleShadowOffset.toStringAsFixed(1),
       );
-      // 内嵌轨道颜色不跟外挂（subtitleColor）：外挂 SRT 走叠层自定义颜色，
-                  // 内嵌/ASS 保留自带颜色特效（libass 渲染），不再被外挂颜色污染（内嵌变绿 bug 根因）。
-                  // player.setProperty('sub-color', _colorToMpvHex(subtitleEmbeddedColor));
-            // sub-border-color/sub-shadow-color 同样不设：内嵌/ASS 保留自带描边阴影特效，
-            // 外挂叠层的描边阴影仍在 Flutter 层用 subtitleBorderColor/subtitleShadowColor。
-            // player.setProperty('sub-border-color', _colorToMpvHex(subtitleBorderColor));
-            // player.setProperty('sub-shadow-color', _colorToMpvHex(subtitleShadowColor));
+      // 内嵌轨道颜色：字幕设置面板（subtitleColor 系）应用 sub-color——
+            // 面板颜色只渲染内嵌/内核轨；外挂 SRT 叠层用独立 externalSubtitleColor
+            // （长按外挂调色板），互不污染。
+            player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
+            player.setProperty(
+              'sub-border-color',
+              _colorToMpvHex(subtitleBorderColor),
+            );
+            player.setProperty(
+              'sub-shadow-color',
+              _colorToMpvHex(subtitleShadowColor),
+            );
       player.setProperty('sub-bold', _subtitleBold ? 'yes' : 'no');
       player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
 
