@@ -612,6 +612,33 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         bytes: rgba.buffer,
         numChannels: 4,
       );
+      // 截图设置「裁剪黑边」：按视频宽高比 contain 计算视频区（居中），
+      // 裁掉上下/左右黑边——截图更紧凑，弹幕字幕在视频区内不受影响。
+      if (_screenshotCropLetterbox && _aspectRatio > 0) {
+        final w = imageWidth.toDouble();
+        final h = imageHeight.toDouble();
+        final ar = _aspectRatio;
+        var x = 0;
+        var y = 0;
+        var cw = imageWidth;
+        var ch = imageHeight;
+        if (w / ar <= h) {
+          // 上下黑边（letterbox）：宽不变，高收窄到视频区
+          ch = (w / ar).round();
+          y = ((h - ch) / 2).round();
+        } else {
+          // 左右黑边（pillarbox）：高不变，宽收窄到视频区
+          cw = (h * ar).round();
+          x = ((w - cw) / 2).round();
+        }
+        if (cw > 0 && ch > 0 && cw <= imageWidth && ch <= imageHeight) {
+          final cropped =
+              img.copyCrop(decoded, x: x, y: y, width: cw, height: ch);
+          final jpegBytes =
+              img.encodeJpg(cropped, quality: _screenshotQuality.jpegQuality);
+          return Uint8List.fromList(jpegBytes);
+        }
+      }
       final jpegBytes =
           img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality);
       return Uint8List.fromList(jpegBytes);

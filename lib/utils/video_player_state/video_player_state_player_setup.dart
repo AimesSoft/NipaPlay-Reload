@@ -485,7 +485,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 完全就绪也先尝试暂停，尾部还有兜底。
       if (!autoPlay) {
         try {
-          await player.pauseDirectly();
+          // 不 await：mdk/media_kit 内核 pause 是异步生效，await 可能
+          // 阻塞（未就绪时挂起导致"准备播放"卡死）。内核 prepare 后
+          // 默认 paused，这里只是兜底，fire-and-forget 足够。
+          unawaited(player.pauseDirectly());
         } catch (_) {}
       }
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
@@ -549,10 +552,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           await Future.delayed(const Duration(milliseconds: 100));
           if (player.state == PlaybackState.playing) {
             // 切换内核场景：内核已自动进入播放——立即用内核层暂停
-            // （绕过状态机门控），避免"播放一下"。
+            // （绕过状态机门控），避免"播放一下"。不 await 防挂起。
             if (!autoPlay) {
               try {
-                await player.pauseDirectly();
+                unawaited(player.pauseDirectly());
               } catch (_) {}
             }
             break;
@@ -566,10 +569,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
       // 切换内核场景兜底：媒体就绪后再暂停一次（早期 pauseDirectly 可能被
-      // 内核就绪流程覆盖）。
+      // 内核就绪流程覆盖）。不 await 防挂起。
       if (!autoPlay) {
         try {
-          await player.pauseDirectly();
+          unawaited(player.pauseDirectly());
         } catch (_) {}
       }
       mediaPrepareCompleted = true;
@@ -1124,7 +1127,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           play(); // Call our central play method
         } else {
           try {
-            await player.pauseDirectly();
+            unawaited(player.pauseDirectly());
           } catch (_) {}
         }
       } else {
@@ -1138,7 +1141,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           // 切换内核场景：内核已自动播放——立即内核层暂停，避免"播放一下"
           if (!autoPlay) {
             try {
-              await player.pauseDirectly();
+              unawaited(player.pauseDirectly());
             } catch (_) {}
           } else {
             _startScreenshotTimer(); // Start timer directly

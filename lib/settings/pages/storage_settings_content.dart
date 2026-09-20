@@ -188,6 +188,17 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                 onChanged: videoState.setScreenshotCaptureIncludesSubtitles,
               ),
             ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图裁剪黑边',
+                subtitle: '截图不包含视频画面外的上下/左右黑边',
+                icon: Icons.crop_outlined,
+                phoneIcon: cupertino.CupertinoIcons.crop,
+                value: videoState.screenshotCropLetterbox,
+                onChanged: videoState.setScreenshotCropLetterbox,
+              ),
+            ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.clearImageCache,
               subtitle: _isClearingImageCache

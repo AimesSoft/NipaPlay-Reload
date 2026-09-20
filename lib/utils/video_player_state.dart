@@ -449,12 +449,16 @@ int _exactEndStreak = 0;
   // 截图/GIF 导出时是否包含弹幕与字幕（由截图对话框临时切换）
   bool _screenshotCaptureIncludesDanmaku = true;
   bool _screenshotCaptureIncludesSubtitles = true;
+  // 截图时裁剪视频画面外的黑边（letterbox/pillarbox），默认开启
+  bool _screenshotCropLetterbox = true;
   final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
   final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
+  final String _screenshotCropLetterboxKey = 'screenshot_crop_letterbox';
   bool get screenshotCaptureIncludesDanmaku =>
       _screenshotCaptureIncludesDanmaku;
   bool get screenshotCaptureIncludesSubtitles =>
       _screenshotCaptureIncludesSubtitles;
+  bool get screenshotCropLetterbox => _screenshotCropLetterbox;
 
   // 截图帧合成期间（_isCapturingScreenshot=true）且设置不含弹幕/字幕时，
   // 弹幕层与字幕叠层临时隐藏——只影响截图帧，不影响正常观看。

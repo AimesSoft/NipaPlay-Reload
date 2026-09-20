@@ -515,6 +515,10 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     _currentExternalSubtitlePath = null;
+    // 多挂 SRT/VTT 路径列表也要清——否则切到无外挂字幕的视频时
+    // ExternalSubtitleOverlay 仍按旧路径渲染（"外挂轨道还在"）。
+    _activeExternalSubtitlePaths.clear();
+    _pathDisplayState.clear();
 
     final existing = _subtitleTrackInfo['external_subtitle'];
     if (existing is Map<String, dynamic>) {

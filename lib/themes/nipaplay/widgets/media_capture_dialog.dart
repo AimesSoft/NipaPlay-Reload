@@ -516,6 +516,20 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                         unawaited(_refreshImagePreview());
                       },
               ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('裁剪黑边'),
+                subtitle: const Text('截图不包含视频画面外的上下/左右黑边'),
+                value: widget.videoState.screenshotCropLetterbox,
+                onChanged: !_supportsCompositedScreenshot || _isWorking
+                    ? null
+                    : (value) {
+                        unawaited(
+                          widget.videoState.setScreenshotCropLetterbox(value),
+                        );
+                        unawaited(_refreshImagePreview());
+                      },
+              ),
               const Spacer(),
               OutlinedButton.icon(
                 onPressed: _isWorking ? null : _refreshImagePreview,

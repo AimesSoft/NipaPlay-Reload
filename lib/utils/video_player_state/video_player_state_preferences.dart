@@ -2725,6 +2725,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         prefs.getBool(_screenshotIncludeDanmakuKey) ?? true;
     _screenshotCaptureIncludesSubtitles =
         prefs.getBool(_screenshotIncludeSubtitlesKey) ?? true;
+    _screenshotCropLetterbox =
+        prefs.getBool(_screenshotCropLetterboxKey) ?? true;
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2761,6 +2763,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _screenshotCaptureIncludesDanmaku = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_screenshotIncludeDanmakuKey, value);
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotCropLetterbox(bool value) async {
+    if (_screenshotCropLetterbox == value) return;
+    _screenshotCropLetterbox = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_screenshotCropLetterboxKey, value);
     _notifyListeners();
   }
 
