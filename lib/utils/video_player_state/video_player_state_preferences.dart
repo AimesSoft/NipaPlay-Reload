@@ -483,37 +483,55 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
   Future<void> applyHardwareDecoderPreference() async {
-      if (kIsWeb || _isDisposed) return;
-      final kernelName = player.getPlayerKernelName();
-      if (kernelName == 'MDK') {
-        await _decoderManager.applyHardwareDecodingPreference(
-          _useHardwareDecoder,
-        );
-        // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效；
-                // 硬解输出由硬件决定，pixel_format 不适用）
-                if (_softDecodePixelFormat.isNotEmpty) {
-                  try {
-                    player.setProperty(
-                      'video.decoder',
-                      'pixel_format=$_softDecodePixelFormat',
-                    );
-                  } catch (_) {}
-                  debugPrint('[Decoder] 软解颜色格式已应用: $_softDecodePixelFormat');
-                } else {
-                  debugPrint('[Decoder] 软解颜色格式: 自动（内核默认）');
-                }
-                SystemResourceMonitor().setPixelFormat(
-                  _softDecodePixelFormat.isEmpty ? 'auto' : _softDecodePixelFormat,
-                );
-      } else if (kernelName == 'Media Kit') {
-        final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
-        player.setProperty('hwdec', hwdecValue);
-        // libmpv 的解码器由 hwdec 属性控制（不 setDecoders）；但资源监视器
-        // 的解码器信息来自 DecoderManager，需同步更新，否则开关后仍显示旧的
-        // "硬解 - VT（尝试）"。setDecoders 对 media_kit 仅存 map，无副作用。
-        await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+        if (kIsWeb || _isDisposed) return;
+        final kernelName = player.getPlayerKernelName();
+        if (kernelName == 'MDK') {
+          // 硬解模式 → mdk decoder 列表（auto 系列用现有偏好；specific 强制该解码器）
+          final isAutoMode = const {
+                HwDecType.auto,
+                HwDecType.autoSafe,
+                HwDecType.autoCopy,
+                HwDecType.no,
+              }.contains(_hwdecMode);
+          if (isAutoMode) {
+            await _decoderManager.applyHardwareDecodingPreference(
+              _useHardwareDecoder,
+            );
+          } else {
+            // 特定硬解（videotoolbox/mediacodec/nvdec...）：copy 版用基础名
+            final decoder =
+                _hwdecMode.hwdec.replaceAll('-copy', '').split('-').first;
+            player.setDecoders(MediaType.video, [decoder, 'FFmpeg']);
+            debugPrint('[Decoder] mdk 硬解模式: ${_hwdecMode.hwdec} -> $decoder');
+          }
+          // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效；
+                  // 硬解输出由硬件决定，pixel_format 不适用）
+                  if (_softDecodePixelFormat.isNotEmpty) {
+                    try {
+                      player.setProperty(
+                        'video.decoder',
+                        'pixel_format=$_softDecodePixelFormat',
+                      );
+                    } catch (_) {}
+                    debugPrint('[Decoder] 软解颜色格式已应用: $_softDecodePixelFormat');
+                  } else {
+                    debugPrint('[Decoder] 软解颜色格式: 自动（内核默认）');
+                  }
+                  SystemResourceMonitor().setPixelFormat(
+                    _softDecodePixelFormat.isEmpty ? 'auto' : _softDecodePixelFormat,
+                  );
+        } else if (kernelName == 'Media Kit') {
+          // 硬解模式直设 mpv hwdec（照搬 PiliPlus）；软解开关关闭时强制 no
+          final hwdecValue =
+              _useHardwareDecoder ? _hwdecMode.hwdec : 'no';
+          player.setProperty('hwdec', hwdecValue);
+          debugPrint('[Decoder] libmpv hwdec: $hwdecValue');
+          // libmpv 的解码器由 hwdec 属性控制（不 setDecoders）；但资源监视器
+          // 的解码器信息来自 DecoderManager，需同步更新，否则开关后仍显示旧的
+          // "硬解 - VT（尝试）"。setDecoders 对 media_kit 仅存 map，无副作用。
+          await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+        }
       }
-    }
 
   // 播放速度相关方法
 
@@ -2747,7 +2765,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       orElse: () => VideoAspectMode.contain,
     );
     _softDecodePixelFormat =
-        prefs.getString(_softDecodePixelFormatKey) ?? '';
+            prefs.getString(_softDecodePixelFormatKey) ?? '';
+        final hwdecName = prefs.getString(_hwdecModeKey);
+        _hwdecMode = HwDecType.values.firstWhere(
+          (h) => h.name == hwdecName,
+          orElse: () => HwDecType.auto,
+        );
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2776,6 +2799,41 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       'Player',
       '截图质量已设置为 ${quality.label}（JPEG ${quality.jpegQuality}）',
     );
+    _notifyListeners();
+  }
+
+  /// 硬解模式（mpv hwdec 值，照搬 PiliPlus）
+  HwDecType get hwdecMode => _hwdecMode;
+
+  Future<void> setHwdecMode(HwDecType mode) async {
+    if (_hwdecMode == mode) return;
+    _hwdecMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_hwdecModeKey, mode.name);
+    await applyHardwareDecoderPreference();
+    // 硬解模式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
+    final path = currentVideoPath;
+    if (path != null && path.isNotEmpty && hasVideo) {
+      final posMs = _position.inMilliseconds;
+      final history = WatchHistoryItem(
+        filePath: path,
+        animeName: animeTitle ?? '',
+        episodeTitle: episodeTitle,
+        episodeId: episodeId,
+        animeId: animeId,
+        lastPosition: posMs,
+        duration: duration.inMilliseconds,
+        watchProgress: progress,
+        lastWatchTime: DateTime.now(),
+      );
+      await initializePlayer(
+        path,
+        historyItem: history,
+        resetManualDanmakuOffset: false,
+        autoPlay: false,
+      );
+      debugPrint('[Decoder] 硬解模式切换，已重载视频以应用 hwdec=${mode.hwdec}');
+    }
     _notifyListeners();
   }
 

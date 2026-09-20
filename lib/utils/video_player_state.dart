@@ -11,6 +11,7 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
+import '../player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
@@ -464,8 +465,11 @@ int _exactEndStreak = 0;
   VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
   final String _videoAspectModeKey = 'video_aspect_mode';
   // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
-  String _softDecodePixelFormat = '';
-  final String _softDecodePixelFormatKey = 'soft_decode_pixel_format';
+    String _softDecodePixelFormat = '';
+    final String _softDecodePixelFormatKey = 'soft_decode_pixel_format';
+    // 硬解模式（mpv hwdec 值，照搬 PiliPlus），默认自动
+    HwDecType _hwdecMode = HwDecType.auto;
+    final String _hwdecModeKey = 'hwdec_mode';
   final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
   final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
   final String _screenshotCropLetterboxKey = 'screenshot_crop_letterbox';

@@ -41,6 +41,32 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   final GlobalKey _seekStepDropdownKey = GlobalKey();
   final GlobalKey _speedBoostDropdownKey = GlobalKey();
   final GlobalKey _softDecodePixelFormatDropdownKey = GlobalKey();
+  final GlobalKey _hwdecModeDropdownKey = GlobalKey();
+
+  /// 硬解模式平台过滤（照搬 PiliPlus hwdec 枚举；iOS/Android 只列相关项）
+  List<HwDecType> _hwdecOptions() {
+    if (!kIsWeb && Platform.isIOS) {
+      return const [
+        HwDecType.no,
+        HwDecType.auto,
+        HwDecType.autoSafe,
+        HwDecType.autoCopy,
+        HwDecType.videotoolbox,
+        HwDecType.videotoolboxCopy,
+      ];
+    }
+    if (!kIsWeb && Platform.isAndroid) {
+      return const [
+        HwDecType.no,
+        HwDecType.auto,
+        HwDecType.autoSafe,
+        HwDecType.autoCopy,
+        HwDecType.mediacodec,
+        HwDecType.mediacodecCopy,
+      ];
+    }
+    return HwDecType.values.toList();
+  }
 
   static const List<double> _seekStepPresetOptions = [
     0.5,
@@ -523,17 +549,50 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                                             ),
                                           ],
                                           onChanged: (value) {
-                                            videoState.setSoftDecodePixelFormat(value ?? '');
-                                            if (!context.mounted) return;
-                                            BlurSnackBar.show(
-                                              context,
-                                              '软解颜色格式已设为 $label',
-                                            );
-                                          },
-                                          dropdownKey: _softDecodePixelFormatDropdownKey,
-                                        );
-                                      },
-                                    ),
+                                                                final picked = value ?? '';
+                                                                if (videoState.softDecodePixelFormat == picked) return;
+                                                                videoState.setSoftDecodePixelFormat(picked);
+                                                                if (!context.mounted) return;
+                                                                BlurSnackBar.show(
+                                                                  context,
+                                                                  '软解颜色格式已设为 $label',
+                                                                );
+                                                              },
+                                                              dropdownKey: _softDecodePixelFormatDropdownKey,
+                                                            );
+                                                          },
+                                                        ),
+                                                        Consumer<VideoPlayerState>(
+                                                          builder: (context, videoState, child) {
+                                                            final options = _hwdecOptions();
+                                                            return AdaptiveSettingsTile.dropdown(
+                                                              title: '硬解模式',
+                                                              subtitle: 'mpv --hwdec（照搬 PiliPlus），切换后自动重载视频',
+                                                              icon: Icons.memory_outlined,
+                                                              items: [
+                                                                for (final m in options)
+                                                                  DropdownMenuItemData(
+                                                                    title: m.desc,
+                                                                    value: m,
+                                                                    isSelected: videoState.hwdecMode == m,
+                                                                    description: m.hwdec,
+                                                                  ),
+                                                              ],
+                                                              onChanged: (value) {
+                                                                if (value == null) return;
+                                                                final prev = videoState.hwdecMode;
+                                                                if (prev == value) return;
+                                                                videoState.setHwdecMode(value);
+                                                                if (!context.mounted) return;
+                                                                BlurSnackBar.show(
+                                                                  context,
+                                                                  '硬解模式已设为 ${value.desc}，正重载视频',
+                                                                );
+                                                              },
+                                                              dropdownKey: _hwdecModeDropdownKey,
+                                                            );
+                                                          },
+                                                        ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),
