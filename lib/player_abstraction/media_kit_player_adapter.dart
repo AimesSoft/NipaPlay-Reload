@@ -915,10 +915,10 @@ class MediaKitPlayerAdapter
       platform.setProperty?.call("sub-ass-override", "no");
 
       if (defaultTargetPlatform == TargetPlatform.android) {
-        platform.setProperty?.call("sub-font", "Droid Sans Fallback");
-        // PlayerConfiguration 已配置 libassAndroidFont，对应的目录无需在此覆盖。
-      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-        platform.setProperty?.call("sub-font", "Droid Sans Fallback");
+              platform.setProperty?.call("sub-font", "");
+              // PlayerConfiguration 已配置 libassAndroidFont，对应的目录无需在此覆盖。
+            } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+              platform.setProperty?.call("sub-font", "");
         final fontInfo = await ensureSubtitleFontFromAsset(
           assetPath: 'assets/subfont.ttf',
           fileName: 'subfont.ttf',

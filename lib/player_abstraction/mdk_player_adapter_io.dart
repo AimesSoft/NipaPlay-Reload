@@ -289,7 +289,7 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
           debugPrint('MDK: 字幕字体路径信息不完整');
           return;
         }
-        const fontName = 'Droid Sans Fallback';
+        const fontName = '';
 
         try {
           _mdkPlayer.setProperty('subtitle.font', fontName);
