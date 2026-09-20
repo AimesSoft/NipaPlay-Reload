@@ -40,6 +40,9 @@ class _CupertinoSubtitleSettingsPaneState
   final FocusNode _shadowColorFocus = FocusNode();
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
+  // 字幕位置滑块预览值：onChanged 只更新本地状态（跟手不碰内核），
+  // 松手 onChangeEnd 才提交 sub-pos，避免每帧 setProperty 卡顿。
+  double? _subtitlePositionPreviewValue;
   String? _fontImportMessage;
   Future<List<String>>? _fontLibraryFuture;
 
@@ -325,6 +328,9 @@ class _CupertinoSubtitleSettingsPaneState
       value: _colorToHex(videoState.subtitleShadowColor),
     );
 
+    // 键盘弹出时把可滚动内容底部垫高一个键盘高度，否则面板底部的
+    // 延迟/字体/hex 输入框会被键盘盖住无法查看与编辑。
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
         SliverPadding(
@@ -344,7 +350,7 @@ class _CupertinoSubtitleSettingsPaneState
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.only(bottom: 12 + keyboardInset),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed(
               controller.supportsFullSubtitleStyle
@@ -406,12 +412,33 @@ class _CupertinoSubtitleSettingsPaneState
           _buildSliderTile(
             context,
             title: '字幕位置',
-            description: '${videoState.subtitlePosition.toStringAsFixed(0)}%',
-            value: videoState.subtitlePosition,
+            description:
+                '${(_subtitlePositionPreviewValue ?? videoState.subtitlePosition).toStringAsFixed(0)}%',
+            value: _subtitlePositionPreviewValue ??
+                videoState.subtitlePosition,
             min: VideoPlayerState.minSubtitlePosition,
             max: VideoPlayerState.maxSubtitlePosition,
             divisions: 100,
-            onChanged: videoState.setSubtitlePosition,
+            // 拖动过程只更新本地预览值（滑块跟手、零内核调用）；
+            // 松手才提交 sub-pos——内嵌 ASS 每帧 setProperty 会全量
+            // 重排导致视频卡顿，这是此前「滑动卡顿」的根因。
+            onChangeStart: (_) {
+              setState(() {
+                _subtitlePositionPreviewValue = videoState.subtitlePosition;
+              });
+            },
+            onChanged: (value) {
+              setState(() {
+                _subtitlePositionPreviewValue = value;
+              });
+            },
+            onChangeEnd: (value) async {
+              await videoState.setSubtitlePosition(value);
+              if (!mounted) return;
+              setState(() {
+                _subtitlePositionPreviewValue = null;
+              });
+            },
           ),
         ],
       ),
@@ -904,57 +931,55 @@ class _CupertinoSubtitleSettingsPaneState
   }) {
     return AdaptivePlayerMenuTile(
       title: Text(label),
-      trailing: SizedBox(
-        width: 120,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            GestureDetector(
-              onTap: () {
-                // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
-                // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
-                // 顺序反了会导致第一次应用的是输入框旧值。
-                _showColorPickerDialog(context, color, (picked) {
-                  debugPrint(
-                    '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
-                  );
-                  onSubmit(_colorToHex(picked));
-                  controller.text = _colorToHex(picked);
-                });
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: CupertinoColors.systemGrey),
-                  ),
-                ),
+      // 早前外层 SizedBox(width:120) 装不下 28+8+110=146 的子项，
+      // 色块被挤出可点区域；改为自适应 Row + 44pt 命中的 CupertinoButton。
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minSize: 44,
+            onPressed: () {
+              // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
+              // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
+              // 顺序反了会导致第一次应用的是输入框旧值。
+              _showColorPickerDialog(context, color, (picked) {
+                debugPrint(
+                  '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
+                );
+                onSubmit(_colorToHex(picked));
+                controller.text = _colorToHex(picked);
+              });
+            },
+            child: Container(
+              key: const Key('subtitleColorSwatch'),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: CupertinoColors.systemGrey),
               ),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 110,
-              child: AdaptivePlayerMenuTextField(
-                controller: controller,
-                focusNode: focusNode,
-                placeholder: '#FFFFFF',
-                textStyle: const TextStyle(
-                  color: CupertinoColors.white,
-                  fontSize: 14,
-                ),
-                onSubmitted: onSubmit,
-                // 输入即应用：hex 完整时立即生效（解析失败忽略），
-                // 避免移动端不按回车就"输入后没应用"
-                onChanged: onSubmit,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 110,
+            child: AdaptivePlayerMenuTextField(
+              controller: controller,
+              focusNode: focusNode,
+              placeholder: '#FFFFFF',
+              textStyle: const TextStyle(
+                color: CupertinoColors.white,
+                fontSize: 14,
               ),
+              onSubmitted: onSubmit,
+              // 输入即应用：hex 完整时立即生效（解析失败忽略），
+              // 避免移动端不按回车就"输入后没应用"
+              onChanged: onSubmit,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
