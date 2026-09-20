@@ -31,15 +31,13 @@ class _CupertinoSubtitleSettingsPaneState
       TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
   final TextEditingController _textColorController = TextEditingController();
-    final TextEditingController _borderColorController = TextEditingController();
-    final TextEditingController _shadowColorController = TextEditingController();
-    final TextEditingController _embeddedColorController = TextEditingController();
-    final FocusNode _subtitleDelayFocus = FocusNode();
-    final FocusNode _fontNameFocus = FocusNode();
-    final FocusNode _textColorFocus = FocusNode();
-    final FocusNode _borderColorFocus = FocusNode();
-    final FocusNode _shadowColorFocus = FocusNode();
-    final FocusNode _embeddedColorFocus = FocusNode();
+  final TextEditingController _borderColorController = TextEditingController();
+  final TextEditingController _shadowColorController = TextEditingController();
+  final FocusNode _subtitleDelayFocus = FocusNode();
+  final FocusNode _fontNameFocus = FocusNode();
+  final FocusNode _textColorFocus = FocusNode();
+  final FocusNode _borderColorFocus = FocusNode();
+  final FocusNode _shadowColorFocus = FocusNode();
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
   String? _fontImportMessage;
@@ -322,15 +320,10 @@ class _CupertinoSubtitleSettingsPaneState
       value: _colorToHex(videoState.subtitleBorderColor),
     );
     _syncController(
-          controller: _shadowColorController,
-          focus: _shadowColorFocus,
-          value: _colorToHex(videoState.subtitleShadowColor),
-        );
-        _syncController(
-          controller: _embeddedColorController,
-          focus: _embeddedColorFocus,
-          value: _colorToHex(videoState.subtitleEmbeddedColor),
-        );
+      controller: _shadowColorController,
+      focus: _shadowColorFocus,
+      value: _colorToHex(videoState.subtitleShadowColor),
+    );
 
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) => [
@@ -500,31 +493,18 @@ class _CupertinoSubtitleSettingsPaneState
         header: const Text('颜色'),
         children: [
           _buildColorTile(
-                      context,
-                      label: '文字颜色',
-                      controller: _textColorController,
-                      focusNode: _textColorFocus,
-                      color: videoState.subtitleColor,
-                      onSubmit: (value) {
-                        final parsed = _parseHexColor(value);
-                        if (parsed != null) {
-                          videoState.setSubtitleColor(parsed);
-                        }
-                      },
-                    ),
-                    _buildColorTile(
-                      context,
-                      label: '内嵌字幕颜色',
-                      controller: _embeddedColorController,
-                      focusNode: _embeddedColorFocus,
-                      color: videoState.subtitleEmbeddedColor,
-                      onSubmit: (value) {
-                        final parsed = _parseHexColor(value);
-                        if (parsed != null) {
-                          videoState.setSubtitleEmbeddedColor(parsed);
-                        }
-                      },
-                    ),
+            context,
+            label: '文字颜色',
+            controller: _textColorController,
+            focusNode: _textColorFocus,
+            color: videoState.subtitleColor,
+            onSubmit: (value) {
+              final parsed = _parseHexColor(value);
+              if (parsed != null) {
+                videoState.setSubtitleColor(parsed);
+              }
+            },
+          ),
           _buildColorTile(
             context,
             label: '描边颜色',
