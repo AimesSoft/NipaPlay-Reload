@@ -85,8 +85,9 @@ class PlayerMenuContext {
   bool get supportsAdvancedTracks => kernelType != PlayerKernelType.videoPlayer;
 
   bool get supportsSubtitleSettings =>
-      kernelType == PlayerKernelType.mediaKit ||
-      kernelType == PlayerKernelType.erika;
+        kernelType == PlayerKernelType.mediaKit ||
+        kernelType == PlayerKernelType.erika ||
+        kernelType == PlayerKernelType.mdk;
 
   bool get hasVideo => videoState.hasVideo;
 

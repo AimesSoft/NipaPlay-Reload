@@ -2498,11 +2498,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
               return;
             }
             // mdk 属性名是 subtitle.scale（sub-scale 是 mpv 的）——之前用错
-            // 导致 mdk 内嵌轨字号设置不生效（默认 22 小字号，对比 libmpv 明显小）
-            player.setProperty(
-              playerKernelName == 'MDK' ? 'subtitle.scale' : 'sub-scale',
-              _subtitleScale.toStringAsFixed(2),
-            );
+                  // 导致 mdk 内嵌轨字号设置不生效（默认 22 小字号，对比 libmpv 明显小）
+                  player.setProperty(
+                    playerKernelName == 'MDK' ? 'subtitle.scale' : 'sub-scale',
+                    _subtitleScale.toStringAsFixed(2),
+                  );
+                  // mdk 内嵌轨（srt/text）字号基准调大（默认 22 太小，对齐 libmpv 视觉）
+                  if (playerKernelName == 'MDK') {
+                    try {
+                      player.setProperty('subtitle.font.size', '45');
+                    } catch (_) {}
+                  }
       player.setProperty('sub-delay', subtitleDelaySeconds.toStringAsFixed(2));
       player.setProperty('sub-pos', _subtitlePosition.toStringAsFixed(0));
       player.setProperty('sub-align-x', _subtitleAlignXToMpv(_subtitleAlignX));
