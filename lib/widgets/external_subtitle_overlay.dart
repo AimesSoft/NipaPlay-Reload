@@ -561,7 +561,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                                           ),
                                           const SizedBox(height: 8),
                                           GestureDetector(
-                                            onTap: () => _showHsvPicker(context, vs),
+                                            onTap: () => _showHsvPicker(context, videoState),
                                             child: const Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
@@ -667,9 +667,8 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     // 占满整个播放舞台（含视频外区域），视频面 Center(AspectRatio) 居中留黑边。
     return (normalized / 100) * 2.0 - 1.0;
   }
-}
 
-  /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
+    /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
     /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
     TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
       final fontNames = videoState.externalSubtitleFontName
