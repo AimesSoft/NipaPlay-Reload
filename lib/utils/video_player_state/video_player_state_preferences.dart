@@ -2466,15 +2466,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         'sub-shadow-offset',
         _subtitleShadowOffset.toStringAsFixed(1),
       );
-      player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
-      player.setProperty(
-        'sub-border-color',
-        _colorToMpvHex(subtitleBorderColor),
-      );
-      player.setProperty(
-        'sub-shadow-color',
-        _colorToMpvHex(subtitleShadowColor),
-      );
+      // 内嵌轨道颜色不跟外挂（subtitleColor）：外挂 SRT 走叠层自定义颜色，
+                  // 内嵌/ASS 保留自带颜色特效（libass 渲染），不再被外挂颜色污染（内嵌变绿 bug 根因）。
+                  // player.setProperty('sub-color', _colorToMpvHex(subtitleEmbeddedColor));
+            // sub-border-color/sub-shadow-color 同样不设：内嵌/ASS 保留自带描边阴影特效，
+            // 外挂叠层的描边阴影仍在 Flutter 层用 subtitleBorderColor/subtitleShadowColor。
+            // player.setProperty('sub-border-color', _colorToMpvHex(subtitleBorderColor));
+            // player.setProperty('sub-shadow-color', _colorToMpvHex(subtitleShadowColor));
       player.setProperty('sub-bold', _subtitleBold ? 'yes' : 'no');
       player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
 
