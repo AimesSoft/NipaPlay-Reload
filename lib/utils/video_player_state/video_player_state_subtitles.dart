@@ -220,6 +220,23 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
+  /// 字幕对齐：暂停在某句台词处调用——以当前播放位置为语音时机基准，
+  /// 计算当前显示字幕 cue 起点与播放位置的偏差并设为该字幕的时轴偏移。
+  /// 返回应用的偏移秒数（未命中字幕返回 null）。
+  double? alignExternalSubtitleToPosition() {
+    final positionMs = _position.inMilliseconds;
+    final activePath = _subtitleManager.getActiveExternalSubtitlePath();
+    if (activePath == null || activePath.isEmpty) return null;
+    final cueStartMs =
+        _subtitleManager.pathCueStartMsAt(activePath, positionMs);
+    if (cueStartMs == null) return null;
+    final deltaSeconds = (positionMs - cueStartMs) / 1000.0;
+    setPathSubtitleDelaySeconds(activePath, deltaSeconds);
+    debugPrint('[SubtitleAlign] 已对齐 path=$activePath pos=${positionMs}ms '
+        'cueStart=${cueStartMs}ms delay=${deltaSeconds.toStringAsFixed(2)}s');
+    return deltaSeconds;
+  }
+
   /// 某条字幕的垂直位置（0=屏幕顶 100=屏幕底）
   double pathSubtitlePosition(String path) =>
       _subtitleManager.pathPosition(path);
