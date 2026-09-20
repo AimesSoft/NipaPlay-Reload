@@ -229,10 +229,11 @@ class AdaptivePlayerMenuTextField extends StatelessWidget {
     this.readOnly = false,
     this.autofocus = false,
     this.onChanged,
-    this.onSubmitted,
-    this.inputFormatters,
-    this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-  });
+        this.onSubmitted,
+        this.inputFormatters,
+        this.textStyle,
+        this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      });
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -251,33 +252,35 @@ class AdaptivePlayerMenuTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final List<TextInputFormatter>? inputFormatters;
-  final EdgeInsetsGeometry padding;
+    final TextStyle? textStyle;
+    final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     final isTelevision = useTvOSRemoteTextInput(context);
     final field = GlassTextField(
-      controller: controller,
-      focusNode: isTelevision ? null : focusNode,
-      placeholder: placeholder,
-      prefixIcon: prefix,
-      suffixIcon: suffix,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      maxLines: maxLines,
-      minLines: minLines,
-      maxLength: maxLength,
-      obscureText: obscureText,
-      enabled: enabled,
-      readOnly: readOnly || isTelevision,
-      autofocus: isTelevision ? false : autofocus,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      inputFormatters: inputFormatters,
-      padding: padding,
-      useOwnLayer: true,
-      quality: GlassQuality.standard,
-    );
+          controller: controller,
+          focusNode: isTelevision ? null : focusNode,
+          placeholder: placeholder,
+          prefixIcon: prefix,
+          suffixIcon: suffix,
+          keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          maxLines: maxLines,
+          minLines: minLines,
+          maxLength: maxLength,
+          obscureText: obscureText,
+          enabled: enabled,
+          readOnly: readOnly || isTelevision,
+          autofocus: isTelevision ? false : autofocus,
+          onChanged: onChanged,
+          onSubmitted: onSubmitted,
+          inputFormatters: inputFormatters,
+          textStyle: textStyle,
+          padding: padding,
+          useOwnLayer: true,
+          quality: GlassQuality.standard,
+        );
     if (!isTelevision) return field;
     return TvOSRemoteTextInputControl(
       focusNode: focusNode,

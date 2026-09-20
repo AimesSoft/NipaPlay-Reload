@@ -331,10 +331,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                       videoState.pathSubtitlePosition(path)),
                 ),
                 child: Transform.translate(
-                  offset: Offset(
-                    videoState.pathSubtitleMarginX(path),
-                    videoState.subtitleMarginY,
-                  ),
+                                  offset: Offset(
+                                    videoState.pathSubtitleMarginX(path),
+                                    0, // 外挂垂直位移独立（pathSubtitlePosition 控制），不跟随全局垂直边距滑块
+                                  ),
                   child: positionedContent,
                 ),
               ),
@@ -546,10 +546,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                                   color: color,
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: vs.subtitleColor.toARGB32() ==
-                                            color.toARGB32()
-                                        ? Colors.amber
-                                        : Colors.white24,
+                                                                      color: vs.externalSubtitleColor.toARGB32() ==
+                                                                              color.toARGB32()
+                                                                          ? Colors.amber
+                                                                          : Colors.white24,
                                     width: 2,
                                   ),
                                 ),

@@ -910,41 +910,49 @@ class _CupertinoSubtitleSettingsPaneState
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     GestureDetector(
-                      onTap: () {
-                                              // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
-                                              // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
-                                              // 顺序反了会导致第一次应用的是输入框旧值。
-                                              _showColorPickerDialog(context, color, (picked) {
-                                                debugPrint(
-                                                  '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
-                                                );
-                                                onSubmit(_colorToHex(picked));
-                                                controller.text = _colorToHex(picked);
-                                              });
-                                            },
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: CupertinoColors.systemGrey),
-                        ),
-                      ),
-                    ),
+                                          onTap: () {
+                                                                  // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
+                                                                  // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
+                                                                  // 顺序反了会导致第一次应用的是输入框旧值。
+                                                                  _showColorPickerDialog(context, color, (picked) {
+                                                                    debugPrint(
+                                                                      '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
+                                                                    );
+                                                                    onSubmit(_colorToHex(picked));
+                                                                    controller.text = _colorToHex(picked);
+                                                                  });
+                                                                },
+                                          behavior: HitTestBehavior.opaque,
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(6),
+                                            child: Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                color: color,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: CupertinoColors.systemGrey),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
             const SizedBox(width: 8),
-                        SizedBox(
-                                      width: 80,
-                                      child: AdaptivePlayerMenuTextField(
-                                        controller: controller,
-                                        focusNode: focusNode,
-                                        placeholder: '#FFFFFF',
-                                        onSubmitted: onSubmit,
-                                        // 输入即应用：hex 完整时立即生效（解析失败忽略），
-                                        // 避免移动端不按回车就"输入后没应用"
-                                        onChanged: onSubmit,
-                                      ),
-                                    ),
+                                    SizedBox(
+                                                  width: 110,
+                                                  child: AdaptivePlayerMenuTextField(
+                                                    controller: controller,
+                                                    focusNode: focusNode,
+                                                    placeholder: '#FFFFFF',
+                                                    textStyle: const TextStyle(
+                                                                                                          color: CupertinoColors.white,
+                                                                                                          fontSize: 14,
+                                                                                                        ),
+                                                    onSubmitted: onSubmit,
+                                                    // 输入即应用：hex 完整时立即生效（解析失败忽略），
+                                                    // 避免移动端不按回车就"输入后没应用"
+                                                    onChanged: onSubmit,
+                                                  ),
+                                                ),
                       ],
                     ),
                   ),
