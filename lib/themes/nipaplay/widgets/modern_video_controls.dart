@@ -41,6 +41,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   final GlobalKey _playlistButtonKey = GlobalKey();
   final GlobalKey _settingsButtonKey = GlobalKey();
   final GlobalKey _progressBarKey = GlobalKey();
+  final GlobalKey<PopupMenuButtonState<VideoAspectMode>> _aspectMenuKey =
+      GlobalKey();
   bool _isRewindPressed = false;
   bool _isForwardPressed = false;
   bool _isPlayPressed = false;
@@ -830,6 +832,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                     // 画面比例按钮（适应/填充/拉伸/16:9/4:3）——PopupMenuButton 自动锚定在按钮旁
                                                                         // （showMenu 手动算锚点在不同布局下会飘到左上角，已弃用）
                                                                         PopupMenuButton<VideoAspectMode>(
+                                                                          key: _aspectMenuKey,
                                                                           onSelected: (mode) => unawaited(
                                                                             videoState.setVideoAspectMode(mode),
                                                                           ),
@@ -858,12 +861,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                                           ],
                                                                           tooltip: '画面比例（适应/填充/拉伸/16:9/4:3）',
                                                                           child: _buildControlButton(
-                                                                            icon: const Icon(
-                                                                              Icons.aspect_ratio,
-                                                                              color: Colors.white,
-                                                                              size: 24,
-                                                                            ),
-                                                                            onTap: () {},
+                                                                                                                                                    icon: const Icon(
+                                                                                                                                                      Icons.aspect_ratio,
+                                                                                                                                                      color: Colors.white,
+                                                                                                                                                      size: 24,
+                                                                                                                                                    ),
+                                                                                                                                                    onTap: () => _aspectMenuKey
+                                                                                                                                                        .currentState
+                                                                                                                                                        ?.showButtonMenu(),
                                                                             isPressed: _isAspectModePressed,
                                                                             isHovered: _isAspectModeHovered,
                                                                             onHover: (value) => setState(() =>

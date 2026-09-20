@@ -2481,13 +2481,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
     // 叠层字幕(SRT/VTT)样式在 Flutter UI 层，不设内核属性（sub-margin-x 限制0~300，拖拽负值报错/卡热切换）；
-    // 但混挂内核轨 ASS 时仍需继续设置 sub-pos/sub-delay 等，否则位置滑块/延迟对内核字幕不生效。
-    final hasKernelExternalSubtitle = activeExternalSubtitlePaths
-        .any((p) => !externalSubtitleRenderedInApp(p));
-    if (shouldRenderCurrentExternalSubtitleInApp() &&
-        !hasKernelExternalSubtitle) {
-      return;
-    }
+        // 但混挂内核轨 ASS 时仍需继续设置 sub-pos/sub-delay 等，否则位置滑块/延迟对内核字幕不生效。
+        // 内嵌轨（含 mdk 字号 subtitle.font.size）也必须走内核属性——只按"外挂走叠层"就 return 会漏掉内嵌轨。
+        final hasKernelExternalSubtitle = activeExternalSubtitlePaths
+            .any((p) => !externalSubtitleRenderedInApp(p));
+        final hasEmbeddedSubtitleActive = player.activeSubtitleTracks.isNotEmpty;
+        if (!hasKernelExternalSubtitle &&
+            !hasEmbeddedSubtitleActive) {
+          return;
+        }
     try {
       final playerKernelName = player.getPlayerKernelName();
       if (playerKernelName == 'Erika') {
