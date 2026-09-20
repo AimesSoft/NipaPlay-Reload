@@ -469,6 +469,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
+      // 切换内核场景（autoPlay=false）：setMedia 后立即用内核层暂停
+      // （pauseDirectly 绕过状态机门控），阻止 mdk/libmpv 内核自动播放
+      // 开始（画面+声音都不出）。prepare 与就绪后还有兜底。
+      if (!autoPlay) {
+        try {
+          await player.pauseDirectly();
+        } catch (_) {}
+      }
       await applyErikaUpscalerModeToCurrentPlayer();
 
       //debugPrint('4. 准备播放器...');
@@ -476,11 +484,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       mediaPrepareStarted = true;
       await player.prepare();
       // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
-      // 切换内核场景（autoPlay=false）要尽早暂停，避免"放一秒钟有声音
-      // 才暂停"——即使内核尚未完全就绪也先尝试 pause，尾部还有兜底。
+      // 切换内核场景（autoPlay=false）要尽早用内核层暂停（pauseDirectly
+      // 绕过状态机门控），避免"放一秒钟有声音才暂停"——即使内核尚未
+      // 完全就绪也先尝试暂停，尾部还有兜底。
       if (!autoPlay) {
         try {
-          pause();
+          await player.pauseDirectly();
         } catch (_) {}
       }
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
@@ -542,8 +551,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // 其他内核保持原有最多10秒的兼容轮询，不改变其启动体验。
         for (var waitCount = 0; waitCount < 100; waitCount++) {
           await Future.delayed(const Duration(milliseconds: 100));
-          if (player.state == PlaybackState.playing ||
-              player.state == PlaybackState.paused ||
+          if (player.state == PlaybackState.playing) {
+            // 切换内核场景：内核已自动进入播放——立即用内核层暂停
+            // （绕过状态机门控），避免"播放一下"。
+            if (!autoPlay) {
+              try {
+                await player.pauseDirectly();
+              } catch (_) {}
+            }
+            break;
+          }
+          if (player.state == PlaybackState.paused ||
               (player.mediaInfo.duration > 0 &&
                   (player.prefersPlatformVideoSurface ||
                       player.textureId.value != null))) {
@@ -551,11 +569,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           }
         }
       }
-      // 切换内核场景兜底：媒体就绪后再暂停一次（早期 pause 可能被
+      // 切换内核场景兜底：媒体就绪后再暂停一次（早期 pauseDirectly 可能被
       // 内核就绪流程覆盖）。
       if (!autoPlay) {
         try {
-          pause();
+          await player.pauseDirectly();
         } catch (_) {}
       }
       mediaPrepareCompleted = true;
