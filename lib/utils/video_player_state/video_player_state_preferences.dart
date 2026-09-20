@@ -1886,7 +1886,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleBorderColorValue = prefs.getInt(_subtitleBorderColorKey) ??
         VideoPlayerState.defaultSubtitleBorderColorValue;
     _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
-        VideoPlayerState.defaultSubtitleShadowColorValue;
+            VideoPlayerState.defaultSubtitleShadowColorValue;
+        _subtitleEmbeddedColorValue = prefs.getInt(_subtitleEmbeddedColorKey) ??
+            VideoPlayerState.defaultSubtitleColorValue;
     _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
@@ -2089,13 +2091,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> setSubtitleColor(Color color) async {
-    if (_subtitleColorValue == color.value) return;
-    _subtitleColorValue = color.value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleColorKey, color.value);
-    await applySubtitleStylePreference();
-    _notifyListeners();
-  }
+      if (_subtitleColorValue == color.value) return;
+      _subtitleColorValue = color.value;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_subtitleColorKey, color.value);
+      await applySubtitleStylePreference();
+      _notifyListeners();
+    }
+
+    /// 内嵌字幕颜色（内核轨/sub-color）——与外挂叠层颜色分离
+    Future<void> setSubtitleEmbeddedColor(Color color) async {
+      if (_subtitleEmbeddedColorValue == color.value) return;
+      _subtitleEmbeddedColorValue = color.value;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_subtitleEmbeddedColorKey, color.value);
+      await applySubtitleStylePreference();
+      _notifyListeners();
+    }
 
   Future<void> setSubtitleBorderColor(Color color) async {
     if (_subtitleBorderColorValue == color.value) return;
@@ -2466,7 +2478,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         'sub-shadow-offset',
         _subtitleShadowOffset.toStringAsFixed(1),
       );
-      player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
+      player.setProperty('sub-color', _colorToMpvHex(subtitleEmbeddedColor));
       player.setProperty(
         'sub-border-color',
         _colorToMpvHex(subtitleBorderColor),
