@@ -2495,9 +2495,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         return;
       }
       if (playerKernelName != 'Media Kit' && playerKernelName != 'MDK') {
-        return;
-      }
-      player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
+              return;
+            }
+            // mdk 属性名是 subtitle.scale（sub-scale 是 mpv 的）——之前用错
+            // 导致 mdk 内嵌轨字号设置不生效（默认 22 小字号，对比 libmpv 明显小）
+            player.setProperty(
+              playerKernelName == 'MDK' ? 'subtitle.scale' : 'sub-scale',
+              _subtitleScale.toStringAsFixed(2),
+            );
       player.setProperty('sub-delay', subtitleDelaySeconds.toStringAsFixed(2));
       player.setProperty('sub-pos', _subtitlePosition.toStringAsFixed(0));
       player.setProperty('sub-align-x', _subtitleAlignXToMpv(_subtitleAlignX));
