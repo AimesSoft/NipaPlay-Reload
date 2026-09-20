@@ -632,6 +632,8 @@ extension VideoPlayerStateCapture on VideoPlayerState {
           x = ((w - cw) / 2).round();
         }
         if (cw > 0 && ch > 0 && cw <= imageWidth && ch <= imageHeight) {
+          debugPrint('[Screenshot] 裁剪黑边 x=$x y=$y w=$cw h=$ch '
+              '(原始 ${imageWidth}x$imageHeight)');
           final cropped =
               img.copyCrop(decoded, x: x, y: y, width: cw, height: ch);
           final jpegBytes =

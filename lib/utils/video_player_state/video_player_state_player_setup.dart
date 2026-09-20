@@ -479,6 +479,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 准备播放器
       mediaPrepareStarted = true;
       await player.prepare();
+      debugPrint('[PlayerSetup] prepare 完成 kernel=${player.getPlayerKernelName()} '
+          'autoPlay=$autoPlay state=${player.state}');
       // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
       // 切换内核场景（autoPlay=false）要尽早用内核层暂停（pauseDirectly
       // 绕过状态机门控），避免"放一秒钟有声音才暂停"——即使内核尚未
@@ -575,6 +577,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           unawaited(player.pauseDirectly());
         } catch (_) {}
       }
+      debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
+          'autoPlay=$autoPlay 进入纹理阶段');
       mediaPrepareCompleted = true;
 
       //debugPrint('5. 获取视频纹理...');
@@ -1053,7 +1057,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // media clock paused while the loading layer mounts the real DFM+
         // instance, fills its glyph atlas, and publishes its first frame.
         if (player.state == PlaybackState.playing) {
-          await player.pauseDirectly();
+          unawaited(player.pauseDirectly());
         }
         if (_isDisposed || initializationGeneration != _playbackGeneration) {
           return;
