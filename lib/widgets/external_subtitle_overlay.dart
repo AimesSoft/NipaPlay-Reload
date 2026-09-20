@@ -494,7 +494,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                         future: fontListFuture,
                         builder: (context, snapshot) {
                           final fonts = snapshot.data ?? <String>[];
-                          final current = vs.subtitleFontName;
+                          final current = vs.externalSubtitleFontName;
                           final selected = current
                               .split(',')
                               .map((e) => e.trim())
@@ -516,7 +516,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                                         : selected
                                             .where((e) => e != f)
                                             .join(',');
-                                    videoState.setSubtitleFontName(next);
+                                    videoState.setExternalSubtitleFontName(next);
                                   },
                                 ),
                             ],
@@ -556,10 +556,28 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
                               ),
                             ),
                         ],
-                      );
-                    },
-                  ),
-                ],
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(height: 8),
+                                          GestureDetector(
+                                            onTap: () => _showHsvPicker(context, vs),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.palette, size: 16, color: Colors.white70),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  '全色调色盘',
+                                                  style: TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
               ),
             ),
           ),
@@ -654,8 +672,8 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
     /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
     TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
-      final fontNames = videoState.subtitleFontName
-          .split(',')
+      final fontNames = videoState.externalSubtitleFontName
+                .split(',')
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList();
@@ -676,7 +694,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
       shadows: videoState.subtitleShadowOffset > 0
           ? [
               Shadow(
-                color: videoState.subtitleShadowColor,
+                color: videoState.externalSubtitleColor,
                 offset: Offset(0, videoState.subtitleShadowOffset),
                 blurRadius: videoState.subtitleShadowOffset * 2,
               ),
@@ -691,18 +709,119 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth =
-          videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
-      ..color = videoState.subtitleBorderColor;
+            ..strokeWidth =
+                videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
+            // 外挂叠层描边固定黑色（独立于播放器设置/内嵌描边）
+            ..color = const Color(0xFF000000);
 
     return fillStyle.copyWith(
-      foreground: borderPaint,
-      color: null,
-      shadows: null,
-    );
-  }
+          foreground: borderPaint,
+          color: null,
+          shadows: null,
+        );
+      }
 
-class _OutlinedSubtitleText extends StatelessWidget {
+      /// 全色调色盘（HSV 三滑块：色相/饱和度/亮度 + 实时预览），
+      /// 外挂叠层专属——选色应用 externalSubtitleColor
+      Future<void> _showHsvPicker(
+        BuildContext context,
+        VideoPlayerState videoState,
+      ) async {
+        var hsv = HSVColor.fromColor(videoState.externalSubtitleColor);
+        final picked = await showDialog<Color>(
+          context: context,
+          builder: (dialogContext) {
+            return StatefulBuilder(
+              builder: (dialogContext, setDialogState) {
+                return AlertDialog(
+                  title: const Text('选择颜色'),
+                  content: SizedBox(
+                    width: 300,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: hsv.toColor(),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildHsvSliderRow(
+                          '色相',
+                          hsv.hue,
+                          0,
+                          360,
+                          (v) => setDialogState(() => hsv = hsv.withHue(v)),
+                        ),
+                        _buildHsvSliderRow(
+                          '饱和',
+                          hsv.saturation,
+                          0,
+                          1,
+                          (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
+                        ),
+                        _buildHsvSliderRow(
+                          '亮度',
+                          hsv.value,
+                          0,
+                          1,
+                          (v) => setDialogState(() => hsv = hsv.withValue(v)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('取消'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
+                      child: const Text('确定'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+        if (picked != null) {
+          videoState.setExternalSubtitleColor(picked);
+        }
+      }
+
+      Widget _buildHsvSliderRow(
+        String label,
+        double value,
+        double min,
+        double max,
+        ValueChanged<double> onChanged,
+      ) {
+        return Row(
+          children: [
+            SizedBox(
+              width: 36,
+              child: Text(label, style: const TextStyle(fontSize: 13)),
+            ),
+            Expanded(
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        );
+      }
+    }
+
+    class _OutlinedSubtitleText extends StatelessWidget {
   final String text;
   final TextStyle fillStyle;
   final TextStyle borderStyle;

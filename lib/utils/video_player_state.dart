@@ -717,7 +717,11 @@ int _exactEndStreak = 0;
     // 外挂叠层独立颜色（默认白）——长按外挂的调色板设这里，
     // 不影响字幕设置面板颜色（那只管内嵌轨 sub-color）
     int _externalSubtitleColorValue = 0xFFFFFFFF;
-    final String _externalSubtitleColorKey = 'external_subtitle_color';
+      final String _externalSubtitleColorKey = 'external_subtitle_color';
+      // 外挂叠层独立字体（默认空=系统字体）——长按外挂选字体设这里，
+      // 不影响播放器设置（subtitleFontName 只管内嵌 sub-font）
+      String _externalSubtitleFontName = '';
+      final String _externalSubtitleFontNameKey = 'external_subtitle_font_name';
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
@@ -1573,6 +1577,7 @@ int _exactEndStreak = 0;
     Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
     Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
     Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
+  String get externalSubtitleFontName => _externalSubtitleFontName;
   String get subtitleFontName => _subtitleFontName;
   String get subtitleFontDir => _subtitleFontDir;
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;

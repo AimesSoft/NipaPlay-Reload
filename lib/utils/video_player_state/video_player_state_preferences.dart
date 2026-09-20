@@ -1913,7 +1913,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
             VideoPlayerState.defaultSubtitleShadowColorValue;
         _externalSubtitleColorValue =
-            prefs.getInt(_externalSubtitleColorKey) ?? 0xFFFFFFFF;
+                prefs.getInt(_externalSubtitleColorKey) ?? 0xFFFFFFFF;
+            _externalSubtitleFontName =
+                prefs.getString(_externalSubtitleFontNameKey) ?? '';
         _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
@@ -2121,6 +2123,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _externalSubtitleColorValue = color.value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_externalSubtitleColorKey, color.value);
+    _notifyListeners();
+  }
+
+  /// 外挂叠层独立字体（长按外挂面板设这里；不影响播放器设置/内嵌 sub-font）
+  String get externalSubtitleFontName => _externalSubtitleFontName;
+
+  Future<void> setExternalSubtitleFontName(String value) async {
+    final normalized = value.trim();
+    if (_externalSubtitleFontName == normalized) return;
+    _externalSubtitleFontName = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_externalSubtitleFontNameKey, normalized);
     _notifyListeners();
   }
 
