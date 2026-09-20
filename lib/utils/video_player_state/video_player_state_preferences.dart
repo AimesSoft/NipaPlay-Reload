@@ -2002,11 +2002,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       debugPrint('[SubtitlePos] 设置 sub-pos=$resolved kernel=${player.getPlayerKernelName()}');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_subtitlePositionKey, resolved);
-    // 全局滑块同步所有已激活的叠层字幕块（滑块=全局控制，
-    // 单块长按拖动=逐条微调）；同时更新种子供新激活块继承。
+    // 滑块只管内嵌轨（含 libmpv 内核轨 sub-pos）；外挂叠层字幕块由
+    // 长按拖动逐条定位，滑块不再同步覆盖各 path 的位置。
     _subtitleManager.globalPositionSeed = resolved;
-    _subtitleManager.applyGlobalDisplayPosition(
-        resolved, _subtitleMarginX);
     // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
     if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
@@ -2042,8 +2040,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginXKey, value);
     _subtitleManager.globalMarginSeed = value;
-    _subtitleManager.applyGlobalDisplayPosition(
-        _subtitlePosition, value);
+    // 水平边距滑块同样只管内嵌轨，不覆盖外挂叠层块的独立摆位。
     // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
     if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();

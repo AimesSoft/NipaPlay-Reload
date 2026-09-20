@@ -15,7 +15,7 @@ import '../models/watch_history_model.dart';
 /// 提供多内核支持的静态工具方法
 class PlayerKernelManager {
   static const Duration defaultHotSwapPlayerDisposalTimeout =
-      Duration(seconds: 5);
+      Duration(seconds: 10);
 
   /// 为VideoPlayerState执行播放器内核热切换
   static Future<void> performPlayerKernelHotSwap(

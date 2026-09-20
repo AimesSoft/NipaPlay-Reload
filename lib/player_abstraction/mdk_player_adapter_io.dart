@@ -483,11 +483,19 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
     void dispose() => _mdkPlayer.dispose();
 
     /// 异步释放：native 释放可能阻塞主线程（MDK 切换 libmpv 时旧内核
-    /// 同步 dispose 卡死过）。先让出一帧再执行，保证事件循环/超时能运转，
-    /// 切换流程的 5s 兜底才真正有效。
+    /// 同步 dispose 卡死过）。先停解码管线让 mdk 内部线程收敛，再让出
+    /// 一帧执行 dispose——dispose 是同步 FFI，超时机制救不了已阻塞的
+    /// 平台线程，唯一防线是调用前把内核置为 stopped 空闲态。
     @override
     Future<void> disposeAsync() async {
-      await Future<void>.delayed(const Duration(milliseconds: 16));
+      try {
+        if (state != PlayerPlaybackState.stopped) {
+          state = PlayerPlaybackState.stopped;
+        }
+      } catch (e) {
+        debugPrint('MDK: dispose 前置停止失败: $e');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       dispose();
     }
 
