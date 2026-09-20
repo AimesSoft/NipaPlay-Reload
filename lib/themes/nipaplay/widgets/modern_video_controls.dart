@@ -819,88 +819,53 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         .isFeatureEnabled)
                                       const SizedBox(width: 12),
 
-                                    // 画面比例按钮（适应/填充/拉伸/16:9/4:3，点击弹小框选择）
-                                    _buildControlButton(
-                                      icon: const Icon(
-                                        Icons.aspect_ratio,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                      onTap: () {
-                                        final buttonBox =
-                                                                                    context.findRenderObject()
-                                                                                        as RenderBox?;
-                                                                                final overlayBox =
-                                                                                    Overlay.of(context).context
-                                                                                        .findRenderObject()
-                                                                                        as RenderBox?;
-                                                                                if (buttonBox == null ||
-                                                                                    overlayBox == null) {
-                                                                                  return;
-                                                                                }
-                                                                                // 锚点：按钮位置转换到 overlay 坐标系，菜单贴在按钮旁
-                                                                                final topLeft = overlayBox.globalToLocal(
-                                                                                  buttonBox.localToGlobal(
-                                                                                      Offset.zero),
-                                                                                );
-                                                                                final bottomRight = overlayBox
-                                                                                    .globalToLocal(
-                                                                                  buttonBox.localToGlobal(buttonBox
-                                                                                      .size
-                                                                                      .bottomRight(Offset.zero)),
-                                                                                );
-                                                                                showMenu<VideoAspectMode>(
-                                                                                  context: context,
-                                                                                  position: RelativeRect.fromRect(
-                                                                                    Rect.fromLTRB(
-                                                                                      0,
-                                                                                      0,
-                                                                                      overlayBox.size.width,
-                                                                                      overlayBox.size.height,
-                                                                                    ),
-                                                                                    Rect.fromPoints(
-                                                                                      topLeft,
-                                                                                      bottomRight,
-                                                                                    ),
-                                                                                  ),
-                                          items: [
-                                            for (final m
-                                                in VideoAspectMode.values)
-                                              PopupMenuItem<VideoAspectMode>(
-                                                value: m,
-                                                child: Row(
-                                                  children: [
-                                                    if (videoState
-                                                            .videoAspectMode ==
-                                                        m)
-                                                      const Icon(
-                                                        Icons.check,
-                                                        size: 16,
-                                                        color: Colors.green,
-                                                      )
-                                                    else
-                                                      const SizedBox(width: 16),
-                                                    const SizedBox(width: 8),
-                                                    Text(_aspectModeLabel(m)),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        ).then((selected) {
-                                          if (selected != null) {
-                                            unawaited(videoState
-                                                .setVideoAspectMode(selected));
-                                          }
-                                        });
-                                      },
-                                      isPressed: _isAspectModePressed,
-                                      isHovered: _isAspectModeHovered,
-                                      onHover: (value) => setState(() =>
-                                          _isAspectModeHovered = value),
-                                      onPressed: (value) => setState(() =>
-                                          _isAspectModePressed = value),
-                                      tooltip: '画面比例（适应/填充/拉伸/16:9/4:3）',
-                                    ),
+                                    // 画面比例按钮（适应/填充/拉伸/16:9/4:3）——PopupMenuButton 自动锚定在按钮旁
+                                                                        // （showMenu 手动算锚点在不同布局下会飘到左上角，已弃用）
+                                                                        PopupMenuButton<VideoAspectMode>(
+                                                                          onSelected: (mode) => unawaited(
+                                                                            videoState.setVideoAspectMode(mode),
+                                                                          ),
+                                                                          itemBuilder: (context) => [
+                                                                            for (final m
+                                                                                in VideoAspectMode.values)
+                                                                              PopupMenuItem<VideoAspectMode>(
+                                                                                value: m,
+                                                                                child: Row(
+                                                                                  children: [
+                                                                                    if (videoState
+                                                                                            .videoAspectMode ==
+                                                                                        m)
+                                                                                      const Icon(
+                                                                                        Icons.check,
+                                                                                        size: 16,
+                                                                                        color: Colors.green,
+                                                                                      )
+                                                                                    else
+                                                                                      const SizedBox(width: 16),
+                                                                                    const SizedBox(width: 8),
+                                                                                    Text(_aspectModeLabel(m)),
+                                                                                  ],
+                                                                                ),
+                                                                              ),
+                                                                          ],
+                                                                          tooltip: '画面比例（适应/填充/拉伸/16:9/4:3）',
+                                                                          child: _buildControlButton(
+                                                                            icon: const Icon(
+                                                                              Icons.aspect_ratio,
+                                                                              color: Colors.white,
+                                                                              size: 24,
+                                                                            ),
+                                                                            onTap: () {},
+                                                                            isPressed: _isAspectModePressed,
+                                                                            isHovered: _isAspectModeHovered,
+                                                                            onHover: (value) => setState(() =>
+                                                                                _isAspectModeHovered = value),
+                                                                            onPressed: (value) => setState(() =>
+                                                                                _isAspectModePressed = value),
+                                                                            tooltip:
+                                                                                '画面比例（适应/填充/拉伸/16:9/4:3）',
+                                                                          ),
+                                                                        ),
 
                                     const SizedBox(width: 8),
 
