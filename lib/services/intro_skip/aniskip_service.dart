@@ -146,6 +146,12 @@ class AniSkipService {
 
       if (response.statusCode != 200) {
         debugPrint('[跳过片头] AniSkip 返回 HTTP ${response.statusCode}（$uri）');
+        // 400 = 集数超出 MAL 已知范围（连载新番常见）或参数无效，是
+        // 确定答案（该集永远无数据），按空列表缓存，避免每次播放反复
+        // 请求 400 导致按钮永不出现（像"功能没了"）。
+        if (response.statusCode == 400) {
+          return const [];
+        }
         return null;
       }
 

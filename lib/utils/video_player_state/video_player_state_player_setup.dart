@@ -469,14 +469,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
-      // 切换内核场景（autoPlay=false）：setMedia 后立即用内核层暂停
-      // （pauseDirectly 绕过状态机门控），阻止 mdk/libmpv 内核自动播放
-      // 开始（画面+声音都不出）。prepare 与就绪后还有兜底。
-      if (!autoPlay) {
-        try {
-          await player.pauseDirectly();
-        } catch (_) {}
-      }
+      // 切换内核场景（autoPlay=false）：setMedia 后不暂停——内核尚未
+      // 加载媒体（mdk 需 prepare 才加载；media_kit 未 open 时 pause()
+      // 会挂起导致切换卡死）。prepare 后与就绪后再用内核层 pauseDirectly
+      // 阻止自动播放开始。
       await applyErikaUpscalerModeToCurrentPlayer();
 
       //debugPrint('4. 准备播放器...');
@@ -1122,9 +1118,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
       if (lastPosition == 0) {
-        // 从头播放
+        // 从头播放（切换内核场景 autoPlay=false 不自动播放）
         // debugPrint('VideoPlayerState: Initializing playback from start, calling play().'); // <--- REMOVED PRINT
-        play(); // Call our central play method
+        if (autoPlay) {
+          play(); // Call our central play method
+        } else {
+          try {
+            await player.pauseDirectly();
+          } catch (_) {}
+        }
       } else {
         // 从中间恢复
         if (player.state == PlaybackState.playing) {
@@ -1133,13 +1135,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             PlayerStatus.playing,
             message: '正在播放 (恢复)',
           ); // Sync our status
-          // debugPrint('VideoPlayerState: Player already playing on resume. Directly starting screenshot timer.'); // <--- REMOVED PRINT
-          _startScreenshotTimer(); // Start timer directly
+          // 切换内核场景：内核已自动播放——立即内核层暂停，避免"播放一下"
+          if (!autoPlay) {
+            try {
+              await player.pauseDirectly();
+            } catch (_) {}
+          } else {
+            _startScreenshotTimer(); // Start timer directly
+          }
         } else {
           // Player did not auto-play after seek, or was paused. We need to start it.
-          // _status should be 'ready' from earlier _setStatus call in initializePlayer
-          // debugPrint('VideoPlayerState: Resuming playback (player was not auto-playing), calling play().'); // <--- REMOVED PRINT
-          play(); // Call our central play method
+          // 切换内核场景（autoPlay=false）不自动恢复播放——保持暂停，用户手动播放
+          if (autoPlay) {
+            play(); // Call our central play method
+          }
         }
       }
 
