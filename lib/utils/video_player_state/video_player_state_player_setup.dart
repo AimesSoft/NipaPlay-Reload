@@ -480,7 +480,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 才暂停"——即使内核尚未完全就绪也先尝试 pause，尾部还有兜底。
       if (!autoPlay) {
         try {
-          player.pause();
+          pause();
         } catch (_) {}
       }
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
@@ -555,7 +555,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 内核就绪流程覆盖）。
       if (!autoPlay) {
         try {
-          player.pause();
+          pause();
         } catch (_) {}
       }
       mediaPrepareCompleted = true;
