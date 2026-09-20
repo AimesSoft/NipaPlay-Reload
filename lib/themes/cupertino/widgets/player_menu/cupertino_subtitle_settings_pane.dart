@@ -920,14 +920,17 @@ class _CupertinoSubtitleSettingsPaneState
             ),
             const SizedBox(width: 8),
             SizedBox(
-              width: 80,
-              child: AdaptivePlayerMenuTextField(
-                controller: controller,
-                focusNode: focusNode,
-                placeholder: '#FFFFFF',
-                onSubmitted: onSubmit,
-              ),
-            ),
+                          width: 80,
+                          child: AdaptivePlayerMenuTextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            placeholder: '#FFFFFF',
+                            onSubmitted: onSubmit,
+                            // 输入即应用：hex 完整时立即生效（解析失败忽略），
+                            // 避免移动端不按回车就"输入后没应用"
+                            onChanged: onSubmit,
+                          ),
+                        ),
           ],
         ),
       ),
