@@ -40,6 +40,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   final GlobalKey _erikaAndroidOutputDropdownKey = GlobalKey();
   final GlobalKey _seekStepDropdownKey = GlobalKey();
   final GlobalKey _speedBoostDropdownKey = GlobalKey();
+  final GlobalKey _softDecodePixelFormatDropdownKey = GlobalKey();
 
   static const List<double> _seekStepPresetOptions = [
     0.5,
@@ -477,13 +478,62 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                       await videoState.setHardwareDecoderEnabled(value);
                       if (!context.mounted) return;
                       BlurSnackBar.show(
-                        context,
-                        value ? '已开启硬件解码' : '已关闭硬件解码',
-                      );
-                    },
-                  );
-                },
-              ),
+                                              context,
+                                              value ? '已开启硬件解码' : '已关闭硬件解码',
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, child) {
+                                        String label = '自动（内核默认）';
+                                        final fmt = videoState.softDecodePixelFormat;
+                                        if (fmt == 'yuv420p') label = 'YUV 4:2:0 (yuv420p)';
+                                        if (fmt == 'nv12') label = 'NV12';
+                                        if (fmt == 'rgb0') label = 'RGB (rgb0)';
+                                        return AdaptiveSettingsTile.dropdown(
+                                          title: '软解颜色格式',
+                                                                                    subtitle: '软件解码输出像素格式，个别片源颜色异常时可切换试',
+                                                                                    icon: Icons.color_lens_outlined,
+                                          items: [
+                                            DropdownMenuItemData(
+                                              title: '自动',
+                                              value: '',
+                                              isSelected: fmt.isEmpty,
+                                              description: '内核默认输出格式',
+                                            ),
+                                            DropdownMenuItemData(
+                                              title: 'YUV 4:2:0',
+                                              value: 'yuv420p',
+                                              isSelected: fmt == 'yuv420p',
+                                              description: '标准视频输出格式',
+                                            ),
+                                            DropdownMenuItemData(
+                                              title: 'NV12',
+                                              value: 'nv12',
+                                              isSelected: fmt == 'nv12',
+                                              description: '半平面 YUV，部分渲染器更高效',
+                                            ),
+                                            DropdownMenuItemData(
+                                              title: 'RGB',
+                                              value: 'rgb0',
+                                              isSelected: fmt == 'rgb0',
+                                              description: 'RGB 输出，最兼容',
+                                            ),
+                                          ],
+                                          onChanged: (value) {
+                                            videoState.setSoftDecodePixelFormat(value ?? '');
+                                            if (!context.mounted) return;
+                                            BlurSnackBar.show(
+                                              context,
+                                              '软解颜色格式已设为 $label',
+                                            );
+                                          },
+                                          dropdownKey: _softDecodePixelFormatDropdownKey,
+                                        );
+                                      },
+                                    ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),

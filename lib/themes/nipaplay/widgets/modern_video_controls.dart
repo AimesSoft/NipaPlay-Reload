@@ -841,12 +841,20 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         showMenu<VideoAspectMode>(
                                           context: context,
                                           position: RelativeRect.fromRect(
-                                            buttonBox.localToGlobal(
-                                                Offset.zero),
-                                            buttonBox.localToGlobal(buttonBox
-                                                .size
-                                                .bottomRight(Offset.zero)),
-                                          ) & overlay.size,
+                                            Rect.fromLTWH(
+                                              0,
+                                              0,
+                                              overlay.size.width,
+                                              overlay.size.height,
+                                            ),
+                                            Rect.fromPoints(
+                                              buttonBox.localToGlobal(
+                                                  Offset.zero),
+                                              buttonBox.localToGlobal(buttonBox
+                                                  .size
+                                                  .bottomRight(Offset.zero)),
+                                            ),
+                                          ),
                                           items: [
                                             for (final m
                                                 in VideoAspectMode.values)

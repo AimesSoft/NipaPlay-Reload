@@ -489,6 +489,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         await _decoderManager.applyHardwareDecodingPreference(
           _useHardwareDecoder,
         );
+        // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效）
+        if (_softDecodePixelFormat.isNotEmpty) {
+          try {
+            player.setProperty(
+              'video.decoder',
+              'pixel_format=$_softDecodePixelFormat',
+            );
+          } catch (_) {}
+        }
       } else if (kernelName == 'Media Kit') {
         final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
         player.setProperty('hwdec', hwdecValue);
@@ -2732,6 +2741,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       (m) => m.name == aspectModeName,
       orElse: () => VideoAspectMode.contain,
     );
+    _softDecodePixelFormat =
+        prefs.getString(_softDecodePixelFormatKey) ?? '';
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2787,6 +2798,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _videoAspectMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_videoAspectModeKey, mode.name);
+    _notifyListeners();
+  }
+
+  /// 软解输出颜色格式（空=内核默认；mdk 走 video.decoder 属性）
+  String get softDecodePixelFormat => _softDecodePixelFormat;
+
+  Future<void> setSoftDecodePixelFormat(String value) async {
+    final normalized = value.trim();
+    if (_softDecodePixelFormat == normalized) return;
+    _softDecodePixelFormat = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_softDecodePixelFormatKey, normalized);
+    await applyHardwareDecoderPreference();
     _notifyListeners();
   }
 

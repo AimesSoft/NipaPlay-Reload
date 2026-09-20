@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
   battery_plus
   dart_ipc
   desktop_drop
@@ -19,6 +20,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   screen_brightness_windows
   screen_retriever_windows
   tray_manager
+  universal_gamepad
   url_launcher_windows
   volume_controller
   window_manager
