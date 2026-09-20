@@ -85,6 +85,10 @@ class PlayerKernelManager {
 
     // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
     videoPlayerState.player = Player();
+    // mdk/libmpv 内核 setMedia 后会自动进入播放（erika 不自动）。
+    // 切换初始化期间先静音，避免自动播放的 1 秒有声音；就绪后
+    // seek+暂停，再由 applyPlayerVolume 恢复用户音量。
+    videoPlayerState.player.volume = 0;
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
