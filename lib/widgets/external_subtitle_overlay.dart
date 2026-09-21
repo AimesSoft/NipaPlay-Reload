@@ -1,8 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
-class ExternalSubtitleOverlay extends StatelessWidget {
+class ExternalSubtitleOverlay extends StatefulWidget {
   final double currentPositionMs;
 
   const ExternalSubtitleOverlay({
@@ -11,101 +13,724 @@ class ExternalSubtitleOverlay extends StatelessWidget {
   });
 
   @override
+  State<ExternalSubtitleOverlay> createState() =>
+      _ExternalSubtitleOverlayState();
+}
+
+class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
+  // 多字幕分块渲染：每条外挂字幕独立一块（独立延迟/位置/手势）。
+  // _editingPath = 当前出框编辑的字幕路径；null = 全部隐藏（不拦截
+  // 播放器手势：长按倍速/拖动 seek 直达播放器）。
+  String? _editingPath;
+  bool _longPressMoved = false; // 长按期间是否发生拖动
+  double _dragStartPosition = 100.0; // 长按起点字幕垂直位置
+  double _dragStartMarginX = 0.0; // 长按起点水平边距
+  // 长按拖动不可变起点：onLongPressMoveUpdate 的 offsetFromOrigin 是
+  // 相对按下原点的累计值，必须 起点+累计 计算，不能把结果写回起点变量
+  // 再叠加（早期版本越拖越飞的根因）。
+  double _dragOriginPosition = 100.0;
+  double _dragOriginMarginX = 0.0;
+  // 编辑态 pan 拖动阈值：轻触（如点击收框）手指微抖不应移动字幕。
+  Offset? _panStart;
+  bool _panActuallyMoved = false;
+  /// 字幕背景（功能区按钮切换；默认无背景；按字幕路径独立）
+  final Map<String, bool> _subtitleBgEnabled = {};
+  Timer? _twoFingerTimer; // 双指长按识别定时器
+  // 字幕轴同步诊断去重
+  String _lastLoggedCueKey = '';
+  int _lastSyncLogAtMs = 0;
+  static const int _syncLogMinIntervalMs = 1000;
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
         if (!videoState.shouldRenderCurrentExternalSubtitleInApp()) {
           return const SizedBox.shrink();
         }
-
-        final subtitleTimeMs =
-            currentPositionMs - videoState.subtitleDelaySeconds * 1000;
-        final subtitleText =
-            videoState.getCurrentExternalSubtitleTextAt(subtitleTimeMs.round());
-
-        if (subtitleText.trim().isEmpty || videoState.subtitleOpacity <= 0) {
+        if (videoState.shouldHideSubtitlesForScreenshot) {
+          // 截图设置「隐藏字幕」：仅在截图帧合成期间隐藏外挂字幕叠层，
+          // 不影响正常观看。
           return const SizedBox.shrink();
         }
+        final paths = videoState.activeExternalSubtitlePaths;
+        if (paths.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        // 多字幕分块渲染：每条外挂字幕独立一块（独立时轴延迟/位置/手势），
+        // ASS+SRT 混挂时各条可单独调轴与摆位。
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final path in paths)
+              Positioned.fill(child: _buildPathBlock(videoState, path)),
+          ],
+        );
+      },
+    );
+  }
 
-        return IgnorePointer(
-          ignoring: true,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth.isFinite
-                  ? constraints.maxWidth
-                  : MediaQuery.of(context).size.width;
-              final baseFontSize = (width * 0.03).clamp(18.0, 42.0).toDouble();
-              final fontSize = (baseFontSize * videoState.subtitleScale)
-                  .clamp(14.0, 72.0)
-                  .toDouble();
+  /// 渲染单条外挂字幕块（占满整个舞台，内部按该条字幕的位置对齐）
+  Widget _buildPathBlock(VideoPlayerState videoState, String path) {
+    final subtitleTimeMs = widget.currentPositionMs.round() -
+        (videoState.pathSubtitleDelaySeconds(path) * 1000).round();
+    final subtitleText = videoState.pathSubtitleTextAt(path, subtitleTimeMs);
 
-              final fillStyle = TextStyle(
-                fontSize: fontSize,
-                fontWeight:
-                    videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
-                fontStyle: videoState.subtitleItalic
-                    ? FontStyle.italic
-                    : FontStyle.normal,
-                color: videoState.subtitleColor,
-                height: 1.28,
-                fontFamily: videoState.subtitleFontName.isNotEmpty
-                    ? videoState.subtitleFontName
-                    : null,
-                shadows: videoState.subtitleShadowOffset > 0
-                    ? [
-                        Shadow(
-                          color: videoState.subtitleShadowColor,
-                          offset: Offset(0, videoState.subtitleShadowOffset),
-                          blurRadius: videoState.subtitleShadowOffset * 2,
-                        ),
-                      ]
-                    : null,
-              );
+    // 字幕轴同步诊断：每条字幕首次显示时记录一次，用于比对内核间的时间轴
+    _logSubtitleSyncOnce(
+      videoState: videoState,
+      cueKey: '$path|${subtitleText.hashCode}',
+      subtitleTimeMs: subtitleTimeMs,
+      path: path,
+    );
 
-              final borderPaint = Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeJoin = StrokeJoin.round
-                ..strokeWidth =
-                    videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
-                ..color = videoState.subtitleBorderColor;
-
-              final borderStyle = fillStyle.copyWith(
-                foreground: borderPaint,
-                color: null,
-                shadows: null,
-              );
-
-              return Opacity(
-                opacity: videoState.subtitleOpacity.clamp(0.0, 1.0).toDouble(),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 24 + videoState.subtitleMarginX,
-                    vertical: 16 + videoState.subtitleMarginY,
-                  ),
-                  child: Align(
-                    alignment: Alignment(
-                      _resolveHorizontalAlignment(videoState.subtitleAlignX),
-                      _resolveVerticalAlignment(videoState.subtitlePosition),
+    if (subtitleText.trim().isEmpty || videoState.subtitleOpacity <= 0) {
+      // 编辑态（已出框）即使处于两条字幕的空隙也要显示占位框，
+      // 否则框突然消失、用户失去拖动锚点；不透明度为 0 时仍隐藏。
+      if (_editingPath == path && videoState.subtitleOpacity > 0) {
+        return Opacity(
+          opacity: videoState.subtitleOpacity.clamp(0.0, 1.0).toDouble(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Align(
+              alignment: Alignment(
+                _resolveHorizontalAlignment(videoState.subtitleAlignX),
+                _resolveVerticalAlignment(
+                    videoState.pathSubtitlePosition(path)),
+              ),
+              child: Transform.translate(
+                offset: Offset(videoState.pathSubtitleMarginX(path), 0),
+                // 与编辑态相同的双层结构：占位文本 + 边框层
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const SizedBox(
+                      width: 120,
+                      height: 28,
+                      child: Opacity(opacity: 0, child: Text(' ')),
                     ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: width * 0.9),
-                      child: _OutlinedSubtitleText(
-                        text: subtitleText,
-                        fillStyle: fillStyle,
-                        borderStyle: borderStyle,
-                        showBorder: videoState.subtitleBorderSize > 0,
-                        textAlign: _resolveTextAlign(videoState.subtitleAlignX),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: const Color(0x99FFFFFF),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    final isEditingThis = _editingPath == path;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.of(context).size.width;
+        final baseFontSize = (width * 0.03).clamp(18.0, 42.0).toDouble();
+        final fontSize = (baseFontSize * videoState.srtSubtitleScale)
+            .clamp(14.0, 72.0)
+            .toDouble();
+
+        final fillStyle = _buildFillStyle(videoState, fontSize);
+        final borderStyle = _buildBorderStyle(videoState, fillStyle);
+        final bgEnabled = _subtitleBgEnabled[path] ?? false;
+
+        final Widget textBox = ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 120, maxWidth: width * 0.9),
+          child: bgEnabled
+              ? Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x99000000),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: _OutlinedSubtitleText(
+                    text: subtitleText,
+                    fillStyle: fillStyle,
+                    borderStyle: borderStyle,
+                    showBorder: videoState.subtitleBorderSize > 0,
+                    textAlign: _resolveTextAlign(videoState.subtitleAlignX),
+                  ),
+                )
+              : _OutlinedSubtitleText(
+                  text: subtitleText,
+                  fillStyle: fillStyle,
+                  borderStyle: borderStyle,
+                  showBorder: videoState.subtitleBorderSize > 0,
+                  textAlign: _resolveTextAlign(videoState.subtitleAlignX),
+                ),
+        );
+
+        Widget positionedContent;
+        if (!isEditingThis) {
+          // 未出框：长按出框并可顺势拖动调位置（这是字幕区专属手势，
+          // 会盖过播放器的长按倍速——倍速请在字幕文本之外长按）；
+          // 单击/拖动等其他手势全部透传给播放器。
+          positionedContent = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (details) {
+              debugPrint('[SubtitleOverlay] 长按出框 path=$path');
+              setState(() => _editingPath = path);
+              videoState.setSubtitleEditBoxVisible(true);
+              _longPressMoved = false;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              // 保存不可变起点，供 MoveUpdate 的「起点+累计偏移」使用
+              _dragOriginPosition = _dragStartPosition;
+              _dragOriginMarginX = _dragStartMarginX;
+              videoState.setSubtitleDragActive(true);
+            },
+            onLongPressMoveUpdate: (details) {
+              if (details.offsetFromOrigin.distance > 8) {
+                _longPressMoved = true;
+              }
+              if (!_longPressMoved) return;
+              final v = videoState;
+              // offsetFromOrigin 是相对按下原点的累计偏移：一律
+              // 「不可变起点 + 累计」，绝不把结果写回起点再叠加
+              // （旧实现每帧累加，越拖越飞）。
+              v.setPathSubtitleMarginX(
+                path,
+                (_dragOriginMarginX + details.offsetFromOrigin.dx)
+                    .clamp(-500.0, 500.0),
+              );
+              final stageH = MediaQuery.of(context).size.height;
+              v.setPathSubtitlePosition(
+                path,
+                (_dragOriginPosition + details.offsetFromOrigin.dy / stageH * 100)
+                    .clamp(VideoPlayerState.minSubtitlePosition,
+                        VideoPlayerState.maxSubtitlePosition),
+              );
+            },
+            onLongPressEnd: (_) {
+              videoState.setSubtitleDragActive(false);
+              if (_longPressMoved) {
+                // 拖动过 -> 松手即收框
+                setState(() => _editingPath = null);
+                videoState.setSubtitleEditBoxVisible(false);
+              }
+            },
+            child: textBox,
+          );
+        } else {
+          // 编辑态：完整拖动/面板交互（仅作用于当前这条字幕）。
+          // 手势分工：pan 负责拖动（带 6px 阈值，防轻触漂移），longPress
+          // 负责原地保持框/拖动锁定，scale 负责双指长按弹面板。
+          final Widget dragArea = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (_) {
+              // 点击框内非按钮处 -> 收框。onTapUp 是唯一收框入口，
+              // onPanEnd 只在真正拖动过时收框，避免点击时双收框。
+              setState(() => _editingPath = null);
+              videoState.setSubtitleEditBoxVisible(false);
+              videoState.setSubtitleDragActive(false);
+            },
+            onPanDown: (details) {
+              _panStart = details.globalPosition;
+              _panActuallyMoved = false;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              // 不在此处 setSubtitleDragActive(true)：一触即发会残留
+              // 拖动态拦截播放器手势（点击收框时手指微抖即触发）。
+            },
+            onPanUpdate: (details) {
+              final start = _panStart;
+              if (start == null) return;
+              // 6px 最小位移阈值：轻触/微抖不移动字幕
+              if (!_panActuallyMoved) {
+                if ((details.globalPosition - start).distance < 6) return;
+                _panActuallyMoved = true;
+                videoState.setSubtitleDragActive(true);
+              }
+              final v = videoState;
+              _dragStartMarginX += details.delta.dx;
+              v.setPathSubtitleMarginX(
+                path,
+                _dragStartMarginX.clamp(-500.0, 500.0),
+              );
+              final stageH = MediaQuery.of(context).size.height;
+              _dragStartPosition += details.delta.dy / stageH * 100;
+              v.setPathSubtitlePosition(
+                path,
+                _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
+                    VideoPlayerState.maxSubtitlePosition),
+              );
+            },
+            onPanEnd: (_) {
+              // 真正拖动过才复位拖动态；收框统一交给 onTapUp。
+              _panStart = null;
+              if (_panActuallyMoved) {
+                _panActuallyMoved = false;
+                videoState.setSubtitleDragActive(false);
+                setState(() => _editingPath = null);
+                videoState.setSubtitleEditBoxVisible(false);
+              }
+            },
+            onPanCancel: () {
+              // 手势被系统打断（来电/通知等）：必须复位拖动态，
+              // 否则残留 true 永久拦截播放器手势。
+              _panStart = null;
+              _panActuallyMoved = false;
+              videoState.setSubtitleDragActive(false);
+            },
+            onLongPressStart: (details) {
+              debugPrint('[SubtitleOverlay] 长按开始 path=$path');
+              _longPressMoved = false;
+              _dragStartPosition = videoState.pathSubtitlePosition(path);
+              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+              _dragOriginPosition = _dragStartPosition;
+              _dragOriginMarginX = _dragStartMarginX;
+              videoState.setSubtitleDragActive(true);
+            },
+            onLongPressMoveUpdate: (details) {
+              if (details.offsetFromOrigin.distance > 8) {
+                _longPressMoved = true;
+              }
+              if (!_longPressMoved) return;
+              final v = videoState;
+              // 起点+累计偏移（offsetFromOrigin 为累计值，不可再叠加）
+              v.setPathSubtitleMarginX(
+                path,
+                (_dragOriginMarginX + details.offsetFromOrigin.dx)
+                    .clamp(-500.0, 500.0),
+              );
+              final stageH = MediaQuery.of(context).size.height;
+              v.setPathSubtitlePosition(
+                path,
+                (_dragOriginPosition + details.offsetFromOrigin.dy / stageH * 100)
+                    .clamp(VideoPlayerState.minSubtitlePosition,
+                        VideoPlayerState.maxSubtitlePosition),
+              );
+            },
+            onLongPressEnd: (_) {
+              videoState.setSubtitleDragActive(false);
+              if (_longPressMoved) {
+                // 拖动过 -> 松手即锁定收框
+                setState(() => _editingPath = null);
+                videoState.setSubtitleEditBoxVisible(false);
+              }
+              // 原地长按 -> 保持框（双指长按/设置钮弹面板）
+            },
+            onScaleStart: (details) {
+              if (details.pointerCount >= 2) {
+                _twoFingerTimer?.cancel();
+                _twoFingerTimer = Timer(const Duration(milliseconds: 450), () {
+                  debugPrint('[SubtitleOverlay] 双指长按触发设置面板');
+                  _showSubtitleSettingsPanel(context, videoState, path);
+                });
+              }
+            },
+            onScaleUpdate: (details) {
+              // 仅当缩放/旋转确实变化时才算“捏合”并取消双指长按定时器；
+              // 手指微抖触发的 scaleUpdate 不应误杀（否则面板偶发弹不出）。
+              final meaningful =
+                  (details.scale - 1.0).abs() > 0.05 ||
+                      details.rotation.abs() > 0.05;
+              if (meaningful) {
+                _twoFingerTimer?.cancel();
+                _twoFingerTimer = null;
+              }
+            },
+            onScaleEnd: (_) {
+              _twoFingerTimer?.cancel();
+              _twoFingerTimer = null;
+            },
+            child: textBox,
+          );
+
+          final Widget boxLayer = Stack(
+            clipBehavior: Clip.none,
+            children: [
+              dragArea,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: const Color(0x99FFFFFF),
+                        width: 1,
                       ),
                     ),
                   ),
                 ),
-              );
-            },
+              ),
+              Positioned(
+                left: 2,
+                top: 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    debugPrint('[SubtitleOverlay] 点击设置按钮');
+                    _showSubtitleSettingsPanel(context, videoState, path);
+                  },
+                  child: const Icon(
+                    Icons.tune,
+                    size: 18,
+                    color: Color(0xFFFFFFFF),
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 2,
+                top: 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    debugPrint('[SubtitleOverlay] 点击背景切换按钮');
+                    setState(() {
+                      // 背景按字幕路径独立开关，多条字幕互不影响
+                      _subtitleBgEnabled[path] =
+                          !(_subtitleBgEnabled[path] ?? false);
+                    });
+                  },
+                  child: const Icon(
+                    Icons.format_color_fill,
+                    size: 18,
+                    color: Color(0xFFFFFFFF),
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                  ),
+                ),
+              ),
+            ],
+          );
+
+          positionedContent = boxLayer;
+        }
+
+        return Opacity(
+          opacity: videoState.subtitleOpacity.clamp(0.0, 1.0).toDouble(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Align(
+              alignment: Alignment(
+                _resolveHorizontalAlignment(videoState.subtitleAlignX),
+                _resolveVerticalAlignment(
+                    videoState.pathSubtitlePosition(path)),
+              ),
+              child: Transform.translate(
+                offset: Offset(
+                  videoState.pathSubtitleMarginX(path),
+                  0, // 外挂垂直位移独立（pathSubtitlePosition 控制），不跟随全局垂直边距滑块
+                ),
+                child: positionedContent,
+              ),
+            ),
           ),
         );
       },
     );
   }
+
+  /// 长按/双指/设置钮弹出的字幕设置面板（按字幕路径独立调时轴延迟）
+  void _showSubtitleSettingsPanel(
+      BuildContext context, VideoPlayerState videoState, String path) {
+    // 字体列表只扫描一次（面板存续期间复用同一个 Future）
+    final fontListFuture = _listSubtitleFontNames(videoState);
+    // 历史缓存/远程下载的字体可能从未注册进引擎，打开面板时补注册
+    unawaited(videoState.ensureSelectedSubtitleFontsRegistered());
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xF0101010),
+      barrierColor: Colors.black54,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final previewValue =
+            ValueNotifier<double>(videoState.pathSubtitleDelaySeconds(path));
+        final delayController = TextEditingController(
+          text:
+              _formatDelayInputText(videoState.pathSubtitleDelaySeconds(path)),
+        );
+        void applyValue(double value) {
+          videoState.setPathSubtitleDelaySeconds(path, value);
+          previewValue.value = value;
+          delayController.text = _formatDelayInputText(value);
+        }
+
+        // 常用字幕颜色调色板
+        const palette = <Color>[
+          Colors.white,
+          Colors.black,
+          Colors.yellow,
+          Colors.cyan,
+          Color(0xFFFFD54F),
+          Color(0xFFFF8A65),
+          Color(0xFFAED581),
+          Color(0xFF81D4FA),
+          Color(0xFFF48FB1),
+          Color(0xFFB39DDB),
+        ];
+        // 键盘弹出时把整块内容抬到键盘上方：底部内边距 = 键盘高度
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '外挂字幕设置（${videoState.externalSubtitleDisplayName(path)}）',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('外挂字幕时轴偏移（正值延后，负值提前）',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  ValueListenableBuilder<double>(
+                    valueListenable: previewValue,
+                    builder: (context, value, _) {
+                      return Slider(
+                        value: value.clamp(
+                          videoState.subtitleDelaySliderMinSeconds,
+                          videoState.subtitleDelaySliderMaxSeconds,
+                        ),
+                        min: videoState.subtitleDelaySliderMinSeconds,
+                        max: videoState.subtitleDelaySliderMaxSeconds,
+                        divisions: videoState.subtitleDelaySliderDivisions,
+                        label: _formatDelayDisplayText(value),
+                        onChanged: applyValue,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: delayController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              signed: true, decimal: true),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: '例如 -12.5 或 8',
+                            hintStyle: const TextStyle(color: Colors.white38),
+                            labelText: '秒',
+                            labelStyle: const TextStyle(color: Colors.white60),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide:
+                                  const BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.amber),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 10),
+                          ),
+                          onChanged: (text) {
+                            final parsed = double.tryParse(text.trim());
+                            if (parsed != null) applyValue(parsed);
+                          },
+                          onSubmitted: (text) {
+                            final parsed = double.tryParse(text.trim());
+                            if (parsed != null) applyValue(parsed);
+                            FocusScope.of(sheetContext).unfocus();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      IconButton(
+                        onPressed: () => FocusScope.of(sheetContext).unfocus(),
+                        icon: const Icon(Icons.check, color: Colors.amber),
+                        tooltip: '完成',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text('外挂字幕字号（不影响内嵌字幕）',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Consumer<VideoPlayerState>(
+                    builder: (context, vs, _) {
+                      final scale = vs.srtSubtitleScale;
+                      return Slider(
+                        value: scale.clamp(0.5, 3.0),
+                        min: 0.5,
+                        max: 3.0,
+                        divisions: 50,
+                        label: '${scale.toStringAsFixed(2)}x',
+                        onChanged: (value) =>
+                            videoState.setSrtSubtitleScale(value),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Text('字体（可多选）',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  Consumer<VideoPlayerState>(
+                    builder: (context, vs, _) {
+                      return FutureBuilder<List<String>>(
+                        future: fontListFuture,
+                        builder: (context, snapshot) {
+                          final fonts = snapshot.data ?? <String>[];
+                          final current = vs.externalSubtitleFontName;
+                          final selected = current
+                              .split(',')
+                              .map((e) => e.trim())
+                              .where((e) => e.isNotEmpty)
+                              .toSet();
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final f in fonts)
+                                FilterChip(
+                                  label: Text(f,
+                                      style: const TextStyle(fontSize: 12)),
+                                  selected: selected.contains(f),
+                                  onSelected: (sel) {
+                                    final next = sel
+                                        ? [...selected, f].join(',')
+                                        : selected
+                                            .where((e) => e != f)
+                                            .join(',');
+                                    videoState
+                                        .setExternalSubtitleFontName(next);
+                                  },
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Text('文字颜色',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  Consumer<VideoPlayerState>(
+                    builder: (context, vs, _) {
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          for (final color in palette)
+                            GestureDetector(
+                              onTap: () =>
+                                  videoState.setExternalSubtitleColor(color),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color:
+                                        vs.externalSubtitleColor.toARGB32() ==
+                                                color.toARGB32()
+                                            ? Colors.amber
+                                            : Colors.white24,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _showHsvPicker(context, videoState),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.palette, size: 16, color: Colors.white70),
+                        SizedBox(width: 6),
+                        Text(
+                          '全色调色盘',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 字幕轴同步诊断：同一条字幕只记一次，且全局每秒最多一条，
+  /// 输出 [SubtitleSync] 供日志终端比对内核间的时间轴来源差异。
+  void _logSubtitleSyncOnce({
+    required VideoPlayerState videoState,
+    required String cueKey,
+    required int subtitleTimeMs,
+    required String path,
+  }) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (cueKey == _lastLoggedCueKey ||
+        nowMs - _lastSyncLogAtMs < _syncLogMinIntervalMs) {
+      return;
+    }
+    _lastLoggedCueKey = cueKey;
+    _lastSyncLogAtMs = nowMs;
+    debugPrint(
+      '[SubtitleSync] kernel=${videoState.player.getPlayerKernelName()} '
+      'smooth=${widget.currentPositionMs.round()}ms '
+      'raw=${videoState.player.position}ms '
+      'lookup=${subtitleTimeMs}ms '
+      'delay=${videoState.pathSubtitleDelaySeconds(path).toStringAsFixed(1)}s '
+      'file=${path.split('/').last} '
+      'cue=${cueKey.length > 24 ? '${cueKey.substring(0, 24)}...' : cueKey}',
+    );
+  }
+
+  // 与字幕设置菜单共用同一字体列表（含字体库 subtitle_fonts + 本地 fonts）
+  Future<List<String>> _listSubtitleFontNames(VideoPlayerState videoState) {
+    return videoState.listSubtitleFonts();
+  }
+
+  String _formatDelayInputText(double value) {
+    if (value.abs() < 0.0001) return '0';
+    var text = value.toStringAsFixed(3);
+    if (text.contains('.')) {
+      text = text
+          .replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
+    }
+    return text;
+  }
+
+  String _formatDelayDisplayText(double value) {
+    final prefix = value > 0 ? '+' : '';
+    return '$prefix${value.toStringAsFixed(1)}s';
+  }
+
+  // 右下角拉伸手柄：Listener 原生事件，不与长按抢；放在拖动 GestureDetector 外，确保可命中
+
+  // 右下角拉伸手柄：Listener 原生事件，不与长按抢；放在拖动 GestureDetector 外，确保可命中
 
   double _resolveHorizontalAlignment(SubtitleAlignX alignX) {
     switch (alignX) {
@@ -134,7 +759,157 @@ class ExternalSubtitleOverlay extends StatelessWidget {
       VideoPlayerState.minSubtitlePosition,
       VideoPlayerState.maxSubtitlePosition,
     );
-    return ((normalized / 100) * 1.6 - 0.8).clamp(-0.8, 0.8).toDouble();
+    // 0=屏幕顶 100=屏幕底，允许拖到视频外（黑边区）：overlay 是 Positioned.fill
+    // 占满整个播放舞台（含视频外区域），视频面 Center(AspectRatio) 居中留黑边。
+    return (normalized / 100) * 2.0 - 1.0;
+  }
+
+  /// 叠层字幕的填充样式：SRT/VTT 为纯文本渲染，用户选择的字体直接生效
+  /// （不需要"样式覆盖=强制"门控；ASS 特效走内核 libass，不经过此叠层）。
+  TextStyle _buildFillStyle(VideoPlayerState videoState, double fontSize) {
+    final fontNames = videoState.externalSubtitleFontName
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final fontsApply = fontNames.isNotEmpty;
+
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: videoState.subtitleBold ? FontWeight.bold : FontWeight.w500,
+      fontStyle:
+          videoState.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+      color: videoState.externalSubtitleColor,
+      height: 1.28,
+      fontFamily: fontsApply && fontNames.isNotEmpty ? fontNames.first : null,
+      fontFamilyFallback:
+          fontsApply && fontNames.length > 1 ? fontNames.sublist(1) : null,
+      shadows: videoState.subtitleShadowOffset > 0
+          ? [
+              Shadow(
+                color: videoState.externalSubtitleColor,
+                offset: Offset(0, videoState.subtitleShadowOffset),
+                blurRadius: videoState.subtitleShadowOffset * 2,
+              ),
+            ]
+          : null,
+    );
+  }
+
+  /// 叠层字幕的描边样式（填充样式的前景描边变体）
+  TextStyle _buildBorderStyle(
+      VideoPlayerState videoState, TextStyle fillStyle) {
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = videoState.subtitleBorderSize.clamp(0.0, 8.0).toDouble()
+      // 外挂叠层描边固定黑色（独立于播放器设置/内嵌描边）
+      ..color = const Color(0xFF000000);
+
+    return fillStyle.copyWith(
+      foreground: borderPaint,
+      color: null,
+      shadows: null,
+    );
+  }
+
+  /// 全色调色盘（HSV 三滑块：色相/饱和度/亮度 + 实时预览），
+  /// 外挂叠层专属——选色应用 externalSubtitleColor
+  Future<void> _showHsvPicker(
+    BuildContext context,
+    VideoPlayerState videoState,
+  ) async {
+    var hsv = HSVColor.fromColor(videoState.externalSubtitleColor);
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('选择颜色'),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: hsv.toColor(),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildHsvSliderRow(
+                      '色相',
+                      hsv.hue,
+                      0,
+                      360,
+                      (v) => setDialogState(() => hsv = hsv.withHue(v)),
+                    ),
+                    _buildHsvSliderRow(
+                      '饱和',
+                      hsv.saturation,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
+                    ),
+                    _buildHsvSliderRow(
+                      '亮度',
+                      hsv.value,
+                      0,
+                      1,
+                      (v) => setDialogState(() => hsv = hsv.withValue(v)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
+                  child: const Text('确定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (picked != null) {
+      videoState.setExternalSubtitleColor(picked);
+    }
+  }
+
+  Widget _buildHsvSliderRow(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          child: Text(label, style: const TextStyle(fontSize: 13)),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
   }
 }
 
