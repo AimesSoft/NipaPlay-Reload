@@ -40,6 +40,10 @@ class PlayerKernelManager {
     if (videoPlayerState.isDisposed) {
       return;
     }
+    // surface 代数自增 → 渲染层 ValueKey 变化 → 旧 Texture/PlatformView 子树
+    // 被强制销毁重建（等效"关闭重开"）。必须在创建新 Player 之前发生，
+    // 保证新 surface 挂载时平台线程上只有新内核实例。
+    videoPlayerState.beginKernelSurfaceSwap();
     final previousPlayer = videoPlayerState.player;
     try {
       await performPlayerKernelHotSwapSteps(
