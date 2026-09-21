@@ -991,6 +991,9 @@ class _CupertinoSubtitleSettingsPaneState
     ValueChanged<Color> onPicked,
   ) async {
     var hsv = HSVColor.fromColor(initial);
+    // 对话框内 hex 输入与 HSV 滑块双向同步：改滑块刷新文本框，
+    // 输入合法 hex 反过来刷新滑块与预览。
+    final hexController = TextEditingController(text: _colorToHex(initial));
     final picked = await showCupertinoDialog<Color>(
       context: context,
       builder: (dialogContext) {
@@ -1019,21 +1022,55 @@ class _CupertinoSubtitleSettingsPaneState
                       hsv.hue,
                       0,
                       360,
-                      (v) => setDialogState(() => hsv = hsv.withHue(v)),
+                      (v) => setDialogState(() {
+                        hsv = hsv.withHue(v);
+                        hexController.text = _colorToHex(hsv.toColor());
+                      }),
                     ),
                     _buildHsvSliderRow(
                       '饱和',
                       hsv.saturation,
                       0,
                       1,
-                      (v) => setDialogState(() => hsv = hsv.withSaturation(v)),
+                      (v) => setDialogState(() {
+                        hsv = hsv.withSaturation(v);
+                        hexController.text = _colorToHex(hsv.toColor());
+                      }),
                     ),
                     _buildHsvSliderRow(
                       '亮度',
                       hsv.value,
                       0,
                       1,
-                      (v) => setDialogState(() => hsv = hsv.withValue(v)),
+                      (v) => setDialogState(() {
+                        hsv = hsv.withValue(v);
+                        hexController.text = _colorToHex(hsv.toColor());
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 60,
+                          child: Text('十六进制', style: TextStyle(fontSize: 13)),
+                        ),
+                        Expanded(
+                          child: CupertinoTextField(
+                            controller: hexController,
+                            placeholder: '#FFFFFF',
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            onChanged: (text) {
+                              final parsed = _parseHexColor(text);
+                              if (parsed != null) {
+                                setDialogState(
+                                  () => hsv = HSVColor.fromColor(parsed),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1044,7 +1081,12 @@ class _CupertinoSubtitleSettingsPaneState
                   child: const Text('取消'),
                 ),
                 CupertinoButton(
-                  onPressed: () => Navigator.pop(dialogContext, hsv.toColor()),
+                  onPressed: () {
+                    // hex 输入合法时以 hex 为准（允许只改 hex 不动滑块）；
+                    // 非法输入保持 HSV 当前值。
+                    final fromHex = _parseHexColor(hexController.text);
+                    Navigator.pop(dialogContext, fromHex ?? hsv.toColor());
+                  },
                   child: const Text('确定'),
                 ),
               ],
@@ -1053,6 +1095,7 @@ class _CupertinoSubtitleSettingsPaneState
         );
       },
     );
+    hexController.dispose();
     if (picked != null) {
       onPicked(picked);
     }

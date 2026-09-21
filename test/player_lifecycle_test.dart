@@ -150,42 +150,49 @@ void main() {
     });
   });
 
-  group('hot-swap teardown gate', () {
-    test('timeout aborts before assigning a replacement player', () async {
-      final delegate = _ControlledAsyncPlayerDelegate();
-      final player = Player.withDelegate(delegate);
-      final state = _HotSwapVideoPlayerState(player);
+  group('hot-swap teardown schedule', () {
+    // 旧契约「teardown 超时/失败则中止切换」会让主线程等旧内核 dispose，
+    // MDK -> libmpv 实测卡死闪退（iOS watchdog 10s kill）。新契约：新播放
+    // 器先就绪，旧内核在 finally 里 unawaited 异步销毁，超时/异常只记日志。
+    final source =
+        File('lib/utils/player_kernel_manager.dart').readAsStringSync();
 
-      await expectLater(
-        PlayerKernelManager.performPlayerKernelHotSwap(
-          state,
-          playerDisposalTimeout: const Duration(milliseconds: 10),
-        ),
-        throwsA(isA<TimeoutException>()),
-      );
+    test('swap flow schedules teardown without awaiting it', () {
+      final wrapperStart =
+          source.indexOf('static Future<void> performPlayerKernelHotSwap(');
+      final wrapperEnd =
+          source.indexOf('_scheduleOldPlayerTeardown(', wrapperStart);
+      final wrapper = source.substring(wrapperStart, wrapperEnd);
+      expect(wrapperStart, greaterThanOrEqualTo(0));
+      expect(wrapper.contains('} finally {'), isTrue);
+      expect(
+        wrapper.contains('await performPlayerKernelHotSwapSteps('), isTrue);
 
-      expect(delegate.disposeAsyncCalls, 1);
-      expect(state.replacementAssignments, 0);
-      delegate.completeDisposal();
-      await player.disposeAsync();
+      // 步骤本体不得 dispose 旧播放器（disposeAsync 只允许出现在后台
+      // teardown 调度里）。
+      final stepsStart =
+          source.indexOf('static Future<void> performPlayerKernelHotSwapSteps(');
+      final stepsEnd = source.indexOf('/// 为VideoPlayerState执行弹幕内核热切换',
+          stepsStart);
+      final steps = source.substring(stepsStart, stepsEnd);
+      expect(stepsStart, greaterThan(wrapperStart));
+      expect(steps.contains('disposeAsync'), isFalse);
+      expect(steps.contains('resetPlayer()'), isTrue);
     });
 
-    test('teardown failure aborts before assigning a replacement player',
-        () async {
-      final delegate = _ControlledAsyncPlayerDelegate();
-      final player = Player.withDelegate(delegate);
-      final state = _HotSwapVideoPlayerState(player);
-      final swap = PlayerKernelManager.performPlayerKernelHotSwap(
-        state,
-        playerDisposalTimeout: const Duration(seconds: 1),
-      );
-      final expectation = expectLater(swap, throwsStateError);
-
-      delegate.failDisposal(StateError('native teardown failed'));
-      await expectation;
-
-      expect(delegate.disposeAsyncCalls, 1);
-      expect(state.replacementAssignments, 0);
+    test('background teardown swallows timeout and error', () {
+      final scheduleStart =
+          source.indexOf('static void _scheduleOldPlayerTeardown(');
+      final scheduleEnd = source.indexOf('/// 为VideoPlayerState执行播放器内核热切换',
+          scheduleStart);
+      final schedule = source.substring(scheduleStart, scheduleEnd);
+      expect(scheduleStart, greaterThanOrEqualTo(0));
+      expect(schedule.contains('unawaited('), isTrue);
+      expect(schedule.contains('on TimeoutException'), isTrue);
+      expect(schedule.contains('catch (error)'), isTrue);
+      // 超时/失败分支只 debugPrint，不 throw、不 rethrow。
+      expect(schedule.contains('throw'), isFalse);
+      expect(schedule.contains('Error.throwWithStackTrace'), isFalse);
     });
   });
 

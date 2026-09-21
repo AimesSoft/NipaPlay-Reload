@@ -538,7 +538,8 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lnipaplay_native",
+					"-force_load",
+					"$(BUILT_PRODUCTS_DIR)/libnipaplay_native.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay.profile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -754,7 +755,8 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lnipaplay_native",
+					"-force_load",
+					"$(BUILT_PRODUCTS_DIR)/libnipaplay_native.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay2.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -796,7 +798,8 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lnipaplay_native",
+					"-force_load",
+					"$(BUILT_PRODUCTS_DIR)/libnipaplay_native.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay;
 				PRODUCT_NAME = "$(TARGET_NAME)";

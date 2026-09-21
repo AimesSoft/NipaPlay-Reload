@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
@@ -203,6 +204,14 @@ void main() {
     expect(find.text('色相'), findsOneWidget);
     expect(find.text('饱和'), findsOneWidget);
     expect(find.text('亮度'), findsOneWidget);
+    expect(find.text('十六进制'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(CupertinoAlertDialog),
+        matching: find.byType(CupertinoTextField),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('SUB-03 键盘弹出为输入框垫出键盘高度', (tester) async {

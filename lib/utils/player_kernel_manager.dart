@@ -17,11 +17,71 @@ class PlayerKernelManager {
   static const Duration defaultHotSwapPlayerDisposalTimeout =
       Duration(seconds: 10);
 
-  /// 为VideoPlayerState执行播放器内核热切换
+  /// 热切换入口：新播放器先就绪、旧播放器最后异步销毁。
+  ///
+  /// 旧内核（尤其 MDK/AVPlayer）的 dispose 是同步 FFI，在主线程等它会
+  /// 一直堵到 iOS watchdog 杀进程（实测 MDK -> libmpv 卡死闪退）。因此
+  /// 销毁一律放在主流程完成后 unawaited 执行，失败只记日志。
   static Future<void> performPlayerKernelHotSwap(
     VideoPlayerState videoPlayerState, {
     Duration playerDisposalTimeout = defaultHotSwapPlayerDisposalTimeout,
   }) async {
+    if (videoPlayerState.isDisposed) {
+      return;
+    }
+    final previousPlayer = videoPlayerState.player;
+    try {
+      await performPlayerKernelHotSwapSteps(videoPlayerState);
+    } finally {
+      _scheduleOldPlayerTeardown(
+        previousPlayer,
+        timeout: playerDisposalTimeout,
+      );
+    }
+  }
+
+  /// 后台销毁热切换替换下来的旧播放器。
+  ///
+  /// 先让出 50ms 再动手：新内核此刻正在起播，抢在同一次消息循环里做
+  /// 同步 FFI 释放会让界面掉帧甚至卡住。超时/异常一律吞掉（只记日志），
+  /// 旧内核释放失败不应该让已经正常播放的新内核回退或让切换报错。
+  static void _scheduleOldPlayerTeardown(
+    Player player, {
+    required Duration timeout,
+  }) {
+    final kernelName = player.getPlayerKernelName();
+    unawaited(() async {
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown started (background): '
+          'kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
+        );
+        await player.disposeAsync().timeout(timeout);
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown completed: '
+          'kernel=$kernelName',
+        );
+      } on TimeoutException {
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown timed out after '
+          '${timeout.inMilliseconds}ms; new player keeps playing: '
+          'kernel=$kernelName',
+        );
+      } catch (error) {
+        debugPrint(
+          '[PlayerKernelManager] Old player teardown failed; '
+          'new player keeps playing: kernel=$kernelName $error',
+        );
+      }
+    }());
+  }
+
+  /// 为VideoPlayerState执行播放器内核热切换（步骤本体，旧播放器销毁
+  /// 由 [performPlayerKernelHotSwap] 在末尾异步执行）
+  static Future<void> performPlayerKernelHotSwapSteps(
+    VideoPlayerState videoPlayerState,
+  ) async {
     if (videoPlayerState.isDisposed) {
       return;
     }
@@ -34,7 +94,6 @@ class PlayerKernelManager {
     final currentDuration = videoPlayerState.duration;
     final currentProgress = videoPlayerState.progress;
     final currentPlaybackRate = videoPlayerState.playbackRate;
-        final previousPlayer = videoPlayerState.player;
     final historyItem = WatchHistoryItem(
       filePath: currentPath ?? '',
       animeName: videoPlayerState.animeTitle ?? '',
@@ -50,10 +109,6 @@ class PlayerKernelManager {
     if (currentPath == null) {
       debugPrint('[PlayerKernelManager] 没有正在播放的视频，仅创建新播放器实例');
       // 如果没有视频在播放，只需要创建一个新的播放器实例以备后用
-      await _disposePlayerForHotSwap(
-        previousPlayer,
-        timeout: playerDisposalTimeout,
-      );
       if (videoPlayerState.isDisposed) {
         return;
       }
@@ -74,12 +129,10 @@ class PlayerKernelManager {
       return;
     }
 
-    // 2. 释放旧播放器资源
+    // 2. 停止旧播放器（只停不销毁）：resetPlayer 把内核置 stopped 空
+    // 态、断开 media 与纹理，旧内核不再解码/占音频；真正的 dispose 由
+    // wrapper 在切换完成后异步执行，避免同步 FFI 阻塞主线程。
     await videoPlayerState.resetPlayer();
-    await _disposePlayerForHotSwap(
-      previousPlayer,
-      timeout: playerDisposalTimeout,
-    );
     if (videoPlayerState.isDisposed) {
       return;
     }
@@ -140,46 +193,6 @@ class PlayerKernelManager {
     }
   }
 
-  static Future<void> _disposePlayerForHotSwap(
-      Player player, {
-      required Duration timeout,
-    }) async {
-      final kernelName = player.getPlayerKernelName();
-      debugPrint(
-        '[PlayerKernelManager] Waiting for old player teardown before hot swap: '
-        'kernel=$kernelName timeoutMs=${timeout.inMilliseconds}',
-      );
-      try {
-        await player.disposeAsync().timeout(timeout);
-        debugPrint(
-          '[PlayerKernelManager] Old player teardown completed: '
-          'kernel=$kernelName',
-        );
-      } on TimeoutException catch (_, stackTrace) {
-        // 回退到上游 .6 逻辑：旧内核释放超时直接中止切换（throw），
-        // 不再"继续创建新播放器"——旧资源未释放就建新的会造成资源重叠，
-        // mdk 关软解看一半再切 libmpv 时 app 卡死（用户已复现）。
-        // 切换失败但 UI 不卡，比静默卡死好；异常由调用方兜底提示。
-        final error = TimeoutException(
-          'Old player teardown timed out after ${timeout.inMilliseconds}ms; '
-          'replacement creation was aborted to avoid overlapping resources.',
-          timeout,
-        );
-        debugPrint(
-          '[PlayerKernelManager] Native/backend player teardown timed out; '
-          'replacement creation aborted: kernel=$kernelName '
-          'timeoutMs=${timeout.inMilliseconds}\n$stackTrace',
-        );
-        Error.throwWithStackTrace(error, stackTrace);
-      } catch (error, stackTrace) {
-        debugPrint(
-          '[PlayerKernelManager] Native/backend player teardown failed; '
-          'replacement creation aborted: kernel=$kernelName '
-          '$error\n$stackTrace',
-        );
-        Error.throwWithStackTrace(error, stackTrace);
-      }
-    }
 
   /// 为VideoPlayerState执行弹幕内核热切换
   static void performDanmakuKernelHotSwap(

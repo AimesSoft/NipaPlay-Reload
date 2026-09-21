@@ -87,6 +87,11 @@ class SubtitleManager extends ChangeNotifier {
   /// 所有活跃的外部字幕路径（支持多挂 SRT 叠层渲染）
   final List<String> _activeExternalSubtitlePaths = [];
 
+  /// 用户最后一次手动选中的内嵌字幕轨索引（媒体轨道列表里的下标）。
+  /// 移除外挂内核轨字幕（ASS/SSA 占 sid）后用它回退内嵌轨，
+  /// 否则 sid=no 之后滑块/样式全部打到空轨道（BUG-A）。
+  int _lastSelectedEmbeddedTrackIndex = 0;
+
   /// 获取全部活跃的外部字幕路径（多挂时叠加渲染）
   List<String> getAllActiveExternalSubtitlePaths() =>
       List.unmodifiable(_activeExternalSubtitlePaths);
@@ -663,6 +668,24 @@ class SubtitleManager extends ChangeNotifier {
         // activeSubtitleTracks 只管内嵌轨索引，外挂 ASS 轨（setSubtitleTrack(uri)
         // 挂的 mpv sid）必须显式 sid=no 才能真正关闭，否则取消后字幕仍显示。
         _player.setProperty('sid', 'no');
+        // BUG-A：外挂（占 sid 的 ASS/SSA）移除后必须回退内嵌轨——
+        // 之前 sid=no 就结束，只剩内嵌时位置滑块/延迟全打在空轨道上，
+        // 用户感知为「移除外挂后滑块拖不动内嵌」。
+        final stillKernelExternal = _activeExternalSubtitlePaths.any(
+            (p) => !_shouldRenderExternalSubtitleInApp(p));
+        final embeddedTracks = _player.mediaInfo.subtitle;
+        if (!stillKernelExternal && embeddedTracks != null &&
+            embeddedTracks.isNotEmpty) {
+          final restore = _lastSelectedEmbeddedTrackIndex
+              .clamp(0, embeddedTracks.length - 1);
+          try {
+            _player.activeSubtitleTracks = [restore];
+            debugPrint(
+                'SubtitleManager: 移除外挂后回退内嵌轨 index=$restore');
+          } catch (e) {
+            debugPrint('SubtitleManager: 回退内嵌轨失败: $e');
+          }
+        }
       } catch (e) {
         debugPrint('SubtitleManager: 清除字幕轨失败: $e');
       }
@@ -1600,6 +1623,7 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     final playerSubInfo = _player.mediaInfo.subtitle![trackIndex];
+    _lastSelectedEmbeddedTrackIndex = trackIndex;
     debugPrint(
       'SubtitleManager: updateEmbeddedSubtitleTrack - Called for trackIndex: $trackIndex',
     );
