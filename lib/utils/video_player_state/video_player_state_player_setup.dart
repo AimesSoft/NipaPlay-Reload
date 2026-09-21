@@ -27,7 +27,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
-    bool autoPlay = true,
   }) async {
     _playbackErrorDialogRequested = false;
     final isRequestedEmbyStream = videoPath.startsWith('emby://');
@@ -469,10 +468,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
-      // 切换内核场景（autoPlay=false）：setMedia 后不暂停——内核尚未
-      // 加载媒体（mdk 需 prepare 才加载；media_kit 未 open 时 pause()
-      // 会挂起导致切换卡死）。prepare 后与就绪后再用内核层 pauseDirectly
-      // 阻止自动播放开始。
       await applyErikaUpscalerModeToCurrentPlayer();
 
       //debugPrint('4. 准备播放器...');
@@ -480,19 +475,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       mediaPrepareStarted = true;
       await player.prepare();
       debugPrint('[PlayerSetup] prepare 完成 kernel=${player.getPlayerKernelName()} '
-          'autoPlay=$autoPlay state=${player.state}');
+          'state=${player.state}');
       // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
-      // 切换内核场景（autoPlay=false）要尽早用内核层暂停（pauseDirectly
-      // 绕过状态机门控），避免"放一秒钟有声音才暂停"——即使内核尚未
-      // 完全就绪也先尝试暂停，尾部还有兜底。
-      if (!autoPlay) {
-        try {
-          // 不 await：mdk/media_kit 内核 pause 是异步生效，await 可能
-          // 阻塞（未就绪时挂起导致"准备播放"卡死）。内核 prepare 后
-          // 默认 paused，这里只是兜底，fire-and-forget 足够。
-          unawaited(player.pauseDirectly());
-        } catch (_) {}
-      }
+      debugPrint('[PlayerSetup] 媒体已 prepare，内核自动进入播放');
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
           videoPath.startsWith('emby://');
       final bool isNetworkMedia = isMediaServer ||
@@ -553,13 +538,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         for (var waitCount = 0; waitCount < 100; waitCount++) {
           await Future.delayed(const Duration(milliseconds: 100));
           if (player.state == PlaybackState.playing) {
-            // 切换内核场景：内核已自动进入播放——立即用内核层暂停
-            // （绕过状态机门控），避免"播放一下"。不 await 防挂起。
-            if (!autoPlay) {
-              try {
-                unawaited(player.pauseDirectly());
-              } catch (_) {}
-            }
             break;
           }
           if (player.state == PlaybackState.paused ||
@@ -570,15 +548,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           }
         }
       }
-      // 切换内核场景兜底：媒体就绪后再暂停一次（早期 pauseDirectly 可能被
-      // 内核就绪流程覆盖）。不 await 防挂起。
-      if (!autoPlay) {
-        try {
-          unawaited(player.pauseDirectly());
-        } catch (_) {}
-      }
       debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
-          'autoPlay=$autoPlay 进入纹理阶段');
+          '进入纹理阶段');
       mediaPrepareCompleted = true;
 
       //debugPrint('5. 获取视频纹理...');
@@ -1125,15 +1096,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
       if (lastPosition == 0) {
-        // 从头播放（切换内核场景 autoPlay=false 不自动播放）
-        // debugPrint('VideoPlayerState: Initializing playback from start, calling play().'); // <--- REMOVED PRINT
-        if (autoPlay) {
-          play(); // Call our central play method
-        } else {
-          try {
-            unawaited(player.pauseDirectly());
-          } catch (_) {}
-        }
+        // 从头播放
+        play(); // Call our central play method
       } else {
         // 从中间恢复
         if (player.state == PlaybackState.playing) {
@@ -1142,20 +1106,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             PlayerStatus.playing,
             message: '正在播放 (恢复)',
           ); // Sync our status
-          // 切换内核场景：内核已自动播放——立即内核层暂停，避免"播放一下"
-          if (!autoPlay) {
-            try {
-              unawaited(player.pauseDirectly());
-            } catch (_) {}
-          } else {
-            _startScreenshotTimer(); // Start timer directly
-          }
+          _startScreenshotTimer(); // Start timer directly
         } else {
           // Player did not auto-play after seek, or was paused. We need to start it.
-          // 切换内核场景（autoPlay=false）不自动恢复播放——保持暂停，用户手动播放
-          if (autoPlay) {
-            play(); // Call our central play method
-          }
+          // _status should be 'ready' from earlier _setStatus call in initializePlayer
+          play(); // Call our central play method
         }
       }
 

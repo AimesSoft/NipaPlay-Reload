@@ -100,6 +100,7 @@ class PlayerKernelManager {
     final currentDuration = videoPlayerState.duration;
     final currentProgress = videoPlayerState.progress;
     final currentPlaybackRate = videoPlayerState.playbackRate;
+    final wasPlaying = videoPlayerState.status == PlayerStatus.playing;
 
     // 1.1 主动写进度到 PlaybackPositionStore：initializePlayer 内部
     // _getVideoPosition 会 flush + 读同一个 store，确保切换后从精确
@@ -156,10 +157,6 @@ class PlayerKernelManager {
 
     // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
     videoPlayerState.player = Player();
-    // mdk/libmpv 内核 setMedia 后会自动进入播放（erika 不自动）。
-    // 切换初始化期间先静音，避免自动播放的 1 秒有声音；就绪后
-    // seek+暂停，再由 applyPlayerVolume 恢复用户音量。
-    videoPlayerState.player.volume = 0;
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
@@ -172,16 +169,18 @@ class PlayerKernelManager {
     await videoPlayerState.applySubtitleStylePreference();
     if (videoPlayerState.isDisposed) return;
 
-    // 4. 重新初始化播放（autoPlay=false：切换后保持暂停，避免"播一下又停"）
+    // 4. 重新初始化播放（沿用上游流程：内部 _getVideoPosition 读
+    // PlaybackPositionStore → seekAndWait(lastPosition) → play，
+    // 媒体就绪后 seek 自然生效，不会丢进度）
     await videoPlayerState.initializePlayer(
       currentPath,
       historyItem: historyItem,
       resetManualDanmakuOffset: false,
-      autoPlay: false,
     );
     if (videoPlayerState.isDisposed) return;
 
-    // 5. 恢复播放状态
+    // 5. 恢复播放状态（initializePlayer 内部已 seek + play，
+    // 不再外部 seekTo 避免双 seek 竞态；只处理暂停场景）
     if (videoPlayerState.hasVideo) {
       videoPlayerState.applyPlayerVolume();
       // 恢复播放速度设置
@@ -189,23 +188,10 @@ class PlayerKernelManager {
         videoPlayerState.player.setPlaybackRate(currentPlaybackRate);
         debugPrint('[PlayerKernelManager] 恢复播放速度设置: ${currentPlaybackRate}x');
       }
-      // 等媒体就绪再 seek：libmpv setMedia 后立即 seek 会被丢弃（实测
-      // 切 libmpv 进度回退 00:00）。Player 包装类的 supportsMediaLoadReadiness
-      // getter 检测 delegate 是否实现 MediaLoadAwarePlayer（MediaKit=是、
-      // MDK=否），是则 await waitUntilMediaReady 等内核就绪。
-      if (videoPlayerState.player.supportsMediaLoadReadiness) {
-        await videoPlayerState.player.waitUntilMediaReady(
-          timeout: const Duration(seconds: 8),
-        );
-        if (videoPlayerState.isDisposed) return;
+      if (!wasPlaying) {
+        videoPlayerState.pause();
       }
-      videoPlayerState.seekTo(currentPosition);
-      debugPrint('[PlayerKernelManager] 切换后 seekTo=${currentPosition.inMilliseconds}ms 内核=${videoPlayerState.player.getPlayerKernelName()}');
-      // 切换后不自动恢复播放：新内核刚创建，立即 play 会"播一下又暂停"
-      // （内核未就绪状态机自动暂停），突兀且无意义。切完保持暂停，
-      // 用户想继续播放时手动点播放即可。
-      videoPlayerState.pause();
-      debugPrint('[PlayerKernelManager] 播放器内核热切换完成（暂停态，等待用户播放）');
+      debugPrint('[PlayerKernelManager] 播放器内核热切换完成，恢复状态 wasPlaying=$wasPlaying position=${videoPlayerState.position.inMilliseconds}ms 内核=${videoPlayerState.player.getPlayerKernelName()}');
     } else {
       debugPrint('[PlayerKernelManager] 播放器内核热切换完成，但未能恢复播放（可能视频加载失败）');
     }
