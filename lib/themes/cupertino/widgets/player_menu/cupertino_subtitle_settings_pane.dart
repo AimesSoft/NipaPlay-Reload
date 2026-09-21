@@ -30,14 +30,8 @@ class _CupertinoSubtitleSettingsPaneState
   final TextEditingController _subtitleDelayController =
       TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
-  final TextEditingController _textColorController = TextEditingController();
-  final TextEditingController _borderColorController = TextEditingController();
-  final TextEditingController _shadowColorController = TextEditingController();
   final FocusNode _subtitleDelayFocus = FocusNode();
   final FocusNode _fontNameFocus = FocusNode();
-  final FocusNode _textColorFocus = FocusNode();
-  final FocusNode _borderColorFocus = FocusNode();
-  final FocusNode _shadowColorFocus = FocusNode();
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
   // 字幕位置滑块预览值：onChanged 只更新本地状态（跟手不碰内核），
@@ -56,14 +50,8 @@ class _CupertinoSubtitleSettingsPaneState
   void dispose() {
     _subtitleDelayController.dispose();
     _fontNameController.dispose();
-    _textColorController.dispose();
-    _borderColorController.dispose();
-    _shadowColorController.dispose();
     _subtitleDelayFocus.dispose();
     _fontNameFocus.dispose();
-    _textColorFocus.dispose();
-    _borderColorFocus.dispose();
-    _shadowColorFocus.dispose();
     super.dispose();
   }
 
@@ -312,21 +300,6 @@ class _CupertinoSubtitleSettingsPaneState
       focus: _fontNameFocus,
       value: videoState.subtitleFontName,
     );
-    _syncController(
-      controller: _textColorController,
-      focus: _textColorFocus,
-      value: _colorToHex(videoState.subtitleColor),
-    );
-    _syncController(
-      controller: _borderColorController,
-      focus: _borderColorFocus,
-      value: _colorToHex(videoState.subtitleBorderColor),
-    );
-    _syncController(
-      controller: _shadowColorController,
-      focus: _shadowColorFocus,
-      value: _colorToHex(videoState.subtitleShadowColor),
-    );
 
     // 键盘弹出时把可滚动内容底部垫高一个键盘高度，否则面板底部的
     // 延迟/字体/hex 输入框会被键盘盖住无法查看与编辑。
@@ -522,41 +495,20 @@ class _CupertinoSubtitleSettingsPaneState
           _buildColorTile(
             context,
             label: '文字颜色',
-            controller: _textColorController,
-            focusNode: _textColorFocus,
             color: videoState.subtitleColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleColor(parsed),
           ),
           _buildColorTile(
             context,
             label: '描边颜色',
-            controller: _borderColorController,
-            focusNode: _borderColorFocus,
             color: videoState.subtitleBorderColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleBorderColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleBorderColor(parsed),
           ),
           _buildColorTile(
             context,
             label: '阴影颜色',
-            controller: _shadowColorController,
-            focusNode: _shadowColorFocus,
             color: videoState.subtitleShadowColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleShadowColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleShadowColor(parsed),
           ),
         ],
       ),
@@ -921,34 +873,47 @@ class _CupertinoSubtitleSettingsPaneState
     );
   }
 
+  /// 颜色行：hex 文本按钮（点击弹出输入窗口）+ 色块按钮（HSV 调色板）。
+  /// 之前 trailing 内嵌 110pt 输入框，在横屏播放器右下角的面板里键盘一顶
+  /// 就被卡在画面角落；改为点击弹出独立对话框，Dialog/AppSheet 自带键盘
+  /// 避让，输入框始终显示在键盘上方。
   Widget _buildColorTile(
     BuildContext context, {
     required String label,
-    required TextEditingController controller,
-    required FocusNode focusNode,
     required Color color,
-    required ValueChanged<String> onSubmit,
+    required ValueChanged<Color> onPicked,
   }) {
     return AdaptivePlayerMenuTile(
       title: Text(label),
-      // 早前外层 SizedBox(width:120) 装不下 28+8+110=146 的子项，
-      // 色块被挤出可点区域；改为自适应 Row + 44pt 命中的 CupertinoButton。
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            onPressed: () {
+              _showHexInputDialog(context, label, color, onPicked);
+            },
+            child: Text(
+              _colorToHex(color),
+              key: const Key('subtitleColorValueButton'),
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.white,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          CupertinoButton(
             padding: EdgeInsets.zero,
             minSize: 44,
             onPressed: () {
-              // 点色块打开全色调色板（HSV），选色后通过 onSubmit 应用。
-              // 先 onSubmit 再更新输入框：onChanged 也会触发 onSubmit，
-              // 顺序反了会导致第一次应用的是输入框旧值。
+              // 点色块打开全色调色板（HSV），选色后应用。
               _showColorPickerDialog(context, color, (picked) {
                 debugPrint(
                   '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
                 );
-                onSubmit(_colorToHex(picked));
-                controller.text = _colorToHex(picked);
+                onPicked(picked);
               });
             },
             child: Container(
@@ -962,26 +927,53 @@ class _CupertinoSubtitleSettingsPaneState
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 110,
-            child: AdaptivePlayerMenuTextField(
-              controller: controller,
-              focusNode: focusNode,
-              placeholder: '#FFFFFF',
-              textStyle: const TextStyle(
-                color: CupertinoColors.white,
-                fontSize: 14,
-              ),
-              onSubmitted: onSubmit,
-              // 输入即应用：hex 完整时立即生效（解析失败忽略），
-              // 避免移动端不按回车就"输入后没应用"
-              onChanged: onSubmit,
-            ),
-          ),
         ],
       ),
     );
+  }
+
+  /// 单行 hex 输入弹窗：实时解析（onChanged 输入即应用，与旧内嵌框
+  /// 语义一致）。对话框自带键盘避让，不会卡在屏幕角落。
+  Future<void> _showHexInputDialog(
+    BuildContext context,
+    String label,
+    Color initial,
+    ValueChanged<Color> onPicked,
+  ) async {
+    final controller = TextEditingController(text: _colorToHex(initial));
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: Text(label),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: CupertinoTextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 7,
+              placeholder: '#FFFFFF',
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: (value) {
+                final parsed = _parseHexColor(value);
+                if (parsed != null) {
+                  onPicked(parsed);
+                }
+              },
+              onSubmitted: (_) => Navigator.of(dialogContext).pop(),
+            ),
+          ),
+          actions: [
+            CupertinoButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 
   /// 全色调色板对话框（HSV 三滑块：色相/饱和度/亮度 + 实时预览）
