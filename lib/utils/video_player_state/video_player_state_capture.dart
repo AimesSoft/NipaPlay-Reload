@@ -26,6 +26,7 @@ const int _thumbnailMaxHeight = 240;
 const int _thumbnailMaxWidth = 480;
 const int _thumbnailJpegQuality = 70;
 
+
 extension VideoPlayerStateCapture on VideoPlayerState {
   bool _isPngBytes(Uint8List bytes) {
     return bytes.length >= 8 &&
@@ -466,12 +467,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<String?> captureScreenshot({
-    bool includeDanmaku = true,
-    bool includeSubtitles = true,
+    bool? includeDanmaku,
+    bool? includeSubtitles,
   }) async {
-    final bytes = await _captureScreenshotPngBytes(
-      includeDanmaku: includeDanmaku,
-      includeSubtitles: includeSubtitles,
+    final bytes = await _captureScreenshotJpegBytes(
+      // 未显式传参时回退到截图设置页的开关
+      includeDanmaku: includeDanmaku ?? _screenshotCaptureIncludesDanmaku,
+      includeSubtitles: includeSubtitles ?? _screenshotCaptureIncludesSubtitles,
     );
     if (bytes == null || bytes.isEmpty) return null;
 
@@ -488,14 +490,16 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<bool> captureScreenshotToPhotos({
-    bool includeDanmaku = true,
-    bool includeSubtitles = true,
+    bool? includeDanmaku,
+    bool? includeSubtitles,
   }) async {
+    includeDanmaku ??= _screenshotCaptureIncludesDanmaku;
+    includeSubtitles ??= _screenshotCaptureIncludesSubtitles;
     if (kIsWeb) return false;
     if (!Platform.isIOS) return false;
     if (!hasVideo) return false;
 
-    final bytes = await _captureScreenshotPngBytes(
+    final bytes = await _captureScreenshotJpegBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
@@ -509,13 +513,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     bool includeDanmaku = true,
     bool includeSubtitles = true,
   }) {
-    return _captureScreenshotPngBytes(
+    return _captureScreenshotJpegBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
   }
 
-  Future<Uint8List?> _captureScreenshotPngBytes({
+  Future<Uint8List?> _captureScreenshotJpegBytes({
     required bool includeDanmaku,
     required bool includeSubtitles,
   }) async {
@@ -588,15 +592,58 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final pixelRatio = devicePixelRatio.clamp(1.0, 2.0);
 
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      // JPEG(92) 而非 PNG：1080p 帧的 PNG 可达 10MB 级，JPEG 同画质约
+      // 0.3~1MB；RGBA 原始字节经 image 包编码，透明区域按黑底压实。
+      final rgbaData =
+          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final imageWidth = image.width;
+      final imageHeight = image.height;
       image.dispose();
 
-      if (byteData == null) {
+      if (rgbaData == null) {
         debugPrint('截图失败: image.toByteData 返回 null');
         return null;
       }
 
-      return byteData.buffer.asUint8List();
+      final rgba = rgbaData.buffer.asUint8List();
+      final decoded = img.Image.fromBytes(
+        width: imageWidth,
+        height: imageHeight,
+        bytes: rgba.buffer,
+        numChannels: 4,
+      );
+      // 截图设置「裁剪黑边」：按视频宽高比 contain 计算视频区（居中），
+      // 裁掉上下/左右黑边——截图更紧凑，弹幕字幕在视频区内不受影响。
+      if (_screenshotCropLetterbox && _aspectRatio > 0) {
+        final w = imageWidth.toDouble();
+        final h = imageHeight.toDouble();
+        final ar = _aspectRatio;
+        var x = 0;
+        var y = 0;
+        var cw = imageWidth;
+        var ch = imageHeight;
+        if (w / ar <= h) {
+          // 上下黑边（letterbox）：宽不变，高收窄到视频区
+          ch = (w / ar).round();
+          y = ((h - ch) / 2).round();
+        } else {
+          // 左右黑边（pillarbox）：高不变，宽收窄到视频区
+          cw = (h * ar).round();
+          x = ((w - cw) / 2).round();
+        }
+        if (cw > 0 && ch > 0 && cw <= imageWidth && ch <= imageHeight) {
+          debugPrint('[Screenshot] 裁剪黑边 x=$x y=$y w=$cw h=$ch '
+              '(原始 ${imageWidth}x$imageHeight)');
+          final cropped =
+              img.copyCrop(decoded, x: x, y: y, width: cw, height: ch);
+          final jpegBytes =
+              img.encodeJpg(cropped, quality: _screenshotQuality.jpegQuality);
+          return Uint8List.fromList(jpegBytes);
+        }
+      }
+      final jpegBytes =
+          img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality);
+      return Uint8List.fromList(jpegBytes);
     } catch (e) {
       debugPrint('截图失败: $e');
       return null;
@@ -628,7 +675,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
     final directory = Directory(path);
     if (!await directory.exists()) {
-      await directory.create(recursive: true);
+      try {
+        await directory.create(recursive: true);
+      } catch (_) {
+        // 目标路径不可创建（如 iOS 沙盒根 Operation not permitted）：
+        // 回退并缓存默认目录，避免每次截图都重复尝试失败路径。
+        final fallback = (await _getDefaultScreenshotSaveDirectory()).path;
+        _screenshotSaveDirectory = fallback;
+        return fallback;
+      }
     }
     return directory.path;
   }
@@ -653,7 +708,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
     final now = DateTime.now();
     final timestamp = _formatTimestamp(now);
-    return '${baseName}_$timestamp.png';
+    return '${baseName}_$timestamp.jpg';
   }
 
   String _formatTimestamp(DateTime time) {
