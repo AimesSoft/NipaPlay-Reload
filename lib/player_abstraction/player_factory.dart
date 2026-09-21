@@ -10,7 +10,6 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/player_event_log.dart';
 import 'dart:async'; // 导入dart:async库
 
 // Define available player types if you plan to support more than one.
@@ -33,7 +32,7 @@ class PlayerFactory {
   static const String _macOSNativeVideoEnabledKey =
       'macos_native_video_enabled';
   static const String _androidAudioOutputKey = 'android_audio_output';
-    static const String _erikaAndroidOutputModeKey = 'erika_android_output_mode';
+  static const String _erikaAndroidOutputModeKey = 'erika_android_output_mode';
   static const int defaultPrecacheBufferSizeMb = 32;
   static const int minPrecacheBufferSizeMb = 4;
   static const int maxPrecacheBufferSizeMb = 512;
@@ -46,16 +45,16 @@ class PlayerFactory {
   static String _cachedCustomPlayerUA = ''; // 自定义播放器 UA，空=用内核默认
   static String _cachedHttpProxy = '';
   static String? _oneTimeUA; // 一次性 UA（仅下一次播放有效，不持久化，用后即清）
-    static bool _hasLoadedSettings = false;
-          // 硬件解码总开关（VideoPlayerState 的 useHardwareDecoder 桥接，播放器
-          // 构造时需知道——否则 _initializeHardwareDecoding 会无条件开硬解覆盖）。
-          static bool _cachedUseHardwareDecoder = true;
+  static bool _hasLoadedSettings = false;
+  // 硬件解码总开关（VideoPlayerState 的 useHardwareDecoder 桥接，播放器
+  // 构造时需知道——否则 _initializeHardwareDecoding 会无条件开硬解覆盖）。
+  static bool _cachedUseHardwareDecoder = true;
 
-      static bool getUseHardwareDecoder() => _cachedUseHardwareDecoder;
+  static bool getUseHardwareDecoder() => _cachedUseHardwareDecoder;
 
-      static void setUseHardwareDecoder(bool enabled) {
-        _cachedUseHardwareDecoder = enabled;
-      }
+  static void setUseHardwareDecoder(bool enabled) {
+    _cachedUseHardwareDecoder = enabled;
+  }
 
   // 添加一个StreamController来广播内核切换事件
   static final StreamController<PlayerKernelType> _kernelChangeController =
@@ -134,12 +133,6 @@ class PlayerFactory {
       );
       _cachedCustomPlayerUA =
           prefs.getString(SettingsKeys.customPlayerUA) ?? '';
-      final resolvedKernel = _cachedKernelType;
-      logPlayerEvent(
-        'Kernel',
-        '当前播放器内核: ${resolvedKernel?.name ?? _defaultKernelType.name}'
-        '${globals.isTvOS ? '（tvOS 强制 Erika）' : ''}',
-      );
       _cachedHttpProxy =
           (prefs.getString(SettingsKeys.playerHttpProxy) ?? '').trim();
       AppHttpProxy.set(_cachedHttpProxy);
@@ -479,7 +472,6 @@ class PlayerFactory {
       await prefs.setInt(_playerKernelTypeKey, type.index);
       _cachedKernelType = type;
       debugPrint('[PlayerFactory] 保存内核设置: ${type.toString()}');
-      logPlayerEvent('Kernel', '用户切换播放器内核: ${type.name}');
 
       // 更新系统资源监视器的播放器内核类型
       String kernelTypeName;
