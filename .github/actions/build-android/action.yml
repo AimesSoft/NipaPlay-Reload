@@ -305,11 +305,14 @@ runs:
             "$temp_aligned"
 
           # 使用apksigner对APK进行签名
+          # secrets 必须加引号：密码含空格/特殊字符时裸展开会被 shell 拆成
+          # 多个参数，导致 --out 出现在 input APK 之后报
+          # "Unexpected parameter(s) after input APK (--out)"
           $ANDROID_HOME/build-tools/29.0.3/apksigner sign \
             --ks keystore.jks \
-            --ks-pass pass:${{ inputs.keystore-password }} \
-            --ks-key-alias ${{ inputs.key-alias }} \
-            --key-pass pass:${{ inputs.key-password }} \
+            --ks-pass "pass:${{ inputs.keystore-password }}" \
+            --ks-key-alias "${{ inputs.key-alias }}" \
+            --key-pass "pass:${{ inputs.key-password }}" \
             --out "$output_apk" \
             "$temp_aligned"
 
