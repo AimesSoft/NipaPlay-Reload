@@ -31,7 +31,6 @@ import 'danmaku_density_bar.dart';
 import 'speed_boost_indicator.dart';
 import 'loading_overlay.dart';
 import 'macos_hdr_probe_overlay.dart';
-import 'media_capture_dialog.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'base_settings_menu.dart';
@@ -151,7 +150,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
         isPlaying: videoState.status == PlayerStatus.playing,
         fontSize: getFontSize(videoState) * widget.danmakuScale,
-        isVisible: videoState.danmakuVisible,
+        isVisible: videoState.danmakuVisible &&
+            !videoState.shouldHideDanmakuForScreenshot,
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
@@ -166,7 +166,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
           isPlaying: videoState.status == PlayerStatus.playing,
           fontSize: getFontSize(videoState) * widget.danmakuScale,
-          isVisible: videoState.danmakuVisible,
+          isVisible: videoState.danmakuVisible &&
+              !videoState.shouldHideDanmakuForScreenshot,
           opacity: videoState.mappedDanmakuOpacity,
         );
       },
@@ -363,6 +364,108 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
   }
 
+  /// 按画面尺寸模式构建视频表面：适应(contain黑边)/填充(cover裁剪)/
+  /// 拉伸(fill变形)/16:9/4:3(强制比例)
+  Widget _buildVideoSurfaceWithAspectMode(
+      VideoPlayerState videoState, int? textureId) {
+    final mode = videoState.videoAspectMode;
+    switch (mode) {
+      case VideoAspectMode.fill:
+        // 拉伸：直接铺满显示区域（画面变形）
+        return _buildVideoSurface(videoState, textureId);
+      case VideoAspectMode.cover:
+              // 填充：视频等比放大填满区域，超出部分裁剪（无黑边）。
+              // mdk 纹理在 FittedBox 缩放下不渲染（黑屏）——改用 Transform.scale
+              // 放大（渲染变换，mdk 兼容），外层 ClipRect 裁剪超出部分。
+              final videoAspect =
+                  videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+              final size = MediaQuery.of(context).size;
+              final screenAspect =
+                  size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+              final scale = screenAspect > videoAspect
+                  ? screenAspect / videoAspect
+                  : videoAspect / screenAspect;
+              return ClipRect(
+                        child: Transform.scale(
+                          scale: scale,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: videoAspect,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.fitWidth:
+                      // 等宽：视频宽铺满（高可超裁）——Transform.scale（mdk 兼容）
+                      final vaw = videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+                      final szw = MediaQuery.of(context).size;
+                      final saw = szw.width > 0 && szw.height > 0 ? szw.width / szw.height : 16 / 9;
+                      final scaleW = saw > vaw ? 1.0 : vaw / saw;
+                      return ClipRect(
+                        child: Transform.scale(
+                          scale: scaleW,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: vaw,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.fitHeight:
+                      // 等高：视频高铺满（宽可超裁）——Transform.scale（mdk 兼容）
+                      final vah = videoState.aspectRatio > 0 ? videoState.aspectRatio : 16 / 9;
+                      final szh = MediaQuery.of(context).size;
+                      final sah = szh.width > 0 && szh.height > 0 ? szh.width / szh.height : 16 / 9;
+                      final scaleH = sah < vah ? 1.0 : sah / vah;
+                      return ClipRect(
+                        child: Transform.scale(
+                          scale: scaleH,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: vah,
+                              child: _buildVideoSurface(videoState, textureId),
+                            ),
+                          ),
+                        ),
+                      );
+                    case VideoAspectMode.none:
+                    case VideoAspectMode.scaleDown:
+                      // 原始/限制：简化按比例显示（不等比放大的完整语义需内核适配，
+                      // 当前保持 contain 比例显示，避免黑屏）
+                      return Center(
+                        child: AspectRatio(
+                          aspectRatio: videoState.aspectRatio,
+                          child: _buildVideoSurface(videoState, textureId),
+                        ),
+                      );
+      case VideoAspectMode.ratio16x9:
+        return Center(
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+      case VideoAspectMode.ratio4x3:
+        return Center(
+          child: AspectRatio(
+            aspectRatio: 4 / 3,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+      case VideoAspectMode.contain:
+      default:
+        // 适应：保持视频原始比例，居中显示（上下/左右黑边）
+        return Center(
+          child: AspectRatio(
+            aspectRatio: videoState.aspectRatio,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+    }
+  }
+
   void _updateMacOSNativeVideoViewId(int? viewId) {
     if (!mounted || _macosNativeVideoViewId == viewId) {
       return;
@@ -414,12 +517,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       return _buildVideoSurface(videoState, textureId);
     }
 
-    final surface = Center(
-      child: AspectRatio(
-        aspectRatio: videoState.aspectRatio,
-        child: _buildVideoSurface(videoState, textureId),
-      ),
-    );
+    final surface = _buildVideoSurfaceWithAspectMode(videoState, textureId);
     return ColoredBox(color: Colors.black, child: surface);
   }
 
@@ -650,6 +748,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // 添加长按手势处理方法
   void _handleLongPressStart(VideoPlayerState videoState) {
+    // 字幕编辑框可见/字幕拖动中不启动长按倍速
+    if (videoState.subtitleEditBoxVisible || videoState.subtitleDragActive) return;
     if (!globals.isMobilePlatform || !videoState.hasVideo) return;
 
     // 开始倍速播放
@@ -830,7 +930,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!SystemShareService.isSupported) return;
 
     final currentVideoPath = videoState.currentVideoPath;
-    final currentActualUrl = videoState.currentResolvedMediaSource;
+    final currentActualUrl = videoState.currentActualPlayUrl;
 
     String? filePath;
     String? url;
@@ -843,7 +943,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       } else if (scheme == 'jellyfin' || scheme == 'emby') {
         url = currentActualUrl;
       } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
-        url = currentActualUrl;
+        url = currentVideoPath;
       } else {
         filePath = currentVideoPath;
       }
@@ -934,28 +1034,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     _playbackInfoOverlay = null;
   }
 
-  Future<void> _captureScreenshot(
-    VideoPlayerState videoState,
-    ScreenshotSaveTarget target, {
-    required bool includeDanmaku,
-    required bool includeSubtitles,
-  }) async {
+  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
-      if (!kIsWeb &&
-          defaultTargetPlatform == TargetPlatform.iOS &&
-          target == ScreenshotSaveTarget.photos) {
-        final ok = await videoState.captureScreenshotToPhotos(
-          includeDanmaku: includeDanmaku,
-          includeSubtitles: includeSubtitles,
-        );
-        if (!mounted) return;
-        BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
-        return;
-      }
-      final path = await videoState.captureScreenshot(
-        includeDanmaku: includeDanmaku,
-        includeSubtitles: includeSubtitles,
-      );
+      final path = await videoState.captureScreenshot();
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
@@ -1044,25 +1125,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       ),
       ContextMenuAction(
         icon: Icons.camera_alt_outlined,
-        label: '画面截取',
+        label: '截图',
         enabled: videoState.hasVideo,
-        onPressed: () => unawaited(
-          showMediaCaptureDialog(
-            context: context,
-            videoState: videoState,
-            onCaptureImage: (
-              target, {
-              required includeDanmaku,
-              required includeSubtitles,
-            }) =>
-                _captureScreenshot(
-              videoState,
-              target,
-              includeDanmaku: includeDanmaku,
-              includeSubtitles: includeSubtitles,
-            ),
-          ),
-        ),
+        onPressed: () => unawaited(_captureScreenshot(videoState)),
       ),
       ContextMenuAction(
         icon: Icons.double_arrow_rounded,
@@ -1220,9 +1285,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     if ((videoState.hasVideo ||
                                             videoState
                                                 .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible &&
-                                        videoState
-                                            .screenshotCaptureIncludesDanmaku)
+                                        videoState.danmakuVisible)
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
@@ -1235,9 +1298,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                    if (videoState.hasVideo &&
-                                        videoState
-                                            .screenshotCaptureIncludesSubtitles)
+                                    if (videoState.hasVideo)
                                       Positioned.fill(
                                         child: Consumer<VideoPlayerState>(
                                           builder: (context, videoState, _) {
@@ -1312,9 +1373,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       if ((videoState.hasVideo ||
                                               videoState
                                                   .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible &&
-                                          videoState
-                                              .screenshotCaptureIncludesDanmaku)
+                                          videoState.danmakuVisible)
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,
@@ -1328,9 +1387,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                             ),
                                           ),
                                         ),
-                                      if (videoState.hasVideo &&
-                                          videoState
-                                              .screenshotCaptureIncludesSubtitles)
+                                      if (videoState.hasVideo)
                                         Positioned.fill(
                                           child: Consumer<VideoPlayerState>(
                                             builder: (context, videoState, _) {
