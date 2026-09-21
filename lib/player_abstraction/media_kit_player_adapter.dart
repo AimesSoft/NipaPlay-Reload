@@ -60,7 +60,8 @@ bool isRetryableMediaKitLoadError(String message) {
 
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter
-    implements AbstractPlayer, MediaLoadAwarePlayer, TickerProvider {
+    implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
+        TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
@@ -2616,6 +2617,24 @@ class MediaKitPlayerAdapter
           Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
     }
     _textureIdNotifier.dispose();
+  }
+
+  /// 异步释放：与 MdkPlayerAdapter.disposeAsync 策略一致。
+  /// 先停播放器（stopped 空闲态），让出 50ms 等内核内部线程收敛，
+  /// 再执行同步 dispose()。热切换时包装层 _startDispose 会 await 此方法，
+  /// 确保旧 libmpv 实例真正释放完毕后才开始下一轮切换，避免多个原生
+  /// 实例的 teardown 与 init 在平台线程交叠死锁。
+  @override
+  Future<void> disposeAsync() async {
+    try {
+      if (state != PlayerPlaybackState.stopped) {
+        state = PlayerPlaybackState.stopped;
+      }
+    } catch (e) {
+      debugPrint('MediaKit: dispose 前置停止失败: $e');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    dispose();
   }
 
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;

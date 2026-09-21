@@ -184,27 +184,28 @@ class PlayerKernelManager {
     // 5. 恢复播放状态
     if (videoPlayerState.hasVideo) {
       videoPlayerState.applyPlayerVolume();
-            // 恢复播放速度设置
-            if (currentPlaybackRate != 1.0) {
-              videoPlayerState.player.setPlaybackRate(currentPlaybackRate);
-              debugPrint('[PlayerKernelManager] 恢复播放速度设置: ${currentPlaybackRate}x');
-            }
-            // 热切换后内核刚 setMedia，立即 seek 会被内核丢弃（实测切 libmpv 回退 00:00）。
-            // 目标内核支持就绪探测时等媒体就绪再 seek；mdk 无此接口，保持立即 seek。
-            final newPlayer = videoPlayerState.player;
-            if (newPlayer is MediaLoadAwarePlayer) {
-              await newPlayer.waitUntilMediaReady(
-                timeout: const Duration(seconds: 8),
-              );
-              if (videoPlayerState.isDisposed) return;
-            }
-            videoPlayerState.seekTo(currentPosition);
+      // 恢复播放速度设置
+      if (currentPlaybackRate != 1.0) {
+        videoPlayerState.player.setPlaybackRate(currentPlaybackRate);
+        debugPrint('[PlayerKernelManager] 恢复播放速度设置: ${currentPlaybackRate}x');
+      }
+      // 等媒体就绪再 seek：libmpv setMedia 后立即 seek 会被丢弃（实测
+      // 切 libmpv 进度回退 00:00）。Player 包装类的 supportsMediaLoadReadiness
+      // getter 检测 delegate 是否实现 MediaLoadAwarePlayer（MediaKit=是、
+      // MDK=否），是则 await waitUntilMediaReady 等内核就绪。
+      if (videoPlayerState.player.supportsMediaLoadReadiness) {
+        await videoPlayerState.player.waitUntilMediaReady(
+          timeout: const Duration(seconds: 8),
+        );
+        if (videoPlayerState.isDisposed) return;
+      }
+      videoPlayerState.seekTo(currentPosition);
       debugPrint('[PlayerKernelManager] 切换后 seekTo=${currentPosition.inMilliseconds}ms 内核=${videoPlayerState.player.getPlayerKernelName()}');
-            // 切换后不自动恢复播放：新内核刚创建，立即 play 会"播一下又暂停"
-            // （内核未就绪状态机自动暂停），突兀且无意义。切完保持暂停，
-            // 用户想继续播放时手动点播放即可。
-            videoPlayerState.pause();
-            debugPrint('[PlayerKernelManager] 播放器内核热切换完成（暂停态，等待用户播放）');
+      // 切换后不自动恢复播放：新内核刚创建，立即 play 会"播一下又暂停"
+      // （内核未就绪状态机自动暂停），突兀且无意义。切完保持暂停，
+      // 用户想继续播放时手动点播放即可。
+      videoPlayerState.pause();
+      debugPrint('[PlayerKernelManager] 播放器内核热切换完成（暂停态，等待用户播放）');
     } else {
       debugPrint('[PlayerKernelManager] 播放器内核热切换完成，但未能恢复播放（可能视频加载失败）');
     }

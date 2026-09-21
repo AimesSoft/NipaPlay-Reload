@@ -107,10 +107,8 @@ class BaseSettingsMenu extends StatelessWidget {
         final double pointerWidth = scope?.pointerWidth ?? 16;
         final double pointerHeight = scope?.pointerHeight ?? 8;
         final Size screenSize = MediaQuery.of(context).size;
-        final double keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-        final double screenMaxHeight = globals.isPhone
-            ? screenSize.height - 120 - keyboardInset
-            : screenSize.height - 200 - keyboardInset;
+        final double screenMaxHeight =
+            globals.isPhone ? screenSize.height - 120 : screenSize.height - 200;
         final double resolvedHeight = standaloneWindow
             ? screenSize.height
             : math.min(scope?.height ?? height, screenMaxHeight);
