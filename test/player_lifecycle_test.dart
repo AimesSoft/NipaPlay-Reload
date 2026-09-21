@@ -151,48 +151,62 @@ void main() {
   });
 
   group('hot-swap teardown schedule', () {
-    // 旧契约「teardown 超时/失败则中止切换」会让主线程等旧内核 dispose，
-    // MDK -> libmpv 实测卡死闪退（iOS watchdog 10s kill）。新契约：新播放
-    // 器先就绪，旧内核在 finally 里 unawaited 异步销毁，超时/异常只记日志。
+    // 契约演进：
+    //  v1「teardown 超时/失败则中止切换」→ 主线程等旧内核 dispose，MDK -> libmpv
+    //     实测卡死闪退（iOS watchdog 10s kill）。
+    //  v2「新播放器先就绪，旧内核最后 unawaited 异步销毁」→ 播放中切换时旧内核
+    //     仍存活，新内核随即创建并起播，两个原生实例并存导致平台线程死锁（实测
+    //     播放中切 libmpv 冻死，而主页无视频怎么切都不闪退）。
+    //  v3（当前）「旧内核先强制退出（resetPlayer 停止 + dispose 彻底销毁），
+    //     新内核再创建并起播」→ 同一时刻平台线程上只有一个原生实例。
     final source =
         File('lib/utils/player_kernel_manager.dart').readAsStringSync();
 
-    test('swap flow schedules teardown without awaiting it', () {
+    test('swap flow force-quits old kernel before new one starts', () {
+      // wrapper：finally 里保留旧实例 dispose 作为幂等兜底（覆盖无视频/异常路径）。
       final wrapperStart =
           source.indexOf('static Future<void> performPlayerKernelHotSwap(');
-      final wrapperEnd =
-          source.indexOf('_scheduleOldPlayerTeardown(', wrapperStart);
+      final wrapperEnd = source.indexOf(
+          'static Future<void> _disposePlayerForHotSwap(');
       final wrapper = source.substring(wrapperStart, wrapperEnd);
       expect(wrapperStart, greaterThanOrEqualTo(0));
       expect(wrapper.contains('} finally {'), isTrue);
       expect(
         wrapper.contains('await performPlayerKernelHotSwapSteps('), isTrue);
 
-      // 步骤本体不得 dispose 旧播放器（disposeAsync 只允许出现在后台
-      // teardown 调度里）。
+      // 步骤本体：顺序必须是 resetPlayer（停止）→ _disposePlayerForHotSwap
+      // （强制退出旧内核）→ 创建新播放器实例。
       final stepsStart =
           source.indexOf('static Future<void> performPlayerKernelHotSwapSteps(');
-      final stepsEnd = source.indexOf('/// 为VideoPlayerState执行弹幕内核热切换',
-          stepsStart);
+      final stepsEnd = source.indexOf(
+          '/// 为VideoPlayerState执行弹幕内核热切换', stepsStart);
       final steps = source.substring(stepsStart, stepsEnd);
       expect(stepsStart, greaterThan(wrapperStart));
-      expect(steps.contains('disposeAsync'), isFalse);
       expect(steps.contains('resetPlayer()'), isTrue);
+      expect(steps.contains('_disposePlayerForHotSwap('), isTrue);
+
+      final resetIdx = steps.indexOf('await videoPlayerState.resetPlayer();');
+      final disposeIdx = steps.indexOf('_disposePlayerForHotSwap(', resetIdx);
+      final createIdx = steps.indexOf('videoPlayerState.player = Player();',
+          disposeIdx);
+      expect(resetIdx, greaterThan(0));
+      expect(disposeIdx, greaterThan(resetIdx));
+      expect(createIdx, greaterThan(disposeIdx));
     });
 
-    test('background teardown swallows timeout and error', () {
-      final scheduleStart =
-          source.indexOf('static void _scheduleOldPlayerTeardown(');
-      final scheduleEnd = source.indexOf('/// 为VideoPlayerState执行播放器内核热切换',
-          scheduleStart);
-      final schedule = source.substring(scheduleStart, scheduleEnd);
-      expect(scheduleStart, greaterThanOrEqualTo(0));
-      expect(schedule.contains('unawaited('), isTrue);
-      expect(schedule.contains('on TimeoutException'), isTrue);
-      expect(schedule.contains('catch (error)'), isTrue);
-      // 超时/失败分支只 debugPrint，不 throw、不 rethrow。
-      expect(schedule.contains('throw'), isFalse);
-      expect(schedule.contains('Error.throwWithStackTrace'), isFalse);
+    test('old-kernel dispose helper swallows timeout and error', () {
+      // 强制退出旧内核的 dispose 助手：超时/失败只记日志（新内核继续播放），
+      // 绝不 throw、绝不 rethrow，避免拖垮已经正常起播的新内核。
+      final disposeStart =
+          source.indexOf('static Future<void> _disposePlayerForHotSwap(');
+      final disposeEnd = source.indexOf(
+          'static Future<void> performPlayerKernelHotSwapSteps(');
+      final dispose = source.substring(disposeStart, disposeEnd);
+      expect(disposeStart, greaterThanOrEqualTo(0));
+      expect(disposeEnd, greaterThan(disposeStart));
+      expect(dispose.contains('on TimeoutException'), isTrue);
+      expect(dispose.contains('catch (error)'), isTrue);
+      expect(dispose.contains('throw'), isFalse);
     });
   });
 

@@ -2870,8 +2870,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         path,
         historyItem: history,
         resetManualDanmakuOffset: false,
-        autoPlay: false,
       );
+      // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
+      if (hasVideo) {
+        pause();
+      }
       debugPrint('[Decoder] 硬解模式切换，已重载视频以应用 hwdec=${mode.hwdec}');
     }
     _notifyListeners();
@@ -2933,8 +2936,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           path,
           historyItem: history,
           resetManualDanmakuOffset: false,
-          autoPlay: false,
         );
+        // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
+        if (hasVideo) {
+          pause();
+        }
         debugPrint('[Decoder] 颜色格式切换，已重载视频以应用 pixel_format=$normalized');
       }
       _notifyListeners();

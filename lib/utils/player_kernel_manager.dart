@@ -17,11 +17,18 @@ class PlayerKernelManager {
   static const Duration defaultHotSwapPlayerDisposalTimeout =
       Duration(seconds: 10);
 
-  /// 热切换入口：新播放器先就绪、旧播放器最后异步销毁。
+  /// 热切换入口：旧内核先「强制退出」（停止 + 彻底销毁），新内核再创建并
+  /// 起播，全程保证同一时刻只有一个原生播放实例。
   ///
-  /// 旧内核（尤其 MDK/AVPlayer）的 dispose 是同步 FFI，在主线程等它会
-  /// 一直堵到 iOS watchdog 杀进程（实测 MDK -> libmpv 卡死闪退）。因此
-  /// 销毁放在主流程完成后执行，失败只记日志。
+  /// 根因：播放中切内核时，旧内核此前只「停止」不「销毁」，新内核随即创建
+  /// 并起播——新旧两个原生实例（解码线程、GL 上下文、音频输出）在平台线程
+  /// 并存导致死锁卡死。主页无视频时旧内核是空闲态、无活动解码管线，所以怎么
+  /// 切都不闪退（与实测现象一致）。
+  ///
+  /// 为什么现在可以「先销毁再新建」：销毁发生在 resetPlayer 之后，此时旧内核
+  /// 已置 stopped 且媒体/纹理已释放，同步 dispose 快速且非阻塞（与之前延后
+  /// 执行的 dispose 同一前置条件，实测不卡死）。wrapper 的 finally 仍保留旧
+  /// 实例 dispose 作为幂等兜底，覆盖无视频分支与异常路径。
   ///
   /// 串行化保证：teardown 必须 await 完成后才返回，让上层 drain 循环
   /// 在下一轮切换前确认旧实例已销毁。频繁切换时多个原生实例的销毁与
@@ -35,7 +42,10 @@ class PlayerKernelManager {
     }
     final previousPlayer = videoPlayerState.player;
     try {
-      await performPlayerKernelHotSwapSteps(videoPlayerState);
+      await performPlayerKernelHotSwapSteps(
+        videoPlayerState,
+        playerDisposalTimeout: playerDisposalTimeout,
+      );
     } finally {
       await _disposePlayerForHotSwap(
         previousPlayer,
@@ -83,11 +93,16 @@ class PlayerKernelManager {
     }
   }
 
-  /// 为VideoPlayerState执行播放器内核热切换（步骤本体，旧播放器销毁
-  /// 由 [performPlayerKernelHotSwap] 在末尾异步执行）
+  /// 为VideoPlayerState执行播放器内核热切换（步骤本体）。
+  ///
+  /// 播放中切换时，旧内核在 [resetPlayer] 停止后**立即彻底销毁**（强制退出），
+  /// 再创建并起播新内核——同一时刻平台线程上只有一个原生实例，消除新旧解码
+  /// 管线并存的死锁。无视频分支与异常路径下旧实例的销毁由
+  /// [performPlayerKernelHotSwap] 的 finally 幂等兜底（disposeAsync 已幂等）。
   static Future<void> performPlayerKernelHotSwapSteps(
-    VideoPlayerState videoPlayerState,
-  ) async {
+    VideoPlayerState videoPlayerState, {
+    required Duration playerDisposalTimeout,
+  }) async {
     if (videoPlayerState.isDisposed) {
       return;
     }
@@ -147,15 +162,30 @@ class PlayerKernelManager {
       return;
     }
 
-    // 2. 停止旧播放器（只停不销毁）：resetPlayer 把内核置 stopped 空
-    // 态、断开 media 与纹理，旧内核不再解码/占音频；真正的 dispose 由
-    // wrapper 在切换完成后异步执行，避免同步 FFI 阻塞主线程。
+    // 2. 捕获旧播放器实例：resetPlayer 会置空状态，先持有引用以便随后强制退出。
+    final previousPlayer = videoPlayerState.player;
+
+    // 3. 停止旧播放器：resetPlayer 把内核置 stopped 空态、断开 media 与纹理，
+    // 旧内核不再解码/占音频。
     await videoPlayerState.resetPlayer();
     if (videoPlayerState.isDisposed) {
       return;
     }
 
-    // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
+    // 3.1 强制退出旧内核：立即彻底销毁（stop + dispose），而不是留给 wrapper 在
+    // 切换完成后延后销毁。播放中切换时若旧内核还活着，新内核随即创建并起播，
+    // 新旧两个原生实例（解码线程、GL 上下文、音频输出）会在平台线程并存导致
+    // 死锁卡死（实测播放中切 libmpv 冻死，而主页无视频怎么切都不闪退，正源于此）。
+    // 此刻旧内核已 stopped + 媒体纹理已释放，同步 dispose 快速非阻塞。
+    await _disposePlayerForHotSwap(
+      previousPlayer,
+      timeout: playerDisposalTimeout,
+    );
+    if (videoPlayerState.isDisposed) {
+      return;
+    }
+
+    // 4. 创建新的播放器实例（Player()工厂会自动使用新的内核）
     videoPlayerState.player = Player();
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
@@ -169,7 +199,7 @@ class PlayerKernelManager {
     await videoPlayerState.applySubtitleStylePreference();
     if (videoPlayerState.isDisposed) return;
 
-    // 4. 重新初始化播放（沿用上游流程：内部 _getVideoPosition 读
+    // 5. 重新初始化播放（沿用上游流程：内部 _getVideoPosition 读
     // PlaybackPositionStore → seekAndWait(lastPosition) → play，
     // 媒体就绪后 seek 自然生效，不会丢进度）
     await videoPlayerState.initializePlayer(
@@ -179,7 +209,7 @@ class PlayerKernelManager {
     );
     if (videoPlayerState.isDisposed) return;
 
-    // 5. 恢复播放状态（initializePlayer 内部已 seek + play，
+    // 6. 恢复播放状态（initializePlayer 内部已 seek + play，
     // 不再外部 seekTo 避免双 seek 竞态；只处理暂停场景）
     if (videoPlayerState.hasVideo) {
       videoPlayerState.applyPlayerVolume();
