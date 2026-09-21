@@ -541,6 +541,7 @@
 					"$(inherited)",
 					"-force_load",
 					"$(DERIVED_SOURCES_DIR)/libnipaplay_native.a",
+					"-liconv",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay.profile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -758,6 +759,7 @@
 					"$(inherited)",
 					"-force_load",
 					"$(DERIVED_SOURCES_DIR)/libnipaplay_native.a",
+					"-liconv",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay2.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -801,6 +803,7 @@
 					"$(inherited)",
 					"-force_load",
 					"$(DERIVED_SOURCES_DIR)/libnipaplay_native.a",
+					"-liconv",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay;
 				PRODUCT_NAME = "$(TARGET_NAME)";
