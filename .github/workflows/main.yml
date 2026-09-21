@@ -114,7 +114,7 @@ jobs:
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-ohos.yml
     with:
-      sign_hap: true
+      sign_hap: false
     secrets:
       OHOS_SIGNING_CERT_BASE64: ${{ secrets.OHOS_SIGNING_CERT_BASE64 }}
       OHOS_SIGNING_PROFILE_BASE64: ${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}
