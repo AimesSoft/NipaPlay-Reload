@@ -409,6 +409,17 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     }
   }
 
+  /// 立即持久化当前播放位置到 PlaybackPositionStore。
+  /// 供内核热切换前调用，确保新 player 的 initializePlayer
+  /// 内部的 _getVideoPosition 能读到最新位置。
+  Future<void> persistCurrentPositionForHotSwap({
+    required String path,
+    required int positionMs,
+  }) async {
+    if (path.isEmpty) return;
+    await _saveVideoPosition(path, positionMs);
+  }
+
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）
   Future<int> _getVideoPosition(String path) async {
     await PlaybackPositionStore.instance.flush();

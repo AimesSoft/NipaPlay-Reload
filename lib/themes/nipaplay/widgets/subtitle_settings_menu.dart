@@ -58,6 +58,9 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
 
   @override
   void dispose() {
+    _textColorFocus.removeListener(_scrollToFocusedColorInput);
+    _borderColorFocus.removeListener(_scrollToFocusedColorInput);
+    _shadowColorFocus.removeListener(_scrollToFocusedColorInput);
     _subtitleDelayController.dispose();
     _srtDelayController.dispose();
     _srtDelayFocus.dispose();
@@ -111,6 +114,29 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toSet();
+    _textColorFocus.addListener(_scrollToFocusedColorInput);
+    _borderColorFocus.addListener(_scrollToFocusedColorInput);
+    _shadowColorFocus.addListener(_scrollToFocusedColorInput);
+  }
+
+  void _scrollToFocusedColorInput() {
+    final focusedNode = _textColorFocus.hasFocus
+        ? _textColorFocus
+        : _borderColorFocus.hasFocus
+            ? _borderColorFocus
+            : _shadowColorFocus.hasFocus
+                ? _shadowColorFocus
+                : null;
+    if (focusedNode == null) return;
+    final ctx = focusedNode.context;
+    if (ctx == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+      );
+    });
   }
 
   void _toggleFontSelection(
