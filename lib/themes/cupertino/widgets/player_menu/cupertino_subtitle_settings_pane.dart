@@ -387,8 +387,7 @@ class _CupertinoSubtitleSettingsPaneState
             title: '字幕位置',
             description:
                 '${(_subtitlePositionPreviewValue ?? videoState.subtitlePosition).toStringAsFixed(0)}%',
-            value: _subtitlePositionPreviewValue ??
-                videoState.subtitlePosition,
+            value: _subtitlePositionPreviewValue ?? videoState.subtitlePosition,
             min: VideoPlayerState.minSubtitlePosition,
             max: VideoPlayerState.maxSubtitlePosition,
             divisions: 100,
@@ -888,7 +887,7 @@ class _CupertinoSubtitleSettingsPaneState
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CupertinoButton(
+          AdaptiveButton.child(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             onPressed: () {
               _showHexInputDialog(context, label, color, onPicked);
@@ -904,11 +903,11 @@ class _CupertinoSubtitleSettingsPaneState
             ),
           ),
           const SizedBox(width: 4),
-          CupertinoButton(
+          AdaptiveButton.child(
             padding: EdgeInsets.zero,
-            minSize: 44,
+            minSize: const Size(44, 44),
             onPressed: () {
-              // 点色块打开全色调色板（HSV），选色后应用。
+              // 点色块打开全色调色盘（HSV），选色后应用。
               _showColorPickerDialog(context, color, (picked) {
                 debugPrint(
                   '[SubtitleColor] 色板选色: ${_colorToHex(picked)}',
@@ -948,13 +947,11 @@ class _CupertinoSubtitleSettingsPaneState
           title: Text(label),
           content: Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: CupertinoTextField(
+            child: AdaptivePlayerMenuTextField(
               controller: controller,
               autofocus: true,
               maxLength: 7,
               placeholder: '#FFFFFF',
-              autocorrect: false,
-              enableSuggestions: false,
               onChanged: (value) {
                 final parsed = _parseHexColor(value);
                 if (parsed != null) {
@@ -965,7 +962,7 @@ class _CupertinoSubtitleSettingsPaneState
             ),
           ),
           actions: [
-            CupertinoButton(
+            AdaptiveButton.child(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('关闭'),
             ),
@@ -1047,11 +1044,9 @@ class _CupertinoSubtitleSettingsPaneState
                           child: Text('十六进制', style: TextStyle(fontSize: 13)),
                         ),
                         Expanded(
-                          child: CupertinoTextField(
+                          child: AdaptivePlayerMenuTextField(
                             controller: hexController,
                             placeholder: '#FFFFFF',
-                            autocorrect: false,
-                            enableSuggestions: false,
                             onChanged: (text) {
                               final parsed = _parseHexColor(text);
                               if (parsed != null) {
@@ -1068,11 +1063,11 @@ class _CupertinoSubtitleSettingsPaneState
                 ),
               ),
               actions: [
-                CupertinoButton(
+                AdaptiveButton.child(
                   onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('取消'),
                 ),
-                CupertinoButton(
+                AdaptiveButton.child(
                   onPressed: () {
                     // hex 输入合法时以 hex 为准（允许只改 hex 不动滑块）；
                     // 非法输入保持 HSV 当前值。
