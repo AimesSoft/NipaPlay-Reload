@@ -421,21 +421,19 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       }
     }
 
-    // 如果没有匹配的，查找最接近的字幕
-    int closestIndex = 0;
-    int minDistance = -1;
-
+    // 没有区间命中=台词间隙：取"已开始(start<=position)的最后一条"，
+    // 与 cupertino_subtitle_list_pane 语义一致（iOS/Android 行为对齐）。
+    // 旧实现按 |start-position| 绝对最近，间隙不对称时会漂到下一条台词。
+    int lastIndex = 0;
     for (int i = 0; i < _allSubtitleEntries.length; i++) {
       final entry = _allSubtitleEntries[i];
-      final distance = (entry.startTimeMs - currentTimeMs).abs();
-
-      if (minDistance == -1 || distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
+      if (entry.startTimeMs <= currentTimeMs) {
+        lastIndex = i;
+      } else {
+        return lastIndex;
       }
     }
-
-    return closestIndex;
+    return lastIndex;
   }
 
   // 更新当前高亮的字幕索引

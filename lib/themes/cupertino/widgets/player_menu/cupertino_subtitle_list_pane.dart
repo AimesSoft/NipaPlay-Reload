@@ -282,12 +282,25 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
 
   int _findNearestSubtitleIndex(int positionMs) {
     if (_allEntries.isEmpty) return 0;
+    // 语义：高亮"正在显示/刚刚播过"的台词。
+    // 1) 播放位置落在某条 [start,end] 区间内 → 该条；
+    // 2) 处于台词间隙 → 已开始(start<=position)的最后一条。
+    // 旧实现返回首条 startTimeMs>=position 的字幕，会跳过正在播的那条；
+    // 台词稀疏时（如乐器段 19:00→21:00 无对白）高亮跑到几分钟后（用户反馈）。
+    int lastIndex = 0;
     for (int i = 0; i < _allEntries.length; i++) {
-      if (_allEntries[i].startTimeMs >= positionMs) {
+      final entry = _allEntries[i];
+      if (positionMs >= entry.startTimeMs && positionMs <= entry.endTimeMs) {
         return i;
       }
+      if (entry.startTimeMs <= positionMs) {
+        lastIndex = i;
+      } else {
+        // 字幕按起始时间升序；遇到第一条还没开始的即结束扫描
+        return lastIndex;
+      }
     }
-    return _allEntries.length - 1;
+    return lastIndex;
   }
 
   void _updateCurrentSubtitle() {
