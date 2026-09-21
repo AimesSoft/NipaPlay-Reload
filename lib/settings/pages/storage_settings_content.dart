@@ -146,6 +146,59 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                   );
                 },
               ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile<ScreenshotQuality>.dropdown(
+                  title: '截图质量',
+                  subtitle: 'JPEG 质量：体积约为 PNG 的十分之一',
+                  icon: Icons.high_quality,
+                  phoneIcon: cupertino.CupertinoIcons.gauge,
+                  items: [
+                    for (final q in ScreenshotQuality.values)
+                      DropdownMenuItemData(
+                        title: q.label,
+                        value: q,
+                        isSelected: videoState.screenshotQuality == q,
+                        description: 'JPEG ${q.jpegQuality}',
+                      ),
+                  ],
+                  onChanged: videoState.setScreenshotQuality,
+                );
+              },
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含弹幕',
+                subtitle: '关闭后截图不叠加当前弹幕',
+                icon: Icons.subtitles_outlined,
+                phoneIcon: cupertino.CupertinoIcons.chat_bubble,
+                value: videoState.screenshotCaptureIncludesDanmaku,
+                onChanged: videoState.setScreenshotCaptureIncludesDanmaku,
+              ),
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含字幕',
+                subtitle: '关闭后截图不叠加内嵌与外挂字幕',
+                icon: Icons.closed_caption_outlined,
+                phoneIcon: cupertino.CupertinoIcons.text_bubble,
+                value: videoState.screenshotCaptureIncludesSubtitles,
+                onChanged: videoState.setScreenshotCaptureIncludesSubtitles,
+              ),
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图裁剪黑边',
+                subtitle: '截图不包含视频画面外的上下/左右黑边',
+                icon: Icons.crop_outlined,
+                phoneIcon: cupertino.CupertinoIcons.crop,
+                value: videoState.screenshotCropLetterbox,
+                onChanged: videoState.setScreenshotCropLetterbox,
+              ),
+            ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.clearImageCache,
               subtitle: _isClearingImageCache
