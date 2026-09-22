@@ -864,7 +864,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     if (pluginModified != null && pluginModified.isNotEmpty) {
       parsed = pluginModified;
       _pluginService?.updateDanmakuData(null);
-      debugPrint('[ExtDanmaku] 插件过滤: $beforePlugin → ${parsed.length} 条');
+      debugPrint('[ExtDanmaku] 插件过滤: $beforePlugin  ${parsed.length} 条');
     } else {
       debugPrint(
           '[ExtDanmaku] 插件未修改 (pluginService=${_pluginService != null})');
@@ -884,7 +884,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         .where((d) => !shouldBlockDanmaku(d))
         .map(_prepareDanmakuForDisplay)
         .toList();
-    debugPrint('[ExtDanmaku] 屏蔽过滤: $beforeBlock → ${filtered.length} 条');
+    debugPrint('[ExtDanmaku] 屏蔽过滤: $beforeBlock  ${filtered.length} 条');
 
     // 5. 按时间排序
     filtered.sort((a, b) {

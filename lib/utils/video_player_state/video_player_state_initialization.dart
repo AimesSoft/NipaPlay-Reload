@@ -212,6 +212,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   void startBrightnessDrag() {
     if (!globals.isMobilePlatform) return;
+    if (_subtitleDragActive) return; // 字幕拖动中不响应亮度手势
     // Refresh _initialDragBrightness with the most up-to-date _currentBrightness
     // This handles cases where brightness might have been changed by other means
     // or if a previous drag was interrupted.
@@ -406,6 +407,17 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     } catch (error, stackTrace) {
       debugPrint('保存播放进度失败: $error\n$stackTrace');
     }
+  }
+
+  /// 立即持久化当前播放位置到 PlaybackPositionStore。
+  /// 供内核热切换前调用，确保新 player 的 initializePlayer
+  /// 内部的 _getVideoPosition 能读到最新位置。
+  Future<void> persistCurrentPositionForHotSwap({
+    required String path,
+    required int positionMs,
+  }) async {
+    if (path.isEmpty) return;
+    await _saveVideoPosition(path, positionMs);
   }
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）

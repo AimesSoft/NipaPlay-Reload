@@ -97,10 +97,17 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     _heightController = TextEditingController(text: '${size.$2}');
     final supportsCompositedScreenshot =
         widget.videoState.player.getPlayerKernelName() != 'Erika';
-    _includeDanmaku =
-        supportsCompositedScreenshot && widget.videoState.danmakuVisible;
-    _includeSubtitles = supportsCompositedScreenshot;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 初值来自截图设置页(而非每次弹窗都重置);同时受内核合成截图能力约束
+    _includeDanmaku = supportsCompositedScreenshot &&
+        widget.videoState.screenshotCaptureIncludesDanmaku &&
+        widget.videoState.danmakuVisible;
+    _includeSubtitles = supportsCompositedScreenshot &&
+        widget.videoState.screenshotCaptureIncludesSubtitles;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // 等弹窗打开动画完成后再生成预览：全分辨率 toImage+JPEG 编码
+      // 是 100-500ms 的重活，立即执行会阻塞动画线程导致打开掉帧。
+      await Future<void>.delayed(const Duration(milliseconds: 350));
       if (mounted) unawaited(_refreshImagePreview());
     });
   }
@@ -506,6 +513,20 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                     ? null
                     : (value) {
                         setState(() => _includeSubtitles = value);
+                        unawaited(_refreshImagePreview());
+                      },
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('裁剪黑边'),
+                subtitle: const Text('截图不包含视频画面外的上下/左右黑边'),
+                value: widget.videoState.screenshotCropLetterbox,
+                onChanged: !_supportsCompositedScreenshot || _isWorking
+                    ? null
+                    : (value) {
+                        unawaited(
+                          widget.videoState.setScreenshotCropLetterbox(value),
+                        );
                         unawaited(_refreshImagePreview());
                       },
               ),

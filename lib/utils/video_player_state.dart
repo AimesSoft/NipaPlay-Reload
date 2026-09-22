@@ -1,6 +1,9 @@
 library video_player_state;
 
+export 'video_aspect_geometry.dart' show VideoAspectMode;
+
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -11,6 +14,7 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
+import '../player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
@@ -25,6 +29,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/player_event_log.dart';
 import 'package:path/path.dart' as p;
 
 import 'globals.dart' as globals;
@@ -222,9 +227,38 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
 
 enum ScreenshotSaveTarget { ask, photos, file }
 
+/// 截图保存质量档（JPEG 质量；体积与清晰度取舍）
+enum ScreenshotQuality { standard, high, ultra, max }
+
+extension ScreenshotQualityDisplay on ScreenshotQuality {
+  static ScreenshotQuality fromPrefs(int? value) {
+    if (value == null) return ScreenshotQuality.ultra;
+    if (value < 0 || value >= ScreenshotQuality.values.length) {
+      return ScreenshotQuality.ultra;
+    }
+    return ScreenshotQuality.values[value];
+  }
+
+  int get prefsValue => index;
+
+  int get jpegQuality => switch (this) {
+        ScreenshotQuality.standard => 70,
+        ScreenshotQuality.high => 85,
+        ScreenshotQuality.ultra => 92,
+        ScreenshotQuality.max => 100,
+      };
+
+  String get label => switch (this) {
+        ScreenshotQuality.standard => '标准（体积最小）',
+        ScreenshotQuality.high => '高清（推荐）',
+        ScreenshotQuality.ultra => '超清（默认）',
+        ScreenshotQuality.max => '极致（接近无损）',
+      };
+}
+
 extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
   static ScreenshotSaveTarget fromPrefs(int? value) {
-    if (value == null) return ScreenshotSaveTarget.ask;
+    if (value == null) return ScreenshotSaveTarget.file;
     if (value < 0 || value >= ScreenshotSaveTarget.values.length) {
       return ScreenshotSaveTarget.ask;
     }
@@ -274,6 +308,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;
   bool _isDfmStartupGatePending = false;
@@ -294,6 +329,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _isStartupMessageFlowActive = false;
+  // SRT 字幕拖动激活标志：拖动期间屏蔽音量/亮度/进度手势，避免误触
+  bool _subtitleDragActive = false;
+  // 进后台前是否在播放（用于回前台自动续播）
+  bool _wasPlayingBeforeBackground = false;
+  // SRT 编辑框可见标志：框可见/字幕拖动中屏蔽长按倍速
+  bool _subtitleEditBoxVisible = false;
+  bool get subtitleEditBoxVisible => _subtitleEditBoxVisible;
+  void setSubtitleEditBoxVisible(bool visible) {
+    if (_subtitleEditBoxVisible == visible) return;
+    _subtitleEditBoxVisible = visible;
+    _notifyListeners();
+  }
   bool _showControls = true;
   bool _showRightMenu = false; // 控制右侧菜单显示状态
   final String _desktopHoverSettingsMenuEnabledKey =
@@ -353,7 +400,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
   int _lastHistoryUpdateBucket = -1;
   // （保留占位，若未来要做更细粒度同步节流可再启用）
-  // 🔥 新增：Ticker相关字段
+  //  新增：Ticker相关字段
   Ticker? _uiUpdateTicker;
   int _lastTickTime = 0;
   // 节流：UI刷新与位置保存
@@ -370,8 +417,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _smoothAnchorMs = 0.0; // 上次锚定的播放位置（ms）
   int _smoothAnchorElapsedUs = 0; // 锚定时的 Ticker elapsed（微秒）
   int _lastRawPlayerMs = -1; // 上次 player.position 原始值，用于检测变化
+  // [MDK-SPIKE-GUARD] MDK 缓冲抖动时 position 会瞬时前跳数秒又回落，
+  // 连续采样计数：<3 视为尖刺拒绝追锚，>=3 视为真实跳变接受。
+  int _rawSpikeStreak = 0;
+// [MDK-EOF-GUARD] 连续采样确认片尾，防 position 尖刺/无效 duration 误杀播放
+int _exactEndStreak = 0;
   int _lastElapsedUs = 0; // 最近一次 Ticker elapsed（微秒），供 seek 时使用
   int _lastDiagFrameSkipTimeMs = 0; // [NEXT-DIAG] FRAME SKIP 日志节流：上次输出时间（ms）
+  int _lastStallDiagPositionMs = -1; // [停滞诊断] 上次真实位置
+  int _lastStallDiagAtMs = 0; // [停滞诊断] 位置变化时间
+  int _lastStallDiagLoggedAtMs = 0; // [停滞诊断] 上次打点时间
   int _diagBaselineFrameUs = 0; // [NEXT-DIAG] 自适应帧间隔基线（取最小帧间隔）
   int _diagFrameSampleCount = 0; // [NEXT-DIAG] 基线采样帧数
   int _lastDiagRoundTimeMs = 0; // [DRIFT-ROUND-DIAG] 根因A诊断：round舍入误差日志节流
@@ -379,7 +434,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _lastDiagDriftSnapMs = 0; // [DRIFT-SNAP-DIAG] 大漂移对齐日志节流
   double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
   bool _anchorSetBySeek =
-      false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
+      false; //  标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
   double? _pausedPlaybackTimeMs; // 暂停时保存的 playbackTimeMs，用于恢复时平滑衔接
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
@@ -395,9 +450,50 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final GlobalKey screenshotBoundaryKey = GlobalKey(
     debugLabel: 'player_screenshot_boundary',
   );
+  bool _isCapturingScreenshot = false;
+  // 截图/GIF 导出时是否包含弹幕与字幕（由截图对话框临时切换）
   bool _screenshotCaptureIncludesDanmaku = true;
   bool _screenshotCaptureIncludesSubtitles = true;
-  bool _isCapturingScreenshot = false;
+  // 截图时裁剪视频画面外的黑边（letterbox/pillarbox），默认开启
+  bool _screenshotCropLetterbox = true;
+  // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
+  VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  final String _videoAspectModeKey = 'video_aspect_mode';
+  // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
+    String _softDecodePixelFormat = '';
+    final String _softDecodePixelFormatKey = 'soft_decode_pixel_format';
+    // 硬解模式（mpv hwdec 值，照搬 PiliPlus），默认自动
+    HwDecType _hwdecMode = HwDecType.auto;
+    final String _hwdecModeKey = 'hwdec_mode';
+  final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
+  final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
+  final String _screenshotCropLetterboxKey = 'screenshot_crop_letterbox';
+  bool get screenshotCaptureIncludesDanmaku =>
+      _screenshotCaptureIncludesDanmaku;
+  bool get screenshotCaptureIncludesSubtitles =>
+      _screenshotCaptureIncludesSubtitles;
+  bool get screenshotCropLetterbox => _screenshotCropLetterbox;
+  /// Window-hosted native video is composited outside Flutter's clip/scale tree.
+  bool get supportsVideoAspectModes {
+    if (player.usesWindowOverlayVideoSurface) return false;
+    if (kIsWeb || !player.prefersPlatformVideoSurface) return true;
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] == '1' ||
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] == '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] ==
+          '1';
+    }
+    return true;
+  }
+
+  // 截图帧合成期间（_isCapturingScreenshot=true）且设置不含弹幕/字幕时，
+  // 弹幕层与字幕叠层临时隐藏——只影响截图帧，不影响正常观看。
+  bool get shouldHideDanmakuForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesDanmaku;
+  bool get shouldHideSubtitlesForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesSubtitles;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
@@ -409,7 +505,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
   final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
-  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
+  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
+  final String _screenshotQualityKey = 'screenshot_quality';
+  ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -562,6 +660,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const double subtitleDelayStep = 0.1;
   static const double defaultSubtitleDelaySeconds = 0.0;
   static const double defaultSubtitlePosition = 100.0;
+  // 允许拖出屏幕（Align y 可 >1 文本在屏幕外下方，<0 在上方）
+  // 0=顶部 100=底部（与面板文字描述一致；历史遗留的 -20/120 边界取自
+  // 早期拖动卡边的 bug，分块拖动修复后不再需要越界余量）
   static const double minSubtitlePosition = 0.0;
   static const double maxSubtitlePosition = 100.0;
   static const double defaultSubtitleMarginX = 0.0;
@@ -577,6 +678,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const SubtitleAlignX defaultSubtitleAlignX = SubtitleAlignX.center;
   static const SubtitleAlignY defaultSubtitleAlignY = SubtitleAlignY.bottom;
   final String _subtitleScaleKey = 'subtitle_scale';
+  final String _srtSubtitleScaleKey = 'srt_subtitle_scale';
   final String _subtitleDelayKey = 'subtitle_delay_seconds';
   final String _subtitlePositionKey = 'subtitle_position';
   final String _subtitleAlignXKey = 'subtitle_align_x';
@@ -594,8 +696,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _subtitleFontNameKey = 'subtitle_font_name';
   final String _subtitleFontDirKey = 'subtitle_font_dir';
   final String _subtitleOverrideModeKey = 'subtitle_override_mode';
-  double _subtitleScale = defaultSubtitleScale;
+    final String _srtSubtitleDelayKey = 'srt_subtitle_delay';
+    double _subtitleScale = defaultSubtitleScale;
+  // 已注册进 Flutter 引擎的字幕字体文件路径（FontLoader 重复加载同一族会抛错）
+  static final Set<String> _registeredSubtitleRuntimeFontPaths = <String>{};
+  static bool _subtitleFontRegistrationWarned = false;
+  double _srtSubtitleScale = defaultSubtitleScale;
   double _subtitleDelaySeconds = defaultSubtitleDelaySeconds;
+  double _srtSubtitleDelaySeconds = defaultSubtitleDelaySeconds;
   double _subtitlePosition = defaultSubtitlePosition;
   SubtitleAlignX _subtitleAlignX = defaultSubtitleAlignX;
   SubtitleAlignY _subtitleAlignY = defaultSubtitleAlignY;
@@ -607,8 +715,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _subtitleBold = false;
   bool _subtitleItalic = false;
   int _subtitleColorValue = defaultSubtitleColorValue;
-  int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
-  int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
+    int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    // 外挂叠层独立颜色（默认白）——长按外挂的调色板设这里，
+    // 不影响字幕设置面板颜色（那只管内嵌轨 sub-color）
+    int _externalSubtitleColorValue = 0xFFFFFFFF;
+      final String _externalSubtitleColorKey = 'external_subtitle_color';
+      // 外挂叠层独立字体（默认空=系统字体）——长按外挂选字体设这里，
+      // 不影响播放器设置（subtitleFontName 只管内嵌 sub-font）
+      String _externalSubtitleFontName = '';
+      final String _externalSubtitleFontNameKey = 'external_subtitle_font_name';
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
@@ -1107,10 +1223,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
-  bool get screenshotCaptureIncludesDanmaku =>
-      _screenshotCaptureIncludesDanmaku;
-  bool get screenshotCaptureIncludesSubtitles =>
-      _screenshotCaptureIncludesSubtitles;
+  ScreenshotQuality get screenshotQuality => _screenshotQuality;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1142,6 +1255,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   TitanDanmakuSettings get titanDanmakuSettings => _titanDanmakuSettings;
   double get subtitleScale => _subtitleScale;
+  double get srtSubtitleScale => _srtSubtitleScale;
   double get subtitleDelayCustomLimitSeconds {
     final durationSeconds = _duration.inMilliseconds / 1000;
     if (durationSeconds <= 0) {
@@ -1170,6 +1284,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   double get subtitleDelaySeconds =>
       _resolveSubtitleDelaySecondsForCurrentVideo(_subtitleDelaySeconds);
+
+  /// SRT 独立时轴偏移（秒），不与 ASS 冲突
+  double get srtSubtitleDelaySeconds => _srtSubtitleDelaySeconds;
+
+  /// 当前外挂字幕是否为 SRT（决定 overlay 用哪套时轴/交互）
+  bool get currentExternalSubtitleIsSrt {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null || path.isEmpty) return false;
+    final ext = p.extension(path).toLowerCase();
+    // .vtt 兼容：jellyfin/emby 远程字幕常为 vtt，与 SRT 同样走叠层+独立时轴
+    return ext == '.srt' || ext == '.vtt';
+  }
 
   double? _parseSeekStepFrameRateNumericToken(String value) {
     final directNumber = double.tryParse(value);
@@ -1451,8 +1577,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get subtitleBold => _subtitleBold;
   bool get subtitleItalic => _subtitleItalic;
   Color get subtitleColor => Color(_subtitleColorValue);
-  Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
-  Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
+    Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
+  String get externalSubtitleFontName => _externalSubtitleFontName;
   String get subtitleFontName => _subtitleFontName;
   String get subtitleFontDir => _subtitleFontDir;
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;
@@ -1483,6 +1611,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get currentVideoPath => _currentVideoPath;
   String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+
+  /// 当前已解析的媒体源 URL（实际播放地址优先，回退视频路径）；
+  /// 截图/GIF 导出等需要直链的功能使用。
   String? get currentResolvedMediaSource {
     final actual = _currentActualPlayUrl?.trim();
     if (actual != null && actual.isNotEmpty) {
@@ -1494,7 +1625,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (identityPath == null || identityPath.isEmpty) return null;
     return MediaSourceUtils.resolveRemotePathToUrl(identityPath);
   }
-
   PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   EmbyResolvedTrackBundle? get currentEmbyTrackSelection =>
       _currentEmbyTrackSelection;
@@ -1740,7 +1870,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器
 
-    // 🔥 新增：清理Ticker资源
+    //  新增：清理Ticker资源
     if (_uiUpdateTicker != null) {
       _uiUpdateTicker!.stop();
       _uiUpdateTicker!.dispose();
