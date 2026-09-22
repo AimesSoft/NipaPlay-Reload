@@ -35,6 +35,38 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum MediaCollectionSort { comprehensive, recentlyAdded, name }
 
+/// 各媒体库数据源当前选择的排序方式。
+class _LibrarySortPreferenceStore {
+  static const String _keyPrefix = 'library_collection_sort_v1_';
+
+  static Future<MediaCollectionSort?> load(
+    UnifiedMediaLibrarySource source,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('$_keyPrefix${source.name}');
+      for (final sort in MediaCollectionSort.values) {
+        if (sort.name == saved) return sort;
+      }
+    } catch (e) {
+      debugPrint('加载媒体库排序方式失败: $e');
+    }
+    return null;
+  }
+
+  static Future<void> save(
+    UnifiedMediaLibrarySource source,
+    MediaCollectionSort sort,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_keyPrefix${source.name}', sort.name);
+    } catch (e) {
+      debugPrint('保存媒体库排序方式失败: $e');
+    }
+  }
+}
+
 /// 媒体库“新内容”追踪器。
 ///
 /// 为每个数据源（本地 / WebDAV / SMB）持久化保存一份基线：
@@ -383,6 +415,7 @@ class _AdaptiveMediaCollectionViewState
       <int, Future<BangumiAnime>>{};
   String _query = '';
   MediaCollectionSort _sort = MediaCollectionSort.comprehensive;
+  int _sortChangeRevision = 0;
   bool _isSyncing = false;
   bool _isLoadingWebCollection = false;
   bool _requestedHistoryLoad = false;
@@ -414,6 +447,26 @@ class _AdaptiveMediaCollectionViewState
     }
     unawaited(_loadNewContentBaseline());
     unawaited(_loadOpenTimes());
+    unawaited(_loadSortPreference());
+  }
+
+  Future<void> _loadSortPreference() async {
+    final source = widget.source;
+    final revision = _sortChangeRevision;
+    final savedSort = await _LibrarySortPreferenceStore.load(source);
+    if (!mounted ||
+        widget.source != source ||
+        _sortChangeRevision != revision ||
+        savedSort == null) {
+      return;
+    }
+    if (_sort != savedSort) setState(() => _sort = savedSort);
+  }
+
+  void _setSort(MediaCollectionSort value) {
+    _sortChangeRevision++;
+    if (_sort != value) setState(() => _sort = value);
+    unawaited(_LibrarySortPreferenceStore.save(widget.source, value));
   }
 
   Future<void> _loadNewContentBaseline() async {
@@ -484,7 +537,7 @@ class _AdaptiveMediaCollectionViewState
               sort: _sort,
               isSyncing: _isSyncing,
               onSearchChanged: (value) => setState(() => _query = value),
-              onSortChanged: (value) => setState(() => _sort = value),
+              onSortChanged: _setSort,
               onSync: _isSyncing ? null : _sync,
             ),
             material.Expanded(
