@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/subtitle_item_visibility.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
 import 'dart:async';
@@ -269,6 +270,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     // 更新可见条目
     _visibleEntries =
         _allSubtitleEntries.sublist(_windowStartIndex, windowEndIndex);
+    _currentSubtitleIndex = centerIndex - _windowStartIndex;
 
     // 设置滚动位置到当前时间对应的字幕
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -285,6 +287,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   // 后用 Scrollable.ensureVisible 基于实际 RenderBox 校正到视口 30% 处；
   // 若目标条目仍未被构建，则先用实测内容高度校准估算值再重跳一次。
   void _scrollToCurrentItem(int globalIndex, {required bool animated}) {
+    if (!mounted) return;
     final localIndex = globalIndex - _windowStartIndex;
     if (localIndex < 0 || localIndex >= _visibleEntries.length) return;
 
@@ -392,6 +395,12 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       }
 
       _isLoadingWindow = false;
+      final currentGlobalIndex = _findNearestSubtitleIndex(_currentTimeMs);
+      final currentLocalIndex = currentGlobalIndex - _windowStartIndex;
+      _currentSubtitleIndex =
+          currentLocalIndex >= 0 && currentLocalIndex < _visibleEntries.length
+              ? currentLocalIndex
+              : -1;
     });
 
     // 如果是窗口替换，保持相对滚动位置
@@ -506,7 +515,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final itemContext = _currentItemKey.currentContext;
-        if (itemContext != null) {
+        if (itemContext == null) {
+          _scrollToCurrentItem(globalIndex, animated: true);
+        } else if (!isSubtitleItemFullyVisible(
+            itemContext, _scrollController)) {
           Scrollable.ensureVisible(
             itemContext,
             alignment: 0.3,

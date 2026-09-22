@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_me
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
+import 'package:nipaplay/utils/subtitle_item_visibility.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoSubtitleListPane extends StatefulWidget {
@@ -194,6 +195,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
   // 先用估算高度粗定位，真实布局完成后用 Scrollable.ensureVisible 校正；
   // 若目标条目尚未构建，用实测内容高度校准估算值后重跳一次再校正。
   void _scrollToCurrentItem(int globalIndex, {required bool animated}) {
+    if (!mounted || _visibleEntries.isEmpty) return;
     final localIndex = (globalIndex - _windowStartIndex)
         .clamp(0, _visibleEntries.length - 1)
         .toInt();
@@ -274,9 +276,12 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
       _windowStartIndex = newStartIndex;
       _visibleEntries = _allEntries.sublist(newStartIndex, newEndIndex);
       _isWindowLoading = false;
-      _currentLocalIndex = (_currentTimeMs == 0)
-          ? -1
-          : _findNearestSubtitleIndex(_currentTimeMs) - _windowStartIndex;
+      final currentLocalIndex =
+          _findNearestSubtitleIndex(_currentTimeMs) - _windowStartIndex;
+      _currentLocalIndex =
+          currentLocalIndex >= 0 && currentLocalIndex < _visibleEntries.length
+              ? currentLocalIndex
+              : -1;
     });
   }
 
@@ -322,7 +327,10 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final itemContext = _currentItemKey.currentContext;
-        if (itemContext != null) {
+        if (itemContext == null) {
+          _scrollToCurrentItem(globalIndex, animated: true);
+        } else if (!isSubtitleItemFullyVisible(
+            itemContext, _scrollController)) {
           Scrollable.ensureVisible(
             itemContext,
             alignment: 0.3,
