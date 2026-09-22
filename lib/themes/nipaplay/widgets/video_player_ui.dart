@@ -682,8 +682,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   // 添加长按手势处理方法
   void _handleLongPressStart(VideoPlayerState videoState) {
     // 字幕编辑框可见/字幕拖动中不启动长按倍速
-    if (videoState.subtitleEditBoxVisible || videoState.subtitleDragActive)
+    if (videoState.subtitleEditBoxVisible || videoState.subtitleDragActive) {
       return;
+    }
     if (!globals.isMobilePlatform || !videoState.hasVideo) return;
 
     // 开始倍速播放
