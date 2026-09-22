@@ -12,6 +12,7 @@ import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay/utils/player_event_log.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 
@@ -21,6 +22,9 @@ sealed class RemoteSubtitleCandidate {
   String get name;
   String get extension;
   String get sourceLabel;
+
+  /// 服务端声明的文件大小（若已知），用于检测远程字幕是否已变化。
+  int? get fileSize => null;
 }
 
 class WebDavRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
@@ -75,11 +79,15 @@ class DandanplayRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
   @override
   final String extension;
 
+  @override
+  final int? fileSize;
+
   const DandanplayRemoteSubtitleCandidate({
     required this.entryId,
     required this.fileName,
     required this.name,
     required this.extension,
+    this.fileSize,
   });
 
   @override
@@ -99,6 +107,9 @@ class SharedRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
   @override
   final String extension;
 
+  @override
+  final int? fileSize;
+
   const SharedRemoteSubtitleCandidate({
     required this.shareId,
     required this.fileName,
@@ -107,6 +118,7 @@ class SharedRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
     required this.isLikelyMatch,
     required this.name,
     required this.extension,
+    this.fileSize,
   });
 
   @override
@@ -186,16 +198,28 @@ class RemoteSubtitleService {
       String videoPath) async {
     if (kIsWeb || videoPath.isEmpty) return const [];
 
+    List<RemoteSubtitleCandidate> candidates;
     final managedStream = _parseManagedLibraryStreamUrl(videoPath);
     if (managedStream != null) {
-      return _listManagedLibraryCandidates(managedStream);
+      candidates = await _listManagedLibraryCandidates(managedStream);
+    } else {
+      final sharedStream = _parseSharedRemoteStreamUrl(videoPath);
+      if (sharedStream != null) {
+        candidates = await _listSharedRemoteCandidates(sharedStream);
+      } else {
+        candidates = await _listCandidatesForResolvedPath(videoPath);
+      }
     }
 
-    final sharedStream = _parseSharedRemoteStreamUrl(videoPath);
-    if (sharedStream != null) {
-      return _listSharedRemoteCandidates(sharedStream);
-    }
+    logPlayerEvent(
+      'Subtitle',
+      '远程字幕候选列表: ${candidates.length} 个（${videoPath}）',
+    );
+    return candidates;
+  }
 
+  Future<List<RemoteSubtitleCandidate>> _listCandidatesForResolvedPath(
+      String videoPath) async {
     final resolvedPath = _resolveManagedStreamPath(videoPath);
 
     if (DandanplayRemoteService.instance.isDandanplayStreamUrl(resolvedPath)) {
@@ -231,6 +255,21 @@ class RemoteSubtitleService {
     return const [];
   }
 
+  /// 清除全部远程字幕缓存（remote_subtitles 目录）。
+  /// 多字幕组/字幕更新后缓存可能命中旧文件，调用后下次加载会重新下载。
+  Future<void> clearSubtitleCache() async {
+    if (kIsWeb) return;
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final cacheDir = Directory(p.join(baseDir.path, 'remote_subtitles'));
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+      }
+    } catch (e) {
+      debugPrint('RemoteSubtitleService: 清除字幕缓存失败: $e');
+    }
+  }
+
   Future<String> ensureSubtitleCached(RemoteSubtitleCandidate candidate,
       {bool forceRefresh = false}) async {
     if (kIsWeb) {
@@ -245,6 +284,9 @@ class RemoteSubtitleService {
 
     final extension =
         candidate.extension.isNotEmpty ? candidate.extension : '.srt';
+    // 缓存键不包含 fileSize：dandanplay 等服务端对同一文件两次列表请求可能
+    // 返回不同/缺失的 size，size 参与哈希会导致同一字幕每次落到不同缓存名，
+    // 配合下载失败就表现为“挂载选中永远无效”。内容变化由下面的 size 比对处理。
     final cacheKey = switch (candidate) {
       WebDavRemoteSubtitleCandidate() =>
         'webdav:${candidate.connection.id}:${candidate.remotePath}',
@@ -257,12 +299,36 @@ class RemoteSubtitleService {
     };
 
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
-    final target = File(p.join(cacheDir.path, '$hash$extension'));
+    // 缓存文件名用源文件名（sanitize 后），轨道列表显示名 = 源文件名而非 sha1；
+    // hash 写入同名 .cachekey 元文件，命中时校验，避免同名不同条目的旧缓存误用。
+    final safeBase =
+        p.basenameWithoutExtension(candidate.name)
+            .replaceAll(RegExp(r'[\/:*?"<>|]'), '_')
+            .trim();
+    final target = File(
+      p.join(cacheDir.path, '${safeBase.isEmpty ? hash : safeBase}$extension'),
+    );
+    // 点前缀隐藏：文件管理器不显示缓存键元文件
+    final meta =
+        File('${p.join(p.dirname(target.path), '.${p.basename(target.path)}.cachekey')}');
 
     if (!forceRefresh && await target.exists()) {
       final size = await target.length();
-      if (size > 0) {
-        return target.path;
+      if (size > 0 &&
+          await meta.exists() &&
+          await meta.readAsString() == hash) {
+        // 服务端声明了大小且与缓存不一致 -> 远程字幕可能已变化，尝试刷新
+        final declared = candidate.fileSize;
+        if (declared == null || declared == size) {
+          logPlayerEvent(
+            'Subtitle',
+            '远程字幕命中缓存: ${candidate.name}（${candidate.sourceLabel}）',
+          );
+          return target.path;
+        }
+        debugPrint(
+          'RemoteSubtitleService: 远程字幕大小变化($size -> $declared)，尝试刷新缓存',
+        );
       }
     }
 
@@ -272,16 +338,48 @@ class RemoteSubtitleService {
     }
 
     try {
+      logPlayerEvent(
+        'Subtitle',
+        '开始下载远程字幕: ${candidate.name}（${candidate.sourceLabel}）',
+      );
       await _downloadToFile(candidate, tmp);
+      // 先下载成功再替换旧缓存；下载失败时旧缓存保持可用（下方回退）。
       if (await target.exists()) {
         await target.delete();
       }
       await tmp.rename(target.path);
+      try {
+        await meta.writeAsString(hash, flush: true);
+      } catch (_) {
+        // meta 写入失败不影响本次挂载；下次会重新下载校验
+      }
+      logPlayerEvent(
+        'Subtitle',
+        '远程字幕下载完成: ${candidate.name} -> ${target.path}',
+      );
       return target.path;
     } catch (e) {
       if (await tmp.exists()) {
         await tmp.delete();
       }
+      // 刷新失败但本地已有可用缓存（移除字幕后的重新挂载场景）：回退缓存，
+      // 不要让一次网络/服务端错误把挂载彻底打断。
+      if (!forceRefresh && await target.exists() && await target.length() > 0) {
+        debugPrint(
+          'RemoteSubtitleService: 刷新远程字幕失败($e)，回退使用本地缓存 ${target.path}',
+        );
+        logPlayerEvent(
+          'Subtitle',
+          '远程字幕下载失败（$e），回退使用本地缓存: ${candidate.name}',
+          level: 'WARN',
+        );
+        return target.path;
+      }
+      logPlayerEvent(
+        'Subtitle',
+        '远程字幕缓存失败: ${candidate.name}（${candidate.sourceLabel}）: $e',
+        level: 'ERROR',
+      );
       rethrow;
     }
   }
@@ -519,6 +617,7 @@ class RemoteSubtitleService {
           fileName: name,
           name: name,
           extension: ext,
+          fileSize: item.fileSize,
         ),
       );
     }
@@ -674,12 +773,21 @@ class RemoteSubtitleService {
           isLikelyMatch: map['isLikelyMatch'] == true,
           name: name,
           extension: ext,
+          fileSize: _parseItemFileSize(map),
         ),
       );
     }
 
     candidates.sort((a, b) => a.name.compareTo(b.name));
     return candidates;
+  }
+
+  /// 从字幕 item map 中解析服务端声明的文件大小（jellyfin 等可能返回 size/bytes）。
+  int? _parseItemFileSize(Map<String, dynamic> map) {
+    final raw = map['size'] ?? map['fileSize'] ?? map['bytes'];
+    if (raw is int) return raw;
+    if (raw is String) return int.tryParse(raw.trim());
+    return null;
   }
 
   Future<List<RemoteSubtitleCandidate>> _listSharedRemoteCandidates(
@@ -772,6 +880,7 @@ class RemoteSubtitleService {
           isLikelyMatch: map['isLikelyMatch'] == true,
           name: name,
           extension: ext,
+          fileSize: _parseItemFileSize(map),
         ),
       );
     }

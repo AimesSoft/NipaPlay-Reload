@@ -206,8 +206,19 @@ class NetworkSettings {
   /// 设置 Bangumi 服务器地址
   static Future<void> setBangumiServer(String serverUrl) async {
     final prefs = await SharedPreferences.getInstance();
+    final previous = await getBangumiServer();
     final normalized = _normalizeServerUrl(serverUrl);
     await prefs.setString(_bangumiServerKey, normalized);
+    // 换 API 地址后清旧域名图片/详情缓存，否则旧缓存仍指向旧域名一直加载失败
+    if (normalized != previous) {
+      final stale = prefs.getKeys()
+          .where((k) => k.startsWith('media_library_image_url_') ||
+              k.startsWith('bangumi_detail_'))
+          .toList();
+      for (final key in stale) {
+        await prefs.remove(key);
+      }
+    }
     print('[网络设置] Bangumi服务器已切换到: $normalized');
   }
 
