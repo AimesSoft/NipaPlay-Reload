@@ -170,9 +170,12 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
               builder: (context, videoState, child) =>
                   AdaptiveSettingsTile<bool>.toggle(
                 title: '截图包含弹幕',
-                subtitle: '关闭后截图不叠加当前弹幕',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图输出原始视频帧，无法合成弹幕'
+                    : '关闭后截图不叠加当前弹幕',
                 icon: Icons.subtitles_outlined,
                 phoneIcon: cupertino.CupertinoIcons.chat_bubble,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
                 value: videoState.screenshotCaptureIncludesDanmaku,
                 onChanged: videoState.setScreenshotCaptureIncludesDanmaku,
               ),
@@ -181,9 +184,12 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
               builder: (context, videoState, child) =>
                   AdaptiveSettingsTile<bool>.toggle(
                 title: '截图包含字幕',
-                subtitle: '关闭后截图不叠加内嵌与外挂字幕',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图输出原始视频帧，无法合成字幕'
+                    : '关闭后截图不叠加内嵌与外挂字幕',
                 icon: Icons.closed_caption_outlined,
                 phoneIcon: cupertino.CupertinoIcons.text_bubble,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
                 value: videoState.screenshotCaptureIncludesSubtitles,
                 onChanged: videoState.setScreenshotCaptureIncludesSubtitles,
               ),
@@ -192,9 +198,12 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
               builder: (context, videoState, child) =>
                   AdaptiveSettingsTile<bool>.toggle(
                 title: '截图裁剪黑边',
-                subtitle: '截图不包含视频画面外的上下/左右黑边',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图直接输出无播放器黑边的原始视频帧'
+                    : '截图不包含视频画面外的上下/左右黑边',
                 icon: Icons.crop_outlined,
                 phoneIcon: cupertino.CupertinoIcons.crop,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
                 value: videoState.screenshotCropLetterbox,
                 onChanged: videoState.setScreenshotCropLetterbox,
               ),

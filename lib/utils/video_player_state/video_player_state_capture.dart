@@ -26,7 +26,6 @@ const int _thumbnailMaxHeight = 240;
 const int _thumbnailMaxWidth = 480;
 const int _thumbnailJpegQuality = 70;
 
-
 extension VideoPlayerStateCapture on VideoPlayerState {
   bool _isPngBytes(Uint8List bytes) {
     return bytes.length >= 8 &&
@@ -177,12 +176,14 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     );
   }
 
-  Uint8List? _encodeFrameToPngBytes(PlayerFrame frame) {
+  Uint8List? _encodeFrameToScreenshotJpegBytes(PlayerFrame frame) {
     final decoded = _decodeFrameToImage(frame);
     if (decoded == null) {
       return null;
     }
-    return Uint8List.fromList(img.encodePng(decoded));
+    return Uint8List.fromList(
+      img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality),
+    );
   }
 
   _ThumbnailTargetSize _resolveThumbnailTargetSize() {
@@ -538,7 +539,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
           height: targetSize.height,
         );
         if (frame != null) {
-          final bytes = _encodeFrameToPngBytes(frame);
+          final bytes = _encodeFrameToScreenshotJpegBytes(frame);
           if (bytes != null && bytes.isNotEmpty) {
             return bytes;
           }
@@ -612,26 +613,39 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         bytes: rgba.buffer,
         numChannels: 4,
       );
-      // 截图设置「裁剪黑边」：按视频宽高比 contain 计算视频区（居中），
-      // 裁掉上下/左右黑边——截图更紧凑，弹幕字幕在视频区内不受影响。
-      if (_screenshotCropLetterbox && _aspectRatio > 0) {
-        final w = imageWidth.toDouble();
-        final h = imageHeight.toDouble();
-        final ar = _aspectRatio;
-        var x = 0;
-        var y = 0;
-        var cw = imageWidth;
-        var ch = imageHeight;
-        if (w / ar <= h) {
-          // 上下黑边（letterbox）：宽不变，高收窄到视频区
-          ch = (w / ar).round();
-          y = ((h - ch) / 2).round();
-        } else {
-          // 左右黑边（pillarbox）：高不变，宽收窄到视频区
-          cw = (h * ar).round();
-          x = ((w - cw) / 2).round();
+      // Use the same placement as the player. Cover/fill have no outer bars;
+      // forced ratios and original-size modes may have a different visible rect.
+      if (_screenshotCropLetterbox &&
+          _aspectRatio > 0 &&
+          !renderObject.size.isEmpty) {
+        final viewport = renderObject.size;
+        final videoTracks = player.mediaInfo.video;
+        Size? naturalSize;
+        if (videoTracks != null && videoTracks.isNotEmpty) {
+          final codec = videoTracks.first.codec;
+          if (codec.width > 0 && codec.height > 0) {
+            naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
+          }
         }
-        if (cw > 0 && ch > 0 && cw <= imageWidth && ch <= imageHeight) {
+        final visibleRect = VideoAspectGeometry.visibleVideoRect(
+          mode: _videoAspectMode,
+          viewport: viewport,
+          sourceAspect: _aspectRatio,
+          naturalSize: naturalSize,
+        );
+        final scaleX = imageWidth / viewport.width;
+        final scaleY = imageHeight / viewport.height;
+        final x =
+            (visibleRect.left * scaleX).round().clamp(0, imageWidth).toInt();
+        final y =
+            (visibleRect.top * scaleY).round().clamp(0, imageHeight).toInt();
+        final right =
+            (visibleRect.right * scaleX).round().clamp(x, imageWidth).toInt();
+        final bottom =
+            (visibleRect.bottom * scaleY).round().clamp(y, imageHeight).toInt();
+        final cw = right - x;
+        final ch = bottom - y;
+        if (cw > 0 && ch > 0 && (cw < imageWidth || ch < imageHeight)) {
           debugPrint('[Screenshot] 裁剪黑边 x=$x y=$y w=$cw h=$ch '
               '(原始 ${imageWidth}x$imageHeight)');
           final cropped =
