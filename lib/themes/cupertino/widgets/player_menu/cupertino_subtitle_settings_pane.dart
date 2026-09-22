@@ -1,4 +1,6 @@
 import 'package:file_selector/file_selector.dart';
+import 'dart:io' as io;
+import 'package:flutter/material.dart' show ActionChip;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
 
@@ -39,6 +41,13 @@ class _CupertinoSubtitleSettingsPaneState
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
   String? _fontImportMessage;
+  Future<List<String>>? _fontLibraryFuture;
+
+  void _refreshFontLibrary() {
+    setState(() {
+      _fontLibraryFuture = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -80,16 +89,67 @@ class _CupertinoSubtitleSettingsPaneState
   }
 
   Future<void> _pickFontFile(VideoPlayerState videoState) async {
-    final file = await openFile(
+    // 多选导入：导入后不自动套用字体名，由用户从字体库列表自由选择
+    final files = await openFiles(
       acceptedTypeGroups: [
-        const XTypeGroup(label: 'Font', extensions: ['ttf', 'otf', 'ttc']),
+        XTypeGroup(
+          label: 'Font',
+          extensions: const ['ttf', 'otf', 'ttc'],
+          uniformTypeIdentifiers: const [
+            'public.truetype-font',
+            'public.opentype-font',
+            'public.font',
+            'public.data',
+            'public.item',
+          ],
+        ),
       ],
     );
-    if (file == null) return;
-    await videoState.importSubtitleFontFile(file.path);
+    if (files.isEmpty) return;
+    var count = 0;
+    for (final f in files) {
+      await videoState.importSubtitleFontFile(f.path, applyName: false);
+      count++;
+    }
+    if (!mounted) return;
+    setState(() {
+      _fontImportMessage = '已导入 $count 个字体文件';
+    });
+    _refreshFontLibrary();
   }
 
   Future<void> _pickFontDirectory(VideoPlayerState videoState) async {
+    // iOS 上 file_selector 的 getDirectoryPath 不受支持，改为多选字体文件
+    if (io.Platform.isIOS) {
+      final files = await openFiles(
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: 'Font',
+            extensions: const ['ttf', 'otf', 'ttc'],
+            uniformTypeIdentifiers: const [
+              'public.truetype-font',
+              'public.opentype-font',
+              'public.font',
+              'public.data',
+              'public.item'
+            ],
+          ),
+        ],
+      );
+      if (files.isEmpty) return;
+      var count = 0;
+      for (final f in files) {
+        // 多选导入：不自动套用当前字体名，让用户从字体库列表自由选择
+        await videoState.importSubtitleFontFile(f.path, applyName: false);
+        count++;
+      }
+      if (!mounted) return;
+      setState(() {
+        _fontImportMessage = '已导入 $count 个字体文件';
+      });
+      _refreshFontLibrary();
+      return;
+    }
     final directory = await getDirectoryPath();
     if (directory == null) return;
     final count = await videoState.importSubtitleFontDirectory(directory);
@@ -103,6 +163,7 @@ class _CupertinoSubtitleSettingsPaneState
         _fontImportMessage = '未在目录中找到字体文件';
       });
     }
+    _refreshFontLibrary();
   }
 
   double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
@@ -238,6 +299,9 @@ class _CupertinoSubtitleSettingsPaneState
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<SubtitleSettingsPaneController>();
+    // 监听 VideoPlayerState：点选字体/颜色后芯片与输入框立即反映最新值
+    // （此前只 watch PaneController，重开面板前看不到变化）。
+    context.watch<VideoPlayerState>();
     final videoState = controller.videoState;
     _syncSubtitleDelayController(videoState);
     _syncController(
@@ -514,6 +578,62 @@ class _CupertinoSubtitleSettingsPaneState
               title: const Text('当前字体目录'),
               subtitle: Text(_getFontDirDisplayText(videoState)),
             ),
+          FutureBuilder<List<String>>(
+            future: _fontLibraryFuture ??= videoState.listSubtitleFonts(),
+            builder: (context, snapshot) {
+              final fonts = snapshot.data ?? const <String>[];
+              if (fonts.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              // 多选感知：高亮按逗号分隔列表判断，点击为切换（与其他
+              // 字幕面板的多选语义一致），不再是单值覆盖。
+              final selectedFonts = videoState.subtitleFontName
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toSet();
+              return AdaptivePlayerMenuTile(
+                title: const Text('字体库（点击多选）'),
+                subtitle: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 140),
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final name in fonts)
+                          ActionChip(
+                            label: Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: selectedFonts.contains(name)
+                                    ? CupertinoColors.activeBlue
+                                    : CupertinoColors.label,
+                              ),
+                            ),
+                            backgroundColor: CupertinoColors.systemGrey5,
+                            side: BorderSide(
+                              color: selectedFonts.contains(name)
+                                  ? CupertinoColors.activeBlue
+                                  : CupertinoColors.systemGrey4,
+                            ),
+                            onPressed: () {
+                              final next = selectedFonts.contains(name)
+                                  ? selectedFonts
+                                      .where((e) => e != name)
+                                      .join(',')
+                                  : [...selectedFonts, name].join(',');
+                              videoState.setSubtitleFontName(next);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           AdaptivePlayerMenuTile(
             title: const Text('清除字体设置'),
             trailing: AdaptiveButton(
@@ -523,6 +643,22 @@ class _CupertinoSubtitleSettingsPaneState
               onPressed: () {
                 videoState.setSubtitleFontName('');
                 videoState.setSubtitleFontDir('');
+              },
+            ),
+          ),
+          AdaptivePlayerMenuTile(
+            title: const Text('清理字体缓存'),
+            trailing: AdaptiveButton(
+              label: '清理',
+              style: AdaptiveButtonStyle.glass,
+              size: AdaptiveButtonSize.small,
+              onPressed: () async {
+                await videoState.clearSubtitleFontCache();
+                if (!mounted) return;
+                setState(() {
+                  _fontImportMessage = '已清空字体库（subtitle_fonts 目录）';
+                });
+                _refreshFontLibrary();
               },
             ),
           ),
