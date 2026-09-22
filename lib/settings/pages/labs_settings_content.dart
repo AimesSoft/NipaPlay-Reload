@@ -25,6 +25,25 @@ class LabsSettingsContent extends StatelessWidget {
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
+                if (!globals.isTelevision && !globals.isPhone)
+                  AdaptiveSettingsTile.toggle(
+                    title: _text(
+                      context,
+                      '新版番剧卡片页面',
+                      '新版番劇卡片頁面',
+                      'New Anime Detail Page',
+                    ),
+                    subtitle: _text(
+                      context,
+                      '在桌面端与 Pad 端使用全屏沉浸式媒体详情页',
+                      '在桌面端與 Pad 端使用全螢幕沉浸式媒體詳情頁',
+                      'Use the immersive full-screen media detail page on desktop and tablet.',
+                    ),
+                    icon: Ionicons.albums_outline,
+                    phoneIcon: cupertino.CupertinoIcons.rectangle_stack,
+                    value: labsSettings.enableImmersiveAnimeDetail,
+                    onChanged: labsSettings.setEnableImmersiveAnimeDetail,
+                  ),
                 if (PlayerFactory.isErikaKernelSupported &&
                     !globals.isTelevision)
                   AdaptiveSettingsTile.toggle(

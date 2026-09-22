@@ -20,6 +20,7 @@ import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 
 enum AutoSyncPhase { idle, pulling, merging, pushing, complete, failed }
@@ -847,6 +848,12 @@ class AutoSyncService extends ChangeNotifier {
         in operations.where((operation) => operation.deleted)) {
       if (operation.category == BackupCategory.preferences.name) {
         await prefs.remove(operation.key);
+      } else if (operation.category == BackupCategory.mediaLibraries.name &&
+          operation.key.startsWith(
+            BangumiService.backupAnimeDetailKeyPrefix,
+          )) {
+        await BangumiService.instance
+            .deleteAnimeDetailFromBackupKey(operation.key);
       } else if (operation.category == BackupCategory.watchHistory.name) {
         await database.deleteHistory(operation.key);
       } else if (operation.category == BackupCategory.episodeMatches.name) {

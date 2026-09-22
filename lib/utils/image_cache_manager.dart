@@ -19,6 +19,11 @@ class ImageCacheManager {
   final Map<String, int> _refCount = {};
   final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
 
+  /// 同一 URL 的磁盘缓存写入链：不同解码宽度并发加载同一 URL 时，
+  /// 必须串行读写同一个磁盘缓存文件，否则并发 writeAsBytes 会互相破坏，
+  /// 导致读取到半截文件、解码失败（表现为背景图闪黑/不显示）。
+  final Map<String, Future<void>> _diskWrites = {};
+
   /// 每张缓存图片的估算字节数，以及总量。
   /// 解码后的 ui.Image 像素位于 native/external 内存，不受 Dart GC 管理，
   /// 在 32 位设备（低端安卓电视）上必须有硬上限，否则地址空间会被耗尽。
@@ -106,6 +111,32 @@ class ImageCacheManager {
     return '${url}_w${width ?? 0}_h${height ?? 0}';
   }
 
+  /// 等待同一 URL 的磁盘缓存写入链结束（避免读到半截文件）。
+  Future<void> _awaitDiskWrite(String url) async {
+    final pending = _diskWrites[url];
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {}
+    }
+  }
+
+  /// 按 URL 串行执行磁盘缓存写入，返回本次写入的 Future。
+  Future<void> _chainDiskWrite(
+    String url,
+    Future<void> Function() write,
+  ) {
+    final previous = _diskWrites[url] ?? Future<void>.value();
+    final next = previous.then((_) => write());
+    _diskWrites[url] = next;
+    next.whenComplete(() {
+      if (identical(_diskWrites[url], next)) {
+        _diskWrites.remove(url);
+      }
+    });
+    return next;
+  }
+
   ui.Image? getCachedImage(String url, {int? targetWidth, int? targetHeight}) {
     final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
     final cachedImage = _cache[cacheKey];
@@ -149,6 +180,7 @@ class ImageCacheManager {
         // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
         // 我们从本地读取原图数据，然后按需解码
         if (!forceRefresh && !kIsWeb) {
+          await _awaitDiskWrite(url);
           final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
           if (await cacheFile.exists()) {
             final bytes = await cacheFile.readAsBytes();
@@ -178,7 +210,11 @@ class ImageCacheManager {
         // instantiateImageCodec 完成，它本身就是流式的，也能做降采样。
         if (!kIsWeb) {
           final cacheFile = await _getCacheFile(url);
-          await cacheFile.writeAsBytes(downloadedBytes);
+          // 同一 URL 的写入串行执行，防止并发写坏磁盘缓存文件。
+          await _chainDiskWrite(
+            url,
+            () => cacheFile.writeAsBytes(downloadedBytes),
+          );
         }
 
         // 解码图片数据

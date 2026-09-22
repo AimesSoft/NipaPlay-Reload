@@ -204,10 +204,9 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
-                  // 整屏宽的横幅：显式给出解码尺寸，既保证画质，
-                  // 又避免在低端电视上按原始分辨率解码整张背景图。
+                  // 只约束宽度以保持海报原始比例，再交给 BoxFit.cover 裁切。
+                  // 同时传宽高会在 Flutter 解码阶段把竖版海报拉成 16:9。
                   memCacheWidth: 1280,
-                  memCacheHeight: 720,
                   delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                   blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
                   forceBlur: item.source != RecommendedItemSource.dandanplay

@@ -24,6 +24,7 @@
 /// [hintText] - 可选，文本框提示文字
 /// [initialValue] - 可选，文本框初始值
 /// [minLines] - 可选，文本框最小行数，默认为5
+/// [allowEmpty] - 可选，允许用空文本确认；用于“清除/恢复默认”场景
 ///
 /// 返回值：
 /// 返回 Future<String?>，点击"确定"返回输入的文本，
@@ -70,6 +71,7 @@ class TextInputDialog extends StatefulWidget {
   final String? initialValue;
   final int minLines;
   final bool embedded;
+  final bool allowEmpty;
 
   const TextInputDialog({
     super.key,
@@ -79,6 +81,7 @@ class TextInputDialog extends StatefulWidget {
     this.initialValue,
     this.minLines = 5,
     this.embedded = false,
+    this.allowEmpty = false,
   });
 
   static Future<String?> show(
@@ -88,6 +91,7 @@ class TextInputDialog extends StatefulWidget {
     String? hintText,
     String? initialValue,
     int minLines = 5,
+    bool allowEmpty = false,
   }) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<String>(
@@ -101,6 +105,7 @@ class TextInputDialog extends StatefulWidget {
           initialValue: initialValue,
           minLines: minLines,
           embedded: true,
+          allowEmpty: allowEmpty,
         ),
       );
     }
@@ -120,6 +125,7 @@ class TextInputDialog extends StatefulWidget {
         hintText: hintText,
         initialValue: initialValue,
         minLines: minLines,
+        allowEmpty: allowEmpty,
       ),
     );
   }
@@ -167,7 +173,9 @@ class _TextInputDialogState extends State<TextInputDialog> {
 
   void _confirm() {
     final text = _controller.text.trim();
-    Navigator.of(context).maybePop(text.isEmpty ? null : text);
+    Navigator.of(context).maybePop(
+      text.isEmpty && !widget.allowEmpty ? null : text,
+    );
   }
 
   void _cancel() {

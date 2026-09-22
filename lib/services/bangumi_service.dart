@@ -14,6 +14,8 @@ class BangumiService {
 
   static const String _cacheKey = 'dandanplay_shin_cache';
   static const String _detailsCacheKeyPrefix = 'bangumi_detail_';
+  static const String backupAnimeDetailKeyPrefix = 'animeDetail:';
+  static const String _customBackgroundKeyPrefix = 'bangumi_custom_background_';
   static const Duration _defaultCacheDuration = Duration(hours: 3);
   static const int _oldAnimeThreshold = 18343; // 和弹幕缓存使用相同的判断标准
   static const Duration _oldAnimeCacheDuration = Duration(days: 7);
@@ -82,15 +84,18 @@ class BangumiService {
             bool isExpired = now - timestamp > cacheDuration.inMilliseconds;
 
             // 对于自定义媒体信息（animeId为负数），即使过期也保留
-            if (!isExpired || animeId < 0) {
-              final Map<String, dynamic> animeData = data['animeDetail'];
+            final Map<String, dynamic> animeData =
+                Map<String, dynamic>.from(data['animeDetail'] as Map);
+            final animeDetail = BangumiAnime.fromJson(animeData);
+            await _persistCustomBackground(animeDetail);
 
-              final animeDetail = BangumiAnime.fromJson(animeData);
+            if (!isExpired || animeId < 0) {
               _detailsCache[animeId] = animeDetail;
               _detailsCacheTime[animeId] =
                   DateTime.fromMillisecondsSinceEpoch(timestamp);
               loadedCount++;
-            } else {
+            } else if (animeDetail.backgroundImageUrl?.trim().isNotEmpty !=
+                true) {
               // 过期的缓存自动删除
               await prefs.remove(key);
             }
@@ -114,6 +119,23 @@ class BangumiService {
       return _detailsCache[animeId];
     }
     return null;
+  }
+
+  String _customBackgroundKey(int animeId) =>
+      '$_customBackgroundKeyPrefix$animeId';
+
+  Future<void> _persistCustomBackground(BangumiAnime anime) async {
+    final url = anime.backgroundImageUrl?.trim();
+    if (url?.isNotEmpty != true) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_customBackgroundKey(anime.id), url!);
+  }
+
+  Future<BangumiAnime> _mergeCustomBackground(BangumiAnime anime) async {
+    final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString(_customBackgroundKey(anime.id))?.trim();
+    if (url?.isNotEmpty != true) return anime;
+    return anime.copyWith(backgroundImageUrl: url);
   }
 
   Future<void> loadData() async {
@@ -514,6 +536,8 @@ class BangumiService {
 
           // 转换为繁体中文（如果需要）
           anime = await ChineseConverter.convertAnime(anime);
+          // 用户背景是本地元数据，API 刷新不能覆盖它。
+          anime = await _mergeCustomBackground(anime);
 
           // 更新内存缓存
           _detailsCache[animeId] = anime;
@@ -573,8 +597,15 @@ class BangumiService {
 
             // 检查是否过期
             if (now - timestamp > cacheDuration.inMilliseconds) {
-              await prefs.remove(key);
-              removedCount++;
+              final raw = data['animeDetail'];
+              final anime = raw is Map
+                  ? BangumiAnime.fromJson(Map<String, dynamic>.from(raw))
+                  : null;
+              await _persistCustomBackgroundIfPresent(anime);
+              if (anime?.backgroundImageUrl?.trim().isNotEmpty != true) {
+                await prefs.remove(key);
+                removedCount++;
+              }
             }
           }
         } catch (e) {
@@ -626,6 +657,11 @@ class BangumiService {
     }
   }
 
+  Future<void> _persistCustomBackgroundIfPresent(BangumiAnime? anime) async {
+    if (anime == null) return;
+    await _persistCustomBackground(anime);
+  }
+
   // 从磁盘缓存加载详情数据
   Future<BangumiAnime?> _loadDetailFromCache(int animeId) async {
     try {
@@ -648,18 +684,20 @@ class BangumiService {
         bool isExpired = now - timestamp > cacheDuration.inMilliseconds;
 
         // 对于自定义媒体信息（animeId为负数），即使缓存过期也返回
-        if (!isExpired || animeId < 0) {
-          final Map<String, dynamic> animeData = data['animeDetail'];
+        final Map<String, dynamic> animeData =
+            Map<String, dynamic>.from(data['animeDetail'] as Map);
+        final animeDetail = BangumiAnime.fromJson(animeData);
+        await _persistCustomBackground(animeDetail);
 
+        if (!isExpired || animeId < 0) {
           // 加载到内存缓存
-          final animeDetail = BangumiAnime.fromJson(animeData);
           _detailsCache[animeId] = animeDetail;
           _detailsCacheTime[animeId] =
               DateTime.fromMillisecondsSinceEpoch(timestamp);
 
           //debugPrint('[番剧服务] 从磁盘缓存成功加载番剧 $animeId 的详情 (缓存时间: ${cacheDuration.inHours}小时)');
           return animeDetail;
-        } else {
+        } else if (animeDetail.backgroundImageUrl?.trim().isNotEmpty != true) {
           //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存已过期，将从网络重新获取');
           await prefs.remove(cacheKey);
         }
@@ -836,7 +874,91 @@ class BangumiService {
   // 保存自定义媒体信息到缓存
   Future<void> saveCustomAnimeDetail(
       int animeId, BangumiAnime animeDetail) async {
-    await _saveDetailToCache(animeId, animeDetail);
+    final resolved = await _mergeCustomBackground(animeDetail);
+    _detailsCache[animeId] = resolved;
+    _detailsCacheTime[animeId] = DateTime.now();
+    await _persistCustomBackground(resolved);
+    await _saveDetailToCache(animeId, resolved);
+  }
+
+  /// 修改详情页背景。传入 null 会恢复为海报。
+  Future<BangumiAnime> updateBackgroundImageUrl(
+    int animeId,
+    String? backgroundImageUrl, {
+    BangumiAnime? fallbackAnime,
+  }) async {
+    var anime = _detailsCache[animeId] ?? fallbackAnime;
+    anime ??= await _loadDetailFromCache(animeId);
+    anime ??= await getAnimeDetails(animeId);
+
+    final normalized = backgroundImageUrl?.trim();
+    final updated = normalized?.isNotEmpty == true
+        ? anime.copyWith(backgroundImageUrl: normalized)
+        : anime.copyWith(clearBackgroundImageUrl: true);
+    final prefs = await SharedPreferences.getInstance();
+    if (normalized?.isNotEmpty == true) {
+      await prefs.setString(_customBackgroundKey(animeId), normalized!);
+    } else {
+      await prefs.remove(_customBackgroundKey(animeId));
+    }
+    await saveCustomAnimeDetail(animeId, updated);
+    return updated;
+  }
+
+  /// 以逐条记录形式导出番剧详情，便于增量同步按 animeId 合并。
+  Future<Map<String, dynamic>> exportAnimeDetailsForBackup() async {
+    final prefs = await SharedPreferences.getInstance();
+    final result = <String, dynamic>{};
+    for (final key in prefs
+        .getKeys()
+        .where((key) => key.startsWith(_detailsCacheKeyPrefix))) {
+      try {
+        final animeId = int.parse(key.substring(_detailsCacheKeyPrefix.length));
+        final encoded = prefs.getString(key);
+        if (encoded == null) continue;
+        final wrapper = json.decode(encoded);
+        if (wrapper is! Map || wrapper['animeDetail'] is! Map) continue;
+        final anime = BangumiAnime.fromJson(
+          Map<String, dynamic>.from(wrapper['animeDetail'] as Map),
+        );
+        result['$backupAnimeDetailKeyPrefix$animeId'] = anime.toJson();
+      } catch (_) {
+        // 单条旧缓存损坏不应阻断整个备份。
+      }
+    }
+    return result;
+  }
+
+  Future<void> restoreAnimeDetailFromBackup(
+    String backupKey,
+    Map<String, dynamic> data,
+  ) async {
+    if (!backupKey.startsWith(backupAnimeDetailKeyPrefix)) return;
+    final animeId = int.tryParse(
+      backupKey.substring(backupAnimeDetailKeyPrefix.length),
+    );
+    if (animeId == null) return;
+    final decoded = BangumiAnime.fromJson(data);
+    final anime =
+        decoded.id == animeId ? decoded : decoded.copyWith(id: animeId);
+    if (anime.backgroundImageUrl?.trim().isNotEmpty != true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_customBackgroundKey(animeId));
+    }
+    await saveCustomAnimeDetail(animeId, anime);
+  }
+
+  Future<void> deleteAnimeDetailFromBackupKey(String backupKey) async {
+    if (!backupKey.startsWith(backupAnimeDetailKeyPrefix)) return;
+    final animeId = int.tryParse(
+      backupKey.substring(backupAnimeDetailKeyPrefix.length),
+    );
+    if (animeId == null) return;
+    _detailsCache.remove(animeId);
+    _detailsCacheTime.remove(animeId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_detailsCacheKeyPrefix$animeId');
+    await prefs.remove(_customBackgroundKey(animeId));
   }
 }
 
