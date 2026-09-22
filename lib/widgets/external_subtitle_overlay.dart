@@ -36,10 +36,33 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   /// 字幕背景（功能区按钮切换；默认无背景；按字幕路径独立）
   final Map<String, bool> _subtitleBgEnabled = {};
   Timer? _twoFingerTimer; // 双指长按识别定时器
+  // 记录编辑框所属的视频路径：换视频/内核热切换重载时自动收框。
+  // 否则框在新视频加载完成后立即显示（同名外挂字幕路径仍命中
+  // _editingPath），框层（白边框+按钮）随播放进度每帧重建，与同 Stack
+  // 的弹幕层反复合成导致弹幕闪烁（用户反馈）。长按出框不受影响。
+  String? _boundMediaPath;
+  // 出框时的字幕文本：编辑期间若切换到下一句，自动收框——否则框随
+  // 新文本缩到很小，收框/按钮点不中、拖动锚点也丢失（用户反馈）。
+  String? _editingCueText;
   // 字幕轴同步诊断去重
   String _lastLoggedCueKey = '';
   int _lastSyncLogAtMs = 0;
   static const int _syncLogMinIntervalMs = 1000;
+
+  /// 收起编辑框并清理手势拦截标志（在 build 中检测状态变化后调用，
+  /// 通过 postFrame 延迟 setState，避免构建期改状态）。
+  void _collapseEditBox(VideoPlayerState videoState) {
+    if (_editingPath == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _editingPath == null) return;
+      setState(() {
+        _editingPath = null;
+        _editingCueText = null;
+      });
+      videoState.setSubtitleEditBoxVisible(false);
+      videoState.setSubtitleDragActive(false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +80,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
         if (paths.isEmpty) {
           return const SizedBox.shrink();
         }
+        // 字幕集合变化（换文件/重新加载）时收起残留编辑框
+        if (_editingPath != null && !paths.contains(_editingPath)) {
+          _collapseEditBox(videoState);
+        }
         // 多字幕分块渲染：每条外挂字幕独立一块（独立时轴延迟/位置/手势），
         // ASS+SRT 混挂时各条可单独调轴与摆位。
         return Stack(
@@ -72,9 +99,27 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
 
   /// 渲染单条外挂字幕块（占满整个舞台，内部按该条字幕的位置对齐）
   Widget _buildPathBlock(VideoPlayerState videoState, String path) {
+    // 换视频（切集/内核热切换重载）时收起残留编辑框——否则框在新视频
+    // 加载完成后立即显示，框层每帧重建导致弹幕闪烁（用户反馈）。
+    final mediaPath = videoState.currentVideoPath;
+    if (mediaPath != _boundMediaPath) {
+      _boundMediaPath = mediaPath;
+      _collapseEditBox(videoState);
+    }
+
     final subtitleTimeMs = widget.currentPositionMs.round() -
         (videoState.pathSubtitleDelaySeconds(path) * 1000).round();
     final subtitleText = videoState.pathSubtitleTextAt(path, subtitleTimeMs);
+
+    // 编辑期间字幕切换到下一句：自动收框——否则框随新文本缩到很小，
+    // 收框/设置按钮点不中、拖动锚点也丢失（用户反馈）。间隙期
+    // （文本为空）不收框，保留占位框作为拖动锚点。
+    if (_editingPath == path &&
+        _editingCueText != null &&
+        subtitleText.trim().isNotEmpty &&
+        subtitleText != _editingCueText) {
+      _collapseEditBox(videoState);
+    }
 
     // 字幕轴同步诊断：每条字幕首次显示时记录一次，用于比对内核间的时间轴
     _logSubtitleSyncOnce(
@@ -182,7 +227,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
             behavior: HitTestBehavior.opaque,
             onLongPressStart: (details) {
               debugPrint('[SubtitleOverlay] 长按出框 path=$path');
-              setState(() => _editingPath = path);
+              setState(() {
+                _editingPath = path;
+                _editingCueText = subtitleText; // 记录出框时的文本，供换句自动收框
+              });
               videoState.setSubtitleEditBoxVisible(true);
               _longPressMoved = false;
               _dragStartPosition = videoState.pathSubtitlePosition(path);
