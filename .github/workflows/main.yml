@@ -421,6 +421,10 @@ jobs:
         with:
           tag: v${{ needs.Build-Android.outputs.version }}
           name: Release v${{ needs.Build-Android.outputs.version }}
+          # tag 必须指向本次构建的 commit：release-action 默认用仓库默认分支
+          # （main）建 tag，dispatch 在 release 分支构建时 tag 会指向旧代码，
+          # release 源码包与二进制不一致。
+          commit: ${{ github.sha }}
           bodyFile: "release_notes.md"
           allowUpdates: true
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-*/*.dmg,/tmp/artifacts/release-macOS-*/*.zip,/tmp/artifacts/release-macOS-*/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm,/tmp/artifacts/release-HarmonyOS-unsigned/*.hap,/tmp/artifacts/release-tvOS-sideload/*.ipa
