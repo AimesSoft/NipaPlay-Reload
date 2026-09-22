@@ -509,6 +509,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void pause() {
+    _playbackIntentGeneration++;
     if (_status == PlayerStatus.playing) {
       final bool isWindowsMediaKit = !kIsWeb &&
           Platform.isWindows &&
@@ -587,6 +588,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void play() {
+    _playbackIntentGeneration++;
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
       '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, '

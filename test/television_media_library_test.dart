@@ -58,6 +58,55 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  testWidgets('media collection restores each source sort after switching sections',
+      (tester) async {
+    final selectedSource =
+        ValueNotifier<UnifiedMediaLibrarySource?>(UnifiedMediaLibrarySource.local);
+    addTearDown(selectedSource.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<WatchHistoryProvider>(
+        create: (_) => _LoadedEmptyWatchHistoryProvider(),
+        child: _testApp(
+          home: Scaffold(
+            body: AppDisplaySurfaceScope(
+              surface: AppDisplaySurface.television,
+              child: ValueListenableBuilder<UnifiedMediaLibrarySource?>(
+                valueListenable: selectedSource,
+                builder: (context, source, _) => source == null
+                    ? const SizedBox.expand()
+                    : AdaptiveMediaCollectionView(
+                        key: ValueKey<String>('collection-${source.name}'),
+                        source: source,
+                        onPlayEpisode: (_) {},
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('综合排序'));
+    await tester.pumpAndSettle();
+    expect(find.text('最近观看'), findsOneWidget);
+
+    selectedSource.value = UnifiedMediaLibrarySource.webdav;
+    await tester.pumpAndSettle();
+    expect(find.text('综合排序'), findsOneWidget);
+
+    selectedSource.value = null;
+    await tester.pumpAndSettle();
+    selectedSource.value = UnifiedMediaLibrarySource.local;
+    await tester.pumpAndSettle();
+    expect(find.text('最近观看'), findsOneWidget);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('library_collection_sort_v1_local'), 'recentlyAdded');
+    expect(prefs.getString('library_collection_sort_v1_webdav'), isNull);
+  });
+
   test('televisions exclude local library sections and local folders', () {
     expect(
       shouldExposeLocalMediaLibrary(isWeb: false, isTelevision: true),

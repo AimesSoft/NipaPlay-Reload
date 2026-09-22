@@ -17,6 +17,8 @@ extension VideoPlayerStateLifecycle on VideoPlayerState {
         pause();
       }
     } else if (state == AppLifecycleState.resumed) {
+      final shouldRemainPaused = _status == PlayerStatus.paused ||
+          (_pauseOnBackground && _wasPlayingBeforeBackground);
       // 回前台复位字幕编辑态：长按出框/拖动中切后台再回来，框与
       // dragActive 残留会拦截播放器长按倍速（video_player_ui 653 行）。
       setSubtitleEditBoxVisible(false);
@@ -32,25 +34,34 @@ extension VideoPlayerStateLifecycle on VideoPlayerState {
       // 仅 iOS：Android libmpv 上这组 seek(-90ms)+seek(回) 会打乱外挂字幕
       // 轨道时间轴（字幕整体偏移，只能重开视频）。
       if (Platform.isIOS && hasVideo && _position.inMilliseconds > 0) {
+        final refreshPlayer = player;
+        final refreshGeneration = _playbackGeneration;
+        final playbackIntentGeneration = _playbackIntentGeneration;
+        bool isCurrentVideo() => !_isDisposed &&
+            hasVideo &&
+            refreshGeneration == _playbackGeneration &&
+            identical(refreshPlayer, player);
         // 回前台刷新帧（seek 退 90ms 再回）强制重绘画面。注意：不要在
         // 回前台时机调用 updateTexture()——iOS 上切后台再回前台瞬间
         // 重建纹理会在 native 层崩溃（截图后退出聊天再切回即复现），
         // 已回退；久后台黑屏问题（画面丢失声音正常）另想办法。
         Future<void>.delayed(const Duration(milliseconds: 200), () {
-          if (!hasVideo) return;
+          if (!isCurrentVideo()) return;
           final pos = _position.inMilliseconds;
           debugPrint('[VideoPlayerState] 回前台强制刷新画面帧 pos=$pos');
           // 同位置 seek 会被解码器优化掉（日志刷新但画面不重绘）：
           // 先退 90ms 强制解码新帧，再回到原位置，暂停态保持不变。
           final back = pos > 200 ? pos - 90 : 0;
-          player.seek(position: back);
+          refreshPlayer.seek(position: back);
           Future<void>.delayed(const Duration(milliseconds: 160), () {
-            if (hasVideo) {
-              player.seek(position: pos);
+            if (isCurrentVideo()) {
+              refreshPlayer.seek(position: pos);
               // iOS 内核（AVPlayer）seek 后可能短暂恢复播放：刷新帧
-              // 后内核层直接暂停，保证回前台保持暂停态（用户手动播放）。
-              // ignore: unawaited_futures
-              player.pauseDirectly();
+              // 只恢复原本的暂停状态；期间手动播放或暂停后不再覆盖用户操作。
+              if (shouldRemainPaused &&
+                  playbackIntentGeneration == _playbackIntentGeneration) {
+                unawaited(refreshPlayer.pauseDirectly());
+              }
             }
           });
         });
