@@ -408,16 +408,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> _loadHardwareDecoderSetting() async {
-    if (kIsWeb) return;
-    final prefs = await SharedPreferences.getInstance();
-    final resolved = prefs.getBool(_useHardwareDecoderKey) ?? true;
-    final bool changed = resolved != _useHardwareDecoder;
-    _useHardwareDecoder = resolved;
-    await applyHardwareDecoderPreference();
-    if (changed) {
-      _notifyListeners();
+      if (kIsWeb) return;
+      final prefs = await SharedPreferences.getInstance();
+      final resolved = prefs.getBool(_useHardwareDecoderKey) ?? true;
+      final bool changed = resolved != _useHardwareDecoder;
+      _useHardwareDecoder = resolved;
+      PlayerFactory.setUseHardwareDecoder(resolved);
+      await applyHardwareDecoderPreference();
+      if (changed) {
+        _notifyListeners();
+      }
     }
-  }
 
   // 设置弹幕堆叠
   Future<void> setDanmakuStacking(bool stacking) async {
@@ -461,35 +462,76 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> setHardwareDecoderEnabled(bool enabled) async {
-    if (_useHardwareDecoder == enabled) {
-      return;
+      if (_useHardwareDecoder == enabled) {
+        return;
+      }
+      _useHardwareDecoder = enabled;
+      PlayerFactory.setUseHardwareDecoder(enabled);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_useHardwareDecoderKey, enabled);
+      await applyHardwareDecoderPreference();
+      _notifyListeners();
     }
-    _useHardwareDecoder = enabled;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useHardwareDecoderKey, enabled);
-    await applyHardwareDecoderPreference();
-    _notifyListeners();
-  }
 
   String _resolveMpvHwdecValue() {
-    if (Platform.isAndroid) {
-      return 'mediacodec-copy';
+      if (Platform.isAndroid) {
+        return 'mediacodec-copy';
+      }
+      // 非 Android（iOS 等）：iOS libmpv 用 vo=libmpv，videotoolbox 直接输出
+      // 会回退 copy-back，统一用 auto-copy（copy-back）保证兼容。
+      return 'auto-copy';
     }
-    return 'auto-copy';
-  }
 
   Future<void> applyHardwareDecoderPreference() async {
-    if (kIsWeb || _isDisposed) return;
-    final kernelName = player.getPlayerKernelName();
-    if (kernelName == 'MDK') {
-      await _decoderManager.applyHardwareDecodingPreference(
-        _useHardwareDecoder,
-      );
-    } else if (kernelName == 'Media Kit') {
-      final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
-      player.setProperty('hwdec', hwdecValue);
-    }
-  }
+        if (kIsWeb || _isDisposed) return;
+        final kernelName = player.getPlayerKernelName();
+        if (kernelName == 'MDK') {
+          // 硬解模式 → mdk decoder 列表（auto 系列用现有偏好；specific 强制该解码器）
+          final isAutoMode = const {
+                HwDecType.auto,
+                HwDecType.autoSafe,
+                HwDecType.autoCopy,
+                HwDecType.no,
+              }.contains(_hwdecMode);
+          if (isAutoMode) {
+            await _decoderManager.applyHardwareDecodingPreference(
+              _useHardwareDecoder,
+            );
+          } else {
+            // 特定硬解（videotoolbox/mediacodec/nvdec...）：copy 版用基础名
+            final decoder =
+                _hwdecMode.hwdec.replaceAll('-copy', '').split('-').first;
+            player.setDecoders(MediaType.video, [decoder, 'FFmpeg']);
+            debugPrint('[Decoder] mdk 硬解模式: ${_hwdecMode.hwdec} -> $decoder');
+          }
+          // 软解输出颜色格式：mdk 解码器属性（FFmpeg AVOption，软解生效；
+                  // 硬解输出由硬件决定，pixel_format 不适用）
+                  if (_softDecodePixelFormat.isNotEmpty) {
+                    try {
+                      player.setProperty(
+                        'video.decoder',
+                        'pixel_format=$_softDecodePixelFormat',
+                      );
+                    } catch (_) {}
+                    debugPrint('[Decoder] 软解颜色格式已应用: $_softDecodePixelFormat');
+                  } else {
+                    debugPrint('[Decoder] 软解颜色格式: 自动（内核默认）');
+                  }
+                  SystemResourceMonitor().setPixelFormat(
+                    _softDecodePixelFormat.isEmpty ? 'auto' : _softDecodePixelFormat,
+                  );
+        } else if (kernelName == 'Media Kit') {
+          // 硬解模式直设 mpv hwdec（照搬 PiliPlus）；软解开关关闭时强制 no
+          final hwdecValue =
+              _useHardwareDecoder ? _hwdecMode.hwdec : 'no';
+          player.setProperty('hwdec', hwdecValue);
+          debugPrint('[Decoder] libmpv hwdec: $hwdecValue');
+          // libmpv 的解码器由 hwdec 属性控制（不 setDecoders）；但资源监视器
+          // 的解码器信息来自 DecoderManager，需同步更新，否则开关后仍显示旧的
+          // "硬解 - VT（尝试）"。setDecoders 对 media_kit 仅存 map，无副作用。
+          await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+        }
+      }
 
   // 播放速度相关方法
 
@@ -602,7 +644,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     // 保存当前播放速度，以便长按结束时恢复
     _normalPlaybackRate = _playbackRate;
 
-    // ✅ P6修复：速率变化前重设锚点，防止 playbackTimeMs 跳变
+    //  P6修复：速率变化前重设锚点，防止 playbackTimeMs 跳变
     // 根因：smoothMs = anchorMs + elapsedDelta * newRate，elapsedDelta是旧速率期间积累的，
     // 乘以新速率会导致 playbackTimeMs 瞬间跳变 elapsedDelta*(newRate-oldRate)。
     // 修复：将锚点重设到当前 playbackTimeMs 和 elapsed，使新速率从当前位置平滑推进。
@@ -611,11 +653,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final predictedJumpMs =
           elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
       debugPrint(
-          '[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
+          '[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x  ${_speedBoostRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_JUMP=${predictedJumpMs.toStringAsFixed(1)}ms '
-          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)}  ANCHOR RESET to ptm');
     }
     _smoothAnchorMs = _playbackTimeMs.value;
     _smoothAnchorElapsedUs = _lastElapsedUs;
@@ -633,19 +675,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   void stopSpeedBoost() {
     if (!hasVideo || !_isSpeedBoostActive) return;
 
-    // ✅ P6修复：速率变化前重设锚点，防止 smoothMs 增速骤降导致 drift
-    // 根因：2x→1x时 smoothMs = anchorMs + elapsedDelta*1.0（之前*2.0），
-    // playbackTimeMs几乎不推进 → playerMs以1x继续推进 → 大drift → FORWARD SNAP
+    //  P6修复：速率变化前重设锚点，防止 smoothMs 增速骤降导致 drift
+    // 根因：2x1x时 smoothMs = anchorMs + elapsedDelta*1.0（之前*2.0），
+    // playbackTimeMs几乎不推进  playerMs以1x继续推进  大drift  FORWARD SNAP
     if (!kReleaseMode) {
       final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
       final predictedDriftMs =
           elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
       debugPrint(
-          '[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
+          '[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x  ${_normalPlaybackRate}x '
           'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
           'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
           'PREDICTED_DRIFT=${predictedDriftMs.toStringAsFixed(1)}ms '
-          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)}  ANCHOR RESET to ptm');
     }
     _smoothAnchorMs = _playbackTimeMs.value;
     _smoothAnchorElapsedUs = _lastElapsedUs;
@@ -1508,17 +1550,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final bytes = await sourceFile.readAsBytes();
       if (bytes.isEmpty) return null;
 
-      final supportDir = await path_provider.getApplicationSupportDirectory();
-      final fontsDir = Directory(p.join(supportDir.path, 'danmaku_fonts'));
+      // 与字幕字体共用一个字体库目录（subtitle_fonts）：弹幕/字幕/外挂
+      // 字幕三处设置导入的字体集中于此，各选择器都能看到同一份字体库。
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
       await fontsDir.create(recursive: true);
 
-      final ext = p.extension(sourcePath).toLowerCase();
-      final baseName = p.basenameWithoutExtension(sourcePath);
-      final hash = sha1.convert(bytes).toString().substring(0, 12);
-      final fileName = '${baseName}_$hash$ext';
+      final fileName = p.basename(sourcePath);
       final destPath = p.join(fontsDir.path, fileName);
       final destFile = File(destPath);
-      if (!await destFile.exists()) {
+      if (!await destFile.exists() ||
+          await destFile.length() != bytes.length) {
         await destFile.writeAsBytes(bytes, flush: true);
       }
       return destPath;
@@ -1816,12 +1858,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   String _defaultSubtitleFontNameForPlatform() {
-    if (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'Droid Sans Fallback';
+      // 返回空 = 让内核/libass 用内置默认字体。
+      // 旧值 'Droid Sans Fallback' 在 iOS/Android 系统里并不存在，显式设置
+      // 这个无效字体名会让 libass 加载失败——切换自动/自定义样式后内嵌轨道
+      // 字幕消失（切回自动也不恢复）。
+      return '';
     }
-    return 'subfont';
-  }
 
   Future<void> _loadSubtitleSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1829,6 +1871,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       prefs.getDouble(_subtitleScaleKey) ??
           VideoPlayerState.defaultSubtitleScale,
     );
+    _srtSubtitleScale = _clampSubtitleScale(
+        prefs.getDouble(_srtSubtitleScaleKey) ??
+            VideoPlayerState.defaultSubtitleScale);
+    _srtSubtitleDelaySeconds = prefs.getDouble(_srtSubtitleDelayKey) ??
+        VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitlePosition = _clampSubtitlePosition(
@@ -1864,14 +1911,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleBorderColorValue = prefs.getInt(_subtitleBorderColorKey) ??
         VideoPlayerState.defaultSubtitleBorderColorValue;
     _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
-        VideoPlayerState.defaultSubtitleShadowColorValue;
-    _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
+            VideoPlayerState.defaultSubtitleShadowColorValue;
+        _externalSubtitleColorValue =
+                prefs.getInt(_externalSubtitleColorKey) ?? 0xFFFFFFFF;
+            _externalSubtitleFontName =
+                prefs.getString(_externalSubtitleFontNameKey) ?? '';
+        _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
-              _subtitleOverrideModeKey,
-            ) ??
-            VideoPlayerState.defaultSubtitleOverrideMode.index)
-        .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+            _subtitleOverrideModeKey,
+          ) ??
+          VideoPlayerState.defaultSubtitleOverrideMode.index)
+      .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+    // 跨会话恢复的已选字体必须在启动时注册进引擎，否则叠层 fontFamily
+    // 静默回退默认字体（用户感知：选了字体但没生效）。
+    await ensureSelectedSubtitleFontsRegistered();
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -1888,6 +1942,26 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+    /// 设置 SRT 独立字号（不碰内核/内嵌字号）
+    Future<void> setSrtSubtitleScale(double scale) async {
+      final resolved = _clampSubtitleScale(scale);
+      if ((_srtSubtitleScale - resolved).abs() < 0.0001) return;
+      _srtSubtitleScale = resolved;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_srtSubtitleScaleKey, resolved);
+      _notifyListeners();
+    }
+
+  /// 设置 SRT 独立时轴偏移（秒）
+  Future<void> setSrtSubtitleDelaySeconds(double seconds) async {
+    final clamped = _resolveSubtitleDelaySecondsForCurrentVideo(seconds);
+    if (_srtSubtitleDelaySeconds == clamped) return;
+    _srtSubtitleDelaySeconds = clamped;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_srtSubtitleDelayKey, clamped);
+    _notifyListeners();
+  }
+
   Future<void> setSubtitleDelaySeconds(double seconds) async {
     if ((_subtitleDelaySeconds - seconds).abs() < 0.0001) {
       return;
@@ -1899,15 +1973,44 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
-  Future<void> setSubtitlePosition(double position) async {
-    final resolved = _clampSubtitlePosition(position);
-    if ((_subtitlePosition - resolved).abs() < 0.0001) {
-      return;
-    }
-    _subtitlePosition = resolved;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitlePositionKey, resolved);
+
+  /// 位置/边距/对齐改动后强制 libass 重新排版（mpv 需 seek 触发字幕重渲染，否则要重载视频才生效）
+    void _refreshSubtitleLayout() {
+      if (kIsWeb || _isDisposed) return;
+      // App 内叠层字幕（SRT/VTT/ASS）的位置是 Flutter UI 层，不占内核轨：
+      // 拖动/调整时无需 seek 内核，seek 反而造成卡顿跳帧（libmpv 实测拖不动）。
+      final extPath = getActiveExternalSubtitlePath();
+      if (extPath != null && extPath.isNotEmpty) {
+        final ext = extPath.toLowerCase();
+        if (ext.endsWith('.srt') || ext.endsWith('.vtt') ||
+            ext.endsWith('.ass') || ext.endsWith('.ssa')) {
+          return;
+        }
+      }
+      // 内嵌轨（简日双语 mkv 等）：同样不 seek。mdk/libass 的 sub-pos/边距
+            // 属性走 setProperty 热更新即可生效，seek 会打断解码/渲染队列导致
+            // 拖滑块画面冻结（音频继续走）。仅内核不支持热更新时才需要 seek。
+            return;
+          }
+
+        Future<void> setSubtitlePosition(double position) async {
+      final resolved = _clampSubtitlePosition(position);
+      if ((_subtitlePosition - resolved).abs() < 0.0001) {
+        return;
+      }
+      _subtitlePosition = resolved;
+      debugPrint('[SubtitlePos] 设置 sub-pos=$resolved kernel=${player.getPlayerKernelName()}');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_subtitlePositionKey, resolved);
+    // 滑块只管内嵌轨（含 libmpv 内核轨 sub-pos）；外挂叠层字幕块由
+    // 长按拖动逐条定位，滑块不再同步覆盖各 path 的位置。
+    _subtitleManager.globalPositionSeed = resolved;
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1917,6 +2020,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignXKey, align.index);
     await applySubtitleStylePreference();
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1926,6 +2030,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignYKey, align.index);
     await applySubtitleStylePreference();
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1934,7 +2039,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleMarginX = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginXKey, value);
+    _subtitleManager.globalMarginSeed = value;
+    // 水平边距滑块同样只管内嵌轨，不覆盖外挂叠层块的独立摆位。
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1943,7 +2055,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleMarginY = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginYKey, value);
+    // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
+    if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
+
+    }
+    _refreshSubtitleLayout();
     _notifyListeners();
   }
 
@@ -1995,6 +2112,30 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  /// 外挂叠层独立颜色（长按外挂调色板设这里；不影响内嵌/字幕设置面板）
+  Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
+
+  Future<void> setExternalSubtitleColor(Color color) async {
+    if (_externalSubtitleColorValue == color.value) return;
+    _externalSubtitleColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_externalSubtitleColorKey, color.value);
+    _notifyListeners();
+  }
+
+  /// 外挂叠层独立字体（长按外挂面板设这里；不影响播放器设置/内嵌 sub-font）
+  String get externalSubtitleFontName => _externalSubtitleFontName;
+
+  Future<void> setExternalSubtitleFontName(String value) async {
+    final normalized = value.trim();
+    if (_externalSubtitleFontName == normalized) return;
+    _externalSubtitleFontName = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_externalSubtitleFontNameKey, normalized);
+    await ensureSelectedSubtitleFontsRegistered();
+    _notifyListeners();
+  }
+
   Future<void> setSubtitleColor(Color color) async {
     if (_subtitleColorValue == color.value) return;
     _subtitleColorValue = color.value;
@@ -2028,6 +2169,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleFontName = trimmed;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_subtitleFontNameKey, trimmed);
+    // 多选字体在叠层渲染前必须已注册进引擎，否则 fontFamily 静默回退。
+    unawaited(ensureSelectedSubtitleFontsRegistered());
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2041,7 +2184,153 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
-  Future<void> importSubtitleFontFile(String sourcePath) async {
+  /// 列出 subtitle_fonts 字体库中的字体文件名（不含扩展名），用于选择字体样式。
+  Future<List<String>> listSubtitleFonts() async {
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      if (!await fontsDir.exists()) return const [];
+      final names = <String>[];
+      await for (final entity in fontsDir.list()) {
+        if (entity is File) {
+          final ext = p.extension(entity.path).toLowerCase();
+          if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+            names.add(p.basenameWithoutExtension(entity.path));
+          }
+        }
+      }
+      names.sort();
+      return names;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 列出字体库失败: $e');
+      return const [];
+    }
+  }
+
+  /// 清空 subtitle_fonts 字体缓存目录并重置字体设置（导入/远程下载的字体全删）。
+  Future<void> clearSubtitleFontCache() async {
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      if (await fontsDir.exists()) {
+        await fontsDir.delete(recursive: true);
+      }
+      VideoPlayerState._registeredSubtitleRuntimeFontPaths
+          .removeWhere((path) => p.isWithin(fontsDir.path, path));
+      _subtitleFontDir = '';
+      _subtitleFontName = '';
+      _externalSubtitleFontName = '';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_subtitleFontDirKey, '');
+      await prefs.setString(_subtitleFontNameKey, '');
+      await prefs.setString(_externalSubtitleFontNameKey, '');
+      await applySubtitleStylePreference();
+      _notifyListeners();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 清除字幕字体缓存失败: $e');
+    }
+  }
+
+  /// 将字幕字体注册到 Flutter（overlay 的 fontFamily 才能生效，否则 Text 不渲染）
+  Future<String?> _registerSubtitleRuntimeFont(String filePath) async {
+    if (kIsWeb) return null;
+    if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
+        .contains(filePath)) {
+      return p.basenameWithoutExtension(filePath);
+    }
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return null;
+      final family = p.basenameWithoutExtension(filePath);
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return null;
+      final loader = FontLoader(family);
+      loader.addFont(
+        Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))),
+      );
+      await loader.load();
+      VideoPlayerState._registeredSubtitleRuntimeFontPaths.add(filePath);
+      return family;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 注册字幕字体失败: $e');
+      return null;
+    }
+  }
+
+  /// 确保当前多选的字幕字体已注册进 Flutter 引擎。
+  ///
+  /// 远程下载/历史缓存的字体文件从未走过 import 流程时，overlay 的
+  /// fontFamily 会静默回退到默认字体——用户感知就是“选了字体没生效”。
+  /// 在设置面板打开与字体选择变更时调用。
+  Future<void> ensureSelectedSubtitleFontsRegistered() async {
+    if (kIsWeb) return;
+    List<String> selectedNames(String value) => value
+        .split(',')
+        .map((name) => name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+
+    final internalNames = selectedNames(_subtitleFontName);
+    final externalNames = selectedNames(_externalSubtitleFontName);
+    if (internalNames.isEmpty && externalNames.isEmpty) return;
+
+    var missing = 0;
+    final checkedPaths = <String>{};
+    Future<void> registerNames(String dir, List<String> names) async {
+      for (final family in names) {
+        File? match;
+        for (final extension in const <String>['.ttf', '.otf', '.ttc']) {
+          final file = File(p.join(dir, '$family$extension'));
+          if (file.existsSync()) {
+            match = file;
+            break;
+          }
+        }
+        if (match == null) {
+          missing++;
+          continue;
+        }
+        if (!checkedPaths.add(match.path)) {
+          continue;
+        }
+        if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
+            .contains(match.path)) {
+          continue;
+        }
+        final registered = await _registerSubtitleRuntimeFont(match.path);
+        if (registered == null) {
+          missing++;
+        }
+      }
+    }
+
+    final internalDir = _subtitleFontDir.trim();
+    if (internalDir.isNotEmpty && internalNames.isNotEmpty) {
+      await registerNames(internalDir, internalNames);
+    }
+    if (externalNames.isNotEmpty) {
+      try {
+        final baseDir = await StorageService.getAppStorageDirectory();
+        await registerNames(
+          p.join(baseDir.path, 'subtitle_fonts'),
+          externalNames,
+        );
+      } catch (e) {
+        missing += externalNames.length;
+        debugPrint('[VideoPlayerState] 外挂字幕字体目录不可用: $e');
+      }
+    }
+    if (missing > 0 && !VideoPlayerState._subtitleFontRegistrationWarned) {
+      VideoPlayerState._subtitleFontRegistrationWarned = true;
+      debugPrint(
+        '[VideoPlayerState] 有 $missing 个已选字幕字体未能注册（文件缺失或解析失败），'
+        '渲染将回退默认字体',
+      );
+    }
+  }
+
+  Future<void> importSubtitleFontFile(String sourcePath,
+      {bool applyName = true}) async {
     if (sourcePath.isEmpty) return;
     try {
       final baseDir = await StorageService.getAppStorageDirectory();
@@ -2050,11 +2339,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final fileName = p.basename(sourcePath);
       final destPath = p.join(fontsDir.path, fileName);
       await File(sourcePath).copy(destPath);
+      await _registerSubtitleRuntimeFont(destPath);
       _subtitleFontDir = fontsDir.path;
-      _subtitleFontName = p.basenameWithoutExtension(destPath);
+      if (applyName) {
+        _subtitleFontName = p.basenameWithoutExtension(destPath);
+      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
-      await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+      if (applyName) {
+        await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+      }
       await applySubtitleStylePreference();
       _notifyListeners();
     } catch (e) {
@@ -2097,6 +2391,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         final fileName = p.basename(file.path);
         final destPath = p.join(fontsDir.path, fileName);
         await file.copy(destPath);
+        await _registerSubtitleRuntimeFont(destPath);
         copiedCount++;
       }
 
@@ -2203,16 +2498,37 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
+    // 叠层字幕(SRT/VTT)样式在 Flutter UI 层，不设内核属性（sub-margin-x 限制0~300，拖拽负值报错/卡热切换）；
+        // 但混挂内核轨 ASS 时仍需继续设置 sub-pos/sub-delay 等，否则位置滑块/延迟对内核字幕不生效。
+        // 内嵌轨（含 mdk 字号 subtitle.font.size）也必须走内核属性——只按"外挂走叠层"就 return 会漏掉内嵌轨。
+        final hasKernelExternalSubtitle = activeExternalSubtitlePaths
+            .any((p) => !externalSubtitleRenderedInApp(p));
+        final hasEmbeddedSubtitleActive = player.activeSubtitleTracks.isNotEmpty;
+        if (!hasKernelExternalSubtitle &&
+            !hasEmbeddedSubtitleActive) {
+          return;
+        }
     try {
       final playerKernelName = player.getPlayerKernelName();
       if (playerKernelName == 'Erika') {
         player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
         return;
       }
-      if (playerKernelName != 'Media Kit') {
-        return;
-      }
-      player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
+      if (playerKernelName != 'Media Kit' && playerKernelName != 'MDK') {
+              return;
+            }
+            // mdk 属性名是 subtitle.scale（sub-scale 是 mpv 的）——之前用错
+                  // 导致 mdk 内嵌轨字号设置不生效（默认 22 小字号，对比 libmpv 明显小）
+                  player.setProperty(
+                    playerKernelName == 'MDK' ? 'subtitle.scale' : 'sub-scale',
+                    _subtitleScale.toStringAsFixed(2),
+                  );
+                  // mdk 内嵌轨（srt/text）字号基准调大（默认 22 太小，对齐 libmpv 视觉）
+                  if (playerKernelName == 'MDK') {
+                    try {
+                      player.setProperty('subtitle.font.size', '45');
+                    } catch (_) {}
+                  }
       player.setProperty('sub-delay', subtitleDelaySeconds.toStringAsFixed(2));
       player.setProperty('sub-pos', _subtitlePosition.toStringAsFixed(0));
       player.setProperty('sub-align-x', _subtitleAlignXToMpv(_subtitleAlignX));
@@ -2231,21 +2547,44 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         'sub-shadow-offset',
         _subtitleShadowOffset.toStringAsFixed(1),
       );
-      player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
-      player.setProperty(
-        'sub-border-color',
-        _colorToMpvHex(subtitleBorderColor),
-      );
-      player.setProperty(
-        'sub-shadow-color',
-        _colorToMpvHex(subtitleShadowColor),
-      );
+      // 内嵌轨道颜色：字幕设置面板（subtitleColor 系）应用 sub-color——
+            // 面板颜色只渲染内嵌/内核轨；外挂 SRT 叠层用独立 externalSubtitleColor
+            // （长按外挂调色板），互不污染。
+            player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
+            player.setProperty(
+              'sub-border-color',
+              _colorToMpvHex(subtitleBorderColor),
+            );
+            player.setProperty(
+              'sub-shadow-color',
+              _colorToMpvHex(subtitleShadowColor),
+            );
       player.setProperty('sub-bold', _subtitleBold ? 'yes' : 'no');
       player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
 
       String? effectiveFontDir;
       String? localFontsFolder;
       final hadPreviousFontDir = _subtitleFontDir.isNotEmpty;
+
+      // 字体仅在“自定义样式”(force) 模式下生效；其他模式清空自定义字体
+      final fontOverrideActive =
+          _subtitleOverrideMode == SubtitleStyleOverrideMode.force;
+      if (!fontOverrideActive) {
+        if (hadPreviousFontDir) {
+          player.setProperty('sub-fonts-dir', '');
+          if (defaultTargetPlatform == TargetPlatform.iOS) {
+            player.setProperty('sub-file-paths', '');
+          }
+          _subtitleFontDir = '';
+        }
+        final resolvedDefaultFont = _defaultSubtitleFontNameForPlatform();
+        player.setProperty('sub-font', resolvedDefaultFont);
+        player.setProperty(
+          'sub-ass-override',
+          _subtitleOverrideModeToMpv(_subtitleOverrideMode),
+        );
+        return;
+      }
 
       if (_currentVideoPath != null &&
           !_currentVideoPath!.startsWith('http') &&
@@ -2473,6 +2812,26 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getInt(_screenshotSaveTargetKey);
       _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
+    _screenshotQuality =
+        ScreenshotQualityDisplay.fromPrefs(prefs.getInt(_screenshotQualityKey));
+    _screenshotCaptureIncludesDanmaku =
+        prefs.getBool(_screenshotIncludeDanmakuKey) ?? true;
+    _screenshotCaptureIncludesSubtitles =
+        prefs.getBool(_screenshotIncludeSubtitlesKey) ?? true;
+    _screenshotCropLetterbox =
+        prefs.getBool(_screenshotCropLetterboxKey) ?? true;
+    final aspectModeName = prefs.getString(_videoAspectModeKey);
+    _videoAspectMode = VideoAspectMode.values.firstWhere(
+      (m) => m.name == aspectModeName,
+      orElse: () => VideoAspectMode.contain,
+    );
+    _softDecodePixelFormat =
+            prefs.getString(_softDecodePixelFormatKey) ?? '';
+        final hwdecName = prefs.getString(_hwdecModeKey);
+        _hwdecMode = HwDecType.values.firstWhere(
+          (h) => h.name == hwdecName,
+          orElse: () => HwDecType.auto,
+        );
       _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
@@ -2489,6 +2848,130 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotQuality(ScreenshotQuality quality) async {
+    if (_screenshotQuality == quality) return;
+    _screenshotQuality = quality;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_screenshotQualityKey, quality.prefsValue);
+    logPlayerEvent(
+      'Player',
+      '截图质量已设置为 ${quality.label}（JPEG ${quality.jpegQuality}）',
+    );
+    _notifyListeners();
+  }
+
+  /// 硬解模式（mpv hwdec 值，照搬 PiliPlus）
+  HwDecType get hwdecMode => _hwdecMode;
+
+  Future<void> setHwdecMode(HwDecType mode) async {
+    if (_hwdecMode == mode) return;
+    _hwdecMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_hwdecModeKey, mode.name);
+    await applyHardwareDecoderPreference();
+    // 硬解模式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
+    final path = currentVideoPath;
+    if (path != null && path.isNotEmpty && hasVideo) {
+      final posMs = _position.inMilliseconds;
+      final history = WatchHistoryItem(
+        filePath: path,
+        animeName: animeTitle ?? '',
+        episodeTitle: episodeTitle,
+        episodeId: episodeId,
+        animeId: animeId,
+        lastPosition: posMs,
+        duration: duration.inMilliseconds,
+        watchProgress: progress,
+        lastWatchTime: DateTime.now(),
+      );
+      await initializePlayer(
+        path,
+        historyItem: history,
+        resetManualDanmakuOffset: false,
+      );
+      // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
+      if (hasVideo) {
+        pause();
+      }
+      debugPrint('[Decoder] 硬解模式切换，已重载视频以应用 hwdec=${mode.hwdec}');
+    }
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotCaptureIncludesDanmaku(bool value) async {
+    if (_screenshotCaptureIncludesDanmaku == value) return;
+    _screenshotCaptureIncludesDanmaku = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_screenshotIncludeDanmakuKey, value);
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotCropLetterbox(bool value) async {
+    if (_screenshotCropLetterbox == value) return;
+    _screenshotCropLetterbox = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_screenshotCropLetterboxKey, value);
+    _notifyListeners();
+  }
+
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
+
+  Future<void> setVideoAspectMode(VideoAspectMode mode) async {
+    if (_videoAspectMode == mode) return;
+    _videoAspectMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_videoAspectModeKey, mode.name);
+    _notifyListeners();
+  }
+
+  /// 软解输出颜色格式（空=内核默认；mdk 走 video.decoder 属性）
+    String get softDecodePixelFormat => _softDecodePixelFormat;
+
+    Future<void> setSoftDecodePixelFormat(String value) async {
+      final normalized = value.trim();
+      if (_softDecodePixelFormat == normalized) return;
+      _softDecodePixelFormat = normalized;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_softDecodePixelFormatKey, normalized);
+      await applyHardwareDecoderPreference();
+      // 颜色格式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
+      final path = currentVideoPath;
+      if (path != null && path.isNotEmpty && hasVideo) {
+        final posMs = _position.inMilliseconds;
+        final history = WatchHistoryItem(
+          filePath: path,
+          animeName: animeTitle ?? '',
+          episodeTitle: episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          lastPosition: posMs,
+          duration: duration.inMilliseconds,
+          watchProgress: progress,
+          lastWatchTime: DateTime.now(),
+        );
+        await initializePlayer(
+          path,
+          historyItem: history,
+          resetManualDanmakuOffset: false,
+        );
+        // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
+        if (hasVideo) {
+          pause();
+        }
+        debugPrint('[Decoder] 颜色格式切换，已重载视频以应用 pixel_format=$normalized');
+      }
+      _notifyListeners();
+    }
+
+  Future<void> setScreenshotCaptureIncludesSubtitles(bool value) async {
+    if (_screenshotCaptureIncludesSubtitles == value) return;
+    _screenshotCaptureIncludesSubtitles = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_screenshotIncludeSubtitlesKey, value);
     _notifyListeners();
   }
 
