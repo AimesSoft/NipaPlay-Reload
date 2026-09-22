@@ -536,8 +536,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // 其他内核保持原有最多10秒的兼容轮询，不改变其启动体验。
         for (var waitCount = 0; waitCount < 100; waitCount++) {
           await Future.delayed(const Duration(milliseconds: 100));
-          if (player.state == PlaybackState.playing ||
-              player.state == PlaybackState.paused ||
+          if (player.state == PlaybackState.playing) {
+            break;
+          }
+          if (player.state == PlaybackState.paused ||
               (player.mediaInfo.duration > 0 &&
                   (player.prefersPlatformVideoSurface ||
                       player.textureId.value != null))) {
@@ -1023,7 +1025,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // media clock paused while the loading layer mounts the real DFM+
         // instance, fills its glyph atlas, and publishes its first frame.
         if (player.state == PlaybackState.playing) {
-          await player.pauseDirectly();
+          unawaited(player.pauseDirectly());
         }
         if (_isDisposed || initializationGeneration != _playbackGeneration) {
           return;
