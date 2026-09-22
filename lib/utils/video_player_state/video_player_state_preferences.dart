@@ -1925,7 +1925,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
     // 跨会话恢复的已选字体必须在启动时注册进引擎，否则叠层 fontFamily
     // 静默回退默认字体（用户感知：选了字体但没生效）。
-    unawaited(ensureSelectedSubtitleFontsRegistered());
+    await ensureSelectedSubtitleFontsRegistered();
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2132,6 +2132,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _externalSubtitleFontName = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_externalSubtitleFontNameKey, normalized);
+    await ensureSelectedSubtitleFontsRegistered();
     _notifyListeners();
   }
 
@@ -2185,9 +2186,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   /// 列出 subtitle_fonts 字体库中的字体文件名（不含扩展名），用于选择字体样式。
   Future<List<String>> listSubtitleFonts() async {
-    // extension 内不能非限定引用宿主类的静态成员，必须带 VideoPlayerState. 前缀。
-    final cached = VideoPlayerState._cachedSubtitleFontNames;
-    if (cached != null) return cached;
     try {
       final baseDir = await StorageService.getAppStorageDirectory();
       final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
@@ -2202,7 +2200,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         }
       }
       names.sort();
-      VideoPlayerState._cachedSubtitleFontNames = names;
       return names;
     } catch (e) {
       debugPrint('[VideoPlayerState] 列出字体库失败: $e');
@@ -2218,11 +2215,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       if (await fontsDir.exists()) {
         await fontsDir.delete(recursive: true);
       }
+      VideoPlayerState._registeredSubtitleRuntimeFontPaths
+          .removeWhere((path) => p.isWithin(fontsDir.path, path));
       _subtitleFontDir = '';
       _subtitleFontName = '';
+      _externalSubtitleFontName = '';
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_subtitleFontDirKey, '');
       await prefs.setString(_subtitleFontNameKey, '');
+      await prefs.setString(_externalSubtitleFontNameKey, '');
       await applySubtitleStylePreference();
       _notifyListeners();
     } catch (e) {
@@ -2263,40 +2264,60 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   /// 在设置面板打开与字体选择变更时调用。
   Future<void> ensureSelectedSubtitleFontsRegistered() async {
     if (kIsWeb) return;
-    final dir = _subtitleFontDir.trim();
-    if (dir.isEmpty) return;
-    final selected = _subtitleFontName
+    List<String> selectedNames(String value) => value
         .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+        .map((name) => name.trim())
+        .where((name) => name.isNotEmpty)
         .toList();
-    if (selected.isEmpty) return;
+
+    final internalNames = selectedNames(_subtitleFontName);
+    final externalNames = selectedNames(_externalSubtitleFontName);
+    if (internalNames.isEmpty && externalNames.isEmpty) return;
+
     var missing = 0;
-    for (final family in selected) {
-      final candidates = <String>[
-        '$family.ttf',
-        '$family.otf',
-        '$family.ttc',
-      ];
-      File? match;
-      for (final name in candidates) {
-        final file = File(p.join(dir, name));
-        if (file.existsSync()) {
-          match = file;
-          break;
+    final checkedPaths = <String>{};
+    Future<void> registerNames(String dir, List<String> names) async {
+      for (final family in names) {
+        File? match;
+        for (final extension in const <String>['.ttf', '.otf', '.ttc']) {
+          final file = File(p.join(dir, '$family$extension'));
+          if (file.existsSync()) {
+            match = file;
+            break;
+          }
+        }
+        if (match == null) {
+          missing++;
+          continue;
+        }
+        if (!checkedPaths.add(match.path)) {
+          continue;
+        }
+        if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
+            .contains(match.path)) {
+          continue;
+        }
+        final registered = await _registerSubtitleRuntimeFont(match.path);
+        if (registered == null) {
+          missing++;
         }
       }
-      if (match == null) {
-        missing++;
-        continue;
-      }
-      if (VideoPlayerState._registeredSubtitleRuntimeFontPaths
-          .contains(match.path)) {
-        continue;
-      }
-      final registered = await _registerSubtitleRuntimeFont(match.path);
-      if (registered == null) {
-        missing++;
+    }
+
+    final internalDir = _subtitleFontDir.trim();
+    if (internalDir.isNotEmpty && internalNames.isNotEmpty) {
+      await registerNames(internalDir, internalNames);
+    }
+    if (externalNames.isNotEmpty) {
+      try {
+        final baseDir = await StorageService.getAppStorageDirectory();
+        await registerNames(
+          p.join(baseDir.path, 'subtitle_fonts'),
+          externalNames,
+        );
+      } catch (e) {
+        missing += externalNames.length;
+        debugPrint('[VideoPlayerState] 外挂字幕字体目录不可用: $e');
       }
     }
     if (missing > 0 && !VideoPlayerState._subtitleFontRegistrationWarned) {

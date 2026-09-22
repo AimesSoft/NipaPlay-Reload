@@ -318,6 +318,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;
   bool _isDfmStartupGatePending = false;
@@ -693,8 +694,6 @@ int _exactEndStreak = 0;
   final String _subtitleOverrideModeKey = 'subtitle_override_mode';
     final String _srtSubtitleDelayKey = 'srt_subtitle_delay';
     double _subtitleScale = defaultSubtitleScale;
-  // 字体列表缓存（listSubtitleFonts 复用，面板即时显示）
-  static List<String>? _cachedSubtitleFontNames;
   // 已注册进 Flutter 引擎的字幕字体文件路径（FontLoader 重复加载同一族会抛错）
   static final Set<String> _registeredSubtitleRuntimeFontPaths = <String>{};
   static bool _subtitleFontRegistrationWarned = false;

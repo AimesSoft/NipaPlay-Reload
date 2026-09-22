@@ -282,19 +282,6 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _removeVideoSubtitleMapping(String videoPath) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
-      final mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
-      if (mappingMap.remove(videoPath) != null) {
-        await prefs.setString(_videoSubtitleMapKey, json.encode(mappingMap));
-      }
-    } catch (e) {
-      debugPrint('SubtitleManager: 移除视频字幕映射失败: $e');
-    }
-  }
-
   // 获取视频对应的字幕路径
   Future<String?> getVideoSubtitlePath(String videoPath) async {
     try {
@@ -313,15 +300,6 @@ class SubtitleManager extends ChangeNotifier {
         final subtitleFile = File(subtitlePath);
         if (!subtitleFile.existsSync()) {
           debugPrint('SubtitleManager: 记录的字幕文件不存在: $subtitlePath');
-          return null;
-        }
-        // 旧版本缓存文件名是 sha1 hash（如 95042d....srt），改名后旧文件
-        // 仍存在但路径过期——命中即视为失效走候选重新下载，否则一直挂旧文件
-        // （表现为"清缓存重新加载后才正常"）。
-        final base = p.basename(subtitlePath).toLowerCase();
-        if (RegExp(r'^[0-9a-f]{40}\.[a-z0-9]+$').hasMatch(base)) {
-          debugPrint('SubtitleManager: 记录的字幕为旧 hash 缓存名，忽略: $subtitlePath');
-          await _removeVideoSubtitleMapping(videoPath);
           return null;
         }
       }
@@ -549,7 +527,9 @@ class SubtitleManager extends ChangeNotifier {
 
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path,
-      {bool isManualSetting = false, String? displayName}) {
+      {bool isManualSetting = false,
+      String? displayName,
+      bool preserveStack = false}) {
     if (path.isNotEmpty && displayName != null) {
       registerPathDisplayName(path, displayName);
     }
@@ -601,10 +581,12 @@ class SubtitleManager extends ChangeNotifier {
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
         _currentExternalSubtitlePath = path;
-        // 单挂/替换语义：重置多挂列表（SRT 叠加由 addExternalSubtitleToStack 维护）
-        _activeExternalSubtitlePaths
-          ..clear()
-          ..add(path);
+        // 字体预取后的 ASS 重载不应丢掉已叠加的 SRT/VTT。
+        if (!preserveStack || !_activeExternalSubtitlePaths.contains(path)) {
+          _activeExternalSubtitlePaths
+            ..clear()
+            ..add(path);
+        }
         unawaited(_loadPathDisplayState(path));
 
         // 更新轨道信息
@@ -1360,13 +1342,33 @@ class SubtitleManager extends ChangeNotifier {
 
             // 后台下载远程字体，完成后重新加载字幕使字体生效
             _prefetchRemoteFontsForSubtitle(videoPath, cachedPath).then((_) {
-              if (kDebugMode) debugPrint('[FONT_DEBUG] 远程字体预取完成，重新加载字幕以应用字体');
-              setExternalSubtitle(cachedPath,
+              // 只有 ASS/SSA 需要重新交给内核加载字体。异步完成时视频或
+              // 字幕选择可能已变，不能恢复旧字幕，也不能清除已叠加的字幕。
+              final extension = p.extension(cachedPath).toLowerCase();
+              if (extension != '.ass' && extension != '.ssa') {
+                return;
+              }
+              if (_currentVideoPath != videoPath ||
+                  _shouldRenderExternalSubtitleInApp(cachedPath) ||
+                  !_activeExternalSubtitlePaths.contains(cachedPath) ||
+                  _activeExternalSubtitlePaths.any((path) =>
+                      path != cachedPath &&
+                      !_shouldRenderExternalSubtitleInApp(path))) {
+                return;
+              }
+              if (kDebugMode) {
+                debugPrint('[FONT_DEBUG] 远程字体预取完成，重新加载字幕以应用字体');
+              }
+              setExternalSubtitle(
+                cachedPath,
                 isManualSetting: false,
-                displayName: selected.name);
+                displayName: selected.name,
+                preserveStack: true,
+              );
             }).catchError((e) {
-              if (kDebugMode)
+              if (kDebugMode) {
                 debugPrint('[FONT_DEBUG] 远程字体预取失败（字幕仍可用备用字体）: $e');
+              }
             });
 
             // 保存这个自动找到的字幕路径，下次可以直接使用
