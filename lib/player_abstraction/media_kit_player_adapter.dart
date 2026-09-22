@@ -270,7 +270,7 @@ class MediaKitPlayerAdapter
   StreamSubscription<Track>? _trackSubscription;
   // [FIX-L1] 订阅 mpv 真实 position 流，校正 _lastActualPosition，消除纯墙钟插值漂移。
   // 根因：原实现未订阅 stream.position，_lastActualPosition 仅 playing/seek 时设一次，
-  // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正 → 与 mpv 漂移 → 下游 big-fwd snap → 回弹。
+  // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正  与 mpv 漂移  下游 big-fwd snap  回弹。
   StreamSubscription<Duration>? _positionSubscription;
   bool _isDisposed = false;
   // MKV 章节列表是否已成功获取过（用于 _refreshChapters 去重，避免 duration
@@ -1894,8 +1894,8 @@ class MediaKitPlayerAdapter
   // （逆向补偿），getter 中对 mpv 值取三次方还原用户值。
   //
   // 映射关系：
-  //   用户值 0.45 → mpv volume = 0.45^(1/3)*100 ≈ 76.6 → gain = 0.45
-  //   用户值 1.0  → mpv volume = 100 → gain = 1.0
+  //   用户值 0.45  mpv volume = 0.45^(1/3)*100 ≈ 76.6  gain = 0.45
+  //   用户值 1.0   mpv volume = 100  gain = 1.0
   @override
   double get volume {
     final mpvLinear = _player.state.volume / 100.0;
@@ -2605,7 +2605,7 @@ class MediaKitPlayerAdapter
         detachPlatformVideoSurface().whenComplete(disposePlayerCore),
       );
     } else {
-      // ✨ 优化：异步执行销毁，不阻塞主线程
+      //  优化：异步执行销毁，不阻塞主线程
       // Future.microtask 仍在当前事件循环执行，会阻塞 UI
       // Future.delayed 让出一帧时间，确保页面过渡动画完成
       unawaited(
@@ -2784,10 +2784,10 @@ class MediaKitPlayerAdapter
   ///
   /// P3 修复：先探测 `chapter-list/count` 区分"未就绪"与"确实无章节"。
   /// 网络流媒体场景下 duration（mpv 估计值）可能先于 chapter-list 就绪，
-  /// 此时 count 返回 null/空表示 chapter-list 尚未加载 → 延迟重试（最多
+  /// 此时 count 返回 null/空表示 chapter-list 尚未加载  延迟重试（最多
   /// [_maxChapterRetries] 次，间隔递增 300/600/900ms），避免 _chaptersFetched
   /// 被无条件置 true 导致后续 duration stream 去重跳过、章节永久为空。
-  /// count 返回有效数字 <=0 表示确实无章节 → 置 _chaptersFetched=true 终止。
+  /// count 返回有效数字 <=0 表示确实无章节  置 _chaptersFetched=true 终止。
   Future<void> _refreshChapters() async {
     if (_isDisposed) return;
     if (_chaptersFetched) {
@@ -3431,7 +3431,7 @@ class MediaKitPlayerAdapter
       final rawDeltaUs = nowUs - _lastPositionTimestampUs;
       final prevInterpMs = _interpolatedPosition.inMilliseconds;
       // [FIX-L1] 阻塞后追赶限幅：主线程阻塞恢复后 rawDeltaUs 会很大（>100ms），
-      // 原实现一次性墙钟追赶 → _interpolatedPosition 暴跳 → 下游 big-fwd snap → 回弹。
+      // 原实现一次性墙钟追赶  _interpolatedPosition 暴跳  下游 big-fwd snap  回弹。
       // 修复：deltaUs 超过 50ms（约3帧@60fps）时 clamp 到 50ms，并把锚点重设到
       // 当前 _interpolatedPosition，使后续帧从限幅后的位置继续推进，避免暴跳传递。
       // 与 L2 的 Ticker.elapsed（阻塞不累积）行为对齐，消除层间时钟源不一致。
@@ -3453,9 +3453,9 @@ class MediaKitPlayerAdapter
       // 与 L2 [CHAIN-A] / L3 [CHAIN-B] 共享墙钟时间戳，验证三层时钟源不一致假设：
       //   L1 用 DateTime.now()（绝对墙钟，阻塞后一次性追赶）
       //   L2 用 Ticker.elapsed（vsync 累积，阻塞不累积）
-      //   主线程阻塞恢复后 L1 暴跳 → L2 看到 playerMs 暴跳 → big-fwd snap → 回弹
+      //   主线程阻塞恢复后 L1 暴跳  L2 看到 playerMs 暴跳  big-fwd snap  回弹
       // 关键指标：
-      //   deltaUs > 100000(100ms) = 主线程阻塞，L1 一次性追赶 → L2 将看到暴跳
+      //   deltaUs > 100000(100ms) = 主线程阻塞，L1 一次性追赶  L2 将看到暴跳
       //   interpJump > 50ms = _interpolatedPosition 单帧跳变（回弹的直接上游）
       //   actualMs = _lastActualPosition（mpv 真实 position 锚点，正常播放不更新）
       if (!kReleaseMode) {
@@ -3470,7 +3470,7 @@ class MediaKitPlayerAdapter
               'actualMs=${_lastActualPosition.inMilliseconds} '
               'mpvStatePosMs=${_player.state.position.inMilliseconds} '
               'rate=${_player.state.rate} '
-              '← ${deltaUs > 100000 ? "BLOCKED-RECOVER: 主线程阻塞后L1墙钟追赶" : ""} '
+              ' ${deltaUs > 100000 ? "BLOCKED-RECOVER: 主线程阻塞后L1墙钟追赶" : ""} '
               '${interpJump > 50 ? "L1-JUMP: 适配器插值暴跳" : ""}');
         }
       }

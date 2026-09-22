@@ -173,6 +173,20 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     await _subtitleManager.preloadSubtitleFile(path);
   }
 
+  // 桥接方法：叠加挂载外部字幕到堆栈（多挂，可带显示名）
+  Future<void> addExternalSubtitleToStack(String path,
+      {String? displayName}) async {
+    await _subtitleManager.addExternalSubtitleToStack(path,
+        displayName: displayName);
+    _notifyListeners();
+  }
+
+  // 桥接方法：取消挂载外部字幕（从叠层/内核移除）
+  Future<void> removeExternalSubtitle(String path) async {
+    await _subtitleManager.removeExternalSubtitleFromStack(path);
+    _notifyListeners();
+  }
+
   // 桥接方法：获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
     return _subtitleManager.getActiveExternalSubtitlePath();
@@ -181,6 +195,51 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 桥接方法：获取当前显示的字幕文本
   String getCurrentSubtitleText() {
     return _subtitleManager.getCurrentSubtitleText();
+  }
+
+  // ---- 多字幕分块渲染桥接：每条外挂字幕独立的时轴延迟/位置/边距 ----
+
+  /// 全部活跃的外挂字幕路径（有序，多挂时逐条叠加渲染）
+  List<String> get activeExternalSubtitlePaths =>
+      _subtitleManager.getAllActiveExternalSubtitlePaths();
+
+  /// 查询单条字幕在指定时间点的文本
+  String pathSubtitleTextAt(String path, int positionMs) =>
+      _subtitleManager.pathSubtitleTextAt(path, positionMs);
+
+  /// 某条字幕的显示名（无登记时回退文件名）
+  String externalSubtitleDisplayName(String path) =>
+      _subtitleManager.displayNameForPath(path);
+
+  /// 某条字幕的时轴延迟（秒；正值延后，负值提前）
+  double pathSubtitleDelaySeconds(String path) =>
+      _subtitleManager.pathDelaySeconds(path);
+
+  void setPathSubtitleDelaySeconds(String path, double seconds) {
+    _subtitleManager.setPathDelaySeconds(path, seconds);
+    _notifyListeners();
+  }
+
+  /// 某条字幕的垂直位置（0=屏幕顶 100=屏幕底）
+  double pathSubtitlePosition(String path) =>
+      _subtitleManager.pathPosition(path);
+
+  /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，libmpv ASS）
+  bool externalSubtitleRenderedInApp(String path) =>
+      _subtitleManager.externalSubtitleRenderedInApp(path);
+
+  void setPathSubtitlePosition(String path, double position) {
+    _subtitleManager.setPathPosition(path, position);
+    _notifyListeners();
+  }
+
+  /// 某条字幕的水平边距（逻辑像素）
+  double pathSubtitleMarginX(String path) =>
+      _subtitleManager.pathMarginX(path);
+
+  void setPathSubtitleMarginX(String path, double marginX) {
+    _subtitleManager.setPathMarginX(path, marginX);
+    _notifyListeners();
   }
 
   // 桥接方法：判断当前外挂字幕是否使用应用内叠层渲染
@@ -216,6 +275,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   void clearDanmakuTrackInfo() {
     _subtitleManager.clearSubtitleTrackInfo();
   }
+
+  /// 重新触发自动检测并加载字幕（清除字幕缓存后调用）
+  Future<void> redetectAndLoadSubtitle(String videoPath) =>
+      _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
 
   // 自动检测并加载同名字幕文件
   Future<void> _autoDetectAndLoadSubtitle(String videoPath) async {
