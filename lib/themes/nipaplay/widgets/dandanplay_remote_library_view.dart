@@ -48,6 +48,10 @@ class _DandanplayRemoteLibraryViewState
   Timer? _searchDebounce;
   final Map<int, String?> _coverCache = {}; // 复用本地缓存的番剧封面
   final Map<int, Future<String?>> _coverLoadingTasks = {};
+  // 缓存的番剧详情 future：只创建一次。FutureBuilder 的 future 若在 build
+  // 里每次新建，会随滚动/封面加载等任何 rebuild 回到 waiting 态（简介空白
+  // /闪烁），且旧请求结果被丢弃。缓存后快照稳定，简介可立即/稳定显示。
+  final Map<int, Future<BangumiAnime>> _animeDetailFutures = {};
 
   @override
   void initState() {
@@ -604,8 +608,13 @@ class _DandanplayRemoteLibraryViewState
     final coverUrl = _resolveCoverUrlForGroup(group, provider);
 
     if (group.animeId != null) {
+      final animeId = group.animeId!;
+      // 复用缓存的 future，避免每次 build 重建导致 FutureBuilder 回到
+      // waiting 态（简介空白/闪烁）且旧结果被丢弃。
+      final future = _animeDetailFutures[animeId] ??=
+          BangumiService.instance.getAnimeDetails(animeId);
       return FutureBuilder<BangumiAnime>(
-        future: BangumiService.instance.getAnimeDetails(group.animeId!),
+        future: future,
         builder: (context, snapshot) {
           String? summary;
           if (snapshot.hasData && snapshot.data!.summary != null) {
