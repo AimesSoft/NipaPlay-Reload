@@ -322,7 +322,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return videoState.actualDanmakuFontSize;
   }
 
+  /// 渲染层出口统一包 ValueKey(playerSurfaceGeneration)：内核热切换时代数
+  /// 变化 → Flutter 销毁并重建整棵 surface 子树（Texture 解除旧纹理绑定、
+  /// PlatformView 重建平台视图），杜绝旧内核的渲染状态残留在新内核上。
   Widget _buildVideoSurface(VideoPlayerState videoState, int? textureId) {
+    return KeyedSubtree(
+      key: ValueKey<int>(
+        Object.hash(videoState.playerSurfaceGeneration, 'player-surface'),
+      ),
+      child: _buildVideoSurfaceInner(videoState, textureId),
+    );
+  }
+
+  Widget _buildVideoSurfaceInner(VideoPlayerState videoState, int? textureId) {
     if (kIsWeb) {
       final controller = videoState.player.videoPlayerController;
       if (controller == null) {
