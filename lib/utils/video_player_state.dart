@@ -1,6 +1,9 @@
 library video_player_state;
 
+export 'video_aspect_geometry.dart' show VideoAspectMode;
+
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -255,7 +258,7 @@ extension ScreenshotQualityDisplay on ScreenshotQuality {
 
 extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
   static ScreenshotSaveTarget fromPrefs(int? value) {
-    if (value == null) return ScreenshotSaveTarget.ask;
+    if (value == null) return ScreenshotSaveTarget.file;
     if (value < 0 || value >= ScreenshotSaveTarget.values.length) {
       return ScreenshotSaveTarget.ask;
     }
@@ -297,19 +300,6 @@ class _VideoDimensionSnapshot {
       displayWidth! > 0 &&
       displayHeight != null &&
       displayHeight! > 0;
-}
-
-/// 视频画面尺寸模式：适应(contain)/填充(cover裁剪)/拉伸(fill变形)/16:9/4:3
-enum VideoAspectMode {
-  contain,
-  cover,
-  fill,
-  fitWidth,
-  fitHeight,
-  none,
-  scaleDown,
-  ratio16x9,
-  ratio4x3,
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
@@ -483,6 +473,20 @@ int _exactEndStreak = 0;
   bool get screenshotCaptureIncludesSubtitles =>
       _screenshotCaptureIncludesSubtitles;
   bool get screenshotCropLetterbox => _screenshotCropLetterbox;
+  /// Window-hosted native video is composited outside Flutter's clip/scale tree.
+  bool get supportsVideoAspectModes {
+    if (player.usesWindowOverlayVideoSurface) return false;
+    if (kIsWeb || !player.prefersPlatformVideoSurface) return true;
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] == '1' ||
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] == '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] ==
+          '1';
+    }
+    return true;
+  }
 
   // 截图帧合成期间（_isCapturingScreenshot=true）且设置不含弹幕/字幕时，
   // 弹幕层与字幕叠层临时隐藏——只影响截图帧，不影响正常观看。
@@ -501,7 +505,7 @@ int _exactEndStreak = 0;
   final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
   final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
-  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
+  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
   final String _screenshotQualityKey = 'screenshot_quality';
   ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
 

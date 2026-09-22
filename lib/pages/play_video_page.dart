@@ -379,6 +379,27 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
+  void _showMediaCaptureSettings(VideoPlayerState videoState) {
+    unawaited(
+      showMediaCaptureDialog(
+        context: context,
+        videoState: videoState,
+        onCaptureImage: (
+          target, {
+          required includeDanmaku,
+          required includeSubtitles,
+        }) =>
+            _captureScreenshot(
+          videoState,
+          target,
+          includeDanmaku: includeDanmaku,
+          includeSubtitles: includeSubtitles,
+        ),
+        barrierDismissible: !_shouldDisableDialogDismiss(videoState),
+      ),
+    );
+  }
+
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
     if (videoState == null) return false;
     return globals.isTabletLikeMobile && videoState.isAppBarHidden;
@@ -1172,29 +1193,27 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               defaultTargetPlatform == TargetPlatform.iOS)
                             const SizedBox(width: 12),
                           ShadowActionButton(
-                            tooltip: '画面截取',
+                            tooltip: '点击截图，长按打开截取设置',
                             icon: Icons.camera_alt_outlined,
                             onPressed: () {
                               videoState.resetHideControlsTimer();
-                              unawaited(
-                                showMediaCaptureDialog(
-                                  context: context,
-                                  videoState: videoState,
-                                  onCaptureImage: (
-                                    target, {
-                                    required includeDanmaku,
-                                    required includeSubtitles,
-                                  }) =>
-                                      _captureScreenshot(
-                                    videoState,
-                                    target,
-                                    includeDanmaku: includeDanmaku,
-                                    includeSubtitles: includeSubtitles,
-                                  ),
-                                  barrierDismissible:
-                                      !_shouldDisableDialogDismiss(videoState),
-                                ),
-                              );
+                              final target = videoState.screenshotSaveTarget;
+                              if (target == ScreenshotSaveTarget.ask) {
+                                _showMediaCaptureSettings(videoState);
+                              } else {
+                                unawaited(_captureScreenshot(
+                                  videoState,
+                                  target,
+                                  includeDanmaku: videoState
+                                      .screenshotCaptureIncludesDanmaku,
+                                  includeSubtitles: videoState
+                                      .screenshotCaptureIncludesSubtitles,
+                                ));
+                              }
+                            },
+                            onLongPress: () {
+                              videoState.resetHideControlsTimer();
+                              _showMediaCaptureSettings(videoState);
                             },
                           ),
                         ],
