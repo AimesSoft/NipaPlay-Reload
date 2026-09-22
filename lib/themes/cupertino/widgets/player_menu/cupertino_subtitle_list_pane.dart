@@ -42,7 +42,10 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
 
   static const int _windowSize = 120;
   static const int _bufferSize = 60;
-  static const double _estimatedItemHeight = 74;
+  // 预估每项高度（首次定位后按真实布局校准）
+  double _estimatedItemHeight = 74;
+  // 当前高亮条目的 Key，用于基于真实 RenderBox 精确定位（估算高度存在偏差）
+  final GlobalKey _currentItemKey = GlobalKey();
 
   @override
   void initState() {
@@ -180,11 +183,81 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final target = (_currentLocalIndex.clamp(0, _visibleEntries.length - 1) *
-          _estimatedItemHeight);
-      _scrollController.jumpTo(target);
+      _scrollToCurrentItem(centerIndex, animated: false);
     });
+  }
+
+  // 精确定位到当前高亮条目（与 nipaplay subtitle_list_menu 同策略）：
+  // 估算高度与真实条目高度存在偏差（估算 74px，多行台词约 85~110px），
+  // 且随窗口内索引线性放大，直接按估算偏移 jumpTo 会把高亮定位到可视区
+  // 之外（用户反馈"需要再滑动才能看到高亮"）。
+  // 先用估算高度粗定位，真实布局完成后用 Scrollable.ensureVisible 校正；
+  // 若目标条目尚未构建，用实测内容高度校准估算值后重跳一次再校正。
+  void _scrollToCurrentItem(int globalIndex, {required bool animated}) {
+    final localIndex = (globalIndex - _windowStartIndex)
+        .clamp(0, _visibleEntries.length - 1)
+        .toInt();
+
+    // 1) 粗定位：按当前估算高度跳转
+    if (_scrollController.hasClients) {
+      final target = (localIndex * _estimatedItemHeight)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      if ((_scrollController.offset - target).abs() > 1) {
+        _scrollController.jumpTo(target);
+      }
+    }
+
+    // 2) 下一帧基于真实布局精确校正
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _calibrateItemHeight();
+      final itemContext = _currentItemKey.currentContext;
+      if (itemContext != null) {
+        Scrollable.ensureVisible(
+          itemContext,
+          alignment: 0.3,
+          duration:
+              animated ? const Duration(milliseconds: 240) : Duration.zero,
+          curve: Curves.easeInOut,
+        );
+        return;
+      }
+
+      // 3) 目标条目仍未构建：用校准后的高度重跳，再等一帧做最终校正。
+      if (!_scrollController.hasClients) return;
+      final target = (localIndex * _estimatedItemHeight)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      _scrollController.jumpTo(target);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final ctx = _currentItemKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.3,
+            duration:
+                animated ? const Duration(milliseconds: 240) : Duration.zero,
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    });
+  }
+
+  // 用列表实际内容高度校准估算条目高度：
+  // 内容高度 = maxScrollExtent + 视口高度，平均条目高度 = 内容高度 / 条目数。
+  void _calibrateItemHeight() {
+    if (!_scrollController.hasClients || _visibleEntries.isEmpty) return;
+    final position = _scrollController.position;
+    if (position.viewportDimension <= 0 || position.maxScrollExtent <= 0) {
+      return;
+    }
+    final contentHeight = position.maxScrollExtent + position.viewportDimension;
+    final measured = contentHeight / _visibleEntries.length;
+    if (measured > 0 &&
+        (measured - _estimatedItemHeight).abs() / _estimatedItemHeight > 0.05) {
+      _estimatedItemHeight = measured;
+    }
   }
 
   void _updateVisibleWindow(int newStartIndex) {
@@ -229,6 +302,12 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
 
     if (!insideWindow) {
       _updateVisibleWindow(globalIndex - _windowSize ~/ 2);
+      // 窗口更新后重新定位到当前条目（相对滚动位置保持依赖估算高度，需校正）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToCurrentItem(globalIndex, animated: true);
+        }
+      });
       return;
     }
 
@@ -237,21 +316,21 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
         _currentLocalIndex = localIndex;
       });
 
-      if (_scrollController.hasClients) {
-        final itemOffset = localIndex * _estimatedItemHeight;
-        final visibleStart = _scrollController.offset;
-        final visibleEnd =
-            visibleStart + _scrollController.position.viewportDimension;
-
-        if (itemOffset < visibleStart ||
-            itemOffset > visibleEnd - _estimatedItemHeight) {
-          _scrollController.animateTo(
-            itemOffset,
+      // 如果当前字幕不在可见区域，等新布局完成后基于真实位置自动滚动
+      // （ensureVisible 只在条目不可见时滚动，且基于实际 RenderBox，
+      // 不再依赖估算高度，避免高亮被定位到可视区外）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final itemContext = _currentItemKey.currentContext;
+        if (itemContext != null) {
+          Scrollable.ensureVisible(
+            itemContext,
+            alignment: 0.3,
             duration: const Duration(milliseconds: 240),
             curve: Curves.easeInOut,
           );
         }
-      }
+      });
     }
   }
 
@@ -360,6 +439,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
                     final entry = _visibleEntries[index];
                     final bool isCurrent = index == _currentLocalIndex;
                     return Padding(
+                      key: isCurrent ? _currentItemKey : null,
                       padding: const EdgeInsets.symmetric(
                           vertical: 4, horizontal: 4),
                       child: AdaptivePlayerMenuActionSurface(
