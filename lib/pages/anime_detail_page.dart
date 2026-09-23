@@ -51,6 +51,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
@@ -177,16 +178,9 @@ class AnimeDetailPage extends StatefulWidget {
       final enableAnimation =
           context.read<AppearanceSettingsProvider>().enablePageAnimation;
       return Navigator.of(context).push<WatchHistoryItem>(
-        PageRouteBuilder<WatchHistoryItem>(
-          opaque: true,
-          transitionDuration: enableAnimation
-              ? const Duration(milliseconds: 280)
-              : Duration.zero,
-          reverseTransitionDuration: enableAnimation
-              ? const Duration(milliseconds: 220)
-              : Duration.zero,
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              AnimeDetailPage(
+        ImmersiveMediaDetailPageRoute<WatchHistoryItem>(
+          enableAnimation: enableAnimation,
+          builder: (_) => AnimeDetailPage(
             animeId: animeId,
             sharedSummary: sharedSummary,
             sharedEpisodeLoader: sharedEpisodeLoader,
@@ -196,23 +190,6 @@ class AnimeDetailPage extends StatefulWidget {
             renderInWindowScaffold: false,
             useImmersiveLayout: true,
           ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return FadeTransition(
-              opacity: curved,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.015),
-                  end: Offset.zero,
-                ).animate(curved),
-                child: child,
-              ),
-            );
-          },
         ),
       );
     }
@@ -2707,16 +2684,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         playbackDetail != null && !playbackDetail.usesLocalLibraryDetail;
     final playbackSummary =
         allowPlaybackOverrides ? playbackDetail.summary?.trim() : null;
-    return (playbackSummary?.isNotEmpty == true
-            ? playbackSummary!
-            : _sharedSummary?.summary?.trim().isNotEmpty == true
-                ? _sharedSummary!.summary!
-                : (anime.summary ?? ''))
-        .replaceAll('<br>', ' ')
-        .replaceAll('<br/>', ' ')
-        .replaceAll('<br />', ' ')
-        .replaceAll('```', '')
-        .trim();
+    return normalizeImmersiveSummaryText(
+      playbackSummary?.isNotEmpty == true
+          ? playbackSummary!
+          : _sharedSummary?.summary?.trim().isNotEmpty == true
+              ? _sharedSummary!.summary!
+              : (anime.summary ?? ''),
+    );
   }
 
   List<String> _immersiveMetadata(BangumiAnime anime) {
@@ -3054,6 +3028,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     : sourceProgress;
             final completed = progress >= _kFinishedWatchThreshold ||
                 _dandanplayWatchStatus[episode.id] == true;
+            final unavailable = !_episodeHasPlayableResource(episode);
             return ListTile(
               dense: true,
               title: Text(
@@ -3066,37 +3041,39 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white60),
               ),
-              trailing: completed
-                  ? Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2E7D32),
-                        shape: BoxShape.circle,
-                        // 深色描边+阴影，与剧集轨道上的绿勾一致
-                        border: Border.all(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
+              trailing: unavailable
+                  ? const ImmersiveEpisodeUnavailableBadge()
+                  : completed
+                      ? Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2E7D32),
+                            shape: BoxShape.circle,
+                            // 深色描边+阴影，与剧集轨道上的绿勾一致
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Ionicons.checkmark,
-                        color: Colors.white,
-                        size: 13,
-                      ),
-                    )
-                  : const Icon(
-                      Ionicons.play_outline,
-                      color: Colors.white54,
-                      size: 19,
-                    ),
+                          child: const Icon(
+                            Ionicons.checkmark,
+                            color: Colors.white,
+                            size: 13,
+                          ),
+                        )
+                      : const Icon(
+                          Ionicons.play_outline,
+                          color: Colors.white54,
+                          size: 19,
+                        ),
               onTap: () => Navigator.of(dialogContext).pop(episode),
             );
           },
@@ -3288,6 +3265,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     : sourceProgress;
             final duration =
                 _hasReliableLocalDuration(history) ? history!.duration : 0;
+            final availabilityResolved =
+                _sourcePlayableAvailableForEpisode(episode) ||
+                    snapshot.connectionState == ConnectionState.done;
             final episodeTitle = episode.title.trim();
             // dandanplay 的 episodeTitle 自带“第N话”前缀（如“第1话 翻转孤独”），
             // 有前缀时直接单行显示，避免与“第 N 话”重复。
@@ -3308,6 +3288,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               isCurrent: _lastWatchedEpisode?.episodeId == episode.id,
               isCompleted: progress >= _kFinishedWatchThreshold ||
                   _dandanplayWatchStatus[episode.id] == true,
+              isUnavailable:
+                  availabilityResolved && !_episodeHasPlayableResource(episode),
               onTap: snapshot.connectionState == ConnectionState.waiting &&
                       !_sourcePlayableAvailableForEpisode(episode)
                   ? null

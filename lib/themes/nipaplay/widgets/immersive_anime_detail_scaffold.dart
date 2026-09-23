@@ -9,6 +9,14 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 const int immersiveBackdropMinDecodeWidth = 1280;
 const int immersiveBackdropMaxDecodeWidth = 3840;
 
+String normalizeImmersiveSummaryText(String value) {
+  return value
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
+      .replaceAll('```', '')
+      .replaceAll(RegExp(r'[\s\u00A0]+'), ' ')
+      .trim();
+}
+
 int resolveImmersiveBackdropDecodeWidth(
   double logicalWidth,
   double devicePixelRatio,
@@ -94,11 +102,12 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
   }
 
   Widget _buildLandscape(BuildContext context, BoxConstraints constraints) {
+    final compact = constraints.maxHeight < 720;
     final horizontalPadding = constraints.maxWidth >= 1400 ? 54.0 : 34.0;
     final infoWidth =
         (constraints.maxWidth * (constraints.maxWidth >= 1100 ? 0.42 : 0.48))
             .clamp(420.0, 650.0);
-    final railHeight = constraints.maxHeight < 720 ? 205.0 : 235.0;
+    final railHeight = compact ? 190.0 : 235.0;
 
     return Stack(
       fit: StackFit.expand,
@@ -118,21 +127,41 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                 Positioned(
                   left: 0,
                   // 标题区整体下移，收窄“观看”按钮与下方剧集轨道之间的空白。
-                  top: 92,
+                  top: compact ? 60 : 92,
                   width: infoWidth,
-                  bottom: railHeight + 22,
-                  child: SingleChildScrollView(
-                    child: _InformationBlock(
-                      title: title,
-                      subtitle: subtitle,
-                      metadata: metadata,
-                      rating: rating,
-                      description: description,
-                      descriptionExpanded: descriptionExpanded,
-                      onToggleDescription: onToggleDescription,
-                      actions: actions,
-                      compact: constraints.maxHeight < 720,
-                    ),
+                  bottom: railHeight + (compact ? 14 : 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _InformationHeader(
+                        title: title,
+                        subtitle: subtitle,
+                        metadata: metadata,
+                        rating: rating,
+                        compact: compact,
+                      ),
+                      if (description?.trim().isNotEmpty == true) ...[
+                        SizedBox(height: compact ? 8 : 16),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: _DescriptionViewport(
+                            description: description!,
+                            expanded: descriptionExpanded,
+                            compact: compact,
+                          ),
+                        ),
+                        if (onToggleDescription != null)
+                          _DescriptionToggle(
+                            expanded: descriptionExpanded,
+                            onPressed: onToggleDescription!,
+                          ),
+                      ],
+                      SizedBox(height: compact ? 6 : 14),
+                      KeyedSubtree(
+                        key: const ValueKey('immersive-fixed-actions'),
+                        child: actions,
+                      ),
+                    ],
                   ),
                 ),
                 Positioned(
@@ -164,37 +193,54 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
         ),
         const _CinematicGradients(portrait: true),
         SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _BackButton(onPressed: onBack),
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: _BackButton(onPressed: onBack),
+              ),
+              SizedBox(height: heroHeight - 112),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _InformationHeader(
+                  title: title,
+                  subtitle: subtitle,
+                  metadata: metadata,
+                  rating: rating,
                 ),
               ),
-              SliverToBoxAdapter(child: SizedBox(height: heroHeight - 112)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-                  child: _InformationBlock(
-                    title: title,
-                    subtitle: subtitle,
-                    metadata: metadata,
-                    rating: rating,
-                    description: description,
-                    descriptionExpanded: descriptionExpanded,
-                    onToggleDescription: onToggleDescription,
-                    actions: actions,
+              if (description?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 16),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _DescriptionViewport(
+                      description: description!,
+                      expanded: descriptionExpanded,
+                    ),
                   ),
                 ),
+                if (onToggleDescription != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _DescriptionToggle(
+                      expanded: descriptionExpanded,
+                      onPressed: onToggleDescription!,
+                    ),
+                  ),
+              ],
+              Padding(
+                key: const ValueKey('immersive-fixed-actions'),
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: actions,
+                ),
               ),
-              SliverToBoxAdapter(
-                child: SizedBox(height: 250, child: episodeRail),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              SizedBox(height: 250, child: episodeRail),
+              const SizedBox(height: 18),
             ],
           ),
         ),
@@ -338,16 +384,12 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-class _InformationBlock extends StatelessWidget {
-  const _InformationBlock({
+class _InformationHeader extends StatelessWidget {
+  const _InformationHeader({
     required this.title,
     required this.subtitle,
     required this.metadata,
     required this.rating,
-    required this.description,
-    required this.descriptionExpanded,
-    required this.onToggleDescription,
-    required this.actions,
     this.compact = false,
   });
 
@@ -355,22 +397,17 @@ class _InformationBlock extends StatelessWidget {
   final String? subtitle;
   final List<String> metadata;
   final double? rating;
-  final String? description;
-  final bool descriptionExpanded;
-  final VoidCallback? onToggleDescription;
-  final Widget actions;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final cleanSubtitle = subtitle?.trim();
-    final cleanDescription = description?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          maxLines: 2,
+          maxLines: compact ? 1 : 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white,
@@ -384,7 +421,7 @@ class _InformationBlock extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             cleanSubtitle!,
-            maxLines: 2,
+            maxLines: compact ? 1 : 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.68),
@@ -432,34 +469,115 @@ class _InformationBlock extends StatelessWidget {
             ],
           ),
         ],
-        if (cleanDescription?.isNotEmpty == true) ...[
-          SizedBox(height: compact ? 13 : 18),
-          Text(
-            cleanDescription!,
-            maxLines: descriptionExpanded ? 8 : (compact ? 3 : 4),
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.86),
-              fontSize: compact ? 13 : 14,
-              height: 1.62,
+      ],
+    );
+  }
+}
+
+class _DescriptionText extends StatelessWidget {
+  const _DescriptionText({
+    required this.description,
+    required this.expanded,
+    this.compact = false,
+  });
+
+  final String description;
+  final bool expanded;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      description.trim(),
+      maxLines: expanded ? null : (compact ? 3 : 4),
+      overflow: expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.86),
+        fontSize: compact ? 13 : 14,
+        height: 1.62,
+      ),
+    );
+  }
+}
+
+class _DescriptionViewport extends StatelessWidget {
+  const _DescriptionViewport({
+    required this.description,
+    required this.expanded,
+    this.compact = false,
+  });
+
+  final String description;
+  final bool expanded;
+  final bool compact;
+
+  TextStyle _style() => TextStyle(
+        color: Colors.white.withValues(alpha: 0.86),
+        fontSize: compact ? 13 : 14,
+        height: 1.62,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final value = description.trim();
+    final style = _style();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: value, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: expanded ? null : (compact ? 3 : 4),
+          ellipsis: expanded ? null : '…',
+        )..layout(maxWidth: constraints.maxWidth);
+        final naturalHeight = painter.height;
+        final expandedHeightLimit =
+            painter.preferredLineHeight * (compact ? 5 : 6);
+        var viewportHeight = expanded && naturalHeight > expandedHeightLimit
+            ? expandedHeightLimit
+            : naturalHeight;
+        if (constraints.hasBoundedHeight &&
+            viewportHeight > constraints.maxHeight) {
+          viewportHeight = constraints.maxHeight;
+        }
+
+        return SizedBox(
+          height: viewportHeight,
+          child: SingleChildScrollView(
+            key: const ValueKey('immersive-description-scroll'),
+            child: _DescriptionText(
+              description: value,
+              expanded: expanded,
+              compact: compact,
             ),
           ),
-          if (onToggleDescription != null) ...[
-            const SizedBox(height: 2),
-            TextButton(
-              onPressed: onToggleDescription,
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white.withValues(alpha: 0.7),
-                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 5),
-                minimumSize: const Size(44, 34),
-              ),
-              child: Text(descriptionExpanded ? '收起' : '查看更多'),
-            ),
-          ],
-        ],
-        SizedBox(height: compact ? 12 : 18),
-        actions,
-      ],
+        );
+      },
+    );
+  }
+}
+
+class _DescriptionToggle extends StatelessWidget {
+  const _DescriptionToggle({
+    required this.expanded,
+    required this.onPressed,
+  });
+
+  final bool expanded;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white.withValues(alpha: 0.7),
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(44, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      child: Text(expanded ? '收起' : '查看更多'),
     );
   }
 }

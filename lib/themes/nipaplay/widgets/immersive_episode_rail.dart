@@ -151,6 +151,7 @@ class ImmersiveEpisodeCard extends StatefulWidget {
     this.durationLabel,
     this.isCurrent = false,
     this.isCompleted = false,
+    this.isUnavailable = false,
   });
 
   final String episodeLabel;
@@ -160,6 +161,7 @@ class ImmersiveEpisodeCard extends StatefulWidget {
   final String? durationLabel;
   final bool isCurrent;
   final bool isCompleted;
+  final bool isUnavailable;
   final VoidCallback? onTap;
 
   @override
@@ -232,7 +234,13 @@ class _ImmersiveEpisodeCardState extends State<ImmersiveEpisodeCard> {
                             ),
                           ),
                         ),
-                        if (widget.isCompleted)
+                        if (widget.isUnavailable)
+                          const Positioned(
+                            right: 7,
+                            top: 7,
+                            child: ImmersiveEpisodeUnavailableBadge(),
+                          )
+                        else if (widget.isCompleted)
                           Positioned(
                             right: 7,
                             top: 7,
@@ -326,6 +334,50 @@ class _ImmersiveEpisodeCardState extends State<ImmersiveEpisodeCard> {
                   ),
                 ],
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Marks an episode that exists in metadata but has no playable media file.
+class ImmersiveEpisodeUnavailableBadge extends StatelessWidget {
+  const ImmersiveEpisodeUnavailableBadge({super.key, this.size = 20});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '暂无资源',
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xFF686B73),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.black.withValues(alpha: 0.42),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.24),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            '!',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.94),
+              fontSize: size * 0.68,
+              height: 1,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
