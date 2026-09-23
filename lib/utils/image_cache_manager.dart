@@ -383,9 +383,20 @@ class ImageCacheManager {
       final url = entry.key;
       final lastAccessed = entry.value;
 
-      // 检查是否过期且没有引用
-      if (now.difference(lastAccessed) > _maxCacheAge &&
-          (_refCount[url] ?? 0) <= 0) {
+      // Entries currently on screen (refreshed every frame by touch(),
+      // within the 2-second eviction protection window) are exempt: their
+      // handle may be actively drawn and they must stay hit-able when the
+      // card scrolls back.
+      if (now.difference(lastAccessed) < _evictionProtectionWindow) {
+        continue;
+      }
+      // Entries still held by a live widget (refCount > 0) are exempt:
+      // scrolling back relies on them for a synchronous cache hit.
+      if ((_refCount[url] ?? 0) > 0) continue;
+
+      // Only evict entries that are neither displayed, nor referenced,
+      // and beyond the cache lifetime.
+      if (now.difference(lastAccessed) > _maxCacheAge) {
         expiredUrls.add(url);
       }
     }
