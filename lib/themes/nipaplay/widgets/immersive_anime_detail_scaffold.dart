@@ -304,7 +304,7 @@ class _PortraitBackdropSurface extends StatefulWidget {
 
 class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
   String? _sampleKey;
-  Future<Color>? _sampledColor;
+  Future<ImmersiveBackdropAppearance>? _appearance;
 
   @override
   Widget build(BuildContext context) {
@@ -317,16 +317,24 @@ class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
             '${(viewport.height / 32).round()}';
         if (_sampleKey != key) {
           _sampleKey = key;
-          _sampledColor = loadImmersivePortraitBackdropColor(
+          _appearance = loadImmersiveBackdropAppearance(
             widget.url,
             viewport,
+            sampleColor: true,
+            targetWidth: resolveImmersiveBackdropDecodeWidth(
+              viewport.width,
+              MediaQuery.devicePixelRatioOf(context),
+            ),
           );
         }
-        return FutureBuilder<Color>(
-          key: ValueKey(key),
-          future: _sampledColor,
+        return FutureBuilder<ImmersiveBackdropAppearance>(
+          // Preserve the previous appearance during a window resize, but do
+          // not show another poster's palette when the image URL changes.
+          key: ValueKey(widget.url),
+          future: _appearance,
           builder: (context, snapshot) {
-            final color = snapshot.data ?? immersivePortraitFallbackColor;
+            final color =
+                snapshot.data?.color ?? immersivePortraitFallbackColor;
             // The fill can be brighter than the poster edge. Keep a darker
             // shade of the same hue behind the overlapping title/subtitle.
             final titleScrim = Color.lerp(color, Colors.black, 0.38)!;
@@ -344,7 +352,10 @@ class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
                   right: 0,
                   top: 0,
                   height: widget.heroHeight,
-                  child: _Backdrop(url: widget.url),
+                  child: _Backdrop(
+                    url: widget.url,
+                    alignment: snapshot.data?.alignment ?? Alignment.center,
+                  ),
                 ),
                 Positioned(
                   left: 0,
@@ -392,14 +403,25 @@ class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
   }
 }
 
-class _Backdrop extends StatelessWidget {
-  const _Backdrop({this.url});
+class _Backdrop extends StatefulWidget {
+  const _Backdrop({this.url, this.alignment});
 
   final String? url;
+  final Alignment? alignment;
+
+  @override
+  State<_Backdrop> createState() => _BackdropState();
+}
+
+class _BackdropState extends State<_Backdrop> {
+  String? _analysisKey;
+  String? _analysisUrl;
+  Future<ImmersiveBackdropAppearance>? _appearance;
+  Alignment _previousAlignment = Alignment.center;
 
   @override
   Widget build(BuildContext context) {
-    final value = url?.trim() ?? '';
+    final value = widget.url?.trim() ?? '';
     Widget fallback = const DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -420,28 +442,62 @@ class _Backdrop extends StatelessWidget {
           logicalWidth,
           MediaQuery.devicePixelRatioOf(context),
         );
-        final lower = value.toLowerCase();
-        if (lower.startsWith('http://') || lower.startsWith('https://')) {
-          return CachedNetworkImageWidget(
-            imageUrl: value,
+        Widget imageAt(Alignment alignment) {
+          final lower = value.toLowerCase();
+          if (lower.startsWith('http://') || lower.startsWith('https://')) {
+            return CachedNetworkImageWidget(
+              imageUrl: value,
+              fit: BoxFit.cover,
+              alignment: alignment,
+              fadeDuration: const Duration(milliseconds: 300),
+              // 仅指定宽度：Flutter 会保留源图比例，BoxFit.cover 再负责裁切。
+              memCacheWidth: targetWidth,
+              maxDecodeEdge: immersiveBackdropMaxDecodeWidth,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, __) => fallback,
+            );
+          }
+          if (kIsWeb) return fallback;
+          final file = File(value);
+          if (!file.existsSync()) return fallback;
+          return Image.file(
+            file,
             fit: BoxFit.cover,
-            fadeDuration: const Duration(milliseconds: 300),
-            // 仅指定宽度：Flutter 会保留源图比例，BoxFit.cover 再负责裁切。
-            memCacheWidth: targetWidth,
-            maxDecodeEdge: immersiveBackdropMaxDecodeWidth,
-            filterQuality: FilterQuality.high,
-            errorBuilder: (_, __) => fallback,
+            alignment: alignment,
+            // cacheWidth 只约束单边，原图比例不会被改写。
+            cacheWidth: targetWidth,
+            errorBuilder: (_, __, ___) => fallback,
           );
         }
-        if (kIsWeb) return fallback;
-        final file = File(value);
-        if (!file.existsSync()) return fallback;
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          // cacheWidth 只约束单边，原图比例不会被改写。
-          cacheWidth: targetWidth,
-          errorBuilder: (_, __, ___) => fallback,
+
+        if (widget.alignment != null) return imageAt(widget.alignment!);
+        final logicalHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : MediaQuery.sizeOf(context).height;
+        if (logicalHeight <= 0) return imageAt(Alignment.center);
+        final viewport = Size(logicalWidth, logicalHeight);
+        final analysisKey =
+            '$value|${(logicalWidth / logicalHeight * 100).round()}';
+        if (_analysisKey != analysisKey || _appearance == null) {
+          if (_analysisUrl != value) {
+            _previousAlignment = Alignment.center;
+          }
+          _analysisKey = analysisKey;
+          _analysisUrl = value;
+          _appearance = loadImmersiveBackdropAppearance(
+            value,
+            viewport,
+            targetWidth: targetWidth,
+          );
+        }
+        return FutureBuilder<ImmersiveBackdropAppearance>(
+          key: ValueKey(value),
+          future: _appearance,
+          builder: (context, snapshot) {
+            final alignment = snapshot.data?.alignment ?? _previousAlignment;
+            if (snapshot.hasData) _previousAlignment = alignment;
+            return imageAt(alignment);
+          },
         );
       },
     );

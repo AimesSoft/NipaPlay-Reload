@@ -3,16 +3,25 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_backdrop_focus.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 
 const Color immersivePortraitFallbackColor = Color(0xFF10131D);
+
+class ImmersiveBackdropAppearance {
+  const ImmersiveBackdropAppearance(this.alignment, this.color);
+
+  final Alignment alignment;
+  final Color color;
+}
 
 /// Samples the edge of the *visible* cover crop, rather than the bottom of the
 /// source image (which may be cropped away on a narrow portrait screen).
 Future<Color> extractImmersivePortraitBackdropColor(
   ui.Image image,
-  Size viewport,
-) async {
+  Size viewport, {
+  Alignment alignment = Alignment.center,
+}) async {
   if (viewport.width <= 0 || viewport.height <= 0) {
     return immersivePortraitFallbackColor;
   }
@@ -29,8 +38,8 @@ Future<Color> extractImmersivePortraitBackdropColor(
   final visibleHeight = sourceAspect > viewportAspect
       ? sourceHeight.toDouble()
       : sourceWidth / viewportAspect;
-  final left = (sourceWidth - visibleWidth) / 2;
-  final top = (sourceHeight - visibleHeight) / 2;
+  final left = (sourceWidth - visibleWidth) * (alignment.x + 1) / 2;
+  final top = (sourceHeight - visibleHeight) * (alignment.y + 1) / 2;
   final xStart = left.floor().clamp(0, sourceWidth - 1);
   final xEnd = (left + visibleWidth).ceil().clamp(xStart + 1, sourceWidth);
   final yStart =
@@ -130,43 +139,75 @@ Future<Color> loadImmersivePortraitBackdropColor(
   String? url,
   Size viewport,
 ) async {
+  return (await loadImmersiveBackdropAppearance(
+    url,
+    viewport,
+    sampleColor: true,
+  ))
+      .color;
+}
+
+/// The focus and portrait fill are derived from the same proportional sample.
+/// For network images, matching [targetWidth] to the visible backdrop lets the
+/// image cache coalesce the main decode instead of fetching a second URL size.
+Future<ImmersiveBackdropAppearance> loadImmersiveBackdropAppearance(
+  String? url,
+  Size viewport, {
+  bool sampleColor = false,
+  int? targetWidth,
+}) async {
   final value = url?.trim() ?? '';
-  if (value.isEmpty) return immersivePortraitFallbackColor;
+  const fallback = ImmersiveBackdropAppearance(
+    Alignment.center,
+    immersivePortraitFallbackColor,
+  );
+  if (value.isEmpty) return fallback;
 
   try {
+    ui.Image? source;
     final uri = Uri.tryParse(value);
     if (uri?.scheme == 'http' || uri?.scheme == 'https') {
-      // ImageCacheManager uses the same authenticated media-server transport
-      // and on-disk source cache as the visible backdrop. Decode only a tiny
-      // proportional copy for color sampling.
-      final image = await ImageCacheManager.instance.loadImage(
+      final cached = await ImageCacheManager.instance.loadImage(
         value,
-        targetWidth: 64,
+        targetWidth: targetWidth ?? 256,
       );
-      return extractImmersivePortraitBackdropColor(image, viewport);
-    }
-    if (kIsWeb) return immersivePortraitFallbackColor;
-    final file = File(value);
-    if (!await file.exists()) return immersivePortraitFallbackColor;
-    final codec = await ui.instantiateImageCodec(
-      await file.readAsBytes(),
-      targetWidth: 64,
-    );
-    try {
-      final frame = await codec.getNextFrame();
+      // The cache can evict its handle while analysis is in flight.
+      source = cached.clone();
+    } else {
+      if (kIsWeb) return fallback;
+      final file = File(value);
+      if (!await file.exists()) return fallback;
+      final codec = await ui.instantiateImageCodec(
+        await file.readAsBytes(),
+        targetWidth: 256,
+      );
       try {
-        return await extractImmersivePortraitBackdropColor(
-          frame.image,
-          viewport,
-        );
+        source = (await codec.getNextFrame()).image;
       } finally {
-        frame.image.dispose();
+        codec.dispose();
+      }
+    }
+    try {
+      final sample = await makeImmersiveBackdropAnalysisImage(source);
+      try {
+        final alignment =
+            await chooseImmersiveBackdropAlignment(sample, viewport);
+        final color = sampleColor
+            ? await extractImmersivePortraitBackdropColor(
+                sample,
+                viewport,
+                alignment: alignment,
+              )
+            : immersivePortraitFallbackColor;
+        return ImmersiveBackdropAppearance(alignment, color);
+      } finally {
+        sample.dispose();
       }
     } finally {
-      codec.dispose();
+      source.dispose();
     }
   } catch (error) {
-    debugPrint('Unable to sample immersive backdrop color: $error');
-    return immersivePortraitFallbackColor;
+    debugPrint('Unable to analyse immersive backdrop: $error');
+    return fallback;
   }
 }

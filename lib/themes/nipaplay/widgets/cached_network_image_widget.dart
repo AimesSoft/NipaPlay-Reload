@@ -24,6 +24,7 @@ const Duration _kDefaultImageFadeDuration = Duration(milliseconds: 300);
 class CachedNetworkImageWidget extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
+  final Alignment alignment;
   final double? width;
   final double? height;
   final Widget Function(BuildContext, Object)? errorBuilder;
@@ -46,6 +47,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.width,
     this.height,
     this.errorBuilder,
@@ -443,6 +445,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                             child: SafeRawImage(
                               image: selectedImage,
                               fit: widget.fit,
+                              alignment: widget.alignment,
                               filterQuality: widget.filterQuality,
                             ),
                           )
@@ -456,6 +459,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                               child: SafeRawImage(
                                 image: selectedImage,
                                 fit: widget.fit,
+                                alignment: widget.alignment,
                                 filterQuality: widget.filterQuality,
                               ),
                             ),
@@ -487,12 +491,14 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 class SafeRawImage extends StatefulWidget {
   final ui.Image? image;
   final BoxFit fit;
+  final Alignment alignment;
   final FilterQuality filterQuality;
 
   const SafeRawImage({
     super.key,
     required this.image,
     required this.fit,
+    this.alignment = Alignment.center,
     this.filterQuality = FilterQuality.low,
   });
 
@@ -543,6 +549,7 @@ class _SafeRawImageState extends State<SafeRawImage> {
     return RawImage(
       image: image,
       fit: widget.fit,
+      alignment: widget.alignment,
       filterQuality: widget.filterQuality,
     );
   }
