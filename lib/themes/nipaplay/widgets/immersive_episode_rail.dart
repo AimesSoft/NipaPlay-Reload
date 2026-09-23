@@ -84,7 +84,7 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
                   Text(
                     '共 ${widget.episodeCount} 集',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.58),
+                      color: Colors.white.withValues(alpha: 0.72),
                       fontSize: 12,
                     ),
                   ),
@@ -328,7 +328,7 @@ class _ImmersiveEpisodeCardState extends State<ImmersiveEpisodeCard> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.56),
+                      color: Colors.white.withValues(alpha: 0.72),
                       fontSize: 11,
                     ),
                   ),

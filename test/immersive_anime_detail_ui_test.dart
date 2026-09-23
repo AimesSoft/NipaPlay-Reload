@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
@@ -12,6 +15,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.da
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_portrait_backdrop_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -49,6 +53,110 @@ void main() {
     expect(
       AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass,
       isFalse,
+    );
+  });
+
+  test('portrait color samples the visible cover edge, not cropped poster end',
+      () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, 100, 160),
+      Paint()..color = Colors.blue,
+    );
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 160, 100, 40),
+      Paint()..color = Colors.red,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    addTearDown(() {
+      image.dispose();
+      picture.dispose();
+    });
+
+    // A 1:1 hero displays y=50..150, so the red source-image bottom is hidden.
+    final color = await extractImmersivePortraitBackdropColor(
+      image,
+      const Size(100, 100),
+    );
+    final hsl = HSLColor.fromColor(color);
+    expect(hsl.hue, closeTo(HSLColor.fromColor(Colors.blue).hue, 5));
+    expect(hsl.lightness, greaterThan(0.22));
+    expect(immersivePortraitSecondaryTextContrast(color), greaterThan(4.5));
+  });
+
+  test('local portrait poster supplies the lower background color', () async {
+    final directory = await Directory.systemTemp.createTemp('nipaplay-hero-');
+    addTearDown(() => directory.delete(recursive: true));
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawColor(Colors.purple, BlendMode.src);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    final posterFile = File('${directory.path}/poster.png');
+    await posterFile.writeAsBytes(png!.buffer.asUint8List());
+
+    final color = await loadImmersivePortraitBackdropColor(
+      posterFile.path,
+      const Size(390, 422),
+    );
+    expect(HSLColor.fromColor(color).hue,
+        closeTo(HSLColor.fromColor(Colors.purple).hue, 5));
+    expect(HSLColor.fromColor(color).lightness, greaterThan(0.22));
+  });
+
+  test('a colourful area is not washed out by neutral poster pixels', () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.grey, BlendMode.src);
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 130, 42, 30),
+      Paint()..color = Colors.pinkAccent,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    addTearDown(() {
+      image.dispose();
+      picture.dispose();
+    });
+
+    final color = await extractImmersivePortraitBackdropColor(
+      image,
+      const Size(100, 100),
+    );
+    final hsl = HSLColor.fromColor(color);
+    expect(hsl.hue, closeTo(HSLColor.fromColor(Colors.pinkAccent).hue, 10));
+    expect(hsl.saturation, greaterThan(0.4));
+    expect(immersivePortraitSecondaryTextContrast(color), greaterThan(4.5));
+  });
+
+  test('poster-derived fill preserves secondary text contrast', () {
+    for (final posterColor in <Color>[
+      Colors.white,
+      Colors.yellow,
+      Colors.cyanAccent,
+      Colors.pinkAccent,
+      Colors.purple,
+      Colors.black,
+    ]) {
+      final fill = toneImmersivePortraitBackdropColor(posterColor);
+      expect(
+        immersivePortraitSecondaryTextContrast(fill),
+        greaterThanOrEqualTo(4.5),
+        reason: 'Low-contrast fill derived from $posterColor',
+      );
+    }
+    final neutralFill = toneImmersivePortraitBackdropColor(Colors.white);
+    expect((neutralFill.r - neutralFill.b).abs(), lessThan(0.01));
+    final blueFill = toneImmersivePortraitBackdropColor(Colors.blue);
+    final pinkFill = toneImmersivePortraitBackdropColor(Colors.pinkAccent);
+    expect(
+      (HSLColor.fromColor(blueFill).hue - HSLColor.fromColor(pinkFill).hue)
+          .abs(),
+      greaterThan(80),
     );
   });
 
@@ -348,6 +456,7 @@ void main() {
   for (final size in <Size>[
     const Size(1280, 800),
     const Size(800, 1100),
+    const Size(390, 844),
   ]) {
     testWidgets('immersive scaffold renders at $size', (tester) async {
       tester.view.physicalSize = size;
@@ -383,7 +492,85 @@ void main() {
       expect(find.text('魔法少女小圆'), findsOneWidget);
       expect(find.text('开始观看'), findsOneWidget);
       expect(find.text('剧集轨道'), findsOneWidget);
+      if (size.height > size.width) {
+        final poster = tester.widget<Positioned>(
+          find.byKey(const ValueKey('immersive-portrait-poster')),
+        );
+        expect(poster.height, size.height / 2);
+        expect(
+          find.byKey(const ValueKey('immersive-portrait-color-fill')),
+          findsOneWidget,
+        );
+        final seam = tester.widget<Positioned>(
+          find.byKey(const ValueKey('immersive-portrait-seam')),
+        );
+        expect(seam.top! + seam.height!, size.height / 2);
+      }
+      if (size.width < 600) {
+        expect(
+          find.byKey(const ValueKey('immersive-phone-scroll')),
+          findsOneWidget,
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('phone keeps the scrollable detail layout after rotation',
+      (tester) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: AppDisplaySurfaceScope(
+        surface: AppDisplaySurface.phone,
+        child: ImmersiveAnimeDetailScaffold(
+          title: '魔法少女小圆',
+          onBack: () {},
+          actions: const Text('观看'),
+          episodeRail: const Center(child: Text('剧集轨道')),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('immersive-phone-scroll')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('portrait tablet keeps actions visible below the half-page hero',
+      (tester) async {
+    tester.view.physicalSize = const Size(768, 1024);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: ImmersiveAnimeDetailScaffold(
+        title: '魔法少女小圆',
+        subtitle: 'Puella Magi Madoka Magica',
+        metadata: const ['TV动画', '2011', '共 12 集'],
+        description: List.filled(30, '简介内容。').join(),
+        onToggleDescription: () {},
+        onBack: () {},
+        actions: const Text('观看'),
+        episodeRail: const Center(child: Text('剧集轨道')),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final poster = tester.widget<Positioned>(
+      find.byKey(const ValueKey('immersive-portrait-poster')),
+    );
+    expect(poster.height, 512);
+    final actions = find.byKey(const ValueKey('immersive-fixed-actions'));
+    expect(tester.getBottomLeft(actions).dy, lessThan(1024));
+    expect(find.byKey(const ValueKey('immersive-phone-scroll')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

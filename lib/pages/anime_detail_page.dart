@@ -147,28 +147,12 @@ class AnimeDetailPage extends StatefulWidget {
       });
     }
 
-    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
-      return CupertinoBottomSheet.show<WatchHistoryItem>(
-        context: context,
-        title: '番剧详情',
-        floatingTitle: true,
-        heightRatio: 0.96,
-        child: AnimeDetailPage(
-          animeId: animeId,
-          sharedSummary: sharedSummary,
-          sharedEpisodeLoader: sharedEpisodeLoader,
-          sharedEpisodeBuilder: sharedEpisodeBuilder,
-          sharedSourceLabel: sharedSourceLabel,
-          playbackDetailContext: playbackDetailContext,
-          renderInWindowScaffold: false,
-        ),
-      );
-    }
-
-    final isDesktopTablet =
-        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.desktopTablet;
+    final surface = AppDisplaySurfaceScope.of(context);
+    final supportsImmersiveLayout =
+        surface == AppDisplaySurface.desktopTablet ||
+            surface == AppDisplaySurface.phone;
     var useImmersiveLayout = false;
-    if (isDesktopTablet) {
+    if (supportsImmersiveLayout) {
       final labsSettings = context.read<LabsSettingsProvider>();
       await labsSettings.ready;
       if (!context.mounted) return null;
@@ -190,6 +174,24 @@ class AnimeDetailPage extends StatefulWidget {
             renderInWindowScaffold: false,
             useImmersiveLayout: true,
           ),
+        ),
+      );
+    }
+
+    if (surface == AppDisplaySurface.phone) {
+      return CupertinoBottomSheet.show<WatchHistoryItem>(
+        context: context,
+        title: '番剧详情',
+        floatingTitle: true,
+        heightRatio: 0.96,
+        child: AnimeDetailPage(
+          animeId: animeId,
+          sharedSummary: sharedSummary,
+          sharedEpisodeLoader: sharedEpisodeLoader,
+          sharedEpisodeBuilder: sharedEpisodeBuilder,
+          sharedSourceLabel: sharedSourceLabel,
+          playbackDetailContext: playbackDetailContext,
+          renderInWindowScaffold: false,
         ),
       );
     }
@@ -3469,15 +3471,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         },
         child: Focus(
           autofocus: true,
-          child: Theme(
-            data: ThemeData.dark(useMaterial3: false).copyWith(
-              colorScheme: ThemeData.dark(useMaterial3: false)
-                  .colorScheme
-                  .copyWith(primary: AppAccentColors.current),
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
             ),
-            child: Material(
-              color: const Color(0xFF080B12),
-              child: _buildImmersiveContent(),
+            child: Theme(
+              data: ThemeData.dark(useMaterial3: false).copyWith(
+                colorScheme: ThemeData.dark(useMaterial3: false)
+                    .colorScheme
+                    .copyWith(primary: AppAccentColors.current),
+              ),
+              child: Material(
+                color: const Color(0xFF080B12),
+                child: _buildImmersiveContent(),
+              ),
             ),
           ),
         ),

@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_portrait_backdrop_color.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 const int immersiveBackdropMinDecodeWidth = 1280;
@@ -78,7 +81,10 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
       color: const Color(0xFF080B12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final portrait = constraints.maxHeight > constraints.maxWidth ||
+          final phoneSurface =
+              AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+          final portrait = phoneSurface ||
+              constraints.maxHeight > constraints.maxWidth ||
               constraints.maxWidth < 760;
           return Stack(
             fit: StackFit.expand,
@@ -113,7 +119,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         _Backdrop(url: backdropUrl),
-        const _CinematicGradients(portrait: false),
+        const _CinematicGradients(),
         SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
@@ -180,71 +186,208 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
   }
 
   Widget _buildPortrait(BuildContext context, BoxConstraints constraints) {
-    final heroHeight = (constraints.maxHeight * 0.42).clamp(280.0, 430.0);
+    final heroHeight = constraints.maxHeight / 2;
+    final phone =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone ||
+            constraints.maxWidth < 600;
+    final safeTop = MediaQuery.paddingOf(context).top;
+    final heroLead = (heroHeight - safeTop - 54 - (phone ? 140 : 180))
+        .clamp(0.0, double.infinity);
+    final backButton = Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: _BackButton(onPressed: onBack, onImage: true),
+    );
+    final header = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: _InformationHeader(
+        title: title,
+        subtitle: subtitle,
+        metadata: metadata,
+        rating: rating,
+      ),
+    );
+    final actionRow = Padding(
+      key: const ValueKey('immersive-fixed-actions'),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+      child: Align(alignment: Alignment.centerLeft, child: actions),
+    );
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: heroHeight,
-          child: _Backdrop(url: backdropUrl),
+        _PortraitBackdropSurface(
+          url: backdropUrl,
+          heroHeight: heroHeight,
         ),
-        const _CinematicGradients(portrait: true),
         SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                child: _BackButton(onPressed: onBack),
-              ),
-              SizedBox(height: heroHeight - 112),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _InformationHeader(
-                  title: title,
-                  subtitle: subtitle,
-                  metadata: metadata,
-                  rating: rating,
-                ),
-              ),
-              if (description?.trim().isNotEmpty == true) ...[
-                const SizedBox(height: 16),
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _DescriptionViewport(
-                      description: description!,
-                      expanded: descriptionExpanded,
-                    ),
+          child: phone
+              ? SingleChildScrollView(
+                  key: const ValueKey('immersive-phone-scroll'),
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      backButton,
+                      SizedBox(height: heroLead),
+                      header,
+                      if (description?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: _DescriptionViewport(
+                            description: description!,
+                            expanded: descriptionExpanded,
+                          ),
+                        ),
+                        if (onToggleDescription != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: _DescriptionToggle(
+                              expanded: descriptionExpanded,
+                              onPressed: onToggleDescription!,
+                            ),
+                          ),
+                      ],
+                      actionRow,
+                      SizedBox(height: 235, child: episodeRail),
+                      const SizedBox(height: 24),
+                    ],
                   ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    backButton,
+                    SizedBox(height: heroLead),
+                    header,
+                    if (description?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 16),
+                      Flexible(
+                        fit: FlexFit.loose,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: _DescriptionViewport(
+                            description: description!,
+                            expanded: descriptionExpanded,
+                          ),
+                        ),
+                      ),
+                      if (onToggleDescription != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: _DescriptionToggle(
+                            expanded: descriptionExpanded,
+                            onPressed: onToggleDescription!,
+                          ),
+                        ),
+                    ],
+                    actionRow,
+                    Expanded(child: episodeRail),
+                    const SizedBox(height: 18),
+                  ],
                 ),
-                if (onToggleDescription != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _DescriptionToggle(
-                      expanded: descriptionExpanded,
-                      onPressed: onToggleDescription!,
-                    ),
-                  ),
-              ],
-              Padding(
-                key: const ValueKey('immersive-fixed-actions'),
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: actions,
-                ),
-              ),
-              SizedBox(height: 250, child: episodeRail),
-              const SizedBox(height: 18),
-            ],
-          ),
         ),
       ],
+    );
+  }
+}
+
+class _PortraitBackdropSurface extends StatefulWidget {
+  const _PortraitBackdropSurface({required this.url, required this.heroHeight});
+
+  final String? url;
+  final double heroHeight;
+
+  @override
+  State<_PortraitBackdropSurface> createState() =>
+      _PortraitBackdropSurfaceState();
+}
+
+class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
+  String? _sampleKey;
+  Future<Color>? _sampledColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewport = Size(constraints.maxWidth, widget.heroHeight);
+        // Quantize resizes so dragging a portrait window does not decode a
+        // fresh palette image for every single logical pixel.
+        final key = '${widget.url}|${(viewport.width / 32).round()}|'
+            '${(viewport.height / 32).round()}';
+        if (_sampleKey != key) {
+          _sampleKey = key;
+          _sampledColor = loadImmersivePortraitBackdropColor(
+            widget.url,
+            viewport,
+          );
+        }
+        return FutureBuilder<Color>(
+          key: ValueKey(key),
+          future: _sampledColor,
+          builder: (context, snapshot) {
+            final color = snapshot.data ?? immersivePortraitFallbackColor;
+            // The fill can be brighter than the poster edge. Keep a darker
+            // shade of the same hue behind the overlapping title/subtitle.
+            final titleScrim = Color.lerp(color, Colors.black, 0.38)!;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                AnimatedContainer(
+                  key: const ValueKey('immersive-portrait-color-fill'),
+                  duration: const Duration(milliseconds: 350),
+                  color: color,
+                ),
+                Positioned(
+                  key: const ValueKey('immersive-portrait-poster'),
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: widget.heroHeight,
+                  child: _Backdrop(url: widget.url),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: widget.heroHeight * 0.25,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xC7000000), Colors.transparent],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  key: const ValueKey('immersive-portrait-seam'),
+                  left: 0,
+                  right: 0,
+                  top: widget.heroHeight * 0.48,
+                  height: widget.heroHeight * 0.52,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: const [0, 0.2, 0.4, 1],
+                        colors: [
+                          Colors.transparent,
+                          titleScrim.withValues(alpha: 0.68),
+                          titleScrim.withValues(alpha: 0.98),
+                          color,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -306,52 +449,40 @@ class _Backdrop extends StatelessWidget {
 }
 
 class _CinematicGradients extends StatelessWidget {
-  const _CinematicGradients({required this.portrait});
-
-  final bool portrait;
+  const _CinematicGradients();
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return const Stack(
       fit: StackFit.expand,
       children: [
-        if (!portrait)
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                stops: [0, 0.42, 0.75, 1],
-                colors: [
-                  Color(0xF2080B12),
-                  Color(0xC7080B12),
-                  Color(0x30080B12),
-                  Color(0x26080B12),
-                ],
-              ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              stops: [0, 0.42, 0.75, 1],
+              colors: [
+                Color(0xF2080B12),
+                Color(0xC7080B12),
+                Color(0x30080B12),
+                Color(0x26080B12),
+              ],
             ),
           ),
+        ),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: portrait
-                  ? const [0, 0.28, 0.48, 1]
-                  : const [0, 0.48, 0.75, 1],
-              colors: portrait
-                  ? const [
-                      Color(0x42080B12),
-                      Color(0x16080B12),
-                      Color(0xF0080B12),
-                      Color(0xFF080B12),
-                    ]
-                  : const [
-                      Color(0x5C080B12),
-                      Color(0x10080B12),
-                      Color(0xC7080B12),
-                      Color(0xFF080B12),
-                    ],
+              stops: [0, 0.48, 0.75, 1],
+              colors: [
+                Color(0x5C080B12),
+                Color(0x10080B12),
+                Color(0xC7080B12),
+                Color(0xFF080B12),
+              ],
             ),
           ),
         ),
@@ -361,9 +492,10 @@ class _CinematicGradients extends StatelessWidget {
 }
 
 class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onPressed});
+  const _BackButton({required this.onPressed, this.onImage = false});
 
   final VoidCallback onPressed;
+  final bool onImage;
 
   @override
   Widget build(BuildContext context) {
@@ -374,6 +506,8 @@ class _BackButton extends StatelessWidget {
         onPressed: onPressed,
         style: TextButton.styleFrom(
           foregroundColor: Colors.white,
+          backgroundColor:
+              onImage ? Colors.black.withValues(alpha: 0.58) : null,
           minimumSize: const Size(48, 44),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         ),

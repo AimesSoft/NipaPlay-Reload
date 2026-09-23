@@ -25,7 +25,7 @@ class LabsSettingsContent extends StatelessWidget {
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
-                if (!globals.isTelevision && !globals.isPhone)
+                if (!globals.isTelevision)
                   AdaptiveSettingsTile.toggle(
                     title: _text(
                       context,
@@ -35,9 +35,9 @@ class LabsSettingsContent extends StatelessWidget {
                     ),
                     subtitle: _text(
                       context,
-                      '在桌面端与 Pad 端使用全屏沉浸式媒体详情页',
-                      '在桌面端與 Pad 端使用全螢幕沉浸式媒體詳情頁',
-                      'Use the immersive full-screen media detail page on desktop and tablet.',
+                      '开启后，桌面、平板和手机均使用新版全屏番剧详情页',
+                      '開啟後，桌面、平板和手機均使用新版全螢幕番劇詳情頁',
+                      'Use the new full-screen anime detail page on desktop, tablet, and phone.',
                     ),
                     icon: Ionicons.albums_outline,
                     phoneIcon: cupertino.CupertinoIcons.rectangle_stack,
