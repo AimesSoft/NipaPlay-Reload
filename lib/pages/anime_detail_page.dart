@@ -2812,10 +2812,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   /// 解析主“播放”按钮的目标剧集、按钮文案与详情。
   ///
   /// 规则：
-  /// - 无观看记录：开始观看第一集。
-  /// - 上次观看未播完（<90%）：继续观看该集。
-  /// - 上次观看已播完（≥90%）：优先指向下一集（若下一集存在可播放资源）；
-  ///   找不到下一集的资源/文件匹配信息时，停留在观看当前集。
+  /// - 无观看记录：开始观看第一话。
+  /// - 上次观看未播完（<90%）：继续观看该话。
+  /// - 上次观看已播完（≥90%）：优先指向下一话（若下一话存在可播放资源）；
+  ///   找不到下一话的资源/文件匹配信息时，停留在观看当前话。
   ({
     EpisodeData episode,
     String label,
@@ -2862,14 +2862,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         _episodeHasPlayableResource(episodes[nextIndex])) {
       return (
         episode: episodes[nextIndex],
-        label: '观看第 ${nextIndex + 1} 集',
+        label: '观看第 ${nextIndex + 1} 话',
         detail: null,
         knownHistory: null,
       );
     }
     return (
       episode: lastEpisode,
-      label: '观看第 ${lastIndex + 1} 集',
+      label: '观看第 ${lastIndex + 1} 话',
       detail: null,
       knownHistory: lastWatched,
     );
