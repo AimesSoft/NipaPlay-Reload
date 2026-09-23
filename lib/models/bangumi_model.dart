@@ -3,6 +3,8 @@ class BangumiAnime {
   final String name; // Corresponds to Dandanplay's animeTitle, primary name
   final String nameCn; // Potentially from Dandanplay's titles array or use animeTitle if only one
   final String imageUrl;
+  /// 用户为媒体详情页单独指定的背景图；为空时继续使用 [imageUrl] 海报。
+  final String? backgroundImageUrl;
   final String? summary;
   final String? airDate; // Dandanplay's BangumiQueueIntroV2 provides airDate, BangumiDetails might have more specific first episode air date
   final int? airWeekday; // Corresponds to Dandanplay's airDay (0 for Sun, 1-6 for Mon-Sat)
@@ -34,6 +36,7 @@ class BangumiAnime {
     required this.name,
     required this.nameCn,
     required this.imageUrl,
+    this.backgroundImageUrl,
     this.summary,
     this.airDate,
     this.airWeekday,
@@ -59,6 +62,8 @@ class BangumiAnime {
     String? name,
     String? nameCn,
     String? imageUrl,
+    String? backgroundImageUrl,
+    bool clearBackgroundImageUrl = false,
     String? summary,
     String? airDate,
     int? airWeekday,
@@ -83,6 +88,9 @@ class BangumiAnime {
       name: name ?? this.name,
       nameCn: nameCn ?? this.nameCn,
       imageUrl: imageUrl ?? this.imageUrl,
+      backgroundImageUrl: clearBackgroundImageUrl
+          ? null
+          : backgroundImageUrl ?? this.backgroundImageUrl,
       summary: summary ?? this.summary,
       airDate: airDate ?? this.airDate,
       airWeekday: airWeekday ?? this.airWeekday,
@@ -263,6 +271,7 @@ class BangumiAnime {
       'name': name,
       'name_cn': nameCn,
       'imageUrl': imageUrl,
+      'backgroundImageUrl': backgroundImageUrl,
       'summary': summary,
       'air_date': airDate,
       'airDay': airWeekday,
@@ -331,6 +340,7 @@ class BangumiAnime {
     final imageUrlRaw = readString(json['imageUrl']);
     final imageUrl =
         imageUrlRaw.isNotEmpty ? imageUrlRaw : 'assets/backempty.png';
+    final backgroundImageUrlRaw = readString(json['backgroundImageUrl']).trim();
     final airDateRaw = readString(json['air_date']);
     final airDate =
         airDateRaw.isNotEmpty ? airDateRaw : readString(json['airDate']);
@@ -369,6 +379,8 @@ class BangumiAnime {
       name: resolvedName,
       nameCn: resolvedNameCn,
       imageUrl: imageUrl,
+      backgroundImageUrl:
+          backgroundImageUrlRaw.isEmpty ? null : backgroundImageUrlRaw,
       summary: json['summary']?.toString(),
       airDate: airDate.isNotEmpty ? airDate : null,
       airWeekday: readInt(json['airDay'] ?? json['airWeekday']),

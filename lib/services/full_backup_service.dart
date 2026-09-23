@@ -13,6 +13,7 @@ import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
@@ -166,6 +167,10 @@ class FullBackupService {
         !key.startsWith('server_profiles') && // 服务器配置属于媒体库
         key != 'video_positions' && // 播放位置属于观看历史
         key != 'watch_history_web_store' && // Web观看历史单独处理
+        !key.startsWith('bangumi_detail_') && // 番剧详情属于媒体库元数据
+        !key.startsWith('bangumi_custom_background_') && // 随番剧详情导出
+        // backdrop_crop_rect_ 为已移除的背景裁切功能残留键，同样不进入通用偏好备份。
+        !key.startsWith('backdrop_crop_rect_') &&
         !key.startsWith('nipaplay_subfolder_hash_cache') && // 扫描缓存不需要备份
         !key.endsWith('_library_sort_settings') && // 排序设置属于媒体库
         key != 'custom_storage_path' && // 存储路径是设备相关的
@@ -290,6 +295,10 @@ class FullBackupService {
       'port': webServerPort ?? 1180,
       'ipv6Enabled': webServerIpv6Enabled,
     };
+
+    // 10. 番剧详情使用逐 animeId 记录，保证自定义背景等新增字段能被
+    // 完整备份，并避免增量同步时不同番剧互相覆盖。
+    result.addAll(await BangumiService.instance.exportAnimeDetailsForBackup());
 
     return result;
   }
@@ -875,6 +884,29 @@ class FullBackupService {
         await prefs.setInt('web_server_port', port);
         await prefs.setBool('web_server_ipv6_enabled', ipv6Enabled);
         debugPrint('恢复了Nipaplay媒体库共享配置');
+      }
+
+      // 9. 恢复完整番剧信息（包含用户自定义背景）。旧备份没有这些键时
+      // 自然跳过，保持向后兼容。
+      for (final entry in mediaLibrariesData.entries.where(
+        (entry) => entry.key.startsWith(
+          BangumiService.backupAnimeDetailKeyPrefix,
+        ),
+      )) {
+        if (entry.value is! Map) {
+          result.skippedCount++;
+          continue;
+        }
+        try {
+          await BangumiService.instance.restoreAnimeDetailFromBackup(
+            entry.key,
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+          result.restoredCount++;
+        } catch (e) {
+          result.skippedCount++;
+          debugPrint('恢复番剧信息 ${entry.key} 失败: $e');
+        }
       }
 
       result.success = true;
