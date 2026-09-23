@@ -963,6 +963,18 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   final Future<void> Function() onRefresh;
   final material.ValueChanged<WatchHistoryItem> onTap;
 
+  material.ValueKey<String> _itemKey(WatchHistoryItem item) {
+    final identity = item.animeId?.toString() ?? item.filePath;
+    return material.ValueKey<String>(
+      'media-collection-${source.name}-$identity',
+    );
+  }
+
+  int? _findItemIndex(material.Key key) {
+    final index = items.indexWhere((item) => _itemKey(item) == key);
+    return index < 0 ? null : index;
+  }
+
   @override
   material.Widget build(material.BuildContext context) {
     final emptyContent = mediaCollectionEmptyContent(
@@ -1002,6 +1014,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           key: const material.ValueKey<String>(
             'television-media-collection-grid',
           ),
+          findChildIndexCallback: _findItemIndex,
           primary: true,
           padding: const material.EdgeInsets.fromLTRB(6, 4, 6, 72),
           physics: const material.ClampingScrollPhysics(),
@@ -1016,11 +1029,9 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
             final item = items[index];
             final detail = details[item.animeId];
             return NipaplayLargeScreenModeScope(
+              key: _itemKey(item),
               isActive: true,
               child: AnimeCard(
-                key: material.ValueKey<String>(
-                  'television-media-poster-${item.animeId}',
-                ),
                 imageUrl:
                     _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
                 name: _AdaptiveMediaCollectionViewState._title(item, detail),
@@ -1075,11 +1086,13 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           padding: const material.EdgeInsets.fromLTRB(20, 12, 20, 112),
           sliver: material.SliverList.separated(
             itemCount: items.length,
+            findItemIndexCallback: _findItemIndex,
             separatorBuilder: (_, __) => const material.SizedBox(height: 12),
             itemBuilder: (context, index) {
               final item = items[index];
               final detail = details[item.animeId];
               return CupertinoAnimeCard(
+                key: _itemKey(item),
                 title: _AdaptiveMediaCollectionViewState._title(item, detail),
                 imageUrl:
                     _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
@@ -1122,6 +1135,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     return material.GridView.builder(
+      findChildIndexCallback: _findItemIndex,
       gridDelegate: material.SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: showSummary
             ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
@@ -1141,6 +1155,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         final item = items[index];
         final detail = details[item.animeId];
         return HorizontalAnimeCard(
+          key: _itemKey(item),
           imageUrl: _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
           title: _AdaptiveMediaCollectionViewState._title(item, detail),
           rating: detail?.rating,
