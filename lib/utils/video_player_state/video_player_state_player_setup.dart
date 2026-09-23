@@ -307,8 +307,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           '${_redactMediaUrlForLog(resolvedActualPlayUrl)}',
         );
       } catch (e) {
-        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $e');
-        _setStatus(PlayerStatus.error, message: '解析远程媒体路径失败: $e');
+        final safeError = MediaSourceUtils.safeRemotePathError(e);
+        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $safeError');
+        _setStatus(
+          PlayerStatus.error,
+          message: '解析远程媒体路径失败，请检查连接配置（$safeError）',
+        );
         _error = '解析远程媒体路径失败';
         _requestPlaybackErrorDialog();
         return;

@@ -12,7 +12,9 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_backdrop_focus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_portrait_backdrop_color.dart';
@@ -56,6 +58,59 @@ void main() {
     );
   });
 
+  test('detail-rich poster region moves cover display centre upward', () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.grey, BlendMode.src);
+    for (var row = 35; row < 90; row += 8) {
+      for (var column = 10; column < 90; column += 8) {
+        canvas.drawRect(
+          Rect.fromLTWH(column.toDouble(), row.toDouble(), 4, 4),
+          Paint()..color = Colors.pinkAccent,
+        );
+      }
+    }
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    addTearDown(() {
+      image.dispose();
+      picture.dispose();
+    });
+
+    final alignment = await chooseImmersiveBackdropAlignment(
+      image,
+      const Size(160, 90),
+    );
+    expect(alignment.x, 0);
+    expect(alignment.y, lessThan(-0.2));
+  });
+
+  testWidgets('raw image uses the selected cover alignment', (tester) async {
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    addTearDown(() {
+      image.dispose();
+      picture.dispose();
+    });
+    const alignment = Alignment(0, -0.6);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 160,
+          height: 90,
+          child: SafeRawImage(
+            image: image,
+            fit: BoxFit.cover,
+            alignment: alignment,
+          ),
+        ),
+      ),
+    );
+    expect(tester.widget<RawImage>(find.byType(RawImage)).alignment, alignment);
+  });
+
   test('portrait color samples the visible cover edge, not cropped poster end',
       () async {
     final recorder = ui.PictureRecorder();
@@ -84,6 +139,37 @@ void main() {
     expect(hsl.hue, closeTo(HSLColor.fromColor(Colors.blue).hue, 5));
     expect(hsl.lightness, greaterThan(0.22));
     expect(immersivePortraitSecondaryTextContrast(color), greaterThan(4.5));
+  });
+
+  test('portrait fill follows the chosen display centre', () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.red, BlendMode.src);
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, 100, 100),
+      Paint()..color = Colors.blue,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(100, 200);
+    addTearDown(() {
+      image.dispose();
+      picture.dispose();
+    });
+
+    final upper = await extractImmersivePortraitBackdropColor(
+      image,
+      const Size(100, 100),
+      alignment: Alignment.topCenter,
+    );
+    final lower = await extractImmersivePortraitBackdropColor(
+      image,
+      const Size(100, 100),
+      alignment: Alignment.bottomCenter,
+    );
+    expect(HSLColor.fromColor(upper).hue,
+        closeTo(HSLColor.fromColor(Colors.blue).hue, 5));
+    expect(HSLColor.fromColor(lower).hue,
+        closeTo(HSLColor.fromColor(Colors.red).hue, 5));
   });
 
   test('local portrait poster supplies the lower background color', () async {
@@ -244,6 +330,9 @@ void main() {
     expect(source, contains('fit: BoxFit.cover'));
     expect(source, contains('memCacheWidth: 1280'));
     expect(source, isNot(contains('memCacheHeight: 720')));
+    expect(RegExp(r'smartCrop: true').allMatches(source), hasLength(2));
+    expect(
+        const CachedNetworkImageWidget(imageUrl: 'poster').smartCrop, isFalse);
   });
 
   test('immersive episode time is limited to reliable local history', () {

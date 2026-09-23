@@ -593,7 +593,8 @@ class WebDAVService {
       host: baseUri.host,
       port: baseUri.hasPort ? baseUri.port : null,
       userInfo: hasAuth
-          ? '${normalizedConnection.username}:${normalizedConnection.password}'
+          ? '${Uri.encodeComponent(normalizedConnection.username)}:'
+              '${Uri.encodeComponent(normalizedConnection.password)}'
           : null,
     );
     final encodedPath = OpaqueMediaPath.canonicalize(combinedPath);
