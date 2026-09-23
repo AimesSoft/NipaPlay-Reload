@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_backdrop_focus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
@@ -25,6 +26,10 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
   final Alignment alignment;
+
+  /// Selects a cover display centre from the already loaded image. Opt-in so
+  /// poster walls, logos, and other callers keep their existing framing.
+  final bool smartCrop;
   final double? width;
   final double? height;
   final Widget Function(BuildContext, Object)? errorBuilder;
@@ -48,6 +53,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     required this.imageUrl,
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
+    this.smartCrop = false,
     this.width,
     this.height,
     this.errorBuilder,
@@ -78,6 +84,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   bool _isDisposed = false;
   ui.Image? _basicImage; // 基础图片
   bool _hasRetriedLowRes = false;
+  String? _smartCropKey;
+  Alignment _smartCropAlignment = Alignment.center;
 
   /// 本次解码的目标尺寸（物理像素），null 表示无法推导。
   (int?, int?)? _decodeTarget;
@@ -97,6 +105,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
         oldWidget.maxDecodeEdge != widget.maxDecodeEdge;
     if (!urlChanged && !dimsChanged) return;
     if (urlChanged) {
+      _smartCropKey = null;
+      _smartCropAlignment = Alignment.center;
       // 不再在这里释放图片，改为由缓存管理器统一管理
       setState(() {
         _isImageLoaded = false;
@@ -275,6 +285,37 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     }
   }
 
+  void _startSmartCrop(ui.Image image, Size viewport, String key) {
+    ui.Image owned;
+    try {
+      owned = image.clone();
+    } catch (_) {
+      return;
+    }
+    _smartCropKey = key;
+    () async {
+      ui.Image? sample;
+      try {
+        sample = await makeImmersiveBackdropAnalysisImage(owned);
+        final alignment = await chooseImmersiveBackdropAlignment(
+          sample,
+          viewport,
+        );
+        if (mounted &&
+            !_isDisposed &&
+            _smartCropKey == key &&
+            alignment != _smartCropAlignment) {
+          setState(() => _smartCropAlignment = alignment);
+        }
+      } catch (error) {
+        debugPrint('Unable to focus recommendation poster: $error');
+      } finally {
+        sample?.dispose();
+        owned.dispose();
+      }
+    }();
+  }
+
   Size? _resolveDisplaySize(BoxConstraints constraints) {
     double? width = widget.width;
     if (width != null && !width.isFinite) {
@@ -376,6 +417,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
           final displaySize = _resolveDisplaySize(constraints);
 
           return FutureBuilder<ui.Image>(
+            // A resized decode may reuse its previous frame, but a new URL
+            // must not expose the previous poster while its request starts.
+            key: widget.smartCrop ? ValueKey(widget.imageUrl) : null,
             future: _imageFuture,
             builder: (context, snapshot) {
               final baseImage = _getSafeImage(_basicImage);
@@ -386,6 +430,20 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                 displaySize,
                 context,
               );
+              if (widget.smartCrop &&
+                  widget.fit == BoxFit.cover &&
+                  selectedImage != null &&
+                  displaySize != null) {
+                final key = '${widget.imageUrl}|'
+                    '${(displaySize.width / displaySize.height * 100).round()}';
+                if (_smartCropKey != key) {
+                  _startSmartCrop(selectedImage, displaySize, key);
+                }
+              }
+              final displayAlignment =
+                  widget.smartCrop && widget.fit == BoxFit.cover
+                      ? _smartCropAlignment
+                      : widget.alignment;
 
               if (!_hasRetriedLowRes &&
                   widget.blurIfLowRes &&
@@ -445,7 +503,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                             child: SafeRawImage(
                               image: selectedImage,
                               fit: widget.fit,
-                              alignment: widget.alignment,
+                              alignment: displayAlignment,
                               filterQuality: widget.filterQuality,
                             ),
                           )
@@ -459,7 +517,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                               child: SafeRawImage(
                                 image: selectedImage,
                                 fit: widget.fit,
-                                alignment: widget.alignment,
+                                alignment: displayAlignment,
                                 filterQuality: widget.filterQuality,
                               ),
                             ),
