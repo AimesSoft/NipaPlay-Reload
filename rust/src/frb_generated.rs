@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1073613189;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1076718673;
 
 // Section: executor
 
@@ -962,6 +962,77 @@ fn wire__crate__api__next2__next2_prepare_layout_impl(
         },
     )
 }
+fn wire__crate__api__client_notifications__notify_client_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "notify_client",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_notification =
+                <crate::api::client_notifications::ClientNotification>::sse_decode(
+                    &mut deserializer,
+                );
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::client_notifications::notify_client(api_notification);
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__startup_commands__parse_startup_command_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "parse_startup_command",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_args = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::startup_commands::parse_startup_command(api_args)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__webdav_multistatus__parse_webdav_multistatus_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1040,6 +1111,45 @@ fn wire__crate__api__media_probe__probe_remote_media_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__crate__api__startup_commands__report_startup_command_result_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "report_startup_command_result",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_script_name = <String>::sse_decode(&mut deserializer);
+            let api_error = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::startup_commands::report_startup_command_result(
+                            api_script_name,
+                            api_error,
+                        );
+                    })?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -1278,6 +1388,44 @@ fn wire__crate__api__remote_directory__sort_remote_entry_indices_impl(
                         api_modified_millis,
                         api_preset,
                     )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__client_notifications__subscribe_client_notifications_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "subscribe_client_notifications",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_sink = <StreamSink<
+                crate::api::client_notifications::ClientNotification,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::client_notifications::subscribe_client_notifications(api_sink);
+                    })?;
                     Ok(output_ok)
                 })())
             }
@@ -2037,6 +2185,27 @@ fn wire__crate__api__torrent__torrent_stream_url_impl(
 
 // Section: dart2rust
 
+impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::anyhow::anyhow!("{}", inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<
+        crate::api::client_notifications::ClientNotification,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
 impl SseDecode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2049,6 +2218,18 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for crate::api::client_notifications::ClientNotification {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_message = <String>::sse_decode(deserializer);
+        return crate::api::client_notifications::ClientNotification {
+            title: var_title,
+            message: var_message,
+        };
     }
 }
 
@@ -3144,6 +3325,18 @@ impl SseDecode for crate::api::webdav_multistatus::RustWebDavEntry {
     }
 }
 
+impl SseDecode for crate::api::startup_commands::StartupCommand {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_launchFilePath = <Option<String>>::sse_decode(deserializer);
+        let mut var_loadJsPath = <Option<String>>::sse_decode(deserializer);
+        return crate::api::startup_commands::StartupCommand {
+            launch_file_path: var_launchFilePath,
+            load_js_path: var_loadJsPath,
+        };
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3229,103 +3422,127 @@ fn pde_ffi_dispatcher_primary_impl(
         17 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
         24 => wire__crate__api__next2__next2_layout_frame_impl(port, ptr, rust_vec_len, data_len),
         25 => wire__crate__api__next2__next2_prepare_layout_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__webdav_multistatus__parse_webdav_multistatus_impl(
+        26 => wire__crate__api__client_notifications__notify_client_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        27 => wire__crate__api__media_probe__probe_remote_media_impl(
+        27 => wire__crate__api__startup_commands__parse_startup_command_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__performance__sample_cpu_counters_impl(
+        28 => wire__crate__api__webdav_multistatus__parse_webdav_multistatus_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__performance__sample_gpu_percent_impl(
+        29 => wire__crate__api__media_probe__probe_remote_media_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__crate__api__performance__sample_memory_rss_mb_impl(
+        30 => wire__crate__api__startup_commands__report_startup_command_result_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => wire__crate__api__performance__sample_performance_impl(
+        31 => wire__crate__api__performance__sample_cpu_counters_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        32 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__remote_directory__sort_remote_entry_indices_impl(
+        32 => wire__crate__api__performance__sample_gpu_percent_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__incremental_sync__sync_apply_operations_impl(
+        33 => wire__crate__api__performance__sample_memory_rss_mb_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__incremental_sync__sync_apply_patch_chain_impl(
+        34 => wire__crate__api__performance__sample_performance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__incremental_sync__sync_canonicalize_json_impl(
+        35 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__remote_directory__sort_remote_entry_indices_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__incremental_sync__sync_decode_snapshot_state_impl(
+        38 => wire__crate__api__client_notifications__subscribe_client_notifications_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__crate__api__incremental_sync__sync_diff_states_impl(
+        43 => wire__crate__api__incremental_sync__sync_apply_operations_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__incremental_sync__sync_sha256_bytes_impl(
+        44 => wire__crate__api__incremental_sync__sync_apply_patch_chain_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
-        50 => {
+        45 => wire__crate__api__incremental_sync__sync_canonicalize_json_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        46 => wire__crate__api__incremental_sync__sync_decode_snapshot_state_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        47 => wire__crate__api__incremental_sync__sync_diff_states_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        48 => wire__crate__api__incremental_sync__sync_sha256_bytes_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        49 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
+        54 => {
             wire__crate__api__torrent__torrent_init_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        51 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__torrent__torrent_preview_magnet_impl(
+        55 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__torrent__torrent_preview_magnet_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        54 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3382,23 +3599,23 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        33 => wire__crate__api__danmaku_analytics__smooth_density_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__media_metadata__subtitle_compute_match_score_impl(
+        36 => wire__crate__api__danmaku_analytics__smooth_density_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__media_metadata__subtitle_compute_match_score_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        36 => wire__crate__api__media_metadata__subtitle_extract_match_tokens_impl(
+        40 => wire__crate__api__media_metadata__subtitle_extract_match_tokens_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__media_metadata__subtitle_normalize_match_name_impl(
+        41 => wire__crate__api__media_metadata__subtitle_normalize_match_name_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        38 => wire__crate__api__media_metadata__subtitle_pick_likely_episode_number_impl(
+        42 => wire__crate__api__media_metadata__subtitle_pick_likely_episode_number_impl(
             ptr,
             rust_vec_len,
             data_len,
@@ -3409,6 +3626,27 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::client_notifications::ClientNotification {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.title.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::client_notifications::ClientNotification
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::client_notifications::ClientNotification>
+    for crate::api::client_notifications::ClientNotification
+{
+    fn into_into_dart(self) -> crate::api::client_notifications::ClientNotification {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::dfm_plus::DfmPlusDanmakuItem {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -4327,6 +4565,46 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::webdav_multistatus::RustWebDa
         self
     }
 }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::startup_commands::StartupCommand {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.launch_file_path.into_into_dart().into_dart(),
+            self.load_js_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::startup_commands::StartupCommand
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::startup_commands::StartupCommand>
+    for crate::api::startup_commands::StartupCommand
+{
+    fn into_into_dart(self) -> crate::api::startup_commands::StartupCommand {
+        self
+    }
+}
+
+impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(format!("{:?}", self), serializer);
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::api::client_notifications::ClientNotification,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
 
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -4339,6 +4617,14 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::client_notifications::ClientNotification {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.title, serializer);
+        <String>::sse_encode(self.message, serializer);
     }
 }
 
@@ -5082,6 +5368,14 @@ impl SseEncode for crate::api::webdav_multistatus::RustWebDavEntry {
         <bool>::sse_encode(self.is_directory, serializer);
         <Option<i64>>::sse_encode(self.size, serializer);
         <Option<String>>::sse_encode(self.last_modified, serializer);
+    }
+}
+
+impl SseEncode for crate::api::startup_commands::StartupCommand {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.launch_file_path, serializer);
+        <Option<String>>::sse_encode(self.load_js_path, serializer);
     }
 }
 

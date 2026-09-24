@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/plugins/url_resolver.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -29,7 +30,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class PluginService extends ChangeNotifier {
   PluginService() : _eventBus = PluginEventBus() {
-    _initialize();
+    _ready = _initialize();
     _setupEventListeners();
   }
 
@@ -95,6 +96,7 @@ class PluginService extends ChangeNotifier {
   /// 插件启动的外部进程，key 为 pluginId，value 为 Process。
   final Map<String, Process> _managedProcesses = {};
 
+  late final Future<void> _ready;
   bool _isLoaded = false;
   Map<String, PluginIndexEntry> _pluginIndex = {};
   Map<String, RemotePluginInfo> _remotePlugins = {};
@@ -109,6 +111,33 @@ class PluginService extends ChangeNotifier {
   PluginEventBus get eventBus => _eventBus;
 
   List<Map<String, dynamic>>? get pendingDanmakuData => _pendingDanmakuData;
+
+  Future<PluginResolvedUrl?> resolveUrl(
+    String url, {
+    required PluginUrlSelector select,
+    bool Function()? isCancelled,
+  }) async {
+    await _ready;
+    final candidates = _plugins
+        .where((plugin) =>
+            plugin.enabled &&
+            plugin.loaded &&
+            plugin.manifest.permissions.contains(PluginPermission.urlResolve))
+        .toList()
+      ..sort((a, b) => a.manifest.priority.compareTo(b.manifest.priority));
+    for (final plugin in candidates) {
+      final id = plugin.manifest.id;
+      final runtime = _runtimeByPluginId[id];
+      if (runtime == null) continue;
+      final result = await PluginUrlResolver(
+        runtime: runtime,
+        isActive: () =>
+            identical(_runtimeByPluginId[id], runtime) && isPluginEnabled(id),
+      ).resolve(url, select: select, isCancelled: isCancelled);
+      if (result != null) return result;
+    }
+    return null;
+  }
 
   List<String> get activeDanmakuBlockWords {
     final merged = <String>[];
@@ -1351,6 +1380,27 @@ class PluginService extends ChangeNotifier {
     _runtimeByPluginId.clear();
   }
 
+  Future<String> loadStartupScript(String sourceFilePath) async {
+    await _ready;
+    final script = await _pluginStorage.readTextFile(sourceFilePath);
+    final id = await _importPluginFromContent(
+      script,
+      allowSameVersionUpdate: true,
+    );
+    if (id == null) {
+      throw StateError('插件没有加入列表');
+    }
+    if (!isPluginEnabled(id)) {
+      await setPluginEnabled(id, true);
+    }
+    final descriptor =
+        _plugins.firstWhere((plugin) => plugin.manifest.id == id);
+    if (!descriptor.loaded) {
+      throw StateError(descriptor.errorMessage ?? '插件运行时载入失败');
+    }
+    return id;
+  }
+
   Future<String?> importPluginScript({
     required String sourceFilePath,
   }) async {
@@ -1363,8 +1413,11 @@ class PluginService extends ChangeNotifier {
     return _importPluginFromContent(script, updateForId: updateForId);
   }
 
-  Future<String?> _importPluginFromContent(String script,
-      {String? updateForId}) async {
+  Future<String?> _importPluginFromContent(
+    String script, {
+    String? updateForId,
+    bool allowSameVersionUpdate = false,
+  }) async {
     final parsed = _parsePluginMetadata(script);
     final manifest = parsed.manifest;
     final minVersion = manifest.minHostVersion;
@@ -1393,7 +1446,8 @@ class PluginService extends ChangeNotifier {
 
     if (existingLocalId != null) {
       final existing = _pluginIndex[existingLocalId]!;
-      if (_compareVersions(manifest.version, existing.version) <= 0) {
+      if (_compareVersions(manifest.version, existing.version) <
+          (allowSameVersionUpdate ? 0 : 1)) {
         throw StateError(
           '当前已安装版本 ${existing.version} 不低于插件版本 ${manifest.version}',
         );
