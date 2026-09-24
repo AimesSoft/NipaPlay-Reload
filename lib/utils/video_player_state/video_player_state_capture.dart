@@ -470,6 +470,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   Future<String?> captureScreenshot({
     bool? includeDanmaku,
     bool? includeSubtitles,
+    bool temporary = false,
   }) async {
     final bytes = await _captureScreenshotJpegBytes(
       // 未显式传参时回退到截图设置页的开关
@@ -479,7 +480,9 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     if (bytes == null || bytes.isEmpty) return null;
 
     try {
-      final directoryPath = await _resolveScreenshotSaveDirectoryPath();
+      final directoryPath = temporary
+          ? (await path_provider.getTemporaryDirectory()).path
+          : await _resolveScreenshotSaveDirectoryPath();
       final fileName = _buildScreenshotFileName();
       final file = File(p.join(directoryPath, fileName));
       await file.writeAsBytes(bytes, flush: true);

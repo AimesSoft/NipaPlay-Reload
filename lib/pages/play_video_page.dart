@@ -366,10 +366,25 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       final path = await videoState.captureScreenshot(
         includeDanmaku: includeDanmaku,
         includeSubtitles: includeSubtitles,
+        temporary: Platform.isIOS || Platform.isAndroid,
       );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      if (Platform.isIOS || Platform.isAndroid) {
+        final saved = await SystemShareService.exportFile(
+          path,
+          mimeType: 'image/jpeg',
+        );
+        if (!mounted) return;
+        // iOS acknowledges that its Files picker opened, not that the user
+        // finished saving. Android returns only after the selected document
+        // has received the bytes.
+        if (saved && Platform.isAndroid) {
+          BlurSnackBar.show(context, '截图已保存到所选位置');
+        }
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');

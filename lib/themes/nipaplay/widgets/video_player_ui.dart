@@ -971,10 +971,25 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
-      final path = await videoState.captureScreenshot();
+      final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+      final isAndroid =
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      final path = await videoState.captureScreenshot(
+        temporary: isIos || isAndroid,
+      );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      if (isIos || isAndroid) {
+        final saved = await SystemShareService.exportFile(
+          path,
+          mimeType: 'image/jpeg',
+        );
+        if (mounted && isAndroid && saved) {
+          BlurSnackBar.show(context, '截图已保存到所选位置');
+        }
         return;
       }
       final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
