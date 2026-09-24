@@ -57,6 +57,12 @@ import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/src/rust/api/startup_commands.dart'
+    as startup_commands;
+import 'package:nipaplay/src/rust/api/client_notifications.dart'
+    as client_notifications;
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:universal_gamepad/universal_gamepad.dart';
 import 'dart:async';
@@ -196,10 +202,24 @@ void main(List<String> args) async {
   });
 
   String? launchFilePath;
+  String? startupScriptPath;
+  String? startupCommandError;
   if (globals.isDesktop && args.isNotEmpty) {
-    final filePath = args.first;
-    if (await File(filePath).exists()) {
-      launchFilePath = filePath;
+    try {
+      final command = await startup_commands.parseStartupCommand(args: args);
+      final scriptPath = command.loadJsPath;
+      if (scriptPath != null) {
+        startupScriptPath = path.normalize(path.absolute(scriptPath));
+      }
+      final filePath = command.launchFilePath;
+      if (filePath != null && await File(filePath).exists()) {
+        launchFilePath = filePath;
+      }
+    } catch (error) {
+      startupCommandError = error.toString();
+      if (!args.first.startsWith('-') && await File(args.first).exists()) {
+        launchFilePath = args.first;
+      }
     }
   }
   if (globals.isDesktop && launchFilePath == null) {
@@ -214,9 +234,10 @@ void main(List<String> args) async {
   if (globals.isDesktop) {
     final isPrimary = await SingleInstanceService.ensureSingleInstance(
       launchFilePath: launchFilePath,
+      startupScriptPath: startupScriptPath,
     );
     if (!isPrimary) {
-      return;
+      exit(0);
     }
   }
 
@@ -641,7 +662,11 @@ void main(List<String> args) async {
             ),
           ],
           child: DesktopMultiWindowHost(
-            child: NipaPlayApp(launchFilePath: launchFilePath),
+            child: NipaPlayApp(
+              launchFilePath: launchFilePath,
+              startupScriptPath: startupScriptPath,
+              startupCommandError: startupCommandError,
+            ),
           ),
         ),
       ),
@@ -704,8 +729,15 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 
 class NipaPlayApp extends StatefulWidget {
   final String? launchFilePath;
+  final String? startupScriptPath;
+  final String? startupCommandError;
 
-  const NipaPlayApp({super.key, this.launchFilePath});
+  const NipaPlayApp({
+    super.key,
+    this.launchFilePath,
+    this.startupScriptPath,
+    this.startupCommandError,
+  });
 
   @override
   State<NipaPlayApp> createState() => _NipaPlayAppState();
@@ -717,6 +749,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   String? _lastSystemUiLogSignature;
   int _handledIncrementalSyncRun = 0;
+  StreamSubscription<client_notifications.ClientNotification>?
+      _clientNotificationSubscription;
 
   @override
   void initState() {
@@ -729,7 +763,11 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     }
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!kIsWeb && globals.supportsRustNativeBridge) {
+        _startClientNotifications();
+      }
       if (globals.isDesktop) {
+        unawaited(_runStartupCommand());
         SingleInstanceService.registerMessageHandler(
           _handleSingleInstanceMessage,
         );
@@ -761,8 +799,85 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     });
   }
 
+  void _startClientNotifications() {
+    try {
+      _clientNotificationSubscription ??=
+          client_notifications.subscribeClientNotifications().listen((notice) {
+        if (mounted) unawaited(_showClientNotification(notice));
+      });
+    } catch (error) {
+      debugPrint('客户端通知接口启动失败: $error');
+    }
+  }
+
+  Future<void> _runStartupCommand() async {
+    if (widget.startupCommandError != null) {
+      await _reportStartupResult('启动命令', widget.startupCommandError);
+      return;
+    }
+    final sourcePath = widget.startupScriptPath;
+    if (sourcePath == null) return;
+    await _loadStartupScriptPath(sourcePath);
+  }
+
+  Future<void> _loadStartupScriptPath(String sourcePath) async {
+    if (!mounted) return;
+    final scriptName = path.basename(sourcePath);
+    try {
+      final plugin = context.read<PluginService>();
+      await plugin.loadStartupScript(sourcePath);
+      await _reportStartupResult(scriptName, null);
+    } catch (error) {
+      await _reportStartupResult(scriptName, error.toString());
+    }
+  }
+
+  Future<void> _reportStartupResult(String scriptName, String? error) async {
+    try {
+      await startup_commands.reportStartupCommandResult(
+        scriptName: scriptName,
+        error: error,
+      );
+    } catch (bridgeError) {
+      debugPrint('启动命令通知失败: $bridgeError');
+      if (mounted) {
+        unawaited(_showClientNotification(
+          client_notifications.ClientNotification(
+            title: error == null ? '插件已就绪' : '插件载入失败',
+            message: error ?? '$scriptName 已自动载入并启用。',
+          ),
+        ));
+      }
+    }
+  }
+
+  Future<void> _showClientNotification(
+    client_notifications.ClientNotification notice,
+  ) async {
+    if (!mounted) return;
+    final dialogContext = navigatorKey.currentState?.overlay?.context;
+    if (dialogContext == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showClientNotification(notice));
+      });
+      return;
+    }
+    await BlurDialog.show<void>(
+      context: dialogContext,
+      title: notice.title,
+      content: notice.message,
+      actions: [
+        HoverScaleTextButton(
+          onPressed: () => navigatorKey.currentState?.pop(),
+          text: '知道了',
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
+    _clientNotificationSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
@@ -826,6 +941,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     }
     if (message.focus) {
       await _focusMainWindow();
+    }
+    final startupScriptPath = message.startupScriptPath;
+    if (startupScriptPath != null) {
+      await _loadStartupScriptPath(startupScriptPath);
     }
     final filePath = message.filePath;
     if (filePath != null) {

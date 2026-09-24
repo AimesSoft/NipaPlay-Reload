@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/ass_converter.dart';
+import 'api/client_notifications.dart';
 import 'api/danmaku_analytics.dart';
 import 'api/dfm_plus.dart';
 import 'api/file_scan.dart';
@@ -13,6 +14,7 @@ import 'api/media_probe.dart';
 import 'api/next2.dart';
 import 'api/performance.dart';
 import 'api/remote_directory.dart';
+import 'api/startup_commands.dart';
 import 'api/torrent.dart';
 import 'api/webdav_multistatus.dart';
 import 'dart:async';
@@ -30,10 +32,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<ClientNotification>
+      dco_decode_StreamSink_client_notification_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  ClientNotification dco_decode_box_autoadd_client_notification(dynamic raw);
 
   @protected
   DfmPlusFrameRequest dco_decode_box_autoadd_dfm_plus_frame_request(
@@ -66,6 +78,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  ClientNotification dco_decode_client_notification(dynamic raw);
 
   @protected
   DfmPlusDanmakuItem dco_decode_dfm_plus_danmaku_item(dynamic raw);
@@ -288,6 +303,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustWebDavEntry dco_decode_rust_web_dav_entry(dynamic raw);
 
   @protected
+  StartupCommand dco_decode_startup_command(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -300,10 +318,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<ClientNotification>
+      sse_decode_StreamSink_client_notification_Sse(
+          SseDeserializer deserializer);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  ClientNotification sse_decode_box_autoadd_client_notification(
+      SseDeserializer deserializer);
 
   @protected
   DfmPlusFrameRequest sse_decode_box_autoadd_dfm_plus_frame_request(
@@ -336,6 +366,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  ClientNotification sse_decode_client_notification(
+      SseDeserializer deserializer);
 
   @protected
   DfmPlusDanmakuItem sse_decode_dfm_plus_danmaku_item(
@@ -599,6 +633,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustWebDavEntry sse_decode_rust_web_dav_entry(SseDeserializer deserializer);
 
   @protected
+  StartupCommand sse_decode_startup_command(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
@@ -611,10 +648,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+      AnyhowException self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_client_notification_Sse(
+      RustStreamSink<ClientNotification> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_client_notification(
+      ClientNotification self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_dfm_plus_frame_request(
@@ -648,6 +697,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_client_notification(
+      ClientNotification self, SseSerializer serializer);
 
   @protected
   void sse_encode_dfm_plus_danmaku_item(
@@ -922,6 +975,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_rust_web_dav_entry(
       RustWebDavEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_startup_command(
+      StartupCommand self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

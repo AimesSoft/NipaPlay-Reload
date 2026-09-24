@@ -3,6 +3,8 @@ library video_player_state;
 export 'video_aspect_geometry.dart' show VideoAspectMode;
 
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay/services/plugin_playback_service.dart';
+import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
@@ -308,6 +310,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int _sourceResolutionGeneration = 0;
   int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;
