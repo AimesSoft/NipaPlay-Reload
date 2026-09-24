@@ -27,7 +27,38 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
+    bool manualMatchHandled = false,
   }) async {
+    final resolutionGeneration = ++_sourceResolutionGeneration;
+    final previousPlaybackGeneration = _playbackGeneration;
+    final resolutionContext = _context;
+    bool resolutionCancelled() =>
+        _isDisposed ||
+        resolutionGeneration != _sourceResolutionGeneration ||
+        previousPlaybackGeneration != _playbackGeneration;
+    if (actualPlayUrl == null &&
+        resolutionContext != null &&
+        resolutionContext.mounted &&
+        (videoPath.startsWith('https://') || videoPath.startsWith('http://'))) {
+      try {
+        final resolved = await PluginPlaybackService.prepare(
+          resolutionContext,
+          videoPath,
+          interactive: false,
+          historyItem: historyItem,
+          isCancelled: resolutionCancelled,
+        );
+        if (resolutionCancelled()) return;
+        if (resolved != null) {
+          videoPath = resolved.videoPath;
+          actualPlayUrl = resolved.actualPlayUrl;
+          historyItem = resolved.historyItem;
+          manualMatchHandled = true;
+        }
+      } on PluginResolutionCancelled {
+        return;
+      }
+    }
     _playbackErrorDialogRequested = false;
     final isRequestedEmbyStream = videoPath.startsWith('emby://');
     final requestedEmbyAccountKey = isRequestedEmbyStream
@@ -932,6 +963,25 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (danmakuAutoLoadSettings.skipMatching) {
           _clearDanmakuAutoLoadState();
           _addStatusMessage('已跳过弹幕匹配');
+          _applyTimelineDanmakuTrackForCurrentVideo();
+          _updateMergedDanmakuList();
+          return;
+        }
+
+        if (manualMatchHandled) {
+          if (_episodeId != null &&
+              _animeId != null &&
+              _episodeId! > 0 &&
+              _animeId! > 0) {
+            try {
+              await loadDanmaku(_episodeId.toString(), _animeId.toString());
+            } catch (e) {
+              if (!canContinue()) return;
+              _clearDanmakuAutoLoadState();
+              _addStatusMessage('手动匹配的弹幕加载失败');
+            }
+          }
+          if (!canContinue()) return;
           _applyTimelineDanmakuTrackForCurrentVideo();
           _updateMergedDanmakuList();
           return;
