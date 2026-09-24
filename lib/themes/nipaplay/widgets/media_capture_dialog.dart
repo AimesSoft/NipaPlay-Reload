@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -242,7 +243,9 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
           alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
         ));
       }
-      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android)) {
         unawaited(
             SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
       }
@@ -300,7 +303,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
       );
       return result;
     } catch (error) {
-      if (mounted) BlurSnackBar.show(context, 'GIF 导出失败：$error');
+      if (mounted) BlurSnackBar.show(context, 'GIF 导出或保存失败：$error');
       return null;
     } finally {
       if (mounted) {
@@ -338,18 +341,28 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   Future<void> _exportFile() async {
     final fileName = 'nipaplay_${DateTime.now().millisecondsSinceEpoch}.gif';
     try {
-      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android)) {
         final directory = await getTemporaryDirectory();
         final result = await _exportTo(
           p.join(directory.path, fileName),
           '正在导出 GIF…',
         );
         if (result == null || !mounted) return;
-        await SystemShareService.share(
-          filePath: result.outputPath,
-          mimeType: 'image/gif',
-          subject: 'NipaPlay GIF 动图',
-        );
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          await PhotoLibraryService.saveTemporaryFileToPhotos(
+            result.outputPath,
+            mimeType: 'image/gif',
+          );
+          if (mounted) BlurSnackBar.show(context, 'GIF 已保存到相册');
+        } else {
+          await SystemShareService.share(
+            filePath: result.outputPath,
+            mimeType: 'image/gif',
+            subject: 'NipaPlay GIF 动图',
+          );
+        }
         return;
       }
 
@@ -368,7 +381,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
         );
       }
     } catch (error) {
-      if (mounted) BlurSnackBar.show(context, 'GIF 导出或分享失败：$error');
+      if (mounted) BlurSnackBar.show(context, 'GIF 导出失败：$error');
     }
   }
 
@@ -615,12 +628,14 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                   onPressed: _isWorking
                       ? null
                       : () => unawaited(
-                            _captureImage(ScreenshotSaveTarget.file),
+                            _captureImage(!kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.android
+                                ? ScreenshotSaveTarget.photos
+                                : ScreenshotSaveTarget.file),
                           ),
-                  icon: Icon(!kIsWeb && Platform.isAndroid
-                      ? Icons.folder_outlined
-                      : Icons.camera_alt_outlined),
-                  label: Text(!kIsWeb && Platform.isAndroid ? '保存到文件' : '立即截取'),
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: const Text('立即截取'),
                 ),
             ],
           ),
