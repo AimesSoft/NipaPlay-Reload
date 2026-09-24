@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -17,5 +19,34 @@ class PhotoLibraryService {
     await _channel.invokeMethod<void>('saveImage', <String, dynamic>{
       'bytes': pngBytes,
     });
+  }
+
+  /// Copies a temporary JPEG or GIF into Android's shared photo library.
+  static Future<void> saveFileToPhotos(
+    String filePath, {
+    required String mimeType,
+  }) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      throw UnsupportedError('Gallery file save is only supported on Android');
+    }
+    await _channel.invokeMethod<void>('saveFile', <String, dynamic>{
+      'filePath': filePath,
+      'mimeType': mimeType,
+    });
+  }
+
+  static Future<void> saveTemporaryFileToPhotos(
+    String filePath, {
+    required String mimeType,
+  }) async {
+    try {
+      await saveFileToPhotos(filePath, mimeType: mimeType);
+    } finally {
+      try {
+        await File(filePath).delete();
+      } catch (_) {
+        // Temporary files can already have been cleared by the OS.
+      }
+    }
   }
 }

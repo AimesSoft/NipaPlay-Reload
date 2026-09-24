@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/widgets/intro_skip_button.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
@@ -366,10 +367,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       final path = await videoState.captureScreenshot(
         includeDanmaku: includeDanmaku,
         includeSubtitles: includeSubtitles,
+        temporary: Platform.isIOS || Platform.isAndroid,
       );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      if (Platform.isAndroid) {
+        await PhotoLibraryService.saveTemporaryFileToPhotos(
+          path,
+          mimeType: 'image/jpeg',
+        );
+        if (!mounted) return;
+        BlurSnackBar.show(context, '截图已保存到相册');
+        return;
+      }
+      if (Platform.isIOS) {
+        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');

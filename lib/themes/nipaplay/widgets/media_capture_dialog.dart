@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -62,6 +64,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   late final TextEditingController _heightController;
   late final TextEditingController _startTimeController;
   late final TextEditingController _endTimeController;
+  late final FocusNode _widthFocusNode;
+  late final FocusNode _heightFocusNode;
+  late final FocusNode _startTimeFocusNode;
+  late final FocusNode _endTimeFocusNode;
   late double _startMillis;
   late double _endMillis;
   late double _maximumMillis;
@@ -92,6 +98,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     _startTimeController =
         TextEditingController(text: _formatTime(_startMillis));
     _endTimeController = TextEditingController(text: _formatTime(_endMillis));
+    _startTimeFocusNode = FocusNode(debugLabel: 'gif-start-time');
+    _endTimeFocusNode = FocusNode(debugLabel: 'gif-end-time');
+    _widthFocusNode = FocusNode(debugLabel: 'gif-width');
+    _heightFocusNode = FocusNode(debugLabel: 'gif-height');
     final size = _recommendedSize();
     _widthController = TextEditingController(text: '${size.$1}');
     _heightController = TextEditingController(text: '${size.$2}');
@@ -119,6 +129,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     _heightController.dispose();
     _startTimeController.dispose();
     _endTimeController.dispose();
+    _widthFocusNode.dispose();
+    _heightFocusNode.dispose();
+    _startTimeFocusNode.dispose();
+    _endTimeFocusNode.dispose();
     final previewPath = _previewPath;
     if (previewPath != null) {
       unawaited(
@@ -216,6 +230,28 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     });
   }
 
+  void _focusGifField(FocusNode focusNode) {
+    if (_isWorking) return;
+    focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !focusNode.hasFocus) return;
+      final fieldContext = focusNode.context;
+      if (fieldContext != null) {
+        unawaited(Scrollable.ensureVisible(
+          fieldContext,
+          duration: const Duration(milliseconds: 180),
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        ));
+      }
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android)) {
+        unawaited(
+            SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+      }
+    });
+  }
+
   String? _validateSource() {
     if (!widget.videoState.player.supportsGifExport) {
       return '当前平台暂不支持 Erika GIF 导出工具。';
@@ -267,7 +303,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
       );
       return result;
     } catch (error) {
-      if (mounted) BlurSnackBar.show(context, 'GIF 导出失败：$error');
+      if (mounted) BlurSnackBar.show(context, 'GIF 导出或保存失败：$error');
       return null;
     } finally {
       if (mounted) {
@@ -303,19 +339,49 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   }
 
   Future<void> _exportFile() async {
-    final location = await getSaveLocation(
-      suggestedName: 'nipaplay_${DateTime.now().millisecondsSinceEpoch}.gif',
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'GIF 动图', extensions: ['gif']),
-      ],
-    );
-    if (location == null || !mounted) return;
-    final result = await _exportTo(location.path, '正在导出 GIF…');
-    if (result != null && mounted) {
-      BlurSnackBar.show(
-        context,
-        'GIF 已导出：${result.width}×${result.height}，${result.frameCount} 帧',
+    final fileName = 'nipaplay_${DateTime.now().millisecondsSinceEpoch}.gif';
+    try {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android)) {
+        final directory = await getTemporaryDirectory();
+        final result = await _exportTo(
+          p.join(directory.path, fileName),
+          '正在导出 GIF…',
+        );
+        if (result == null || !mounted) return;
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          await PhotoLibraryService.saveTemporaryFileToPhotos(
+            result.outputPath,
+            mimeType: 'image/gif',
+          );
+          if (mounted) BlurSnackBar.show(context, 'GIF 已保存到相册');
+        } else {
+          await SystemShareService.share(
+            filePath: result.outputPath,
+            mimeType: 'image/gif',
+            subject: 'NipaPlay GIF 动图',
+          );
+        }
+        return;
+      }
+
+      final location = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'GIF 动图', extensions: ['gif']),
+        ],
       );
+      if (location == null || !mounted) return;
+      final result = await _exportTo(location.path, '正在导出 GIF…');
+      if (result != null && mounted) {
+        BlurSnackBar.show(
+          context,
+          'GIF 已导出：${result.width}×${result.height}，${result.frameCount} 帧',
+        );
+      }
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, 'GIF 导出失败：$error');
     }
   }
 
@@ -562,7 +628,11 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                   onPressed: _isWorking
                       ? null
                       : () => unawaited(
-                            _captureImage(ScreenshotSaveTarget.file),
+                            _captureImage(!kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.android
+                                ? ScreenshotSaveTarget.photos
+                                : ScreenshotSaveTarget.file),
                           ),
                   icon: const Icon(Icons.camera_alt_outlined),
                   label: const Text('立即截取'),
@@ -697,6 +767,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                   Expanded(
                     child: _timeField(
                       controller: _startTimeController,
+                      focusNode: _startTimeFocusNode,
                       label: '开始时间',
                       onChanged: (_) => _handleTimeChanged(start: true),
                     ),
@@ -711,6 +782,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                   Expanded(
                     child: _timeField(
                       controller: _endTimeController,
+                      focusNode: _endTimeFocusNode,
                       label: '结束时间',
                       onChanged: (_) => _handleTimeChanged(start: false),
                     ),
@@ -732,14 +804,26 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
               _sectionLabel('输出尺寸'),
               Row(
                 children: [
-                  Expanded(child: _numberField(_widthController, '宽度')),
+                  Expanded(
+                    child: _numberField(
+                      _widthController,
+                      _widthFocusNode,
+                      '宽度',
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Text('×',
                         style: TextStyle(
                             color: colors.onSurface.withValues(alpha: 0.5))),
                   ),
-                  Expanded(child: _numberField(_heightController, '高度')),
+                  Expanded(
+                    child: _numberField(
+                      _heightController,
+                      _heightFocusNode,
+                      '高度',
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   _smallAction('推荐', () => _setOutputSize(_recommendedSize())),
                   const SizedBox(width: 6),
@@ -810,9 +894,12 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       );
 
-  Widget _numberField(TextEditingController controller, String label) {
+  Widget _numberField(
+      TextEditingController controller, FocusNode focusNode, String label) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
+      onTap: () => _focusGifField(focusNode),
       enabled: !_isWorking,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -826,11 +913,14 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
 
   Widget _timeField({
     required TextEditingController controller,
+    required FocusNode focusNode,
     required String label,
     required ValueChanged<String> onChanged,
   }) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
+      onTap: () => _focusGifField(focusNode),
       enabled: !_isWorking,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -880,7 +970,10 @@ class _Panel extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.onSurface.withValues(alpha: 0.09)),
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(type: MaterialType.transparency, child: child),
+      ),
     );
   }
 }
