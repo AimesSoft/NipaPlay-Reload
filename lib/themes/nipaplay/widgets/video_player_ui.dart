@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -982,14 +983,16 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         BlurSnackBar.show(context, '截图失败');
         return;
       }
-      if (isIos || isAndroid) {
-        final saved = await SystemShareService.exportFile(
+      if (isAndroid) {
+        await PhotoLibraryService.saveTemporaryFileToPhotos(
           path,
           mimeType: 'image/jpeg',
         );
-        if (mounted && isAndroid && saved) {
-          BlurSnackBar.show(context, '截图已保存到所选位置');
-        }
+        if (mounted) BlurSnackBar.show(context, '截图已保存到相册');
+        return;
+      }
+      if (isIos) {
+        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
         return;
       }
       final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;

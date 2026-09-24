@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/widgets/intro_skip_button.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
@@ -373,18 +374,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         BlurSnackBar.show(context, '截图失败');
         return;
       }
-      if (Platform.isIOS || Platform.isAndroid) {
-        final saved = await SystemShareService.exportFile(
+      if (Platform.isAndroid) {
+        await PhotoLibraryService.saveTemporaryFileToPhotos(
           path,
           mimeType: 'image/jpeg',
         );
         if (!mounted) return;
-        // iOS acknowledges that its Files picker opened, not that the user
-        // finished saving. Android returns only after the selected document
-        // has received the bytes.
-        if (saved && Platform.isAndroid) {
-          BlurSnackBar.show(context, '截图已保存到所选位置');
-        }
+        BlurSnackBar.show(context, '截图已保存到相册');
+        return;
+      }
+      if (Platform.isIOS) {
+        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');
