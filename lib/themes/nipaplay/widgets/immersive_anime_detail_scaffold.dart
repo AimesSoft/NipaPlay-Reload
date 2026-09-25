@@ -13,6 +13,13 @@ const int immersiveBackdropMinDecodeWidth = 1280;
 const int immersiveBackdropMaxDecodeWidth = 3840;
 
 String normalizeImmersiveSummaryText(String value) {
+  // Bangumi 简介常在中文译文后附带 “[简介原文] 日语原文”，
+  // 展示时剔除该标记及其后的全部内容，避免无谓地拉长文本。
+  final separator =
+      RegExp(r'[\[【]\s*简介原文\s*[\]】]').firstMatch(value);
+  if (separator != null) {
+    value = value.substring(0, separator.start);
+  }
   return value
       .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
       .replaceAll('```', '')
@@ -77,32 +84,40 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFF080B12),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final phoneSurface =
-              AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
-          final portrait = phoneSurface ||
-              constraints.maxHeight > constraints.maxWidth ||
-              constraints.maxWidth < 760;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              if (portrait)
-                _buildPortrait(context, constraints)
-              else
-                _buildLandscape(context, constraints),
-              if (commentsPanel != null)
-                _CommentsOverlay(
-                  open: commentsOpen,
-                  portrait: portrait,
-                  onClose: onCloseComments,
-                  child: commentsPanel!,
-                ),
-            ],
-          );
-        },
+    // 沉浸式详情页没有 Material 祖先，DefaultTextStyle 不带主题里的
+    // zh-Hans locale，Windows 上 CJK 文本会退回日文字形变体（如「达」
+    // 的走之底渲染成 ⻍）。在根部补一次 locale，页内文本统一继承。
+    return DefaultTextStyle(
+      style: DefaultTextStyle.of(context)
+          .style
+          .copyWith(locale: const Locale('zh-Hans')),
+      child: ColoredBox(
+        color: const Color(0xFF080B12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final phoneSurface =
+                AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+            final portrait = phoneSurface ||
+                constraints.maxHeight > constraints.maxWidth ||
+                constraints.maxWidth < 760;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (portrait)
+                  _buildPortrait(context, constraints)
+                else
+                  _buildLandscape(context, constraints),
+                if (commentsPanel != null)
+                  _CommentsOverlay(
+                    open: commentsOpen,
+                    portrait: portrait,
+                    onClose: onCloseComments,
+                    child: commentsPanel!,
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -132,8 +147,9 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                 ),
                 Positioned(
                   left: 0,
-                  // 标题区整体下移，收窄“观看”按钮与下方剧集轨道之间的空白。
-                  top: compact ? 60 : 92,
+                  // 标题区整体下移：大标题与左上角返回按钮拉开距离，
+                  // 简介自适应行数占住中间，操作按钮压到剧集栏上方。
+                  top: compact ? 88 : 150,
                   width: infoWidth,
                   bottom: railHeight + (compact ? 14 : 22),
                   child: Column(
@@ -148,19 +164,18 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                       ),
                       if (description?.trim().isNotEmpty == true) ...[
                         SizedBox(height: compact ? 8 : 16),
+                        // 简介按剩余空间自适应行数（loose）：操作按钮紧跟
+                        // 简介下方；展开时简介把按钮行往下顶，空间不足则
+                        // 简介区内部滚动、按钮停留在剧集栏上方。
                         Flexible(
                           fit: FlexFit.loose,
-                          child: _DescriptionViewport(
+                          child: _DescriptionBlock(
                             description: description!,
                             expanded: descriptionExpanded,
+                            onToggle: onToggleDescription,
                             compact: compact,
                           ),
                         ),
-                        if (onToggleDescription != null)
-                          _DescriptionToggle(
-                            expanded: descriptionExpanded,
-                            onPressed: onToggleDescription!,
-                          ),
                       ],
                       SizedBox(height: compact ? 6 : 14),
                       KeyedSubtree(
@@ -233,19 +248,12 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _DescriptionViewport(
+                          child: _DescriptionBlock(
                             description: description!,
                             expanded: descriptionExpanded,
+                            onToggle: onToggleDescription,
                           ),
                         ),
-                        if (onToggleDescription != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: _DescriptionToggle(
-                              expanded: descriptionExpanded,
-                              onPressed: onToggleDescription!,
-                            ),
-                          ),
                       ],
                       actionRow,
                       SizedBox(height: 235, child: episodeRail),
@@ -265,20 +273,13 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                         fit: FlexFit.loose,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _DescriptionViewport(
+                          child: _DescriptionBlock(
                             description: description!,
                             expanded: descriptionExpanded,
+                            onToggle: onToggleDescription,
                           ),
                         ),
                       ),
-                      if (onToggleDescription != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _DescriptionToggle(
-                            expanded: descriptionExpanded,
-                            onPressed: onToggleDescription!,
-                          ),
-                        ),
                     ],
                     actionRow,
                     Expanded(child: episodeRail),
@@ -664,47 +665,36 @@ class _InformationHeader extends StatelessWidget {
   }
 }
 
-class _DescriptionText extends StatelessWidget {
-  const _DescriptionText({
+/// 简介展示块：文本视口与“查看更多/收起”按钮的组合。
+///
+/// 收起状态下按可用高度自适应显示行数（占住标题与操作按钮之间的空间）；
+/// 实测完整文本在收起行数内就能显示时，自动隐藏展开按钮。
+/// 无界高度（滚动布局）中退化为固定行数，但仍保留精确的溢出测量。
+class _DescriptionBlock extends StatelessWidget {
+  const _DescriptionBlock({
     required this.description,
     required this.expanded,
+    required this.onToggle,
     this.compact = false,
   });
 
   final String description;
   final bool expanded;
+  final VoidCallback? onToggle;
   final bool compact;
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      description.trim(),
-      maxLines: expanded ? null : (compact ? 3 : 4),
-      overflow: expanded ? TextOverflow.clip : TextOverflow.ellipsis,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.86),
-        fontSize: compact ? 13 : 14,
-        height: 1.62,
-      ),
-    );
-  }
-}
+  static const int _fallbackLines = 4;
+  static const int _maxAdaptiveLines = 4;
+  // “查看更多”按钮的占位高度（minimumSize(44, 28) 收紧后）。
+  static const double _toggleHeight = 30.0;
 
-class _DescriptionViewport extends StatelessWidget {
-  const _DescriptionViewport({
-    required this.description,
-    required this.expanded,
-    this.compact = false,
-  });
-
-  final String description;
-  final bool expanded;
-  final bool compact;
-
+  // TextPainter 手动构造样式、不读 DefaultTextStyle，locale 需显式带上，
+  // 保证测量与显示使用同一套 CJK 字形变体。
   TextStyle _style() => TextStyle(
         color: Colors.white.withValues(alpha: 0.86),
         fontSize: compact ? 13 : 14,
         height: 1.62,
+        locale: const Locale('zh-Hans'),
       );
 
   @override
@@ -717,30 +707,71 @@ class _DescriptionViewport extends StatelessWidget {
           text: TextSpan(text: value, style: style),
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
-          maxLines: expanded ? null : (compact ? 3 : 4),
-          ellipsis: expanded ? null : '…',
         )..layout(maxWidth: constraints.maxWidth);
         final naturalHeight = painter.height;
-        final expandedHeightLimit =
-            painter.preferredLineHeight * (compact ? 5 : 6);
-        var viewportHeight = expanded && naturalHeight > expandedHeightLimit
-            ? expandedHeightLimit
-            : naturalHeight;
-        if (constraints.hasBoundedHeight &&
-            viewportHeight > constraints.maxHeight) {
-          viewportHeight = constraints.maxHeight;
+        final lineHeight = painter.preferredLineHeight;
+        final availableHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : null;
+
+        // 收起状态：按剩余空间换算可显示行数，用于占位。
+        int collapsedLines = compact ? 3 : _fallbackLines;
+        if (availableHeight != null && lineHeight > 0) {
+          collapsedLines =
+              (((availableHeight - _toggleHeight) / lineHeight).floor())
+                  .clamp(1, _maxAdaptiveLines);
+        }
+        final fitsCollapsed =
+            naturalHeight <= collapsedLines * lineHeight + 0.5;
+
+        double viewportHeight;
+        if (expanded) {
+          // 展开状态：完整显示，超出可用高度时滚动。
+          viewportHeight = naturalHeight;
+          if (availableHeight != null) {
+            viewportHeight =
+                viewportHeight.clamp(0.0, availableHeight - _toggleHeight);
+          }
+        } else {
+          viewportHeight = fitsCollapsed
+              ? naturalHeight
+              : collapsedLines * lineHeight;
+        }
+        if (availableHeight != null && viewportHeight > availableHeight) {
+          viewportHeight = availableHeight;
         }
 
-        return SizedBox(
-          height: viewportHeight,
-          child: SingleChildScrollView(
-            key: const ValueKey('immersive-description-scroll'),
-            child: _DescriptionText(
-              description: value,
-              expanded: expanded,
-              compact: compact,
+        final showToggle = onToggle != null && (expanded || !fitsCollapsed);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: viewportHeight.clamp(0.0, double.infinity),
+              // 展开后文本超出可视高度时可滚动，并显示滚动条指示。
+              child: Scrollbar(
+                thumbVisibility:
+                    expanded && naturalHeight > viewportHeight + 0.5,
+                child: SingleChildScrollView(
+                  key: const ValueKey('immersive-description-scroll'),
+                  child: Text(
+                    value,
+                    maxLines:
+                        expanded || fitsCollapsed ? null : collapsedLines,
+                    overflow: expanded || fitsCollapsed
+                        ? TextOverflow.clip
+                        : TextOverflow.ellipsis,
+                    style: style,
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (showToggle)
+              _DescriptionToggle(
+                expanded: expanded,
+                onPressed: onToggle!,
+              ),
+          ],
         );
       },
     );

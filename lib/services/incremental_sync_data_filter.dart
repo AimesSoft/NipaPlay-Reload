@@ -1,3 +1,4 @@
+import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
@@ -14,6 +15,7 @@ class IncrementalSyncDataFilter {
   static Map<String, dynamic> sanitizeBackup(
     Map<String, dynamic> backup, {
     Map<String, String> webDavConnectionTombstones = const {},
+    Map<String, String> animeDeletionTombstones = const {},
   }) {
     final result = Map<String, dynamic>.from(backup);
 
@@ -29,20 +31,48 @@ class IncrementalSyncDataFilter {
       result[BackupCategory.mediaLibraries.name] = sanitizedMediaLibraries;
     }
 
+    final deletedAnimeIds = animeDeletionTombstones.keys
+        .map(int.tryParse)
+        .whereType<int>()
+        .toSet();
     for (final category in const [
       BackupCategory.watchHistory,
       BackupCategory.episodeMatches,
     ]) {
       final records = backup[category.name];
       if (records is List) {
+        final isWatchHistory = category == BackupCategory.watchHistory;
         result[category.name] = records
             .where((record) =>
                 record is Map &&
-                !isDeviceLocalRecord(record, localLibraryRoots))
+                !isDeviceLocalRecord(record, localLibraryRoots) &&
+                !_isDeletedAnimeRecord(record, deletedAnimeIds) &&
+                (!isWatchHistory || !_isUnknownAnimePlaceholder(record)))
             .toList();
       }
     }
     return result;
+  }
+
+  /// 将番剧删除墓碑注入展平后的增量同步状态（watchHistory 分类下的
+  /// `deletedAnime:<animeId>` 特殊条目），使删除意图随 diff 传播：
+  /// - 其他端应用墓碑条目 → 删除本地对应番剧记录并记下墓碑；
+  /// - 墓碑过期 GC 或本地复活（clear）→ key 从状态消失 → deleted op
+  ///   → 各端解除删除标记。
+  static void injectAnimeDeletionTombstones(
+    IncrementalSyncState state,
+    Map<String, String> tombstones,
+  ) {
+    if (tombstones.isEmpty) return;
+    final watchState =
+        state.putIfAbsent(BackupCategory.watchHistory.name, () => {});
+    for (final entry in tombstones.entries) {
+      watchState[AnimeDeletionTombstones.keyFor(entry.key)] =
+          AnimeDeletionTombstones.tombstoneValue(
+        animeId: entry.key,
+        deletedAt: entry.value,
+      );
+    }
   }
 
   static IncrementalSyncState sanitizeState(IncrementalSyncState state) {
@@ -122,6 +152,27 @@ class IncrementalSyncDataFilter {
     return localLibraryRoots.any(
       (root) => _isPathInsideLibrary(filePath, root),
     );
+  }
+
+  /// 命中删除墓碑的观看记录/剧集匹配不进入跨设备仓库，防止本地已
+  /// 删除番剧经云端回灌。
+  static bool _isDeletedAnimeRecord(
+    Map<dynamic, dynamic> record,
+    Set<int> deletedAnimeIds,
+  ) {
+    if (deletedAnimeIds.isEmpty) return false;
+    final animeId = (record['animeId'] as num?)?.toInt();
+    return animeId != null && deletedAnimeIds.contains(animeId);
+  }
+
+  /// 「未知动画」占位脏条目：无 animeName 且没有任何实际观看痕迹。
+  /// 多由匹配清理/远端文件删除后的残留回写产生。
+  static bool _isUnknownAnimePlaceholder(Map<dynamic, dynamic> record) {
+    final animeName = record['animeName']?.toString().trim() ?? '';
+    if (animeName.isNotEmpty) return false;
+    final lastPosition = (record['lastPosition'] as num?)?.toInt() ?? 0;
+    final watchProgress = (record['watchProgress'] as num?)?.toDouble() ?? 0.0;
+    return lastPosition <= 0 && watchProgress <= 0;
   }
 
   static bool _isRemoteMediaPath(String filePath) {
