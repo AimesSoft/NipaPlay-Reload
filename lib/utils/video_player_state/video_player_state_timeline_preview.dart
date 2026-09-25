@@ -57,8 +57,17 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     _timelinePreviewDirectory = null;
     _timelinePreviewVideoKey = null;
     _timelinePreviewSessionId++;
-    _disposeTimelinePreviewPlayer();
-    _timelinePreviewSerialTask = Future.value();
+    // 不能在 UI 线程上立即 dispose 预览播放器：它可能正卡在 seek/snapshot 的
+    // 原生调用中，MDK delete 会 join 原生线程，从而冻结整个窗口（未响应）。
+    // 先摘除引用，再把释放排到当前串行截图队列之后，确保没有在途截图任务后
+    // 才真正释放；bump 过的 session 也会让在途任务自行短路退出。
+    final oldPlayer = _timelinePreviewPlayer;
+    _timelinePreviewPlayer = null;
+    _timelinePreviewPlayerKernel = null;
+    _timelinePreviewPlayerSource = null;
+    _timelinePreviewSerialTask = _timelinePreviewSerialTask
+        .then((_) => _releasePreviewPlayerSafely(oldPlayer))
+        .then((_) => null, onError: (_) => null);
   }
 
   Future<void> _setupTimelinePreviewForVideo(String path) async {
@@ -222,6 +231,17 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
+      if (kernel == PlayerKernelType.mdk) {
+        // 截图播放器强制软解：主播放器此时通常正以 D3D11 硬解（MFT:d3d=11）
+        // 播放，第二个 MDK 实例再起一套 D3D11 硬解设备，会在部分机器上与主
+        // 实例争用 GPU/驱动资源，严重时原生渲染线程挂起、整个窗口未响应
+        // （日志戛然而止、无任何异常）。缩略图仅 320x180，软解开销可忽略。
+        try {
+          previewPlayer.setDecoders(PlayerMediaType.video, const ['FFmpeg']);
+        } catch (e) {
+          debugPrint('设置时间轴截图软解失败: $e');
+        }
+      }
       previewPlayer.setMedia(source, PlayerMediaType.video);
       await previewPlayer.prepare();
       previewPlayer.state = PlayerPlaybackState.paused;
@@ -239,7 +259,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       return previewPlayer;
     } catch (e) {
       debugPrint('初始化时间轴截图播放器失败: $e');
-      previewPlayer.dispose();
+      unawaited(_releasePreviewPlayerSafely(previewPlayer));
       return null;
     }
   }
@@ -254,18 +274,44 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   void _disposeTimelinePreviewPlayer() {
-    try {
-      _timelinePreviewPlayer?.dispose();
-    } catch (_) {}
+    final player = _timelinePreviewPlayer;
     _timelinePreviewPlayer = null;
     _timelinePreviewPlayerKernel = null;
     _timelinePreviewPlayerSource = null;
+    unawaited(_releasePreviewPlayerSafely(player));
+  }
+
+  /// 安全释放预览播放器：先停止播放让原生渲染/解码线程退出当前帧，短暂等待
+  /// 后再 delete，避免与在途 seek/snapshot 并发进入 MDK 原生层造成线程挂死。
+  /// 全程不在 UI 线程上同步等待原生调用。
+  Future<void> _releasePreviewPlayerSafely(AbstractPlayer? player) async {
+    if (player == null) return;
+    try {
+      player.state = PlayerPlaybackState.stopped;
+    } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    try {
+      player.dispose();
+    } catch (_) {}
   }
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
     final next = _timelinePreviewSerialTask.then((_) => task());
     _timelinePreviewSerialTask = next.then((_) => null, onError: (_) => null);
     return next;
+  }
+
+  /// fvp 的 snapshot 由原生渲染线程异步回调完成；当渲染表面不可见或原生
+  /// 线程卡住时回调可能永远不来，这里统一加 2 秒超时，避免串行截图队列被
+  /// 一个永不完成的 Future 永久堵死（进而拖住后续释放播放器的任务）。
+  Future<PlayerFrame?> _timelineSnapshotWithTimeout(
+    AbstractPlayer player, {
+    required int width,
+    required int height,
+  }) {
+    return player
+        .snapshot(width: width, height: height)
+        .timeout(const Duration(seconds: 2), onTimeout: () => null);
   }
 
   Future<PlayerFrame?> _captureTimelineFrame(
@@ -309,16 +355,27 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (kernel == PlayerKernelType.mdk) {
         // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
-        await player.snapshot(width: targetWidth, height: targetHeight);
+        await _timelineSnapshotWithTimeout(
+          player,
+          width: targetWidth,
+          height: targetHeight,
+        );
         await Future.delayed(const Duration(milliseconds: 60));
       }
 
-      PlayerFrame? frame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      PlayerFrame? frame = await _timelineSnapshotWithTimeout(
+        player,
+        width: targetWidth,
+        height: targetHeight,
+      );
       if ((frame == null || frame.bytes.isEmpty) &&
           kernel == PlayerKernelType.mdk) {
         await Future.delayed(const Duration(milliseconds: 80));
-        frame = await player.snapshot(width: targetWidth, height: targetHeight);
+        frame = await _timelineSnapshotWithTimeout(
+          player,
+          width: targetWidth,
+          height: targetHeight,
+        );
       }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
@@ -450,11 +507,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
 
     final total = _duration.inMilliseconds;
+    // 只预取开头和中点两帧：预取阶段第二播放器刚创建，与主播放器的初始化/
+    // 硬解同时进行，采样点过多会加剧 GPU 争用；其余位置由悬停时按需生成。
     final samples = <int>{
       0,
-      total ~/ 4,
       total ~/ 2,
-      (total - _timelinePreviewIntervalMs).clamp(0, total - 1),
     };
 
     for (final bucket in samples) {
@@ -476,7 +533,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final total = _duration.inMilliseconds;
     final interval =
         _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
-    const int maxThumbnails = 80;
+    // 后台填充要克制：每个缩略图都伴随第二播放器的 seek/播放/暂停/多次
+    // snapshot，长视频全速填充会持续与主播放器争用解码与 GPU，曾导致整个
+    // 窗口未响应。上限降到 24 张、间隔拉大到 600ms，日常悬停基本都能命中
+    // 缓存，未命中的位置再按需即时生成。
+    const int maxThumbnails = 24;
     int generated = 0;
 
     for (int bucket = 0;
@@ -490,7 +551,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       }
       await _createTimelineThumbnail(bucket, session);
       generated++;
-      await Future.delayed(const Duration(milliseconds: 220));
+      await Future.delayed(const Duration(milliseconds: 600));
     }
   }
 
