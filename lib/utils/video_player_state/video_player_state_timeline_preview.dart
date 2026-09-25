@@ -246,13 +246,9 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       await previewPlayer.prepare();
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
-      if (kernel == PlayerKernelType.mdk) {
-        try {
-          await previewPlayer.updateTexture();
-        } catch (e) {
-          debugPrint('初始化时间轴截图纹理失败: $e');
-        }
-      }
+      // Windows 上绝不调用 updateTexture()：它会通过 "CreateRT" method channel
+      // 在 platform 线程创建第二套 D3D11 共享纹理，与主播放器的纹理路径
+      // 存在原生层死锁风险。MDK 的 snapshot 是原生离屏抓帧，不依赖纹理挂载。
       _timelinePreviewPlayer = previewPlayer;
       _timelinePreviewPlayerKernel = kernel;
       _timelinePreviewPlayerSource = source;
@@ -320,14 +316,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     try {
       final kernel =
           _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
-      if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
-          player.textureId.value == null) {
-        try {
-          await player.updateTexture();
-        } catch (e) {
-          debugPrint('时间轴截图纹理创建失败: $e');
-        }
-      }
+      // Windows 上不调用 updateTexture()，纹理创建本身就会触发死锁。
 
       int targetHeight = _timelinePreviewMaxHeight;
       int targetWidth = _timelinePreviewDefaultWidth;
