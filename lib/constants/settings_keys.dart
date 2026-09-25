@@ -17,6 +17,11 @@ class SettingsKeys {
 
   static const String fastPlaybackStartup = 'fast_playback_startup';
 
+  static const String showPlayerMenuQuickControls =
+      'show_player_menu_quick_controls';
+
+  static const String showMediaLibraryNewBadge = 'show_media_library_new_badge';
+
   // =========================== 外部播放器相关设置 ============================
 
   static const String useExternalPlayer =

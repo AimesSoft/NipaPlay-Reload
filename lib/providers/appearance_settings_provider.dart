@@ -59,6 +59,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late RecentWatchingStyle _recentWatchingStyle;
   late double _uiScale;
   late bool _showAnimeCardSummary;
+  late bool _showMediaLibraryNewBadge;
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
   late FolderNameDisplayMode _folderNameDisplayMode;
@@ -77,6 +78,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
+  bool get showMediaLibraryNewBadge => _showMediaLibraryNewBadge;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
   FolderNameDisplayMode get folderNameDisplayMode => _folderNameDisplayMode;
@@ -103,6 +105,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
     _uiScale = _resolveDefaultUiScale();
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
+    _showMediaLibraryNewBadge = true;
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _accentColorPreset = AppAccentColorPreset.rose;
     _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
@@ -139,6 +142,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _showDanmakuDensityChart =
           prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
+      _showMediaLibraryNewBadge =
+          prefs.getBool(SettingsKeys.showMediaLibraryNewBadge) ?? true;
       _diffuseLowResolutionPosters =
           prefs.getBool(_diffuseLowResolutionPostersKey) ?? true;
       _showHomeHeroBanner = prefs.getBool(_showHomeHeroBannerKey) ?? true;
@@ -279,6 +284,20 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_showAnimeCardSummaryKey, value);
     } catch (e) {
       debugPrint('保存番剧卡片简介显示设置时出错: $e');
+    }
+  }
+
+  Future<void> setShowMediaLibraryNewBadge(bool value) async {
+    if (_showMediaLibraryNewBadge == value) return;
+
+    _showMediaLibraryNewBadge = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(SettingsKeys.showMediaLibraryNewBadge, value);
+    } catch (e) {
+      debugPrint('保存媒体库 NEW 标识显示设置时出错: $e');
     }
   }
 

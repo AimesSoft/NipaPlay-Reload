@@ -72,11 +72,53 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       ImageCacheManager.instance.clear();
     });
+    testWidgets('${testCase.name} updates NEW badge visibility immediately',
+        (tester) async {
+      final appearance = AppearanceSettingsProvider();
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppearanceSettingsProvider>.value(
+          value: appearance,
+          child: MaterialApp(
+            home: AppDisplaySurfaceScope(
+              surface: testCase.surface,
+              child: NipaplayLargeScreenModeScope(
+                isActive: testCase.largeScreen,
+                child: const SizedBox(
+                  width: 1280,
+                  height: 720,
+                  child: _MediaCollectionReorderHarness(
+                    newAnimeIds: <int>{1},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('NEW'), findsOneWidget);
+
+      await appearance.setShowMediaLibraryNewBadge(false);
+      await tester.pump();
+      expect(find.text('NEW'), findsNothing);
+
+      await appearance.setShowMediaLibraryNewBadge(true);
+      await tester.pump();
+      expect(find.text('NEW'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      ImageCacheManager.instance.clear();
+    });
   }
 }
 
 class _MediaCollectionReorderHarness extends StatefulWidget {
-  const _MediaCollectionReorderHarness({super.key});
+  const _MediaCollectionReorderHarness({
+    super.key,
+    this.newAnimeIds = const <int>{},
+  });
+
+  final Set<int> newAnimeIds;
 
   @override
   State<_MediaCollectionReorderHarness> createState() =>
@@ -106,7 +148,7 @@ class _MediaCollectionReorderHarnessState
       items: _items,
       allHistory: _items,
       details: const {},
-      newAnimeIds: const <int>{},
+      newAnimeIds: widget.newAnimeIds,
       onRefresh: () async {},
       onTap: (_) {},
     );
