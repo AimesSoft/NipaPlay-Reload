@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay/services/incremental_sync_data_filter.dart';
@@ -275,12 +276,21 @@ class AutoSyncService extends ChangeNotifier {
       // artifacts and must never enter the cross-device repository.
       includeWatchHistoryThumbnails: false,
     );
+    final animeDeletionTombstones =
+        await AnimeDeletionTombstones.activeTombstones();
     final localBackup = IncrementalSyncDataFilter.sanitizeBackup(
       collectedLocalBackup,
       webDavConnectionTombstones: WebDAVService.instance.connectionTombstones,
+      animeDeletionTombstones: animeDeletionTombstones,
     );
     final localState =
         IncrementalSyncCodec.flattenBackup(localBackup, categories);
+    // 番剧删除墓碑以特殊条目进入同步状态：远端据此删除对应番剧记录，
+    // 同时上传侧已过滤掉该番剧的残留数据，防止云端脏条目回灌。
+    IncrementalSyncDataFilter.injectAnimeDeletionTombstones(
+      localState,
+      animeDeletionTombstones,
+    );
     if (manifestBytes == null) {
       return _createRepository(
         transport: transport,
@@ -854,6 +864,14 @@ class AutoSyncService extends ChangeNotifier {
           )) {
         await BangumiService.instance
             .deleteAnimeDetailFromBackupKey(operation.key);
+      } else if (operation.category == BackupCategory.watchHistory.name &&
+          AnimeDeletionTombstones.isDeletionKey(operation.key)) {
+        // 墓碑 key 从远端状态消失 = 删除意图已过期 GC 或远端复活，
+        // 同步解除本地墓碑，让该番剧后续数据恢复正常写入。
+        final animeId = AnimeDeletionTombstones.animeIdFromKey(operation.key);
+        if (animeId != null) {
+          await AnimeDeletionTombstones.clear(animeId);
+        }
       } else if (operation.category == BackupCategory.watchHistory.name) {
         await database.deleteHistory(operation.key);
       } else if (operation.category == BackupCategory.episodeMatches.name) {
@@ -943,6 +961,27 @@ class AutoSyncService extends ChangeNotifier {
       );
     }
 
+    for (final operation in operations.where(
+      (operation) =>
+          !operation.deleted &&
+          operation.category == BackupCategory.watchHistory.name &&
+          AnimeDeletionTombstones.isDeletionKey(operation.key) &&
+          AnimeDeletionTombstones.isTombstone(operation.value),
+    )) {
+      final animeId = AnimeDeletionTombstones.animeIdFromKey(operation.key);
+      if (animeId == null) continue;
+      // 应用远端删除意图：删除本地该番剧的全部记录并记下墓碑。
+      // deletedAt 沿用远端原值，避免两端互相刷新时间戳导致墓碑永不过期。
+      await WatchHistoryManager.removeHistoryByAnimeId(
+        animeId,
+        recordTombstone: false,
+      );
+      final deletedAt = operation.value is Map
+          ? DateTime.tryParse(operation.value['deletedAt']?.toString() ?? '')
+          : null;
+      await AnimeDeletionTombstones.record(animeId, deletedAt: deletedAt);
+    }
+
     final changedState = <String, Map<String, dynamic>>{};
     for (final operation in operations.where(
       (operation) =>
@@ -951,7 +990,10 @@ class AutoSyncService extends ChangeNotifier {
               IncrementalSyncWebDavConnections.isConnectionKey(
                 operation.key,
               ) &&
-              IncrementalSyncWebDavConnections.isTombstone(operation.value)),
+              IncrementalSyncWebDavConnections.isTombstone(operation.value)) &&
+          // 番剧删除墓碑不是观看记录，不能经 restoreFromData 恢复。
+          !(operation.category == BackupCategory.watchHistory.name &&
+              AnimeDeletionTombstones.isDeletionKey(operation.key)),
     )) {
       changedState.putIfAbsent(operation.category, () => {})[operation.key] =
           operation.value;

@@ -47,6 +47,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
@@ -2135,34 +2136,43 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ),
               SizedBox(width: 12),
-              if (_lastWatchedEpisode != null)
-                Builder(builder: (context) {
-                  final episodeId = _lastWatchedEpisode!.episodeId;
-                  if (episodeId != null) {
-                    // 查找对应的剧集
-                    final episode = episodes.firstWhere(
-                      (ep) => ep.id == episodeId,
-                      orElse: () => episodes.first,
+              Builder(builder: (context) {
+                final lastWatched = _lastWatchedEpisode;
+                if (lastWatched == null) {
+                  // 没有任何实际播放记录时明确提示，而不是隐藏该元素。
+                  return Text(
+                    '上次观看：没有记录',
+                    locale: const Locale('zh-Hans', 'zh'),
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 12,
+                    ),
+                  );
+                }
+                final episodeId = lastWatched.episodeId;
+                if (episodeId != null) {
+                  // 查找对应的剧集
+                  final episode = episodes.firstWhere(
+                    (ep) => ep.id == episodeId,
+                    orElse: () => episodes.first,
+                  );
+                  // 提取标题的第一个词作为剧集标识
+                  final title = episode.title;
+                  final parts = title.split(' ');
+                  if (parts.isNotEmpty) {
+                    final firstPart = parts[0];
+                    return Text(
+                      '上次观看：$firstPart',
+                      locale: const Locale('zh-Hans', 'zh'),
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                        fontSize: 12,
+                      ),
                     );
-                    // 提取标题的第一个词作为剧集标识
-                    final title = episode.title;
-                    final parts = title.split(' ');
-                    if (parts.isNotEmpty) {
-                      final firstPart = parts[0];
-                      return Text(
-                        '上次观看：$firstPart',
-                        locale: const Locale('zh-Hans', 'zh'),
-                        style: TextStyle(
-                          color: secondaryTextColor,
-                          fontSize: 12,
-                        ),
-                      );
-                    }
                   }
-                  return const SizedBox.shrink();
-                })
-              else
-                const SizedBox.shrink(),
+                }
+                return const SizedBox.shrink();
+              }),
               const Spacer(),
               _wrapLargeScreenFocusable(
                 onActivate: _isCleaningEpisodeHistory
@@ -2848,8 +2858,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final lastEpisode = episodes[lastIndex];
     final isFinished = lastWatched.watchProgress >= _kFinishedWatchThreshold;
     if (!isFinished) {
+      // 历史记录的 lastPosition/duration 单位为毫秒，格式化前换算为秒。
       final detail = _hasReliableLocalDuration(lastWatched)
-          ? '${lastWatched.episodeTitle ?? '上次观看'}  ${_formatPlaybackTime(lastWatched.lastPosition)} / ${_formatPlaybackTime(lastWatched.duration)}'
+          ? '${lastWatched.episodeTitle ?? '上次观看'}  ${_formatPlaybackTime(lastWatched.lastPosition ~/ 1000)} / ${_formatPlaybackTime(lastWatched.duration ~/ 1000)}'
           : lastWatched.episodeTitle ?? '上次观看';
       return (
         episode: lastEpisode,
@@ -3285,8 +3296,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   hasEpisodePrefix || episodeTitle.isEmpty ? '' : episodeTitle,
               thumbnailPath: history?.thumbnailPath,
               progress: progress,
-              durationLabel:
-                  duration > 0 ? _formatPlaybackTime(duration) : null,
+              // duration 单位为毫秒，格式化前换算为秒。
+              durationLabel: duration > 0
+                  ? _formatPlaybackTime(duration ~/ 1000)
+                  : null,
               isCurrent: _lastWatchedEpisode?.episodeId == episode.id,
               isCompleted: progress >= _kFinishedWatchThreshold ||
                   _dandanplayWatchStatus[episode.id] == true,
@@ -3431,7 +3444,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             : anime.nameCn;
     final displaySubtitle = _buildImmersiveSubtitle(anime);
     final summary = _immersiveSummary(anime);
-    final canExpandSummary = summary.length > 130;
 
     if (anime.id > 0 && _lastWatchedEpisode == null && !_isLoadingLastWatched) {
       _loadLastWatchedEpisode(anime.id);
@@ -3445,12 +3457,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       rating: _immersiveBangumiRating(anime),
       description: summary.isEmpty ? null : summary,
       descriptionExpanded: _isImmersiveDescriptionExpanded,
-      onToggleDescription: canExpandSummary
-          ? () => setState(() {
-                _isImmersiveDescriptionExpanded =
-                    !_isImmersiveDescriptionExpanded;
-              })
-          : null,
+      // 显隐交给 Scaffold 内部按实测溢出情况决定，不再按字符数猜测。
+      onToggleDescription: () => setState(() {
+        _isImmersiveDescriptionExpanded = !_isImmersiveDescriptionExpanded;
+      }),
       actions: _buildImmersiveActions(anime),
       episodeRail: _buildImmersiveEpisodeRail(anime),
       onBack: _dismissDetailIfNeeded,
@@ -3478,10 +3488,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               statusBarBrightness: Brightness.dark,
             ),
             child: Theme(
-              data: ThemeData.dark(useMaterial3: false).copyWith(
-                colorScheme: ThemeData.dark(useMaterial3: false)
-                    .colorScheme
-                    .copyWith(primary: AppAccentColors.current),
+              // 全新构造的局部主题必须经过 AppTheme.applyHansLocale：
+              // 按钮/菜单内部的 Material 会用该主题的 bodyMedium/
+              // labelLarge 替换式注入 DefaultTextStyle，绕过 Scaffold 根部
+              // 的 zh-Hans locale，导致 CJK 字形退回日文变体。
+              data: AppTheme.applyHansLocale(
+                ThemeData.dark(useMaterial3: false).copyWith(
+                  colorScheme: ThemeData.dark(useMaterial3: false)
+                      .colorScheme
+                      .copyWith(primary: AppAccentColors.current),
+                ),
               ),
               child: Material(
                 color: const Color(0xFF080B12),
@@ -3738,11 +3754,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     try {
       final historyItems =
           await WatchHistoryManager.getHistoryItemsByAnimeId(animeId);
-      if (historyItems.isNotEmpty) {
+      // 过滤掉仅由媒体库扫描/文件匹配生成、没有任何实际播放痕迹的记录，
+      // 避免未看过的番剧把“上次观看”错标为某个文件（如最后一话）。
+      final watchedItems = historyItems
+          .where(
+              (item) => item.lastPosition > 0 || item.watchProgress > 0)
+          .toList();
+      if (watchedItems.isNotEmpty) {
         // 按最后观看时间排序，取最近的一个
-        historyItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+        watchedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
         setState(() {
-          _lastWatchedEpisode = historyItems.first;
+          _lastWatchedEpisode = watchedItems.first;
         });
       }
     } catch (e) {
