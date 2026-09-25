@@ -251,12 +251,16 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           Provider.of<WatchHistoryProvider>(context, listen: false);
       if (watchHistoryProvider.isLoaded) {
         try {
-          // 本地 + WebDAV + SMB 的观看记录
+          // 本地 + WebDAV + SMB 的观看记录；排除已清除匹配信息的记录
+          // （animeName 为空，会显示成“未知动画”）与仅由扫描/匹配生成、
+          // 没有实际播放痕迹的记录。
           final localHistory = watchHistoryProvider.history
               .where((item) =>
                   !item.filePath.startsWith('jellyfin://') &&
                   !item.filePath.startsWith('emby://') &&
-                  !item.isDandanplayRemote)
+                  !item.isDandanplayRemote &&
+                  item.animeName.isNotEmpty &&
+                  (item.lastPosition > 0 || item.watchProgress > 0))
               .toList();
 
           // 按animeId分组，获取每个动画的最新观看记录
