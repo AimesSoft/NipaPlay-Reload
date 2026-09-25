@@ -1135,18 +1135,21 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
       source,
       sourceLabel: sourceLabel,
     );
+    final showNewBadges =
+        context.watch<AppearanceSettingsProvider>().showMediaLibraryNewBadge;
     if (_useTelevisionCollectionLayout(context)) {
-      return _buildTelevision(context, emptyContent);
+      return _buildTelevision(context, emptyContent, showNewBadges);
     }
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
-      return _buildPhone(context, emptyContent);
+      return _buildPhone(context, emptyContent, showNewBadges);
     }
-    return _buildDesktop(context, emptyContent);
+    return _buildDesktop(context, emptyContent, showNewBadges);
   }
 
   material.Widget _buildTelevision(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     if (isLoading) {
       return material.Center(
@@ -1201,7 +1204,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 // （一次可达数 MB，且解码本身要几十毫秒主 isolate CPU）。
                 imageDecodeWidth: 400,
                 imageDecodeHeight: 560,
-                showNewBadge: newAnimeIds.contains(item.animeId),
+                showNewBadge:
+                    showNewBadges && newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               ),
             );
@@ -1214,6 +1218,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   material.Widget _buildPhone(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     final slivers = <material.Widget>[
       cupertino.CupertinoSliverRefreshControl(onRefresh: onRefresh),
@@ -1259,7 +1264,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 sourceLabel: sourceLabel,
                 rating: detail?.rating,
                 summary: detail?.summary,
-                showNewBadge: newAnimeIds.contains(item.animeId),
+                showNewBadge:
+                    showNewBadges && newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               );
             },
@@ -1278,6 +1284,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   material.Widget _buildDesktop(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     if (isLoading) {
       return material.Center(
@@ -1320,7 +1327,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           source: AnimeCard.getSourceFromFilePath(item.filePath),
           summary: detail?.summary,
           progress: _watchProgress(item.animeId!, detail),
-          showNewBadge: newAnimeIds.contains(item.animeId),
+          showNewBadge: showNewBadges && newAnimeIds.contains(item.animeId),
           onTap: () => onTap(item),
         );
       },
