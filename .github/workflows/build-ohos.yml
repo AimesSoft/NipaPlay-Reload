@@ -256,7 +256,7 @@ jobs:
               elif old_count == 0 and new_count == 1:
                   continue
               else:
-                  raise SystemExit(f'Unexpected Erika 0.1.9 ArkTS source: {old}')
+                  raise SystemExit(f'Unexpected Erika 0.2.0 ArkTS source: {old}')
           path.write_text(source, encoding='utf-8')
           PY
           python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
