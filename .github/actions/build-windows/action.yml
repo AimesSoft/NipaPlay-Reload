@@ -354,7 +354,45 @@ runs:
         Copy-Item -Path $dll.FullName -Destination "windows\libmpv-2.dll" -Force
         Remove-Item $packagePath -Force -ErrorAction SilentlyContinue
         Write-Host "libmpv-2.dll 已下载并可用于后续打包"
-    
+
+    - name: Download ffmpeg for timeline preview
+      shell: pwsh
+      env:
+        # BtbN 官方 nightly 固定下载地址（GitHub Releases，runner 内网速度）
+        FFMPEG_URL: "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+      run: |
+        $ErrorActionPreference = "Stop"
+        $zipPath = "windows\ffmpeg.zip"
+        $extractDir = "windows\ffmpeg-package"
+        $downloaded = $false
+        foreach ($attempt in 1..3) {
+          try {
+            Write-Host "Downloading ffmpeg (attempt $attempt) from $env:FFMPEG_URL ..."
+            Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile $zipPath -UseBasicParsing -TimeoutSec 300
+            if ((Test-Path $zipPath) -and (Get-Item $zipPath).Length -gt 10MB) {
+              $downloaded = $true
+              break
+            }
+            Write-Warning "ffmpeg 压缩包体积异常，重试"
+          } catch {
+            Write-Warning "ffmpeg 下载失败：$($_.Exception.Message)"
+            Start-Sleep -Seconds 5
+          }
+        }
+        if (-not $downloaded) {
+          throw "ffmpeg 下载失败，时间轴截图预览功能需要 ffmpeg.exe"
+        }
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        $exe = Get-ChildItem -Path $extractDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+        if (-not $exe) {
+          throw "解压后未找到 ffmpeg.exe"
+        }
+        Copy-Item -Path $exe.FullName -Destination "windows\ffmpeg.exe" -Force
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "ffmpeg.exe 已准备好：windows\ffmpeg.exe"
+
     - name: Build Windows
       id: build
       shell: pwsh
@@ -451,6 +489,13 @@ runs:
         }
         Copy-Item -Path $CustomLib -Destination "$SrcDir\libmpv-2.dll" -Force
         Write-Host "已将构建输出中的 libmpv-2.dll 替换为完整版"
+        $CustomFfmpeg = "windows\ffmpeg.exe"
+        if (Test-Path $CustomFfmpeg) {
+          Copy-Item -Path $CustomFfmpeg -Destination "$SrcDir\ffmpeg.exe" -Force
+          Write-Host "已将 ffmpeg.exe 复制到构建输出（时间轴截图预览）"
+        } else {
+          throw "未找到 ffmpeg.exe：$CustomFfmpeg"
+        }
         New-Item -Path $DestDir -ItemType Directory -Force
         Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
         Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
