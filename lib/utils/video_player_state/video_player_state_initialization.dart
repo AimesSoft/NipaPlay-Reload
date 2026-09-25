@@ -89,6 +89,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDesktopHoverSettingsMenuEnabled();
     await _loadInstantHidePlayerUiEnabled();
     await _loadPlayerTopButtonVisibilitySettings();
+    await _loadPlayerMenuQuickControlsVisibility();
     await _loadChapterMarkersEnabled(); // 加载 MKV 章节标记开关
     await loadIntroSkipEnabled(); // 加载跳过片头开关
     await _loadScreenshotSaveTarget();

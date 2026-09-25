@@ -292,6 +292,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
+              '媒体库 NEW 标识',
+              '媒體庫 NEW 標識',
+              'Library NEW Badge',
+            ),
+            subtitle: _text(
+              context,
+              '在有新内容的番剧卡片上显示 NEW 标识',
+              '在有新內容的番劇卡片上顯示 NEW 標識',
+              'Show NEW on anime cards with newly added content.',
+            ),
+            icon: Ionicons.pricetag_outline,
+            phoneIcon: cupertino.CupertinoIcons.tag,
+            value: appearanceSettings.showMediaLibraryNewBadge,
+            onChanged: appearanceSettings.setShowMediaLibraryNewBadge,
+          ),
+          AdaptiveSettingsTile<bool>.toggle(
+            title: _text(
+              context,
               '低清推荐海报晕染',
               '低清推薦海報暈染',
               'Diffuse Low-resolution Posters',
