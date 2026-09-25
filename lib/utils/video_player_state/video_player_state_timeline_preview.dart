@@ -7,6 +7,14 @@ const int _timelinePreviewDefaultWidth = 320;
 /// on MDK only: enabling the MDK preference must not start another libmpv
 /// instance after the playback kernel is switched to MediaKit.
 bool supportsTimelinePreviewForKernel(PlayerKernelType kernel) {
+  // Windows 上不能创建第二个后台 MDK 播放器：双 MDK 实例会在部分机器的
+  // D3D11/显卡驱动层发生原生死锁，表现为窗口瞬间"未响应"（Dart 层无法
+  // 规避）。Windows 改为调用独立的 ffmpeg 子进程抽帧（见
+  // _createTimelineThumbnailViaFfmpeg），与播放内核无关，进程隔离也保证
+  // 子进程出任何问题都不会卡死主程序。
+  if (!kIsWeb && Platform.isWindows) {
+    return true;
+  }
   return kernel == PlayerKernelType.mdk;
 }
 
@@ -57,17 +65,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     _timelinePreviewDirectory = null;
     _timelinePreviewVideoKey = null;
     _timelinePreviewSessionId++;
-    // 不能在 UI 线程上立即 dispose 预览播放器：它可能正卡在 seek/snapshot 的
-    // 原生调用中，MDK delete 会 join 原生线程，从而冻结整个窗口（未响应）。
-    // 先摘除引用，再把释放排到当前串行截图队列之后，确保没有在途截图任务后
-    // 才真正释放；bump 过的 session 也会让在途任务自行短路退出。
-    final oldPlayer = _timelinePreviewPlayer;
-    _timelinePreviewPlayer = null;
-    _timelinePreviewPlayerKernel = null;
-    _timelinePreviewPlayerSource = null;
-    _timelinePreviewSerialTask = _timelinePreviewSerialTask
-        .then((_) => _releasePreviewPlayerSafely(oldPlayer))
-        .then((_) => null, onError: (_) => null);
+    _disposeTimelinePreviewPlayer();
+    _timelinePreviewSerialTask = Future.value();
   }
 
   Future<void> _setupTimelinePreviewForVideo(String path) async {
@@ -185,6 +184,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       _timelinePreviewPending.add(bucket);
 
       try {
+        // Windows：独立 ffmpeg 子进程抽帧，绝不创建第二个播放器。
+        if (!kIsWeb && Platform.isWindows) {
+          return await _createTimelineThumbnailViaFfmpeg(
+              source, targetPath, bucket, session);
+        }
         final kernel = PlayerFactory.getKernelType();
         final previewPlayer =
             await _ensureTimelinePreviewPlayer(kernel, source);
@@ -214,8 +218,96 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   bool _isTimelinePreviewKernelSupported() {
+    // Windows 走 ffmpeg 子进程，只看 ffmpeg.exe 是否随包提供，与播放内核无关
+    if (!kIsWeb && Platform.isWindows) {
+      return _resolveTimelineFfmpegPath() != null;
+    }
     final kernel = PlayerFactory.getKernelType();
     return supportsTimelinePreviewForKernel(kernel);
+  }
+
+  /// 定位随应用打包的 ffmpeg.exe（release 包中与 NipaPlay.exe 同目录，
+  /// 由 Windows 构建工作流下载并放入打包目录）。开发环境下不存在则返回
+  /// null，时间轴预览自动不可用。
+  String? _resolveTimelineFfmpegPath() {
+    if (kIsWeb || !Platform.isWindows) return null;
+    final exePath =
+        p.join(File(Platform.resolvedExecutable).parent.path, 'ffmpeg.exe');
+    return File(exePath).existsSync() ? exePath : null;
+  }
+
+  /// 把应用内部使用的媒体地址转成 ffmpeg 能识别的输入地址。
+  String? _normalizeTimelineSourceForFfmpeg(String source) {
+    if (source.isEmpty) return null;
+    if (source.startsWith('file://')) {
+      try {
+        return Uri.parse(source).toFilePath();
+      } catch (_) {
+        return null;
+      }
+    }
+    // 本地盘符路径、UNC（SMB）路径、http(s) 直链 ffmpeg 均可直接打开
+    return source;
+  }
+
+  /// Windows 专用：启动 ffmpeg 子进程在指定时间点抽一帧，缩放为缩略图后
+  /// 直接写成 JPEG 文件。子进程与主程序完全隔离：
+  /// - 不会创建第二个播放器/D3D11 设备，从根源上消除原生死锁；
+  /// - 启动与退出均有超时，异常时直接 kill 进程，绝不影响 UI 线程。
+  Future<String?> _createTimelineThumbnailViaFfmpeg(
+    String source,
+    String targetPath,
+    int bucket,
+    int session,
+  ) async {
+    final exe = _resolveTimelineFfmpegPath();
+    if (exe == null) return null;
+    final input = _normalizeTimelineSourceForFfmpeg(source);
+    if (input == null) return null;
+
+    final args = <String>[
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-nostdin',
+      '-y',
+      // -ss 放在 -i 之前为输入级 seek，直接定位到最近关键帧，
+      // 长视频也几乎瞬时完成，缩略图无需帧级精确。
+      '-ss', (bucket / 1000.0).toStringAsFixed(3),
+      '-i', input,
+      '-frames:v', '1',
+      '-vf', 'scale=$_timelinePreviewDefaultWidth:-2',
+      '-q:v', '4',
+      '-f', 'image2',
+      targetPath,
+    ];
+
+    Process? process;
+    try {
+      process = await Process.start(exe, args)
+          .timeout(const Duration(seconds: 10));
+      // 排空 stderr，避免管道缓冲区写满后子进程阻塞
+      unawaited(process.stderr.drain<List<int>>(<int>[]));
+      final exitCode =
+          await process.exitCode.timeout(const Duration(seconds: 20));
+      if (session != _timelinePreviewSessionId) return null;
+      final file = File(targetPath);
+      if (exitCode == 0 &&
+          await file.exists() &&
+          (await file.length()) > 0) {
+        _timelinePreviewCache[bucket] = targetPath;
+        return targetPath;
+      }
+      debugPrint('ffmpeg 时间轴抽帧失败: exit=$exitCode, bucket=${bucket}ms');
+      return null;
+    } catch (e) {
+      debugPrint('ffmpeg 时间轴抽帧异常: $e');
+      if (process != null) {
+        try {
+          process.kill(ProcessSignal.sigkill);
+        } catch (_) {}
+      }
+      return null;
+    }
   }
 
   Future<AbstractPlayer?> _ensureTimelinePreviewPlayer(
@@ -231,31 +323,24 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
-      if (kernel == PlayerKernelType.mdk) {
-        // 截图播放器强制软解：主播放器此时通常正以 D3D11 硬解（MFT:d3d=11）
-        // 播放，第二个 MDK 实例再起一套 D3D11 硬解设备，会在部分机器上与主
-        // 实例争用 GPU/驱动资源，严重时原生渲染线程挂起、整个窗口未响应
-        // （日志戛然而止、无任何异常）。缩略图仅 320x180，软解开销可忽略。
-        try {
-          previewPlayer.setDecoders(PlayerMediaType.video, const ['FFmpeg']);
-        } catch (e) {
-          debugPrint('设置时间轴截图软解失败: $e');
-        }
-      }
       previewPlayer.setMedia(source, PlayerMediaType.video);
       await previewPlayer.prepare();
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
-      // Windows 上绝不调用 updateTexture()：它会通过 "CreateRT" method channel
-      // 在 platform 线程创建第二套 D3D11 共享纹理，与主播放器的纹理路径
-      // 存在原生层死锁风险。MDK 的 snapshot 是原生离屏抓帧，不依赖纹理挂载。
+      if (kernel == PlayerKernelType.mdk) {
+        try {
+          await previewPlayer.updateTexture();
+        } catch (e) {
+          debugPrint('初始化时间轴截图纹理失败: $e');
+        }
+      }
       _timelinePreviewPlayer = previewPlayer;
       _timelinePreviewPlayerKernel = kernel;
       _timelinePreviewPlayerSource = source;
       return previewPlayer;
     } catch (e) {
       debugPrint('初始化时间轴截图播放器失败: $e');
-      unawaited(_releasePreviewPlayerSafely(previewPlayer));
+      previewPlayer.dispose();
       return null;
     }
   }
@@ -270,25 +355,12 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   void _disposeTimelinePreviewPlayer() {
-    final player = _timelinePreviewPlayer;
+    try {
+      _timelinePreviewPlayer?.dispose();
+    } catch (_) {}
     _timelinePreviewPlayer = null;
     _timelinePreviewPlayerKernel = null;
     _timelinePreviewPlayerSource = null;
-    unawaited(_releasePreviewPlayerSafely(player));
-  }
-
-  /// 安全释放预览播放器：先停止播放让原生渲染/解码线程退出当前帧，短暂等待
-  /// 后再 delete，避免与在途 seek/snapshot 并发进入 MDK 原生层造成线程挂死。
-  /// 全程不在 UI 线程上同步等待原生调用。
-  Future<void> _releasePreviewPlayerSafely(AbstractPlayer? player) async {
-    if (player == null) return;
-    try {
-      player.state = PlayerPlaybackState.stopped;
-    } catch (_) {}
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-    try {
-      player.dispose();
-    } catch (_) {}
   }
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
@@ -297,26 +369,20 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     return next;
   }
 
-  /// fvp 的 snapshot 由原生渲染线程异步回调完成；当渲染表面不可见或原生
-  /// 线程卡住时回调可能永远不来，这里统一加 2 秒超时，避免串行截图队列被
-  /// 一个永不完成的 Future 永久堵死（进而拖住后续释放播放器的任务）。
-  Future<PlayerFrame?> _timelineSnapshotWithTimeout(
-    AbstractPlayer player, {
-    required int width,
-    required int height,
-  }) {
-    return player
-        .snapshot(width: width, height: height)
-        .timeout(const Duration(seconds: 2), onTimeout: () => null);
-  }
-
   Future<PlayerFrame?> _captureTimelineFrame(
       AbstractPlayer player, int bucket, int session) async {
     if (session != _timelinePreviewSessionId) return null;
     try {
       final kernel =
           _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
-      // Windows 上不调用 updateTexture()，纹理创建本身就会触发死锁。
+      if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
+          player.textureId.value == null) {
+        try {
+          await player.updateTexture();
+        } catch (e) {
+          debugPrint('时间轴截图纹理创建失败: $e');
+        }
+      }
 
       int targetHeight = _timelinePreviewMaxHeight;
       int targetWidth = _timelinePreviewDefaultWidth;
@@ -344,27 +410,16 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (kernel == PlayerKernelType.mdk) {
         // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
-        await _timelineSnapshotWithTimeout(
-          player,
-          width: targetWidth,
-          height: targetHeight,
-        );
+        await player.snapshot(width: targetWidth, height: targetHeight);
         await Future.delayed(const Duration(milliseconds: 60));
       }
 
-      PlayerFrame? frame = await _timelineSnapshotWithTimeout(
-        player,
-        width: targetWidth,
-        height: targetHeight,
-      );
+      PlayerFrame? frame =
+          await player.snapshot(width: targetWidth, height: targetHeight);
       if ((frame == null || frame.bytes.isEmpty) &&
           kernel == PlayerKernelType.mdk) {
         await Future.delayed(const Duration(milliseconds: 80));
-        frame = await _timelineSnapshotWithTimeout(
-          player,
-          width: targetWidth,
-          height: targetHeight,
-        );
+        frame = await player.snapshot(width: targetWidth, height: targetHeight);
       }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
@@ -496,11 +551,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
 
     final total = _duration.inMilliseconds;
-    // 只预取开头和中点两帧：预取阶段第二播放器刚创建，与主播放器的初始化/
-    // 硬解同时进行，采样点过多会加剧 GPU 争用；其余位置由悬停时按需生成。
     final samples = <int>{
       0,
+      total ~/ 4,
       total ~/ 2,
+      (total - _timelinePreviewIntervalMs).clamp(0, total - 1),
     };
 
     for (final bucket in samples) {
@@ -522,11 +577,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final total = _duration.inMilliseconds;
     final interval =
         _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
-    // 后台填充要克制：每个缩略图都伴随第二播放器的 seek/播放/暂停/多次
-    // snapshot，长视频全速填充会持续与主播放器争用解码与 GPU，曾导致整个
-    // 窗口未响应。上限降到 24 张、间隔拉大到 600ms，日常悬停基本都能命中
-    // 缓存，未命中的位置再按需即时生成。
-    const int maxThumbnails = 24;
+    const int maxThumbnails = 80;
     int generated = 0;
 
     for (int bucket = 0;
@@ -540,7 +591,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       }
       await _createTimelineThumbnail(bucket, session);
       generated++;
-      await Future.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 220));
     }
   }
 
