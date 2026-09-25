@@ -1240,7 +1240,11 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           padding: const material.EdgeInsets.fromLTRB(20, 12, 20, 112),
           sliver: material.SliverList.separated(
             itemCount: items.length,
-            findItemIndexCallback: _findItemIndex,
+            // ignore: deprecated_member_use
+            findChildIndexCallback: (key) {
+              final index = _findItemIndex(key);
+              return index == null ? null : index * 2;
+            },
             separatorBuilder: (_, __) => const material.SizedBox(height: 12),
             itemBuilder: (context, index) {
               final item = items[index];
