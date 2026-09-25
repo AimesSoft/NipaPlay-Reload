@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -59,7 +60,8 @@ bool isRetryableMediaKitLoadError(String message) {
 
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter
-    implements AbstractPlayer, MediaLoadAwarePlayer, TickerProvider {
+    implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
+        TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
@@ -1036,6 +1038,9 @@ class MediaKitPlayerAdapter
         //debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
         // 延迟一点时间确保视频已经真正开始播放
         Future.delayed(const Duration(milliseconds: 500), () {
+          // 热切换/退出后原生 player 已销毁：不能再读 _player.state，
+          // 否则触发 "[Player] has been disposed" 断言（debug）/ 释放后访问（release）
+          if (_isDisposed) return;
           if (_player.state.width != null &&
               _player.state.height != null &&
               _player.state.width! > 0 &&
@@ -2301,6 +2306,10 @@ class MediaKitPlayerAdapter
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
     Future.delayed(const Duration(milliseconds: 500), () {
+      // 热切换/退出后原生 player 已销毁：延迟回调不能再访问 platform，
+      // 否则触发 "[Player] has been disposed" 断言（debug，实测热切换复现）
+      // 或释放后访问原生对象（release）。与下方 track-info 延迟块同样加守卫。
+      if (_isDisposed) return;
       try {
         final dynamic platform = _player.platform;
         if (platform != null && platform.setProperty != null) {
@@ -2310,6 +2319,7 @@ class MediaKitPlayerAdapter
 
           // 延迟检查设置是否生效
           Future.delayed(const Duration(milliseconds: 500), () async {
+            if (_isDisposed) return;
             try {
               var videoAspect = platform.getProperty('video-aspect');
               if (videoAspect is Future) {
@@ -2574,6 +2584,12 @@ class MediaKitPlayerAdapter
     _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
+  // 原生销毁完成信号：dispose() 只负责调度（detach 平台视图/延时后销毁
+  // 核心），_player.dispose() 在后台完成。disposeAsync 通过它等待旧实例
+  // 真正释放，保证热切换"先销毁再新建"的串行化真实生效。
+  final Completer<void> _nativeDisposeCompleter = Completer<void>();
+  Future<void>? _disposeAsyncFuture;
+
   @override
   void dispose() {
     if (_isDisposed) {
@@ -2598,6 +2614,9 @@ class MediaKitPlayerAdapter
       } catch (e) {
         debugPrint('MediaKit: 销毁播放器失败: $e');
       }
+      if (!_nativeDisposeCompleter.isCompleted) {
+        _nativeDisposeCompleter.complete();
+      }
     }
 
     if (_prefersPlatformVideoSurface) {
@@ -2612,6 +2631,44 @@ class MediaKitPlayerAdapter
           Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
     }
     _textureIdNotifier.dispose();
+  }
+
+  /// 异步释放：dispose() 只负责调度（detach 平台视图 / 延时后销毁核心），
+  /// 真正的原生销毁在后台完成。旧实现 await 不到它，热切换的"串行化"
+  /// 形同虚设——旧 libmpv 实例可能在新内核创建并起播时仍存活，多实例的
+  /// teardown 与 init 在平台线程交叠导致死锁卡死。
+  /// 现策略：并发调用合并（_disposeAsyncFuture）+ 等待原生销毁完成
+  /// （带 5s 超时兜底；超时只记日志，不阻塞新内核起播）。
+  @override
+  Future<void> disposeAsync() {
+    return _disposeAsyncFuture ??= _disposeAsyncInternal();
+  }
+
+  Future<void> _disposeAsyncInternal() async {
+    if (!_isDisposed) {
+      PlayerKernelManager.traceHotSwapStage(
+          'media_kit teardown: set stopped begin');
+      try {
+        if (state != PlayerPlaybackState.stopped) {
+          state = PlayerPlaybackState.stopped;
+        }
+      } catch (e) {
+        debugPrint('MediaKit: dispose 前置停止失败: $e');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      PlayerKernelManager.traceHotSwapStage(
+          'media_kit teardown: dispose scheduled');
+      dispose();
+    }
+    try {
+      await _nativeDisposeCompleter.future
+          .timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      PlayerKernelManager.traceHotSwapStage(
+          'media_kit teardown: native dispose TIMEOUT');
+      debugPrint('MediaKit: 等待旧内核原生释放超时（后台继续，不阻塞新内核）');
+    }
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: done');
   }
 
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
