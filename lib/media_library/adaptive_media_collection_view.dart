@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
+import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/media_collection_empty_content.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
@@ -514,23 +515,19 @@ class _AdaptiveMediaCollectionViewState
           });
         }
 
-        final allItems =
-            kIsWeb && widget.source == UnifiedMediaLibrarySource.local
-                ? _webCollectionItems
-                : mediaLibraryLatestItemsByAnime(
-                    provider.history,
-                    widget.source,
-                  );
+        final allItems = kIsWeb &&
+                widget.source == UnifiedMediaLibrarySource.local
+            ? _webCollectionItems
+            : mediaLibraryLatestItemsByAnime(provider.history, widget.source);
         _episodeCounts = _episodeCountByAnime(provider.history);
         _recomputeNewContentState();
-        final filteredItems =
-            _filterAndSort(allItems, _lastOpenTime);
+        final filteredItems = _filterAndSort(allItems, _lastOpenTime);
         for (final item in filteredItems) {
           _ensureDetail(item.animeId!);
         }
 
-        return material.Column(
-          children: [
+        return MediaLibraryBody(
+          controls: [
             AdaptiveMediaCollectionControlBar(
               sourceLabel: _sourceLabel,
               controller: _searchController,
@@ -540,21 +537,19 @@ class _AdaptiveMediaCollectionViewState
               onSortChanged: _setSort,
               onSync: _isSyncing ? null : _sync,
             ),
-            material.Expanded(
-              child: AdaptiveMediaCollectionItems(
-                source: widget.source,
-                sourceLabel: _sourceLabel,
-                isLoading: _isLoadingWebCollection ||
-                    (provider.isLoading && !provider.isLoaded),
-                items: filteredItems,
-                allHistory: provider.history,
-                details: _details,
-                newAnimeIds: _newAnimeIds,
-                onRefresh: _sync,
-                onTap: _openAnimeDetail,
-              ),
-            ),
           ],
+          child: AdaptiveMediaCollectionItems(
+            source: widget.source,
+            sourceLabel: _sourceLabel,
+            isLoading: _isLoadingWebCollection ||
+                (provider.isLoading && !provider.isLoaded),
+            items: filteredItems,
+            allHistory: provider.history,
+            details: _details,
+            newAnimeIds: _newAnimeIds,
+            onRefresh: _sync,
+            onTap: _openAnimeDetail,
+          ),
         );
       },
     );

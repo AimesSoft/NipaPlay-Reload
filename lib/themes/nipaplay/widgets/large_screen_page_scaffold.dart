@@ -41,6 +41,7 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(44, 28, 44, 32),
     this.headerBottomSpacing = 24,
     this.showBackgroundEffects = true,
+    this.bodyBuilder,
   });
 
   final String title;
@@ -53,11 +54,65 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
   final bool showBackgroundEffects;
   final Widget child;
 
+  /// Allows a page to lay out its header together with its content controls.
+  /// The header includes [headerBottomSpacing]; other pages keep the default.
+  final Widget Function(BuildContext context, Widget header, Widget child)?
+      bodyBuilder;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF151820);
     final mutedColor = textColor.withValues(alpha: 0.64);
+
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      height: 1.0,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(width: 20),
+              Wrap(spacing: 10, runSpacing: 10, children: actions),
+            ],
+            if (trailing != null) ...[const SizedBox(width: 20), trailing!],
+          ],
+        ),
+        SizedBox(height: headerBottomSpacing),
+      ],
+    );
 
     return Stack(
       children: [
@@ -92,62 +147,14 @@ class NipaplayLargeScreenPageScaffold extends StatelessWidget {
               Expanded(
                 child: Padding(
                   padding: padding,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                  child: bodyBuilder?.call(context, header, child) ??
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 34,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.0,
-                                  ),
-                                ),
-                                if (subtitle != null &&
-                                    subtitle!.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    subtitle!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: mutedColor,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (actions.isNotEmpty) ...[
-                            const SizedBox(width: 20),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: actions,
-                            ),
-                          ],
-                          if (trailing != null) ...[
-                            const SizedBox(width: 20),
-                            trailing!,
-                          ],
+                          header,
+                          Expanded(child: child),
                         ],
                       ),
-                      SizedBox(height: headerBottomSpacing),
-                      Expanded(child: child),
-                    ],
-                  ),
                 ),
               ),
             ],
