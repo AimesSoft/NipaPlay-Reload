@@ -363,12 +363,12 @@ class SubtitleManager extends ChangeNotifier {
         debugPrint('SubtitleManager: 字幕文件已变化($path)，强制重新解析');
       }
       {
-        // 仅对文本字幕进行预解析，图像字幕(.sup)直接交给播放器
+        // 仅对文本字幕进行预解析，图像字幕(.sup)与 VobSub 二进制(.sub 头部
+        // 为 MPEG-PS)直接交给播放器，不做文本级解析
         final extension = p.extension(path).toLowerCase();
         if (extension == '.ass' ||
             extension == '.srt' ||
-            extension == '.ssa' ||
-            extension == '.sub') {
+            extension == '.ssa') {
           final result = await SubtitleParser.parseSubtitleFile(
             path,
             allowUnknownFormat: true,
@@ -378,6 +378,20 @@ class SubtitleManager extends ChangeNotifier {
           notifyListeners();
         } else if (extension == '.sup') {
           debugPrint('SubtitleManager: 检测到sup字幕，跳过文本解析');
+        } else if (extension == '.sub') {
+          // .sub 可能是 VobSub 二进制或 MicroDVD 文本，按文件头嗅探后再解析
+          final bytes = await file.readAsBytes();
+          if (SubtitleParser.hasMpegPsPackHeader(bytes)) {
+            debugPrint('SubtitleManager: 检测到VobSub二进制字幕，跳过文本解析');
+          } else {
+            final result = await SubtitleParser.parseSubtitleFile(
+              path,
+              allowUnknownFormat: true,
+            );
+            _subtitleCache[path] = result.entries;
+            _subtitleCacheFingerprint[path] = fingerprint;
+            notifyListeners();
+          }
         }
       }
     } catch (e) {
@@ -1078,9 +1092,10 @@ class SubtitleManager extends ChangeNotifier {
               previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
             );
             debugPrint('SubtitleManager: 检测到VobSub，改用IDX加载字幕: $idxPath');
+            return;
           }
         }
-        // 解码失败，回退直接加载原文件（避免完全无字幕）
+        // 解码失败且无 IDX 配对，回退直接加载原文件（避免完全无字幕）
         if (loadToken != _subtitleLoadToken) return;
         if (_currentExternalSubtitlePath != sourcePath) return;
         _loadExternalSubtitleIntoPlayer(
@@ -1319,7 +1334,10 @@ class SubtitleManager extends ChangeNotifier {
               debugPrint(
                   '[FONT_DEBUG] 选中字幕: ${selected.name}, extension=${selected.extension}');
             final cachedPath = await RemoteSubtitleService.instance
-                .ensureSubtitleCached(selected);
+                .ensureSubtitleCached(
+              selected,
+              allCandidates: candidates,
+            );
             if (kDebugMode) debugPrint('[FONT_DEBUG] 字幕已缓存: $cachedPath');
 
             // 渐进式加载：先立即加载字幕（可能使用备用字体），再后台下载远程字体
@@ -1378,13 +1396,22 @@ class SubtitleManager extends ChangeNotifier {
             // 内核轨 ASS/SSA 不自动叠加：mpv sid 单轨显示，多挂只有最后
             // 一条可见，制造"挂了两条 ASS 只显示一条"的困惑；ASS 走评分第一，
             // 需要更多 ASS 可手动多挂（内核限制：仍只显示最后一条）。
+            // .idx 与主选字幕同源成对，避免重复下载叠挂。
             for (final other in candidates) {
               if (identical(other, selected)) continue;
               final otherExt = other.extension.toLowerCase();
               if (otherExt == '.ass' || otherExt == '.ssa') continue;
+              if (otherExt == '.idx' &&
+                  p.setExtension(selected.name, '.').toLowerCase() ==
+                      p.setExtension(other.name, '.').toLowerCase()) {
+                continue;
+              }
               try {
                 final otherPath = await RemoteSubtitleService.instance
-                    .ensureSubtitleCached(other);
+                    .ensureSubtitleCached(
+                  other,
+                  allCandidates: candidates,
+                );
                 await addExternalSubtitleToStack(otherPath,
                     displayName: other.name);
                 debugPrint('SubtitleManager: 自动叠加字幕 ${other.name}');
@@ -1459,7 +1486,8 @@ class SubtitleManager extends ChangeNotifier {
         final potentialPath = p.join(videoDir, '$videoName$ext');
         debugPrint('SubtitleManager: 尝试检测字幕文件: $potentialPath');
         final subtitleFile = File(potentialPath);
-        if (subtitleFile.existsSync()) {
+        // .idx 无独立播放语义：同名 .sub 不存在时跳过该候选
+        if (subtitleFile.existsSync() && isVobSubPairComplete(potentialPath)) {
           debugPrint('SubtitleManager: 找到匹配的字幕文件: $potentialPath');
 
           // 等待一段时间确保播放器准备好
@@ -1502,7 +1530,8 @@ class SubtitleManager extends ChangeNotifier {
           for (final file in files) {
             if (file is File) {
               final ext = p.extension(file.path).toLowerCase();
-              if (subtitleExts.contains(ext)) {
+              if (subtitleExts.contains(ext) &&
+                  isVobSubPairComplete(file.path)) {
                 subtitleFiles.add(file);
               }
             }
@@ -1583,6 +1612,7 @@ class SubtitleManager extends ChangeNotifier {
         '.srt' => 30,
         '.sub' => 20,
         '.sup' => 10,
+        '.idx' => 25,
         _ => 0,
       };
 

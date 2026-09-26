@@ -9,6 +9,7 @@ const Set<String> subtitleExtensions = {
   '.srt',
   '.sub',
   '.sup',
+  '.idx',
 };
 
 /// 支持的外挂音轨扩展名
