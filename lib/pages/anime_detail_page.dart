@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
@@ -30,9 +31,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_anime_detail_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
@@ -44,7 +47,13 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
@@ -57,6 +66,18 @@ enum _EpisodeCleanupAction {
   deleteWatchHistory,
 }
 
+enum _ImmersiveMoreAction {
+  changeBackdrop,
+  toggleFavorite,
+  editBangumiRating,
+  searchTags,
+  reverseEpisodes,
+  clearHistory,
+}
+
+/// 观看进度达到该比例即认为该集已播完（沿用原版卡片口径：超过 95%）。
+const double _kFinishedWatchThreshold = 0.95;
+
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
   final SharedRemoteAnimeSummary? sharedSummary;
@@ -67,6 +88,7 @@ class AnimeDetailPage extends StatefulWidget {
   final PlaybackDetailContext? playbackDetailContext;
   final bool renderInWindowScaffold;
   final bool embeddedInPlayback;
+  final bool useImmersiveLayout;
 
   const AnimeDetailPage({
     super.key,
@@ -78,6 +100,7 @@ class AnimeDetailPage extends StatefulWidget {
     this.playbackDetailContext,
     this.renderInWindowScaffold = true,
     this.embeddedInPlayback = false,
+    this.useImmersiveLayout = false,
   });
 
   @override
@@ -99,11 +122,12 @@ class AnimeDetailPage extends StatefulWidget {
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
     String? sharedSourceLabel,
     PlaybackDetailContext? playbackDetailContext,
-  }) {
+  }) async {
     if (NipaplayLargeScreenModeScope.isActiveOf(context) &&
         playbackDetailContext == null) {
       context.read<LargeScreenUiSfxService>().playOpenSubPage();
-      return Navigator.of(context).push<WatchHistoryItem>(
+      return Navigator.of(context)
+          .push<WatchHistoryItem>(
         NipaplayLargeScreenWindowPageRoute<WatchHistoryItem>(
           enableAnimation: true,
           dismissible: false,
@@ -115,7 +139,8 @@ class AnimeDetailPage extends StatefulWidget {
             sharedSourceLabel: sharedSourceLabel,
           ),
         ),
-      ).then((result) {
+      )
+          .then((result) {
         if (context.mounted) {
           context.read<LargeScreenUiSfxService>().playCloseSubPage();
         }
@@ -123,7 +148,38 @@ class AnimeDetailPage extends StatefulWidget {
       });
     }
 
-    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+    final surface = AppDisplaySurfaceScope.of(context);
+    final supportsImmersiveLayout =
+        surface == AppDisplaySurface.desktopTablet ||
+            surface == AppDisplaySurface.phone;
+    var useImmersiveLayout = false;
+    if (supportsImmersiveLayout) {
+      final labsSettings = context.read<LabsSettingsProvider>();
+      await labsSettings.ready;
+      if (!context.mounted) return null;
+      useImmersiveLayout = labsSettings.enableImmersiveAnimeDetail;
+    }
+    if (useImmersiveLayout) {
+      final enableAnimation =
+          context.read<AppearanceSettingsProvider>().enablePageAnimation;
+      return Navigator.of(context).push<WatchHistoryItem>(
+        ImmersiveMediaDetailPageRoute<WatchHistoryItem>(
+          enableAnimation: enableAnimation,
+          builder: (_) => AnimeDetailPage(
+            animeId: animeId,
+            sharedSummary: sharedSummary,
+            sharedEpisodeLoader: sharedEpisodeLoader,
+            sharedEpisodeBuilder: sharedEpisodeBuilder,
+            sharedSourceLabel: sharedSourceLabel,
+            playbackDetailContext: playbackDetailContext,
+            renderInWindowScaffold: false,
+            useImmersiveLayout: true,
+          ),
+        ),
+      );
+    }
+
+    if (surface == AppDisplaySurface.phone) {
       return CupertinoBottomSheet.show<WatchHistoryItem>(
         context: context,
         title: '番剧详情',
@@ -176,6 +232,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   final Map<int, PlaybackDetailEpisode> _playbackEpisodeMap = {};
   final Map<int, PlayableItem> _playbackPlayableMap = {};
   final Map<int, Future<WatchHistoryItem?>> _episodeHistoryFutures = {};
+  // 已完成解析的历史记录缓存，供同步判断剧集是否有可播放资源。
+  final Map<int, WatchHistoryItem?> _resolvedEpisodeHistory = {};
   bool _isLoadingSharedEpisodes = false;
   String? _sharedEpisodesError;
   bool _isLoadingPlaybackEpisodes = false;
@@ -229,6 +287,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   final GlobalKey _commentsWidgetKey = GlobalKey();
   int _myCommentTimestamp = 0;
   bool _hasOpenedCommentsTab = false;
+  bool _isImmersiveDescriptionExpanded = false;
+  bool _isImmersiveCommentsOpen = false;
+  String? _immersiveBackdropUrl;
+
+  int _immersiveBackdropRequestId = 0;
 
   static const String _commentTimestampPrefix = 'bangumi_comment_ts_';
 
@@ -639,6 +702,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _isLoading = false;
         });
 
+        if (widget.useImmersiveLayout) {
+          _resolveImmersiveBackdrop();
+        }
         _loadBangumiUserData(mergedAnime);
       }
     } catch (e) {
@@ -2070,34 +2136,43 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ),
               SizedBox(width: 12),
-              if (_lastWatchedEpisode != null)
-                Builder(builder: (context) {
-                  final episodeId = _lastWatchedEpisode!.episodeId;
-                  if (episodeId != null) {
-                    // 查找对应的剧集
-                    final episode = episodes.firstWhere(
-                      (ep) => ep.id == episodeId,
-                      orElse: () => episodes.first,
+              Builder(builder: (context) {
+                final lastWatched = _lastWatchedEpisode;
+                if (lastWatched == null) {
+                  // 没有任何实际播放记录时明确提示，而不是隐藏该元素。
+                  return Text(
+                    '上次观看：没有记录',
+                    locale: const Locale('zh-Hans', 'zh'),
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 12,
+                    ),
+                  );
+                }
+                final episodeId = lastWatched.episodeId;
+                if (episodeId != null) {
+                  // 查找对应的剧集
+                  final episode = episodes.firstWhere(
+                    (ep) => ep.id == episodeId,
+                    orElse: () => episodes.first,
+                  );
+                  // 提取标题的第一个词作为剧集标识
+                  final title = episode.title;
+                  final parts = title.split(' ');
+                  if (parts.isNotEmpty) {
+                    final firstPart = parts[0];
+                    return Text(
+                      '上次观看：$firstPart',
+                      locale: const Locale('zh-Hans', 'zh'),
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                        fontSize: 12,
+                      ),
                     );
-                    // 提取标题的第一个词作为剧集标识
-                    final title = episode.title;
-                    final parts = title.split(' ');
-                    if (parts.isNotEmpty) {
-                      final firstPart = parts[0];
-                      return Text(
-                        '上次观看：$firstPart',
-                        locale: const Locale('zh-Hans', 'zh'),
-                        style: TextStyle(
-                          color: secondaryTextColor,
-                          fontSize: 12,
-                        ),
-                      );
-                    }
                   }
-                  return const SizedBox.shrink();
-                })
-              else
-                const SizedBox.shrink(),
+                }
+                return const SizedBox.shrink();
+              }),
               const Spacer(),
               _wrapLargeScreenFocusable(
                 onActivate: _isCleaningEpisodeHistory
@@ -2583,8 +2658,857 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return coverImageUrl;
   }
 
+  Future<void> _resolveImmersiveBackdrop() async {
+    final requestId = ++_immersiveBackdropRequestId;
+    final anime = _detailedAnime;
+    final custom = anime?.backgroundImageUrl?.trim();
+
+    String? resolved;
+    if (custom?.isNotEmpty == true) {
+      resolved = custom;
+    } else if (anime != null) {
+      final subjectId = _extractBangumiSubjectId(anime);
+      if (subjectId != null) {
+        final bangumiServer = await NetworkSettings.getBangumiServer();
+        resolved = Uri.parse(bangumiServer).replace(
+          path: '${Uri.parse(bangumiServer).path}/v0/subjects/$subjectId/image'
+              .replaceAll('//', '/'),
+          queryParameters: const <String, String>{'type': 'large'},
+        ).toString();
+      }
+    }
+
+    resolved ??= _getPosterUrl();
+    if (kIsWeb && resolved != null) {
+      resolved = WebRemoteAccessService.imageProxyUrl(resolved) ?? resolved;
+    }
+    if (!mounted ||
+        requestId != _immersiveBackdropRequestId ||
+        resolved == _immersiveBackdropUrl) {
+      return;
+    }
+    setState(() => _immersiveBackdropUrl = resolved);
+  }
+
+  String _immersiveSummary(BangumiAnime anime) {
+    final playbackDetail = _playbackDetailContext;
+    final allowPlaybackOverrides =
+        playbackDetail != null && !playbackDetail.usesLocalLibraryDetail;
+    final playbackSummary =
+        allowPlaybackOverrides ? playbackDetail.summary?.trim() : null;
+    return normalizeImmersiveSummaryText(
+      playbackSummary?.isNotEmpty == true
+          ? playbackSummary!
+          : _sharedSummary?.summary?.trim().isNotEmpty == true
+              ? _sharedSummary!.summary!
+              : (anime.summary ?? ''),
+    );
+  }
+
+  List<String> _immersiveMetadata(BangumiAnime anime) {
+    final values = <String>[];
+    final type = anime.typeDescription?.trim();
+    if (type?.isNotEmpty == true) values.add(type!);
+
+    final airDate = anime.airDate?.trim();
+    if (airDate?.isNotEmpty == true) {
+      final match = RegExp(r'^(\d{4})').firstMatch(airDate!);
+      if (match != null) values.add(match.group(1)!);
+    }
+
+    final total = _getTotalEpisodeCount(anime);
+    if (total > 0) values.add('共 $total 集');
+
+    final studio = _studioFromMetadata(anime.metadata);
+    if (studio != null) values.add(studio);
+    return values;
+  }
+
+  String? _studioFromMetadata(List<String>? metadata) {
+    if (metadata == null) return null;
+    const acceptedKeys = <String>{
+      '动画制作',
+      '動畫製作',
+      '制作公司',
+      '製作公司',
+      'studio',
+    };
+    for (final item in metadata) {
+      final parts = item.split(RegExp(r'[:：]'));
+      if (parts.length < 2) continue;
+      final key = parts.first.trim().toLowerCase();
+      if (!acceptedKeys.contains(key)) continue;
+      final value = parts.sublist(1).join(':').trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  double? _immersiveBangumiRating(BangumiAnime anime) {
+    final value = anime.ratingDetails?['Bangumi评分'];
+    if (value is num && value > 0) return value.toDouble();
+    return null;
+  }
+
+  String _formatPlaybackTime(int seconds) {
+    if (seconds <= 0) return '0:00';
+    final duration = Duration(seconds: seconds);
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final secs = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (duration.inHours > 0) {
+      return '${duration.inHours}:$minutes:$secs';
+    }
+    return '${duration.inMinutes}:$secs';
+  }
+
+  PlayableItem? _sourcePlayableForEpisode(EpisodeData episode) {
+    return _playbackPlayableMap[episode.id] ?? _sharedPlayableMap[episode.id];
+  }
+
+  bool _sourcePlayableAvailableForEpisode(EpisodeData episode) {
+    final playbackEpisode = _playbackEpisodeMap[episode.id];
+    if (playbackEpisode != null && _playbackPlayableMap[episode.id] != null) {
+      return true;
+    }
+    final sharedEpisode = _sharedEpisodeMap[episode.id];
+    return sharedEpisode != null &&
+        sharedEpisode.fileExists &&
+        _sharedPlayableMap[episode.id] != null;
+  }
+
+  double? _sourceProgressForEpisode(EpisodeData episode) {
+    return _playbackEpisodeMap[episode.id]?.progress ??
+        _sharedEpisodeMap[episode.id]?.progress;
+  }
+
+  Future<WatchHistoryItem?> _historyForEpisode(
+    BangumiAnime anime,
+    EpisodeData episode,
+  ) {
+    return _episodeHistoryFutures.putIfAbsent(episode.id, () async {
+      final sourceHistory = _playbackEpisodeMap[episode.id]?.historyItem;
+      final WatchHistoryItem? result = sourceHistory ??
+          await WatchHistoryManager.getHistoryItemByEpisode(
+            anime.id,
+            episode.id,
+          );
+      _resolvedEpisodeHistory[episode.id] = result;
+      return result;
+    });
+  }
+
+  /// 剧集是否已有可播放资源（媒体源文件匹配信息或本地/远程历史文件）。
+  bool _episodeHasPlayableResource(EpisodeData episode) {
+    if (_sourcePlayableAvailableForEpisode(episode)) return true;
+    final history = _resolvedEpisodeHistory[episode.id];
+    return history != null && history.filePath.isNotEmpty;
+  }
+
+  Future<void> _playImmersiveEpisode(
+    BangumiAnime anime,
+    EpisodeData episode, {
+    WatchHistoryItem? knownHistory,
+  }) async {
+    final history = knownHistory ?? await _historyForEpisode(anime, episode);
+    if (!mounted) return;
+    await _playEpisodeFromSourceOrHistory(
+      anime: anime,
+      episode: episode,
+      historyItem: history,
+      historyState: ConnectionState.done,
+      sourcePlayableAvailable: _sourcePlayableAvailableForEpisode(episode),
+      sourcePlayable: _sourcePlayableForEpisode(episode),
+    );
+  }
+
+  /// 解析主“播放”按钮的目标剧集、按钮文案与详情。
+  ///
+  /// 规则：
+  /// - 无观看记录：开始观看第一话。
+  /// - 上次观看未播完（<90%）：继续观看该话。
+  /// - 上次观看已播完（≥90%）：优先指向下一话（若下一话存在可播放资源）；
+  ///   找不到下一话的资源/文件匹配信息时，停留在观看当前话。
+  ({
+    EpisodeData episode,
+    String label,
+    String? detail,
+    WatchHistoryItem? knownHistory
+  }) _resolveImmersivePrimary(List<EpisodeData> episodes) {
+    final lastWatched = _lastWatchedEpisode;
+    if (lastWatched == null) {
+      return (
+        episode: episodes.first,
+        label: '开始观看',
+        detail: null,
+        knownHistory: null,
+      );
+    }
+
+    final lastIndex =
+        episodes.indexWhere((episode) => episode.id == lastWatched.episodeId);
+    if (lastIndex < 0) {
+      return (
+        episode: episodes.first,
+        label: '开始观看',
+        detail: null,
+        knownHistory: null,
+      );
+    }
+
+    final lastEpisode = episodes[lastIndex];
+    final isFinished = lastWatched.watchProgress >= _kFinishedWatchThreshold;
+    if (!isFinished) {
+      // 历史记录的 lastPosition/duration 单位为毫秒，格式化前换算为秒。
+      final detail = _hasReliableLocalDuration(lastWatched)
+          ? '${lastWatched.episodeTitle ?? '上次观看'}  ${_formatPlaybackTime(lastWatched.lastPosition ~/ 1000)} / ${_formatPlaybackTime(lastWatched.duration ~/ 1000)}'
+          : lastWatched.episodeTitle ?? '上次观看';
+      return (
+        episode: lastEpisode,
+        label: '继续观看',
+        detail: detail,
+        knownHistory: lastWatched,
+      );
+    }
+
+    final nextIndex = lastIndex + 1;
+    if (nextIndex < episodes.length &&
+        _episodeHasPlayableResource(episodes[nextIndex])) {
+      return (
+        episode: episodes[nextIndex],
+        label: '观看第 ${nextIndex + 1} 话',
+        detail: null,
+        knownHistory: null,
+      );
+    }
+    return (
+      episode: lastEpisode,
+      label: '观看第 ${lastIndex + 1} 话',
+      detail: null,
+      knownHistory: lastWatched,
+    );
+  }
+
+  Future<void> _playImmersivePrimary(BangumiAnime anime) async {
+    final episodes = anime.episodeList ?? const <EpisodeData>[];
+    if (episodes.isEmpty) {
+      _showBlurSnackBar(context, '当前没有可播放的剧集');
+      return;
+    }
+    final resolved = _resolveImmersivePrimary(episodes);
+    await _playImmersiveEpisode(
+      anime,
+      resolved.episode,
+      knownHistory: resolved.knownHistory,
+    );
+  }
+
+  void _openImmersiveComments() {
+    if (_hasOpenedCommentsTab) {
+      setState(() => _isImmersiveCommentsOpen = true);
+      return;
+    }
+    setState(() => _hasOpenedCommentsTab = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _isImmersiveCommentsOpen = true);
+    });
+  }
+
+  void _handleImmersiveEscape() {
+    if (_isImmersiveCommentsOpen) {
+      setState(() => _isImmersiveCommentsOpen = false);
+      return;
+    }
+    _dismissDetailIfNeeded();
+  }
+
+  Widget _buildImmersiveCommentsPanel(BangumiAnime anime) {
+    final userInfo = BangumiApiService.userInfo;
+    final currentUserId = userInfo?['id'] as int? ?? 0;
+    String userAvatar = '';
+    final rawAvatar = userInfo?['avatar'];
+    if (rawAvatar is String) {
+      userAvatar = rawAvatar;
+    } else if (rawAvatar is Map<String, dynamic>) {
+      userAvatar = (rawAvatar['large'] as String?) ??
+          (rawAvatar['medium'] as String?) ??
+          '';
+    }
+    final userNickname = (userInfo?['nickname'] as String?) ??
+        (userInfo?['username'] as String?) ??
+        '';
+    final myComment = BangumiApiService.isLoggedIn
+        ? BangumiMyCommentData(
+            nickname: userNickname,
+            avatarUrl: userAvatar,
+            rate: _bangumiUserRating,
+            comment: _bangumiComment ?? '',
+            updatedAt: _myCommentTimestamp > 0
+                ? _myCommentTimestamp
+                : DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          )
+        : null;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 8, 8),
+          child: Row(
+            children: [
+              const Text(
+                '评论',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: '关闭评论',
+                onPressed: () =>
+                    setState(() => _isImmersiveCommentsOpen = false),
+                icon: const Icon(Ionicons.close, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: Colors.white.withValues(alpha: 0.1)),
+        Expanded(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollEndNotification &&
+                  notification.metrics.pixels >=
+                      notification.metrics.maxScrollExtent) {
+                (_commentsWidgetKey.currentState as dynamic)?.loadMore();
+              }
+              return false;
+            },
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+              child: BangumiCommentsWidget(
+                key: _commentsWidgetKey,
+                subjectId: _bangumiSubjectId,
+                dandanplayId: anime.id,
+                onEditRating:
+                    BangumiApiService.isLoggedIn ? _showCommentDialog : null,
+                myComment: myComment,
+                currentUserId: currentUserId,
+                commentsVersion: _commentsVersion,
+                onMyCommentTimestamp: (timestamp) {
+                  if (!mounted || timestamp == _myCommentTimestamp) return;
+                  setState(() => _myCommentTimestamp = timestamp);
+                  if (_bangumiSubjectId != null) {
+                    _saveCommentTimestamp(_bangumiSubjectId!, timestamp);
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showImmersiveEpisodeSelector(BangumiAnime anime) async {
+    final episodes = anime.episodeList ?? const <EpisodeData>[];
+    if (episodes.isEmpty) return;
+    // 弹窗打开前先解析各集观看历史（本地 + dandanplay），
+    // 保证列表能同步展示观看标记。
+    await Future.wait(episodes.map(
+      (e) => _historyForEpisode(anime, e).catchError((_) => null),
+    ));
+    if (!mounted) return;
+    final selected = await BlurDialog.show<EpisodeData>(
+      context: context,
+      title: '选择剧集',
+      desktopMaxWidth: 560,
+      desktopMaxHeightFactor: 0.8,
+      contentWidget: SizedBox(
+        height: 430,
+        child: ListView.separated(
+          itemCount: episodes.length,
+          separatorBuilder: (_, __) =>
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          itemBuilder: (dialogContext, index) {
+            final episode = episodes[index];
+            final history = _resolvedEpisodeHistory[episode.id];
+            final sourceProgress = _sourceProgressForEpisode(episode) ?? 0;
+            final progress = history == null
+                ? sourceProgress
+                : history.watchProgress > sourceProgress
+                    ? history.watchProgress
+                    : sourceProgress;
+            final completed = progress >= _kFinishedWatchThreshold ||
+                _dandanplayWatchStatus[episode.id] == true;
+            final unavailable = !_episodeHasPlayableResource(episode);
+            return ListTile(
+              dense: true,
+              title: Text(
+                '第 ${index + 1} 话',
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                episode.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white60),
+              ),
+              trailing: unavailable
+                  ? const ImmersiveEpisodeUnavailableBadge()
+                  : completed
+                      ? Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2E7D32),
+                            shape: BoxShape.circle,
+                            // 深色描边+阴影，与剧集轨道上的绿勾一致
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Ionicons.checkmark,
+                            color: Colors.white,
+                            size: 13,
+                          ),
+                        )
+                      : const Icon(
+                          Ionicons.play_outline,
+                          color: Colors.white54,
+                          size: 19,
+                        ),
+              onTap: () => Navigator.of(dialogContext).pop(episode),
+            );
+          },
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    await _playImmersiveEpisode(anime, selected);
+  }
+
+  bool _isRemoteHistoryItem(WatchHistoryItem history) {
+    final filePath = history.filePath;
+    final lowerPath = filePath.toLowerCase();
+    return history.isDandanplayRemote ||
+        lowerPath.startsWith('http://') ||
+        lowerPath.startsWith('https://') ||
+        lowerPath.startsWith('jellyfin://') ||
+        lowerPath.startsWith('emby://') ||
+        MediaSourceUtils.isWebDavPath(filePath) ||
+        MediaSourceUtils.isSmbPath(filePath);
+  }
+
+  bool _hasReliableLocalDuration(WatchHistoryItem? history) {
+    return history != null &&
+        history.filePath.isNotEmpty &&
+        !_isRemoteHistoryItem(history) &&
+        history.duration > 0;
+  }
+
+  Future<void> _changeImmersiveBackdrop(BangumiAnime anime) async {
+    final result = await TextInputDialog.show(
+      context,
+      title: '修改背景图',
+      subtitle: '填写 HTTP(S) 图片 URL；留空保存将恢复使用海报。',
+      hintText: 'https://example.com/background.jpg',
+      initialValue: anime.backgroundImageUrl ?? '',
+      minLines: 1,
+      allowEmpty: true,
+    );
+    if (!mounted || result == null) return;
+
+    final value = result.trim();
+    if (value.isNotEmpty) {
+      final uri = Uri.tryParse(value);
+      if (uri == null ||
+          !(uri.scheme == 'http' || uri.scheme == 'https') ||
+          uri.host.isEmpty) {
+        _showBlurSnackBar(context, '请输入有效的 HTTP(S) 图片 URL');
+        return;
+      }
+    }
+
+    try {
+      final updated = await _bangumiService.updateBackgroundImageUrl(
+        anime.id,
+        value.isEmpty ? null : value,
+        fallbackAnime: anime,
+      );
+      if (!mounted) return;
+      setState(() {
+        _detailedAnime = _mergePlaybackDetail(updated);
+      });
+      await _resolveImmersiveBackdrop();
+      if (!mounted) return;
+      _showBlurSnackBar(
+        context,
+        value.isEmpty ? '已恢复使用海报背景' : '背景图已保存',
+      );
+    } catch (e) {
+      if (mounted) {
+        _showBlurSnackBar(context, '保存背景图失败: $e');
+      }
+    }
+  }
+
+  void _handleImmersiveMoreAction(
+    _ImmersiveMoreAction action,
+    BangumiAnime anime,
+  ) {
+    switch (action) {
+      case _ImmersiveMoreAction.changeBackdrop:
+        _changeImmersiveBackdrop(anime);
+      case _ImmersiveMoreAction.toggleFavorite:
+        _toggleFavorite();
+      case _ImmersiveMoreAction.editBangumiRating:
+        _showRatingDialog();
+      case _ImmersiveMoreAction.searchTags:
+        _openTagSearch();
+      case _ImmersiveMoreAction.reverseEpisodes:
+        setState(() => _isEpisodeListReversed = !_isEpisodeListReversed);
+      case _ImmersiveMoreAction.clearHistory:
+        _showEpisodeListCleanupDialog(anime);
+    }
+  }
+
+  Widget _buildImmersiveActions(BangumiAnime anime) {
+    final episodes = anime.episodeList ?? const <EpisodeData>[];
+    final resolved =
+        episodes.isEmpty ? null : _resolveImmersivePrimary(episodes);
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        AdaptiveMediaDetailActionButton(
+          icon: Ionicons.play,
+          label: resolved?.label ?? '开始观看',
+          detail: resolved?.detail,
+          emphasis: MediaDetailActionEmphasis.primary,
+          onPressed: () => _playImmersivePrimary(anime),
+        ),
+        AdaptiveMediaDetailActionButton(
+          icon: Ionicons.chatbubble_outline,
+          label: '评论',
+          onPressed: _openImmersiveComments,
+        ),
+        PopupMenuButton<_ImmersiveMoreAction>(
+          tooltip: '更多',
+          color: const Color(0xFF20222B),
+          onSelected: (action) => _handleImmersiveMoreAction(action, anime),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: _ImmersiveMoreAction.changeBackdrop,
+              child: Text('修改背景图'),
+            ),
+            if (DandanplayService.isLoggedIn && anime.id > 0)
+              PopupMenuItem(
+                value: _ImmersiveMoreAction.toggleFavorite,
+                child: Text(_isFavorited ? '取消收藏' : '收藏'),
+              ),
+            if (BangumiApiService.isLoggedIn)
+              const PopupMenuItem(
+                value: _ImmersiveMoreAction.editBangumiRating,
+                child: Text('编辑 Bangumi 评分与收藏'),
+              ),
+            if (anime.tags?.isNotEmpty == true)
+              const PopupMenuItem(
+                value: _ImmersiveMoreAction.searchTags,
+                child: Text('浏览标签'),
+              ),
+            PopupMenuItem(
+              value: _ImmersiveMoreAction.reverseEpisodes,
+              child: Text(_isEpisodeListReversed ? '剧集正序' : '剧集倒序'),
+            ),
+            const PopupMenuItem(
+              value: _ImmersiveMoreAction.clearHistory,
+              child: Text('清理本地记录'),
+            ),
+          ],
+          child: IgnorePointer(
+            child: AdaptiveMediaDetailActionButton(
+              icon: Ionicons.ellipsis_horizontal,
+              label: '更多',
+              onPressed: () {},
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImmersiveEpisodeRail(BangumiAnime anime) {
+    final episodes = anime.episodeList ?? const <EpisodeData>[];
+    final displayed =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+    if (displayed.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无剧集',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.56)),
+        ),
+      );
+    }
+    return ImmersiveEpisodeRail(
+      episodeCount: displayed.length,
+      onSelectEpisodes: () => _showImmersiveEpisodeSelector(anime),
+      itemBuilder: (context, index) {
+        final episode = displayed[index];
+        final originalIndex = episodes.indexOf(episode);
+        return FutureBuilder<WatchHistoryItem?>(
+          future: _historyForEpisode(anime, episode),
+          builder: (context, snapshot) {
+            final history = snapshot.data;
+            final sourceProgress = _sourceProgressForEpisode(episode) ?? 0;
+            final progress = history == null
+                ? sourceProgress
+                : history.watchProgress > sourceProgress
+                    ? history.watchProgress
+                    : sourceProgress;
+            final duration =
+                _hasReliableLocalDuration(history) ? history!.duration : 0;
+            final availabilityResolved =
+                _sourcePlayableAvailableForEpisode(episode) ||
+                    snapshot.connectionState == ConnectionState.done;
+            final episodeTitle = episode.title.trim();
+            // dandanplay 的 episodeTitle 自带“第N话”前缀（如“第1话 翻转孤独”），
+            // 有前缀时直接单行显示，避免与“第 N 话”重复。
+            final hasEpisodePrefix =
+                RegExp(r'^第\s*\d+\s*[话集]').hasMatch(episodeTitle);
+            return ImmersiveEpisodeCard(
+              episodeLabel: hasEpisodePrefix || episodeTitle.isEmpty
+                  ? (episodeTitle.isEmpty
+                      ? '第 ${originalIndex + 1} 话'
+                      : episodeTitle)
+                  : '第 ${originalIndex + 1} 话',
+              title:
+                  hasEpisodePrefix || episodeTitle.isEmpty ? '' : episodeTitle,
+              thumbnailPath: history?.thumbnailPath,
+              progress: progress,
+              // duration 单位为毫秒，格式化前换算为秒。
+              durationLabel: duration > 0
+                  ? _formatPlaybackTime(duration ~/ 1000)
+                  : null,
+              isCurrent: _lastWatchedEpisode?.episodeId == episode.id,
+              isCompleted: progress >= _kFinishedWatchThreshold ||
+                  _dandanplayWatchStatus[episode.id] == true,
+              isUnavailable:
+                  availabilityResolved && !_episodeHasPlayableResource(episode),
+              onTap: snapshot.connectionState == ConnectionState.waiting &&
+                      !_sourcePlayableAvailableForEpisode(episode)
+                  ? null
+                  : () => _playEpisodeFromSourceOrHistory(
+                        anime: anime,
+                        episode: episode,
+                        historyItem: history,
+                        historyState: snapshot.connectionState,
+                        sourcePlayableAvailable:
+                            _sourcePlayableAvailableForEpisode(episode),
+                        sourcePlayable: _sourcePlayableForEpisode(episode),
+                      ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 构建沉浸式页面大标题下的副标题：日文名 / 英文名或罗马音名称。
+  ///
+  /// dandanplay 的 titles[].language 是中文描述（如“官方标题，日语”“主标题”），
+  /// 部分数据源为语言代码（ja/en/zh），两种都兼容。
+  String _buildImmersiveSubtitle(BangumiAnime anime) {
+    final entries = anime.titles ?? const <Map<String, String>>[];
+    bool isJapanese(String lang) =>
+        (lang.contains('ja') || lang.contains('日语')) && !lang.contains('罗马字');
+    bool isChinese(String lang) =>
+        lang.contains('zh') || lang.contains('cn') || lang.contains('中文');
+    bool isEnglish(String lang) => lang.contains('en') || lang.contains('英语');
+
+    String primary = '';
+    for (final entry in entries) {
+      final title = (entry['title'] ?? '').trim();
+      if (title.isEmpty) continue;
+      if (isJapanese((entry['language'] ?? '').toLowerCase())) {
+        primary = title;
+        break;
+      }
+    }
+    if (primary.isEmpty) {
+      // 回退：第一个非中文条目（排除“主标题”自身），最后回退 anime.name。
+      for (final entry in entries) {
+        final title = (entry['title'] ?? '').trim();
+        if (title.isEmpty) continue;
+        final lang = (entry['language'] ?? '').toLowerCase();
+        if (isChinese(lang) || lang.contains('主标题')) continue;
+        primary = title;
+        break;
+      }
+    }
+    if (primary.isEmpty) primary = anime.name.trim();
+    if (primary.isEmpty) return '';
+
+    String? latin;
+    for (final entry in entries) {
+      final title = (entry['title'] ?? '').trim();
+      if (title.isEmpty || title == primary) continue;
+      final lang = (entry['language'] ?? '').toLowerCase();
+      if (isEnglish(lang)) {
+        latin = title;
+        break;
+      }
+      if (lang.contains('罗马字') && _isMostlyLatinText(title)) {
+        latin ??= title;
+      }
+    }
+    if (latin == null) {
+      for (final entry in entries) {
+        final title = (entry['title'] ?? '').trim();
+        if (title.isEmpty || title == primary) continue;
+        final lang = (entry['language'] ?? '').toLowerCase();
+        if (isChinese(lang) || lang.contains('主标题')) continue;
+        if (_isMostlyLatinText(title)) {
+          latin ??= title;
+        }
+      }
+    }
+    if (latin == null || latin.isEmpty) return primary;
+    return '$primary / $latin';
+  }
+
+  bool _isMostlyLatinText(String text) {
+    if (text.isEmpty) return false;
+    var latinCount = 0;
+    for (final rune in text.runes) {
+      final ch = String.fromCharCode(rune);
+      if (RegExp(r'[A-Za-zÀ-ÿ]').hasMatch(ch)) latinCount++;
+    }
+    return latinCount / text.runes.length >= 0.6;
+  }
+
+  Widget _buildImmersiveContent() {
+    if (_isLoading) {
+      return const ColoredBox(
+        color: Color(0xFF080B12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final anime = _detailedAnime;
+    if (_error != null || anime == null) {
+      return ColoredBox(
+        color: const Color(0xFF080B12),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '加载详情失败',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error ?? '未知错误',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white60),
+              ),
+              const SizedBox(height: 18),
+              AdaptiveMediaDetailActionButton(
+                icon: Ionicons.refresh,
+                label: '重试',
+                onPressed: _fetchAnimeDetails,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final playbackDetail = _playbackDetailContext;
+    final usesPlaybackHeader =
+        playbackDetail != null && !playbackDetail.usesLocalLibraryDetail;
+    final displayTitle = usesPlaybackHeader
+        ? playbackDetail.displayTitle
+        : (_sharedSummary?.nameCn?.isNotEmpty == true)
+            ? _sharedSummary!.nameCn!
+            : anime.nameCn;
+    final displaySubtitle = _buildImmersiveSubtitle(anime);
+    final summary = _immersiveSummary(anime);
+
+    if (anime.id > 0 && _lastWatchedEpisode == null && !_isLoadingLastWatched) {
+      _loadLastWatchedEpisode(anime.id);
+    }
+
+    return ImmersiveAnimeDetailScaffold(
+      title: displayTitle.isNotEmpty ? displayTitle : anime.name,
+      subtitle: displaySubtitle,
+      backdropUrl: _immersiveBackdropUrl ?? _getPosterUrl(),
+      metadata: _immersiveMetadata(anime),
+      rating: _immersiveBangumiRating(anime),
+      description: summary.isEmpty ? null : summary,
+      descriptionExpanded: _isImmersiveDescriptionExpanded,
+      // 显隐交给 Scaffold 内部按实测溢出情况决定，不再按字符数猜测。
+      onToggleDescription: () => setState(() {
+        _isImmersiveDescriptionExpanded = !_isImmersiveDescriptionExpanded;
+      }),
+      actions: _buildImmersiveActions(anime),
+      episodeRail: _buildImmersiveEpisodeRail(anime),
+      onBack: _dismissDetailIfNeeded,
+      commentsPanel:
+          _hasOpenedCommentsTab ? _buildImmersiveCommentsPanel(anime) : null,
+      commentsOpen: _isImmersiveCommentsOpen,
+      onCloseComments: () => setState(() => _isImmersiveCommentsOpen = false),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.useImmersiveLayout) {
+      return CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.escape):
+              _handleImmersiveEscape,
+        },
+        child: Focus(
+          autofocus: true,
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+            ),
+            child: Theme(
+              // 全新构造的局部主题必须经过 AppTheme.applyHansLocale：
+              // 按钮/菜单内部的 Material 会用该主题的 bodyMedium/
+              // labelLarge 替换式注入 DefaultTextStyle，绕过 Scaffold 根部
+              // 的 zh-Hans locale，导致 CJK 字形退回日文变体。
+              data: AppTheme.applyHansLocale(
+                ThemeData.dark(useMaterial3: false).copyWith(
+                  colorScheme: ThemeData.dark(useMaterial3: false)
+                      .colorScheme
+                      .copyWith(primary: AppAccentColors.current),
+                ),
+              ),
+              child: Material(
+                color: const Color(0xFF080B12),
+                child: _buildImmersiveContent(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_isLargeScreenModeActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -2830,11 +3754,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     try {
       final historyItems =
           await WatchHistoryManager.getHistoryItemsByAnimeId(animeId);
-      if (historyItems.isNotEmpty) {
+      // 过滤掉仅由媒体库扫描/文件匹配生成、没有任何实际播放痕迹的记录，
+      // 避免未看过的番剧把“上次观看”错标为某个文件（如最后一话）。
+      final watchedItems = historyItems
+          .where(
+              (item) => item.lastPosition > 0 || item.watchProgress > 0)
+          .toList();
+      if (watchedItems.isNotEmpty) {
         // 按最后观看时间排序，取最近的一个
-        historyItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+        watchedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
         setState(() {
-          _lastWatchedEpisode = historyItems.first;
+          _lastWatchedEpisode = watchedItems.first;
         });
       }
     } catch (e) {

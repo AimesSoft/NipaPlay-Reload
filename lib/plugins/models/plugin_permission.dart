@@ -1,4 +1,5 @@
 enum PluginPermission {
+  urlResolve('url.resolve', '链接解析', '允许解析输入的链接、请求网络数据并提供播放地址'),
   playerControl('player.control', '播放器控制', '允许控制播放器的播放、暂停、跳转等操作'),
   danmakuModify('danmaku.modify', '弹幕修改', '允许修改弹幕显示和过滤规则'),
   danmakuRenderer('danmaku.renderer', '弹幕渲染器', '允许插件在视频上方创建本地 WebView 弹幕渲染层'),

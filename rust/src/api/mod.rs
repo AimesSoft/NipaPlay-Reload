@@ -1,4 +1,5 @@
 pub mod ass_converter;
+pub mod client_notifications;
 pub mod danmaku_analytics;
 pub mod dfm_plus;
 pub mod file_scan;
@@ -9,5 +10,6 @@ pub mod next2;
 pub mod performance;
 pub mod remote_directory;
 pub mod simple;
+pub mod startup_commands;
 pub mod torrent;
 pub mod webdav_multistatus;

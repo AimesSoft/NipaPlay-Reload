@@ -19,6 +19,11 @@ class ImageCacheManager {
   final Map<String, int> _refCount = {};
   final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
 
+  /// 同一 URL 的磁盘缓存写入链：不同解码宽度并发加载同一 URL 时，
+  /// 必须串行读写同一个磁盘缓存文件，否则并发 writeAsBytes 会互相破坏，
+  /// 导致读取到半截文件、解码失败（表现为背景图闪黑/不显示）。
+  final Map<String, Future<void>> _diskWrites = {};
+
   /// 每张缓存图片的估算字节数，以及总量。
   /// 解码后的 ui.Image 像素位于 native/external 内存，不受 Dart GC 管理，
   /// 在 32 位设备（低端安卓电视）上必须有硬上限，否则地址空间会被耗尽。
@@ -106,6 +111,32 @@ class ImageCacheManager {
     return '${url}_w${width ?? 0}_h${height ?? 0}';
   }
 
+  /// 等待同一 URL 的磁盘缓存写入链结束（避免读到半截文件）。
+  Future<void> _awaitDiskWrite(String url) async {
+    final pending = _diskWrites[url];
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {}
+    }
+  }
+
+  /// 按 URL 串行执行磁盘缓存写入，返回本次写入的 Future。
+  Future<void> _chainDiskWrite(
+    String url,
+    Future<void> Function() write,
+  ) {
+    final previous = _diskWrites[url] ?? Future<void>.value();
+    final next = previous.then((_) => write());
+    _diskWrites[url] = next;
+    next.whenComplete(() {
+      if (identical(_diskWrites[url], next)) {
+        _diskWrites.remove(url);
+      }
+    });
+    return next;
+  }
+
   ui.Image? getCachedImage(String url, {int? targetWidth, int? targetHeight}) {
     final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
     final cachedImage = _cache[cacheKey];
@@ -149,6 +180,7 @@ class ImageCacheManager {
         // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
         // 我们从本地读取原图数据，然后按需解码
         if (!forceRefresh && !kIsWeb) {
+          await _awaitDiskWrite(url);
           final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
           if (await cacheFile.exists()) {
             final bytes = await cacheFile.readAsBytes();
@@ -178,7 +210,11 @@ class ImageCacheManager {
         // instantiateImageCodec 完成，它本身就是流式的，也能做降采样。
         if (!kIsWeb) {
           final cacheFile = await _getCacheFile(url);
-          await cacheFile.writeAsBytes(downloadedBytes);
+          // 同一 URL 的写入串行执行，防止并发写坏磁盘缓存文件。
+          await _chainDiskWrite(
+            url,
+            () => cacheFile.writeAsBytes(downloadedBytes),
+          );
         }
 
         // 解码图片数据
@@ -208,13 +244,25 @@ class ImageCacheManager {
 
   /// 记录一张新解码的图片并维护字节预算。
   void _store(String cacheKey, ui.Image image) {
+    final imageBytes = _estimateImageBytes(image);
+    final budget = maxBytes;
+
+    // 单张图片已经超过预算时不能把它放进 LRU：旧实现会先写入缓存，
+    // 随后在同一次 _enforceByteBudget 中把这个仍处于 _loading 的新条目
+    // dispose，最后却又通过 completer 把已释放的 ui.Image 返回给组件。
+    // 全屏背景在窗口最大化并解码竖版海报时很容易命中这条路径。
+    // 这里让调用方继续持有可用图片，但不把超预算对象纳入缓存。
+    if (budget > 0 && imageBytes > budget) {
+      return;
+    }
+
     _dropBytes(cacheKey);
     _cache[cacheKey] = image;
     _refCount[cacheKey] = 1;
     _lastAccessed[cacheKey] = DateTime.now();
-    _bytes[cacheKey] = _estimateImageBytes(image);
+    _bytes[cacheKey] = imageBytes;
     _totalBytes += _bytes[cacheKey]!;
-    _enforceByteBudget();
+    _enforceByteBudget(protectedKey: cacheKey);
   }
 
   /// 从字节统计中移除一个键（不 dispose，由调用方决定）。
@@ -250,7 +298,7 @@ class ImageCacheManager {
   /// 的策略在真实使用中等同于"永不淘汰"，最终耗尽 32 位设备的地址空间。
   /// 这里改为以最后访问时间为准的 LRU；最近被访问过的图片（很可能正在被绘制）
   /// 受到 [_evictionProtectionWindow] 保护。
-  void _enforceByteBudget() {
+  void _enforceByteBudget({String? protectedKey}) {
     final budget = maxBytes;
     if (budget <= 0) return;
     if (_totalBytes <= budget) return;
@@ -258,11 +306,13 @@ class ImageCacheManager {
     final now = DateTime.now();
     final candidates = <String>[];
     for (final key in _cache.keys) {
+      // 新解码图片尚未通过 completer 交给调用方，不能在 loadImage 返回前
+      // 淘汰；其他仍在加载链中的条目也遵循同一约束。
+      if (key == protectedKey || _loading.containsKey(key)) continue;
       final lastAccessed = _lastAccessed[key];
       final isRecentlyUsed = lastAccessed != null &&
           now.difference(lastAccessed) < _evictionProtectionWindow;
-      // 正在加载中的条目没有句柄被外部持有，随时可淘汰。
-      if (!isRecentlyUsed || _loading.containsKey(key)) {
+      if (!isRecentlyUsed) {
         candidates.add(key);
       }
     }

@@ -1117,24 +1117,39 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   final Future<void> Function() onRefresh;
   final material.ValueChanged<WatchHistoryItem> onTap;
 
+  material.ValueKey<String> _itemKey(WatchHistoryItem item) {
+    final identity = item.animeId?.toString() ?? item.filePath;
+    return material.ValueKey<String>(
+      'media-collection-${source.name}-$identity',
+    );
+  }
+
+  int? _findItemIndex(material.Key key) {
+    final index = items.indexWhere((item) => _itemKey(item) == key);
+    return index < 0 ? null : index;
+  }
+
   @override
   material.Widget build(material.BuildContext context) {
     final emptyContent = mediaCollectionEmptyContent(
       source,
       sourceLabel: sourceLabel,
     );
+    final showNewBadges =
+        context.watch<AppearanceSettingsProvider>().showMediaLibraryNewBadge;
     if (_useTelevisionCollectionLayout(context)) {
-      return _buildTelevision(context, emptyContent);
+      return _buildTelevision(context, emptyContent, showNewBadges);
     }
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
-      return _buildPhone(context, emptyContent);
+      return _buildPhone(context, emptyContent, showNewBadges);
     }
-    return _buildDesktop(context, emptyContent);
+    return _buildDesktop(context, emptyContent, showNewBadges);
   }
 
   material.Widget _buildTelevision(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     if (isLoading) {
       return material.Center(
@@ -1156,6 +1171,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           key: const material.ValueKey<String>(
             'television-media-collection-grid',
           ),
+          findChildIndexCallback: _findItemIndex,
           primary: true,
           padding: const material.EdgeInsets.fromLTRB(6, 4, 6, 72),
           physics: const material.ClampingScrollPhysics(),
@@ -1170,11 +1186,9 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
             final item = items[index];
             final detail = details[item.animeId];
             return NipaplayLargeScreenModeScope(
+              key: _itemKey(item),
               isActive: true,
               child: AnimeCard(
-                key: material.ValueKey<String>(
-                  'television-media-poster-${item.animeId}',
-                ),
                 imageUrl:
                     _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
                 name: _AdaptiveMediaCollectionViewState._title(item, detail),
@@ -1190,7 +1204,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 // （一次可达数 MB，且解码本身要几十毫秒主 isolate CPU）。
                 imageDecodeWidth: 400,
                 imageDecodeHeight: 560,
-                showNewBadge: newAnimeIds.contains(item.animeId),
+                showNewBadge:
+                    showNewBadges && newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               ),
             );
@@ -1203,6 +1218,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   material.Widget _buildPhone(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     final slivers = <material.Widget>[
       cupertino.CupertinoSliverRefreshControl(onRefresh: onRefresh),
@@ -1229,11 +1245,17 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
           padding: const material.EdgeInsets.fromLTRB(20, 12, 20, 112),
           sliver: material.SliverList.separated(
             itemCount: items.length,
+            // ignore: deprecated_member_use
+            findChildIndexCallback: (key) {
+              final index = _findItemIndex(key);
+              return index == null ? null : index * 2;
+            },
             separatorBuilder: (_, __) => const material.SizedBox(height: 12),
             itemBuilder: (context, index) {
               final item = items[index];
               final detail = details[item.animeId];
               return CupertinoAnimeCard(
+                key: _itemKey(item),
                 title: _AdaptiveMediaCollectionViewState._title(item, detail),
                 imageUrl:
                     _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
@@ -1242,7 +1264,8 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
                 sourceLabel: sourceLabel,
                 rating: detail?.rating,
                 summary: detail?.summary,
-                showNewBadge: newAnimeIds.contains(item.animeId),
+                showNewBadge:
+                    showNewBadges && newAnimeIds.contains(item.animeId),
                 onTap: () => onTap(item),
               );
             },
@@ -1261,6 +1284,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
   material.Widget _buildDesktop(
     material.BuildContext context,
     MediaCollectionEmptyContent emptyContent,
+    bool showNewBadges,
   ) {
     if (isLoading) {
       return material.Center(
@@ -1276,6 +1300,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     return material.GridView.builder(
+      findChildIndexCallback: _findItemIndex,
       gridDelegate: material.SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: showSummary
             ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
@@ -1295,13 +1320,14 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         final item = items[index];
         final detail = details[item.animeId];
         return HorizontalAnimeCard(
+          key: _itemKey(item),
           imageUrl: _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
           title: _AdaptiveMediaCollectionViewState._title(item, detail),
           rating: detail?.rating,
           source: AnimeCard.getSourceFromFilePath(item.filePath),
           summary: detail?.summary,
           progress: _watchProgress(item.animeId!, detail),
-          showNewBadge: newAnimeIds.contains(item.animeId),
+          showNewBadge: showNewBadges && newAnimeIds.contains(item.animeId),
           onTap: () => onTap(item),
         );
       },
