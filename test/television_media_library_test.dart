@@ -9,6 +9,7 @@ import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/media_source_option.dart';
+import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
@@ -65,8 +66,13 @@ void main() {
     addTearDown(selectedSource.dispose);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<WatchHistoryProvider>(
-        create: (_) => _LoadedEmptyWatchHistoryProvider(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<WatchHistoryProvider>(
+            create: (_) => _LoadedEmptyWatchHistoryProvider(),
+          ),
+          ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+        ],
         child: _testApp(
           home: Scaffold(
             body: AppDisplaySurfaceScope(
@@ -171,7 +177,7 @@ void main() {
             onSectionOrderChanged: (_) {},
             onRemoteAccess: () {},
             onAddMedia: () {},
-            child: const SizedBox.expand(),
+            child: const MediaLibraryBody(child: SizedBox.expand()),
           ),
         ),
       ),
@@ -207,7 +213,7 @@ void main() {
               onSectionOrderChanged: (_) {},
               onRemoteAccess: () {},
               onAddMedia: () {},
-              child: const SizedBox.expand(),
+              child: const MediaLibraryBody(child: SizedBox.expand()),
             ),
           ),
         ),

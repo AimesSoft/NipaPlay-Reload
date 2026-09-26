@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
+import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/media_source_option.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
@@ -47,6 +48,9 @@ class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
   final material.ValueChanged<List<String>> onSectionOrderChanged;
   final material.VoidCallback onRemoteAccess;
   final material.VoidCallback onAddMedia;
+
+  /// TV content uses [MediaLibraryBody] so its controls share the page header's
+  /// height budget. Other display surfaces lay out this child unchanged.
   final material.Widget child;
 
   @override
@@ -90,10 +94,12 @@ class AdaptiveMediaLibraryEmptyState extends material.StatelessWidget {
 
   @override
   material.Widget build(material.BuildContext context) {
-    return const NipaplayLargeScreenEmptyState(
-      icon: material.Icons.video_library_outlined,
-      title: '暂无可用的媒体库',
-      subtitle: '选择“添加媒体”连接媒体来源，或在“远程访问”中管理连接。',
+    return const MediaLibraryBody(
+      child: NipaplayLargeScreenEmptyState(
+        icon: material.Icons.video_library_outlined,
+        title: '暂无可用的媒体库',
+        subtitle: '选择“添加媒体”连接媒体来源，或在“远程访问”中管理连接。',
+      ),
     );
   }
 }
@@ -103,7 +109,7 @@ bool _useTelevisionMediaLibraryLayout(material.BuildContext context) {
       NipaplayLargeScreenModeScope.isActiveOf(context);
 }
 
-class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
+class _TelevisionMediaLibraryScaffold extends material.StatefulWidget {
   const _TelevisionMediaLibraryScaffold({
     required this.sections,
     required this.selectedSection,
@@ -123,8 +129,25 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
   final material.Widget child;
 
   @override
+  material.State<_TelevisionMediaLibraryScaffold> createState() =>
+      _TelevisionMediaLibraryScaffoldState();
+}
+
+class _TelevisionMediaLibraryScaffoldState
+    extends material.State<_TelevisionMediaLibraryScaffold> {
+  // Keep the source selector (and its remote focus/scroll position) alive when
+  // the keyed media view changes underneath the shared page header.
+  final _headerKey = material.GlobalKey(debugLabel: 'tv-media-library-header');
+
+  @override
   material.Widget build(material.BuildContext context) {
-    final selectedSection = this.selectedSection;
+    final selectedSection = widget.selectedSection;
+    final sections = widget.sections;
+    final onSectionSelected = widget.onSectionSelected;
+    final onSectionOrderChanged = widget.onSectionOrderChanged;
+    final onRemoteAccess = widget.onRemoteAccess;
+    final onAddMedia = widget.onAddMedia;
+    final child = widget.child;
     return NipaplayLargeScreenModeScope(
       isActive: true,
       child: NipaplayLargeScreenPageScaffold(
@@ -159,33 +182,33 @@ class _TelevisionMediaLibraryScaffold extends material.StatelessWidget {
             onPressed: onAddMedia,
           ),
         ],
-        child: material.Column(
-          crossAxisAlignment: material.CrossAxisAlignment.stretch,
-          children: [
-            if (selectedSection != null) ...[
-              NipaplayLargeScreenPanel(
-                padding: const material.EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
+        bodyBuilder: (context, header, content) =>
+            TelevisionMediaLibraryHeaderScope(
+          header: material.Column(
+            key: _headerKey,
+            mainAxisSize: material.MainAxisSize.min,
+            crossAxisAlignment: material.CrossAxisAlignment.stretch,
+            children: [
+              header,
+              if (selectedSection != null) ...[
+                NipaplayLargeScreenPanel(
+                  padding: const material.EdgeInsets.all(8),
+                  child: _TelevisionMediaLibrarySectionBar(
+                    sections: sections,
+                    selectedSection: selectedSection,
+                    onSectionSelected: onSectionSelected,
+                  ),
                 ),
-                child: _TelevisionMediaLibrarySectionBar(
-                  sections: sections,
-                  selectedSection: selectedSection,
-                  onSectionSelected: onSectionSelected,
-                ),
-              ),
-              const material.SizedBox(height: 16),
+                const material.SizedBox(height: 16),
+              ],
             ],
-            // 将搜索框行和媒体项放在同一个遍历组中，
-            // 确保从媒体项向上导航时先到达搜索框行，而不是跳到分区栏。
-            material.Expanded(
-              child: material.FocusTraversalGroup(
-                policy: material.ReadingOrderTraversalPolicy(),
-                child: child,
-              ),
-            ),
-          ],
+          ),
+          child: material.FocusTraversalGroup(
+            policy: material.ReadingOrderTraversalPolicy(),
+            child: content,
+          ),
         ),
+        child: child,
       ),
     );
   }

@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_search_toolbar.dart';
@@ -72,21 +73,28 @@ class _DandanplayRemoteLibraryViewState
       builder: (context, provider, child) {
         final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
         if (!provider.isInitialized && provider.isLoading) {
-          return const Center(child: AdaptiveMediaActivityIndicator());
+          return const MediaLibraryBody(
+            child: Center(child: AdaptiveMediaActivityIndicator()),
+          );
         }
         if (!provider.isConnected) {
           if (isLargeScreen) {
-            return _buildLargeScreenDisconnectedState(provider);
+            return MediaLibraryBody(
+              child: _buildLargeScreenDisconnectedState(provider),
+            );
           }
           return _buildDisconnectedState(provider);
         }
 
-        final List<DandanplayRemoteAnimeGroup> groups =
-            _filterGroups(provider.animeGroups);
+        final List<DandanplayRemoteAnimeGroup> groups = _filterGroups(
+          provider.animeGroups,
+        );
 
         if (provider.animeGroups.isEmpty && !provider.isLoading) {
           if (isLargeScreen) {
-            return _buildLargeScreenEmptyState(provider);
+            return MediaLibraryBody(
+              child: _buildLargeScreenEmptyState(provider),
+            );
           }
           return _buildEmptyState(provider);
         }
@@ -105,9 +113,7 @@ class _DandanplayRemoteLibraryViewState
               _buildDandanErrorBanner(provider.errorMessage!),
             ],
             SizedBox(height: 12),
-            Expanded(
-              child: _buildMediaGrid(groups, provider),
-            ),
+            Expanded(child: _buildMediaGrid(groups, provider)),
           ],
         );
       },
@@ -118,8 +124,8 @@ class _DandanplayRemoteLibraryViewState
     List<DandanplayRemoteAnimeGroup> groups,
     DandanplayRemoteProvider provider,
   ) {
-    return Column(
-      children: [
+    return MediaLibraryBody(
+      controls: [
         Row(
           children: [
             Expanded(
@@ -168,39 +174,36 @@ class _DandanplayRemoteLibraryViewState
           _buildLargeScreenDandanErrorBanner(provider.errorMessage!),
         ],
         const SizedBox(height: 18),
-        Expanded(
-          child: provider.isLoading && groups.isEmpty
-              ? const Center(child: AdaptiveMediaActivityIndicator())
-              : groups.isEmpty
-                  ? const NipaplayLargeScreenEmptyState(
-                      icon: Icons.search_off_rounded,
-                      title: '没有匹配结果',
-                      subtitle: '换个关键词再试试',
-                    )
-                  : GridView.builder(
-                      controller: _gridScrollController,
-                      padding: const EdgeInsets.only(bottom: 96),
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: BouncingScrollPhysics(),
-                      ),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 244,
-                        mainAxisExtent: 468,
-                        crossAxisSpacing: 18,
-                        mainAxisSpacing: 18,
-                      ),
-                      itemCount: groups.length,
-                      itemBuilder: (context, index) {
-                        return _buildLargeScreenAnimeCard(
-                          groups[index],
-                          provider,
-                          autofocus: index == 0,
-                        );
-                      },
-                    ),
-        ),
       ],
+      child: provider.isLoading && groups.isEmpty
+          ? const Center(child: AdaptiveMediaActivityIndicator())
+          : groups.isEmpty
+              ? const NipaplayLargeScreenEmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: '没有匹配结果',
+                  subtitle: '换个关键词再试试',
+                )
+              : GridView.builder(
+                  controller: _gridScrollController,
+                  padding: const EdgeInsets.only(bottom: 96),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 244,
+                    mainAxisExtent: 468,
+                    crossAxisSpacing: 18,
+                    mainAxisSpacing: 18,
+                  ),
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    return _buildLargeScreenAnimeCard(
+                      groups[index],
+                      provider,
+                      autofocus: index == 0,
+                    );
+                  },
+                ),
     );
   }
 

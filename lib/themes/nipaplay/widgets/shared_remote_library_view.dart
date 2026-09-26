@@ -24,6 +24,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart'
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
@@ -352,8 +353,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     required bool isManagement,
     required bool managementBusy,
   }) {
-    return Column(
-      children: [
+    return MediaLibraryBody(
+      controls: [
         _buildLargeScreenTopBar(
           provider: provider,
           isManagement: isManagement,
@@ -380,22 +381,20 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           ),
         ],
         const SizedBox(height: 18),
-        Expanded(
-          child: isManagement
-              ? _buildLargeScreenManagementBody(
-                  context,
-                  provider,
-                  hasHosts,
-                  scannedFolders,
-                )
-              : _buildLargeScreenMediaBody(
-                  context,
-                  provider,
-                  animeSummaries,
-                  hasHosts,
-                ),
-        ),
       ],
+      child: isManagement
+          ? _buildLargeScreenManagementBody(
+              context,
+              provider,
+              hasHosts,
+              scannedFolders,
+            )
+          : _buildLargeScreenMediaBody(
+              context,
+              provider,
+              animeSummaries,
+              hasHosts,
+            ),
     );
   }
 
