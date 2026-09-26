@@ -30,6 +30,7 @@ Future<void> showMediaCaptureDialog({
     title: '',
     desktopMaxWidth: 1120,
     desktopMaxHeightFactor: 0.9,
+    desktopShowCloseButton: false,
     barrierDismissible: barrierDismissible,
     contentWidget: MediaCaptureDialogContent(
       videoState: videoState,
@@ -438,17 +439,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
         children: [
           Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppAccentColors.current.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.photo_camera_back_rounded,
-                    color: AppAccentColors.current),
-              ),
-              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,6 +457,21 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
               ),
               IconButton(
                 tooltip: '关闭',
+                style: ButtonStyle(
+                  backgroundColor:
+                      const WidgetStatePropertyAll(Colors.transparent),
+                  overlayColor:
+                      const WidgetStatePropertyAll(Colors.transparent),
+                  side: const WidgetStatePropertyAll(BorderSide.none),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                      states.contains(WidgetState.disabled)
+                          ? colors.onSurface.withValues(alpha: 0.38)
+                          : states.contains(WidgetState.focused) ||
+                                  states.contains(WidgetState.hovered) ||
+                                  states.contains(WidgetState.pressed)
+                              ? AppAccentColors.current
+                              : colors.onSurface),
+                ),
                 onPressed:
                     _isWorking ? null : () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded),
