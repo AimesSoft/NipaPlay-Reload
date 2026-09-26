@@ -147,9 +147,11 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                 ),
                 Positioned(
                   left: 0,
-                  // 标题区整体下移：大标题与左上角返回按钮拉开距离，
-                  // 简介自适应行数占住中间，操作按钮压到剧集栏上方。
-                  top: compact ? 88 : 150,
+                  // 标题区下移量随窗口高度自适应：矮窗口少下移以保住简介
+                  // 行数，高窗口多下移以拉开大标题与返回按钮的间距。
+                  // 锚点：600px 高 → 60；1000px 高 → 150，区间内线性过渡。
+                  top: (60.0 + (constraints.maxHeight - 600) / 400 * 90)
+                      .clamp(60.0, 150.0),
                   width: infoWidth,
                   bottom: railHeight + (compact ? 14 : 22),
                   child: Column(
@@ -684,7 +686,10 @@ class _DescriptionBlock extends StatelessWidget {
   final bool compact;
 
   static const int _fallbackLines = 4;
-  static const int _maxAdaptiveLines = 4;
+  // 有界高度下的自适应行数上限：非紧凑档多给一行。
+  // pad 等中等高度窗口的信息栏较窄、每行容纳字数少，
+  // 4 行封顶会浪费剩余空间，加重阅读压力。
+  int get _maxAdaptiveLines => compact ? 4 : 5;
   // “查看更多”按钮的占位高度（minimumSize(44, 28) 收紧后）。
   static const double _toggleHeight = 30.0;
 

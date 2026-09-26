@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/services/clipboard_image_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -332,10 +333,73 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   }
 
   Future<void> _copyPreview() async {
+    // 桌面端优先把文件本体写入剪贴板：粘贴到聊天软件即为动图附件，
+    // 而不是一段需要手动打开的文件路径。
+    if (ClipboardImageService.isSupported) {
+      final path = await _persistPreviewForClipboard();
+      if (!mounted || path == null) return;
+      final copied = await ClipboardImageService.copyImageFile(
+        path,
+        mimeType: 'image/gif',
+      );
+      if (copied) {
+        if (mounted) BlurSnackBar.show(context, 'GIF 已复制到剪贴板，可直接粘贴');
+        return;
+      }
+      // 原生写入失败时回退为复制文件地址（旧行为）。
+      await Clipboard.setData(ClipboardData(text: Uri.file(path).toString()));
+      if (mounted) BlurSnackBar.show(context, 'GIF 文件地址已复制到剪贴板');
+      return;
+    }
     final path = _previewPath ?? await _refreshPreview();
     if (path == null || !mounted) return;
     await Clipboard.setData(ClipboardData(text: Uri.file(path).toString()));
     if (mounted) BlurSnackBar.show(context, 'GIF 文件地址已复制到剪贴板');
+  }
+
+  /// 生成一份不会被弹窗销毁的 GIF 副本，供剪贴板粘贴使用。
+  ///
+  /// 预览文件位于系统临时目录且随弹窗关闭被删除，直接写入剪贴板会失效；
+  /// 这里只做一次文件复制，避免重复执行昂贵的 GIF 编码。
+  Future<String?> _persistPreviewForClipboard() async {
+    var source = _previewPath;
+    if (source == null) {
+      source = await _refreshPreview();
+      if (source == null) return null;
+    }
+    try {
+      final directory = Directory(
+        p.join(
+          (await getApplicationSupportDirectory()).path,
+          'clipboard_gif_cache',
+        ),
+      );
+      await directory.create(recursive: true);
+      unawaited(_pruneClipboardCache(directory));
+      final target = p.join(
+        directory.path,
+        'nipaplay_gif_${DateTime.now().microsecondsSinceEpoch}.gif',
+      );
+      return (await File(source).copy(target)).path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 清理过期的剪贴板缓存，避免其无限增长。
+  Future<void> _pruneClipboardCache(Directory directory) async {
+    final threshold = DateTime.now().subtract(const Duration(days: 7));
+    try {
+      await for (final entity in directory.list()) {
+        if (entity is! File) continue;
+        final stat = await entity.stat();
+        if (stat.modified.isBefore(threshold)) {
+          await entity.delete();
+        }
+      }
+    } catch (_) {
+      // 清理失败不影响复制流程。
+    }
   }
 
   Future<void> _exportFile() async {
