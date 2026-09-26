@@ -8,6 +8,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
@@ -333,9 +334,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
         await pluginService.importPluginFromContent(response.body,
             updateForId: plugin.localId);
         if (!mounted) return;
-        plugin.isInstalled = true;
-        plugin.localVersion = plugin.version;
-        plugin.localId = plugin.id;
+        _syncInstalledStatus();
         BlurSnackBar.show(context, wasInstalled ? '插件更新成功' : '插件安装成功');
       } else {
         BlurSnackBar.show(context, '下载插件失败: ${response.statusCode}');
@@ -349,6 +348,56 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
           plugin.isInstalling = false;
         });
       }
+    }
+  }
+
+  bool _canDeletePlugin(_PluginInfo plugin) {
+    final localId = plugin.localId;
+    if (!plugin.isInstalled || localId == null) return false;
+    return context.read<PluginService>().plugins.any(
+          (installed) =>
+              installed.manifest.id == localId && !installed.isBuiltin,
+        );
+  }
+
+  Future<void> _deletePlugin(_PluginInfo plugin) async {
+    final localId = plugin.localId;
+    if (localId == null || !_canDeletePlugin(plugin)) return;
+
+    final confirmed = await BlurDialog.show<bool>(
+      context: context,
+      title: '确认删除',
+      content: '确定要删除插件「${plugin.name}」吗？此操作不可撤销。',
+      actions: [
+        AdaptiveMediaActionButton(
+          label: '取消',
+          compact: true,
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        AdaptiveMediaActionButton(
+          label: '删除',
+          compact: true,
+          emphasis: AdaptiveMediaActionEmphasis.destructive,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() => plugin.isDeleting = true);
+    try {
+      final deleted = await context.read<PluginService>().deletePlugin(localId);
+      if (!mounted) return;
+      if (deleted) {
+        _syncInstalledStatus();
+        BlurSnackBar.show(context, '插件已删除');
+      } else {
+        BlurSnackBar.show(context, '删除失败，请在插件设置中检查此插件');
+      }
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '删除插件失败: $error');
+    } finally {
+      if (mounted) setState(() => plugin.isDeleting = false);
     }
   }
 
@@ -648,7 +697,11 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            Row(
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 8,
+              overflowSpacing: 8,
               children: [
                 AdaptiveMediaActionButton(
                   label: '查看文档',
@@ -656,7 +709,6 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
                   compact: true,
                   onPressed: () => _showPluginReadme(plugin),
                 ),
-                const Spacer(),
                 _buildActionButtons(plugin),
               ],
             ),
@@ -669,7 +721,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
   Widget _buildActionButtons(_PluginInfo plugin) {
     final isVersionCompatible = _isVersionCompatible(plugin.minHostVersion);
 
-    if (plugin.isInstalling) {
+    if (plugin.isInstalling || plugin.isDeleting) {
       return const SizedBox(
         width: 24,
         height: 24,
@@ -680,14 +732,34 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
     if (plugin.isInstalled) {
       final hasUpdate = plugin.localVersion != null &&
           _compareVersions(plugin.version, plugin.localVersion!) > 0;
+      final canDelete = _canDeletePlugin(plugin);
+      final deleteButton = AdaptiveMediaActionButton(
+        label: '删除',
+        desktopIcon: Ionicons.trash_outline,
+        phoneIcon: cupertino.CupertinoIcons.trash,
+        compact: true,
+        emphasis: AdaptiveMediaActionEmphasis.destructive,
+        onPressed: () => _deletePlugin(plugin),
+      );
       if (hasUpdate) {
-        return AdaptiveMediaActionButton(
-          label: '更新',
-          desktopIcon: Ionicons.refresh_outline,
-          onPressed: () => _installPlugin(plugin),
-          emphasis: AdaptiveMediaActionEmphasis.primary,
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AdaptiveMediaActionButton(
+              label: '更新',
+              desktopIcon: Ionicons.refresh_outline,
+              onPressed: () => _installPlugin(plugin),
+              emphasis: AdaptiveMediaActionEmphasis.primary,
+              compact: true,
+            ),
+            if (canDelete) ...[
+              const SizedBox(width: 8),
+              deleteButton,
+            ],
+          ],
         );
       }
+      if (canDelete) return deleteButton;
       return AdaptiveMediaActionButton(
         label: '已安装',
         desktopIcon: Ionicons.checkmark_circle_outline,
@@ -824,6 +896,7 @@ class _PluginInfo {
   final List<String> tags;
   bool isInstalled = false;
   bool isInstalling = false;
+  bool isDeleting = false;
   String? localVersion;
   String? localId;
 
