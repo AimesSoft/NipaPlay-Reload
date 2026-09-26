@@ -7,14 +7,6 @@ const int _timelinePreviewDefaultWidth = 320;
 /// on MDK only: enabling the MDK preference must not start another libmpv
 /// instance after the playback kernel is switched to MediaKit.
 bool supportsTimelinePreviewForKernel(PlayerKernelType kernel) {
-  // Windows 上不能创建第二个后台 MDK 播放器：双 MDK 实例会在部分机器的
-  // D3D11/显卡驱动层发生原生死锁，表现为窗口瞬间"未响应"（Dart 层无法
-  // 规避）。Windows 改为调用独立的 ffmpeg 子进程抽帧（见
-  // _createTimelineThumbnailViaFfmpeg），与播放内核无关，进程隔离也保证
-  // 子进程出任何问题都不会卡死主程序。
-  if (!kIsWeb && Platform.isWindows) {
-    return true;
-  }
   return kernel == PlayerKernelType.mdk;
 }
 
@@ -184,11 +176,6 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       _timelinePreviewPending.add(bucket);
 
       try {
-        // Windows：独立 ffmpeg 子进程抽帧，绝不创建第二个播放器。
-        if (!kIsWeb && Platform.isWindows) {
-          return await _createTimelineThumbnailViaFfmpeg(
-              source, targetPath, bucket, session);
-        }
         final kernel = PlayerFactory.getKernelType();
         final previewPlayer =
             await _ensureTimelinePreviewPlayer(kernel, source);
@@ -218,96 +205,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   bool _isTimelinePreviewKernelSupported() {
-    // Windows 走 ffmpeg 子进程，只看 ffmpeg.exe 是否随包提供，与播放内核无关
-    if (!kIsWeb && Platform.isWindows) {
-      return _resolveTimelineFfmpegPath() != null;
-    }
     final kernel = PlayerFactory.getKernelType();
     return supportsTimelinePreviewForKernel(kernel);
-  }
-
-  /// 定位随应用打包的 ffmpeg.exe（release 包中与 NipaPlay.exe 同目录，
-  /// 由 Windows 构建工作流下载并放入打包目录）。开发环境下不存在则返回
-  /// null，时间轴预览自动不可用。
-  String? _resolveTimelineFfmpegPath() {
-    if (kIsWeb || !Platform.isWindows) return null;
-    final exePath =
-        p.join(File(Platform.resolvedExecutable).parent.path, 'ffmpeg.exe');
-    return File(exePath).existsSync() ? exePath : null;
-  }
-
-  /// 把应用内部使用的媒体地址转成 ffmpeg 能识别的输入地址。
-  String? _normalizeTimelineSourceForFfmpeg(String source) {
-    if (source.isEmpty) return null;
-    if (source.startsWith('file://')) {
-      try {
-        return Uri.parse(source).toFilePath();
-      } catch (_) {
-        return null;
-      }
-    }
-    // 本地盘符路径、UNC（SMB）路径、http(s) 直链 ffmpeg 均可直接打开
-    return source;
-  }
-
-  /// Windows 专用：启动 ffmpeg 子进程在指定时间点抽一帧，缩放为缩略图后
-  /// 直接写成 JPEG 文件。子进程与主程序完全隔离：
-  /// - 不会创建第二个播放器/D3D11 设备，从根源上消除原生死锁；
-  /// - 启动与退出均有超时，异常时直接 kill 进程，绝不影响 UI 线程。
-  Future<String?> _createTimelineThumbnailViaFfmpeg(
-    String source,
-    String targetPath,
-    int bucket,
-    int session,
-  ) async {
-    final exe = _resolveTimelineFfmpegPath();
-    if (exe == null) return null;
-    final input = _normalizeTimelineSourceForFfmpeg(source);
-    if (input == null) return null;
-
-    final args = <String>[
-      '-hide_banner',
-      '-loglevel', 'error',
-      '-nostdin',
-      '-y',
-      // -ss 放在 -i 之前为输入级 seek，直接定位到最近关键帧，
-      // 长视频也几乎瞬时完成，缩略图无需帧级精确。
-      '-ss', (bucket / 1000.0).toStringAsFixed(3),
-      '-i', input,
-      '-frames:v', '1',
-      '-vf', 'scale=$_timelinePreviewDefaultWidth:-2',
-      '-q:v', '4',
-      '-f', 'image2',
-      targetPath,
-    ];
-
-    Process? process;
-    try {
-      process = await Process.start(exe, args)
-          .timeout(const Duration(seconds: 10));
-      // 排空 stderr，避免管道缓冲区写满后子进程阻塞
-      unawaited(process.stderr.drain<List<int>>(<int>[]));
-      final exitCode =
-          await process.exitCode.timeout(const Duration(seconds: 20));
-      if (session != _timelinePreviewSessionId) return null;
-      final file = File(targetPath);
-      if (exitCode == 0 &&
-          await file.exists() &&
-          (await file.length()) > 0) {
-        _timelinePreviewCache[bucket] = targetPath;
-        return targetPath;
-      }
-      debugPrint('ffmpeg 时间轴抽帧失败: exit=$exitCode, bucket=${bucket}ms');
-      return null;
-    } catch (e) {
-      debugPrint('ffmpeg 时间轴抽帧异常: $e');
-      if (process != null) {
-        try {
-          process.kill(ProcessSignal.sigkill);
-        } catch (_) {}
-      }
-      return null;
-    }
   }
 
   Future<AbstractPlayer?> _ensureTimelinePreviewPlayer(
@@ -323,11 +222,28 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
+      if (!kIsWeb && Platform.isWindows && kernel == PlayerKernelType.mdk) {
+        // Windows 防护：预览播放器仅用于 320x180 软渲染抽帧，强制软件解码，
+        // 避免与主播放器的 D3D11 硬解实例争用；同时跳过 updateTexture()
+        // （其 "CreateRT" 会在 platform 线程再建一套 D3D11 共享纹理设备）。
+        // fvp 的 snapshot 走 mdk 原生软渲染回传 RGBA，不依赖纹理挂载
+        // （见 third_party/fvp/lib/src/callbacks.cpp MdkSnapshot）。
+        try {
+          previewPlayer.setProperty('video.hwdec', 'no');
+        } catch (e) {
+          debugPrint('设置时间轴预览软解失败: $e');
+        }
+      }
       previewPlayer.setMedia(source, PlayerMediaType.video);
-      await previewPlayer.prepare();
+      // prepare 添加整体超时：任何一步挂住都只放弃本张缩略图，绝不阻塞 UI。
+      await previewPlayer
+          .prepare()
+          .timeout(const Duration(seconds: 5),
+              onTimeout: () =>
+                  throw TimeoutException('时间轴预览播放器 prepare 超时'));
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
-      if (kernel == PlayerKernelType.mdk) {
+      if (kernel == PlayerKernelType.mdk && !kIsWeb && !Platform.isWindows) {
         try {
           await previewPlayer.updateTexture();
         } catch (e) {
@@ -355,12 +271,21 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   void _disposeTimelinePreviewPlayer() {
-    try {
-      _timelinePreviewPlayer?.dispose();
-    } catch (_) {}
+    final player = _timelinePreviewPlayer;
     _timelinePreviewPlayer = null;
     _timelinePreviewPlayerKernel = null;
     _timelinePreviewPlayerSource = null;
+    if (player == null) return;
+    // 先置为停止态让原生渲染循环退出，再延迟释放：避免在 UI 线程上同步
+    // join 可能仍阻塞的原生渲染线程导致窗口"未响应"。
+    try {
+      player.state = PlayerPlaybackState.stopped;
+    } catch (_) {}
+    Future.delayed(const Duration(milliseconds: 150), () {
+      try {
+        player.dispose();
+      } catch (_) {}
+    });
   }
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
@@ -376,7 +301,9 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       final kernel =
           _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
       if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
-          player.textureId.value == null) {
+          player.textureId.value == null &&
+          !kIsWeb &&
+          !Platform.isWindows) {
         try {
           await player.updateTexture();
         } catch (e) {
@@ -410,16 +337,23 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (kernel == PlayerKernelType.mdk) {
         // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
-        await player.snapshot(width: targetWidth, height: targetHeight);
+        // snapshot 依赖渲染回调完成，异常/挂住时用超时兜底（放弃本张图），
+        // 防止串行队列被永久占死。
+        await player
+            .snapshot(width: targetWidth, height: targetHeight)
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
         await Future.delayed(const Duration(milliseconds: 60));
       }
 
-      PlayerFrame? frame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      PlayerFrame? frame = await player
+          .snapshot(width: targetWidth, height: targetHeight)
+          .timeout(const Duration(seconds: 2), onTimeout: () => null);
       if ((frame == null || frame.bytes.isEmpty) &&
           kernel == PlayerKernelType.mdk) {
         await Future.delayed(const Duration(milliseconds: 80));
-        frame = await player.snapshot(width: targetWidth, height: targetHeight);
+        frame = await player
+            .snapshot(width: targetWidth, height: targetHeight)
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
       }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
