@@ -20,7 +20,6 @@ class BlurDialog {
     Color? phoneBarrierColor,
     double? desktopMaxWidth,
     double? desktopMaxHeightFactor,
-    bool desktopShowCloseButton = true,
   }) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -46,7 +45,6 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       maxWidth: desktopMaxWidth,
       maxHeightFactor: desktopMaxHeightFactor,
-      showCloseButton: desktopShowCloseButton,
     );
   }
 
@@ -60,7 +58,6 @@ class BlurDialog {
     bool barrierDismissible = true,
     double? maxWidth,
     double? maxHeightFactor,
-    bool showCloseButton = true,
   }) {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
@@ -94,7 +91,6 @@ class BlurDialog {
           );
 
           return NipaplayWindowScaffold(
-            showCloseButton: showCloseButton,
             maxWidth: dialogWidth,
             maxHeightFactor: maxHeightFactor ?? (isRealPhone ? 0.85 : 0.8),
             onClose: barrierDismissible
