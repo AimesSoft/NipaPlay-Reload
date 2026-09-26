@@ -2,8 +2,9 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
-#include <shellapi.h>
 #include <windows.h>
+
+#include <shlobj.h>
 
 #include <cstring>
 #include <memory>
