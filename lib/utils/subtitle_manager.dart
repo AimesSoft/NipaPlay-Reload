@@ -1610,9 +1610,9 @@ class SubtitleManager extends ChangeNotifier {
         '.ass' => 40,
         '.ssa' => 35,
         '.srt' => 30,
-        '.sub' => 20,
+        '.sub' => 25,
         '.sup' => 10,
-        '.idx' => 25,
+        '.idx' => 20,
         _ => 0,
       };
 
