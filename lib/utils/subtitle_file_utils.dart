@@ -279,7 +279,41 @@ int computeLocalSubtitleMatchScore({
     }
   }
 
+  score += computeSubtitleLanguagePreferenceBonus(subtitleName);
+
   return score;
+}
+
+/// 语言偏好加权：同名多字幕（如 .ass 与 .SC.ass）时优先默认激活简体/简日，
+/// 繁中次之。其余语言不加权。
+int computeSubtitleLanguagePreferenceBonus(String subtitleName) {
+  final lower = subtitleName.toLowerCase();
+  // 语言标记通常是文件名末段（.SC.ass / .chs&sja），按点分段检测
+  final segments = lower.split(RegExp(r'[.\[\] ()_-]+'));
+  const simplified = {'sc', 'chs', 'gb', 'scjp', 'chsjpn', 'sc&jp', 'sc&jpn'};
+  const traditional = {'tc', 'cht', 'big5', 'tcjp', 'chtjpn', 'tc&jp', 'tc&jpn'};
+  for (final segment in segments) {
+    if (simplified.contains(segment) ||
+        segment.contains('简中') ||
+        segment.contains('简体') ||
+        segment.contains('简日')) {
+      return 15;
+    }
+    if (segment.contains('jp') ||
+        segment.contains('jpn') ||
+        segment == 'ja' ||
+        segment.contains('日')) {
+      return 12;
+    }
+  }
+  for (final segment in segments) {
+    if (traditional.contains(segment) ||
+        segment.contains('繁中') ||
+        segment.contains('繁体')) {
+      return 6;
+    }
+  }
+  return 0;
 }
 
 bool _isSubtitleNoiseToken(String token) {

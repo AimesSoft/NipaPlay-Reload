@@ -1218,51 +1218,6 @@ class SubtitleManager extends ChangeNotifier {
     setExternalSubtitle(path, isManualSetting: true);
   }
 
-  File? _pickBestLocalSubtitleFile({
-    required List<File> subtitleFiles,
-    required String videoName,
-    required List<String> videoNumbers,
-    String? episodeNumber,
-  }) {
-    if (subtitleFiles.isEmpty) {
-      return null;
-    }
-
-    final scoredCandidates = subtitleFiles.map((file) {
-      final subtitleName = p.basenameWithoutExtension(file.path);
-      final extension = p.extension(file.path).toLowerCase();
-      final score = computeLocalSubtitleMatchScore(
-        videoName: videoName,
-        subtitleName: subtitleName,
-        extension: extension,
-        videoNumbers: videoNumbers,
-        episodeNumber: episodeNumber,
-      );
-      return (file: file, score: score);
-    }).toList()
-      ..sort((a, b) {
-        final scoreCompare = b.score.compareTo(a.score);
-        if (scoreCompare != 0) {
-          return scoreCompare;
-        }
-        return a.file.path.compareTo(b.file.path);
-      });
-
-    for (final candidate in scoredCandidates) {
-      debugPrint(
-        'SubtitleManager: 本地字幕候选 ${candidate.file.path} 得分: ${candidate.score}',
-      );
-    }
-
-    final bestCandidate = scoredCandidates.first;
-    if (bestCandidate.score >= minReliableLocalSubtitleMatchScore ||
-        (subtitleFiles.length == 1 && bestCandidate.score >= 0)) {
-      return bestCandidate.file;
-    }
-
-    return null;
-  }
-
   // 自动检测并加载同名字幕文件
   Future<void> autoDetectAndLoadSubtitle(String videoPath) async {
     if (kIsWeb) {
@@ -1481,7 +1436,10 @@ class SubtitleManager extends ChangeNotifier {
       // 常见字幕文件扩展名按优先级排序
       final subtitleExts = subtitleExtensionMatchScore.keys.toList();
 
-      // 搜索可能的字幕文件
+      // 同名精确匹配 + 目录模糊匹配统一走"激活最佳一条 + 其余叠挂"：
+      // 内核 sid 单轨显示，叠挂的多条 ASS 仍只有激活条目可见，但全部进入
+      // 轨道列表可手动切换，不再需要从远程库另行加载。
+      final exactMatches = <File>[];
       for (final ext in subtitleExts) {
         final potentialPath = p.join(videoDir, '$videoName$ext');
         debugPrint('SubtitleManager: 尝试检测字幕文件: $potentialPath');
@@ -1489,34 +1447,19 @@ class SubtitleManager extends ChangeNotifier {
         // .idx 无独立播放语义：同名 .sub 不存在时跳过该候选
         if (subtitleFile.existsSync() && isVobSubPairComplete(potentialPath)) {
           debugPrint('SubtitleManager: 找到匹配的字幕文件: $potentialPath');
-
-          // 等待一段时间确保播放器准备好
-          await Future.delayed(_autoLoadPlayerReadyDelay);
-
-          // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-          setExternalSubtitle(potentialPath, isManualSetting: false);
-
-          // 保存这个自动找到的字幕路径，下次可以直接使用
-          saveVideoSubtitleMapping(videoPath, potentialPath);
-
-          // 写入 external_subtitles 列表，让字幕轨道菜单能看到
-          await _persistExternalSubtitleSelection(
-            videoPath: videoPath,
-            subtitlePath: potentialPath,
-            isActive: true,
-          );
-
-          // 设置完成后强制刷新状态
-          await Future.delayed(_autoLoadStateSettleDelay);
-
-          // 触发自动加载字幕回调
-          if (onExternalSubtitleAutoLoaded != null) {
-            final fileName = p.basename(potentialPath);
-            onExternalSubtitleAutoLoaded!(potentialPath, fileName);
-          }
-
-          return;
+          exactMatches.add(subtitleFile);
         }
+      }
+
+      if (exactMatches.isNotEmpty) {
+        await _autoLoadLocalSubtitleGroup(
+          videoPath: videoPath,
+          subtitleFiles: exactMatches,
+          videoName: videoName,
+          videoNumbers: videoNumbers,
+          episodeNumber: episodeNumber,
+        );
+        return;
       }
 
       // 如果没有找到完全匹配的，尝试查找目录中可能匹配的字幕文件
@@ -1542,45 +1485,14 @@ class SubtitleManager extends ChangeNotifier {
             return;
           }
 
-          final bestMatchFile = _pickBestLocalSubtitleFile(
+          await _autoLoadLocalSubtitleGroup(
+            videoPath: videoPath,
             subtitleFiles: subtitleFiles,
             videoName: videoName,
             videoNumbers: videoNumbers,
             episodeNumber: episodeNumber,
+            requireReliableMatch: true,
           );
-
-          if (bestMatchFile != null) {
-            debugPrint('SubtitleManager: 找到最佳匹配的字幕文件: ${bestMatchFile.path}');
-
-            // 等待一段时间确保播放器准备好
-            await Future.delayed(_autoLoadPlayerReadyDelay);
-
-            // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-            setExternalSubtitle(bestMatchFile.path, isManualSetting: false);
-
-            // 保存这个自动找到的字幕路径，下次可以直接使用
-            saveVideoSubtitleMapping(videoPath, bestMatchFile.path);
-
-            // 写入 external_subtitles 列表，让字幕轨道菜单能看到
-            await _persistExternalSubtitleSelection(
-              videoPath: videoPath,
-              subtitlePath: bestMatchFile.path,
-              isActive: true,
-            );
-
-            // 设置完成后强制刷新状态
-            await Future.delayed(_autoLoadStateSettleDelay);
-
-            // 触发自动加载字幕回调
-            if (onExternalSubtitleAutoLoaded != null) {
-              final fileName = p.basename(bestMatchFile.path);
-              onExternalSubtitleAutoLoaded!(bestMatchFile.path, fileName);
-            }
-
-            return;
-          }
-
-          debugPrint('SubtitleManager: 没有找到足够可靠的本地字幕匹配结果');
         } catch (e) {
           debugPrint('SubtitleManager: 目录搜索错误: $e');
         }
@@ -1589,6 +1501,96 @@ class SubtitleManager extends ChangeNotifier {
       debugPrint('SubtitleManager: 未找到匹配的字幕文件');
     } catch (e) {
       debugPrint('SubtitleManager: 自动检测字幕文件失败: $e');
+    }
+  }
+
+  /// 本地自动加载一组字幕：评分选最佳一条激活（简中/简日优先），
+  /// 其余叠加挂载进入轨道列表供手动切换。
+  Future<void> _autoLoadLocalSubtitleGroup({
+    required String videoPath,
+    required List<File> subtitleFiles,
+    required String videoName,
+    required List<String> videoNumbers,
+    String? episodeNumber,
+    bool requireReliableMatch = false,
+  }) async {
+    final scored = subtitleFiles.map((file) {
+      final subtitleName = p.basenameWithoutExtension(file.path);
+      final extension = p.extension(file.path).toLowerCase();
+      final score = computeLocalSubtitleMatchScore(
+        videoName: videoName,
+        subtitleName: subtitleName,
+        extension: extension,
+        videoNumbers: videoNumbers,
+        episodeNumber: episodeNumber,
+      );
+      return (file: file, score: score);
+    }).toList()
+      ..sort((a, b) {
+        final scoreCompare = b.score.compareTo(a.score);
+        if (scoreCompare != 0) return scoreCompare;
+        return a.file.path.compareTo(b.file.path);
+      });
+
+    for (final candidate in scored) {
+      debugPrint(
+        'SubtitleManager: 本地字幕候选 ${candidate.file.path} 得分: ${candidate.score}',
+      );
+    }
+
+    var best = scored.first;
+    if (requireReliableMatch &&
+        best.score < minReliableLocalSubtitleMatchScore &&
+        !(subtitleFiles.length == 1 && best.score >= 0)) {
+      debugPrint('SubtitleManager: 没有找到足够可靠的本地字幕匹配结果');
+      return;
+    }
+
+    // 等待一段时间确保播放器准备好
+    await Future.delayed(_autoLoadPlayerReadyDelay);
+
+    // 设置外部字幕（不标记为手动设置，因为是自动检测的）
+    setExternalSubtitle(best.file.path, isManualSetting: false);
+
+    // 保存这个自动找到的字幕路径，下次可以直接使用
+    saveVideoSubtitleMapping(videoPath, best.file.path);
+
+    // 写入 external_subtitles 列表，让字幕轨道菜单能看到
+    await _persistExternalSubtitleSelection(
+      videoPath: videoPath,
+      subtitlePath: best.file.path,
+      isActive: true,
+    );
+
+    // 其余候选叠加挂载（不重复激活）。ASS/SSA 叠挂只进轨道列表不显示，
+    // SRT/VTT 叠层可共存显示；同源 .idx 与 .sub 不重复挂。
+    final bestBase = p.basenameWithoutExtension(best.file.path).toLowerCase();
+    for (final candidate in scored.skip(1)) {
+      final ext = p.extension(candidate.file.path).toLowerCase();
+      if (ext == '.idx' &&
+          bestBase == p.basenameWithoutExtension(candidate.file.path).toLowerCase()) {
+        continue;
+      }
+      if (ext == '.sub' &&
+          bestBase == p.basenameWithoutExtension(candidate.file.path).toLowerCase()) {
+        continue;
+      }
+      try {
+        await addExternalSubtitleToStack(candidate.file.path,
+            displayName: p.basename(candidate.file.path));
+        debugPrint('SubtitleManager: 自动叠加字幕 ${p.basename(candidate.file.path)}');
+      } catch (e) {
+        debugPrint('SubtitleManager: 自动叠加字幕 ${p.basename(candidate.file.path)} 失败: $e');
+      }
+    }
+
+    // 设置完成后强制刷新状态
+    await Future.delayed(_autoLoadStateSettleDelay);
+
+    // 触发自动加载字幕回调
+    if (onExternalSubtitleAutoLoaded != null) {
+      final fileName = p.basename(best.file.path);
+      onExternalSubtitleAutoLoaded!(best.file.path, fileName);
     }
   }
 
