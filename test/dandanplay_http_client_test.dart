@@ -5,9 +5,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
 import 'package:nipaplay/utils/network_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const gateway = NetworkSettings.primaryServer;
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('every official API blocks anonymous requests before the network',
       () async {
@@ -106,8 +110,11 @@ void main() {
     client.close();
   });
 
-  test('never forwards the Dandanplay account token to a custom provider',
+  test('forwards the account token only to the selected custom provider',
       () async {
+    SharedPreferences.setMockInitialValues({
+      'dandanplay_server_url': 'https://third-party.example/dandanplay',
+    });
     final seen = <http.Request>[];
     final client = DandanplayHttpClient(
       authorization: () => {'Authorization': 'Bearer account-token'},
@@ -117,12 +124,47 @@ void main() {
       }),
     );
     await client.get(
-        Uri.parse('https://third-party.example/api/v2/comment/123'),
+      Uri.parse('https://third-party.example/dandanplay/api/v2/comment/123'),
+    );
+    await client.get(
+        Uri.parse('https://third-party.example/dandanplay/api/v2/favorite'),
+        headers: {'Authorization': 'Bearer stale-token'});
+    await client.get(Uri.parse('https://unrelated.example/api/v2/comment/123'),
         headers: {'Authorization': 'Bearer account-token'});
     await client.get(Uri.parse('https://api.bgm.tv/v0/me'),
         headers: {'Authorization': 'Bearer bangumi-token'});
-    expect(seen[0].headers.containsKey('authorization'), isFalse);
-    expect(seen[1].headers['authorization'], 'Bearer bangumi-token');
+    expect(seen[0].headers['authorization'], 'Bearer account-token');
+    expect(seen[1].headers['authorization'], 'Bearer account-token');
+    expect(seen[2].headers.containsKey('authorization'), isFalse);
+    expect(seen[3].headers['authorization'], 'Bearer bangumi-token');
+    client.close();
+  });
+
+  test('custom provider trust respects scheme, port, and path boundaries',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'dandanplay_server_url': 'https://third-party.example:8443/dandanplay',
+      'dandanplay_server_mode': 'custom',
+    });
+    final seen = <http.Request>[];
+    final client = DandanplayHttpClient(
+      authorization: () => {'Authorization': 'Bearer account-token'},
+      inner: MockClient((request) async {
+        seen.add(request);
+        return http.Response('{}', 200);
+      }),
+    );
+    for (final url in [
+      'http://third-party.example:8443/dandanplay/api/v2/comment/1',
+      'https://third-party.example/dandanplay/api/v2/comment/2',
+      'https://third-party.example:8443/dandanplay-evil/api/v2/comment/3',
+    ]) {
+      await client.get(Uri.parse(url),
+          headers: {'Authorization': 'Bearer account-token'});
+    }
+    expect(
+        seen.every((request) => !request.headers.containsKey('authorization')),
+        isTrue);
     client.close();
   });
 

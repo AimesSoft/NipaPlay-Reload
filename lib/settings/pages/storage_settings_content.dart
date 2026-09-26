@@ -80,36 +80,38 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                final currentPath =
-                    (videoState.screenshotSaveDirectory ?? '').trim();
-                final updatedMessage =
-                    context.l10n.screenshotSaveLocationUpdated;
-                return AdaptiveSettingsTile<void>.card(
-                  title: context.l10n.screenshotSaveLocation,
-                  subtitle: currentPath.isEmpty
-                      ? context.l10n.defaultDownloadDir
-                      : currentPath,
-                  icon: Icons.camera_alt_outlined,
-                  phoneIcon: cupertino.CupertinoIcons.camera,
-                  onTap: () async {
-                    final selected = await FilePickerService().pickDirectory(
-                      initialDirectory:
-                          currentPath.isEmpty ? null : currentPath,
-                    );
-                    if (selected == null || selected.trim().isEmpty) return;
-                    await videoState.setScreenshotSaveDirectory(selected);
-                    if (!mounted) return;
-                    AdaptiveSnackBar.show(
-                      this.context,
-                      message: updatedMessage,
-                      type: AdaptiveSnackBarType.success,
-                    );
-                  },
-                );
-              },
-            ),
+            if (defaultTargetPlatform != TargetPlatform.iOS &&
+                defaultTargetPlatform != TargetPlatform.android)
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  final currentPath =
+                      (videoState.screenshotSaveDirectory ?? '').trim();
+                  final updatedMessage =
+                      context.l10n.screenshotSaveLocationUpdated;
+                  return AdaptiveSettingsTile<void>.card(
+                    title: context.l10n.screenshotSaveLocation,
+                    subtitle: currentPath.isEmpty
+                        ? context.l10n.defaultDownloadDir
+                        : currentPath,
+                    icon: Icons.camera_alt_outlined,
+                    phoneIcon: cupertino.CupertinoIcons.camera,
+                    onTap: () async {
+                      final selected = await FilePickerService().pickDirectory(
+                        initialDirectory:
+                            currentPath.isEmpty ? null : currentPath,
+                      );
+                      if (selected == null || selected.trim().isEmpty) return;
+                      await videoState.setScreenshotSaveDirectory(selected);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        this.context,
+                        message: updatedMessage,
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  );
+                },
+              ),
             if (defaultTargetPlatform == TargetPlatform.iOS)
               Consumer<VideoPlayerState>(
                 builder: (context, videoState, child) {
