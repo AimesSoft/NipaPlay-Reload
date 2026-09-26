@@ -609,6 +609,7 @@ class ErikaPlayerAdapter
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   String _media = '';
+  String _userAgent = '';
   double _volume = 1.0;
   double _playbackRate = 1.0;
   PlayerUpscalerStatus _lastUpscalerStatus = const PlayerUpscalerStatus.off();
@@ -905,7 +906,10 @@ class ErikaPlayerAdapter
       return;
     }
     await _player.ensureCreated();
-    await _player.open(_media);
+    await _player.open(
+      _media,
+      httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
+    );
     _subtitleTrace('prepare open complete media=$_media');
     _state = PlayerPlaybackState.paused;
   }
@@ -1045,7 +1049,7 @@ class ErikaPlayerAdapter
 
   @override
   void setUserAgent(String ua) {
-    // erika_flutter 暂未暴露设置 HTTP User-Agent 的接口，留空实现。
+    _userAgent = ua;
   }
 
   @override

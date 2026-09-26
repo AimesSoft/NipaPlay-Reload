@@ -3,6 +3,8 @@ library video_player_state;
 export 'video_aspect_geometry.dart' show VideoAspectMode;
 
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay/services/plugin_playback_service.dart';
+import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
@@ -308,6 +310,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  int _sourceResolutionGeneration = 0;
   int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;
@@ -359,6 +362,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _playerTopSkipButtonVisible = false;
   bool _playerTopResizeButtonVisible = false;
   bool _playerTopFrameStepButtonsVisible = false;
+  bool _showPlayerMenuQuickControls = false;
   // MKV 章节标记开关：显示 MKV 自带章节在进度条上的分割线标记/当前章节高亮/点击跳转
   final String _chapterMarkersEnabledKey = 'chapter_markers_enabled';
   bool _chapterMarkersEnabled = true; // 默认开启
@@ -1272,6 +1276,7 @@ int _exactEndStreak = 0;
   bool get playerTopResizeButtonVisible => _playerTopResizeButtonVisible;
   bool get playerTopFrameStepButtonsVisible =>
       _playerTopFrameStepButtonsVisible;
+  bool get showPlayerMenuQuickControls => _showPlayerMenuQuickControls;
 
   double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
     final limit = subtitleDelayCustomLimitSeconds;

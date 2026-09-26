@@ -395,7 +395,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('television-media-poster-42')),
+      find.byKey(const ValueKey<String>('media-collection-local-42')),
       findsOneWidget,
     );
     expect(

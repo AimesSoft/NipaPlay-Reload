@@ -18,6 +18,14 @@ class MediaSourceUtils {
     return uri != null && uri.scheme.toLowerCase() == 'content';
   }
 
+  /// Returns a credential-safe description for remote path resolution errors.
+  ///
+  /// In particular, [FormatException.toString] includes its source value,
+  /// which may be a WebDAV `username:password` user-info string.
+  static String safeRemotePathError(Object error) {
+    return error.runtimeType.toString();
+  }
+
   static bool isSmbPath(String filePath) {
     if (filePath.isEmpty) return false;
     final lower = filePath.toLowerCase();

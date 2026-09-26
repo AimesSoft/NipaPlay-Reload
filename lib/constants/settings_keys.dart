@@ -17,6 +17,11 @@ class SettingsKeys {
 
   static const String fastPlaybackStartup = 'fast_playback_startup';
 
+  static const String showPlayerMenuQuickControls =
+      'show_player_menu_quick_controls';
+
+  static const String showMediaLibraryNewBadge = 'show_media_library_new_badge';
+
   // =========================== 外部播放器相关设置 ============================
 
   static const String useExternalPlayer =
@@ -55,6 +60,9 @@ class SettingsKeys {
 
   static const String labsEnableErikaPlayerKernel =
       'labs_enable_erika_player_kernel';
+
+  static const String labsEnableImmersiveAnimeDetail =
+      'labs_enable_immersive_anime_detail';
 
   static const String danmakuEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';

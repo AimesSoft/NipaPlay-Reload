@@ -60,6 +60,21 @@ class NetworkSettings {
     return host == '139.224.252.88' && uri.port == 16001;
   }
 
+  /// Whether [uri] belongs to the custom Dandanplay-compatible server that the
+  /// user explicitly selected.
+  ///
+  /// Selecting a custom server is also the trust decision that allows account
+  /// credentials to be sent to that server. Merely using a compatible API path
+  /// on another origin is not enough.
+  static Future<bool> isSelectedCustomDandanplayServiceUri(Uri uri) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (await getDandanplayServerMode() != DandanplayServerMode.custom) {
+      return false;
+    }
+    final customServer = customServerOf(prefs);
+    return customServer.isNotEmpty && _matchesGateway(uri, customServer);
+  }
+
   static bool _matchesGateway(Uri uri, String base) {
     final gateway = Uri.parse(base);
     if (hostOf(uri) != hostOf(gateway)) return false;

@@ -20,7 +20,7 @@ void main() {
     expect(File('pubspec_overrides.tvos.yaml').existsSync(), isTrue);
     expect(pubspec, contains('package_info_plus: ^10.2.1'));
     expect(pubspec, contains('wakelock_plus: ^1.7.0'));
-    expect(pubspec, contains('erika_flutter: ^0.1.9'));
+    expect(pubspec, contains('erika_flutter: 0.2.0'));
     expect(
       File('.flutter-version-linux').readAsStringSync().trim(),
       '3.47.0-0.3.pre',

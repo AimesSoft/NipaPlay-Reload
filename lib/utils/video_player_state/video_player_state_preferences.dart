@@ -216,6 +216,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  Future<void> _loadPlayerMenuQuickControlsVisibility() async {
+    final prefs = await SharedPreferences.getInstance();
+    final visible =
+        prefs.getBool(SettingsKeys.showPlayerMenuQuickControls) ?? false;
+    if (_showPlayerMenuQuickControls == visible) return;
+    _showPlayerMenuQuickControls = visible;
+    _notifyListeners();
+  }
+
+  Future<void> setShowPlayerMenuQuickControls(bool visible) async {
+    if (_showPlayerMenuQuickControls == visible) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SettingsKeys.showPlayerMenuQuickControls, visible);
+    _showPlayerMenuQuickControls = visible;
+    _notifyListeners();
+  }
+
   Future<void> setPlayerTopSendDanmakuButtonVisible(bool visible) =>
       _setPlayerTopButtonVisibility(
         key: SettingsKeys.playerTopSendDanmakuButtonVisible,
