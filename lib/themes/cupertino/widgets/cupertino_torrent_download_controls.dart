@@ -415,7 +415,8 @@ class _CupertinoTorrentDownloadViewState
       context: context,
       title: item.task.name,
       options: [
-        for (final action in item.actions)
+        for (final action
+            in item.actions.where((action) => action.onPressed != null))
           CupertinoBottomSheetOption(
             label: action.label,
             value: action.action,
@@ -424,7 +425,7 @@ class _CupertinoTorrentDownloadViewState
       ],
     );
     if (selected == null) return;
-    item.action(selected)?.onPressed();
+    item.action(selected)?.onPressed?.call();
   }
 
   Widget _buildEmpty(BuildContext context) {
