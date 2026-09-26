@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
@@ -335,6 +336,29 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     });
   }
 
+  void _keepCurrentItemVisible(int globalIndex) {
+    if (!_scrollController.hasClients) return;
+    final itemContext = _currentItemKey.currentContext;
+    if (itemContext == null) {
+      // SliverList has not built the highlighted row yet.
+      _scrollToCurrentItem(globalIndex, animated: true);
+      return;
+    }
+    final item = itemContext.findRenderObject();
+    final viewport = RenderAbstractViewport.maybeOf(item);
+    if (item == null || viewport == null) return;
+    final pixels = _scrollController.position.pixels;
+    final leading = viewport.getOffsetToReveal(item, 0).offset;
+    final trailing = viewport.getOffsetToReveal(item, 1).offset;
+    if (leading >= pixels - 1 && trailing <= pixels + 1) return;
+    Scrollable.ensureVisible(
+      itemContext,
+      alignment: 0.3,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
   // 用列表实际内容高度校准估算条目高度：
   // 内容高度 = maxScrollExtent + 视口高度，平均条目高度 = 内容高度 / 条目数。
   // ListView 的 maxScrollExtent 基于已构建条目的实测平均高度推算，
@@ -498,20 +522,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
         _currentSubtitleIndex = localIndex;
       });
 
-      // 如果当前字幕不在可见区域，等新布局完成后基于真实位置自动滚动
-      // （ensureVisible 只在条目不可见时滚动，且基于实际 RenderBox，
-      // 不再依赖估算高度，避免高亮被定位到可视区外）
+      // 切句后只在高亮条目超出视口时滚动，避免每句都重新对齐。
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final itemContext = _currentItemKey.currentContext;
-        if (itemContext != null) {
-          Scrollable.ensureVisible(
-            itemContext,
-            alignment: 0.3,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
+        if (!mounted || _currentSubtitleIndex != localIndex) return;
+        _keepCurrentItemVisible(globalIndex);
       });
     }
   }

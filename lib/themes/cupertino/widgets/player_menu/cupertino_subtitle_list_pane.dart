@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/rendering.dart';
 
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
@@ -194,6 +195,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
   // 先用估算高度粗定位，真实布局完成后用 Scrollable.ensureVisible 校正；
   // 若目标条目尚未构建，用实测内容高度校准估算值后重跳一次再校正。
   void _scrollToCurrentItem(int globalIndex, {required bool animated}) {
+    if (_visibleEntries.isEmpty) return;
     final localIndex = (globalIndex - _windowStartIndex)
         .clamp(0, _visibleEntries.length - 1)
         .toInt();
@@ -242,6 +244,29 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
         }
       });
     });
+  }
+
+  void _keepCurrentItemVisible(int globalIndex) {
+    if (!_scrollController.hasClients) return;
+    final itemContext = _currentItemKey.currentContext;
+    if (itemContext == null) {
+      // SliverList has not built the highlighted row yet.
+      _scrollToCurrentItem(globalIndex, animated: true);
+      return;
+    }
+    final item = itemContext.findRenderObject();
+    final viewport = RenderAbstractViewport.maybeOf(item);
+    if (item == null || viewport == null) return;
+    final pixels = _scrollController.position.pixels;
+    final leading = viewport.getOffsetToReveal(item, 0).offset;
+    final trailing = viewport.getOffsetToReveal(item, 1).offset;
+    if (leading >= pixels - 1 && trailing <= pixels + 1) return;
+    Scrollable.ensureVisible(
+      itemContext,
+      alignment: 0.3,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeInOut,
+    );
   }
 
   // 用列表实际内容高度校准估算条目高度：
@@ -329,20 +354,10 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
         _currentLocalIndex = localIndex;
       });
 
-      // 如果当前字幕不在可见区域，等新布局完成后基于真实位置自动滚动
-      // （ensureVisible 只在条目不可见时滚动，且基于实际 RenderBox，
-      // 不再依赖估算高度，避免高亮被定位到可视区外）
+      // 切句后只在高亮条目超出视口时滚动，避免每句都重新对齐。
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final itemContext = _currentItemKey.currentContext;
-        if (itemContext != null) {
-          Scrollable.ensureVisible(
-            itemContext,
-            alignment: 0.3,
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeInOut,
-          );
-        }
+        if (!mounted || _currentLocalIndex != localIndex) return;
+        _keepCurrentItemVisible(globalIndex);
       });
     }
   }
