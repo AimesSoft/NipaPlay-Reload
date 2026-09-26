@@ -74,9 +74,9 @@ class DownloaderSettingsContent extends StatelessWidget {
                   ),
                   subtitle: _text(
                     context,
-                    '任务下载完成后自动把输出文件夹加入库管理并扫描',
-                    '任務下載完成後自動把輸出文件夾加入庫管理並掃描',
-                    'Scan the output folder into the media library after completion.',
+                    '任务下载完成后，仅扫描该任务的视频文件并加入媒体库',
+                    '任務下載完成後，僅掃描該任務的影片檔案並加入媒體庫',
+                    'Scan only this task’s completed video files into the media library.',
                   ),
                   icon: Ionicons.library_outline,
                   phoneIcon: cupertino.CupertinoIcons.collections,

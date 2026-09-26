@@ -1,22 +1,73 @@
+use std::collections::HashMap;
 use std::io::{Read, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
+use std::time::Duration;
+
+use futures_util::future::{AbortHandle, AbortRegistration, Abortable};
 
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ListOnlyResponse, Magnet, Session,
-    DhtSessionConfig, SessionOptions, SessionPersistenceConfig,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, DhtSessionConfig, ListOnlyResponse,
+    Magnet, Session, SessionOptions, SessionPersistenceConfig,
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::runtime::{Builder, Runtime};
 
 struct TorrentRuntime {
     runtime: Runtime,
+    initialization: Mutex<()>,
+    previews: Mutex<PreviewRegistry>,
     api: Mutex<Option<Api>>,
     session: Mutex<Option<Arc<Session>>>,
     download_dir: Mutex<Option<String>>,
     stream_server: Mutex<Option<TorrentStreamServer>>,
+}
+
+// A preview owns both the cancellation handle and its resolved metadata until
+// the dialog is cancelled or the exact preview is consumed by an add request.
+#[flutter_rust_bridge::frb(ignore)]
+#[derive(Default)]
+struct PreviewRegistry {
+    next_id: i32,
+    requests: HashMap<i32, PreviewRequest>,
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+struct PreviewRequest {
+    abort: AbortHandle,
+    registration: Option<AbortRegistration>,
+    metadata: Option<Arc<ListOnlyResponse>>,
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+impl PreviewRegistry {
+    fn begin(&mut self) -> Result<i32, String> {
+        if self.requests.len() >= 32 {
+            return Err("too many pending torrent previews".to_string());
+        }
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .ok_or_else(|| "preview request ID exhausted".to_string())?;
+        let (abort, registration) = AbortHandle::new_pair();
+        self.requests.insert(
+            self.next_id,
+            PreviewRequest {
+                abort,
+                registration: Some(registration),
+                metadata: None,
+            },
+        );
+        Ok(self.next_id)
+    }
+
+    fn cancel(&mut self, id: i32) {
+        if let Some(request) = self.requests.remove(&id) {
+            request.abort.abort();
+        }
+    }
 }
 
 struct TorrentStreamServer {
@@ -38,6 +89,8 @@ fn torrent_runtime() -> &'static TorrentRuntime {
             .thread_name("nipaplay-torrent")
             .build()
             .expect("failed to create torrent runtime"),
+        initialization: Mutex::new(()),
+        previews: Mutex::new(PreviewRegistry::default()),
         api: Mutex::new(None),
         session: Mutex::new(None),
         download_dir: Mutex::new(None),
@@ -45,9 +98,17 @@ fn torrent_runtime() -> &'static TorrentRuntime {
     })
 }
 
-pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
+pub fn torrent_init_session(
+    download_dir: String,
+    session_dir: Option<String>,
+) -> Result<(), String> {
     let normalized_dir = normalize_download_dir(download_dir)?;
     let state = torrent_runtime();
+    // Hold this lock through creation and publication of both API and session.
+    let _initialization = state
+        .initialization
+        .lock()
+        .map_err(|_| "torrent initialization lock poisoned".to_string())?;
     std::fs::create_dir_all(&normalized_dir)
         .map_err(|error| format!("failed to create download directory: {error}"))?;
 
@@ -70,8 +131,9 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
         }
     }
 
-    // Session does not exist or download directory changed – (re)create it.
-    let session_dir = default_session_dir(&normalized_dir);
+    let session_dir = session_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default_session_dir(&normalized_dir));
     torrent_log(format_args!(
         "init_session create session: download_dir={normalized_dir:?}, session_dir={session_dir:?}"
     ));
@@ -122,130 +184,63 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Reserve a request before dispatching the asynchronous FFI call, so that
+/// cancellation also works when the call has not started running yet.
+#[flutter_rust_bridge::frb(sync)]
+pub fn torrent_begin_preview() -> Result<i32, String> {
+    torrent_runtime()
+        .previews
+        .lock()
+        .map_err(|_| "torrent preview lock poisoned".to_string())?
+        .begin()
+}
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn torrent_cancel_preview(request_id: i32) -> Result<(), String> {
+    torrent_runtime()
+        .previews
+        .lock()
+        .map_err(|_| "torrent preview lock poisoned".to_string())?
+        .cancel(request_id);
+    Ok(())
+}
+
 pub fn torrent_add_magnet(
     magnet_uri: String,
     download_dir: String,
     create_folder_for_task: bool,
+    preview_id: i32,
 ) -> Result<String, String> {
-    let raw_len = magnet_uri.len();
-    let magnet_uri = magnet_uri.trim().to_string();
-    let had_outer_whitespace = raw_len != magnet_uri.len();
-    torrent_log(format_args!(
-        "add_magnet start: {}, had_outer_whitespace={had_outer_whitespace}, download_dir={download_dir:?}, create_folder_for_task={create_folder_for_task}",
-        magnet_log_summary(&magnet_uri)
-    ));
-    if magnet_uri.is_empty() {
-        torrent_log(format_args!("add_magnet rejected: magnet URI is empty"));
-        return Err("magnet URI is empty".to_string());
-    }
-
-    let parsed_magnet = match Magnet::parse(&magnet_uri) {
-        Ok(magnet) => {
-            torrent_log(format_args!(
-                "add_magnet parsed: {}",
-                parsed_magnet_log_summary(&magnet)
-            ));
-            magnet
-        }
-        Err(error) => {
-            let detail = format!("{error:#}");
-            torrent_log(format_args!(
-                "add_magnet parse failed: {}, error={}",
-                magnet_log_summary(&magnet_uri),
-                truncate_for_log(&detail, 240)
-            ));
-            return Err(format!("invalid magnet URI: {detail}"));
-        }
-    };
-
-    let normalized_dir = normalize_download_dir(download_dir)?;
-    torrent_init_session(normalized_dir.clone())?;
+    let magnet = Magnet::parse(magnet_uri.trim())
+        .map_err(|error| format!("invalid magnet URI: {error:#}"))?;
     let state = torrent_runtime();
-    let api = current_api(state)?;
-    let magnet_trackers = parsed_magnet.trackers.clone();
-
-    if create_folder_for_task {
-        torrent_log(format_args!(
-            "add_magnet resolving metadata for task folder: {}",
-            magnet_log_summary(&magnet_uri)
-        ));
-        let metadata = resolve_magnet_metadata_for_add(state, &magnet_uri)?;
-        let fallback_folder_name = parsed_magnet
-            .name
-            .as_deref()
-            .and_then(sanitize_folder_name)
-            .or_else(|| parsed_magnet.as_id20().map(|id| id.as_string()));
-        let folder_name = torrent_metadata_folder_name(&metadata).or(fallback_folder_name);
-        let mut options = add_torrent_options(normalized_dir, folder_name.clone());
-        if !metadata.seen_peers.is_empty() {
-            options.initial_peers = Some(metadata.seen_peers.clone());
-        }
-        if !magnet_trackers.is_empty() {
-            options.trackers = Some(magnet_trackers);
-        }
-        let output_folder = options.output_folder.clone();
-        torrent_log(format_args!(
-            "add_magnet rqbit_add start: folder_name={folder_name:?}, output_folder={output_folder:?}, source=resolved_metadata"
-        ));
-
-        return state.runtime.block_on(async {
-            match api
-                .api_add_torrent(
-                    AddTorrent::from_bytes(metadata.torrent_bytes),
-                    Some(options),
-                )
-                .await
-            {
-                Ok(response) => {
-                    torrent_log(format_args!(
-                        "add_magnet rqbit_add success: {}",
-                        magnet_log_summary(&magnet_uri)
-                    ));
-                    response_to_json(&response)
-                }
-                Err(error) => {
-                    let detail = format_error_chain(&error);
-                    torrent_log(format_args!(
-                        "add_magnet rqbit_add failed: {}, output_folder={output_folder:?}, error={}",
-                        magnet_log_summary(&magnet_uri),
-                        truncate_for_log(&detail, 480)
-                    ));
-                    Err(format!("failed to add magnet: {detail}"))
-                }
-            }
-        });
+    let metadata = state
+        .previews
+        .lock()
+        .map_err(|_| "torrent preview lock poisoned".to_string())?
+        .requests
+        .remove(&preview_id)
+        .and_then(|request| request.metadata)
+        .ok_or_else(|| "预览已失效，请重新预览后添加任务".to_string())?;
+    if magnet.as_id20() != Some(metadata.info_hash) {
+        return Err("磁力链接已改变，请重新预览".to_string());
     }
-
-    let folder_name = None;
-    let options = add_torrent_options(normalized_dir, folder_name.clone());
-    let output_folder = options.output_folder.clone();
-    torrent_log(format_args!(
-        "add_magnet rqbit_add start: folder_name={folder_name:?}, output_folder={output_folder:?}"
-    ));
-
-    state.runtime.block_on(async {
-        match api
-            .api_add_torrent(AddTorrent::from_url(magnet_uri.clone()), Some(options))
-            .await
-        {
-            Ok(response) => {
-                torrent_log(format_args!(
-                    "add_magnet rqbit_add success: {}",
-                    magnet_log_summary(&magnet_uri)
-                ));
-                response_to_json(&response)
-            }
-            Err(error) => {
-                let detail = format_error_chain(&error);
-                torrent_log(format_args!(
-                    "add_magnet rqbit_add failed: {}, output_folder={output_folder:?}, error={}",
-                    magnet_log_summary(&magnet_uri),
-                    truncate_for_log(&detail, 480)
-                ));
-                Err(format!("failed to add magnet: {detail}"))
-            }
-        }
-    })
+    let normalized_dir = normalize_download_dir(download_dir)?;
+    torrent_init_session(normalized_dir.clone(), None)?;
+    let folder = if create_folder_for_task {
+        torrent_metadata_folder_name(&metadata).or_else(|| Some(metadata.info_hash.as_string()))
+    } else {
+        None
+    };
+    let mut options = add_torrent_options(normalized_dir, folder);
+    options.only_files = metadata.only_files.clone();
+    options.initial_peers = Some(metadata.seen_peers.clone());
+    options.trackers = Some(magnet.trackers);
+    add_to_session(
+        state,
+        AddTorrent::from_bytes(metadata.torrent_bytes.clone()),
+        options,
+    )
 }
 
 pub fn torrent_add_file(
@@ -253,71 +248,124 @@ pub fn torrent_add_file(
     download_dir: String,
     create_folder_for_task: bool,
 ) -> Result<String, String> {
-    let torrent_file_path = torrent_file_path.trim().to_string();
-    torrent_log(format_args!(
-        "add_torrent_file start: torrent_file_path={torrent_file_path:?}, download_dir={download_dir:?}, create_folder_for_task={create_folder_for_task}"
-    ));
-    if torrent_file_path.is_empty() {
-        torrent_log(format_args!(
-            "add_torrent_file rejected: torrent file path is empty"
-        ));
-        return Err("torrent file path is empty".to_string());
-    }
+    let torrent_file_path = torrent_file_path.trim();
     let normalized_dir = normalize_download_dir(download_dir)?;
-    torrent_init_session(normalized_dir.clone())?;
-    let state = torrent_runtime();
-    let api = current_api(state)?;
-    let folder_name = create_folder_for_task.then(|| file_stem_folder_name(&torrent_file_path));
-    let options = add_torrent_options(normalized_dir, folder_name.clone());
-    let output_folder = options.output_folder.clone();
-    torrent_log(format_args!(
-        "add_torrent_file rqbit_add start: folder_name={folder_name:?}, output_folder={output_folder:?}"
-    ));
+    torrent_init_session(normalized_dir.clone(), None)?;
+    let folder = create_folder_for_task.then(|| file_stem_folder_name(torrent_file_path));
+    let add = AddTorrent::from_local_filename(torrent_file_path)
+        .map_err(|error| format!("failed to read torrent file: {error:#}"))?;
+    add_to_session(
+        torrent_runtime(),
+        add,
+        add_torrent_options(normalized_dir, folder),
+    )
+}
 
+fn add_to_session(
+    state: &TorrentRuntime,
+    add: AddTorrent<'_>,
+    options: AddTorrentOptions,
+) -> Result<String, String> {
+    let session = current_session(state)?;
     state.runtime.block_on(async {
-        let add = AddTorrent::from_local_filename(&torrent_file_path).map_err(|error| {
-            let detail = format!("{error:#}");
-            torrent_log(format_args!(
-                "add_torrent_file read failed: torrent_file_path={torrent_file_path:?}, error={}",
-                truncate_for_log(&detail, 480)
-            ));
-            format!("failed to read torrent file: {detail}")
-        })?;
-        match api.api_add_torrent(add, Some(options)).await {
-            Ok(response) => {
-                torrent_log(format_args!(
-                    "add_torrent_file rqbit_add success: torrent_file_path={torrent_file_path:?}"
-                ));
-                response_to_json(&response)
+        let response = session
+            .add_torrent(add, Some(options))
+            .await
+            .map_err(|error| format!("failed to add torrent: {error:#}"))?;
+        let (id, handle, already_exists) = match response {
+            AddTorrentResponse::Added(id, handle) => (id, handle, false),
+            AddTorrentResponse::AlreadyManaged(id, handle) => (id, handle, true),
+            AddTorrentResponse::ListOnly(_) => {
+                return Err("unexpected preview response".to_string())
             }
-            Err(error) => {
-                let detail = format_error_chain(&error);
-                torrent_log(format_args!(
-                    "add_torrent_file rqbit_add failed: torrent_file_path={torrent_file_path:?}, output_folder={output_folder:?}, error={}",
-                    truncate_for_log(&detail, 480)
-                ));
-                Err(format!("failed to add torrent file: {detail}"))
-            }
-        }
+        };
+        response_to_json(&serde_json::json!({
+            "id": id,
+            "already_exists": already_exists,
+            "output_folder": handle.output_folder(),
+        }))
     })
 }
 
-pub fn torrent_preview_magnet(magnet_uri: String, download_dir: String) -> Result<String, String> {
-    let magnet_uri = magnet_uri.trim().to_string();
-    if magnet_uri.is_empty() {
-        return Err("magnet URI is empty".to_string());
-    }
-    Magnet::parse(&magnet_uri).map_err(|error| format!("invalid magnet URI: {error:#}"))?;
-
-    let normalized_dir = normalize_download_dir(download_dir)?;
-    torrent_init_session(normalized_dir)?;
+pub fn torrent_preview_magnet(
+    magnet_uri: String,
+    download_dir: String,
+    request_id: i32,
+) -> Result<String, String> {
     let state = torrent_runtime();
-    let metadata = resolve_magnet_metadata_for_add(state, &magnet_uri)?;
-    torrent_preview_to_json(&metadata)
+    let result = (|| {
+        let registration = state
+            .previews
+            .lock()
+            .map_err(|_| "torrent preview lock poisoned".to_string())?
+            .requests
+            .get_mut(&request_id)
+            .and_then(|request| request.registration.take())
+            .ok_or_else(|| "预览已取消".to_string())?;
+        let magnet_uri = magnet_uri.trim();
+        Magnet::parse(magnet_uri).map_err(|error| format!("invalid magnet URI: {error:#}"))?;
+        torrent_init_session(download_dir, None)?;
+        let session = current_session(state)?;
+        let metadata = state.runtime.block_on(async {
+            resolve_preview(session, magnet_uri, registration, Duration::from_secs(60)).await
+        })?;
+        let json = torrent_preview_to_json(&metadata)?;
+        let mut previews = state
+            .previews
+            .lock()
+            .map_err(|_| "torrent preview lock poisoned".to_string())?;
+        let request = previews
+            .requests
+            .get_mut(&request_id)
+            .ok_or_else(|| "预览已取消".to_string())?;
+        request.metadata = Some(Arc::new(metadata));
+        Ok(json)
+    })();
+    if result.is_err() {
+        torrent_cancel_preview(request_id)?;
+    }
+    result
+}
+
+async fn resolve_preview(
+    session: Arc<Session>,
+    magnet_uri: &str,
+    registration: AbortRegistration,
+    timeout: Duration,
+) -> Result<ListOnlyResponse, String> {
+    let resolve = async {
+        match session
+            .add_torrent(
+                AddTorrent::from_url(magnet_uri.to_string()),
+                Some(AddTorrentOptions {
+                    list_only: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+        {
+            Ok(AddTorrentResponse::ListOnly(metadata)) => Ok(metadata),
+            Ok(_) => Err("unexpected torrent response while resolving metadata".to_string()),
+            Err(error) => Err(format!("failed to resolve magnet metadata: {error:#}")),
+        }
+    };
+    bounded_preview(resolve, registration, timeout).await
+}
+
+async fn bounded_preview<T>(
+    resolve: impl std::future::Future<Output = Result<T, String>>,
+    registration: AbortRegistration,
+    timeout: Duration,
+) -> Result<T, String> {
+    match tokio::time::timeout(timeout, Abortable::new(resolve, registration)).await {
+        Err(_) => Err("磁力链接解析超时，请检查网络或稍后重试".to_string()),
+        Ok(Err(_)) => Err("预览已取消".to_string()),
+        Ok(Ok(result)) => result,
+    }
 }
 
 pub fn torrent_list(download_dir: String) -> Result<String, String> {
-    torrent_init_session(download_dir)?;
+    torrent_init_session(download_dir, None)?;
     let state = torrent_runtime();
     let api = current_api(state)?;
 
@@ -414,113 +462,8 @@ fn current_session(state: &TorrentRuntime) -> Result<Arc<Session>, String> {
         .ok_or_else(|| "torrent session is not initialized".to_string())
 }
 
-fn resolve_magnet_metadata_for_add(
-    state: &TorrentRuntime,
-    magnet_uri: &str,
-) -> Result<ListOnlyResponse, String> {
-    let session = current_session(state)?;
-    state.runtime.block_on(async {
-        match session
-            .add_torrent(
-                AddTorrent::from_url(magnet_uri.to_string()),
-                Some(AddTorrentOptions {
-                    list_only: true,
-                    overwrite: true,
-                    ..Default::default()
-                }),
-            )
-            .await
-        {
-            Ok(AddTorrentResponse::ListOnly(response)) => Ok(response),
-            Ok(AddTorrentResponse::Added(_, _)) => {
-                Err("unexpected torrent add response while resolving metadata".to_string())
-            }
-            Ok(AddTorrentResponse::AlreadyManaged(_, _)) => {
-                Err("unexpected managed torrent while resolving metadata".to_string())
-            }
-            Err(error) => {
-                let detail = format!("{error:#}");
-                torrent_log(format_args!(
-                    "add_magnet metadata resolve failed: {}, error={}",
-                    magnet_log_summary(magnet_uri),
-                    truncate_for_log(&detail, 480)
-                ));
-                Err(format!("failed to resolve magnet metadata: {detail}"))
-            }
-        }
-    })
-}
-
 fn torrent_log(args: std::fmt::Arguments<'_>) {
     eprintln!("[nipaplay_torrent] {args}");
-}
-
-fn magnet_log_summary(magnet_uri: &str) -> String {
-    let has_whitespace = magnet_uri.chars().any(char::is_whitespace);
-    let starts_with_magnet_ci = magnet_uri.to_ascii_lowercase().starts_with("magnet:");
-    let mut summary = format!(
-        "len={}, starts_with_magnet={}, starts_with_magnet_ci={}, has_whitespace={has_whitespace}",
-        magnet_uri.len(),
-        magnet_uri.starts_with("magnet:"),
-        starts_with_magnet_ci
-    );
-
-    match Magnet::parse(magnet_uri) {
-        Ok(magnet) => {
-            summary.push_str(", parse=ok, ");
-            summary.push_str(&parsed_magnet_log_summary(&magnet));
-        }
-        Err(error) => {
-            let detail = format!("{error:#}");
-            summary.push_str(", parse=err(");
-            summary.push_str(&truncate_for_log(&detail, 160));
-            summary.push(')');
-        }
-    }
-
-    summary
-}
-
-fn parsed_magnet_log_summary(magnet: &Magnet) -> String {
-    let btv1 = magnet
-        .as_id20()
-        .map(|id| id.as_string())
-        .unwrap_or_else(|| "<none>".to_string());
-    let btv2 = magnet
-        .as_id32()
-        .map(|id| id.as_string())
-        .unwrap_or_else(|| "<none>".to_string());
-    let display_name = magnet
-        .name
-        .as_deref()
-        .map(|name| truncate_for_log(name, 120))
-        .unwrap_or_else(|| "<none>".to_string());
-
-    format!(
-        "btv1_info_hash={btv1}, btv2_info_hash={btv2}, tracker_count={}, dn={display_name:?}",
-        magnet.trackers.len()
-    )
-}
-
-fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
-    let mut message = error.to_string();
-    let mut source = error.source();
-    while let Some(error) = source {
-        message.push_str(" | caused by: ");
-        message.push_str(&error.to_string());
-        source = error.source();
-    }
-    message
-}
-
-fn truncate_for_log(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let truncated: String = chars.by_ref().take(max_chars).collect();
-    if chars.next().is_some() {
-        format!("{truncated}...")
-    } else {
-        truncated
-    }
 }
 
 fn ensure_stream_server(state: &'static TorrentRuntime) -> Result<u16, String> {
@@ -583,7 +526,8 @@ fn handle_stream_request(mut socket: TcpStream) -> Result<(), String> {
         parse_stream_path(&path).ok_or_else(|| format!("invalid torrent stream path: {path}"))?;
     let state = torrent_runtime();
     let api = current_api(state)?;
-    let mut stream = state.runtime
+    let mut stream = state
+        .runtime
         .block_on(api.api_stream(torrent_id.into(), file_id))
         .map_err(|error| format!("failed to create torrent stream: {error:#}"))?;
     let file_len = stream.len();
@@ -985,4 +929,145 @@ fn normalize_torrent_id(id: i32) -> Result<usize, String> {
 
 fn response_to_json<T: serde::Serialize>(response: &T) -> Result<String, String> {
     serde_json::to_string(response).map_err(|error| format!("failed to encode JSON: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn runtime() -> Runtime {
+        Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn cancellation_before_dispatch_releases_the_request() {
+        let mut requests = PreviewRegistry::default();
+        let id = requests.begin().unwrap();
+        requests.cancel(id);
+        assert!(!requests.requests.contains_key(&id));
+        requests.cancel(id); // Closing an already completed dialog is harmless.
+    }
+
+    #[test]
+    fn cancellation_aborts_an_in_flight_resolution() {
+        let mut requests = PreviewRegistry::default();
+        let id = requests.begin().unwrap();
+        let registration = requests
+            .requests
+            .get_mut(&id)
+            .unwrap()
+            .registration
+            .take()
+            .unwrap();
+        let handle = requests.requests.get(&id).unwrap().abort.clone();
+        runtime().block_on(async {
+            let resolving = bounded_preview(
+                std::future::pending::<Result<(), String>>(),
+                registration,
+                Duration::from_secs(60),
+            );
+            let cancel = async {
+                tokio::task::yield_now().await;
+                handle.abort();
+            };
+            let (result, _) = tokio::join!(resolving, cancel);
+            assert_eq!(result.unwrap_err(), "预览已取消");
+        });
+    }
+
+    #[test]
+    fn resolution_timeout_drops_network_work() {
+        struct OnDrop(Arc<AtomicUsize>);
+        impl Drop for OnDrop {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let guard = OnDrop(dropped.clone());
+        let (_, registration) = AbortHandle::new_pair();
+        runtime().block_on(async {
+            let result = bounded_preview(
+                async move {
+                    let _guard = guard;
+                    std::future::pending::<Result<(), String>>().await
+                },
+                registration,
+                Duration::from_millis(10),
+            )
+            .await;
+            assert!(result.unwrap_err().contains("超时"));
+        });
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn adding_resolved_bytes_offline_reports_duplicates_and_keeps_original_directory() {
+        let directory =
+            std::env::temp_dir().join(format!("nipaplay-torrent-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let runtime = runtime();
+        let session = runtime
+            .block_on(Session::new_with_opts(
+                directory.clone(),
+                SessionOptions {
+                    dht: None,
+                    disable_trackers: true,
+                    disable_local_service_discovery: true,
+                    ..Default::default()
+                },
+            ))
+            .unwrap();
+        let state = TorrentRuntime {
+            runtime,
+            initialization: Mutex::new(()),
+            previews: Mutex::new(PreviewRegistry::default()),
+            api: Mutex::new(Some(Api::new(session.clone(), None))),
+            session: Mutex::new(Some(session.clone())),
+            download_dir: Mutex::new(None),
+            stream_server: Mutex::new(None),
+        };
+        // One byte, no trackers. Neither adding nor re-adding may resolve peers.
+        let bytes = b"d4:infod6:lengthi1e4:name8:test.mp412:piece lengthi16384e6:pieces20:00000000000000000000ee";
+        let first_folder = directory.join("first").to_string_lossy().into_owned();
+        let first = add_to_session(
+            &state,
+            AddTorrent::from_bytes(bytes.as_slice()),
+            AddTorrentOptions {
+                paused: true,
+                ..add_torrent_options(first_folder.clone(), None)
+            },
+        )
+        .unwrap();
+        let second = add_to_session(
+            &state,
+            AddTorrent::from_bytes(bytes.as_slice()),
+            AddTorrentOptions {
+                paused: true,
+                ..add_torrent_options(
+                    directory.join("second").to_string_lossy().into_owned(),
+                    None,
+                )
+            },
+        )
+        .unwrap();
+        let first: serde_json::Value = serde_json::from_str(&first).unwrap();
+        let second: serde_json::Value = serde_json::from_str(&second).unwrap();
+        assert_eq!(first["already_exists"], false);
+        assert_eq!(second["already_exists"], true);
+        assert_eq!(first["id"], second["id"]);
+        assert_eq!(second["output_folder"], first_folder);
+        assert!(session
+            .get((first["id"].as_u64().unwrap() as usize).into())
+            .unwrap()
+            .is_paused());
+        state.runtime.block_on(session.stop());
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }

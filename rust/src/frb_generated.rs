@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1076718673;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -281536625;
 
 // Section: executor
 
@@ -1864,6 +1864,7 @@ fn wire__crate__api__torrent__torrent_add_magnet_impl(
             let api_magnet_uri = <String>::sse_decode(&mut deserializer);
             let api_download_dir = <String>::sse_decode(&mut deserializer);
             let api_create_folder_for_task = <bool>::sse_decode(&mut deserializer);
+            let api_preview_id = <i32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -1871,10 +1872,70 @@ fn wire__crate__api__torrent__torrent_add_magnet_impl(
                         api_magnet_uri,
                         api_download_dir,
                         api_create_folder_for_task,
+                        api_preview_id,
                     )?;
                     Ok(output_ok)
                 })())
             }
+        },
+    )
+}
+fn wire__crate__api__torrent__torrent_begin_preview_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "torrent_begin_preview",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::torrent::torrent_begin_preview()?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__torrent__torrent_cancel_preview_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "torrent_cancel_preview",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request_id = <i32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::torrent::torrent_cancel_preview(api_request_id)?;
+                Ok(output_ok)
+            })())
         },
     )
 }
@@ -2000,10 +2061,14 @@ fn wire__crate__api__torrent__torrent_init_session_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_download_dir = <String>::sse_decode(&mut deserializer);
+            let api_session_dir = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
-                    let output_ok = crate::api::torrent::torrent_init_session(api_download_dir)?;
+                    let output_ok = crate::api::torrent::torrent_init_session(
+                        api_download_dir,
+                        api_session_dir,
+                    )?;
                     Ok(output_ok)
                 })())
             }
@@ -2100,12 +2165,14 @@ fn wire__crate__api__torrent__torrent_preview_magnet_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_magnet_uri = <String>::sse_decode(&mut deserializer);
             let api_download_dir = <String>::sse_decode(&mut deserializer);
+            let api_request_id = <i32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::torrent::torrent_preview_magnet(
                         api_magnet_uri,
                         api_download_dir,
+                        api_request_id,
                     )?;
                     Ok(output_ok)
                 })())
@@ -3527,22 +3594,22 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         49 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
         50 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
-        54 => {
+        53 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__torrent__torrent_details_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
+        56 => {
             wire__crate__api__torrent__torrent_init_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        55 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__torrent__torrent_preview_magnet_impl(
+        57 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__torrent__torrent_preview_magnet_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3620,6 +3687,8 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
+        51 => wire__crate__api__torrent__torrent_begin_preview_impl(ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__torrent__torrent_cancel_preview_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
