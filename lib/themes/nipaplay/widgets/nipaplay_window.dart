@@ -1,4 +1,6 @@
 import 'dart:ui' as ui;
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
@@ -7,7 +9,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:provider/provider.dart';
 
@@ -88,6 +89,16 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   void dispose() {
     _detachRouteListener();
     super.dispose();
+  }
+
+  bool _useMacStyleCloseButton() {
+    if (kIsWeb) {
+      return false;
+    }
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final isIPad =
+        defaultTargetPlatform == TargetPlatform.iOS && globals.isTablet;
+    return isMac || isIPad;
   }
 
   void _armDismissGuardIfNeeded() {
@@ -173,28 +184,64 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     );
   }
 
-  Widget _buildCloseButton(BuildContext context) {
+  Widget _buildMacCloseButton(BuildContext context) {
+    final onClose = _resolveCloseHandler(context);
+    final bool isTablet = globals.isTablet;
+    final double hitSize = isTablet ? 36 : 28;
+    final double buttonSize = isTablet ? 20 : 14;
+    return Tooltip(
+      message: '关闭',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: SizedBox(
+          width: hitSize,
+          height: hitSize,
+          child: Center(
+            child: Container(
+              width: buttonSize,
+              height: buttonSize,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5F57),
+                borderRadius: BorderRadius.circular(buttonSize / 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: isTablet ? 4 : 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFluentCloseButton(BuildContext context) {
+    final onClose = _resolveCloseHandler(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bool isTablet = globals.isTablet;
     final double hitSize = isTablet ? 36 : 28;
-    return IconButton(
-      tooltip: '关闭',
-      onPressed: _resolveCloseHandler(context),
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints.tightFor(width: hitSize, height: hitSize),
-      style: ButtonStyle(
-        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        shadowColor: const WidgetStatePropertyAll(Colors.transparent),
-        side: const WidgetStatePropertyAll(BorderSide.none),
-        foregroundColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.focused) ||
-                    states.contains(WidgetState.hovered) ||
-                    states.contains(WidgetState.pressed)
-                ? AppAccentColors.current
-                : (isDark ? Colors.white : Colors.black87)),
+    final double iconSize = isTablet ? 18 : 14;
+    return Tooltip(
+      message: '关闭',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: SizedBox(
+          width: hitSize,
+          height: hitSize,
+          child: Center(
+            child: Icon(
+              fluent.FluentIcons.chrome_close,
+              size: iconSize,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+        ),
       ),
-      icon: Icon(Icons.close_rounded, size: isTablet ? 18 : 14),
     );
   }
 
@@ -214,6 +261,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final Color bgColor = widget.backgroundColor ??
         (isDark ? const Color(0xFF2C2C2C) : Colors.white);
     final Color textColor = isDark ? Colors.white : Colors.black87;
+    final bool useMacStyleCloseButton = _useMacStyleCloseButton();
     final Widget? topRightAction = widget.topRightAction;
     final bool showCloseButton = widget.showCloseButton;
     final bool usePhoneBottomSheetLayout = globals.isPhone && !globals.isTablet;
@@ -346,7 +394,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                 Positioned(
                                   top: windowControlPadding,
                                   right: windowControlPadding,
-                                  child: _buildCloseButton(context),
+                                  child: _buildFluentCloseButton(context),
                                 ),
                               if (phoneTopRightAction != null)
                                 Positioned(
@@ -360,7 +408,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                             const SizedBox(
                                               width: _windowControlGap,
                                             ),
-                                            _buildCloseButton(context),
+                                            _buildFluentCloseButton(context),
                                           ],
                                         )
                                       : phoneTopRightAction,
@@ -494,29 +542,39 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                           _applyWindowOffset(details.delta),
                                     ),
                                   ),
-                                  if (showCloseButton && topRightAction == null)
+                                  if (showCloseButton && useMacStyleCloseButton)
+                                    Positioned(
+                                      top: 0,
+                                      left: 0,
+                                      child: _buildMacCloseButton(context),
+                                    )
+                                  else if (showCloseButton &&
+                                      topRightAction == null)
                                     Positioned(
                                       top: windowControlPadding,
                                       right: windowControlPadding,
-                                      child: _buildCloseButton(context),
+                                      child: _buildFluentCloseButton(context),
                                     ),
                                   if (topRightAction != null)
                                     Positioned(
                                       top: windowControlPadding,
                                       right: windowControlPadding,
                                       child: showCloseButton
-                                          ? Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                topRightAction,
-                                                const SizedBox(
-                                                  width: _windowControlGap,
-                                                ),
-                                                _buildCloseButton(
-                                                  context,
-                                                ),
-                                              ],
-                                            )
+                                          ? (useMacStyleCloseButton
+                                              ? topRightAction
+                                              : Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    topRightAction,
+                                                    const SizedBox(
+                                                      width: _windowControlGap,
+                                                    ),
+                                                    _buildFluentCloseButton(
+                                                      context,
+                                                    ),
+                                                  ],
+                                                ))
                                           : topRightAction,
                                     ),
                                 ],
