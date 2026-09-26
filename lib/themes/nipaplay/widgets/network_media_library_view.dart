@@ -26,7 +26,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/jellyfin_library_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
-import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
@@ -416,16 +415,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     if (!provider.isConnected || provider.selectedLibraryIds.isEmpty) {
       if (isLargeScreen) {
-        return MediaLibraryBody(
-          child: NipaplayLargeScreenEmptyState(
-            icon: Icons.dns_outlined,
-            title: '还没有连接 $_serverName',
-            subtitle: '添加服务器后可以在大屏模式中浏览、搜索并播放媒体库内容',
-            action: NipaplayLargeScreenActionButton(
-              icon: Icons.cloud_outlined,
-              label: '添加媒体服务器',
-              onPressed: _showServerDialog,
-            ),
+        return NipaplayLargeScreenEmptyState(
+          icon: Icons.dns_outlined,
+          title: '还没有连接 $_serverName',
+          subtitle: '添加服务器后可以在大屏模式中浏览、搜索并播放媒体库内容',
+          action: NipaplayLargeScreenActionButton(
+            icon: Icons.cloud_outlined,
+            label: '添加媒体服务器',
+            onPressed: _showServerDialog,
           ),
         );
       }
@@ -472,22 +469,20 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final selectedLibraries = _getSelectedLibraries(provider);
 
     if (selectedLibraries.isEmpty) {
-      return MediaLibraryBody(
-        child: NipaplayLargeScreenEmptyState(
-          icon: Icons.video_library_outlined,
-          title: '没有可用的媒体库',
-          subtitle: '刷新服务器媒体库，或在服务器设置中选择要显示的库',
-          action: NipaplayLargeScreenActionButton(
-            icon: Icons.refresh_rounded,
-            label: '刷新媒体库',
-            onPressed: _loadData,
-          ),
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.video_library_outlined,
+        title: '没有可用的媒体库',
+        subtitle: '刷新服务器媒体库，或在服务器设置中选择要显示的库',
+        action: NipaplayLargeScreenActionButton(
+          icon: Icons.refresh_rounded,
+          label: '刷新媒体库',
+          onPressed: _loadData,
         ),
       );
     }
 
-    return MediaLibraryBody(
-      controls: [
+    return Column(
+      children: [
         _buildLargeScreenRemoteTopBar(
           title: '$_serverName 媒体库',
           onSearchChanged: _onMainSearchChanged,
@@ -499,64 +494,62 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _buildLargeScreenLocalSortRow(),
         ],
         const SizedBox(height: 18),
+        Expanded(
+          child: _isSearching
+              ? _buildLargeScreenMediaGrid(_searchResults)
+              : GridView.builder(
+                  controller: _gridScrollController,
+                  padding: const EdgeInsets.only(bottom: 96),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 420,
+                    mainAxisExtent: 210,
+                    crossAxisSpacing: 18,
+                    mainAxisSpacing: 18,
+                  ),
+                  itemCount: selectedLibraries.length,
+                  itemBuilder: (context, index) {
+                    return _buildLargeScreenLibraryCard(
+                      selectedLibraries[index],
+                      autofocus: index == 0,
+                    );
+                  },
+                ),
+        ),
       ],
-      child: _isSearching
-          ? _buildLargeScreenMediaGrid(_searchResults)
-          : GridView.builder(
-              controller: _gridScrollController,
-              padding: const EdgeInsets.only(bottom: 96),
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 420,
-                mainAxisExtent: 210,
-                crossAxisSpacing: 18,
-                mainAxisSpacing: 18,
-              ),
-              itemCount: selectedLibraries.length,
-              itemBuilder: (context, index) {
-                return _buildLargeScreenLibraryCard(
-                  selectedLibraries[index],
-                  autofocus: index == 0,
-                );
-              },
-            ),
     );
   }
 
   Widget _buildLargeScreenLibraryContentView(
-    dynamic provider,
-    dynamic service,
-  ) {
+      dynamic provider, dynamic service) {
     if (_isLoadingLibraryContent) {
-      return const MediaLibraryBody(
-        child: Center(child: AdaptiveMediaActivityIndicator()),
+      return const Center(
+        child: AdaptiveMediaActivityIndicator(),
       );
     }
 
     if (_error != null) {
-      return MediaLibraryBody(
-        child: NipaplayLargeScreenEmptyState(
-          icon: Icons.error_outline_rounded,
-          title: '加载媒体库失败',
-          subtitle: _error!,
-          action: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NipaplayLargeScreenActionButton(
-                icon: Icons.refresh_rounded,
-                label: '重试',
-                onPressed: _retryCurrentView,
-              ),
-              const SizedBox(width: 12),
-              NipaplayLargeScreenActionButton(
-                icon: Icons.arrow_back_rounded,
-                label: '返回',
-                onPressed: _handleBackNavigation,
-              ),
-            ],
-          ),
+      return NipaplayLargeScreenEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: '加载媒体库失败',
+        subtitle: _error!,
+        action: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            NipaplayLargeScreenActionButton(
+              icon: Icons.refresh_rounded,
+              label: '重试',
+              onPressed: _retryCurrentView,
+            ),
+            const SizedBox(width: 12),
+            NipaplayLargeScreenActionButton(
+              icon: Icons.arrow_back_rounded,
+              label: '返回',
+              onPressed: _handleBackNavigation,
+            ),
+          ],
         ),
       );
     }
@@ -564,8 +557,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final items = _isSearching ? _searchResults : _filteredMediaItems;
     final title = _getCurrentViewTitle(provider);
 
-    return MediaLibraryBody(
-      controls: [
+    return Column(
+      children: [
         _buildLargeScreenRemoteTopBar(
           title: title,
           onSearchChanged: _onSearchChanged,
@@ -577,23 +570,25 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _buildLargeScreenLocalSortRow(),
         ],
         const SizedBox(height: 18),
+        Expanded(
+          child: _mediaItems.isEmpty
+              ? NipaplayLargeScreenEmptyState(
+                  icon: _isFolderNavigation
+                      ? Icons.folder_off_outlined
+                      : Icons.video_library_outlined,
+                  title: _isFolderNavigation ? '该文件夹为空' : '该媒体库为空',
+                  subtitle: '返回上一级或刷新服务器内容后再试',
+                  action: NipaplayLargeScreenActionButton(
+                    icon: Icons.arrow_back_rounded,
+                    label: _isFolderNavigation && !_isAtFolderRoot
+                        ? '返回上级文件夹'
+                        : '返回媒体库列表',
+                    onPressed: _handleBackNavigation,
+                  ),
+                )
+              : _buildLargeScreenMediaGrid(items),
+        ),
       ],
-      child: _mediaItems.isEmpty
-          ? NipaplayLargeScreenEmptyState(
-              icon: _isFolderNavigation
-                  ? Icons.folder_off_outlined
-                  : Icons.video_library_outlined,
-              title: _isFolderNavigation ? '该文件夹为空' : '该媒体库为空',
-              subtitle: '返回上一级或刷新服务器内容后再试',
-              action: NipaplayLargeScreenActionButton(
-                icon: Icons.arrow_back_rounded,
-                label: _isFolderNavigation && !_isAtFolderRoot
-                    ? '返回上级文件夹'
-                    : '返回媒体库列表',
-                onPressed: _handleBackNavigation,
-              ),
-            )
-          : _buildLargeScreenMediaGrid(items),
     );
   }
 

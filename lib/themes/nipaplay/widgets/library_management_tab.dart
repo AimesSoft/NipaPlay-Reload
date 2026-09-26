@@ -45,7 +45,6 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
-import 'package:nipaplay/media_library/television_media_library_layout.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
@@ -3326,8 +3325,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       LibraryManagementSection.local => '本地文件夹',
     };
 
-    return MediaLibraryBody(
-      controls: [
+    return Column(
+      children: [
         Row(
           children: [
             Expanded(
@@ -3361,21 +3360,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           scanService: scanService,
           scanProgressBackground: scanProgressBackground,
         ),
+        Expanded(
+          child: switch (widget.section) {
+            LibraryManagementSection.webdav =>
+              _buildLargeScreenWebDAVManagementBody(
+                isRemoteMode: isRemoteMode,
+                sharedProvider: sharedProvider,
+              ),
+            LibraryManagementSection.smb => _buildLargeScreenSMBManagementBody(
+                isRemoteMode: isRemoteMode,
+                sharedProvider: sharedProvider,
+              ),
+            LibraryManagementSection.local =>
+              _buildLargeScreenLocalManagementBody(scanService!),
+          },
+        ),
       ],
-      child: switch (widget.section) {
-        LibraryManagementSection.webdav =>
-          _buildLargeScreenWebDAVManagementBody(
-            isRemoteMode: isRemoteMode,
-            sharedProvider: sharedProvider,
-          ),
-        LibraryManagementSection.smb => _buildLargeScreenSMBManagementBody(
-            isRemoteMode: isRemoteMode,
-            sharedProvider: sharedProvider,
-          ),
-        LibraryManagementSection.local => _buildLargeScreenLocalManagementBody(
-            scanService!,
-          ),
-      },
     );
   }
 
