@@ -30,7 +30,6 @@ Future<void> showMediaCaptureDialog({
     title: '',
     desktopMaxWidth: 1120,
     desktopMaxHeightFactor: 0.9,
-    desktopShowCloseButton: false,
     barrierDismissible: barrierDismissible,
     contentWidget: MediaCaptureDialogContent(
       videoState: videoState,
@@ -457,21 +456,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
               ),
               IconButton(
                 tooltip: '关闭',
-                style: ButtonStyle(
-                  backgroundColor:
-                      const WidgetStatePropertyAll(Colors.transparent),
-                  overlayColor:
-                      const WidgetStatePropertyAll(Colors.transparent),
-                  side: const WidgetStatePropertyAll(BorderSide.none),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                      states.contains(WidgetState.disabled)
-                          ? colors.onSurface.withValues(alpha: 0.38)
-                          : states.contains(WidgetState.focused) ||
-                                  states.contains(WidgetState.hovered) ||
-                                  states.contains(WidgetState.pressed)
-                              ? AppAccentColors.current
-                              : colors.onSurface),
-                ),
                 onPressed:
                     _isWorking ? null : () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded),
