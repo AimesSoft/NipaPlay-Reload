@@ -310,6 +310,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  /// Changes whenever a new playback session starts, including a reload of
+  /// the same video path.
+  int get playbackGeneration => _playbackGeneration;
   int _sourceResolutionGeneration = 0;
   int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;

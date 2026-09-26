@@ -33,18 +33,82 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   // 编辑态 pan 拖动阈值：轻触（如点击收框）手指微抖不应移动字幕。
   Offset? _panStart;
   bool _panActuallyMoved = false;
+
   /// 字幕背景（功能区按钮切换；默认无背景；按字幕路径独立）
   final Map<String, bool> _subtitleBgEnabled = {};
   Timer? _twoFingerTimer; // 双指长按识别定时器
+  final Map<int, Offset> _pointerStarts = {};
+  VideoPlayerState? _boundVideoState;
+  // 记录编辑框所属的视频路径：换视频/内核热切换重载时自动收框。
+  // 否则框在新视频加载完成后立即显示（同名外挂字幕路径仍命中
+  // _editingPath），框层（白边框+按钮）随播放进度每帧重建，与同 Stack
+  // 的弹幕层反复合成导致弹幕闪烁（用户反馈）。长按出框不受影响。
+  String? _boundMediaPath;
+  int? _boundPlaybackGeneration;
+  // 出框时的字幕文本：编辑期间若切换到下一句，自动收框——否则框随
+  // 新文本缩到很小，收框/按钮点不中、拖动锚点也丢失（用户反馈）。
+  String? _editingCueText;
   // 字幕轴同步诊断去重
   String _lastLoggedCueKey = '';
   int _lastSyncLogAtMs = 0;
   static const int _syncLogMinIntervalMs = 1000;
 
+  /// 收起编辑框并清理手势拦截标志（在 build 中检测状态变化后调用，
+  /// 通过 postFrame 延迟 setState，避免构建期改状态）。
+  void _collapseEditBox(VideoPlayerState videoState) {
+    if (_editingPath == null) return;
+    final editingPath = _editingPath;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _editingPath != editingPath) return;
+      setState(() {
+        _editingPath = null;
+        _editingCueText = null;
+      });
+      _stopTwoFingerLongPress();
+      if (!videoState.isDisposed) {
+        videoState.setSubtitleEditBoxVisible(false);
+        videoState.setSubtitleDragActive(false);
+      }
+    });
+  }
+
+  void _stopTwoFingerLongPress() {
+    _twoFingerTimer?.cancel();
+    _twoFingerTimer = null;
+    _pointerStarts.clear();
+  }
+
+  @override
+  void dispose() {
+    _stopTwoFingerLongPress();
+    final videoState = _boundVideoState;
+    if (_editingPath != null && videoState != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (videoState.isDisposed) return;
+        videoState.setSubtitleEditBoxVisible(false);
+        videoState.setSubtitleDragActive(false);
+      });
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
+        _boundVideoState = videoState;
+        final mediaPath = videoState.currentVideoPath;
+        final generation = videoState.playbackGeneration;
+        if (mediaPath != _boundMediaPath ||
+            generation != _boundPlaybackGeneration) {
+          _boundMediaPath = mediaPath;
+          _boundPlaybackGeneration = generation;
+          _collapseEditBox(videoState);
+        }
+        final paths = videoState.activeExternalSubtitlePaths;
+        if (_editingPath != null && !paths.contains(_editingPath)) {
+          _collapseEditBox(videoState);
+        }
         if (!videoState.shouldRenderCurrentExternalSubtitleInApp()) {
           return const SizedBox.shrink();
         }
@@ -53,7 +117,6 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
           // 不影响正常观看。
           return const SizedBox.shrink();
         }
-        final paths = videoState.activeExternalSubtitlePaths;
         if (paths.isEmpty) {
           return const SizedBox.shrink();
         }
@@ -75,6 +138,17 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     final subtitleTimeMs = widget.currentPositionMs.round() -
         (videoState.pathSubtitleDelaySeconds(path) * 1000).round();
     final subtitleText = videoState.pathSubtitleTextAt(path, subtitleTimeMs);
+
+    // 编辑期间字幕切换到下一句：自动收框——否则框随新文本缩到很小，
+    // 收框/设置按钮点不中、拖动锚点也丢失（用户反馈）。间隙期
+    // （文本为空）不收框，保留占位框作为拖动锚点。
+    if (_editingPath == path &&
+        _editingCueText != null &&
+        subtitleText.trim().isNotEmpty &&
+        subtitleText != _editingCueText &&
+        !videoState.subtitleDragActive) {
+      _collapseEditBox(videoState);
+    }
 
     // 字幕轴同步诊断：每条字幕首次显示时记录一次，用于比对内核间的时间轴
     _logSubtitleSyncOnce(
@@ -182,7 +256,10 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
             behavior: HitTestBehavior.opaque,
             onLongPressStart: (details) {
               debugPrint('[SubtitleOverlay] 长按出框 path=$path');
-              setState(() => _editingPath = path);
+              setState(() {
+                _editingPath = path;
+                _editingCueText = subtitleText; // 记录出框时的文本，供换句自动收框
+              });
               videoState.setSubtitleEditBoxVisible(true);
               _longPressMoved = false;
               _dragStartPosition = videoState.pathSubtitlePosition(path);
@@ -209,7 +286,8 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
               final stageH = MediaQuery.of(context).size.height;
               v.setPathSubtitlePosition(
                 path,
-                (_dragOriginPosition + details.offsetFromOrigin.dy / stageH * 100)
+                (_dragOriginPosition +
+                        details.offsetFromOrigin.dy / stageH * 100)
                     .clamp(VideoPlayerState.minSubtitlePosition,
                         VideoPlayerState.maxSubtitlePosition),
               );
@@ -227,127 +305,145 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
         } else {
           // 编辑态：完整拖动/面板交互（仅作用于当前这条字幕）。
           // 手势分工：pan 负责拖动（带 6px 阈值，防轻触漂移），longPress
-          // 负责原地保持框/拖动锁定，scale 负责双指长按弹面板。
-          final Widget dragArea = GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapUp: (_) {
-              // 点击框内非按钮处 -> 收框。onTapUp 是唯一收框入口，
-              // onPanEnd 只在真正拖动过时收框，避免点击时双收框。
-              setState(() => _editingPath = null);
-              videoState.setSubtitleEditBoxVisible(false);
-              videoState.setSubtitleDragActive(false);
-            },
-            onPanDown: (details) {
-              _panStart = details.globalPosition;
-              _panActuallyMoved = false;
-              _dragStartPosition = videoState.pathSubtitlePosition(path);
-              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
-              // 不在此处 setSubtitleDragActive(true)：一触即发会残留
-              // 拖动态拦截播放器手势（点击收框时手指微抖即触发）。
-            },
-            onPanUpdate: (details) {
-              final start = _panStart;
-              if (start == null) return;
-              // 6px 最小位移阈值：轻触/微抖不移动字幕
-              if (!_panActuallyMoved) {
-                if ((details.globalPosition - start).distance < 6) return;
-                _panActuallyMoved = true;
-                videoState.setSubtitleDragActive(true);
-              }
-              final v = videoState;
-              _dragStartMarginX += details.delta.dx;
-              v.setPathSubtitleMarginX(
-                path,
-                _dragStartMarginX.clamp(-500.0, 500.0),
-              );
-              final stageH = MediaQuery.of(context).size.height;
-              _dragStartPosition += details.delta.dy / stageH * 100;
-              v.setPathSubtitlePosition(
-                path,
-                _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
-                    VideoPlayerState.maxSubtitlePosition),
-              );
-            },
-            onPanEnd: (_) {
-              // 真正拖动过才复位拖动态；收框统一交给 onTapUp。
-              _panStart = null;
-              if (_panActuallyMoved) {
-                _panActuallyMoved = false;
-                videoState.setSubtitleDragActive(false);
-                setState(() => _editingPath = null);
-                videoState.setSubtitleEditBoxVisible(false);
-              }
-            },
-            onPanCancel: () {
-              // 手势被系统打断（来电/通知等）：必须复位拖动态，
-              // 否则残留 true 永久拦截播放器手势。
-              _panStart = null;
-              _panActuallyMoved = false;
-              videoState.setSubtitleDragActive(false);
-            },
-            onLongPressStart: (details) {
-              debugPrint('[SubtitleOverlay] 长按开始 path=$path');
-              _longPressMoved = false;
-              _dragStartPosition = videoState.pathSubtitlePosition(path);
-              _dragStartMarginX = videoState.pathSubtitleMarginX(path);
-              _dragOriginPosition = _dragStartPosition;
-              _dragOriginMarginX = _dragStartMarginX;
-              videoState.setSubtitleDragActive(true);
-            },
-            onLongPressMoveUpdate: (details) {
-              if (details.offsetFromOrigin.distance > 8) {
-                _longPressMoved = true;
-              }
-              if (!_longPressMoved) return;
-              final v = videoState;
-              // 起点+累计偏移（offsetFromOrigin 为累计值，不可再叠加）
-              v.setPathSubtitleMarginX(
-                path,
-                (_dragOriginMarginX + details.offsetFromOrigin.dx)
-                    .clamp(-500.0, 500.0),
-              );
-              final stageH = MediaQuery.of(context).size.height;
-              v.setPathSubtitlePosition(
-                path,
-                (_dragOriginPosition + details.offsetFromOrigin.dy / stageH * 100)
-                    .clamp(VideoPlayerState.minSubtitlePosition,
-                        VideoPlayerState.maxSubtitlePosition),
-              );
-            },
-            onLongPressEnd: (_) {
-              videoState.setSubtitleDragActive(false);
-              if (_longPressMoved) {
-                // 拖动过 -> 松手即锁定收框
-                setState(() => _editingPath = null);
-                videoState.setSubtitleEditBoxVisible(false);
-              }
-              // 原地长按 -> 保持框（双指长按/设置钮弹面板）
-            },
-            onScaleStart: (details) {
-              if (details.pointerCount >= 2) {
+          // 负责原地保持框/拖动锁定，Listener 识别双指长按，
+          // 避免在同一 GestureDetector 中同时注册 pan 和 scale。
+          final Widget dragArea = Listener(
+            onPointerDown: (event) {
+              _pointerStarts[event.pointer] = event.position;
+              if (_pointerStarts.length == 2 && !_panActuallyMoved) {
                 _twoFingerTimer?.cancel();
                 _twoFingerTimer = Timer(const Duration(milliseconds: 450), () {
-                  debugPrint('[SubtitleOverlay] 双指长按触发设置面板');
-                  _showSubtitleSettingsPanel(context, videoState, path);
+                  _twoFingerTimer = null;
+                  if (mounted &&
+                      _editingPath == path &&
+                      _pointerStarts.length >= 2) {
+                    _showSubtitleSettingsPanel(context, videoState, path);
+                  }
                 });
               }
             },
-            onScaleUpdate: (details) {
-              // 仅当缩放/旋转确实变化时才算“捏合”并取消双指长按定时器；
-              // 手指微抖触发的 scaleUpdate 不应误杀（否则面板偶发弹不出）。
-              final meaningful =
-                  (details.scale - 1.0).abs() > 0.05 ||
-                      details.rotation.abs() > 0.05;
-              if (meaningful) {
+            onPointerMove: (event) {
+              final start = _pointerStarts[event.pointer];
+              if (start != null && (event.position - start).distance > 8) {
                 _twoFingerTimer?.cancel();
                 _twoFingerTimer = null;
               }
             },
-            onScaleEnd: (_) {
+            onPointerUp: (event) {
+              _pointerStarts.remove(event.pointer);
               _twoFingerTimer?.cancel();
               _twoFingerTimer = null;
             },
-            child: textBox,
+            onPointerCancel: (event) {
+              _pointerStarts.remove(event.pointer);
+              _twoFingerTimer?.cancel();
+              _twoFingerTimer = null;
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (_) {
+                // 点击框内非按钮处 -> 收框。onTapUp 是唯一收框入口，
+                // onPanEnd 只在真正拖动过时收框，避免点击时双收框。
+                setState(() => _editingPath = null);
+                _panStart = null;
+                _stopTwoFingerLongPress();
+                videoState.setSubtitleEditBoxVisible(false);
+                videoState.setSubtitleDragActive(false);
+              },
+              onPanDown: (details) {
+                _panStart = details.globalPosition;
+                _panActuallyMoved = false;
+                _dragStartPosition = videoState.pathSubtitlePosition(path);
+                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+                // 不在此处 setSubtitleDragActive(true)：一触即发会残留
+                // 拖动态拦截播放器手势（点击收框时手指微抖即触发）。
+              },
+              onPanUpdate: (details) {
+                final start = _panStart;
+                if (start == null) return;
+                // 6px 最小位移阈值：轻触/微抖不移动字幕
+                if (!_panActuallyMoved) {
+                  if ((details.globalPosition - start).distance < 6) return;
+                  _panActuallyMoved = true;
+                  _twoFingerTimer?.cancel();
+                  _twoFingerTimer = null;
+                  videoState.setSubtitleDragActive(true);
+                }
+                final v = videoState;
+                _dragStartMarginX += details.delta.dx;
+                v.setPathSubtitleMarginX(
+                  path,
+                  _dragStartMarginX.clamp(-500.0, 500.0),
+                );
+                final stageH = MediaQuery.of(context).size.height;
+                _dragStartPosition += details.delta.dy / stageH * 100;
+                v.setPathSubtitlePosition(
+                  path,
+                  _dragStartPosition.clamp(VideoPlayerState.minSubtitlePosition,
+                      VideoPlayerState.maxSubtitlePosition),
+                );
+              },
+              onPanEnd: (_) {
+                // 真正拖动过才复位拖动态；收框统一交给 onTapUp。
+                _panStart = null;
+                if (_panActuallyMoved) {
+                  _panActuallyMoved = false;
+                  _stopTwoFingerLongPress();
+                  videoState.setSubtitleDragActive(false);
+                  setState(() => _editingPath = null);
+                  videoState.setSubtitleEditBoxVisible(false);
+                }
+              },
+              onPanCancel: () {
+                // 手势被系统打断（来电/通知等）：必须复位拖动态，
+                // 否则残留 true 永久拦截播放器手势。
+                _panStart = null;
+                _panActuallyMoved = false;
+                _stopTwoFingerLongPress();
+                videoState.setSubtitleDragActive(false);
+              },
+              onLongPressStart: (details) {
+                debugPrint('[SubtitleOverlay] 长按开始 path=$path');
+                _longPressMoved = false;
+                _dragStartPosition = videoState.pathSubtitlePosition(path);
+                _dragStartMarginX = videoState.pathSubtitleMarginX(path);
+                _dragOriginPosition = _dragStartPosition;
+                _dragOriginMarginX = _dragStartMarginX;
+                videoState.setSubtitleDragActive(true);
+              },
+              onLongPressMoveUpdate: (details) {
+                if (details.offsetFromOrigin.distance > 8) {
+                  _longPressMoved = true;
+                }
+                if (!_longPressMoved) return;
+                final v = videoState;
+                // 起点+累计偏移（offsetFromOrigin 为累计值，不可再叠加）
+                v.setPathSubtitleMarginX(
+                  path,
+                  (_dragOriginMarginX + details.offsetFromOrigin.dx)
+                      .clamp(-500.0, 500.0),
+                );
+                final stageH = MediaQuery.of(context).size.height;
+                v.setPathSubtitlePosition(
+                  path,
+                  (_dragOriginPosition +
+                          details.offsetFromOrigin.dy / stageH * 100)
+                      .clamp(VideoPlayerState.minSubtitlePosition,
+                          VideoPlayerState.maxSubtitlePosition),
+                );
+              },
+              onLongPressEnd: (_) {
+                videoState.setSubtitleDragActive(false);
+                if (_longPressMoved) {
+                  // 拖动过 -> 松手即锁定收框
+                  setState(() => _editingPath = null);
+                  _stopTwoFingerLongPress();
+                  videoState.setSubtitleEditBoxVisible(false);
+                }
+                // 原地长按 -> 保持框（双指长按/设置钮弹面板）
+              },
+              child: textBox,
+            ),
           );
 
           final Widget boxLayer = Stack(
