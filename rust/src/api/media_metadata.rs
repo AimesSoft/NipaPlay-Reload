@@ -265,7 +265,7 @@ fn subtitle_language_preference_bonus(lower_subtitle: &str) -> i32 {
         .split(|c: char| c == '.' || c == '[' || c == ']' || c == ' ' || c == '('
             || c == ')' || c == '_' || c == '-')
         .collect();
-    let simplified = ["sc", "chs", "gb", "scjp", "chsjpn", "sc&jp", "sc&jpn"];
+    let simplified = ["sc", "chs", "gb", "scjp", "chsjpn", "sc&jp", "sc&jpn", "chs&jpn", "chs&jp"];
     let traditional = ["tc", "cht", "big5", "tcjp", "chtjpn", "tc&jp", "tc&jpn"];
     for segment in &segments {
         let s = *segment;
@@ -433,5 +433,17 @@ mod tests {
             Some("02".into()),
         );
         assert!(score >= 100);
+    }
+
+    #[test]
+    fn prefers_simplified_or_japanese_over_traditional() {
+        let score = |name: &str| {
+            subtitle_language_preference_bonus(&name.to_lowercase())
+        };
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].SC"), 15);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].chs&jpn"), 15);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].JP"), 12);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].TC"), 6);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE]"), 0);
     }
 }

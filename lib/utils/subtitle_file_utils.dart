@@ -290,7 +290,17 @@ int computeSubtitleLanguagePreferenceBonus(String subtitleName) {
   final lower = subtitleName.toLowerCase();
   // 语言标记通常是文件名末段（.SC.ass / .chs&sja），按点分段检测
   final segments = lower.split(RegExp(r'[.\[\] ()_-]+'));
-  const simplified = {'sc', 'chs', 'gb', 'scjp', 'chsjpn', 'sc&jp', 'sc&jpn'};
+  const simplified = {
+    'sc',
+    'chs',
+    'gb',
+    'scjp',
+    'chsjpn',
+    'sc&jp',
+    'sc&jpn',
+    'chs&jpn',
+    'chs&jp',
+  };
   const traditional = {'tc', 'cht', 'big5', 'tcjp', 'chtjpn', 'tc&jp', 'tc&jpn'};
   for (final segment in segments) {
     if (simplified.contains(segment) ||
