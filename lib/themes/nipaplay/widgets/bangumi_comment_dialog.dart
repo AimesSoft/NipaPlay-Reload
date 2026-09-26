@@ -224,19 +224,6 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
   Widget _buildHeader() {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: _accentColor.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            Ionicons.chatbubble_ellipses_outline,
-            color: _accentColor,
-            size: 20,
-          ),
-        ),
-        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
