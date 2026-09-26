@@ -222,11 +222,28 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
+      if (!kIsWeb && Platform.isWindows && kernel == PlayerKernelType.mdk) {
+        // Windows 防护：预览播放器仅用于 320x180 软渲染抽帧，强制软件解码，
+        // 避免与主播放器的 D3D11 硬解实例争用；同时跳过 updateTexture()
+        // （其 "CreateRT" 会在 platform 线程再建一套 D3D11 共享纹理设备）。
+        // fvp 的 snapshot 走 mdk 原生软渲染回传 RGBA，不依赖纹理挂载
+        // （见 third_party/fvp/lib/src/callbacks.cpp MdkSnapshot）。
+        try {
+          previewPlayer.setProperty('video.hwdec', 'no');
+        } catch (e) {
+          debugPrint('设置时间轴预览软解失败: $e');
+        }
+      }
       previewPlayer.setMedia(source, PlayerMediaType.video);
-      await previewPlayer.prepare();
+      // prepare 添加整体超时：任何一步挂住都只放弃本张缩略图，绝不阻塞 UI。
+      await previewPlayer
+          .prepare()
+          .timeout(const Duration(seconds: 5),
+              onTimeout: () =>
+                  throw TimeoutException('时间轴预览播放器 prepare 超时'));
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
-      if (kernel == PlayerKernelType.mdk) {
+      if (kernel == PlayerKernelType.mdk && !kIsWeb && !Platform.isWindows) {
         try {
           await previewPlayer.updateTexture();
         } catch (e) {
@@ -254,12 +271,21 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   void _disposeTimelinePreviewPlayer() {
-    try {
-      _timelinePreviewPlayer?.dispose();
-    } catch (_) {}
+    final player = _timelinePreviewPlayer;
     _timelinePreviewPlayer = null;
     _timelinePreviewPlayerKernel = null;
     _timelinePreviewPlayerSource = null;
+    if (player == null) return;
+    // 先置为停止态让原生渲染循环退出，再延迟释放：避免在 UI 线程上同步
+    // join 可能仍阻塞的原生渲染线程导致窗口"未响应"。
+    try {
+      player.state = PlayerPlaybackState.stopped;
+    } catch (_) {}
+    Future.delayed(const Duration(milliseconds: 150), () {
+      try {
+        player.dispose();
+      } catch (_) {}
+    });
   }
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
@@ -275,7 +301,9 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       final kernel =
           _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
       if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
-          player.textureId.value == null) {
+          player.textureId.value == null &&
+          !kIsWeb &&
+          !Platform.isWindows) {
         try {
           await player.updateTexture();
         } catch (e) {
@@ -309,16 +337,23 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (kernel == PlayerKernelType.mdk) {
         // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
-        await player.snapshot(width: targetWidth, height: targetHeight);
+        // snapshot 依赖渲染回调完成，异常/挂住时用超时兜底（放弃本张图），
+        // 防止串行队列被永久占死。
+        await player
+            .snapshot(width: targetWidth, height: targetHeight)
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
         await Future.delayed(const Duration(milliseconds: 60));
       }
 
-      PlayerFrame? frame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      PlayerFrame? frame = await player
+          .snapshot(width: targetWidth, height: targetHeight)
+          .timeout(const Duration(seconds: 2), onTimeout: () => null);
       if ((frame == null || frame.bytes.isEmpty) &&
           kernel == PlayerKernelType.mdk) {
         await Future.delayed(const Duration(milliseconds: 80));
-        frame = await player.snapshot(width: targetWidth, height: targetHeight);
+        frame = await player
+            .snapshot(width: targetWidth, height: targetHeight)
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
       }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
