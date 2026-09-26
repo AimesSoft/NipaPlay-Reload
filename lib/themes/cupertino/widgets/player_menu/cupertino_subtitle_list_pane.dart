@@ -47,6 +47,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
   double _estimatedItemHeight = 74;
   // 当前高亮条目的 Key，用于基于真实 RenderBox 精确定位（估算高度存在偏差）
   final GlobalKey _currentItemKey = GlobalKey();
+  bool _locatingUnbuiltItem = false;
 
   @override
   void initState() {
@@ -66,7 +67,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
   }
 
   void _handleScroll() {
-    if (_isWindowLoading || _allEntries.isEmpty) return;
+    if (_isWindowLoading || _locatingUnbuiltItem || _allEntries.isEmpty) return;
     final position = _scrollController.position.pixels;
     final isNearTop = position < 400;
     final isNearBottom =
@@ -241,7 +242,33 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
                 animated ? const Duration(milliseconds: 240) : Duration.zero,
             curve: Curves.easeInOut,
           );
+        } else {
+          _locateUnbuiltItem(globalIndex);
         }
+      });
+    });
+  }
+
+  // Variable-height rows can defeat both estimated jumps. Put the target at
+  // the start of a new window so SliverList must build it, then reveal it.
+  void _locateUnbuiltItem(int globalIndex) {
+    if (_locatingUnbuiltItem || !_scrollController.hasClients) return;
+    _locatingUnbuiltItem = true;
+    _updateVisibleWindow(globalIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _locatingUnbuiltItem = false;
+        return;
+      }
+      _scrollController.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final itemContext = _currentItemKey.currentContext;
+          if (itemContext != null) {
+            Scrollable.ensureVisible(itemContext, alignment: 0.3);
+          }
+        }
+        _locatingUnbuiltItem = false;
       });
     });
   }
@@ -250,8 +277,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
     if (!_scrollController.hasClients) return;
     final itemContext = _currentItemKey.currentContext;
     if (itemContext == null) {
-      // SliverList has not built the highlighted row yet.
-      _scrollToCurrentItem(globalIndex, animated: true);
+      _locateUnbuiltItem(globalIndex);
       return;
     }
     final item = itemContext.findRenderObject();
@@ -289,8 +315,7 @@ class _CupertinoSubtitleListPaneState extends State<CupertinoSubtitleListPane> {
     if (_isWindowLoading || _allEntries.isEmpty) return;
     setState(() => _isWindowLoading = true);
 
-    final int maxStart =
-        (_allEntries.length - _windowSize).clamp(0, _allEntries.length).toInt();
+    final int maxStart = _allEntries.length - 1;
     newStartIndex = newStartIndex.clamp(0, maxStart).toInt();
     final int newEndIndex =
         (newStartIndex + _windowSize).clamp(0, _allEntries.length).toInt();

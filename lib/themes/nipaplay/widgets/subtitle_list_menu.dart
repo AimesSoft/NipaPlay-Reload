@@ -43,6 +43,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   double _estimatedItemHeight = 80.0; // 预估每项高度（首次定位后按真实布局校准）
   // 当前高亮条目的 Key，用于基于真实 RenderBox 精确定位（估算高度存在偏差）
   final GlobalKey _currentItemKey = GlobalKey();
+  bool _locatingUnbuiltItem = false;
 
   @override
   void initState() {
@@ -72,7 +73,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
   // 处理滚动事件
   void _handleScroll() {
-    if (_isLoadingWindow || _allSubtitleEntries.isEmpty) return;
+    if (_isLoadingWindow ||
+        _locatingUnbuiltItem ||
+        _allSubtitleEntries.isEmpty) {
+      return;
+    }
 
     // 计算当前滚动位置对应的索引
     final scrollPosition = _scrollController.position.pixels;
@@ -331,7 +336,33 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                 animated ? const Duration(milliseconds: 250) : Duration.zero,
             curve: Curves.easeInOut,
           );
+        } else {
+          _locateUnbuiltItem(globalIndex);
         }
+      });
+    });
+  }
+
+  // Variable-height rows can defeat both estimated jumps. Put the target at
+  // the start of a new window so SliverList must build it, then reveal it.
+  void _locateUnbuiltItem(int globalIndex) {
+    if (_locatingUnbuiltItem || !_scrollController.hasClients) return;
+    _locatingUnbuiltItem = true;
+    _updateVisibleWindow(globalIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _locatingUnbuiltItem = false;
+        return;
+      }
+      _scrollController.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final itemContext = _currentItemKey.currentContext;
+          if (itemContext != null) {
+            Scrollable.ensureVisible(itemContext, alignment: 0.3);
+          }
+        }
+        _locatingUnbuiltItem = false;
       });
     });
   }
@@ -340,8 +371,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     if (!_scrollController.hasClients) return;
     final itemContext = _currentItemKey.currentContext;
     if (itemContext == null) {
-      // SliverList has not built the highlighted row yet.
-      _scrollToCurrentItem(globalIndex, animated: true);
+      _locateUnbuiltItem(globalIndex);
       return;
     }
     final item = itemContext.findRenderObject();
