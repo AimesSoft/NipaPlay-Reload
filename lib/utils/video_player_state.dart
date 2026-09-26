@@ -310,6 +310,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  /// Changes whenever a new playback session starts, including a reload of
+  /// the same video path.
+  int get playbackGeneration => _playbackGeneration;
   int _sourceResolutionGeneration = 0;
   int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
@@ -362,6 +365,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _playerTopSkipButtonVisible = false;
   bool _playerTopResizeButtonVisible = false;
   bool _playerTopFrameStepButtonsVisible = false;
+  bool _showPlayerMenuQuickControls = false;
   // MKV 章节标记开关：显示 MKV 自带章节在进度条上的分割线标记/当前章节高亮/点击跳转
   final String _chapterMarkersEnabledKey = 'chapter_markers_enabled';
   bool _chapterMarkersEnabled = true; // 默认开启
@@ -1275,6 +1279,7 @@ int _exactEndStreak = 0;
   bool get playerTopResizeButtonVisible => _playerTopResizeButtonVisible;
   bool get playerTopFrameStepButtonsVisible =>
       _playerTopFrameStepButtonsVisible;
+  bool get showPlayerMenuQuickControls => _showPlayerMenuQuickControls;
 
   double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
     final limit = subtitleDelayCustomLimitSeconds;

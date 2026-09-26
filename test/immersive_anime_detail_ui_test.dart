@@ -537,8 +537,11 @@ void main() {
     final expandedActionTop = tester.getTopLeft(actions).dy;
 
     expect(gap, lessThan(14));
-    expect(expandedActionTop, greaterThan(collapsedActionTop));
-    expect(expandedActionTop - collapsedActionTop, lessThan(60));
+    // 新布局：展开后简介占满剩余空间、超出部分由简介区内部滚动承载，
+    // 按钮行位置保持稳定——不允许反跳到收起位置上方，也不越过剧集栏
+    // （railHeight 235，剧集栏顶部即 800 - 235 = 565）。
+    expect(expandedActionTop, greaterThanOrEqualTo(collapsedActionTop));
+    expect(tester.getBottomRight(actions).dy, lessThan(800 - 235.0));
     expect(tester.takeException(), isNull);
   });
 
