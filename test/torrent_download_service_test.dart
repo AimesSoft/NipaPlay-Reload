@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+      'concurrent initialization shares one future and failed initialization can retry',
+      () async {
+    SharedPreferences.setMockInitialValues(
+        {SettingsKeys.torrentDownloadDirectory: '/downloads'});
+    final gate = Completer<void>();
+    var calls = 0;
+    final service = TorrentDownloadService.forTesting(
+      isIos: () => false,
+      getDownloadsDirectory: () async => Directory('/downloads'),
+      directoryExists: (_) async => true,
+      initializeSession: (_) async {
+        calls++;
+        if (calls == 1) {
+          await gate.future;
+          throw StateError('initialization failed');
+        }
+      },
+    );
+    final first = expectLater(service.initialize(), throwsStateError);
+    final second = expectLater(service.initialize(), throwsStateError);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, 1);
+    gate.complete();
+    await Future.wait([first, second]);
+    await service.initialize();
+    await service.initialize();
+    expect(calls, 2);
+  });
 
   group('TorrentDownloadService.getDownloadDirectory', () {
     const staleDirectory = '/old/Application/CONTAINER/Documents/downloads';
