@@ -410,7 +410,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           includeDanmaku: includeDanmaku,
           includeSubtitles: includeSubtitles,
         ),
-        barrierDismissible: !_shouldDisableDialogDismiss(videoState),
+        // Tap-outside dismiss stays enabled even in fullscreen on tablets,
+        // so the dialog closes like every other Nipaplay window.
+        barrierDismissible: true,
       ),
     );
   }
