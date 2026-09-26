@@ -2025,7 +2025,7 @@ class _TorrentTaskCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _StateBadge(task: task),
+                _TorrentStateText(task: task),
               ],
             ),
             const SizedBox(height: 14),
@@ -2217,7 +2217,7 @@ class _TorrentTaskListItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    _StateBadge(task: task),
+                    _TorrentStateText(task: task),
                     if (!compact) ...[
                       const SizedBox(width: 8),
                       Row(
@@ -2372,8 +2372,8 @@ class _TorrentTaskScanText extends StatelessWidget {
   }
 }
 
-class _StateBadge extends StatelessWidget {
-  const _StateBadge({required this.task});
+class _TorrentStateText extends StatelessWidget {
+  const _TorrentStateText({required this.task});
 
   final TorrentTask task;
 
@@ -2387,20 +2387,12 @@ class _StateBadge extends StatelessWidget {
             : task.isPaused
                 ? colorScheme.onSurface.withValues(alpha: 0.55)
                 : AppAccentColors.current;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.5),
-      ),
-      child: Text(
-        task.displayState,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+    return Text(
+      task.displayState,
+      style: TextStyle(
+        color: color,
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
@@ -2500,7 +2492,7 @@ class _LargeScreenTorrentTaskCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              _LargeScreenTorrentBadge(task: task),
+              _LargeScreenTorrentStateText(task: task),
             ],
           ),
           SizedBox(height: compact ? 12 : 16),
@@ -2610,8 +2602,8 @@ class _LargeScreenTorrentTaskCard extends StatelessWidget {
   }
 }
 
-class _LargeScreenTorrentBadge extends StatelessWidget {
-  const _LargeScreenTorrentBadge({required this.task});
+class _LargeScreenTorrentStateText extends StatelessWidget {
+  const _LargeScreenTorrentStateText({required this.task});
 
   final TorrentTask task;
 
@@ -2624,22 +2616,14 @@ class _LargeScreenTorrentBadge extends StatelessWidget {
             : task.isPaused
                 ? Colors.orangeAccent
                 : AppAccentColors.current;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.36)),
-      ),
-      child: Text(
-        task.displayState,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
-        ),
+    return Text(
+      task.displayState,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: color,
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
       ),
     );
   }
