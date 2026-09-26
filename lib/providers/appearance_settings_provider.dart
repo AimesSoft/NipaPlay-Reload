@@ -47,7 +47,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _showHomeHeroSideCardBottomKey =
       'show_home_hero_side_card_bottom';
 
-  static const double uiScaleMin = 1.0;
+  static const double uiScaleMin = 0.5;
   static const double uiScaleMax = 1.3;
   static const double uiScaleStep = 0.05;
   static const double defaultUiScale = 1.0;
