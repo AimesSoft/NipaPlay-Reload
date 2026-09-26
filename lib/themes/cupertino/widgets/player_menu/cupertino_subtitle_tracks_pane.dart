@@ -172,8 +172,8 @@ class _CupertinoSubtitleTracksPaneState
       if (selected == null) return;
 
       setState(() => _isLoading = true);
-      final cachedPath =
-          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      final cachedPath = await RemoteSubtitleService.instance
+          .ensureSubtitleCached(selected, allCandidates: candidates);
       if (!mounted) return;
 
       final subtitleInfo = <String, dynamic>{

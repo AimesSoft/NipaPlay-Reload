@@ -146,7 +146,11 @@ class SubtitleService {
       final extension = p.extension(filePath).toLowerCase();
 
       if (!supportedSubtitleExtensions.contains(extension)) {
-        throw UnsupportedError('不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
+        throw UnsupportedError(
+            '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub, .sup 或 .idx 文件');
+      }
+      if (!isVobSubPairComplete(filePath)) {
+        throw UnsupportedError('VobSub 字幕需要同名 .sub 与 .idx 成对选择');
       }
 
       // 检查文件是否存在
@@ -304,7 +308,9 @@ class SubtitleService {
       // 尝试查找同名字幕文件
       for (final ext in subtitleExts) {
         final potentialPath = p.join(videoDir, '$videoName$ext');
-        if (File(potentialPath).existsSync()) {
+        // .idx 无独立播放语义：同名 .sub 不存在时跳过
+        if (File(potentialPath).existsSync() &&
+            isVobSubPairComplete(potentialPath)) {
           return potentialPath;
         }
       }

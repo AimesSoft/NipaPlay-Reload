@@ -145,6 +145,15 @@ class SubtitleParser {
         return const SubtitleDecodeResult(text: '', encoding: 'utf-8');
       }
 
+      // VobSub（MPEG-PS）位图字幕嗅探：.sub 扩展名存在二义性（也可能是
+      // MicroDVD 文本），扩展名不可靠，按文件头 00 00 01 BA 判定。
+      // 二进制字幕不走文本解码/编码猜测，交由播放器内核按 IDX 索引渲染。
+      if (hasMpegPsPackHeader(bytes)) {
+        debugPrint(
+            'INFO: SubtitleParser: 检测到 MPEG-PS (VobSub) 二进制字幕，跳过文本解码: $filePath');
+        return null;
+      }
+
       final bomEncoding = _detectBomEncoding(bytes);
       if (bomEncoding != null) {
         final decoded =
@@ -866,6 +875,16 @@ class SubtitleParser {
         encoding: 'unknown',
       );
     }
+  }
+
+  /// MPEG-PS pack start code 00 00 01 BA：VobSub .sub 的标准文件头。
+  /// MicroDVD 文本不可能以连续 4 个控制字节开头，无误判风险。
+  static bool hasMpegPsPackHeader(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    return bytes[0] == 0x00 &&
+        bytes[1] == 0x00 &&
+        bytes[2] == 0x01 &&
+        bytes[3] == 0xBA;
   }
 
   static String? _detectBomEncoding(Uint8List bytes) {

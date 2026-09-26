@@ -172,7 +172,14 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (!supportedSubtitleExtensions.contains(extension)) {
         if (context.mounted) {
           BlurSnackBar.show(
-              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
+              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub, .sup 或 .idx 文件');
+          setState(() => _isLoading = false);
+        }
+        return;
+      }
+      if (!isVobSubPairComplete(filePath)) {
+        if (context.mounted) {
+          BlurSnackBar.show(context, 'VobSub 字幕需要同名 .sub 与 .idx 成对选择');
           setState(() => _isLoading = false);
         }
         return;
@@ -292,8 +299,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (selected == null) return;
 
       setState(() => _isLoading = true);
-      final cachedPath =
-          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      final cachedPath = await RemoteSubtitleService.instance
+          .ensureSubtitleCached(selected, allCandidates: candidates);
       if (!mounted) return;
 
       final existingIndex =
