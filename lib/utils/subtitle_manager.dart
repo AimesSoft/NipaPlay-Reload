@@ -457,6 +457,22 @@ class SubtitleManager extends ChangeNotifier {
       // 移除同路径条目，并把当前字幕置顶（方便选择）
       subtitles.removeWhere((s) => s['path'] == subtitlePath);
 
+      // 旧版本持久化过的条目可能存的是哈希文件名（远程缓存路径），
+      // 补登记当前显示名修正历史脏数据。
+      for (final s in subtitles) {
+        final entryPath = s['path']?.toString() ?? '';
+        if (entryPath.isEmpty) continue;
+        final entryName = s['name']?.toString() ?? '';
+        if (entryName.isEmpty ||
+            entryName == p.basename(entryPath) &&
+                entryPath.contains('remote_subtitles')) {
+          final registered = _pathDisplayNames[entryPath];
+          if (registered != null && registered.isNotEmpty) {
+            s['name'] = registered;
+          }
+        }
+      }
+
       // 将所有字幕设为非激活
       for (final s in subtitles) {
         s['isActive'] = false;
@@ -628,10 +644,10 @@ class SubtitleManager extends ChangeNotifier {
         }
         unawaited(_loadPathDisplayState(path));
 
-        // 更新轨道信息
+        // 更新轨道信息（title 用登记的显示名；远程缓存文件名是哈希）
         updateSubtitleTrackInfo('external_subtitle', {
           'path': path,
-          'title': p.basename(path),
+          'title': displayNameForPath(path),
           'isActive': true,
           'isManualSet': isManualSetting, // 添加是否手动设置的标记
         });
@@ -713,7 +729,7 @@ class SubtitleManager extends ChangeNotifier {
     }
     updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
       'path': path,
-      'title': p.basename(path),
+      'title': displayNameForPath(path),
       'isActive': false,
       'isManualSet': true,
     });
@@ -753,7 +769,7 @@ class SubtitleManager extends ChangeNotifier {
     unawaited(preloadSubtitleFile(path));
     updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
       'path': path,
-      'title': p.basename(path),
+      'title': displayNameForPath(path),
       'isActive': true,
       'isManualSet': true,
     });
@@ -801,7 +817,7 @@ class SubtitleManager extends ChangeNotifier {
       _currentExternalSubtitlePath = path;
       updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
         'path': path,
-        'title': p.basename(path),
+        'title': displayNameForPath(path),
         'isActive': true,
         'isManualSet': isManualSetting,
       });
@@ -1410,16 +1426,18 @@ class SubtitleManager extends ChangeNotifier {
             // 保存这个自动找到的字幕路径，下次可以直接使用
             saveVideoSubtitleMapping(videoPath, cachedPath);
 
-            // 其余候选也叠加挂载（SRT/VTT 走叠层可共存多挂）。
-            // 内核轨 ASS/SSA 不自动叠加：mpv sid 单轨显示，多挂只有最后
-            // 一条可见，制造"挂了两条 ASS 只显示一条"的困惑；ASS 走评分第一，
-            // 需要更多 ASS 可手动多挂（内核限制：仍只显示最后一条）。
-            // .idx 与主选字幕同源成对，避免重复下载叠挂。
+            // 其余候选也叠挂进轨道列表（多语言 ASS、SRT 等全部纳入，
+            // 供手动切换；内核 sid 单轨显示，叠挂的 ASS 仍只有激活条目
+            // 可见）。.idx 与主选字幕同源成对，避免重复下载叠挂。
             for (final other in candidates) {
               if (identical(other, selected)) continue;
               final otherExt = other.extension.toLowerCase();
-              if (otherExt == '.ass' || otherExt == '.ssa') continue;
               if (otherExt == '.idx' &&
+                  p.setExtension(selected.name, '.').toLowerCase() ==
+                      p.setExtension(other.name, '.').toLowerCase()) {
+                continue;
+              }
+              if (otherExt == '.sub' &&
                   p.setExtension(selected.name, '.').toLowerCase() ==
                       p.setExtension(other.name, '.').toLowerCase()) {
                 continue;
