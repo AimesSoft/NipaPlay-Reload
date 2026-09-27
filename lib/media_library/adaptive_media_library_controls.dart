@@ -8,6 +8,7 @@ import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/media_source_option.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -22,11 +23,12 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dar
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
-import 'package:nipaplay/widgets/in_view_dialog.dart';
 import 'package:provider/provider.dart';
 
 class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {
@@ -754,32 +756,36 @@ Future<List<String>?> showAdaptiveMediaLibrarySectionOrder(
     );
   }
 
-  return showInViewDialog<List<String>>(
+  return NipaplayWindow.show<List<String>>(
     context: context,
-    builder: (dialogContext) {
-      final viewport = material.MediaQuery.sizeOf(dialogContext);
-      final maximumWidth = (viewport.width - 96).clamp(0.0, 720.0);
-      final minimumWidth = maximumWidth.clamp(0.0, 640.0);
-      final dialogWidth = (viewport.width * 0.64).clamp(
-        minimumWidth,
-        maximumWidth,
-      );
-      final maximumHeight = (viewport.height * 0.72).clamp(0.0, 600.0);
-      final desiredHeight = 128.0 + sections.length * 58.0;
-      final dialogHeight = desiredHeight.clamp(0.0, maximumHeight);
-
-      return material.AlertDialog(
-        title: const material.Text('媒体库排序'),
-        content: material.SizedBox(
-          key: const material.ValueKey<String>(
-            'media-library-order-dialog-content',
+    enableAnimation:
+        context.read<AppearanceSettingsProvider>().enablePageAnimation,
+    child: material.Builder(
+      builder: (dialogContext) {
+        final viewport = material.MediaQuery.sizeOf(dialogContext);
+        return NipaplayWindowScaffold(
+          maxWidth: (viewport.width - 16).clamp(0.0, 760.0),
+          maxHeightFactor: 0.82,
+          respectMaxSizeInFilledScreen: true,
+          showCloseButton: false,
+          onClose: () => material.Navigator.of(dialogContext).maybePop(),
+          child: material.Padding(
+            padding: const material.EdgeInsets.fromLTRB(24, 16, 24, 20),
+            child: material.LayoutBuilder(
+              builder: (context, constraints) => material.SizedBox(
+                key: const material.ValueKey<String>(
+                  'media-library-order-dialog-content',
+                ),
+                width: double.infinity,
+                height: (160.0 + sections.length * 58.0)
+                    .clamp(0.0, constraints.maxHeight),
+                child: _MediaLibrarySectionOrderEditor(sections: sections),
+              ),
+            ),
           ),
-          width: dialogWidth,
-          height: dialogHeight,
-          child: _MediaLibrarySectionOrderEditor(sections: sections),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 }
 
@@ -907,7 +913,7 @@ class _MediaLibrarySectionOrderEditorState
     final reorderedIds = reorderMediaLibrarySectionIds(
       _sections.map((section) => section.id).toList(),
       oldIndex,
-      newIndex,
+      newIndex > oldIndex ? newIndex - 1 : newIndex,
     );
     final sectionsById = <String, UnifiedMediaLibrarySection>{
       for (final section in _sections) section.id: section,
@@ -925,65 +931,133 @@ class _MediaLibrarySectionOrderEditorState
             context,
           )
         : material.Theme.of(context).colorScheme.onSurface;
-    final background = widget.isPhone
-        ? cupertino.CupertinoDynamicColor.resolve(
-            cupertino.CupertinoColors.secondarySystemGroupedBackground,
-            context,
-          )
-        : material.Theme.of(context).colorScheme.surfaceContainerHighest;
+    final secondary = foreground.withValues(alpha: 0.55);
 
     return material.Column(
+      crossAxisAlignment: material.CrossAxisAlignment.stretch,
       children: [
+        if (!widget.isPhone) ...[
+          material.Row(
+            children: [
+              material.Expanded(
+                child: material.Text(
+                  '媒体库排序',
+                  style: material.TextStyle(
+                    color: foreground,
+                    fontSize: 18,
+                    fontWeight: material.FontWeight.bold,
+                  ),
+                ),
+              ),
+              material.Tooltip(
+                message: '关闭',
+                child: material.Semantics(
+                  button: true,
+                  label: '关闭',
+                  child: HoverScaleTextButton(
+                    onPressed: () => material.Navigator.of(context).pop(),
+                    padding: const material.EdgeInsets.all(8),
+                    child: const material.Icon(material.Icons.close, size: 18),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const material.SizedBox(height: 4),
+          material.Text(
+            '拖动列表调整媒体库的显示顺序',
+            style: material.TextStyle(color: secondary, fontSize: 13),
+          ),
+          const material.SizedBox(height: 20),
+        ],
         material.Expanded(
           child: material.ReorderableListView.builder(
+            padding: material.EdgeInsets.zero,
             buildDefaultDragHandles: false,
             itemCount: _sections.length,
+            // HarmonyOS still uses Flutter 3.35, before onReorderItem.
+            // ignore: deprecated_member_use
             onReorder: _reorder,
+            proxyDecorator: widget.isPhone
+                ? null
+                : (child, index, animation) => material.Material(
+                      type: material.MaterialType.transparency,
+                      child: child,
+                    ),
             itemBuilder: (context, index) {
               final section = _sections[index];
+              final row = material.ReorderableDragStartListener(
+                key: material.ValueKey<String>(
+                  'media-library-order-drag-${section.id}',
+                ),
+                index: index,
+                child: material.MouseRegion(
+                  cursor: material.SystemMouseCursors.grab,
+                  child: material.SizedBox(
+                    height: 52,
+                    child: material.Padding(
+                      padding:
+                          const material.EdgeInsets.symmetric(horizontal: 14),
+                      child: material.Row(
+                        children: [
+                          if (!widget.isPhone) ...[
+                            material.SizedBox(
+                              width: 30,
+                              child: material.Text(
+                                '${index + 1}'.padLeft(2, '0'),
+                                style: material.TextStyle(
+                                    color: secondary, fontSize: 12),
+                              ),
+                            ),
+                            const material.SizedBox(width: 8),
+                          ],
+                          material.Expanded(
+                            child: material.Text(
+                              section.label,
+                              maxLines: 1,
+                              overflow: material.TextOverflow.ellipsis,
+                              style: material.TextStyle(
+                                color: foreground,
+                                fontSize: widget.isPhone ? 16 : 14,
+                                fontWeight: widget.isPhone
+                                    ? material.FontWeight.w600
+                                    : material.FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const material.SizedBox(width: 12),
+                          material.Icon(material.Icons.drag_handle,
+                              color: secondary, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
               return material.Padding(
                 key: material.ValueKey<String>(
                   'media-library-order-row-${section.id}',
                 ),
                 padding: const material.EdgeInsets.only(bottom: 6),
-                child: material.DecoratedBox(
-                  decoration: material.BoxDecoration(
-                    color: background,
-                    borderRadius: material.BorderRadius.circular(10),
-                  ),
-                  child: material.ReorderableDragStartListener(
-                    key: material.ValueKey<String>(
-                      'media-library-order-drag-${section.id}',
-                    ),
-                    index: index,
-                    child: material.SizedBox(
-                      height: 52,
-                      child: material.Padding(
-                        padding: const material.EdgeInsets.symmetric(
-                          horizontal: 14,
+                child: widget.isPhone
+                    ? material.DecoratedBox(
+                        decoration: material.BoxDecoration(
+                          color: cupertino.CupertinoDynamicColor.resolve(
+                            cupertino.CupertinoColors
+                                .secondarySystemGroupedBackground,
+                            context,
+                          ),
+                          borderRadius: material.BorderRadius.circular(10),
                         ),
-                        child: material.Row(
-                          children: [
-                            material.Expanded(
-                              child: material.Text(
-                                section.label,
-                                style: material.TextStyle(
-                                  color: foreground,
-                                  fontSize: 16,
-                                  fontWeight: material.FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            material.Icon(
-                              material.Icons.drag_handle,
-                              color: foreground.withValues(alpha: 0.55),
-                            ),
-                          ],
-                        ),
+                        child: row,
+                      )
+                    : SettingsCard(
+                        padding: material.EdgeInsets.zero,
+                        borderRadius: 8,
+                        backgroundOpacity: 0.12,
+                        borderOpacity: 0.10,
+                        child: row,
                       ),
-                    ),
-                  ),
-                ),
               );
             },
           ),
@@ -995,24 +1069,42 @@ class _MediaLibrarySectionOrderEditorState
             child: material.SizedBox(
               width: double.infinity,
               child: cupertino.CupertinoButton.filled(
-                onPressed: () => material.Navigator.of(context).pop(
-                  _sections.map((section) => section.id).toList(),
-                ),
+                onPressed: _save,
                 child: const material.Text('保存'),
               ),
             ),
           )
-        else
-          material.Align(
-            alignment: material.Alignment.centerRight,
-            child: material.TextButton(
-              onPressed: () => material.Navigator.of(context).pop(
-                _sections.map((section) => section.id).toList(),
+        else ...[
+          material.Divider(
+              height: 1, color: foreground.withValues(alpha: 0.08)),
+          const material.SizedBox(height: 12),
+          material.Row(
+            mainAxisAlignment: material.MainAxisAlignment.end,
+            children: [
+              HoverScaleTextButton(
+                text: '取消',
+                padding: const material.EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                onPressed: () => material.Navigator.of(context).pop(),
               ),
-              child: const material.Text('保存'),
-            ),
+              const material.SizedBox(width: 8),
+              HoverScaleTextButton(
+                text: '保存',
+                idleColor: AppAccentColors.current,
+                padding: const material.EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                onPressed: _save,
+              ),
+            ],
           ),
+        ],
       ],
+    );
+  }
+
+  void _save() {
+    material.Navigator.of(context).pop(
+      _sections.map((section) => section.id).toList(),
     );
   }
 }
