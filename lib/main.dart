@@ -2093,8 +2093,11 @@ class _LargeScreenModeSfxSyncState extends State<_LargeScreenModeSfxSync> {
   }
 
   void _sync() {
-    context.read<LargeScreenUiSfxService>().largeScreenModeActive =
-        widget.isActive;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LargeScreenUiSfxService>().largeScreenModeActive =
+          widget.isActive;
+    });
   }
 
   @override

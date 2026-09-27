@@ -172,12 +172,16 @@ class _NipaplayLargeScreenTopStatusOverlayState
   @override
   Widget build(BuildContext context) {
     final textColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    final backgroundTint = widget.useVideoBackground
-        ? (widget.isDarkMode ? Colors.black : Colors.white)
-            .withValues(alpha: 0.5)
-        : widget.isDarkMode
-            ? Colors.black.withValues(alpha: 0.18)
-            : Colors.white.withValues(alpha: 0.14);
+    final backgroundColor = widget.isDarkMode ? Colors.black : Colors.white;
+    final backgroundTint = TvSafeBackdropFilter.shouldSkipBlur
+        ? backgroundColor
+        : backgroundColor.withValues(
+            alpha: widget.useVideoBackground
+                ? 0.5
+                : widget.isDarkMode
+                    ? 0.18
+                    : 0.14,
+          );
     final dividerColor = widget.isDarkMode
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.12);
@@ -186,7 +190,7 @@ class _NipaplayLargeScreenTopStatusOverlayState
     return SizedBox(
       height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
-        // 电视上跳过 σ25 的常驻顶栏模糊（每帧重算）。
+        // 电视上使用不透明底色，并跳过常驻顶栏模糊。
         child: TvSafeBackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: DecoratedBox(
