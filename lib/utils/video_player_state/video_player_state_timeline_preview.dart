@@ -217,7 +217,16 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       return _timelinePreviewPlayer;
     }
 
-    _disposeTimelinePreviewPlayer();
+    // 先释放旧实例并等待其原生资源真正销毁，再创建新实例（disposing
+    // latch）：避免上一个播放器延迟释放的 150ms 内出现两个 MDK 实例并存
+    // 的 D3D11 争用窗口。
+    final previousPlayer = _timelinePreviewPlayer;
+    _timelinePreviewPlayer = null;
+    _timelinePreviewPlayerKernel = null;
+    _timelinePreviewPlayerSource = null;
+    if (previousPlayer != null) {
+      await _disposePreviewPlayerDeferred(previousPlayer);
+    }
 
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
@@ -228,8 +237,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         // （其 "CreateRT" 会在 platform 线程再建一套 D3D11 共享纹理设备）。
         // fvp 的 snapshot 走 mdk 原生软渲染回传 RGBA，不依赖纹理挂载
         // （见 third_party/fvp/lib/src/callbacks.cpp MdkSnapshot）。
+        // 注意：本项目解码器选择统一走 setDecoders（见
+        // decoder_manager.dart），MDK 识别的软解名称为 'FFmpeg'；
+        // setProperty('video.hwdec', 'no') 不是 fvp 支持的属性键，会被静默忽略。
         try {
-          previewPlayer.setProperty('video.hwdec', 'no');
+          previewPlayer.setDecoders(PlayerMediaType.video, const ['FFmpeg']);
         } catch (e) {
           debugPrint('设置时间轴预览软解失败: $e');
         }
@@ -256,7 +268,9 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       return previewPlayer;
     } catch (e) {
       debugPrint('初始化时间轴截图播放器失败: $e');
-      previewPlayer.dispose();
+      // prepare 超时或初始化失败时同样走延迟释放，绝不在 UI 线程同步
+      // dispose 去 join 可能挂住的原生线程。
+      unawaited(_disposePreviewPlayerDeferred(previewPlayer));
       return null;
     }
   }
@@ -270,22 +284,28 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
   }
 
+  /// 停止并延迟释放一个预览播放器：先置停止态让原生渲染循环退出，等待
+  /// 150ms 后再 dispose，避免在 UI 线程上同步 join 可能仍阻塞的原生渲染
+  /// 线程导致窗口"未响应"。返回的 Future 在原生实例真正销毁后完成。
+  Future<void> _disposePreviewPlayerDeferred(AbstractPlayer player) async {
+    try {
+      player.state = PlayerPlaybackState.stopped;
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 150));
+    try {
+      player.dispose();
+    } catch (_) {}
+  }
+
+  /// fire-and-forget 释放当前预览播放器（开关关闭、切集等场景）。
   void _disposeTimelinePreviewPlayer() {
     final player = _timelinePreviewPlayer;
     _timelinePreviewPlayer = null;
     _timelinePreviewPlayerKernel = null;
     _timelinePreviewPlayerSource = null;
-    if (player == null) return;
-    // 先置为停止态让原生渲染循环退出，再延迟释放：避免在 UI 线程上同步
-    // join 可能仍阻塞的原生渲染线程导致窗口"未响应"。
-    try {
-      player.state = PlayerPlaybackState.stopped;
-    } catch (_) {}
-    Future.delayed(const Duration(milliseconds: 150), () {
-      try {
-        player.dispose();
-      } catch (_) {}
-    });
+    if (player != null) {
+      unawaited(_disposePreviewPlayerDeferred(player));
+    }
   }
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
