@@ -488,6 +488,31 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  /// 读取持久化 external_subtitles 列表中某条字幕的显示名。
+  /// 远程缓存落盘文件名是哈希，界面展示必须用当初登记的原文件名。
+  Future<String?> _lookupPersistedDisplayName({
+    required String videoPath,
+    required String subtitlePath,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final videoHashKey = _getVideoHashKey(videoPath);
+      final raw = prefs.getString('external_subtitles_$videoHashKey');
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = json.decode(raw);
+      if (decoded is! List) return null;
+      for (final item in decoded) {
+        if (item is Map && item['path'] == subtitlePath) {
+          final name = item['name']?.toString();
+          if (name != null && name.isNotEmpty) return name;
+        }
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 读取字幕显示名失败: $e');
+    }
+    return null;
+  }
+
   // 清空外部字幕状态，同时通知播放器关闭外挂轨道
   void _clearExternalSubtitleState({
     bool resetManualFlag = true,
@@ -1240,12 +1265,50 @@ class SubtitleManager extends ChangeNotifier {
         if (subtitleFile.existsSync()) {
           debugPrint('SubtitleManager: 加载上次使用的外部字幕: $savedSubtitlePath');
 
+          // 恢复持久化时登记的显示名（缓存文件名是哈希，不能用 basename）
+          final savedDisplayName = await _lookupPersistedDisplayName(
+            videoPath: videoPath,
+            subtitlePath: savedSubtitlePath,
+          );
+
           // 等待一段时间确保播放器准备好
           await Future.delayed(_autoLoadPlayerReadyDelay);
 
           // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
           setExternalSubtitle(savedSubtitlePath,
-              isManualSetting: true, displayName: p.basename(savedSubtitlePath));
+              isManualSetting: true, displayName: savedDisplayName);
+
+          // 命中保存映射同样把其余候选叠挂进轨道列表（评分最佳已激活，
+          // 其余供手动切换），否则恢复路径只挂一条。
+          if (!kIsWeb &&
+              RemoteSubtitleService.instance
+                  .isPotentialRemoteVideoPath(videoPath)) {
+            try {
+              final candidates = await RemoteSubtitleService.instance
+                  .listCandidatesForVideo(videoPath);
+              for (final other in candidates) {
+                final otherExt = other.extension.toLowerCase();
+                if (otherExt != '.srt' && otherExt != '.vtt') continue;
+                try {
+                  final otherPath = await RemoteSubtitleService.instance
+                      .ensureSubtitleCached(
+                    other,
+                    allCandidates: candidates,
+                  );
+                  if (_activeExternalSubtitlePaths.contains(otherPath)) {
+                    continue;
+                  }
+                  await addExternalSubtitleToStack(otherPath,
+                      displayName: other.name);
+                  debugPrint('SubtitleManager: 恢复时叠加字幕 ${other.name}');
+                } catch (e) {
+                  debugPrint('SubtitleManager: 恢复叠加字幕 ${other.name} 失败: $e');
+                }
+              }
+            } catch (e) {
+              debugPrint('SubtitleManager: 恢复时叠加远程字幕失败: $e');
+            }
+          }
 
           // 设置完成后强制刷新状态
           await Future.delayed(_autoLoadStateSettleDelay);
