@@ -70,6 +70,20 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         }
       }
       break;
+    case WM_SYSCOMMAND:
+      // The transparent accent conflicts with the minimize animation
+      // (DWM): after minimize+restore the hidden-titlebar NC state is
+      // lost (system title bar comes back) with stutter. Disable the
+      // accent before minimizing, re-enable on restore/maximize.
+      if (windows_native_video_plugin_) {
+        const int cmd = static_cast<int>(wparam & 0xFFF0);
+        if (cmd == SC_MINIMIZE) {
+          windows_native_video_plugin_->HostWindowWillMinimize();
+        } else if (cmd == SC_RESTORE || cmd == SC_MAXIMIZE) {
+          windows_native_video_plugin_->HostWindowDidRestore();
+        }
+      }
+      break;
     case WM_WINDOWPOSCHANGED: {
       const auto* window_pos = reinterpret_cast<WINDOWPOS*>(lparam);
       if (windows_native_video_plugin_ &&

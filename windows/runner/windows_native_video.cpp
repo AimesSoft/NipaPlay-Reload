@@ -575,6 +575,57 @@ bool ApplyTransparentAccent(HWND hwnd, const char* label) {
   return true;
 }
 
+/// Disables the host window transparent accent (ACCENT_DISABLED).
+/// ACCENT_ENABLE_TRANSPARENTGRADIENT conflicts with the minimize/restore
+/// animation: after a minimize+restore the non-client area is recomputed
+/// incorrectly (hidden title bar state lost, system title bar returns)
+/// with stutter. Use plain composition while minimized.
+void DisableTransparentAccent(HWND hwnd, const char* label) {
+  if (hwnd == nullptr) {
+    return;
+  }
+
+  struct ACCENTPOLICY {
+    int nAccentState;
+    int nFlags;
+    int nColor;
+    int nAnimationId;
+  };
+  struct WINCOMPATTRDATA {
+    int nAttribute;
+    PVOID pData;
+    ULONG ulDataSize;
+  };
+  typedef BOOL(WINAPI* SetWindowCompositionAttributeProc)(
+      HWND, WINCOMPATTRDATA*);
+
+  HMODULE user32 = ::LoadLibraryW(L"user32.dll");
+  if (user32 == nullptr) {
+    return;
+  }
+  auto set_window_composition_attribute =
+      reinterpret_cast<SetWindowCompositionAttributeProc>(
+          ::GetProcAddress(user32, "SetWindowCompositionAttribute"));
+  if (set_window_composition_attribute == nullptr) {
+    ::FreeLibrary(user32);
+    return;
+  }
+
+  ACCENTPOLICY policy = {};
+  policy.nAccentState = 0;  // ACCENT_DISABLED
+  policy.nFlags = 2;
+  policy.nColor = 0x00000000;
+  policy.nAnimationId = 0;
+  WINCOMPATTRDATA data = {};
+  data.nAttribute = 19;
+  data.pData = &policy;
+  data.ulDataSize = sizeof(policy);
+  set_window_composition_attribute(hwnd, &data);
+  ::FreeLibrary(user32);
+  LogNativeVideo(std::string(label) + " transparent accent disabled hwnd=" +
+                 std::to_string(HwndToInt64(hwnd)));
+}
+
 std::string OptionalInt64ToString(const std::optional<int64_t>& value) {
   return value.has_value() ? std::to_string(value.value()) : "null";
 }
@@ -1023,12 +1074,10 @@ WindowsNativeVideoPlugin::WindowsNativeVideoPlugin(
       main_flutter_view_(flutter_view) {
   LogNativeVideo("plugin created host=" + std::to_string(HwndToInt64(host_window_)) +
                  " flutterView=" + std::to_string(HwndToInt64(flutter_view_)));
-  if (!HasTransparentWindowBackgroundOverride()) {
-    host_transparent_background_enabled_ =
-        ApplyTransparentAccent(host_window_, "HostWindow");
-  } else {
-    LogNativeVideo("HostWindow transparent accent disabled by environment");
-  }
+  // No transparent accent by default at startup: it conflicts with the
+  // minimize/restore animation, and a transparent background shows as a
+  // white window before the first frame. The video overlay is an
+  // independent WS_POPUP window and does not rely on host transparency.
   channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
       messenger, kChannelName, &flutter::StandardMethodCodec::GetInstance());
   channel_->SetMethodCallHandler([this](const auto& call, auto result) {
@@ -1055,6 +1104,20 @@ void WindowsNativeVideoPlugin::SetFlutterView(HWND flutter_view) {
 }
 
 void WindowsNativeVideoPlugin::HostWindowDidChange() {
+  // While playing (overlay exists) and the minimize flow disabled the
+  // accent, re-enable it on the first WM_SIZE after restore/maximize
+  // (positive size, not minimized). No-op when nothing is playing.
+  if (overlay_window_ != nullptr &&
+      !host_transparent_background_enabled_ &&
+      !HasTransparentWindowBackgroundOverride() &&
+      host_window_ != nullptr && !::IsIconic(host_window_)) {
+    RECT bounds = {};
+    if (::GetWindowRect(host_window_, &bounds) &&
+        bounds.right > bounds.left && bounds.bottom > bounds.top) {
+      host_transparent_background_enabled_ =
+          ApplyTransparentAccent(host_window_, "HostWindow");
+    }
+  }
   SyncOverlayWindowToHost(false);
 }
 
@@ -1069,6 +1132,21 @@ void WindowsNativeVideoPlugin::HostWindowDidDeactivate() {
 }
 
 void WindowsNativeVideoPlugin::HostWindowZOrderDidChange() {
+  SyncOverlayWindowToHost(true);
+}
+
+void WindowsNativeVideoPlugin::HostWindowWillMinimize() {
+  if (host_transparent_background_enabled_) {
+    DisableTransparentAccent(host_window_, "HostWindow");
+    host_transparent_background_enabled_ = false;
+  }
+  HideOverlayWindow(false);
+}
+
+void WindowsNativeVideoPlugin::HostWindowDidRestore() {
+  // Restore/maximize is followed by WM_SIZE -> HostWindowDidChange,
+  // which re-enables the accent as needed (avoids racing the DWM
+  // restore animation).
   SyncOverlayWindowToHost(true);
 }
 
@@ -1263,6 +1341,9 @@ HWND WindowsNativeVideoPlugin::EnsureOverlayWindow() {
   }
   if (!host_transparent_background_enabled_ &&
       !HasTransparentWindowBackgroundOverride()) {
+    // Enable the transparent accent only while the overlay exists
+    // (playback); keep plain composition otherwise to avoid the
+    // minimize/restore DWM conflict.
     host_transparent_background_enabled_ =
         ApplyTransparentAccent(host_window_, "HostWindow");
   }

@@ -33,6 +33,8 @@ class WindowsNativeVideoPlugin {
   void HostWindowDidActivate();
   void HostWindowDidDeactivate();
   void HostWindowZOrderDidChange();
+  void HostWindowWillMinimize();
+  void HostWindowDidRestore();
   void Destroy();
 
  private:

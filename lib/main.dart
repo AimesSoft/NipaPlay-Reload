@@ -580,20 +580,16 @@ void main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      final transparentWindowBackground = Platform
-              .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
-          '1';
-      WindowOptions windowOptions = WindowOptions(
+      // Windows 上透明窗口背景（SetWindowCompositionAttribute accent）在
+      // 首帧前无任何填充色：按上次窗口尺寸小窗启动时表现为整窗白屏。
+      // 改为实色背景，保证 waitUntilReadyToShow → show 之间不露白。
+      // 播放器的原生视频覆盖层不再依赖宿主透明背景（原生侧始终可用）。
+      const WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,
-        backgroundColor:
-            transparentWindowBackground ? Colors.transparent : null,
         title: "NipaPlay",
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
-        if (transparentWindowBackground) {
-          await windowManager.setBackgroundColor(Colors.transparent);
-        }
         await windowManager.setMinimumSize(const Size(600, 400));
         if (startupState == DesktopStartupWindowState.maximized) {
           await windowManager.maximize();
