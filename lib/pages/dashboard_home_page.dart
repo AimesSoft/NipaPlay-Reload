@@ -141,6 +141,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   JellyfinProvider? _jellyfinProviderRef;
   EmbyProvider? _embyProviderRef;
   WatchHistoryProvider? _watchHistoryProviderRef;
+  AppearanceSettingsProvider? _appearanceSettingsProviderRef;
+  bool? _lastQuarterlyReviewEnabled;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
   DandanplayRemoteProvider? _dandanplayProviderRef;
@@ -398,6 +400,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _setupProviderListeners() {
+    try {
+      _appearanceSettingsProviderRef =
+          Provider.of<AppearanceSettingsProvider>(context, listen: false);
+      _lastQuarterlyReviewEnabled =
+          _appearanceSettingsProviderRef!.showQuarterlyAnimeReview;
+      _appearanceSettingsProviderRef!.addListener(_onReviewAppearanceChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加外观设置监听器失败: $e');
+    }
+
     // 订阅 Provider 级 ready；ready 之前不监听 Provider 的即时变化
     try {
       _jellyfinProviderRef =
@@ -943,6 +955,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   @override
   void dispose() {
+    _appearanceSettingsProviderRef?.removeListener(_onReviewAppearanceChanged);
     BangumiApiService.loginStatusNotifier.removeListener(_onReviewLoginChanged);
     QuarterlyReviewCache.instance.revision
         .removeListener(_onReviewCacheChanged);

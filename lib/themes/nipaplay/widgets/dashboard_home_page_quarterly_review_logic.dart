@@ -24,21 +24,38 @@ class _QuarterlyReviewItem {
 }
 
 extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
+  bool get _isQuarterlyReviewEnabled => (_appearanceSettingsProviderRef ??
+          Provider.of<AppearanceSettingsProvider>(context, listen: false))
+      .showQuarterlyAnimeReview;
+
+  void _onReviewAppearanceChanged() {
+    if (!mounted) return;
+    final enabled = _isQuarterlyReviewEnabled;
+    if (_lastQuarterlyReviewEnabled == enabled) return;
+    _lastQuarterlyReviewEnabled = enabled;
+    if (enabled) {
+      unawaited(_loadQuarterlyReview());
+    } else {
+      setState(() => _quarterlyReviewItems = []);
+    }
+  }
+
   bool _hasQuarterlyReviewForToday() {
     final now = DateTime.now();
     final visibleSeason = QuarterlyReviewCache.visibleReviewSeason(now);
-    return _quarterlyReviewItems.isNotEmpty &&
+    return _isQuarterlyReviewEnabled &&
+        _quarterlyReviewItems.isNotEmpty &&
         visibleSeason != null &&
         _quarterlyReviewYear == visibleSeason.year &&
         _quarterlyReviewMonth == visibleSeason.month;
   }
 
   void _onReviewCacheChanged() {
-    if (mounted) unawaited(_loadQuarterlyReview());
+    if (mounted && _isQuarterlyReviewEnabled) unawaited(_loadQuarterlyReview());
   }
 
   void _onReviewLoginChanged() {
-    if (!mounted) return;
+    if (!mounted || !_isQuarterlyReviewEnabled) return;
     if (!BangumiApiService.isLoggedIn && _quarterlyReviewItems.isNotEmpty) {
       setState(() {
         _quarterlyReviewItems = _quarterlyReviewItems
@@ -78,7 +95,7 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
   }
 
   Future<void> _loadQuarterlyReview() async {
-    if (!mounted) return;
+    if (!mounted || !_isQuarterlyReviewEnabled) return;
     if (_isLoadingQuarterlyReview) {
       _reviewReloadAfterCurrent = true;
       return;
@@ -94,21 +111,20 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
           ? userInfo['username']?.toString()
           : null;
       final cached = await cache.itemsFor(ids, now, username);
+      if (!mounted || !_isQuarterlyReviewEnabled) return;
       final targetSeason = QuarterlyReviewCache.visibleReviewSeason(now) ??
           DateTime(now.year, QuarterlyReviewCache.seasonMonth(now));
-      if (mounted) {
-        setState(() {
-          _quarterlyReviewItems = cached
-              .map((item) => _QuarterlyReviewItem(item.anime, item.airDate,
-                  dateLabel: item.dateLabel,
-                  rating: item.rating,
-                  comment: item.comment,
-                  commentAt: item.commentAt))
-              .toList();
-          _quarterlyReviewYear = targetSeason.year;
-          _quarterlyReviewMonth = targetSeason.month;
-        });
-      }
+      setState(() {
+        _quarterlyReviewItems = cached
+            .map((item) => _QuarterlyReviewItem(item.anime, item.airDate,
+                dateLabel: item.dateLabel,
+                rating: item.rating,
+                comment: item.comment,
+                commentAt: item.commentAt))
+            .toList();
+        _quarterlyReviewYear = targetSeason.year;
+        _quarterlyReviewMonth = targetSeason.month;
+      });
       if (!_reviewWarmScheduled) {
         _reviewWarmScheduled = true;
         unawaited(_warmQuarterlyReview(ids));
@@ -130,9 +146,10 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
   Future<void> _warmQuarterlyReview(Set<int> ids) async {
     try {
       await Future.delayed(const Duration(seconds: 5));
-      if (!mounted || ids.isEmpty) return;
+      if (!mounted || !_isQuarterlyReviewEnabled || ids.isEmpty) return;
       final cache = QuarterlyReviewCache.instance;
       final id = await cache.reserveMetadataProbe(ids, DateTime.now());
+      if (!mounted || !_isQuarterlyReviewEnabled) return;
       if (id != null) {
         try {
           if (kIsWeb) {
@@ -152,7 +169,9 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
           }
         } catch (_) {}
       }
+      if (!mounted || !_isQuarterlyReviewEnabled) return;
       await BangumiApiService.initialize();
+      if (!mounted || !_isQuarterlyReviewEnabled) return;
       final userInfo = BangumiApiService.userInfo;
       final username = BangumiApiService.isLoggedIn && userInfo != null
           ? userInfo['username']?.toString()
@@ -160,6 +179,7 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
       if (username != null && username.isNotEmpty) {
         final subjectId =
             await cache.reserveCollectionProbe(ids, username, DateTime.now());
+        if (!mounted || !_isQuarterlyReviewEnabled) return;
         if (subjectId != null) {
           try {
             await BangumiApiService.getUserCollection(subjectId);
