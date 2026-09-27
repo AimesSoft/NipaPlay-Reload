@@ -590,6 +590,10 @@ void main(List<String> args) async {
         backgroundColor: Color(0xFF121212),
         title: "NipaPlay",
       );
+      // 不在这里 show：waitUntilReadyToShow 的回调在引擎首帧之前执行，
+      // 此时显示窗口会露出未渲染的 FlutterView（白屏）。窗口由原生侧
+      // SetNextFrameCallback 在首帧就绪后 Show（见 flutter_window.cpp），
+      // 这里只应用尺寸/位置与置顶。
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.setMinimumSize(const Size(600, 400));
         if (startupState == DesktopStartupWindowState.maximized) {
@@ -599,8 +603,6 @@ void main(List<String> args) async {
           await windowManager
               .setAlignment(_resolveStartupWindowAlignment(startupPosition));
         }
-        await windowManager.show();
-        await windowManager.focus();
       });
     }
 

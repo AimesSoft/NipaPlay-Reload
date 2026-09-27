@@ -428,6 +428,7 @@ class SubtitleManager extends ChangeNotifier {
     required String subtitlePath,
     required bool isActive,
     String? displayName,
+    bool deactivateOthers = true,
   }) async {
     try {
       if (subtitlePath.isEmpty) return;
@@ -455,6 +456,8 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
 
+      final hadActiveEntry = subtitles.any((s) => s['isActive'] == true);
+
       // 移除同路径条目，并把当前字幕置顶（方便选择）
       subtitles.removeWhere((s) => s['path'] == subtitlePath);
 
@@ -474,9 +477,12 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
 
-      // 将所有字幕设为非激活
-      for (final s in subtitles) {
-        s['isActive'] = false;
+      // 叠挂（deactivateOthers=false）不动已有激活条目，避免把主字幕的
+      // 激活标记顶掉；激活主字幕时才全列表清激活。
+      if (deactivateOthers) {
+        for (final s in subtitles) {
+          s['isActive'] = false;
+        }
       }
 
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -494,7 +500,7 @@ class SubtitleManager extends ChangeNotifier {
       final lastActiveKey = 'last_active_subtitle_$videoHashKey';
       if (isActive) {
         await prefs.setInt(lastActiveKey, 0);
-      } else {
+      } else if (deactivateOthers || !hadActiveEntry) {
         await prefs.remove(lastActiveKey);
       }
       // 此处直写 prefs 绕过了 SubtitleService 的内存缓存（Cupertino 面板
@@ -776,12 +782,13 @@ class SubtitleManager extends ChangeNotifier {
       'isManualSet': false,
     });
     // 叠挂条目同步持久化进 external_subtitles 列表（带原名），轨道菜单
-    // 从该列表读取，缺了这一步菜单里看不到叠挂的字幕。
+    // 从该列表读取，缺了这一步菜单里看不到叠挂的字幕。不动激活状态。
     unawaited(_persistExternalSubtitleSelection(
       videoPath: _currentVideoPath ?? '',
       subtitlePath: path,
       isActive: false,
       displayName: displayNameForPath(path),
+      deactivateOthers: false,
     ));
     onSubtitleTrackChanged();
     notifyListeners();
