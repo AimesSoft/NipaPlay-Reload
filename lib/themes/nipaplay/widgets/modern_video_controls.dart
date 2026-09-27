@@ -656,6 +656,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
             if (widget.compactPortrait) {
               return _buildCompactPortraitControls(videoState);
             }
+            final isMobileLandscape = globals.isMobilePlatform &&
+                MediaQuery.orientationOf(context) == Orientation.landscape;
+            final viewPadding = MediaQuery.viewPaddingOf(context);
             return Focus(
               canRequestFocus: true,
               autofocus: true,
@@ -676,8 +679,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                       child: Padding(
                         padding: EdgeInsets.only(
                           bottom: videoState.controlBarHeight,
-                          left: 20,
-                          right: 20,
+                          left:
+                              20 + (isMobileLandscape ? viewPadding.left : 0.0),
+                          right: 20 +
+                              (isMobileLandscape ? viewPadding.right : 0.0),
                         ),
                         child: MouseRegion(
                           onEnter: (_) => videoState.setControlsHovered(true),
