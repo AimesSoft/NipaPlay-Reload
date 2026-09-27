@@ -339,6 +339,28 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                 );
               },
             ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '播放器菜单快捷调节',
+                    '播放器選單快速調節',
+                    'Player Menu Quick Controls',
+                  ),
+                  subtitle: _text(
+                    context,
+                    '在播放器菜单顶部显示倍速和音量增强快捷选项',
+                    '在播放器選單頂部顯示倍速和音量增強快速選項',
+                    'Show playback speed and volume boost shortcuts at the top of the player menu.',
+                  ),
+                  icon: Ionicons.options_outline,
+                  phoneIcon: cupertino.CupertinoIcons.slider_horizontal_3,
+                  value: videoState.showPlayerMenuQuickControls,
+                  onChanged: videoState.setShowPlayerMenuQuickControls,
+                );
+              },
+            ),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
@@ -755,14 +777,15 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     icon: Icons.photo_size_select_small_outlined,
                     value: videoState.timelinePreviewEnabled,
                     onChanged: (bool value) async {
-                      // 不在此处弹任何确认对话框 / 模糊提示：
-                      // 该开关原先在开启时弹出全屏确认对话框，其半透明遮罩在
-                      // 部分 Windows 机器的合成/显卡层会导致窗口渲染挂死
-                      // （表现为点击瞬间整个窗口“未响应”，对话框还没画出）。
-                      // 现在抽帧走独立 ffmpeg 子进程、开销很小，也不再需要
-                      // “可能导致卡顿”的性能警告，因此与其他普通开关一致，
-                      // 直接切换状态即可。
+                      // 不再弹开启确认对话框：该对话框的半透明遮罩在部分
+                      // Windows 机器上会在合成/显卡层渲染挂死，导致点开关
+                      // 瞬间窗口"未响应"。开关行为与其他普通开关一致。
                       await videoState.setTimelinePreviewEnabled(value);
+                      if (!context.mounted) return;
+                      BlurSnackBar.show(
+                        context,
+                        value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                      );
                     },
                   );
                 },
