@@ -347,11 +347,17 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       player.seek(position: bucket);
       await Future.delayed(const Duration(milliseconds: 140));
 
-      if (kernel == PlayerKernelType.mdk) {
-        // 关键时序：mdk 的 Player::snapshot() 在【下一次渲染回调】时才完成，
-        // 因此必须先挂起快照请求、再让播放器播放；若先暂停再请求，暂停状态
-        // 下不再产生渲染帧，Completer 永远不会完成（旧代码正是在此处永久
-        // 挂死串行队列，dispose 时 join 原生线程导致整个窗口"未响应"）。
+      if (!kIsWeb &&
+          Platform.isWindows &&
+          kernel == PlayerKernelType.mdk) {
+        // Windows MDK 专用抽帧时序。mdk 的 Player::snapshot() 在【下一次
+        // 渲染回调】时才完成，因此必须在播放器仍在产帧时先挂起快照请求，
+        // 拿到帧后于 finally 中立即暂停；若先暂停再请求，暂停状态下不再
+        // 产生渲染帧，Completer 永不完成——旧时序正是在此处永久挂死串行
+        // 队列，dispose 时 join 原生线程导致窗口"未响应"。
+        // 2 秒超时 + 一次重试：首帧解码慢时最多损失单张缩略图，不阻塞 UI。
+        // 该时序仅用于 Windows（问题所在平台）；macOS 等平台继续走下方
+        // 经验证的原始序列，行为保持不变。
         PlayerFrame? frame;
         try {
           player.state = PlayerPlaybackState.playing;
@@ -386,6 +392,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         );
       }
 
+      // —— 其他平台（macOS MDK / MediaKit）原始抽帧序列，保持不变 ——
       player.state = PlayerPlaybackState.playing;
       await Future.delayed(const Duration(milliseconds: 70));
       player.state = PlayerPlaybackState.paused;
@@ -393,14 +400,18 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (session != _timelinePreviewSessionId) return null;
 
-      PlayerFrame? frame = await player
-          .snapshot(width: targetWidth, height: targetHeight)
-          .timeout(const Duration(seconds: 2), onTimeout: () => null);
-      if (frame == null || frame.bytes.isEmpty) {
+      if (kernel == PlayerKernelType.mdk) {
+        // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
+        await player.snapshot(width: targetWidth, height: targetHeight);
+        await Future.delayed(const Duration(milliseconds: 60));
+      }
+
+      PlayerFrame? frame =
+          await player.snapshot(width: targetWidth, height: targetHeight);
+      if ((frame == null || frame.bytes.isEmpty) &&
+          kernel == PlayerKernelType.mdk) {
         await Future.delayed(const Duration(milliseconds: 80));
-        frame = await player
-            .snapshot(width: targetWidth, height: targetHeight)
-            .timeout(const Duration(seconds: 2), onTimeout: () => null);
+        frame = await player.snapshot(width: targetWidth, height: targetHeight);
       }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
