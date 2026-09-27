@@ -3,6 +3,18 @@ part of video_player_state;
 const int _timelinePreviewMaxHeight = 180;
 const int _timelinePreviewDefaultWidth = 320;
 
+// 临时诊断（合并前移除）
+void _tlLog(String msg) {
+  try {
+    if (kIsWeb || !Platform.isWindows) return;
+    final f = File(
+        '${Platform.environment['USERPROFILE']}\\Documents\\nipaplay\\tl2.log');
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync('${DateTime.now().toString().substring(11, 23)}  $msg\n',
+        mode: FileMode.append);
+  } catch (_) {}
+}
+
 /// Timeline preview uses an extra background player to capture frames. Keep it
 /// on MDK only: enabling the MDK preference must not start another libmpv
 /// instance after the playback kernel is switched to MediaKit.
@@ -231,18 +243,10 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
-      if (!kIsWeb && Platform.isWindows && kernel == PlayerKernelType.mdk) {
-        // Windows 防护：预览播放器仅用于 320x180 抽帧，强制软件解码，
-        // 避免与主播放器的 D3D11 硬解实例争用。
-        // 注意：本项目解码器选择统一走 setDecoders（见
-        // decoder_manager.dart），MDK 识别的软解名称为 'FFmpeg'；
-        // setProperty('video.hwdec', 'no') 不是 fvp 支持的属性键，会被静默忽略。
-        try {
-          previewPlayer.setDecoders(PlayerMediaType.video, const ['FFmpeg']);
-        } catch (e) {
-          debugPrint('设置时间轴预览软解失败: $e');
-        }
-      }
+      // 不在此处独占设置 ['FFmpeg'] 软解：独占候选一旦对当前视频初始化失败，
+      // mdk 无回退项会判定解码失败，fvp 的 _videoSize 被 complete(null)，
+      // updateTexture 静默返回 -1，导致 snapshot 永不回帧。让全新 mdk 实例
+      // 使用默认 auto 解码器（硬软自动、FFmpeg 兜底），与主播放路径一致。
       previewPlayer.setMedia(source, PlayerMediaType.video);
       // prepare 添加整体超时：任何一步挂住都只放弃本张缩略图，绝不阻塞 UI。
       await previewPlayer
@@ -250,39 +254,48 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
           .timeout(const Duration(seconds: 5),
               onTimeout: () =>
                   throw TimeoutException('时间轴预览播放器 prepare 超时'));
-      // 与主播放器一致：prepare 后让内核自动播放，并等待视频尺寸真正解析
-      // 出来。fvp 的 updateTexture 内部等待 _videoSize，而 fvp 在首次
+      // 显式进入播放态：全新 mdk 实例默认 stopped，不播放就不会解码出帧，
+      // fvp 的视频尺寸/渲染回调也无从到来。
+      previewPlayer.state = PlayerPlaybackState.playing;
+      // 与主播放器一致：等待视频尺寸真正解析出来。fvp 的 updateTexture 内部
       // mediaInfo 尺寸未就绪时会直接放弃（_setVideoSize 遇到 width/height<=0
       // 即 return 且不再重试）；若此时立刻暂停，解码器不再产出事件，
       // _videoSize 会永远为 null，updateTexture 静默返回 -1（textureId 仍为
       // null），后续 snapshot 因无渲染目标全部超时。
       bool videoSizeReady = false;
+      int lastW = -1;
+      int lastH = -1;
       for (var i = 0; i < 50; i++) {
         await Future.delayed(const Duration(milliseconds: 100));
         final streams = previewPlayer.mediaInfo.video;
         final codec = (streams != null && streams.isNotEmpty)
             ? streams.first.codec
             : null;
+        lastW = codec?.width ?? -1;
+        lastH = codec?.height ?? -1;
+        if (i < 3 || i % 10 == 0 || (lastW > 0 && lastH > 0)) {
+          _tlLog(
+              'wait i=$i state=${previewPlayer.state} streams=${streams?.length ?? 0} ${lastW}x$lastH tex=${previewPlayer.textureId.value}');
+        }
         if (codec != null && codec.width > 0 && codec.height > 0) {
           videoSizeReady = true;
           break;
         }
       }
       if (!videoSizeReady) {
+        _tlLog('ensure 失败: 尺寸超时 ${lastW}x$lastH');
         throw TimeoutException('时间轴预览视频尺寸等待超时');
       }
       if (kernel == PlayerKernelType.mdk) {
-        // 注册渲染目标：fvp 的 snapshot 由 mdk 渲染回调完成。该纹理从不挂到
-        // widget 上，仅用于驱动 mdk 渲染管线；快照帧经 Dart port 独立回传
-        // RGBA。adapter 层对此调用有 10 秒超时保护。尺寸刚就绪时 fvp 内部
-        // 状态可能还在传播，做少量重试直到拿到非空 textureId。
         for (var i = 0; i < 3; i++) {
           try {
             await previewPlayer.updateTexture();
           } catch (e) {
+            _tlLog('updateTexture 异常: $e');
             debugPrint('初始化时间轴截图纹理失败: $e');
           }
           final texId = previewPlayer.textureId.value;
+          _tlLog('updateTexture 尝试$i texId=$texId');
           if (texId != null && texId >= 0) break;
           await Future.delayed(const Duration(milliseconds: 150));
         }
@@ -384,6 +397,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         } finally {
           player.state = PlayerPlaybackState.paused;
         }
+        _tlLog(
+            'capture b=$bucket 1st=${frame == null ? "null" : frame.bytes.length} tex=${player.textureId.value}');
         if (session != _timelinePreviewSessionId) return null;
         if (frame == null || frame.bytes.isEmpty) {
           // 部分视频 seek 后首帧解码较慢，重试一次：先播放预滚 80ms 再挂请求。
