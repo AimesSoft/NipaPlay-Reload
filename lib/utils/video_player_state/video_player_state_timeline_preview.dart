@@ -232,11 +232,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     try {
       previewPlayer.volume = 0;
       if (!kIsWeb && Platform.isWindows && kernel == PlayerKernelType.mdk) {
-        // Windows 防护：预览播放器仅用于 320x180 软渲染抽帧，强制软件解码，
-        // 避免与主播放器的 D3D11 硬解实例争用；同时跳过 updateTexture()
-        // （其 "CreateRT" 会在 platform 线程再建一套 D3D11 共享纹理设备）。
-        // fvp 的 snapshot 走 mdk 原生软渲染回传 RGBA，不依赖纹理挂载
-        // （见 third_party/fvp/lib/src/callbacks.cpp MdkSnapshot）。
+        // Windows 防护：预览播放器仅用于 320x180 抽帧，强制软件解码，
+        // 避免与主播放器的 D3D11 硬解实例争用。
         // 注意：本项目解码器选择统一走 setDecoders（见
         // decoder_manager.dart），MDK 识别的软解名称为 'FFmpeg'；
         // setProperty('video.hwdec', 'no') 不是 fvp 支持的属性键，会被静默忽略。
@@ -255,7 +252,11 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
                   throw TimeoutException('时间轴预览播放器 prepare 超时'));
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
-      if (kernel == PlayerKernelType.mdk && !kIsWeb && !Platform.isWindows) {
+      if (kernel == PlayerKernelType.mdk) {
+        // 必须注册渲染目标：fvp 的 snapshot 由 mdk 渲染回调完成，没有渲染
+        // 表面时 snapshot 的 Completer 永远不会完成（adapter 层对此调用有
+        // 10 秒超时保护，不会无限挂住）。该纹理从不挂到 widget 上，仅用于
+        // 驱动 mdk 渲染管线；快照帧数据经 Dart port 独立回传 RGBA。
         try {
           await previewPlayer.updateTexture();
         } catch (e) {
@@ -321,9 +322,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       final kernel =
           _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
       if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
-          player.textureId.value == null &&
-          !kIsWeb &&
-          !Platform.isWindows) {
+          player.textureId.value == null) {
         try {
           await player.updateTexture();
         } catch (e) {
