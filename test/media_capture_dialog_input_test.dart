@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_capture_dialog.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -71,6 +73,117 @@ class _TestVideoState extends ChangeNotifier implements VideoPlayerState {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('$platform GIF menu hides unsupported clipboard action',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      final videoState = _TestVideoState();
+      try {
+        await tester.pumpWidget(AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(size: Size(390, 844)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: MediaCaptureDialogContent(
+                    videoState: videoState,
+                    onCaptureImage: (_,
+                        {required includeDanmaku,
+                        required includeSubtitles}) async {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('GIF 截取'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('复制到剪贴板'), findsNothing);
+        expect(find.text('导出动图文件'), findsOneWidget);
+        final scrollable = tester.state<ScrollableState>(
+          find.byWidgetPredicate((widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down),
+        );
+        expect(scrollable.position.maxScrollExtent, greaterThan(0));
+        await tester.drag(find.text('GIF 导出设置'), const Offset(0, -400));
+        await tester.pumpAndSettle();
+        expect(scrollable.position.pixels, greaterThan(0));
+        expect(tester.takeException(), isNull);
+
+        await tester.ensureVisible(find.text('图片截取'));
+        await tester.tap(find.text('图片截取'));
+        await tester.pumpAndSettle();
+        expect(find.text('图片截取设置'), findsOneWidget);
+        await tester.drag(find.text('图片截取设置'), const Offset(0, -300));
+        await tester.pumpAndSettle();
+        expect(scrollable.position.pixels, greaterThan(0));
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 3));
+      } finally {
+        videoState.dispose();
+        await tester.binding.setSurfaceSize(null);
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  for (final size in [const Size(844, 390), const Size(667, 375)]) {
+    testWidgets('landscape phone $size keeps actions reachable',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.binding.setSurfaceSize(size);
+      final videoState = _TestVideoState();
+      try {
+        await tester.pumpWidget(AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(size: size),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: MediaCaptureDialogContent(
+                    videoState: videoState,
+                    onCaptureImage: (_,
+                        {required includeDanmaku,
+                        required includeSubtitles}) async {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ));
+        expect(
+            tester.getTopLeft(find.text('图片截取设置')).dx,
+            greaterThan(
+                tester.getTopLeft(find.byIcon(Icons.image_outlined)).dx));
+        expect(
+            tester.getBottomLeft(find.text('立即截取')).dy, lessThan(size.height));
+
+        await tester.tap(find.text('GIF 截取'));
+        await tester.pumpAndSettle();
+        expect(
+            tester.getTopLeft(find.text('GIF 导出设置')).dx,
+            greaterThan(
+                tester.getTopLeft(find.byIcon(Icons.gif_box_outlined)).dx));
+        expect(tester.getBottomLeft(find.text('导出动图文件')).dy,
+            lessThan(size.height));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 3));
+      } finally {
+        videoState.dispose();
+        await tester.binding.setSurfaceSize(null);
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
 
   testWidgets('GIF time and size fields request the mobile keyboard',
       (tester) async {
@@ -148,7 +261,8 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     await tester.binding.setSurfaceSize(const Size(1100, 900));
     final videoState = _TestVideoState();
-    final directory = Directory.systemTemp.createTempSync('nipaplay-gif-ui-test-');
+    final directory =
+        Directory.systemTemp.createTempSync('nipaplay-gif-ui-test-');
     final previousPathProvider = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _TestPathProvider(directory.path);
     const channel = MethodChannel('nipaplay/photo_library');

@@ -44,6 +44,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       final futures = <Future<void>>[
         _loadRecommendedContent(forceRefresh: shouldForceRecommended),
         _loadRecentContent(),
+        _loadQuarterlyReview(),
       ];
       futures.addAll([
         _loadTodayAnimes(forceRefresh: forceRefreshToday),
@@ -56,6 +57,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       try {
         await _loadRecommendedContent(forceRefresh: shouldForceRecommended);
         await _loadRecentContent();
+        await _loadQuarterlyReview();
         await _loadTodayAnimes(forceRefresh: forceRefreshToday);
         await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
         await _loadTrending(forceRefresh: forceRefreshTrending);
