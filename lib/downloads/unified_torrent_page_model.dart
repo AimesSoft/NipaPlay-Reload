@@ -2,6 +2,7 @@ import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/models/torrent_task_scan_summary.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/models/torrent_magnet_preview.dart';
+import 'package:nipaplay/services/torrent_download_service.dart';
 
 enum UnifiedTorrentTaskViewMode { cards, list }
 
@@ -19,7 +20,7 @@ class UnifiedTorrentTaskActionViewModel {
 
   final UnifiedTorrentTaskAction action;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool destructive;
 }
 
@@ -47,9 +48,10 @@ class UnifiedTorrentTaskItemViewModel {
     return null;
   }
 
-  UnifiedTorrentTaskActionViewModel get primaryAction => task.finished
-      ? action(UnifiedTorrentTaskAction.play)!
-      : action(UnifiedTorrentTaskAction.toggle)!;
+  UnifiedTorrentTaskActionViewModel get primaryAction =>
+      task.finished && task.canPlay
+          ? action(UnifiedTorrentTaskAction.play)!
+          : action(UnifiedTorrentTaskAction.toggle)!;
 
   String? get scanStatusText {
     if (isAutoScanning) return '正在加入媒体库...';
@@ -134,8 +136,12 @@ class AddTorrentDialogResult {
     required this.magnetUri,
     required this.downloadDirectory,
     required this.createFolderForTask,
+    required this.preview,
+    required this.previewRequest,
   });
 
+  final TorrentPreviewRequest previewRequest;
+  final TorrentMagnetPreview preview;
   final String magnetUri;
   final String downloadDirectory;
   final bool createFolderForTask;

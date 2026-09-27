@@ -5,7 +5,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/services/clipboard_image_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -30,6 +33,9 @@ Future<void> showMediaCaptureDialog({
     title: '',
     desktopMaxWidth: 1120,
     desktopMaxHeightFactor: 0.9,
+    phoneHeightRatio: MediaQuery.orientationOf(context) == Orientation.landscape
+        ? 0.98
+        : 0.86,
     barrierDismissible: barrierDismissible,
     contentWidget: MediaCaptureDialogContent(
       videoState: videoState,
@@ -332,10 +338,73 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   }
 
   Future<void> _copyPreview() async {
+    // 桌面端优先把文件本体写入剪贴板：粘贴到聊天软件即为动图附件，
+    // 而不是一段需要手动打开的文件路径。
+    if (ClipboardImageService.isSupported) {
+      final path = await _persistPreviewForClipboard();
+      if (!mounted || path == null) return;
+      final copied = await ClipboardImageService.copyImageFile(
+        path,
+        mimeType: 'image/gif',
+      );
+      if (copied) {
+        if (mounted) BlurSnackBar.show(context, 'GIF 已复制到剪贴板，可直接粘贴');
+        return;
+      }
+      // 原生写入失败时回退为复制文件地址（旧行为）。
+      await Clipboard.setData(ClipboardData(text: Uri.file(path).toString()));
+      if (mounted) BlurSnackBar.show(context, 'GIF 文件地址已复制到剪贴板');
+      return;
+    }
     final path = _previewPath ?? await _refreshPreview();
     if (path == null || !mounted) return;
     await Clipboard.setData(ClipboardData(text: Uri.file(path).toString()));
     if (mounted) BlurSnackBar.show(context, 'GIF 文件地址已复制到剪贴板');
+  }
+
+  /// 生成一份不会被弹窗销毁的 GIF 副本，供剪贴板粘贴使用。
+  ///
+  /// 预览文件位于系统临时目录且随弹窗关闭被删除，直接写入剪贴板会失效；
+  /// 这里只做一次文件复制，避免重复执行昂贵的 GIF 编码。
+  Future<String?> _persistPreviewForClipboard() async {
+    var source = _previewPath;
+    if (source == null) {
+      source = await _refreshPreview();
+      if (source == null) return null;
+    }
+    try {
+      final directory = Directory(
+        p.join(
+          (await getApplicationSupportDirectory()).path,
+          'clipboard_gif_cache',
+        ),
+      );
+      await directory.create(recursive: true);
+      unawaited(_pruneClipboardCache(directory));
+      final target = p.join(
+        directory.path,
+        'nipaplay_gif_${DateTime.now().microsecondsSinceEpoch}.gif',
+      );
+      return (await File(source).copy(target)).path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 清理过期的剪贴板缓存，避免其无限增长。
+  Future<void> _pruneClipboardCache(Directory directory) async {
+    final threshold = DateTime.now().subtract(const Duration(days: 7));
+    try {
+      await for (final entity in directory.list()) {
+        if (entity is! File) continue;
+        final stat = await entity.stat();
+        if (stat.modified.isBefore(threshold)) {
+          await entity.delete();
+        }
+      }
+    } catch (_) {
+      // 清理失败不影响复制流程。
+    }
   }
 
   Future<void> _exportFile() async {
@@ -430,6 +499,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final phoneLayout =
+        AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    final phoneLandscape = phoneLayout &&
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 520),
       child: Column(
@@ -438,17 +511,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
         children: [
           Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppAccentColors.current.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.photo_camera_back_rounded,
-                    color: AppAccentColors.current),
-              ),
-              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,23 +519,25 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                             )),
-                    Text('保存当前画面，或从正在播放的媒体生成 GIF 动图',
-                        style: TextStyle(
-                          color: colors.onSurface.withValues(alpha: 0.62),
-                          fontSize: 13,
-                        )),
+                    if (!phoneLandscape)
+                      Text('保存当前画面，或从正在播放的媒体生成 GIF 动图',
+                          style: TextStyle(
+                            color: colors.onSurface.withValues(alpha: 0.62),
+                            fontSize: 13,
+                          )),
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: '关闭',
-                onPressed:
-                    _isWorking ? null : () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
+              if (!phoneLandscape)
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed:
+                      _isWorking ? null : () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
             ],
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: phoneLandscape ? 8 : 18),
           Container(
             decoration: BoxDecoration(
               color: colors.onSurface.withValues(alpha: 0.055),
@@ -481,28 +545,39 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
             ),
             child: TabBar(
               controller: _tabController,
+              onTap: phoneLayout ? (_) => setState(() {}) : null,
               dividerColor: Colors.transparent,
               indicatorSize: TabBarIndicatorSize.tab,
-              tabs: const [
-                Tab(text: '图片截取', icon: Icon(Icons.image_outlined)),
-                Tab(text: 'GIF 截取', icon: Icon(Icons.gif_box_outlined)),
-              ],
+              tabs: phoneLandscape
+                  ? const [Tab(text: '图片截取'), Tab(text: 'GIF 截取')]
+                  : const [
+                      Tab(text: '图片截取', icon: Icon(Icons.image_outlined)),
+                      Tab(text: 'GIF 截取', icon: Icon(Icons.gif_box_outlined)),
+                    ],
             ),
           ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 430,
-            child: TabBarView(
-              controller: _tabController,
-              children: [_buildImageTab(colors), _buildGifTab(colors)],
+          SizedBox(height: phoneLandscape ? 8 : 18),
+          if (phoneLayout)
+            _tabController.index == 0
+                ? _buildImageTab(colors,
+                    phoneLayout: true, phoneLandscape: phoneLandscape)
+                : _buildGifTab(colors,
+                    phoneLayout: true, phoneLandscape: phoneLandscape)
+          else
+            SizedBox(
+              height: 430,
+              child: TabBarView(
+                controller: _tabController,
+                children: [_buildImageTab(colors), _buildGifTab(colors)],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildImageTab(ColorScheme colors) {
+  Widget _buildImageTab(ColorScheme colors,
+      {bool phoneLayout = false, bool phoneLandscape = false}) {
     return LayoutBuilder(builder: (context, constraints) {
       final wide = constraints.maxWidth >= 760;
       final preview = _Panel(
@@ -534,6 +609,43 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
           ],
         ),
       );
+      final actionButtons = <Widget>[
+        OutlinedButton.icon(
+          onPressed: _isWorking ? null : _refreshImagePreview,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('刷新预览'),
+        ),
+        const SizedBox(height: 10),
+        if (!kIsWeb && Platform.isIOS) ...[
+          FilledButton.icon(
+            onPressed: _isWorking
+                ? null
+                : () => unawaited(_captureImage(ScreenshotSaveTarget.photos)),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: const Text('保存到相册'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _isWorking
+                ? null
+                : () => unawaited(_captureImage(ScreenshotSaveTarget.file)),
+            icon: const Icon(Icons.folder_outlined),
+            label: const Text('保存到文件'),
+          ),
+        ] else
+          FilledButton.icon(
+            onPressed: _isWorking
+                ? null
+                : () => unawaited(
+                      _captureImage(!kIsWeb &&
+                              defaultTargetPlatform == TargetPlatform.android
+                          ? ScreenshotSaveTarget.photos
+                          : ScreenshotSaveTarget.file),
+                    ),
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: const Text('立即截取'),
+          ),
+      ];
       final controls = _Panel(
         child: Padding(
           padding: const EdgeInsets.all(22),
@@ -557,7 +669,11 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 18),
+              SizedBox(height: phoneLandscape ? 10 : 18),
+              if (phoneLandscape) ...[
+                ...actionButtons,
+                const SizedBox(height: 10),
+              ],
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('包含弹幕'),
@@ -596,51 +712,34 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
                         unawaited(_refreshImagePreview());
                       },
               ),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: _isWorking ? null : _refreshImagePreview,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('刷新预览'),
-              ),
-              const SizedBox(height: 10),
-              if (!kIsWeb && Platform.isIOS) ...[
-                FilledButton.icon(
-                  onPressed: _isWorking
-                      ? null
-                      : () => unawaited(
-                            _captureImage(ScreenshotSaveTarget.photos),
-                          ),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('保存到相册'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _isWorking
-                      ? null
-                      : () => unawaited(
-                            _captureImage(ScreenshotSaveTarget.file),
-                          ),
-                  icon: const Icon(Icons.folder_outlined),
-                  label: const Text('保存到文件'),
-                ),
-              ] else
-                FilledButton.icon(
-                  onPressed: _isWorking
-                      ? null
-                      : () => unawaited(
-                            _captureImage(!kIsWeb &&
-                                    defaultTargetPlatform ==
-                                        TargetPlatform.android
-                                ? ScreenshotSaveTarget.photos
-                                : ScreenshotSaveTarget.file),
-                          ),
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: const Text('立即截取'),
-                ),
+              if (!phoneLandscape) ...[
+                if (phoneLayout) const SizedBox(height: 18) else const Spacer(),
+                ...actionButtons,
+              ],
             ],
           ),
         ),
       );
+      if (phoneLandscape) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 9, child: SizedBox(height: 230, child: preview)),
+            const SizedBox(width: 16),
+            Expanded(flex: 11, child: controls),
+          ],
+        );
+      }
+      if (phoneLayout) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: 230, child: preview),
+            const SizedBox(height: 16),
+            controls,
+          ],
+        );
+      }
       if (wide) {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -661,12 +760,34 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     });
   }
 
-  Widget _buildGifTab(ColorScheme colors) {
+  Widget _buildGifTab(ColorScheme colors,
+      {bool phoneLayout = false, bool phoneLandscape = false}) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
         final preview = _buildPreview(colors);
-        final settings = _buildSettings(colors);
+        final settings = _buildSettings(colors,
+            phoneLayout: phoneLayout, phoneLandscape: phoneLandscape);
+        if (phoneLandscape) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 9, child: SizedBox(height: 230, child: preview)),
+              const SizedBox(width: 16),
+              Expanded(flex: 11, child: settings),
+            ],
+          );
+        }
+        if (phoneLayout) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: 250, child: preview),
+              const SizedBox(height: 16),
+              settings,
+            ],
+          );
+        }
         if (wide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -743,147 +864,154 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     );
   }
 
-  Widget _buildSettings(ColorScheme colors) {
+  Widget _buildSettings(ColorScheme colors,
+      {bool phoneLayout = false, bool phoneLandscape = false}) {
+    final actions = Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _actionButton(Icons.refresh_rounded, '刷新预览', _refreshPreview),
+        if (ClipboardImageService.isSupported)
+          _actionButton(Icons.copy_rounded, '复制到剪贴板', _copyPreview),
+        _actionButton(Icons.save_alt_rounded, '导出动图文件', _exportFile,
+            primary: true),
+        if (!phoneLandscape)
+          _actionButton(Icons.close_rounded, '关闭',
+              () async => Navigator.of(context).pop()),
+      ],
+    );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('GIF 导出设置',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                )),
+        const SizedBox(height: 4),
+        Text('独立导出，不会中断当前播放。最长 30 秒。',
+            style: TextStyle(
+                color: colors.onSurface.withValues(alpha: 0.58), fontSize: 12)),
+        if (phoneLandscape) ...[
+          const SizedBox(height: 10),
+          actions,
+        ],
+        const SizedBox(height: 14),
+        _sectionLabel('时间范围'),
+        Row(
+          children: [
+            Expanded(
+              child: _timeField(
+                controller: _startTimeController,
+                focusNode: _startTimeFocusNode,
+                label: '开始时间',
+                onChanged: (_) => _handleTimeChanged(start: true),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _smallAction('填入当前时间', _fillCurrentTime),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _timeField(
+                controller: _endTimeController,
+                focusNode: _endTimeFocusNode,
+                label: '结束时间',
+                onChanged: (_) => _handleTimeChanged(start: false),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              _endMillis > _startMillis
+                  ? '共 ${((_endMillis - _startMillis) / 1000).toStringAsFixed(1)} 秒'
+                  : '时间范围无效',
+              style: TextStyle(
+                color: _endMillis > _startMillis
+                    ? colors.onSurface.withValues(alpha: 0.68)
+                    : colors.error,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _sectionLabel('输出尺寸'),
+        Row(
+          children: [
+            Expanded(
+              child: _numberField(
+                _widthController,
+                _widthFocusNode,
+                '宽度',
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text('×',
+                  style: TextStyle(
+                      color: colors.onSurface.withValues(alpha: 0.5))),
+            ),
+            Expanded(
+              child: _numberField(
+                _heightController,
+                _heightFocusNode,
+                '高度',
+              ),
+            ),
+            const SizedBox(width: 8),
+            _smallAction('推荐', () => _setOutputSize(_recommendedSize())),
+            const SizedBox(width: 6),
+            _smallAction('原始', () => _setOutputSize(_sourceSize())),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _sectionLabel('帧率')),
+            Text('$_framesPerSecond fps',
+                style: TextStyle(color: AppAccentColors.current)),
+          ],
+        ),
+        Slider(
+          min: 5,
+          max: 30,
+          divisions: 25,
+          value: _framesPerSecond.toDouble(),
+          onChanged: _isWorking
+              ? null
+              : (value) => setState(() => _framesPerSecond = value.round()),
+        ),
+        _sectionLabel('输出质量'),
+        SegmentedButton<GifExportQuality>(
+          segments: const [
+            ButtonSegment(
+              value: GifExportQuality.normal,
+              icon: Icon(Icons.bolt_rounded),
+              label: Text('普通'),
+            ),
+            ButtonSegment(
+              value: GifExportQuality.high,
+              icon: Icon(Icons.auto_awesome_rounded),
+              label: Text('高质量'),
+            ),
+          ],
+          selected: {_quality},
+          onSelectionChanged: _isWorking
+              ? null
+              : (value) => setState(() => _quality = value.first),
+        ),
+        if (!phoneLandscape) ...[
+          const SizedBox(height: 18),
+          actions,
+        ],
+      ],
+    );
     return _Panel(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('GIF 导出设置',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      )),
-              const SizedBox(height: 4),
-              Text('独立导出，不会中断当前播放。最长 30 秒。',
-                  style: TextStyle(
-                      color: colors.onSurface.withValues(alpha: 0.58),
-                      fontSize: 12)),
-              const SizedBox(height: 14),
-              _sectionLabel('时间范围'),
-              Row(
-                children: [
-                  Expanded(
-                    child: _timeField(
-                      controller: _startTimeController,
-                      focusNode: _startTimeFocusNode,
-                      label: '开始时间',
-                      onChanged: (_) => _handleTimeChanged(start: true),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _smallAction('填入当前时间', _fillCurrentTime),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _timeField(
-                      controller: _endTimeController,
-                      focusNode: _endTimeFocusNode,
-                      label: '结束时间',
-                      onChanged: (_) => _handleTimeChanged(start: false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _endMillis > _startMillis
-                        ? '共 ${((_endMillis - _startMillis) / 1000).toStringAsFixed(1)} 秒'
-                        : '时间范围无效',
-                    style: TextStyle(
-                      color: _endMillis > _startMillis
-                          ? colors.onSurface.withValues(alpha: 0.68)
-                          : colors.error,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              _sectionLabel('输出尺寸'),
-              Row(
-                children: [
-                  Expanded(
-                    child: _numberField(
-                      _widthController,
-                      _widthFocusNode,
-                      '宽度',
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text('×',
-                        style: TextStyle(
-                            color: colors.onSurface.withValues(alpha: 0.5))),
-                  ),
-                  Expanded(
-                    child: _numberField(
-                      _heightController,
-                      _heightFocusNode,
-                      '高度',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _smallAction('推荐', () => _setOutputSize(_recommendedSize())),
-                  const SizedBox(width: 6),
-                  _smallAction('原始', () => _setOutputSize(_sourceSize())),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _sectionLabel('帧率')),
-                  Text('$_framesPerSecond fps',
-                      style: TextStyle(color: AppAccentColors.current)),
-                ],
-              ),
-              Slider(
-                min: 5,
-                max: 30,
-                divisions: 25,
-                value: _framesPerSecond.toDouble(),
-                onChanged: _isWorking
-                    ? null
-                    : (value) =>
-                        setState(() => _framesPerSecond = value.round()),
-              ),
-              _sectionLabel('输出质量'),
-              SegmentedButton<GifExportQuality>(
-                segments: const [
-                  ButtonSegment(
-                    value: GifExportQuality.normal,
-                    icon: Icon(Icons.bolt_rounded),
-                    label: Text('普通'),
-                  ),
-                  ButtonSegment(
-                    value: GifExportQuality.high,
-                    icon: Icon(Icons.auto_awesome_rounded),
-                    label: Text('高质量'),
-                  ),
-                ],
-                selected: {_quality},
-                onSelectionChanged: _isWorking
-                    ? null
-                    : (value) => setState(() => _quality = value.first),
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _actionButton(Icons.refresh_rounded, '刷新预览', _refreshPreview),
-                  _actionButton(Icons.copy_rounded, '复制到剪贴板', _copyPreview),
-                  _actionButton(Icons.save_alt_rounded, '导出动图文件', _exportFile,
-                      primary: true),
-                  _actionButton(Icons.close_rounded, '关闭',
-                      () async => Navigator.of(context).pop()),
-                ],
-              ),
-            ],
-          ),
-        ),
+        child: phoneLayout ? content : SingleChildScrollView(child: content),
       ),
     );
   }

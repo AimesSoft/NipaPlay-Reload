@@ -14,6 +14,7 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   GtkWindow* main_window;
   FlMethodChannel* desktop_window_channel;
+  FlMethodChannel* clipboard_image_channel;
   gboolean picture_in_picture_has_restore_bounds;
   gint picture_in_picture_restore_x;
   gint picture_in_picture_restore_y;
@@ -256,6 +257,78 @@ static void desktop_window_method_call_cb(FlMethodChannel* channel,
   fl_method_call_respond_not_implemented(method_call, nullptr);
 }
 
+// 剪贴板图片通道：把本地文件以 text/uri-list 形式写入系统剪贴板，
+// 等价于在文件管理器中“复制文件”，聊天软件输入框可直接粘贴为附件。
+// gtk_clipboard_set_with_data 需要数据存活到剪贴板被清空为止，
+// 因此把 URI 列表挂在堆上，由 clear 回调释放。
+static void clipboard_image_get_data_cb(GtkClipboard* clipboard,
+                                        GtkSelectionData* selection_data,
+                                        guint info,
+                                        gpointer user_data) {
+  gtk_selection_data_set_uris(selection_data,
+                              static_cast<gchar**>(user_data));
+}
+
+static void clipboard_image_clear_cb(GtkClipboard* clipboard,
+                                     gpointer user_data) {
+  g_strfreev(static_cast<gchar**>(user_data));
+}
+
+static void clipboard_image_method_call_cb(FlMethodChannel* channel,
+                                           FlMethodCall* method_call,
+                                           gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (strcmp(method, "copyImageFile") != 0) {
+    fl_method_call_respond_not_implemented(method_call, nullptr);
+    return;
+  }
+
+  FlValue* args = fl_method_call_get_args(method_call);
+  const gchar* path =
+      fl_value_as_string(fl_value_lookup_string(args, "path"), nullptr);
+  if (path == nullptr || path[0] == '\0') {
+    fl_method_call_respond_error(method_call, "INVALID_ARGUMENTS",
+                                 "A non-empty file path is required", nullptr,
+                                 nullptr);
+    return;
+  }
+  if (!g_file_test(path, G_FILE_TEST_IS_REGULAR)) {
+    fl_method_call_respond_error(method_call, "FILE_NOT_FOUND",
+                                 "The file to copy does not exist", nullptr,
+                                 nullptr);
+    return;
+  }
+
+  g_autofree gchar* uri = g_filename_to_uri(path, nullptr, nullptr);
+  if (uri == nullptr) {
+    fl_method_call_respond_error(method_call, "INVALID_ARGUMENTS",
+                                 "Failed to build a file URI", nullptr,
+                                 nullptr);
+    return;
+  }
+
+  gchar** uris = g_new0(gchar*, 2);
+  uris[0] = g_strdup(uri);
+  GtkTargetEntry targets[] = {
+      {const_cast<gchar*>("text/uri-list"), 0, 0},
+  };
+  GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+  const gboolean owned = gtk_clipboard_set_with_data(
+      clipboard, targets, G_N_ELEMENTS(targets), clipboard_image_get_data_cb,
+      clipboard_image_clear_cb, uris);
+  if (!owned) {
+    // 接管失败时 GTK 不会调用 clear 回调，需自行释放。
+    g_strfreev(uris);
+    fl_method_call_respond_error(method_call, "CLIPBOARD_WRITE_FAILED",
+                                 "Failed to own the clipboard", nullptr,
+                                 nullptr);
+    return;
+  }
+
+  g_autoptr(FlValue) response = fl_value_new_bool(TRUE);
+  fl_method_call_respond_success(method_call, response, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -311,6 +384,15 @@ static void my_application_activate(GApplication* application) {
   fl_method_channel_set_method_call_handler(
       self->desktop_window_channel, desktop_window_method_call_cb, self,
       nullptr);
+  g_autoptr(FlStandardMethodCodec) clipboard_image_codec =
+      fl_standard_method_codec_new();
+  self->clipboard_image_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "nipaplay/clipboard_image",
+      FL_METHOD_CODEC(clipboard_image_codec));
+  fl_method_channel_set_method_call_handler(
+      self->clipboard_image_channel, clipboard_image_method_call_cb, self,
+      nullptr);
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -355,6 +437,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_object(&self->desktop_window_channel);
+  g_clear_object(&self->clipboard_image_channel);
   self->main_window = nullptr;
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);

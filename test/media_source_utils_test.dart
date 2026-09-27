@@ -64,4 +64,54 @@ void main() {
       expect(safe, isNot(contains('super-secret')));
     });
   });
+
+  group('remote playback error display', () {
+    test('decodes a WebDAV Chinese path without showing URL credentials', () {
+      const error =
+          '播放器打开媒体失败: https://viewer%40example.test:secret%20word@dav.example.test/root/%E5%8A%A8%E6%BC%AB/%E7%AC%AC1%E9%9B%86.mkv';
+
+      final display = MediaSourceUtils.playbackErrorForDisplay(
+        error,
+        'webdav://connection-id/动漫/第1集.mkv',
+      );
+
+      expect(display, contains('https://dav.example.test/root/动漫/第1集.mkv'));
+      expect(display, isNot(contains('viewer')));
+      expect(display, isNot(contains('secret')));
+      expect(error, contains('%E5%8A%A8'));
+    });
+
+    test('decodes the SMB proxy path query without changing other sources', () {
+      const error =
+          '打开失败: http://127.0.0.1:8123/smb/stream?conn=media&path=%2F%E4%B8%AD%E6%96%87%E7%9B%AE%E5%BD%95%2Fmovie.mkv';
+
+      final display = MediaSourceUtils.playbackErrorForDisplay(
+        error,
+        'smb://media/中文目录/movie.mkv',
+      );
+
+      expect(display, contains('中文目录'));
+      expect(display, contains('conn=media&path=/中文目录/movie.mkv'));
+      expect(MediaSourceUtils.playbackErrorForDisplay(error, '/tmp/movie.mkv'),
+          error);
+      expect(
+        MediaSourceUtils.playbackErrorForDisplay(
+          error,
+          'https://cdn.example.test/movie.mkv',
+        ),
+        error,
+      );
+    });
+
+    test('keeps a malformed escape while still hiding credentials', () {
+      const error = '无法打开 https://user:password@dav.example.test/bad%ZZ';
+      final display = MediaSourceUtils.playbackErrorForDisplay(
+        error,
+        'webdav://connection-id/bad%ZZ',
+      );
+
+      expect(display, contains('https://dav.example.test/bad%ZZ'));
+      expect(display, isNot(contains('password')));
+    });
+  });
 }

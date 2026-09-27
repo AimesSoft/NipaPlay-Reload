@@ -32,6 +32,7 @@ class _PluginDanmakuWebViewOverlayState
   WebViewController? _controller;
   Object? _loadError;
   bool _rendererReady = false;
+  bool _initialStateSent = false;
   int _lastClockSentAtMs = 0;
   int _lastDanmakuListVersion = -1;
   int _lastLocallySentDanmakuRevision = -1;
@@ -60,10 +61,11 @@ class _PluginDanmakuWebViewOverlayState
     }
     if (oldWidget.renderer.selectionId != widget.renderer.selectionId) {
       _rendererReady = false;
+      _initialStateSent = false;
       _controller = null;
       _loadError = null;
       unawaited(_initialize());
-    } else if (oldWidget.fontScale != widget.fontScale) {
+    } else if (oldWidget.fontScale != widget.fontScale && _initialStateSent) {
       unawaited(_sendSettings(force: true));
     }
   }
@@ -118,7 +120,7 @@ class _PluginDanmakuWebViewOverlayState
       switch (decoded['type']) {
         case 'ready':
           _rendererReady = true;
-          unawaited(_sendFullState());
+          unawaited(_sendFullState(generation));
           return;
         case 'error':
           debugPrint(
@@ -136,28 +138,33 @@ class _PluginDanmakuWebViewOverlayState
     } catch (_) {}
   }
 
-  Future<void> _sendFullState() async {
+  Future<void> _sendFullState(int generation) async {
+    await widget.videoState.initialDanmakuSettingsReady;
+    if (!mounted || generation != _loadGeneration) return;
     await _send(<String, dynamic>{
       'type': 'initialize',
       'apiVersion': PluginDanmakuRenderer.supportedApiVersion,
       'pluginId': widget.renderer.pluginId,
       'rendererId': widget.renderer.id,
     });
-    await _sendDanmaku(force: true);
     await _sendSettings(force: true);
     await _sendClock(force: true);
+    await _sendDanmaku(force: true);
+    if (!mounted || generation != _loadGeneration) return;
+    _initialStateSent = true;
+    _onVideoStateChanged();
   }
 
   void _onVideoStateChanged() {
-    if (!_rendererReady) return;
-    unawaited(_sendDanmaku());
+    if (!_rendererReady || !_initialStateSent) return;
     unawaited(_sendSettings());
+    unawaited(_sendDanmaku());
     unawaited(
         _sendClock(force: _lastSeekRevision != widget.videoState.seekRevision));
   }
 
   void _onPlaybackClock() {
-    if (!_rendererReady) return;
+    if (!_rendererReady || !_initialStateSent) return;
     unawaited(_sendClock());
   }
 

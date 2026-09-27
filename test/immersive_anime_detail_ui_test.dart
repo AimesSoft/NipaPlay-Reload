@@ -491,14 +491,105 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('landscape summary grows from tablet to desktop', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    final heights = <double>[];
+    final titleTops = <double>[];
+    final previewLines = <int>[];
+    final description = List.filled(60, '这段简介用于验证不同尺寸下的可用行数。').join();
+
+    for (final size in <Size>[
+      const Size(1024, 600),
+      const Size(1280, 800),
+      const Size(1920, 1080),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData.dark(),
+        home: ImmersiveAnimeDetailScaffold(
+          title: '自适应标题',
+          subtitle: '较长的副标题',
+          metadata: const ['TV动画', '2026', '共 24 集'],
+          description: description,
+          onToggleDescription: () {},
+          onBack: () {},
+          actions: const SizedBox(height: 52, child: Text('观看按钮')),
+          episodeRail: const ColoredBox(color: Colors.transparent),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      heights.add(tester
+          .getSize(
+            find.byKey(const ValueKey('immersive-description-viewport')),
+          )
+          .height);
+      previewLines.add(tester.widget<Text>(find.text(description)).maxLines!);
+      titleTops.add(tester.getTopLeft(find.text('自适应标题')).dy);
+      expect(find.text('查看更多'), findsOneWidget);
+      expect(find.byKey(const ValueKey('immersive-description-scroll')),
+          findsNothing);
+      expect(
+          tester
+              .getBottomRight(
+                find.byKey(const ValueKey('immersive-fixed-actions')),
+              )
+              .dy,
+          lessThan(size.height));
+      expect(tester.takeException(), isNull);
+    }
+
+    expect(heights[1], greaterThan(heights[0]));
+    expect(heights[2], greaterThan(heights[1]));
+    expect(previewLines.first, lessThan(previewLines.last));
+    expect(previewLines.last, lessThanOrEqualTo(6));
+    expect(titleTops[1], greaterThan(titleTops[0]));
+    expect(titleTops[2], greaterThan(titleTops[1]));
+  });
+
+  testWidgets('short summary uses its natural height without a toggle',
+      (tester) async {
+    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: ImmersiveAnimeDetailScaffold(
+        title: '短简介',
+        description: '两行以内的简介。',
+        onToggleDescription: () {},
+        onBack: () {},
+        actions: const Text('观看按钮'),
+        episodeRail: const ColoredBox(color: Colors.transparent),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('查看更多'), findsNothing);
+    expect(find.byKey(const ValueKey('immersive-description-scroll')),
+        findsNothing);
+    expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('immersive-description-viewport')),
+            )
+            .height,
+        lessThan(30));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('expanded summary hugs its toggle and gently moves actions down',
       (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    // 文本需长于桌面端收起预览的行数上限，确保出现“查看更多”。
     const realBocchiSummary =
-        '作为网络吉他手“吉他英雄”而广受好评的后藤一里，在现实中却是个什么都不会的沟通障碍者。一里有着组建乐队的梦想，但因为不敢向人主动搭话而一直没有成功，直到一天在公园中被伊地知虹夏发现并邀请进入缺少吉他手的“结束乐队”。可是，完全没有和他人合作经历的一里，在人前完全发挥不出原本的实力。为了努力克服沟通障碍，一里与“结束乐队”的成员们一同开始努力……';
+        '作为网络吉他手“吉他英雄”而广受好评的后藤一里，在现实中却是个什么都不会的沟通障碍者。一里有着组建乐队的梦想，但因为不敢向人主动搭话而一直没有成功，直到一天在公园中被伊地知虹夏发现并邀请进入缺少吉他手的“结束乐队”。可是，完全没有和他人合作经历的一里，在人前完全发挥不出原本的实力。为了努力克服沟通障碍，一里与“结束乐队”的成员们一同开始努力……'
+        '之后众人为了参加音乐节而开始自主练习，一里一边打工攒钱购买新设备，一边在文化祭的舞台上克服了当众演奏的恐惧。乐队逐渐积累了名气，也迎来了与虹夏姐姐凉之间的纠葛，以及面对毕业、就业等现实选择的考验。最终“结束乐队”站上了更大的舞台，一里也在同伴的陪伴下一点点走出自己的壳。';
     var expanded = false;
 
     await tester.pumpWidget(
@@ -663,6 +754,39 @@ void main() {
     final actions = find.byKey(const ValueKey('immersive-fixed-actions'));
     expect(tester.getBottomLeft(actions).dy, lessThan(1024));
     expect(find.byKey(const ValueKey('immersive-phone-scroll')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('portrait tablet scrolls a long expanded summary internally',
+      (tester) async {
+    tester.view.physicalSize = const Size(768, 1024);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: ImmersiveAnimeDetailScaffold(
+        title: '竖屏 Pad 标题',
+        description: List.filled(80, '很长的简介内容。').join(),
+        descriptionExpanded: true,
+        onToggleDescription: () {},
+        onBack: () {},
+        actions: const Text('观看按钮'),
+        episodeRail: const Center(child: Text('剧集轨道')),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final actions = find.byKey(const ValueKey('immersive-fixed-actions'));
+    final actionTop = tester.getTopLeft(actions).dy;
+    expect(find.byKey(const ValueKey('immersive-description-scroll')),
+        findsOneWidget);
+    expect(find.text('剧集轨道'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('immersive-description-scroll')),
+      const Offset(0, -150),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(actions).dy, closeTo(actionTop, 0.1));
     expect(tester.takeException(), isNull);
   });
 }
