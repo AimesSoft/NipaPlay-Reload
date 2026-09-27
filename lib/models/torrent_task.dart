@@ -74,6 +74,7 @@ class TorrentTask {
     required this.uploadSpeedBytesPerSecond,
     required this.error,
     this.files = const <TorrentTaskFile>[],
+    this.initializingPaused = false,
   });
 
   final int id;
@@ -85,6 +86,7 @@ class TorrentTask {
   final int uploadedBytes;
   final int totalBytes;
   final bool finished;
+  final bool initializingPaused;
   final int downloadSpeedBytesPerSecond;
   final int uploadSpeedBytesPerSecond;
   final String? error;
@@ -95,9 +97,24 @@ class TorrentTask {
     return (progressBytes / totalBytes).clamp(0.0, 1.0);
   }
 
-  bool get isPaused => state == 'paused';
+  bool get isPaused =>
+      state == 'paused' || (state == 'initializing' && initializingPaused);
 
-  bool get isActive => state == 'live' || state == 'initializing';
+  bool get canResume => isPaused || hasError;
+
+  bool get canPlay => !hasError && state != 'initializing';
+
+  String get toggleLabel => hasError
+      ? '重试'
+      : isPaused
+          ? (finished ? '继续做种' : '继续下载')
+          : (finished ? '暂停做种' : '暂停下载');
+
+  bool get isActive =>
+      !finished &&
+      !isPaused &&
+      !hasError &&
+      (state == 'live' || state == 'initializing');
 
   bool get hasError => state == 'error' || (error?.isNotEmpty ?? false);
 
@@ -105,7 +122,8 @@ class TorrentTask {
 
   String get displayState {
     if (hasError) return '错误';
-    if (finished) return '已完成';
+    if (finished) return isPaused ? '已完成（已暂停）' : '已完成（做种中）';
+    if (isPaused) return '已暂停';
     switch (state) {
       case 'initializing':
         return '初始化';
@@ -136,6 +154,7 @@ class TorrentTask {
       uploadedBytes: _asInt(stats['uploaded_bytes']),
       totalBytes: _asInt(stats['total_bytes']),
       finished: stats['finished'] == true,
+      initializingPaused: stats['initializing_paused'] == true,
       downloadSpeedBytesPerSecond:
           _speedBytes(live['download_speed'] as Map<String, dynamic>?),
       uploadSpeedBytesPerSecond:
@@ -158,6 +177,7 @@ class TorrentTask {
       uploadedBytes: uploadedBytes,
       totalBytes: totalBytes,
       finished: finished,
+      initializingPaused: initializingPaused,
       downloadSpeedBytesPerSecond: downloadSpeedBytesPerSecond,
       uploadSpeedBytesPerSecond: uploadSpeedBytesPerSecond,
       error: error,

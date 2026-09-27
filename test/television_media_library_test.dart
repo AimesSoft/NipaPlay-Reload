@@ -70,7 +70,9 @@ void main() {
           ChangeNotifierProvider<WatchHistoryProvider>(
             create: (_) => _LoadedEmptyWatchHistoryProvider(),
           ),
-          ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider<AppearanceSettingsProvider>(
+            create: (_) => AppearanceSettingsProvider(),
+          ),
         ],
         child: _testApp(
           home: Scaffold(

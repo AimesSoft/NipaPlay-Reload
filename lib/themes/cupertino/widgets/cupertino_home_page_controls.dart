@@ -34,6 +34,11 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
             child: CupertinoAppPageHeader(title: '主页'),
           ),
           SliverToBoxAdapter(child: _buildCupertinoHero()),
+          if (_hasQuarterlyReviewForToday())
+            SliverPadding(
+              padding: const EdgeInsets.only(top: 22),
+              sliver: SliverToBoxAdapter(child: _buildQuarterlyReviewSection()),
+            ),
           ..._buildCupertinoConfiguredSections(sectionsProvider),
           const SliverPadding(padding: EdgeInsets.only(bottom: 84)),
         ],

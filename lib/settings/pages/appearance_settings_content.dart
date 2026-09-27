@@ -370,6 +370,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
+              '首页新番回顾',
+              '首頁新番回顧',
+              'Seasonal Anime Review',
+            ),
+            subtitle: _text(
+              context,
+              '在季度末和下月前 7 天显示新番回顾',
+              '在季度末和下月前 7 天顯示新番回顧',
+              'Show the anime review at quarter end and for seven more days.',
+            ),
+            icon: Icons.history_rounded,
+            phoneIcon: cupertino.CupertinoIcons.time,
+            value: appearanceSettings.showQuarterlyAnimeReview,
+            onChanged: appearanceSettings.setShowQuarterlyAnimeReview,
+          ),
+          AdaptiveSettingsTile<bool>.toggle(
+            title: _text(
+              context,
               '首页推荐轮播大图',
               '首頁推薦輪播大圖',
               'Home Hero Banner',
