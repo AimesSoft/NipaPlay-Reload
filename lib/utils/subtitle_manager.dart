@@ -1313,35 +1313,12 @@ class SubtitleManager extends ChangeNotifier {
 
           // 命中保存映射同样把其余候选叠挂进轨道列表（评分最佳已激活，
           // 其余供手动切换），否则恢复路径只挂一条。
-          if (!kIsWeb &&
-              RemoteSubtitleService.instance
-                  .isPotentialRemoteVideoPath(videoPath)) {
-            try {
-              final candidates = await RemoteSubtitleService.instance
-                  .listCandidatesForVideo(videoPath);
-              for (final other in candidates) {
-                final otherExt = other.extension.toLowerCase();
-                if (otherExt != '.srt' && otherExt != '.vtt') continue;
-                try {
-                  final otherPath = await RemoteSubtitleService.instance
-                      .ensureSubtitleCached(
-                    other,
-                    allCandidates: candidates,
-                  );
-                  if (_activeExternalSubtitlePaths.contains(otherPath)) {
-                    continue;
-                  }
-                  await addExternalSubtitleToStack(otherPath,
-                      displayName: other.name);
-                  debugPrint('SubtitleManager: 恢复时叠加字幕 ${other.name}');
-                } catch (e) {
-                  debugPrint('SubtitleManager: 恢复叠加字幕 ${other.name} 失败: $e');
-                }
-              }
-            } catch (e) {
-              debugPrint('SubtitleManager: 恢复时叠加远程字幕失败: $e');
-            }
-          }
+          // 本地：扫描视频目录（同名+目录模糊候选，含 sub/idx 成对校验）；
+          // 远程：拉候选列表下载缓存。与全新加载路径的类型范围保持一致。
+          unawaited(_stackRemainingSubtitlesAfterRestore(
+            videoPath: videoPath,
+            savedSubtitlePath: savedSubtitlePath,
+          ));
 
           // 设置完成后强制刷新状态
           await Future.delayed(_autoLoadStateSettleDelay);
@@ -1689,6 +1666,99 @@ class SubtitleManager extends ChangeNotifier {
     if (onExternalSubtitleAutoLoaded != null) {
       final fileName = p.basename(best.file.path);
       onExternalSubtitleAutoLoaded!(best.file.path, fileName);
+    }
+  }
+
+  /// 恢复保存映射后的叠挂：本地视频扫描视频目录（含 sub/idx 成对校验），
+  /// 远程视频拉候选列表下载缓存；同基名的 .sub/.idx 与已激活条目去重。
+  Future<void> _stackRemainingSubtitlesAfterRestore({
+    required String videoPath,
+    required String savedSubtitlePath,
+  }) async {
+    if (kIsWeb) return;
+    final savedBase =
+        p.basenameWithoutExtension(savedSubtitlePath).toLowerCase();
+    final candidates = <_StackCandidate>[];
+
+    try {
+      if (RemoteSubtitleService.instance.isPotentialRemoteVideoPath(videoPath)) {
+        final remote = await RemoteSubtitleService.instance
+            .listCandidatesForVideo(videoPath);
+        for (final other in remote) {
+          candidates.add(_StackCandidate(
+            path: null,
+            name: other.name,
+            remote: other,
+          ));
+        }
+      } else {
+        final videoFile = File(videoPath);
+        if (!videoFile.existsSync()) return;
+        final videoDir = videoFile.parent.path;
+        final subtitleExts = subtitleExtensionMatchScore.keys.toList();
+        final seen = <String>{};
+        for (final ext in subtitleExts) {
+          final potentialPath = p.join(videoDir, '${p.basenameWithoutExtension(videoPath)}$ext');
+          if (File(potentialPath).existsSync() &&
+              isVobSubPairComplete(potentialPath) &&
+              seen.add(potentialPath.toLowerCase())) {
+            candidates.add(_StackCandidate(
+              path: potentialPath,
+              name: p.basename(potentialPath),
+            ));
+          }
+        }
+        final dirFiles = Directory(videoDir).listSync();
+        for (final entity in dirFiles) {
+          if (entity is! File) continue;
+          final ext = p.extension(entity.path).toLowerCase();
+          if (!subtitleExts.contains(ext)) continue;
+          if (!isVobSubPairComplete(entity.path)) continue;
+          if (seen.add(entity.path.toLowerCase())) {
+            candidates.add(_StackCandidate(
+              path: entity.path,
+              name: p.basename(entity.path),
+            ));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 恢复时收集字幕候选失败: $e');
+      return;
+    }
+
+    for (final candidate in candidates) {
+      try {
+        final base = p.basenameWithoutExtension(candidate.name).toLowerCase();
+        // 与已激活主字幕同基名的 .sub/.idx 不重复挂
+        if ((base == savedBase) &&
+            (candidate.path?.toLowerCase().endsWith('.sub') == true ||
+                candidate.path?.toLowerCase().endsWith('.idx') == true)) {
+          continue;
+        }
+        String stackPath;
+        if (candidate.path != null) {
+          stackPath = candidate.path!;
+        } else {
+          stackPath = await RemoteSubtitleService.instance
+              .ensureSubtitleCached(
+            candidate.remote!,
+            allCandidates: candidates
+                .map((c) => c.remote)
+                .whereType<RemoteSubtitleCandidate>()
+                .toList(),
+          );
+        }
+        if (_activeExternalSubtitlePaths.contains(stackPath) ||
+            stackPath == savedSubtitlePath) {
+          continue;
+        }
+        await addExternalSubtitleToStack(stackPath,
+            displayName: candidate.name);
+        debugPrint('SubtitleManager: 恢复时叠加字幕 ${candidate.name}');
+      } catch (e) {
+        debugPrint('SubtitleManager: 恢复叠加字幕 ${candidate.name} 失败: $e');
+      }
     }
   }
 
@@ -2059,4 +2129,17 @@ class SubtitleManager extends ChangeNotifier {
       return '$trimmed stat_error=$error';
     }
   }
+}
+
+/// 恢复叠挂用的统一候选：本地路径直接用，远程候选需先下载缓存。
+class _StackCandidate {
+  const _StackCandidate({
+    required this.name,
+    this.path,
+    this.remote,
+  });
+
+  final String name;
+  final String? path;
+  final RemoteSubtitleCandidate? remote;
 }
