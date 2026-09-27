@@ -659,6 +659,7 @@ int _exactEndStreak = 0;
       ? defaultTvOSErikaDanmakuOutlineWidthLevel
       : defaultDanmakuOutlineWidthLevel;
   TitanDanmakuSettings _titanDanmakuSettings = const TitanDanmakuSettings();
+  final Completer<void> _initialDanmakuSettingsReady = Completer<void>();
   Timer? _titanDanmakuSettingsPersistenceTimer;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
@@ -954,7 +955,12 @@ int _exactEndStreak = 0;
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     PlayerRemoteControlBridge.instance.attach(this);
-    _initialize();
+    unawaited(_initialize().whenComplete(() {
+      // Do not leave the renderer waiting if initialization exits early.
+      if (!_initialDanmakuSettingsReady.isCompleted) {
+        _initialDanmakuSettingsReady.complete();
+      }
+    }));
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
@@ -1261,6 +1267,8 @@ int _exactEndStreak = 0;
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   TitanDanmakuSettings get titanDanmakuSettings => _titanDanmakuSettings;
+  Future<void> get initialDanmakuSettingsReady =>
+      _initialDanmakuSettingsReady.future;
   double get subtitleScale => _subtitleScale;
   double get srtSubtitleScale => _srtSubtitleScale;
   double get subtitleDelayCustomLimitSeconds {
