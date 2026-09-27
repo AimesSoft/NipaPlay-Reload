@@ -481,6 +481,22 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [
+            if (appearanceSettings.supportsAutomaticUiScale)
+              AdaptiveSettingsTile<bool>.toggle(
+                title: _text(
+                    context, '自动适配界面大小', '自動適配介面大小', 'Automatic UI Scale'),
+                subtitle: _text(
+                  context,
+                  '启动时根据显示分辨率和系统缩放选择大小；手动调节下方滑块可关闭自动适配',
+                  '啟動時依顯示解析度和系統縮放選擇大小；手動調整下方滑桿可關閉自動適配',
+                  'Choose a scale at startup using the display resolution and system density. Adjusting the slider switches to manual scaling.',
+                ),
+                icon: Ionicons.expand_outline,
+                phoneIcon:
+                    cupertino.CupertinoIcons.arrow_up_left_arrow_down_right,
+                value: appearanceSettings.useAutomaticUiScale,
+                onChanged: appearanceSettings.setAutomaticUiScale,
+              ),
             AdaptiveSettingsTile<double>.slider(
               title: _text(context, '界面缩放', '介面縮放', 'UI Scale'),
               subtitle: _text(
