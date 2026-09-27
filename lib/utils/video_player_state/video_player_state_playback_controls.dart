@@ -574,11 +574,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           });
         }
       } else if (isWindowsMediaKit) {
-        Future.delayed(const Duration(milliseconds: 400), () {
-          if (_status == PlayerStatus.paused) {
-            _captureConditionalScreenshot("暂停时");
-          }
-        });
+        // Windows+MediaKit 暂停后不做 snapshot：暂停态对 mpv 渲染管线取帧
+        // 会在本地大文件（MFT 硬解）上冻死 platform 线程（UI 全卡）。
+        // 缩略图由首播截图提供；恢复播放后由现有条件截图补新帧。
       } else {
         _captureConditionalScreenshot("暂停时");
       }
