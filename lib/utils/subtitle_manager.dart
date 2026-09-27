@@ -379,19 +379,29 @@ class SubtitleManager extends ChangeNotifier {
         } else if (extension == '.sup') {
           debugPrint('SubtitleManager: 检测到sup字幕，跳过文本解析');
         } else if (extension == '.sub') {
-          // .sub 可能是 VobSub 二进制或 MicroDVD 文本，按文件头嗅探后再解析
-          final bytes = await file.readAsBytes();
-          if (SubtitleParser.hasMpegPsPackHeader(bytes)) {
-            debugPrint('SubtitleManager: 检测到VobSub二进制字幕，跳过文本解析');
-          } else {
-            final result = await SubtitleParser.parseSubtitleFile(
-              path,
-              allowUnknownFormat: true,
-            );
-            _subtitleCache[path] = result.entries;
-            _subtitleCacheFingerprint[path] = fingerprint;
-            notifyListeners();
+          // .sub 可能是 VobSub 二进制或 MicroDVD 文本：只读前 4 字节嗅探
+          // MPEG-PS 头，避免把 12MB 位图流整段读进 Dart 堆（恢复/切换
+          // 字幕时会重复调用，全量读取会让内存翻倍）。二进制结果也写入
+          // 缓存指纹，防止重复嗅探。
+          final raf = await file.open();
+          try {
+            final header = await raf.read(4);
+            if (SubtitleParser.hasMpegPsPackHeader(header)) {
+              _subtitleCache[path] = const [];
+              _subtitleCacheFingerprint[path] = fingerprint;
+              debugPrint('SubtitleManager: 检测到VobSub二进制字幕，跳过文本解析');
+              return;
+            }
+          } finally {
+            await raf.close();
           }
+          final result = await SubtitleParser.parseSubtitleFile(
+            path,
+            allowUnknownFormat: true,
+          );
+          _subtitleCache[path] = result.entries;
+          _subtitleCacheFingerprint[path] = fingerprint;
+          notifyListeners();
         }
       }
     } catch (e) {

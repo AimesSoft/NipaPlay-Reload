@@ -140,18 +140,24 @@ class SubtitleParser {
         return null;
       }
 
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) {
-        return const SubtitleDecodeResult(text: '', encoding: 'utf-8');
+      // VobSub 嗅探放在全量读取之前：位图 .sub 可达十几 MB，为判断格式
+      // 先整段读入 Dart 堆是纯浪费。只读前 4 字节判断 MPEG-PS 头。
+      final raf = await file.open();
+      Uint8List header;
+      try {
+        header = await raf.read(4);
+      } finally {
+        await raf.close();
       }
-
-      // VobSub（MPEG-PS）位图字幕嗅探：.sub 扩展名存在二义性（也可能是
-      // MicroDVD 文本），扩展名不可靠，按文件头 00 00 01 BA 判定。
-      // 二进制字幕不走文本解码/编码猜测，交由播放器内核按 IDX 索引渲染。
-      if (hasMpegPsPackHeader(bytes)) {
+      if (hasMpegPsPackHeader(header)) {
         debugPrint(
             'INFO: SubtitleParser: 检测到 MPEG-PS (VobSub) 二进制字幕，跳过文本解码: $filePath');
         return null;
+      }
+
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        return const SubtitleDecodeResult(text: '', encoding: 'utf-8');
       }
 
       final bomEncoding = _detectBomEncoding(bytes);
