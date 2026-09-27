@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -50,6 +53,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
@@ -246,6 +250,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   AppearanceSettingsProvider? _appearanceSettings;
   bool _isEpisodeListReversed = false;
   bool _isCleaningEpisodeHistory = false;
+  final GlobalKey _immersiveMoreDropdownKey = GlobalKey();
   int? _hoveredEpisodeTileId;
   int? _hoveredWatchToggleEpisodeId;
   final FocusNode _largeScreenDetailsFocusNode = FocusNode(
@@ -697,6 +702,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
       if (mounted) {
         final mergedAnime = _mergePlaybackDetail(anime);
+        unawaited(QuarterlyReviewCache.instance
+            .recordAnime(mergedAnime)
+            .catchError((Object _) {}));
         setState(() {
           _detailedAnime = mergedAnime;
           _isLoading = false;
@@ -3203,40 +3211,41 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           label: '评论',
           onPressed: _openImmersiveComments,
         ),
-        PopupMenuButton<_ImmersiveMoreAction>(
-          tooltip: '更多',
-          color: const Color(0xFF20222B),
-          onSelected: (action) => _handleImmersiveMoreAction(action, anime),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
+        BlurDropdown<_ImmersiveMoreAction>(
+          dropdownKey: _immersiveMoreDropdownKey,
+          onItemSelected: (action) => _handleImmersiveMoreAction(action, anime),
+          // 纯动作菜单，没有“当前选中项”，不预先高亮第一行。
+          highlightInitialItem: false,
+          items: [
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: '修改背景图',
               value: _ImmersiveMoreAction.changeBackdrop,
-              child: Text('修改背景图'),
             ),
             if (DandanplayService.isLoggedIn && anime.id > 0)
-              PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: _isFavorited ? '取消收藏' : '收藏',
                 value: _ImmersiveMoreAction.toggleFavorite,
-                child: Text(_isFavorited ? '取消收藏' : '收藏'),
               ),
             if (BangumiApiService.isLoggedIn)
-              const PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: '编辑 Bangumi 评分与收藏',
                 value: _ImmersiveMoreAction.editBangumiRating,
-                child: Text('编辑 Bangumi 评分与收藏'),
               ),
             if (anime.tags?.isNotEmpty == true)
-              const PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: '浏览标签',
                 value: _ImmersiveMoreAction.searchTags,
-                child: Text('浏览标签'),
               ),
-            PopupMenuItem(
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: _isEpisodeListReversed ? '剧集正序' : '剧集倒序',
               value: _ImmersiveMoreAction.reverseEpisodes,
-              child: Text(_isEpisodeListReversed ? '剧集正序' : '剧集倒序'),
             ),
-            const PopupMenuItem(
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: '清理本地记录',
               value: _ImmersiveMoreAction.clearHistory,
-              child: Text('清理本地记录'),
             ),
           ],
-          child: IgnorePointer(
+          controlBuilder: (context, selectedLabel) => IgnorePointer(
             child: AdaptiveMediaDetailActionButton(
               icon: Ionicons.ellipsis_horizontal,
               label: '更多',
