@@ -580,13 +580,14 @@ void main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      // Windows 上透明窗口背景（SetWindowCompositionAttribute accent）在
-      // 首帧前无任何填充色：按上次窗口尺寸小窗启动时表现为整窗白屏。
-      // 改为实色背景，保证 waitUntilReadyToShow → show 之间不露白。
-      // 播放器的原生视频覆盖层不再依赖宿主透明背景（原生侧始终可用）。
+      // Windows 上首帧渲染完成前窗口会露出填充色：不设 backgroundColor 时
+      // 合成层默认为白色（小窗启动白屏）。给深色实色背景——window_manager
+      // 会走 ACCENT_ENABLE_GRADIENT 填充该色，非 transparent 不触发与最小
+      // 化动画冲突的 TRANSPARENTGRADIENT 模式。
       const WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,
+        backgroundColor: Color(0xFF121212),
         title: "NipaPlay",
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
