@@ -431,6 +431,7 @@ class SubtitleManager extends ChangeNotifier {
   }) async {
     try {
       if (subtitlePath.isEmpty) return;
+      if (videoPath.isEmpty) return;
       if (!File(subtitlePath).existsSync()) return;
 
       final prefs = await SharedPreferences.getInstance();
@@ -759,20 +760,29 @@ class SubtitleManager extends ChangeNotifier {
     );
     _activeExternalSubtitlePaths.add(path);
     unawaited(_loadPathDisplayState(path));
-    _currentExternalSubtitlePath = path;
     if (_shouldRenderExternalSubtitleInApp(path)) {
       _activateAppRenderedExternalSubtitle(path);
     } else {
-      // 非叠层类型（远程 ASS/SSA 等）：必须挂到内核字幕轨，否则选中无效果
+      // 非叠层类型（远程 ASS/SSA 等）：必须挂到内核字幕轨，否则选中无效果。
+      // 注意：内核轨挂载会重设激活轨，这里不抢占 _currentExternalSubtitlePath
+      // 与激活状态——叠挂条目进列表供手动切换，屏幕仍显示原先激活的字幕。
       _loadExternalSubtitleIntoPlayer(path, ++_subtitleLoadToken);
     }
     unawaited(preloadSubtitleFile(path));
     updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
       'path': path,
       'title': displayNameForPath(path),
-      'isActive': true,
-      'isManualSet': true,
+      'isActive': false,
+      'isManualSet': false,
     });
+    // 叠挂条目同步持久化进 external_subtitles 列表（带原名），轨道菜单
+    // 从该列表读取，缺了这一步菜单里看不到叠挂的字幕。
+    unawaited(_persistExternalSubtitleSelection(
+      videoPath: _currentVideoPath ?? '',
+      subtitlePath: path,
+      isActive: false,
+      displayName: displayNameForPath(path),
+    ));
     onSubtitleTrackChanged();
     notifyListeners();
   }
