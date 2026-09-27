@@ -347,6 +347,45 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       player.seek(position: bucket);
       await Future.delayed(const Duration(milliseconds: 140));
 
+      if (kernel == PlayerKernelType.mdk) {
+        // 关键时序：mdk 的 Player::snapshot() 在【下一次渲染回调】时才完成，
+        // 因此必须先挂起快照请求、再让播放器播放；若先暂停再请求，暂停状态
+        // 下不再产生渲染帧，Completer 永远不会完成（旧代码正是在此处永久
+        // 挂死串行队列，dispose 时 join 原生线程导致整个窗口"未响应"）。
+        PlayerFrame? frame;
+        try {
+          player.state = PlayerPlaybackState.playing;
+          frame = await player
+              .snapshot(width: targetWidth, height: targetHeight)
+              .timeout(const Duration(seconds: 2), onTimeout: () => null);
+        } finally {
+          player.state = PlayerPlaybackState.paused;
+        }
+        if (session != _timelinePreviewSessionId) return null;
+        if (frame == null || frame.bytes.isEmpty) {
+          // 部分视频 seek 后首帧解码较慢，重试一次：先播放预滚 80ms 再挂请求。
+          try {
+            player.state = PlayerPlaybackState.playing;
+            await Future.delayed(const Duration(milliseconds: 80));
+            frame = await player
+                .snapshot(width: targetWidth, height: targetHeight)
+                .timeout(const Duration(seconds: 2), onTimeout: () => null);
+          } finally {
+            player.state = PlayerPlaybackState.paused;
+          }
+        }
+        if (session != _timelinePreviewSessionId) return null;
+        if (frame == null || frame.bytes.isEmpty) {
+          return null;
+        }
+        return _normalizeTimelineFrameSize(
+          frame,
+          player,
+          fallbackWidth: targetWidth,
+          fallbackHeight: targetHeight,
+        );
+      }
+
       player.state = PlayerPlaybackState.playing;
       await Future.delayed(const Duration(milliseconds: 70));
       player.state = PlayerPlaybackState.paused;
@@ -354,21 +393,10 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (session != _timelinePreviewSessionId) return null;
 
-      if (kernel == PlayerKernelType.mdk) {
-        // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
-        // snapshot 依赖渲染回调完成，异常/挂住时用超时兜底（放弃本张图），
-        // 防止串行队列被永久占死。
-        await player
-            .snapshot(width: targetWidth, height: targetHeight)
-            .timeout(const Duration(seconds: 2), onTimeout: () => null);
-        await Future.delayed(const Duration(milliseconds: 60));
-      }
-
       PlayerFrame? frame = await player
           .snapshot(width: targetWidth, height: targetHeight)
           .timeout(const Duration(seconds: 2), onTimeout: () => null);
-      if ((frame == null || frame.bytes.isEmpty) &&
-          kernel == PlayerKernelType.mdk) {
+      if (frame == null || frame.bytes.isEmpty) {
         await Future.delayed(const Duration(milliseconds: 80));
         frame = await player
             .snapshot(width: targetWidth, height: targetHeight)
