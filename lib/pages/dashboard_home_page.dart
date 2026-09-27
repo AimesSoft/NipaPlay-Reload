@@ -18,6 +18,8 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -80,6 +82,8 @@ part '../themes/nipaplay/widgets/dashboard_home_page_image_helpers.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_models.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_random_recommendations.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_trending.dart';
+part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review.dart';
+part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart';
 part '../themes/cupertino/widgets/cupertino_home_page_controls.dart';
 
 /// 一次推荐位封面升级的结果，用于把多次 setState 合并成一次。
@@ -137,6 +141,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   JellyfinProvider? _jellyfinProviderRef;
   EmbyProvider? _embyProviderRef;
   WatchHistoryProvider? _watchHistoryProviderRef;
+  AppearanceSettingsProvider? _appearanceSettingsProviderRef;
+  bool? _lastQuarterlyReviewEnabled;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
   DandanplayRemoteProvider? _dandanplayProviderRef;
@@ -195,6 +201,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   List<BangumiAnime> _todayAnimes = [];
   bool _isLoadingTodayAnimes = false;
   ScrollController? _todayAnimesScrollController;
+
+  List<_QuarterlyReviewItem> _quarterlyReviewItems = [];
+  int? _quarterlyReviewYear;
+  int? _quarterlyReviewMonth;
+  bool _isLoadingQuarterlyReview = false;
+  bool _reviewReloadAfterCurrent = false;
+  bool _reviewWarmScheduled = false;
+  _QuarterlyReviewSort _quarterlyReviewSort = _QuarterlyReviewSort.airDate;
+  final ScrollController _quarterlyReviewScrollController = ScrollController();
+  final GlobalKey _quarterlyReviewSortDropdownKey = GlobalKey();
 
   // 排行榜数据
   TrendingRankingKind _trendingKind = TrendingRankingKind.allHot;
@@ -280,6 +296,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void initState() {
     super.initState();
     _heroBannerIndexNotifier = ValueNotifier(0);
+    BangumiApiService.loginStatusNotifier.addListener(_onReviewLoginChanged);
+    QuarterlyReviewCache.instance.revision.addListener(_onReviewCacheChanged);
+    unawaited(_loadQuarterlyReviewSort());
 
     // 🔥 修复Flutter状态错误：将数据加载移到addPostFrameCallback中
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -381,6 +400,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _setupProviderListeners() {
+    try {
+      _appearanceSettingsProviderRef =
+          Provider.of<AppearanceSettingsProvider>(context, listen: false);
+      _lastQuarterlyReviewEnabled =
+          _appearanceSettingsProviderRef!.showQuarterlyAnimeReview;
+      _appearanceSettingsProviderRef!.addListener(_onReviewAppearanceChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加外观设置监听器失败: $e');
+    }
+
     // 订阅 Provider 级 ready；ready 之前不监听 Provider 的即时变化
     try {
       _jellyfinProviderRef =
@@ -926,6 +955,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   @override
   void dispose() {
+    _appearanceSettingsProviderRef?.removeListener(_onReviewAppearanceChanged);
+    BangumiApiService.loginStatusNotifier.removeListener(_onReviewLoginChanged);
+    QuarterlyReviewCache.instance.revision
+        .removeListener(_onReviewCacheChanged);
+    _quarterlyReviewScrollController.dispose();
     debugPrint('DashboardHomePage: 开始销毁Widget');
 
     // 清理定时器和ValueNotifier
@@ -1075,6 +1109,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       _buildHeroBanner(isPhone: false),
                       const SizedBox(height: 24),
                     ],
+                    if (_hasQuarterlyReviewForToday()) ...[
+                      _buildQuarterlyReviewSection(),
+                      const SizedBox(height: 24),
+                    ],
                     ...configuredSections,
                     const SizedBox(height: 56),
                   ],
@@ -1114,6 +1152,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
                   if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
                     _buildHeroBanner(isPhone: isPhone),
+                    SizedBox(height: isPhone ? 16 : 32),
+                  ],
+                  if (_hasQuarterlyReviewForToday()) ...[
+                    _buildQuarterlyReviewSection(),
                     SizedBox(height: isPhone ? 16 : 32),
                   ],
                   ...configuredSections,

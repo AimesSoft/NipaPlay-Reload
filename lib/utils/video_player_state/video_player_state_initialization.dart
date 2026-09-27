@@ -75,6 +75,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载播放速度设置
     await _loadPlaybackRate();
+    _initialDanmakuSettingsReady.complete();
 
     // 加载快进快退时间设置
     await _loadSeekStepSeconds();

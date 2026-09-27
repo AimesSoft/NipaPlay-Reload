@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import './dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';
@@ -642,6 +643,9 @@ class BangumiService {
   // 保存详情数据到磁盘缓存
   Future<void> _saveDetailToCache(int animeId, BangumiAnime animeDetail) async {
     try {
+      unawaited(QuarterlyReviewCache.instance
+          .recordAnime(animeDetail)
+          .catchError((Object _) {}));
       final prefs = await SharedPreferences.getInstance();
       final data = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -687,6 +691,9 @@ class BangumiService {
         final Map<String, dynamic> animeData =
             Map<String, dynamic>.from(data['animeDetail'] as Map);
         final animeDetail = BangumiAnime.fromJson(animeData);
+        unawaited(QuarterlyReviewCache.instance
+            .recordAnime(animeDetail)
+            .catchError((Object _) {}));
         await _persistCustomBackground(animeDetail);
 
         if (!isExpired || animeId < 0) {
