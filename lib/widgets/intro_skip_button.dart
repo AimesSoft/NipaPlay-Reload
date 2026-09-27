@@ -3,9 +3,13 @@ import 'package:flutter/material.dart';
 /// 播放器悬浮的「跳过片头 / 片尾」按钮。
 ///
 /// 只在播放位置落入某个可跳过区间时出现（由 `VideoPlayerState.hasActiveSkipSegment`
-/// 控制），点击后跳到区间结束点。样式保持与播放器浮层一致的深色半透明胶囊，
-/// 不依赖具体主题皮肤，nipaplay / cupertino 两套皮肤下观感统一。
+/// 控制），点击后跳到区间结束点。图标和文字带阴影，以便在视频画面上保持清晰。
 class IntroSkipButton extends StatelessWidget {
+  static const _contentShadows = [
+    Shadow(color: Color(0xE6000000), blurRadius: 4),
+    Shadow(color: Color(0xCC000000), blurRadius: 10, offset: Offset(0, 2)),
+  ];
+
   /// 点击回调（通常调用 `VideoPlayerState.skipCurrentSegment`）。
   final VoidCallback onPressed;
 
@@ -20,19 +24,40 @@ class IntroSkipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return TextButton.icon(
       onPressed: onPressed,
-      icon: const Icon(Icons.fast_forward_rounded, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: Colors.black.withValues(alpha: 0.55),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.6)),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+      icon: const Icon(
+        Icons.fast_forward_rounded,
+        size: 18,
+        shadows: _contentShadows,
+      ),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          shadows: _contentShadows,
         ),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+      style: ButtonStyle(
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const Color(0xFFFFE0A0);
+          }
+          if (states.contains(WidgetState.pressed)) {
+            return const Color(0xFFDADADA);
+          }
+          return Colors.white;
+        }),
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(0),
+        side: const WidgetStatePropertyAll(BorderSide.none),
+        splashFactory: NoSplash.splashFactory,
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        ),
         visualDensity: VisualDensity.compact,
       ),
     );
