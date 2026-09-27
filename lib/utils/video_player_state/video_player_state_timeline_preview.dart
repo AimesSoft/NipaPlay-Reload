@@ -3,20 +3,6 @@ part of video_player_state;
 const int _timelinePreviewMaxHeight = 180;
 const int _timelinePreviewDefaultWidth = 320;
 
-// 临时诊断：release 下 debugPrint 不进日志文件，直接落盘到 timeline_diag.log。
-void _tlLog(String msg) {
-  try {
-    if (kIsWeb || !Platform.isWindows) return;
-    final home = Platform.environment['USERPROFILE'];
-    if (home == null) return;
-    final f = File(
-        '$home\\Documents\\nipaplay\\timeline_diag.log');
-    f.parent.createSync(recursive: true);
-    final ts = DateTime.now().toString().substring(11, 23);
-    f.writeAsStringSync('$ts  $msg\n', mode: FileMode.append);
-  } catch (_) {}
-}
-
 /// Timeline preview uses an extra background player to capture frames. Keep it
 /// on MDK only: enabling the MDK preference must not start another libmpv
 /// instance after the playback kernel is switched to MediaKit.
@@ -157,8 +143,6 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   Future<String?> getTimelinePreview(Duration time) async {
-    _tlLog(
-        'getPreview t=${time.inMilliseconds}ms enabled=$_timelinePreviewEnabled supported=$_timelinePreviewSupported path=${_currentVideoPath != null}');
     if (!isTimelinePreviewAvailable || _currentVideoPath == null) {
       return null;
     }
@@ -195,37 +179,23 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         final kernel = PlayerFactory.getKernelType();
         final previewPlayer =
             await _ensureTimelinePreviewPlayer(kernel, source);
-        if (session != _timelinePreviewSessionId) {
-          _tlLog('create bucket=$bucket 中止: session 变更');
-          return null;
-        }
-        if (previewPlayer == null) {
-          _tlLog('create bucket=$bucket 中止: 预览播放器为 null');
-          return null;
-        }
+        if (session != _timelinePreviewSessionId) return null;
+        if (previewPlayer == null) return null;
 
         final frame =
             await _captureTimelineFrame(previewPlayer, bucket, session);
-        if (frame == null) {
-          _tlLog('create bucket=$bucket 中止: frame=null（截图失败/超时）');
-          return null;
-        }
-        _tlLog(
-            'create bucket=$bucket 拿到帧 bytes=${frame.bytes.length} ${frame.width}x${frame.height}');
+        if (frame == null) return null;
 
         final jpegBytes = _encodeTimelineFrameToJpeg(frame);
         if (jpegBytes == null || jpegBytes.isEmpty) {
-          _tlLog('create bucket=$bucket 中止: JPEG 编码失败');
           return null;
         }
 
         final file = File(targetPath);
         await file.writeAsBytes(jpegBytes, flush: true);
-        _tlLog('create bucket=$bucket 成功写出 jpg=${jpegBytes.length}B');
         _timelinePreviewCache[bucket] = targetPath;
         return targetPath;
       } catch (e) {
-        _tlLog('create bucket=$bucket 异常: $e');
         debugPrint('生成时间轴缩略图失败: $e');
         return null;
       } finally {
@@ -259,7 +229,6 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
 
     final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
-    _tlLog('ensure: 创建预览播放器 kernel=$kernel source=$source');
     try {
       previewPlayer.volume = 0;
       if (!kIsWeb && Platform.isWindows && kernel == PlayerKernelType.mdk) {
@@ -270,9 +239,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         // setProperty('video.hwdec', 'no') 不是 fvp 支持的属性键，会被静默忽略。
         try {
           previewPlayer.setDecoders(PlayerMediaType.video, const ['FFmpeg']);
-          _tlLog('ensure: setDecoders([FFmpeg]) 已设置');
         } catch (e) {
-          _tlLog('ensure: setDecoders 失败: $e');
           debugPrint('设置时间轴预览软解失败: $e');
         }
       }
@@ -283,46 +250,55 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
           .timeout(const Duration(seconds: 5),
               onTimeout: () =>
                   throw TimeoutException('时间轴预览播放器 prepare 超时'));
-      _tlLog('ensure: prepare 完成');
-      previewPlayer.state = PlayerPlaybackState.paused;
-      await _waitForTimelinePreviewReady(previewPlayer);
-      _tlLog(
-          'ensure: ready 完成 videoStreams=${previewPlayer.mediaInfo.video?.length ?? 0}');
-      if (kernel == PlayerKernelType.mdk) {
-        // 必须注册渲染目标：fvp 的 snapshot 由 mdk 渲染回调完成，没有渲染
-        // 表面时 snapshot 的 Completer 永远不会完成（adapter 层对此调用有
-        // 10 秒超时保护，不会无限挂住）。该纹理从不挂到 widget 上，仅用于
-        // 驱动 mdk 渲染管线；快照帧数据经 Dart port 独立回传 RGBA。
-        try {
-          await previewPlayer.updateTexture();
-          _tlLog(
-              'ensure: updateTexture 完成 textureId=${previewPlayer.textureId.value}');
-        } catch (e) {
-          _tlLog('ensure: updateTexture 失败: $e');
-          debugPrint('初始化时间轴截图纹理失败: $e');
+      // 与主播放器一致：prepare 后让内核自动播放，并等待视频尺寸真正解析
+      // 出来。fvp 的 updateTexture 内部等待 _videoSize，而 fvp 在首次
+      // mediaInfo 尺寸未就绪时会直接放弃（_setVideoSize 遇到 width/height<=0
+      // 即 return 且不再重试）；若此时立刻暂停，解码器不再产出事件，
+      // _videoSize 会永远为 null，updateTexture 静默返回 -1（textureId 仍为
+      // null），后续 snapshot 因无渲染目标全部超时。
+      bool videoSizeReady = false;
+      for (var i = 0; i < 50; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        final streams = previewPlayer.mediaInfo.video;
+        final codec = (streams != null && streams.isNotEmpty)
+            ? streams.first.codec
+            : null;
+        if (codec != null && codec.width > 0 && codec.height > 0) {
+          videoSizeReady = true;
+          break;
         }
       }
+      if (!videoSizeReady) {
+        throw TimeoutException('时间轴预览视频尺寸等待超时');
+      }
+      if (kernel == PlayerKernelType.mdk) {
+        // 注册渲染目标：fvp 的 snapshot 由 mdk 渲染回调完成。该纹理从不挂到
+        // widget 上，仅用于驱动 mdk 渲染管线；快照帧经 Dart port 独立回传
+        // RGBA。adapter 层对此调用有 10 秒超时保护。尺寸刚就绪时 fvp 内部
+        // 状态可能还在传播，做少量重试直到拿到非空 textureId。
+        for (var i = 0; i < 3; i++) {
+          try {
+            await previewPlayer.updateTexture();
+          } catch (e) {
+            debugPrint('初始化时间轴截图纹理失败: $e');
+          }
+          final texId = previewPlayer.textureId.value;
+          if (texId != null && texId >= 0) break;
+          await Future.delayed(const Duration(milliseconds: 150));
+        }
+      }
+      // 纹理就绪后暂停，避免后台持续解码占用 CPU；每次抽帧时会临时恢复播放。
+      previewPlayer.state = PlayerPlaybackState.paused;
       _timelinePreviewPlayer = previewPlayer;
       _timelinePreviewPlayerKernel = kernel;
       _timelinePreviewPlayerSource = source;
-      _tlLog('ensure: 预览播放器就绪');
       return previewPlayer;
     } catch (e) {
-      _tlLog('ensure: 初始化失败: $e');
       debugPrint('初始化时间轴截图播放器失败: $e');
       // prepare 超时或初始化失败时同样走延迟释放，绝不在 UI 线程同步
       // dispose 去 join 可能挂住的原生线程。
       unawaited(_disposePreviewPlayerDeferred(previewPlayer));
       return null;
-    }
-  }
-
-  Future<void> _waitForTimelinePreviewReady(AbstractPlayer player) async {
-    for (int i = 0; i < 8; i++) {
-      if (player.mediaInfo.duration > 0) {
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 120));
     }
   }
 
@@ -408,8 +384,6 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         } finally {
           player.state = PlayerPlaybackState.paused;
         }
-        _tlLog(
-            'capture bucket=$bucket 首次snapshot: ${frame == null ? "null(超时/无帧)" : "bytes=${frame.bytes.length} ${frame.width}x${frame.height}"} tex=${player.textureId.value}');
         if (session != _timelinePreviewSessionId) return null;
         if (frame == null || frame.bytes.isEmpty) {
           // 部分视频 seek 后首帧解码较慢，重试一次：先播放预滚 80ms 再挂请求。
@@ -422,8 +396,6 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
           } finally {
             player.state = PlayerPlaybackState.paused;
           }
-          _tlLog(
-              'capture bucket=$bucket 重试snapshot: ${frame == null ? "null(超时/无帧)" : "bytes=${frame.bytes.length} ${frame.width}x${frame.height}"}');
         }
         if (session != _timelinePreviewSessionId) return null;
         if (frame == null || frame.bytes.isEmpty) {
