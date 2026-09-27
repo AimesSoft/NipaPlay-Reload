@@ -35,6 +35,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
+  static const String _showQuarterlyAnimeReviewKey =
+      'show_quarterly_anime_review';
   static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
   static const String _accentColorPresetKey = 'app_accent_color_preset';
   static const String _folderNameDisplayModeKey = 'folder_name_display_mode';
@@ -59,6 +61,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late RecentWatchingStyle _recentWatchingStyle;
   late double _uiScale;
   late bool _showAnimeCardSummary;
+  late bool _showQuarterlyAnimeReview;
   late bool _showMediaLibraryNewBadge;
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
@@ -78,6 +81,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
+  bool get showQuarterlyAnimeReview => _showQuarterlyAnimeReview;
   bool get showMediaLibraryNewBadge => _showMediaLibraryNewBadge;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
@@ -105,6 +109,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
     _uiScale = _resolveDefaultUiScale();
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
+    _showQuarterlyAnimeReview = true;
     _showMediaLibraryNewBadge = true;
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _accentColorPreset = AppAccentColorPreset.rose;
@@ -142,6 +147,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _showDanmakuDensityChart =
           prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
+      _showQuarterlyAnimeReview =
+          prefs.getBool(_showQuarterlyAnimeReviewKey) ?? true;
       _showMediaLibraryNewBadge =
           prefs.getBool(SettingsKeys.showMediaLibraryNewBadge) ?? true;
       _diffuseLowResolutionPosters =
@@ -284,6 +291,20 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_showAnimeCardSummaryKey, value);
     } catch (e) {
       debugPrint('保存番剧卡片简介显示设置时出错: $e');
+    }
+  }
+
+  Future<void> setShowQuarterlyAnimeReview(bool value) async {
+    if (_showQuarterlyAnimeReview == value) return;
+
+    _showQuarterlyAnimeReview = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showQuarterlyAnimeReviewKey, value);
+    } catch (e) {
+      debugPrint('保存首页新番回顾显示设置时出错: $e');
     }
   }
 
