@@ -88,6 +88,7 @@ class SettingsKeys {
   static const String downloaderAutoScanCompletedTasks =
       'downloader_auto_scan_completed_tasks';
 
+  static const String downloaderVerifiedScannedCompletedTaskKeys = 'downloader_verified_scanned_completed_task_keys';
   static const String downloaderAutoScannedCompletedTaskKeys =
       'downloader_auto_scanned_completed_task_keys';
 

@@ -30,14 +30,16 @@ class TorrentMagnetPreview {
     required this.suggestedFolderName,
     required this.totalSize,
     required this.files,
+    this.requestId = 0,
   });
 
+  final int requestId;
   final String name;
   final String suggestedFolderName;
   final int totalSize;
   final List<TorrentMagnetPreviewFile> files;
 
-  factory TorrentMagnetPreview.fromJson(String jsonText) {
+  factory TorrentMagnetPreview.fromJson(String jsonText, {int requestId = 0}) {
     final decoded = jsonDecode(jsonText);
     if (decoded is! Map<String, dynamic>) {
       return const TorrentMagnetPreview(
@@ -50,6 +52,7 @@ class TorrentMagnetPreview {
 
     final rawFiles = decoded['files'];
     return TorrentMagnetPreview(
+      requestId: requestId,
       name: _asString(decoded['name'], fallback: '未命名任务'),
       suggestedFolderName: _asString(decoded['suggested_folder_name']),
       totalSize: _asInt(decoded['total_size']),

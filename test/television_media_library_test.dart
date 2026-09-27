@@ -65,8 +65,15 @@ void main() {
     addTearDown(selectedSource.dispose);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<WatchHistoryProvider>(
-        create: (_) => _LoadedEmptyWatchHistoryProvider(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<WatchHistoryProvider>(
+            create: (_) => _LoadedEmptyWatchHistoryProvider(),
+          ),
+          ChangeNotifierProvider<AppearanceSettingsProvider>(
+            create: (_) => AppearanceSettingsProvider(),
+          ),
+        ],
         child: _testApp(
           home: Scaffold(
             body: AppDisplaySurfaceScope(

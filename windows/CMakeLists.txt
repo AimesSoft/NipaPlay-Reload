@@ -83,6 +83,12 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# universal_gamepad（git 依赖）源码含 UTF-8 无 BOM 字符（em-dash 等），
+# 代码页 936 下 MSVC 触发 C4819，且被 /WX 升级为错误；为其追加 /utf-8。
+if(MSVC AND TARGET universal_gamepad_plugin)
+  target_compile_options(universal_gamepad_plugin PRIVATE /utf-8)
+endif()
+
 if(TARGET media_kit_libs_windows_video_LIBMPV_EXTRACT)
   add_dependencies(${BINARY_NAME} media_kit_libs_windows_video_LIBMPV_EXTRACT)
 endif()
@@ -117,10 +123,13 @@ if(PLUGIN_BUNDLED_LIBRARIES)
 endif()
 
 # Copy the native assets provided by the build.dart from all packages.
+# 本项目没有任何包提供 hook/build.dart，Flutter 也就不会创建该目录；
+# 加 OPTIONAL 避免 install 因源目录不存在而中断整个构建。
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-   COMPONENT Runtime)
+   COMPONENT Runtime
+   OPTIONAL)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

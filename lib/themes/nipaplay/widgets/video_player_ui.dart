@@ -9,6 +9,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/video_aspect_geometry.dart';
@@ -504,8 +505,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
             () async {
           if (mounted && _videoPlayerStateInstance != null) {
             // 获取当前的错误信息用于显示
-            final String errorMessage =
-                _videoPlayerStateInstance!.error ?? "发生未知播放错误，已停止播放。";
+            final videoState = _videoPlayerStateInstance!;
+            final errorMessage = MediaSourceUtils.playbackErrorForDisplay(
+              videoState.error ?? "发生未知播放错误，已停止播放。",
+              videoState.currentVideoPath,
+            );
 
             // 显示 BlurDialog
             BlurDialog.show<void>(

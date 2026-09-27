@@ -15,8 +15,7 @@ const int immersiveBackdropMaxDecodeWidth = 3840;
 String normalizeImmersiveSummaryText(String value) {
   // Bangumi 简介常在中文译文后附带 “[简介原文] 日语原文”，
   // 展示时剔除该标记及其后的全部内容，避免无谓地拉长文本。
-  final separator =
-      RegExp(r'[\[【]\s*简介原文\s*[\]】]').firstMatch(value);
+  final separator = RegExp(r'[\[【]\s*简介原文\s*[\]】]').firstMatch(value);
   if (separator != null) {
     value = value.substring(0, separator.start);
   }
@@ -128,7 +127,19 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
     final infoWidth =
         (constraints.maxWidth * (constraints.maxWidth >= 1100 ? 0.42 : 0.48))
             .clamp(420.0, 650.0);
-    final railHeight = compact ? 190.0 : 235.0;
+    // The episode rail grows smoothly with the viewport instead of taking a
+    // 45px step at 720px, which used to steal a full summary line on tablets.
+    final railHeight = (constraints.maxHeight * 0.29).clamp(165.0, 235.0);
+    final infoHeight = constraints.maxHeight -
+        MediaQuery.paddingOf(context).vertical -
+        30 - // SafeArea child padding (12 top, 18 bottom).
+        railHeight -
+        (compact ? 14 : 22);
+    // Move the title further into the artwork as height grows, but always
+    // leave a useful minimum for the header, summary and action row.
+    final titleTop = (infoHeight * 0.23)
+        .clamp(48.0, 190.0)
+        .clamp(24.0, (infoHeight - 255).clamp(24.0, double.infinity));
 
     return Stack(
       fit: StackFit.expand,
@@ -147,9 +158,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                 ),
                 Positioned(
                   left: 0,
-                  // 标题区整体下移：大标题与左上角返回按钮拉开距离，
-                  // 简介自适应行数占住中间，操作按钮压到剧集栏上方。
-                  top: compact ? 88 : 150,
+                  top: titleTop,
                   width: infoWidth,
                   bottom: railHeight + (compact ? 14 : 22),
                   child: Column(
@@ -667,7 +676,7 @@ class _InformationHeader extends StatelessWidget {
 
 /// 简介展示块：文本视口与“查看更多/收起”按钮的组合。
 ///
-/// 收起状态下按可用高度自适应显示行数（占住标题与操作按钮之间的空间）；
+/// 收起状态下按可用高度自适应显示行数；
 /// 实测完整文本在收起行数内就能显示时，自动隐藏展开按钮。
 /// 无界高度（滚动布局）中退化为固定行数，但仍保留精确的溢出测量。
 class _DescriptionBlock extends StatelessWidget {
@@ -684,9 +693,7 @@ class _DescriptionBlock extends StatelessWidget {
   final bool compact;
 
   static const int _fallbackLines = 4;
-  static const int _maxAdaptiveLines = 4;
-  // “查看更多”按钮的占位高度（minimumSize(44, 28) 收紧后）。
-  static const double _toggleHeight = 30.0;
+  static const double _toggleHeight = 28.0;
 
   // TextPainter 手动构造样式、不读 DefaultTextStyle，locale 需显式带上，
   // 保证测量与显示使用同一套 CJK 字形变体。
@@ -709,62 +716,65 @@ class _DescriptionBlock extends StatelessWidget {
           textScaler: MediaQuery.textScalerOf(context),
         )..layout(maxWidth: constraints.maxWidth);
         final naturalHeight = painter.height;
+        final naturalLines = painter.computeLineMetrics().length;
         final lineHeight = painter.preferredLineHeight;
-        final availableHeight = constraints.hasBoundedHeight
-            ? constraints.maxHeight
-            : null;
+        final availableHeight =
+            constraints.hasBoundedHeight ? constraints.maxHeight : null;
 
-        // 收起状态：按剩余空间换算可显示行数，用于占位。
-        int collapsedLines = compact ? 3 : _fallbackLines;
+        // Use the space left after the header and actions, but keep collapsed
+        // summaries brief even when a large desktop has plenty of free space.
+        // The ceiling rises gradually from 3 lines on a short tablet to at
+        // most 6 lines on a tall desktop.
+        int collapsedLines = _fallbackLines;
         if (availableHeight != null && lineHeight > 0) {
-          collapsedLines =
-              (((availableHeight - _toggleHeight) / lineHeight).floor())
-                  .clamp(1, _maxAdaptiveLines);
+          final reservedHeight = onToggle == null ? 0.0 : _toggleHeight;
+          final fittingLines =
+              ((availableHeight - reservedHeight) / lineHeight).floor();
+          final maxPreviewLines =
+              (3 + ((availableHeight - 140) / 120).floor()).clamp(3, 6);
+          collapsedLines = maxPreviewLines.clamp(1, fittingLines.clamp(1, 6));
         }
-        final fitsCollapsed =
-            naturalHeight <= collapsedLines * lineHeight + 0.5;
+        final fitsCollapsed = naturalLines <= collapsedLines;
+        final showToggle = onToggle != null && (expanded || !fitsCollapsed);
+        final viewportLimit = availableHeight == null
+            ? double.infinity
+            : (availableHeight - (showToggle ? _toggleHeight : 0))
+                .clamp(0.0, double.infinity);
 
         double viewportHeight;
         if (expanded) {
           // 展开状态：完整显示，超出可用高度时滚动。
           viewportHeight = naturalHeight;
-          if (availableHeight != null) {
-            viewportHeight =
-                viewportHeight.clamp(0.0, availableHeight - _toggleHeight);
-          }
+          viewportHeight = viewportHeight.clamp(0.0, viewportLimit);
         } else {
-          viewportHeight = fitsCollapsed
-              ? naturalHeight
-              : collapsedLines * lineHeight;
+          viewportHeight =
+              fitsCollapsed ? naturalHeight : collapsedLines * lineHeight;
+          viewportHeight = viewportHeight.clamp(0.0, viewportLimit);
         }
-        if (availableHeight != null && viewportHeight > availableHeight) {
-          viewportHeight = availableHeight;
-        }
-
-        final showToggle = onToggle != null && (expanded || !fitsCollapsed);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
+              key: const ValueKey('immersive-description-viewport'),
               height: viewportHeight.clamp(0.0, double.infinity),
-              // 展开后文本超出可视高度时可滚动，并显示滚动条指示。
-              child: Scrollbar(
-                thumbVisibility:
-                    expanded && naturalHeight > viewportHeight + 0.5,
-                child: SingleChildScrollView(
-                  key: const ValueKey('immersive-description-scroll'),
-                  child: Text(
-                    value,
-                    maxLines:
-                        expanded || fitsCollapsed ? null : collapsedLines,
-                    overflow: expanded || fitsCollapsed
-                        ? TextOverflow.clip
-                        : TextOverflow.ellipsis,
-                    style: style,
-                  ),
-                ),
-              ),
+              child: expanded && naturalHeight > viewportHeight + 0.5
+                  ? Scrollbar(
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        key: const ValueKey('immersive-description-scroll'),
+                        child: Text(value, style: style),
+                      ),
+                    )
+                  : Text(
+                      value,
+                      maxLines:
+                          expanded || fitsCollapsed ? null : collapsedLines,
+                      overflow: expanded || fitsCollapsed
+                          ? TextOverflow.clip
+                          : TextOverflow.ellipsis,
+                      style: style,
+                    ),
             ),
             if (showToggle)
               _DescriptionToggle(

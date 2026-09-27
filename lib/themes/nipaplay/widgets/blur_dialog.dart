@@ -20,6 +20,7 @@ class BlurDialog {
     Color? phoneBarrierColor,
     double? desktopMaxWidth,
     double? desktopMaxHeightFactor,
+    double phoneHeightRatio = 0.86,
   }) {
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -31,6 +32,7 @@ class BlurDialog {
         barrierDismissible: barrierDismissible,
         hidePhoneBottomBar: hidePhoneBottomBar,
         phoneBarrierColor: phoneBarrierColor,
+        heightRatio: phoneHeightRatio,
       );
     }
 
@@ -116,6 +118,7 @@ class BlurDialog {
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
+    double heightRatio = 0.86,
   }) {
     return _showPhoneBottomSheet<T>(
       context: context,
@@ -126,6 +129,7 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       hidePhoneBottomBar: hidePhoneBottomBar,
       phoneBarrierColor: phoneBarrierColor,
+      heightRatio: heightRatio,
     );
   }
 
@@ -138,11 +142,12 @@ class BlurDialog {
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
+    double heightRatio = 0.86,
   }) {
     return CupertinoBottomSheet.show<T>(
       context: context,
       title: title.isEmpty ? null : title,
-      heightRatio: 0.86,
+      heightRatio: heightRatio,
       barrierDismissible: barrierDismissible,
       barrierColor: phoneBarrierColor,
       hideBottomBar: hidePhoneBottomBar,
