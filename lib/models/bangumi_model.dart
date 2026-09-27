@@ -241,7 +241,7 @@ class BangumiAnime {
       imageUrl: json['imageUrl'] as String? ?? 'assets/backempty.png',
       summary: json['summary'] as String?,
       // 尝试从多个可能的来源获取首播日期
-      airDate: json['air_date'] as String? ?? 
+      airDate: json['air_date'] as String? ?? json['airDate'] as String? ??
               ((parsedEpisodeList != null && parsedEpisodeList.isNotEmpty && parsedEpisodeList[0].airDate != null) 
                 ? parsedEpisodeList[0].airDate
                 : ((json['episodes'] != null && (json['episodes'] as List).isNotEmpty && json['episodes'][0]['airDate'] != null)
