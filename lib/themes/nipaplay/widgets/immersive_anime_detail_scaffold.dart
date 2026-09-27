@@ -15,8 +15,7 @@ const int immersiveBackdropMaxDecodeWidth = 3840;
 String normalizeImmersiveSummaryText(String value) {
   // Bangumi 简介常在中文译文后附带 “[简介原文] 日语原文”，
   // 展示时剔除该标记及其后的全部内容，避免无谓地拉长文本。
-  final separator =
-      RegExp(r'[\[【]\s*简介原文\s*[\]】]').firstMatch(value);
+  final separator = RegExp(r'[\[【]\s*简介原文\s*[\]】]').firstMatch(value);
   if (separator != null) {
     value = value.substring(0, separator.start);
   }
@@ -694,9 +693,6 @@ class _DescriptionBlock extends StatelessWidget {
   final bool compact;
 
   static const int _fallbackLines = 4;
-  // Keep some breathing room below a long collapsed summary. The actual line
-  // budget is still derived from the space left by the header and actions.
-  static const double _collapsedSpaceShare = 0.72;
   static const double _toggleHeight = 28.0;
 
   // TextPainter 手动构造样式、不读 DefaultTextStyle，locale 需显式带上，
@@ -722,22 +718,21 @@ class _DescriptionBlock extends StatelessWidget {
         final naturalHeight = painter.height;
         final naturalLines = painter.computeLineMetrics().length;
         final lineHeight = painter.preferredLineHeight;
-        final availableHeight = constraints.hasBoundedHeight
-            ? constraints.maxHeight
-            : null;
+        final availableHeight =
+            constraints.hasBoundedHeight ? constraints.maxHeight : null;
 
-        // Measure after the header and actions have been laid out. The cap
-        // scales from a compact tablet to a tall desktop without filling the
-        // entire screen with one long paragraph.
+        // Use the space left after the header and actions, but keep collapsed
+        // summaries brief even when a large desktop has plenty of free space.
+        // The ceiling rises gradually from 3 lines on a short tablet to at
+        // most 6 lines on a tall desktop.
         int collapsedLines = _fallbackLines;
         if (availableHeight != null && lineHeight > 0) {
           final reservedHeight = onToggle == null ? 0.0 : _toggleHeight;
           final fittingLines =
               ((availableHeight - reservedHeight) / lineHeight).floor();
-          final comfortableLines =
-              (availableHeight * _collapsedSpaceShare / lineHeight).floor();
-          collapsedLines = comfortableLines.clamp(1, compact ? 7 : 10);
-          collapsedLines = collapsedLines.clamp(1, fittingLines.clamp(1, 10));
+          final maxPreviewLines =
+              (3 + ((availableHeight - 140) / 120).floor()).clamp(3, 6);
+          collapsedLines = maxPreviewLines.clamp(1, fittingLines.clamp(1, 6));
         }
         final fitsCollapsed = naturalLines <= collapsedLines;
         final showToggle = onToggle != null && (expanded || !fitsCollapsed);
@@ -752,9 +747,8 @@ class _DescriptionBlock extends StatelessWidget {
           viewportHeight = naturalHeight;
           viewportHeight = viewportHeight.clamp(0.0, viewportLimit);
         } else {
-          viewportHeight = fitsCollapsed
-              ? naturalHeight
-              : collapsedLines * lineHeight;
+          viewportHeight =
+              fitsCollapsed ? naturalHeight : collapsedLines * lineHeight;
           viewportHeight = viewportHeight.clamp(0.0, viewportLimit);
         }
 
@@ -774,12 +768,13 @@ class _DescriptionBlock extends StatelessWidget {
                     )
                   : Text(
                       value,
-                      maxLines: expanded || fitsCollapsed ? null : collapsedLines,
+                      maxLines:
+                          expanded || fitsCollapsed ? null : collapsedLines,
                       overflow: expanded || fitsCollapsed
                           ? TextOverflow.clip
                           : TextOverflow.ellipsis,
                       style: style,
-                  ),
+                    ),
             ),
             if (showToggle)
               _DescriptionToggle(
