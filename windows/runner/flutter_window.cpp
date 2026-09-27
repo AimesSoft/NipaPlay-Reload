@@ -32,6 +32,9 @@ bool FlutterWindow::OnCreate() {
   windows_native_video_plugin_ = std::make_unique<WindowsNativeVideoPlugin>(
       GetHandle(), flutter_view, flutter_controller_->engine()->messenger());
 
+  // Show on the first frame as a fallback for when Dart's async startup
+  // (preferences load, size/position apply) is slower than engine startup:
+  // ShowWindow is idempotent, so the later Dart-side show is a no-op.
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
