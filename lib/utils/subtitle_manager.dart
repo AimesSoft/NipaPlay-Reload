@@ -1301,6 +1301,24 @@ class SubtitleManager extends ChangeNotifier {
       // 首先检查是否有保存的字幕路径
       String? savedSubtitlePath = await getVideoSubtitlePath(videoPath);
       if (savedSubtitlePath != null && savedSubtitlePath.isNotEmpty) {
+        // 用户要求：VobSub（.sub/.idx）不作为自动恢复的主字幕——位图字幕
+        // 内存重、日文为主。保存的映射是 sub/idx 时改选候选中的文本字幕
+        // （SC/简中优先，TC 次选），sub/idx 转为叠挂候选。
+        final savedExt = p.extension(savedSubtitlePath).toLowerCase();
+        if (savedExt == '.sub' || savedExt == '.idx') {
+          debugPrint(
+              'SubtitleManager: 保存的字幕是 VobSub($savedExt)，改选文本字幕为主');
+          final replacement = _pickTextSubtitleReplacement(
+            videoPath: videoPath,
+            excludePath: savedSubtitlePath,
+          );
+          if (replacement != null) {
+            debugPrint(
+                'SubtitleManager: VobSub 主字幕替换为: $replacement');
+            saveVideoSubtitleMapping(videoPath, replacement);
+            savedSubtitlePath = replacement;
+          }
+        }
         debugPrint('SubtitleManager: 找到保存的字幕映射: $savedSubtitlePath');
 
         // 检查字幕文件是否存在
@@ -1676,6 +1694,72 @@ class SubtitleManager extends ChangeNotifier {
     if (onExternalSubtitleAutoLoaded != null) {
       final fileName = p.basename(best.file.path);
       onExternalSubtitleAutoLoaded!(best.file.path, fileName);
+    }
+  }
+
+  /// 保存的映射是 VobSub（.sub/.idx）时的主字幕替换：在视频目录中按现有
+  /// 评分挑一条文本字幕（SC/简中优先，TC 次选），排除 VobSub 自身。
+  String? _pickTextSubtitleReplacement({
+    required String videoPath,
+    required String excludePath,
+  }) {
+    if (kIsWeb) return null;
+    try {
+      final videoFile = File(videoPath);
+      if (!videoFile.existsSync()) return null;
+      final videoDir = videoFile.parent.path;
+      final videoName = p.basenameWithoutExtension(videoPath);
+      final subtitleExts = subtitleExtensionMatchScore.keys
+          .toList()
+          .where((ext) => ext != '.sub' && ext != '.idx')
+          .toList();
+
+      final files = <File>{};
+      // 同名精确匹配优先入集
+      for (final ext in subtitleExts) {
+        final potentialPath = p.join(videoDir, '$videoName$ext');
+        if (File(potentialPath).existsSync()) {
+          files.add(File(potentialPath));
+        }
+      }
+      // 目录模糊匹配
+      for (final entity in Directory(videoDir).listSync()) {
+        if (entity is! File) continue;
+        final ext = p.extension(entity.path).toLowerCase();
+        if (subtitleExts.contains(ext)) {
+          files.add(entity);
+        }
+      }
+      if (files.isEmpty) return null;
+
+      final videoNumberMatch =
+          RegExp(r'(\d+)').allMatches(videoName).toList();
+      final videoNumbers =
+          videoNumberMatch.map((match) => match.group(0)!).toList();
+      final episodeNumber = videoNumbers.isNotEmpty
+          ? pickLikelyEpisodeNumber(videoNumbers)
+          : null;
+
+      String? bestPath;
+      int bestScore = -0x7fffffff;
+      for (final file in files) {
+        if (p.normalize(file.path) == p.normalize(excludePath)) continue;
+        final score = computeLocalSubtitleMatchScore(
+          videoName: videoName,
+          subtitleName: p.basenameWithoutExtension(file.path),
+          extension: p.extension(file.path).toLowerCase(),
+          videoNumbers: videoNumbers,
+          episodeNumber: episodeNumber,
+        );
+        if (score > bestScore) {
+          bestScore = score;
+          bestPath = file.path;
+        }
+      }
+      return bestPath;
+    } catch (e) {
+      debugPrint('SubtitleManager: 挑选 VobSub 替换主字幕失败: $e');
+      return null;
     }
   }
 
