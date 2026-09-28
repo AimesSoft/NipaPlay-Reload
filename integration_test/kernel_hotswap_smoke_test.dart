@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import '../test/support/native_audio_fixture.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -9,17 +11,8 @@ import 'package:nipaplay/player_abstraction/mdk_player_adapter_io.dart';
 import 'package:nipaplay/player_abstraction/player_enums.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 
-/// 内核热切换死锁冒烟测试（真原生实例，桌面端可跑，iOS 真机亦可跑）。
-///
-/// 复现的根因链：fvp 的 Player.dispose() 是 `async void`——内部
-/// `await updateTexture(width:-1)`（releaseTexture 平台通道 + 等待
-/// videoSize Completer）之后才执行 mdkPlayerAPI_delete，调用方等不到；
-/// 旧实现调用后立即返回，旧 mdk 原生实例与新内核并存/并发 double delete，
-/// 多轮交替切换在平台线程交叠 → 死锁卡死（用户 iPadOS 实测：空闲切换
-/// 永不卡，播放中切换卡死；频繁切换第 4 次冻结）。
-///
-/// 媒体路径不存在时，fvp dispose 内部的 videoSize Completer 恰好永不
-/// 完成——这是最恶劣的挂起分支，修复后 disposeAsync 必须在限期内完成。
+/// Native adapter smoke test. Run on the target device to cover its audio and
+/// rendering backends; unit tests alone do not validate GPU/decoder handoff.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
@@ -27,7 +20,9 @@ void main() {
   testWidgets(
     'alternating kernel create/teardown does not hang (6 rounds)',
     (tester) async {
-      const fakeMedia = 'NIPAPLAY_ITEST_NONEXISTENT_MEDIA.mp4';
+      final directory = await Directory.systemTemp.createTemp('kernel_swap_');
+      final media = await writeNativeAudioFixture(directory);
+      addTearDown(() => directory.delete(recursive: true));
       const rounds = 6;
 
       // 看门狗：整个序列必须在 90s 内完成（旧实现会在此永久挂起/冻结）。
@@ -35,13 +30,17 @@ void main() {
         fail('watchdog: hot swap sequence exceeded 90s — native hang');
       });
 
+      addTearDown(watchdog.cancel);
+
       for (var round = 1; round <= rounds; round++) {
-        // 1) mdk 内核：创建 → 设未加载媒体（videoSize 永不完成的最恶劣分支）
-        //    → teardown（旧实现在这里挂起/泄漏/double delete）
+        // 1) mdk 内核：创建 → 加载真实媒体
+        //    → teardown（检查挂起、资源释放与重复调用）
         final sw = Stopwatch()..start();
         final mdkPlayer = MdkPlayerAdapter();
-        mdkPlayer.setMedia(fakeMedia, PlayerMediaType.video);
+        mdkPlayer.setMedia(media.path, PlayerMediaType.video);
+        await mdkPlayer.prepare();
         mdkPlayer.state = PlayerPlaybackState.playing;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
         await mdkPlayer.disposeAsync();
         final mdkElapsed = sw.elapsed;
         PlayerKernelManager.traceHotSwapStage(
@@ -62,7 +61,8 @@ void main() {
         // 3) media_kit(libmpv) 内核：同样场景，模拟 libmpv ↔ mdk 交替
         final swMk = Stopwatch()..start();
         final mediaKitPlayer = MediaKitPlayerAdapter();
-        mediaKitPlayer.setMedia(fakeMedia, PlayerMediaType.video);
+        mediaKitPlayer.setMedia(media.path, PlayerMediaType.video);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
         await mediaKitPlayer.disposeAsync();
         final mkElapsed = swMk.elapsed;
         PlayerKernelManager.traceHotSwapStage(

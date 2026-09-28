@@ -2584,91 +2584,34 @@ class MediaKitPlayerAdapter
     _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
-  // 原生销毁完成信号：dispose() 只负责调度（detach 平台视图/延时后销毁
-  // 核心），_player.dispose() 在后台完成。disposeAsync 通过它等待旧实例
-  // 真正释放，保证热切换"先销毁再新建"的串行化真实生效。
-  final Completer<void> _nativeDisposeCompleter = Completer<void>();
   Future<void>? _disposeAsyncFuture;
 
   @override
   void dispose() {
-    if (_isDisposed) {
-      return;
-    }
+    unawaited(disposeAsync().catchError((Object error, StackTrace stack) {
+      debugPrint('MediaKit: asynchronous disposal failed: $error');
+    }));
+  }
+
+  @override
+  Future<void> disposeAsync() => _disposeAsyncFuture ??= _disposeAsyncInternal();
+
+  Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
-    if (!_mediaReadyCompleter.isCompleted) {
-      _mediaReadyCompleter.complete(false);
-    }
+    if (!_mediaReadyCompleter.isCompleted) _mediaReadyCompleter.complete(false);
     _ticker?.dispose();
-    _trackSubscription?.cancel();
-    _positionSubscription?.cancel();
+    await _trackSubscription?.cancel();
+    await _positionSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
     _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
-
-    void disposePlayerCore() {
-      try {
-        _player.dispose();
-      } catch (e) {
-        debugPrint('MediaKit: 销毁播放器失败: $e');
-      }
-      if (!_nativeDisposeCompleter.isCompleted) {
-        _nativeDisposeCompleter.complete();
-      }
-    }
-
-    if (_prefersPlatformVideoSurface) {
-      unawaited(
-        detachPlatformVideoSurface().whenComplete(disposePlayerCore),
-      );
-    } else {
-      //  优化：异步执行销毁，不阻塞主线程
-      // Future.microtask 仍在当前事件循环执行，会阻塞 UI
-      // Future.delayed 让出一帧时间，确保页面过渡动画完成
-      unawaited(
-          Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
-    }
+    if (_prefersPlatformVideoSurface) await detachPlatformVideoSurface();
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: native dispose');
+    await _player.dispose();
     _textureIdNotifier.dispose();
-  }
-
-  /// 异步释放：dispose() 只负责调度（detach 平台视图 / 延时后销毁核心），
-  /// 真正的原生销毁在后台完成。旧实现 await 不到它，热切换的"串行化"
-  /// 形同虚设——旧 libmpv 实例可能在新内核创建并起播时仍存活，多实例的
-  /// teardown 与 init 在平台线程交叠导致死锁卡死。
-  /// 现策略：并发调用合并（_disposeAsyncFuture）+ 等待原生销毁完成
-  /// （带 5s 超时兜底；超时只记日志，不阻塞新内核起播）。
-  @override
-  Future<void> disposeAsync() {
-    return _disposeAsyncFuture ??= _disposeAsyncInternal();
-  }
-
-  Future<void> _disposeAsyncInternal() async {
-    if (!_isDisposed) {
-      PlayerKernelManager.traceHotSwapStage(
-          'media_kit teardown: set stopped begin');
-      try {
-        if (state != PlayerPlaybackState.stopped) {
-          state = PlayerPlaybackState.stopped;
-        }
-      } catch (e) {
-        debugPrint('MediaKit: dispose 前置停止失败: $e');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      PlayerKernelManager.traceHotSwapStage(
-          'media_kit teardown: dispose scheduled');
-      dispose();
-    }
-    try {
-      await _nativeDisposeCompleter.future
-          .timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      PlayerKernelManager.traceHotSwapStage(
-          'media_kit teardown: native dispose TIMEOUT');
-      debugPrint('MediaKit: 等待旧内核原生释放超时（后台继续，不阻塞新内核）');
-    }
-    PlayerKernelManager.traceHotSwapStage('media_kit teardown: done');
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: complete');
   }
 
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
@@ -3306,6 +3249,7 @@ class MediaKitPlayerAdapter
         }
       } catch (e) {
         debugPrint('MediaKit: 解绑平台原生视频面失败: $e');
+        if (_isDisposed) rethrow;
       }
     }();
 

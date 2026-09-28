@@ -302,6 +302,9 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
+  # Awaitable native teardown for MDK hot swaps on every mainline platform.
+  fvp:
+    path: third_party/fvp
   # Windows upstream 2.4.1 writes preferences synchronously on the UI isolate.
   shared_preferences_windows:
     path: packages/shared_preferences_windows
