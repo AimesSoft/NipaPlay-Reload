@@ -614,6 +614,9 @@ class DandanplayService {
     required int fileSize,
   }) async {
     await ensureLoggedInForMatching();
+    debugPrint(
+      '[弹幕自动匹配] 发出精确匹配请求: fileName=$fileName, fileSize=$fileSize',
+    );
     final appSecret = await getAppSecret();
     final timestamp =
         (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
@@ -651,7 +654,13 @@ class DandanplayService {
     if (decoded is! Map) {
       throw const FormatException('弹幕匹配响应格式错误');
     }
-    return Map<String, dynamic>.from(decoded);
+    final result = Map<String, dynamic>.from(decoded);
+    debugPrint(
+      '[弹幕自动匹配] 精确匹配响应: status=${response.statusCode}, '
+      'isMatched=${result['isMatched']}, '
+      'matches=${result['matches'] is List ? (result['matches'] as List).length : 'invalid'}',
+    );
+    return result;
   }
 
   static String _responseError(String body) {
@@ -1161,6 +1170,10 @@ class DandanplayService {
     // 尝试从缓存获取视频信息
     final cachedInfo = await getCachedVideoInfo(fileHash);
     if (cachedInfo != null) {
+      debugPrint(
+        '[弹幕自动匹配] 命中视频匹配缓存: isMatched=${cachedInfo['isMatched']}, '
+        'matches=${cachedInfo['matches'] is List ? (cachedInfo['matches'] as List).length : 'invalid'}',
+      );
       if (cachedInfo['matches'] != null && cachedInfo['matches'].isNotEmpty) {
         final match = cachedInfo['matches'][0];
         if (match['episodeId'] != null && match['animeId'] != null) {
@@ -1180,6 +1193,7 @@ class DandanplayService {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    debugPrint('[弹幕自动匹配] 未命中有效缓存，准备请求精确匹配');
     final data = await matchVideo(
       fileName: fileName,
       fileHash: fileHash,
@@ -1213,12 +1227,14 @@ class DandanplayService {
 
       if (autoMatchEnabled) {
         try {
+          debugPrint('[弹幕自动匹配] 精确匹配失败，开始按文件名搜索兜底: $fileName');
           final fallback = await _tryMatchByFileNameFirstResult(
             fileName: fileName,
             fileHash: fileHash,
             fileSize: fileSize,
           );
           if (fallback != null && fallback['isMatched'] == true) {
+            debugPrint('[弹幕自动匹配] 文件名搜索兜底匹配成功');
             _ensureVideoInfoTitles(fallback);
             await saveVideoInfoToCache(fileHash, fallback);
 
@@ -1243,9 +1259,11 @@ class DandanplayService {
             return fallback;
           }
         } catch (e) {
-          debugPrint('文件名 fallback 匹配失败: $e');
+          debugPrint('[弹幕自动匹配] 文件名搜索兜底异常: $e');
         }
       }
+
+      debugPrint('[弹幕自动匹配] 所有远程匹配方式均未找到结果，缓存未匹配状态');
 
       final unmatchedResult = {
         'isMatched': false,
