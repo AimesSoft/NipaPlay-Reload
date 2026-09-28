@@ -12,7 +12,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/video_aspect_geometry.dart';
+import 'package:nipaplay/widgets/video_surface_layout.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
@@ -379,37 +379,20 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   Widget _buildVideoSurfaceWithAspectMode(
       VideoPlayerState videoState, int? textureId) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final videoTracks = videoState.player.mediaInfo.video;
-        Size? naturalSize;
-        if (videoTracks != null && videoTracks.isNotEmpty) {
-          final codec = videoTracks.first.codec;
-          if (codec.width > 0 && codec.height > 0) {
-            naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
-          }
-        }
-        final rect = VideoAspectGeometry.displayRect(
-          mode: videoState.videoAspectMode,
-          viewport: constraints.biggest,
-          sourceAspect: videoState.aspectRatio,
-          naturalSize: naturalSize,
-        );
-        return ClipRect(
-          child: OverflowBox(
-            alignment: Alignment.center,
-            minWidth: 0,
-            minHeight: 0,
-            maxWidth: double.infinity,
-            maxHeight: double.infinity,
-            child: SizedBox(
-              width: rect.width,
-              height: rect.height,
-              child: _buildVideoSurface(videoState, textureId),
-            ),
-          ),
-        );
-      },
+    final videoTracks = videoState.player.mediaInfo.video;
+    Size? naturalSize;
+    if (videoTracks != null && videoTracks.isNotEmpty) {
+      final codec = videoTracks.first.codec;
+      if (codec.width > 0 && codec.height > 0) {
+        naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
+      }
+    }
+    return VideoSurfaceLayout(
+      mode: videoState.videoAspectMode,
+      sourceAspect: videoState.aspectRatio,
+      naturalSize: naturalSize,
+      handlesAspectFit: videoState.player.handlesVideoAspectFit,
+      child: _buildVideoSurface(videoState, textureId),
     );
   }
 

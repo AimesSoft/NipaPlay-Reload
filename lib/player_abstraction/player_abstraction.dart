@@ -354,6 +354,10 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
 
   void stepBackward() => _delegate.stepBackward();
 
+  /// Erika fits the video inside its surface and composites native overlays
+  /// across that entire surface, including the letterbox/pillarbox area.
+  bool get handlesVideoAspectFit => _delegate is ErikaPlayerAdapter;
+
   bool get prefersPlatformVideoSurface {
     try {
       final dyn = _delegate as dynamic;
