@@ -451,6 +451,24 @@ runs:
         }
         Copy-Item -Path $CustomLib -Destination "$SrcDir\libmpv-2.dll" -Force
         Write-Host "已将构建输出中的 libmpv-2.dll 替换为完整版"
+
+        # 下载 ffmpeg.exe 供「时间轴截图预览」使用：Windows 上改用独立 ffmpeg
+        # 子进程抽帧，不再创建第二个播放器。放入 Release 目录后会同时进入
+        # portable zip（下方复制到 DestDir）和 Inno 安装包（[Files] 取 Release）。
+        $ffmpegDir = Join-Path $env:RUNNER_TEMP "ffmpeg-tl"
+        $ffmpegZip = Join-Path $ffmpegDir "ffmpeg.zip"
+        New-Item -ItemType Directory -Force -Path $ffmpegDir | Out-Null
+        $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
+        Expand-Archive -Path $ffmpegZip -DestinationPath $ffmpegDir -Force
+        $ffmpegExe = Get-ChildItem -Path $ffmpegDir -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+        if (-not $ffmpegExe) {
+          throw "ffmpeg.exe 解压后未找到"
+        }
+        Copy-Item -Path $ffmpegExe.FullName -Destination "$SrcDir\ffmpeg.exe" -Force
+        Write-Host "ffmpeg.exe 已放入构建输出目录：$SrcDir"
+
         New-Item -Path $DestDir -ItemType Directory -Force
         Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
         Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
