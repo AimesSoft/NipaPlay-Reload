@@ -103,6 +103,9 @@ pub struct DxgiSharedTextureInfo {
 }
 
 pub enum EngineCommand {
+    DisplayTick {
+        target: std::time::Instant,
+    },
     Vsync { arrived: std::time::Instant, elapsed_us: u64 },
     AttachPresentTexture {
         raw_target_ptr: usize,
@@ -483,7 +486,7 @@ pub fn render_linux_gl_texture(
         n2log("linux GL attach present texture failed");
         return false;
     };
-    renderer.draw_to_present(&mut target);
+    renderer.draw_to_present(&mut target, None);
     let _ = ctx.device.poll(wgpu::PollType::wait_indefinitely());
     entry.frame_ready.store(false, Ordering::Release);
     true
@@ -723,6 +726,7 @@ fn run_engine_loop(
     let mut has_pending_frame = false;
 
     let mut pacer = motion::FramePacer::new();
+    let mut display_link = motion::DisplayLinkPacer::default();
     let mut motion_revision = 0;
     let mut motion_period = TICK_INTERVAL;
     let mut multimedia_scheduling = None;
@@ -753,7 +757,10 @@ fn run_engine_loop(
                     mpsc::TryRecvError::Disconnected => mpsc::RecvTimeoutError::Disconnected,
                 })
             } else {
-                let wait = if continuous && (has_pending_frame || renderer.needs_interpolation_render()) {
+                let wait = if continuous
+                    && !display_link.is_connected()
+                    && (has_pending_frame || renderer.needs_interpolation_render())
+                {
                     pacer.deadline.map(|t| t.saturating_duration_since(std::time::Instant::now()))
                         .unwrap_or(Duration::ZERO)
                 } else { TICK_INTERVAL };
@@ -770,8 +777,14 @@ fn run_engine_loop(
             };
 
             received_command = true;
-            commands_drained += 1;
+            // Display ticks contain no layout/atlas work. Drain all queued
+            // timestamps so a long glyph/resize stall cannot replay batches
+            // of 64 obsolete iOS frames on its way back to the current one.
+            if !matches!(&cmd, EngineCommand::DisplayTick { .. }) {
+                commands_drained += 1;
+            }
             match cmd {
+                EngineCommand::DisplayTick { target } => display_link.tick(target),
                 EngineCommand::Vsync { arrived, elapsed_us } => {
                     if renderer.motion_mode == MotionMode::ContinuousAnchor {
                         pacer.pulse(arrived, elapsed_us, renderer.motion_clock.period);
@@ -917,14 +930,20 @@ fn run_engine_loop(
             pacer = motion::FramePacer::new();
         }
         let now = std::time::Instant::now();
-        let due = if continuous {
+        // Once a native display link connects, it is the sole frame producer.
+        // Missing callbacks mean a missed/suspended display frame, not an
+        // invitation for a second timer to overwrite the shared texture.
+        let display_time = display_link.take_target();
+        let due = if display_link.is_connected() {
+            display_time.is_some()
+        } else if continuous {
             pacer.ready(now, renderer.motion_clock.period).is_some()
         } else {
             true
         };
         if (has_pending_frame || needs_interp) && due {
             if let Some(target) = present_target.as_mut() {
-                renderer.draw_to_present(target);
+                renderer.draw_to_present(target, display_time);
                 signal_frame_ready(
                     ctx.queue.as_ref(),
                     &completion,
