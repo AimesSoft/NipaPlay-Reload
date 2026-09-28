@@ -5,6 +5,7 @@ import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
 import 'dart:async';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
 @visibleForTesting
@@ -188,7 +189,7 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
   );
 }
 
-class MdkPlayerAdapter implements AbstractPlayer {
+class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   late mdk.Player _mdkPlayer;
   double _playbackRate = 1.0;
   List<String> _videoDecoders = const [];
@@ -198,12 +199,20 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String? _activeAudioDecoder;
   int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
   final String _httpProxy;
-
+  // 幂等守卫：热切换主路径（步骤 3.1）与 finally 兜底会先后调用
+  // disposeAsync，必须合并为同一次 teardown，杜绝 double mdkPlayerAPI_delete。
+  bool _isDisposed = false;
+  Future<void>? _disposeAsyncFuture;
   MdkPlayerAdapter({String? httpProxy})
       : _httpProxy = (httpProxy ?? '').trim() {
     _mdkPlayer = mdk.Player();
     _attachMdkEventListeners();
     _applyInitialSettings();
+  }
+
+  @visibleForTesting
+  MdkPlayerAdapter.withPlayer(mdk.Player player) : _httpProxy = '' {
+    _mdkPlayer = player;
   }
 
   void _attachMdkEventListeners() {
@@ -237,14 +246,6 @@ class MdkPlayerAdapter implements AbstractPlayer {
   void _setStickyProperty(String key, String value) {
     _stickyProperties[key] = value;
     _mdkPlayer.setProperty(key, value);
-  }
-
-  void _reapplyStickyProperties() {
-    for (final entry in _stickyProperties.entries) {
-      try {
-        _mdkPlayer.setProperty(entry.key, entry.value);
-      } catch (_) {}
-    }
   }
 
   void _applyInitialSettings() {
@@ -283,6 +284,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
           return;
         }
 
+        if (_isDisposed) return;
         final fontsDir = fontInfo['directory'];
         final fontFile = fontInfo['filePath'];
         if (fontsDir == null || fontFile == null) {
@@ -345,39 +347,12 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String get media => _mdkPlayer.media;
   @override
   set media(String value) {
-    if (value.isNotEmpty && _mdkPlayer.media != value) {
+    if (_isDisposed) throw StateError('MDK player is disposed');
+    if (_mdkPlayer.media != value) {
       _activeVideoDecoder = null;
       _activeAudioDecoder = null;
-      _internalAudioTrackCount = 0; // 重置：新主媒体尚未加载外挂音频
-      final videoDecoders = _videoDecoders.isNotEmpty
-          ? List<String>.from(_videoDecoders)
-          : List<String>.from(_mdkPlayer.videoDecoders);
-      final audioDecoders = _audioDecoders.isNotEmpty
-          ? List<String>.from(_audioDecoders)
-          : List<String>.from(_mdkPlayer.audioDecoders);
-
-      try {
-        _mdkPlayer.dispose();
-      } catch (e) {}
-
-      _mdkPlayer = mdk.Player();
-      _attachMdkEventListeners();
-      _applyInitialSettings();
-
-      try {
-        _reapplyStickyProperties();
-        if (videoDecoders.isNotEmpty) {
-          setDecoders(PlayerMediaType.video, videoDecoders);
-        }
-        if (audioDecoders.isNotEmpty) {
-          setDecoders(PlayerMediaType.audio, audioDecoders);
-        }
-      } catch (e) {}
-    } else if (value.isEmpty && _mdkPlayer.media.isNotEmpty) {
-      _mdkPlayer.state = mdk.PlaybackState.stopped;
-      _mdkPlayer.setMedia("", mdk.MediaType.video);
+      _internalAudioTrackCount = 0;
     }
-
     _mdkPlayer.media = value;
   }
 
@@ -480,7 +455,22 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  void dispose() => _mdkPlayer.dispose();
+  void dispose() {
+    unawaited(disposeAsync().catchError((Object error, StackTrace stack) {
+      debugPrint('MDK: asynchronous disposal failed: $error');
+    }));
+  }
+
+  @override
+  Future<void> disposeAsync() =>
+      _disposeAsyncFuture ??= _disposeAsyncInternal();
+
+  Future<void> _disposeAsyncInternal() async {
+    _isDisposed = true;
+    PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
+    await _mdkPlayer.dispose();
+    PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
+  }
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {

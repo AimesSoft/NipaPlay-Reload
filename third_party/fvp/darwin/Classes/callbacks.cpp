@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <atomic>
 #include <iostream>
 #include <thread>
 #include "dart_api_types.h"
@@ -14,23 +15,24 @@
 
 using namespace std;
 
-class Player final: public mdk::Player
-{
-public:
-
-    Player(int64_t handle)
-        : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle))
-    {
-    }
-
-    int callbackTypes = 0;
+// Native callbacks retain only their synchronization state. Retaining the
+// mdk::Player wrapper here can destroy it on a media callback thread, whose
+// destructor re-enters mdkPlayerAPI_reset while MDK holds the same mutex.
+struct CallbackState {
+    std::atomic<int> callbackTypes{0};
     bool reply[int(CallbackType::Count)] = {};
     bool dataReady[int(CallbackType::Count)] = {};
-    CallbackReply data[int(CallbackType::Count)];
+    CallbackReply data[int(CallbackType::Count)]{};
     mutex mtx[int(CallbackType::Count)];
     condition_variable cv[int(CallbackType::Count)];
-
     mdk::State oldState = mdk::State::Stopped;
+};
+
+class Player final: public mdk::Player {
+public:
+    Player(int64_t handle)
+        : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle)) {}
+    const shared_ptr<CallbackState> callbacks = make_shared<CallbackState>();
 };
 
 static unordered_map<int64_t, shared_ptr<Player>> players;
@@ -85,7 +87,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
     players[handle] = player;
     const auto tid = this_thread::get_id();
 
-    auto wp = weak_ptr<Player>(player);
+    auto wp = weak_ptr<CallbackState>(player->callbacks);
     player->onEvent([=](const mdk::MediaEvent& e){
         auto sp = wp.lock();
         if (!sp)
@@ -263,9 +265,12 @@ FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)
     }
 
     auto sp = it->second;
+    // Wakeups alone do not satisfy the callback wait predicate. Clear every
+    // type (including prepare/seek/snapshot) before closing the Dart port.
+    sp->callbacks->callbackTypes.store(0);
     for (int i = 0; i < (int)CallbackType::Count; ++i) {
-        unique_lock lock(sp->mtx[i]);
-        sp->cv[i].notify_one();
+        unique_lock lock(sp->callbacks->mtx[i]);
+        sp->callbacks->cv[i].notify_all();
     }
 
     players.erase(it);
@@ -284,8 +289,8 @@ FVP_EXPORT void MdkCallbacksRegisterType(int64_t handle, int type, bool reply)
     }
 
     auto sp = it->second;
-    sp->callbackTypes |= (1 << type);
-    sp->reply[type] = reply;
+    sp->callbacks->callbackTypes |= (1 << type);
+    sp->callbacks->reply[type] = reply;
 }
 
 FVP_EXPORT void MdkCallbacksUnregisterType(int64_t handle, int type)
@@ -301,7 +306,7 @@ FVP_EXPORT void MdkCallbacksUnregisterType(int64_t handle, int type)
     }
 
     auto sp = it->second;
-    sp->callbackTypes &= ~(1 << type);
+    sp->callbacks->callbackTypes &= ~(1 << type);
 }
 
 FVP_EXPORT void MdkCallbacksReplyType(int64_t handle, int type, const void* data)
@@ -312,12 +317,12 @@ FVP_EXPORT void MdkCallbacksReplyType(int64_t handle, int type, const void* data
     }
 
     auto sp = it->second;
-    unique_lock lock(sp->mtx[type]);
+    unique_lock lock(sp->callbacks->mtx[type]);
     if (data) { // has return value or out parameters
-        memcpy(&sp->data[type], data, sizeof(CallbackReply));
+        memcpy(&sp->callbacks->data[type], data, sizeof(CallbackReply));
     }
-    sp->dataReady[type] = true;
-    sp->cv[type].notify_one();
+    sp->callbacks->dataReady[type] = true;
+    sp->callbacks->cv[type].notify_one();
 }
 
 FVP_EXPORT bool MdkPrepare(int64_t handle, int64_t pos, int64_t seekFlags, void* post_c_object, int64_t send_port)
@@ -328,16 +333,17 @@ FVP_EXPORT bool MdkPrepare(int64_t handle, int64_t pos, int64_t seekFlags, void*
     }
     const auto postCObject = reinterpret_cast<bool(*)(Dart_Port, Dart_CObject*)>(post_c_object);
     auto sp = it->second;
-    auto wp = weak_ptr<Player>(sp);
+    auto wp = weak_ptr<CallbackState>(sp->callbacks);
+    const auto* api = reinterpret_cast<const mdkPlayerAPI*>(handle);
     const auto tid = this_thread::get_id();
     sp->set(mdk::State::Stopped);
     sp->waitFor(mdk::State::Stopped); // ensure correct state
-    sp->prepare(pos, [send_port, postCObject, wp, tid](int64_t position, bool* boost){
+    sp->prepare(pos, [send_port, postCObject, wp, tid, api](int64_t position, bool* boost){
         auto sp = wp.lock();
         if (!sp)
             return false;
         auto p = sp.get();
-        const auto info = p->mediaInfo();
+        const auto* info = api->mediaInfo(api->object);
         const auto type = int(CallbackType::Prepared);
         unique_lock lock(p->mtx[type]);
         p->dataReady[type] = false;
@@ -357,7 +363,7 @@ FVP_EXPORT bool MdkPrepare(int64_t handle, int64_t pos, int64_t seekFlags, void*
         Dart_CObject live{
             .type = Dart_CObject_kBool,
             .value = {
-                .as_bool = info.duration <= 0,
+                .as_bool = info->duration <= 0,
             }
         };
         Dart_CObject* arr[] = { &t, &v, &live };
