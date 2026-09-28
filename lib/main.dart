@@ -265,13 +265,13 @@ void main(List<String> args) async {
         level: 'INFO', tag: 'FileAssociation');
   }
 
-  // Android平台通过Intent传入
-  if (!kIsWeb && Platform.isAndroid) {
+  // Android Intent / iOS Files 传入的视频文件。
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     final intentFilePath = await FileAssociationService.getOpenFileUri();
     if (intentFilePath != null &&
         await FileAssociationService.validateFilePath(intentFilePath)) {
       launchFilePath = intentFilePath;
-      debugLogService.addLog('应用启动时收到Intent文件路径: $intentFilePath',
+      debugLogService.addLog('应用启动时收到系统文件路径: $intentFilePath',
           level: 'INFO', tag: 'FileAssociation');
     }
   }
@@ -1264,7 +1264,8 @@ class MainPageState extends State<MainPage>
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
   StreamSubscription<GamepadEvent>? _guideButtonSubscription;
-  StreamSubscription<String>? _androidFileAssociationSubscription;
+  StreamSubscription<String>? _fileAssociationSubscription;
+  StreamSubscription<String>? _fileAssociationErrorSubscription;
   DownloaderSettingsProvider? _downloaderSettingsProvider;
   SettingsProvider? _settingsProvider;
 
@@ -1437,23 +1438,31 @@ class MainPageState extends State<MainPage>
 
     await _initializeController();
     _initializeListeners();
-    _initializeAndroidFileAssociationListener();
+    _initializeFileAssociationListeners();
     _postFrameCallbacks();
   }
 
-  void _initializeAndroidFileAssociationListener() {
-    if (kIsWeb || !Platform.isAndroid) {
+  void _initializeFileAssociationListeners() {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       return;
     }
-    _androidFileAssociationSubscription ??=
+    _fileAssociationSubscription ??=
         FileAssociationService.openFileStream.listen((filePath) async {
       if (!mounted) return;
-      if (!await FileAssociationService.validateFilePath(filePath)) {
+      final isValid = await FileAssociationService.validateFilePath(filePath);
+      if (!mounted) return;
+      if (!isValid) {
         BlurSnackBar.show(context, '无法播放启动文件: ${path.basename(filePath)}');
         return;
       }
       await _handleLaunchFile(filePath);
     });
+    if (Platform.isIOS) {
+      _fileAssociationErrorSubscription ??=
+          FileAssociationService.openFileErrorStream.listen((message) {
+        if (mounted) BlurSnackBar.show(context, message);
+      });
+    }
   }
 
   void _onWebDAVSettingsChanged() {
@@ -1686,7 +1695,8 @@ class MainPageState extends State<MainPage>
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
     _guideButtonSubscription?.cancel();
-    _androidFileAssociationSubscription?.cancel();
+    _fileAssociationSubscription?.cancel();
+    _fileAssociationErrorSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();

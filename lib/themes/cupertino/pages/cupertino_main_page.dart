@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
@@ -8,6 +12,8 @@ import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/file_association_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/utils/cupertino_bottom_navigation_style.dart';
@@ -20,7 +26,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/launch_file_handler.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 
 const _lightPhoneNavigationGlassSettings = LiquidGlassSettings(
@@ -67,6 +75,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       CupertinoPageActionsController();
 
   TabChangeNotifier? _tabChangeNotifier;
+  StreamSubscription<String>? _fileAssociationSubscription;
+  StreamSubscription<String>? _fileAssociationErrorSubscription;
   WebDAVQuickAccessProvider? _webdavProvider;
   DownloaderSettingsProvider? _downloaderProvider;
   PluginService? _pluginService;
@@ -125,6 +135,42 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       _applyInitialPage();
     });
     _playBounce(_selectedPageId);
+    _initializeFileAssociationListeners();
+    if (widget.launchFilePath case final filePath?) {
+      unawaited(_handleLaunchFile(filePath));
+    }
+  }
+
+  void _initializeFileAssociationListeners() {
+    if (kIsWeb) return;
+    if (Platform.isAndroid || Platform.isIOS) {
+      _fileAssociationSubscription ??=
+          FileAssociationService.openFileStream.listen((filePath) {
+        unawaited(_handleLaunchFile(filePath));
+      });
+    }
+    if (Platform.isIOS) {
+      _fileAssociationErrorSubscription ??=
+          FileAssociationService.openFileErrorStream.listen((message) {
+        if (mounted) BlurSnackBar.show(context, message);
+      });
+    }
+  }
+
+  Future<void> _handleLaunchFile(String filePath) async {
+    if (!await FileAssociationService.validateFilePath(filePath)) {
+      if (mounted) {
+        BlurSnackBar.show(context, '无法播放启动文件: ${path.basename(filePath)}');
+      }
+      return;
+    }
+    if (!mounted) return;
+    await LaunchFileHandler.handle(
+      filePath,
+      onError: (message) {
+        if (mounted) BlurSnackBar.show(context, message);
+      },
+    );
   }
 
   void _applyInitialPage() {
@@ -161,6 +207,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   void dispose() {
     _tabChangeNotifier?.removeListener(_handleNavigationRequest);
+    _fileAssociationSubscription?.cancel();
+    _fileAssociationErrorSubscription?.cancel();
     _webdavProvider?.removeListener(_handleWebDAVChanged);
     _downloaderProvider?.removeListener(_handleDownloaderChanged);
     _pluginService?.removeListener(_handleDownloaderChanged);

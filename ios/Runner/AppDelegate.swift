@@ -1,10 +1,21 @@
 import Flutter
 import UIKit
 import AVKit
+import CryptoKit
 import Photos
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  private var fileAssociationChannel: FlutterMethodChannel?
+  private var pendingOpenFiles: [String] = []
+  private var pendingOpenErrors: [String] = []
+  private var lastOpenedFileURL: URL?
+  private var lastOpenedFileDate: Date?
+  private let fileImportQueue = DispatchQueue(
+    label: "com.aimessoft.nipaplay.file-import",
+    qos: .userInitiated
+  )
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -35,6 +46,26 @@ import Photos
           "screenHeightDp": Double(bounds.height),
           "smallestScreenWidthDp": Double(min(bounds.width, bounds.height)),
         ])
+      }
+
+      let fileChannel = FlutterMethodChannel(
+        name: "file_association_channel",
+        binaryMessenger: controller.binaryMessenger
+      )
+      fileAssociationChannel = fileChannel
+      fileChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self = self else {
+          result(nil)
+          return
+        }
+        switch call.method {
+        case "getOpenFileUri":
+          result(self.pendingOpenFiles.isEmpty ? nil : self.pendingOpenFiles.removeFirst())
+        case "getOpenFileError":
+          result(self.pendingOpenErrors.isEmpty ? nil : self.pendingOpenErrors.removeFirst())
+        default:
+          result(FlutterMethodNotImplemented)
+        }
       }
 
       let channel = FlutterMethodChannel(
@@ -281,6 +312,132 @@ import Photos
       }
     }
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    if let url = launchOptions?[.url] as? URL, url.isFileURL {
+      receiveFileURL(url)
+    }
+    return launched
+  }
+
+  override func application(
+    _ application: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    let handledByPlugin = super.application(application, open: url, options: options)
+    guard url.isFileURL else { return handledByPlugin }
+    receiveFileURL(url)
+    return true
+  }
+
+  private func receiveFileURL(_ url: URL) {
+    let videoExtensions: Set<String> = [
+      "mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "3gp", "flv", "ts", "m2ts"
+    ]
+    guard videoExtensions.contains(url.pathExtension.lowercased()) else { return }
+
+    // A cold launch can report the same URL in launchOptions and openURL.
+    let now = Date()
+    if lastOpenedFileURL == url,
+       let previous = lastOpenedFileDate,
+       now.timeIntervalSince(previous) < 2 {
+      return
+    }
+    lastOpenedFileURL = url
+    lastOpenedFileDate = now
+
+    fileImportQueue.async { [weak self] in
+      do {
+        let filePath = try Self.prepareOpenedFile(url)
+        DispatchQueue.main.async {
+          self?.pendingOpenFiles.append(filePath)
+          self?.fileAssociationChannel?.invokeMethod("onOpenFileUri", arguments: nil)
+        }
+      } catch {
+        NSLog("[FileAssociation] Failed to open %@: %@", url.lastPathComponent, String(describing: error))
+        DispatchQueue.main.async {
+          self?.pendingOpenErrors.append("无法打开文件：\(url.lastPathComponent)（\(error.localizedDescription)）")
+          self?.fileAssociationChannel?.invokeMethod("onOpenFileError", arguments: nil)
+        }
+      }
+    }
+  }
+
+  private static func prepareOpenedFile(_ url: URL) throws -> String {
+    let fileManager = FileManager.default
+    let source = url.resolvingSymlinksInPath().standardizedFileURL
+    let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      .resolvingSymlinksInPath().standardizedFileURL
+    let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .resolvingSymlinksInPath().standardizedFileURL
+
+    // Files may hand back a document already inside NipaPlay's container.
+    if source.path.hasPrefix(documents.path + "/") ||
+       source.path.hasPrefix(appSupport.path + "/") {
+      guard fileManager.fileExists(atPath: source.path) else {
+        throw CocoaError(.fileNoSuchFile)
+      }
+      return source.path
+    }
+
+    // External providers need security-scoped access while the file is read.
+    // Keep a local copy because playback and watch history outlive this callback.
+    let hasScope = url.startAccessingSecurityScopedResource()
+    defer { if hasScope { url.stopAccessingSecurityScopedResource() } }
+
+    var coordinationError: NSError?
+    var importError: Error?
+    var importedPath: String?
+    let coordinator = NSFileCoordinator(filePresenter: nil)
+    coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { readURL in
+      do {
+        let hash = SHA256.hash(data: Data(source.absoluteString.utf8))
+          .map { String(format: "%02x", $0) }.joined()
+        var destinationDirectory = appSupport
+          .appendingPathComponent("Opened Files", isDirectory: true)
+          .appendingPathComponent(hash, isDirectory: true)
+        try fileManager.createDirectory(
+          at: destinationDirectory,
+          withIntermediateDirectories: true
+        )
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try destinationDirectory.setResourceValues(resourceValues)
+
+        let destination = destinationDirectory.appendingPathComponent(source.lastPathComponent)
+        let sourceAttributes = try fileManager.attributesOfItem(atPath: readURL.path)
+        let existingAttributes = try? fileManager.attributesOfItem(atPath: destination.path)
+        let sourceSize = sourceAttributes[.size] as? NSNumber
+        let sourceDate = sourceAttributes[.modificationDate] as? Date
+        let existingSize = existingAttributes?[.size] as? NSNumber
+        let existingDate = existingAttributes?[.modificationDate] as? Date
+        if sourceSize != nil && sourceSize == existingSize &&
+           sourceDate != nil && sourceDate == existingDate {
+          importedPath = destination.path
+          return
+        }
+
+        let temporary = destinationDirectory.appendingPathComponent(UUID().uuidString + ".tmp")
+        defer { try? fileManager.removeItem(at: temporary) }
+        try fileManager.copyItem(at: readURL, to: temporary)
+        if fileManager.fileExists(atPath: destination.path) {
+          _ = try fileManager.replaceItemAt(destination, withItemAt: temporary)
+        } else {
+          try fileManager.moveItem(at: temporary, to: destination)
+        }
+        if let sourceDate = sourceDate {
+          try fileManager.setAttributes([.modificationDate: sourceDate], ofItemAtPath: destination.path)
+        }
+        importedPath = destination.path
+      } catch {
+        importError = error
+      }
+    }
+
+    if let error = importError ?? coordinationError { throw error }
+    guard let importedPath = importedPath else {
+      throw CocoaError(.fileReadUnknown)
+    }
+    return importedPath
   }
 }
