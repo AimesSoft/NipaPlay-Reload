@@ -9,6 +9,7 @@ const SUBTITLE_NOISE_TOKENS: &[&str] = &[
     "ssa",
     "sub",
     "sup",
+    "idx",
     "subtitle",
     "subtitles",
     "subs",
@@ -183,6 +184,7 @@ pub fn subtitle_compute_match_score(
         ".srt" => 50,
         ".sub" => 35,
         ".sup" => 20,
+        ".idx" => 20,
         _ => 0,
     };
 
@@ -252,7 +254,36 @@ pub fn subtitle_compute_match_score(
         }
         _ => {}
     }
+    score += subtitle_language_preference_bonus(&lower_subtitle);
     score
+}
+
+/// 语言偏好加权：同名多字幕（如 .ass 与 .SC.ass）时优先默认激活简体/简日，
+/// 繁中次之。与 Dart fallback 的 computeSubtitleLanguagePreferenceBonus 保持一致。
+fn subtitle_language_preference_bonus(lower_subtitle: &str) -> i32 {
+    let segments: Vec<&str> = lower_subtitle
+        .split(|c: char| c == '.' || c == '[' || c == ']' || c == ' ' || c == '('
+            || c == ')' || c == '_' || c == '-')
+        .collect();
+    let simplified = ["sc", "chs", "gb", "scjp", "chsjpn", "sc&jp", "sc&jpn", "chs&jpn", "chs&jp"];
+    let traditional = ["tc", "cht", "big5", "tcjp", "chtjpn", "tc&jp", "tc&jpn"];
+    for segment in &segments {
+        let s = *segment;
+        if simplified.contains(&s) || s.contains("简中") || s.contains("简体") || s.contains("简日")
+        {
+            return 15;
+        }
+        if s.contains("jp") || s.contains("jpn") || s == "ja" || s.contains("日") {
+            return 12;
+        }
+    }
+    for segment in &segments {
+        let s = *segment;
+        if traditional.contains(&s) || s.contains("繁中") || s.contains("繁体") {
+            return 6;
+        }
+    }
+    0
 }
 
 fn strip_leading_group_tags(mut value: String) -> String {
@@ -402,5 +433,17 @@ mod tests {
             Some("02".into()),
         );
         assert!(score >= 100);
+    }
+
+    #[test]
+    fn prefers_simplified_or_japanese_over_traditional() {
+        let score = |name: &str| {
+            subtitle_language_preference_bonus(&name.to_lowercase())
+        };
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].SC"), 15);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].chs&jpn"), 15);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].JP"), 12);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE].TC"), 6);
+        assert_eq!(score("[I.G&CASO][K-ON!][MOVIE]"), 0);
     }
 }
