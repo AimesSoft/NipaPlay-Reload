@@ -130,8 +130,7 @@ class SubtitleManager extends ChangeNotifier {
   Map<String, double> _defaultDisplayState({int staggerDepth = 0}) =>
       <String, double>{
         'delay': 0.0,
-        'position':
-            (globalPositionSeed - 20 * staggerDepth).clamp(30.0, 100.0),
+        'position': (globalPositionSeed - 20 * staggerDepth).clamp(30.0, 100.0),
         'marginX': globalMarginSeed,
       };
 
@@ -156,6 +155,7 @@ class SubtitleManager extends ChangeNotifier {
   Future<void> _loadPathDisplayState(String path) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!_activeExternalSubtitlePaths.contains(path)) return;
       final raw = prefs.getString(_pathDisplayStateKey(path));
       if (raw == null || raw.isEmpty) return;
       final decoded = json.decode(raw);
@@ -479,6 +479,7 @@ class SubtitleManager extends ChangeNotifier {
     bool resetManualFlag = true,
     bool clearPlayer = true,
   }) {
+    ++_subtitleLoadToken;
     if (clearPlayer) {
       try {
         if (_player.supportsExternalSubtitles) {
@@ -610,6 +611,7 @@ class SubtitleManager extends ChangeNotifier {
             _persistExternalSubtitleSelection(
               videoPath: _currentVideoPath!,
               subtitlePath: path,
+              displayName: displayName ?? displayNameForPath(path),
               isActive: true,
             ),
           );
@@ -653,17 +655,17 @@ class SubtitleManager extends ChangeNotifier {
         // BUG-A：外挂（占 sid 的 ASS/SSA）移除后必须回退内嵌轨——
         // 之前 sid=no 就结束，只剩内嵌时位置滑块/延迟全打在空轨道上，
         // 用户感知为「移除外挂后滑块拖不动内嵌」。
-        final stillKernelExternal = _activeExternalSubtitlePaths.any(
-            (p) => !_shouldRenderExternalSubtitleInApp(p));
+        final stillKernelExternal = _activeExternalSubtitlePaths
+            .any((p) => !_shouldRenderExternalSubtitleInApp(p));
         final embeddedTracks = _player.mediaInfo.subtitle;
-        if (!stillKernelExternal && embeddedTracks != null &&
+        if (!stillKernelExternal &&
+            embeddedTracks != null &&
             embeddedTracks.isNotEmpty) {
-          final restore = _lastSelectedEmbeddedTrackIndex
-              .clamp(0, embeddedTracks.length - 1);
+          final restore = _lastSelectedEmbeddedTrackIndex.clamp(
+              0, embeddedTracks.length - 1);
           try {
             _player.activeSubtitleTracks = [restore];
-            debugPrint(
-                'SubtitleManager: 移除外挂后回退内嵌轨 index=$restore');
+            debugPrint('SubtitleManager: 移除外挂后回退内嵌轨 index=$restore');
           } catch (e) {
             debugPrint('SubtitleManager: 回退内嵌轨失败: $e');
           }
@@ -688,11 +690,13 @@ class SubtitleManager extends ChangeNotifier {
     if (displayName != null) {
       registerPathDisplayName(path, displayName);
     }
+    final loadToken = _subtitleLoadToken;
     final file = File(path);
     if (!await file.exists()) {
       debugPrint('SubtitleManager: 叠加字幕文件不存在: $path');
       return;
     }
+    if (loadToken != _subtitleLoadToken) return;
     if (_activeExternalSubtitlePaths.contains(path)) {
       return;
     }
@@ -817,8 +821,7 @@ class SubtitleManager extends ChangeNotifier {
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
     // 其他仍在叠加的字幕块跟着消失（旧实现读单条当前路径）。
-    if (_activeExternalSubtitlePaths
-        .any(_shouldRenderExternalSubtitleInApp)) {
+    if (_activeExternalSubtitlePaths.any(_shouldRenderExternalSubtitleInApp)) {
       return true;
     }
     // 旧单路径回退（集合为空时保持旧行为：无激活则隐藏）
@@ -1275,7 +1278,8 @@ class SubtitleManager extends ChangeNotifier {
 
           // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
           setExternalSubtitle(savedSubtitlePath,
-              isManualSetting: true, displayName: p.basename(savedSubtitlePath));
+              isManualSetting: true,
+              displayName: p.basename(savedSubtitlePath));
 
           // 设置完成后强制刷新状态
           await Future.delayed(_autoLoadStateSettleDelay);
@@ -1331,8 +1335,7 @@ class SubtitleManager extends ChangeNotifier {
 
             // 设置外部字幕（不标记为手动设置，因为是自动检测的）
             setExternalSubtitle(cachedPath,
-                isManualSetting: false,
-                displayName: selected.name);
+                isManualSetting: false, displayName: selected.name);
             await _persistExternalSubtitleSelection(
               videoPath: videoPath,
               subtitlePath: cachedPath,
