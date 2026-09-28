@@ -880,9 +880,7 @@ class LocalMediaManagementApi {
 
         final subtitleBaseName =
             p.basenameWithoutExtension(filePath).toLowerCase();
-        final isLikelyMatch = subtitleBaseName == videoBaseName ||
-            subtitleBaseName.contains(videoBaseName) ||
-            videoBaseName.contains(subtitleBaseName);
+        final isLikelyMatch = subtitleMatchesVideo(videoBaseName, subtitleBaseName);
 
         items.add({
           'name': p.basename(filePath),
@@ -1200,8 +1198,7 @@ class LocalMediaManagementApi {
     }
 
     // .idx 请求需要同名 .sub 配对才有效
-    if (ext == '.idx' &&
-        !await File(p.setExtension(subtitlePath, '.sub')).exists()) {
+    if (!isVobSubPairComplete(subtitlePath)) {
       return null;
     }
 

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate' as dart_isolate;
 import 'dart:typed_data';
 import 'package:image/image.dart';
 import 'package:meta/meta.dart';
@@ -103,11 +104,8 @@ class NativePlayer extends PlatformPlayer {
 
       await super.dispose();
 
-      Initializer(mpv).dispose(ctx);
-
-      Future.delayed(const Duration(seconds: 5), () {
-        mpv.mpv_terminate_destroy(ctx);
-      });
+      await Initializer(mpv).dispose(ctx);
+      await _terminateNativePlayer(NativeLibrary.path, ctx.address);
     }
 
     if (synchronized) {
@@ -3034,3 +3032,9 @@ _GetPlaylistResult _getPlaylist(_GetPlaylistData data) {
 }
 
 // --------------------------------------------------
+
+Future<void> _terminateNativePlayer(String libraryPath, int address) =>
+    dart_isolate.Isolate.run(() {
+      final bindings = generated.MPV(DynamicLibrary.open(libraryPath));
+      bindings.mpv_terminate_destroy(Pointer<generated.mpv_handle>.fromAddress(address));
+    });

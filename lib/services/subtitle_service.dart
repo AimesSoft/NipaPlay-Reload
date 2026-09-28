@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
+import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_language_utils.dart';
 
 class SubtitleService {
@@ -56,6 +57,9 @@ class SubtitleService {
         for (final subtitle in subtitles) {
           final path = subtitle['path'] as String;
           if (File(path).existsSync()) {
+            final name =
+                await RemoteSubtitleService.instance.lookupDisplayName(path);
+            if (name != null) subtitle['name'] = name;
             validSubtitles.add(subtitle);
           }
         }
@@ -136,7 +140,7 @@ class SubtitleService {
 
     try {
       final filePickerService = FilePickerService();
-      final filePath = await filePickerService.pickSubtitleFile();
+      var filePath = await filePickerService.pickSubtitleFile();
 
       if (filePath == null) return null;
 
@@ -153,6 +157,7 @@ class SubtitleService {
         throw UnsupportedError('VobSub 字幕需要同名 .sub 与 .idx 成对选择');
       }
 
+      filePath = canonicalSubtitlePath(filePath);
       // 检查文件是否存在
       if (!File(filePath).existsSync()) {
         throw FileSystemException('字幕文件不存在', filePath);
@@ -162,7 +167,7 @@ class SubtitleService {
       return {
         'path': filePath,
         'name': fileName,
-        'type': extension.substring(1),
+        'type': p.extension(filePath).substring(1),
         'addTime': DateTime.now().millisecondsSinceEpoch,
         'isActive': false
       };
