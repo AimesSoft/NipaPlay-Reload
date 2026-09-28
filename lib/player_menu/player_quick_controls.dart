@@ -13,7 +13,9 @@ class PlayerQuickControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<VideoPlayerState>();
-    if (!state.hasVideo) return const SizedBox.shrink();
+    if (!state.hasVideo || !state.showPlayerMenuQuickControls) {
+      return const SizedBox.shrink();
+    }
     final colors = PlayerMenuTheme.colorsOf(context);
     final foreground = cupertino
         ? CupertinoColors.label.resolveFrom(context)

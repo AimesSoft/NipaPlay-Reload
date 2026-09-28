@@ -6,22 +6,34 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_torrent_options`, `current_api`, `current_session`, `default_session_dir`, `ensure_stream_server`, `file_stem_folder_name`, `file_stem_or_name`, `format_error_chain`, `handle_stream_request`, `magnet_log_summary`, `normalize_download_dir`, `normalize_torrent_id`, `parse_http_request`, `parse_range`, `parse_stream_path`, `parsed_magnet_log_summary`, `read_http_request`, `resolve_magnet_metadata_for_add`, `response_to_json`, `sanitize_folder_name`, `torrent_log`, `torrent_metadata_display_name`, `torrent_metadata_folder_name`, `torrent_preview_to_json`, `torrent_runtime`, `truncate_for_log`, `url_path_segment_encode`, `write_simple_response`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `HttpRange`, `TorrentRuntime`, `TorrentStreamServer`
+// These functions are ignored because they are not marked as `pub`: `add_to_session`, `add_torrent_options`, `begin`, `bounded_preview`, `cancel`, `current_api`, `current_session`, `default_session_dir`, `ensure_stream_server`, `file_stem_folder_name`, `file_stem_or_name`, `handle_stream_request`, `normalize_download_dir`, `normalize_torrent_id`, `parse_http_request`, `parse_range`, `parse_stream_path`, `read_http_request`, `resolve_preview`, `response_to_json`, `sanitize_folder_name`, `torrent_log`, `torrent_metadata_display_name`, `torrent_metadata_folder_name`, `torrent_preview_to_json`, `torrent_runtime`, `url_path_segment_encode`, `write_simple_response`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `HttpRange`, `PreviewRegistry`, `PreviewRequest`, `TorrentRuntime`, `TorrentStreamServer`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
-Future<void> torrentInitSession({required String downloadDir}) =>
-    RustLib.instance.api
-        .crateApiTorrentTorrentInitSession(downloadDir: downloadDir);
+Future<void> torrentInitSession(
+        {required String downloadDir, String? sessionDir}) =>
+    RustLib.instance.api.crateApiTorrentTorrentInitSession(
+        downloadDir: downloadDir, sessionDir: sessionDir);
+
+/// Reserve a request before dispatching the asynchronous FFI call, so that
+/// cancellation also works when the call has not started running yet.
+int torrentBeginPreview() =>
+    RustLib.instance.api.crateApiTorrentTorrentBeginPreview();
+
+void torrentCancelPreview({required int requestId}) => RustLib.instance.api
+    .crateApiTorrentTorrentCancelPreview(requestId: requestId);
 
 Future<String> torrentAddMagnet(
         {required String magnetUri,
         required String downloadDir,
-        required bool createFolderForTask}) =>
+        required bool createFolderForTask,
+        required int previewId}) =>
     RustLib.instance.api.crateApiTorrentTorrentAddMagnet(
         magnetUri: magnetUri,
         downloadDir: downloadDir,
-        createFolderForTask: createFolderForTask);
+        createFolderForTask: createFolderForTask,
+        previewId: previewId);
 
 Future<String> torrentAddFile(
         {required String torrentFilePath,
@@ -33,9 +45,11 @@ Future<String> torrentAddFile(
         createFolderForTask: createFolderForTask);
 
 Future<String> torrentPreviewMagnet(
-        {required String magnetUri, required String downloadDir}) =>
+        {required String magnetUri,
+        required String downloadDir,
+        required int requestId}) =>
     RustLib.instance.api.crateApiTorrentTorrentPreviewMagnet(
-        magnetUri: magnetUri, downloadDir: downloadDir);
+        magnetUri: magnetUri, downloadDir: downloadDir, requestId: requestId);
 
 Future<String> torrentList({required String downloadDir}) =>
     RustLib.instance.api.crateApiTorrentTorrentList(downloadDir: downloadDir);

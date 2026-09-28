@@ -21,7 +21,7 @@ import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/utils/app_platform.dart';
 import 'package:nipaplay/utils/color.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
-
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 /// 协调桌面端外部播放器启动, 命令行参数注入和 mpv 控制台注册.
 ///
@@ -71,7 +71,10 @@ abstract final class ExternalPlayerService {
         _log('play: 无法将媒体路径解析为外部播放器可访问的地址');
       }
     } catch (error, stackTrace) {
-      _log('play: 解析远程媒体路径失败: $error');
+      _log(
+        'play: 解析远程媒体路径失败: '
+        '${MediaSourceUtils.safeRemotePathError(error)}',
+      );
       debugPrintStack(stackTrace: stackTrace);
       mediaPath = null;
     }

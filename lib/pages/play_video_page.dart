@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/widgets/intro_skip_button.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
@@ -366,10 +368,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       final path = await videoState.captureScreenshot(
         includeDanmaku: includeDanmaku,
         includeSubtitles: includeSubtitles,
+        temporary: Platform.isIOS || Platform.isAndroid,
       );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      if (Platform.isAndroid) {
+        await PhotoLibraryService.saveTemporaryFileToPhotos(
+          path,
+          mimeType: 'image/jpeg',
+        );
+        if (!mounted) return;
+        BlurSnackBar.show(context, '截图已保存到相册');
+        return;
+      }
+      if (Platform.isIOS) {
+        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');
@@ -377,6 +393,29 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       if (!mounted) return;
       BlurSnackBar.show(context, '截图失败: $e');
     }
+  }
+
+  void _showMediaCaptureSettings(VideoPlayerState videoState) {
+    unawaited(
+      showMediaCaptureDialog(
+        context: context,
+        videoState: videoState,
+        onCaptureImage: (
+          target, {
+          required includeDanmaku,
+          required includeSubtitles,
+        }) =>
+            _captureScreenshot(
+          videoState,
+          target,
+          includeDanmaku: includeDanmaku,
+          includeSubtitles: includeSubtitles,
+        ),
+        // Tap-outside dismiss stays enabled even in fullscreen on tablets,
+        // so the dialog closes like every other Nipaplay window.
+        barrierDismissible: true,
+      ),
+    );
   }
 
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
@@ -920,8 +959,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         DesktopPictureInPictureScope.isEnabledOf(context);
     final showPictureInPictureButton =
         DesktopPlayerWindowService.isFeatureEnabled;
-    final double horizontalCutoutInset =
-        globals.isPhone && portraitUiScale >= 0.999 ? 24.0 : 0.0;
+    final bool isMobileLandscape = globals.isMobilePlatform &&
+        !isCompactPortrait &&
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final minimumSideInset = globals.isPhone ? 24.0 : 0.0;
+    final double leftCutoutInset =
+        isMobileLandscape ? math.max(minimumSideInset, viewPadding.left) : 0.0;
+    final double rightCutoutInset =
+        isMobileLandscape ? math.max(minimumSideInset, viewPadding.right) : 0.0;
 
     final int rightButtonCount = (showPictureInPictureButton
             ? (detachedWindow != null ? (isPictureInPicture ? 1 : 2) : 1)
@@ -933,9 +979,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
         : 0.0;
     final double availableTitleWidth = (MediaQuery.of(context).size.width -
-            (16.0 + horizontalCutoutInset) -
+            (16.0 + leftCutoutInset) -
             (isPictureInPicture ? 0.0 : 116.0) -
-            (16.0 + horizontalCutoutInset) -
+            (16.0 + rightCutoutInset) -
             rightButtonsWidth -
             (globals.isMobilePlatform ? 86.0 : 0.0) -
             24.0)
@@ -963,7 +1009,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 alignment: Alignment.topLeft,
                 child: Padding(
                   padding: EdgeInsets.only(
-                    left: horizontalCutoutInset,
+                    left: leftCutoutInset,
                     top: 6.0,
                     bottom: 12.0,
                   ),
@@ -1098,7 +1144,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 alignment: Alignment.topRight,
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: horizontalCutoutInset,
+                    right: rightCutoutInset,
                     top: 6.0,
                     bottom: 12.0,
                   ),
@@ -1172,29 +1218,27 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               defaultTargetPlatform == TargetPlatform.iOS)
                             const SizedBox(width: 12),
                           ShadowActionButton(
-                            tooltip: '画面截取',
+                            tooltip: '点击截图，长按打开截取设置',
                             icon: Icons.camera_alt_outlined,
                             onPressed: () {
                               videoState.resetHideControlsTimer();
-                              unawaited(
-                                showMediaCaptureDialog(
-                                  context: context,
-                                  videoState: videoState,
-                                  onCaptureImage: (
-                                    target, {
-                                    required includeDanmaku,
-                                    required includeSubtitles,
-                                  }) =>
-                                      _captureScreenshot(
-                                    videoState,
-                                    target,
-                                    includeDanmaku: includeDanmaku,
-                                    includeSubtitles: includeSubtitles,
-                                  ),
-                                  barrierDismissible:
-                                      !_shouldDisableDialogDismiss(videoState),
-                                ),
-                              );
+                              final target = videoState.screenshotSaveTarget;
+                              if (target == ScreenshotSaveTarget.ask) {
+                                _showMediaCaptureSettings(videoState);
+                              } else {
+                                unawaited(_captureScreenshot(
+                                  videoState,
+                                  target,
+                                  includeDanmaku: videoState
+                                      .screenshotCaptureIncludesDanmaku,
+                                  includeSubtitles: videoState
+                                      .screenshotCaptureIncludesSubtitles,
+                                ));
+                              }
+                            },
+                            onLongPress: () {
+                              videoState.resetHideControlsTimer();
+                              _showMediaCaptureSettings(videoState);
                             },
                           ),
                         ],
@@ -1269,7 +1313,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           VideoControlsOverlay(compactPortrait: portraitUiScale < 0.999),
         if (!isPictureInPicture)
           Positioned(
-            right: 16.0 + horizontalCutoutInset,
+            right: 16.0 + rightCutoutInset,
             bottom: isCompactPortrait ? 84.0 : 96.0,
             child: AnimatedOpacity(
               opacity: videoState.hasActiveSkipSegment && !uiLocked ? 1.0 : 0.0,
@@ -1300,7 +1344,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         if (globals.isMobilePlatform && !isCompactPortrait)
           Positioned(
-            left: 16.0 + horizontalCutoutInset,
+            left: 16.0 + leftCutoutInset,
             top: 0,
             bottom: 0,
             child: Center(

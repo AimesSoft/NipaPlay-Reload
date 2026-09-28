@@ -33,14 +33,8 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   final TextEditingController _subtitleDelayController =
       TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
-  final TextEditingController _textColorController = TextEditingController();
-  final TextEditingController _borderColorController = TextEditingController();
-  final TextEditingController _shadowColorController = TextEditingController();
   final FocusNode _subtitleDelayFocus = FocusNode();
   final FocusNode _fontNameFocus = FocusNode();
-  final FocusNode _textColorFocus = FocusNode();
-  final FocusNode _borderColorFocus = FocusNode();
-  final FocusNode _shadowColorFocus = FocusNode();
   String? _subtitleDelayError;
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
@@ -62,14 +56,8 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     _srtDelayController.dispose();
     _srtDelayFocus.dispose();
     _fontNameController.dispose();
-    _textColorController.dispose();
-    _borderColorController.dispose();
-    _shadowColorController.dispose();
     _subtitleDelayFocus.dispose();
     _fontNameFocus.dispose();
-    _textColorFocus.dispose();
-    _borderColorFocus.dispose();
-    _shadowColorFocus.dispose();
     super.dispose();
   }
 
@@ -352,21 +340,6 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           controller: _fontNameController,
           focus: _fontNameFocus,
           value: videoState.subtitleFontName,
-        );
-        _syncController(
-          controller: _textColorController,
-          focus: _textColorFocus,
-          value: _colorToHex(videoState.subtitleColor),
-        );
-        _syncController(
-          controller: _borderColorController,
-          focus: _borderColorFocus,
-          value: _colorToHex(videoState.subtitleBorderColor),
-        );
-        _syncController(
-          controller: _shadowColorController,
-          focus: _shadowColorFocus,
-          value: _colorToHex(videoState.subtitleShadowColor),
         );
 
         return BaseSettingsMenu(
@@ -746,46 +719,25 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '文字颜色',
-            controller: _textColorController,
-            focusNode: _textColorFocus,
             color: videoState.subtitleColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleColor(parsed),
           ),
           const SizedBox(height: 8),
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '描边颜色',
-            controller: _borderColorController,
-            focusNode: _borderColorFocus,
             color: videoState.subtitleBorderColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleBorderColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleBorderColor(parsed),
           ),
           const SizedBox(height: 8),
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '阴影颜色',
-            controller: _shadowColorController,
-            focusNode: _shadowColorFocus,
             color: videoState.subtitleShadowColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleShadowColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleShadowColor(parsed),
           ),
           const SizedBox(height: 4),
-          const SettingsHintText('输入颜色十六进制，例如 #FFFFFF'),
+          const SettingsHintText('点击颜色行输入十六进制，例如 #FFFFFF'),
         ],
       ),
     );
@@ -1080,57 +1032,96 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     );
   }
 
-  Widget _buildColorInputRow({
+  /// 颜色编辑行：色块 + 标签 + 当前 hex 只读文本，整体可点击。
+  /// 点击弹出独立的 hex 输入对话框——面板内嵌 TextField 在横屏播放器里
+  /// 贴屏幕右下角，键盘弹出后输入框会被顶到画面角落难以操作；对话框
+  /// （Dialog 自带 viewInsets 避让）始终显示在键盘上方居中位置。
+  Widget _buildColorEditRow({
     required String label,
-    required TextEditingController controller,
-    required FocusNode focusNode,
     required Color color,
-    required ValueChanged<String> onSubmit,
+    required ValueChanged<Color> onPicked,
   }) {
     final menuColors = PlayerMenuTheme.colorsOf(context);
-    return Row(
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: menuColors.controlBorder),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: menuColors.foreground, fontSize: 13),
-          ),
-        ),
-        SizedBox(
-          width: 110,
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            style: TextStyle(color: menuColors.foreground, fontSize: 12),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              filled: true,
-              fillColor: menuColors.controlBackground,
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: menuColors.controlBorder),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: menuColors.accent),
-                borderRadius: BorderRadius.circular(6),
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showHexInputDialog(label, color, onPicked),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: menuColors.controlBorder),
               ),
             ),
-            onSubmitted: onSubmit,
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: menuColors.foreground, fontSize: 13),
+              ),
+            ),
+            Text(
+              _colorToHex(color),
+              style: TextStyle(
+                color: menuColors.disabledForeground,
+                fontSize: 12,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.edit_outlined,
+                size: 14, color: menuColors.disabledForeground),
+          ],
         ),
-      ],
+      ),
     );
+  }
+
+  /// 单行 hex 输入对话框：实时解析（onChanged 输入即应用，与旧内嵌框
+  /// 语义一致），Dialog 自动避让键盘。
+  Future<void> _showHexInputDialog(
+    String label,
+    Color initial,
+    ValueChanged<Color> onPicked,
+  ) async {
+    final controller = TextEditingController(text: _colorToHex(initial));
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(label, style: const TextStyle(fontSize: 16)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 7,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              hintText: '#FFFFFF',
+              counterText: '',
+              isDense: true,
+            ),
+            onChanged: (value) {
+              final parsed = _parseHexColor(value);
+              if (parsed != null) {
+                onPicked(parsed);
+              }
+            },
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 }

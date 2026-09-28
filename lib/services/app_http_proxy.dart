@@ -3,6 +3,8 @@ class AppHttpProxy {
 
   static String _endpoint = '';
 
+  static String get endpoint => _endpoint;
+
   static Uri? validate(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;

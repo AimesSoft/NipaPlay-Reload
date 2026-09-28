@@ -377,7 +377,6 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       // 所有 UI 操作（setState/SnackBar）按 mounted 逐点保护。
       if (mounted) setState(() => _isLoading = true);
       var loadedCount = 0;
-      var lastIndex = -1;
       for (final candidate in selected) {
         final cachedPath = await RemoteSubtitleService.instance
             .ensureSubtitleCached(candidate);
@@ -386,7 +385,6 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         if (existingIndex >= 0) {
           // 列表已存在（可能由自动检测加入但未真正挂载/或曾被删除标记）：
           // 重新挂载到播放器，而不是跳过——否则「挂载选中」看起来无效果
-          lastIndex = existingIndex;
           loadedCount++;
           await _remountExternalSubtitle(videoState, existingIndex);
           continue;
@@ -411,7 +409,6 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         };
         _externalSubtitles.add(subtitleInfo);
         if (mounted) setState(() {});
-        lastIndex = _externalSubtitles.length - 1;
         loadedCount++;
       }
       // 多挂：本次选中的全部叠加激活（ASS/SRT 同等对待，逐条进栈），

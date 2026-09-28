@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_identity_resolver.dart';
@@ -514,7 +515,18 @@ class WatchHistoryManager {
   // 添加或更新历史记录
   static Future<void> addOrUpdateHistory(WatchHistoryItem item) async {
     if (!_initialized) await initialize();
-    
+
+    // 已删除番剧的写入拦截：animeName 为空的写入视为云端残留或扫描
+    // 脏数据倒灌，直接丢弃；animeName 非空说明是用户主动产生的数据
+    // （重新匹配/观看），解除墓碑并正常写入。
+    if (item.animeId != null &&
+        await AnimeDeletionTombstones.isDeleted(item.animeId)) {
+      if (item.animeName.trim().isEmpty) {
+        return;
+      }
+      await AnimeDeletionTombstones.clear(item.animeId!);
+    }
+
     // 如果已迁移到数据库，则直接使用数据库API
     if (_migratedToDatabase) {
       try {
@@ -937,7 +949,8 @@ class WatchHistoryManager {
   }
 
   // Remove all history items for a specific animeId
-  static Future<int> removeHistoryByAnimeId(int animeId) async {
+  static Future<int> removeHistoryByAnimeId(int animeId,
+      {bool recordTombstone = true}) async {
     if (!_initialized) await initialize();
 
     // 如果已迁移到数据库，则直接使用数据库API
@@ -948,6 +961,9 @@ class WatchHistoryManager {
 
         if (count > 0) {
           _cachedItems.removeWhere((item) => item.animeId == animeId);
+          if (recordTombstone) {
+            await AnimeDeletionTombstones.record(animeId);
+          }
         }
         return count;
       } catch (e) {
@@ -958,7 +974,7 @@ class WatchHistoryManager {
 
     if (_isWriting) {
       await Future.delayed(const Duration(seconds: 1));
-      return removeHistoryByAnimeId(animeId);
+      return removeHistoryByAnimeId(animeId, recordTombstone: recordTombstone);
     }
 
     try {
@@ -974,6 +990,9 @@ class WatchHistoryManager {
         final file = io.File(_historyFilePath);
         await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
+        if (recordTombstone) {
+          await AnimeDeletionTombstones.record(animeId);
+        }
       }
 
       return removedCount;

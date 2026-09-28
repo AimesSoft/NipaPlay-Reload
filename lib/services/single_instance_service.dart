@@ -8,10 +8,12 @@ import 'package:path/path.dart' as path;
 class SingleInstanceMessage {
   final bool focus;
   final String? filePath;
+  final String? startupScriptPath;
 
   const SingleInstanceMessage({
     this.focus = false,
     this.filePath,
+    this.startupScriptPath,
   });
 }
 
@@ -38,6 +40,7 @@ class SingleInstanceService {
 
   static Future<bool> ensureSingleInstance({
     String? launchFilePath,
+    String? startupScriptPath,
   }) async {
     if (kIsWeb) {
       return true;
@@ -54,7 +57,8 @@ class SingleInstanceService {
       return true;
     } on FileSystemException {
       await lockHandle.close();
-      await _notifyExistingInstance(infoPath, launchFilePath);
+      await _notifyExistingInstance(
+          infoPath, launchFilePath, startupScriptPath);
       return false;
     } catch (e) {
       await lockHandle.close();
@@ -135,9 +139,14 @@ class SingleInstanceService {
       }
       final focus = decoded['focus'] == true;
       final filePath = decoded['filePath'];
+      final startupScriptPath = decoded['startupScriptPath'];
       return SingleInstanceMessage(
         focus: focus,
         filePath: filePath is String && filePath.isNotEmpty ? filePath : null,
+        startupScriptPath:
+            startupScriptPath is String && startupScriptPath.isNotEmpty
+                ? startupScriptPath
+                : null,
       );
     } catch (_) {
       return null;
@@ -156,6 +165,7 @@ class SingleInstanceService {
   static Future<void> _notifyExistingInstance(
     String infoPath,
     String? launchFilePath,
+    String? startupScriptPath,
   ) async {
     for (var attempt = 0; attempt < _maxNotifyAttempts; attempt++) {
       final info = await _readInfo(infoPath);
@@ -167,6 +177,7 @@ class SingleInstanceService {
         info.port,
         info.token,
         launchFilePath,
+        startupScriptPath,
       );
       if (ok) {
         return;
@@ -182,8 +193,7 @@ class SingleInstanceService {
       if (decoded is! Map<String, dynamic>) {
         return null;
       }
-      if (decoded['app'] != _appId ||
-          decoded['version'] != _protocolVersion) {
+      if (decoded['app'] != _appId || decoded['version'] != _protocolVersion) {
         return null;
       }
       final portValue = decoded['port'];
@@ -208,6 +218,7 @@ class SingleInstanceService {
     int port,
     String token,
     String? launchFilePath,
+    String? startupScriptPath,
   ) async {
     Socket? socket;
     try {
@@ -222,6 +233,7 @@ class SingleInstanceService {
         'token': token,
         'focus': true,
         'filePath': launchFilePath,
+        'startupScriptPath': startupScriptPath,
       };
       socket.writeln(jsonEncode(payload));
       final response = await socket

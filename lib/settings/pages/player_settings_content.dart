@@ -339,6 +339,28 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                 );
               },
             ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile<bool>.toggle(
+                  title: _text(
+                    context,
+                    '播放器菜单快捷调节',
+                    '播放器選單快速調節',
+                    'Player Menu Quick Controls',
+                  ),
+                  subtitle: _text(
+                    context,
+                    '在播放器菜单顶部显示倍速和音量增强快捷选项',
+                    '在播放器選單頂部顯示倍速和音量增強快速選項',
+                    'Show playback speed and volume boost shortcuts at the top of the player menu.',
+                  ),
+                  icon: Ionicons.options_outline,
+                  phoneIcon: cupertino.CupertinoIcons.slider_horizontal_3,
+                  value: videoState.showPlayerMenuQuickControls,
+                  onChanged: videoState.setShowPlayerMenuQuickControls,
+                );
+              },
+            ),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),

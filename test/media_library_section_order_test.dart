@@ -56,6 +56,7 @@ const _sections = <UnifiedMediaLibrarySection>[
 ];
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('saved section order ignores stale ids and appends new media sources',
       () {
     final ordered = applyMediaLibrarySectionOrder(
@@ -405,6 +406,10 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => ChangeNotifierProvider(
+          create: (_) => AppearanceSettingsProvider(),
+          child: child!,
+        ),
         home: AppDisplaySurfaceScope(
           surface: AppDisplaySurface.desktopTablet,
           child: SizedBox(
@@ -431,6 +436,8 @@ void main() {
     for (final section in _sections) {
       expect(find.text(section.label), findsWidgets);
     }
+
+    expect(find.byType(AlertDialog), findsNothing);
 
     final embyHandle = find.byKey(
       const ValueKey<String>('media-library-order-drag-emby'),
@@ -465,6 +472,80 @@ void main() {
     );
   });
 
+  testWidgets('desktop order can move a row to the end and discard changes',
+      (tester) async {
+    List<String>? savedOrder;
+    var saveCount = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppearanceSettingsProvider(),
+        child: MaterialApp(
+          home: AppDisplaySurfaceScope(
+            surface: AppDisplaySurface.desktopTablet,
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  final result = await showAdaptiveMediaLibrarySectionOrder(
+                      context, _sections);
+                  if (result != null) {
+                    savedOrder = result;
+                    saveCount++;
+                  }
+                },
+                child: const Text('打开排序'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> moveFirstToEnd() async {
+      await tester.tap(find.text('打开排序'));
+      await tester.pumpAndSettle();
+      final start = tester.getCenter(find.byKey(
+        const ValueKey<String>('media-library-order-drag-local_library'),
+      ));
+      final last = tester.getRect(find.byKey(
+        const ValueKey<String>('media-library-order-row-future-media-source'),
+      ));
+      final gesture = await tester.startGesture(start);
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump();
+      await gesture.moveTo(Offset(start.dx, last.bottom + 4));
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.moveBy(const Offset(0, 40));
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    await moveFirstToEnd();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(saveCount, 0);
+    expect(_sections.first.id, MediaLibrarySectionIds.local);
+
+    await moveFirstToEnd();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(saveCount, 1);
+    expect(savedOrder, [
+      MediaLibrarySectionIds.localManagement,
+      MediaLibrarySectionIds.emby,
+      _dynamicSection.id,
+      MediaLibrarySectionIds.local,
+    ]);
+
+    await tester.tap(find.text('打开排序'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    expect(find.text('媒体库排序'), findsNothing);
+    expect(saveCount, 1);
+  });
+
   testWidgets('desktop order dialog grows with section count and caps its size',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
@@ -484,6 +565,10 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => ChangeNotifierProvider(
+            create: (_) => AppearanceSettingsProvider(),
+            child: child!,
+          ),
           home: AppDisplaySurfaceScope(
             surface: AppDisplaySurface.desktopTablet,
             child: Builder(
@@ -502,6 +587,7 @@ void main() {
       );
       await tester.tap(find.text('打开排序'));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
       final size = tester.getSize(
         find.byKey(
           const ValueKey<String>('media-library-order-dialog-content'),

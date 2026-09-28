@@ -40,6 +40,14 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['TVOS_DEPLOYMENT_TARGET'] = '13.0'
+      if target.name == 'erika_flutter'
+        # Keep the headless GIF API available to Dart FFI in release builds.
+        config.build_settings['OTHER_LDFLAGS'] = ['$(inherited)'] + %w[
+          erika_export_gif
+          erika_last_error_message
+          erika_string_free
+        ].map { |symbol| "-Wl,-u,_#{symbol}" }
+      end
     end
   end
 end

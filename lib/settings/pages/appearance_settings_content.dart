@@ -292,6 +292,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
+              '媒体库 NEW 标识',
+              '媒體庫 NEW 標識',
+              'Library NEW Badge',
+            ),
+            subtitle: _text(
+              context,
+              '在有新内容的番剧卡片上显示 NEW 标识',
+              '在有新內容的番劇卡片上顯示 NEW 標識',
+              'Show NEW on anime cards with newly added content.',
+            ),
+            icon: Ionicons.pricetag_outline,
+            phoneIcon: cupertino.CupertinoIcons.tag,
+            value: appearanceSettings.showMediaLibraryNewBadge,
+            onChanged: appearanceSettings.setShowMediaLibraryNewBadge,
+          ),
+          AdaptiveSettingsTile<bool>.toggle(
+            title: _text(
+              context,
               '低清推荐海报晕染',
               '低清推薦海報暈染',
               'Diffuse Low-resolution Posters',
@@ -349,6 +367,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
       const SizedBox(height: 16),
       AdaptiveSettingsSection(
         children: [
+          AdaptiveSettingsTile<bool>.toggle(
+            title: _text(
+              context,
+              '首页新番回顾',
+              '首頁新番回顧',
+              'Seasonal Anime Review',
+            ),
+            subtitle: _text(
+              context,
+              '在季度末和下月前 7 天显示新番回顾',
+              '在季度末和下月前 7 天顯示新番回顧',
+              'Show the anime review at quarter end and for seven more days.',
+            ),
+            icon: Icons.history_rounded,
+            phoneIcon: cupertino.CupertinoIcons.time,
+            value: appearanceSettings.showQuarterlyAnimeReview,
+            onChanged: appearanceSettings.setShowQuarterlyAnimeReview,
+          ),
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,
@@ -445,6 +481,22 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [
+            if (appearanceSettings.supportsAutomaticUiScale)
+              AdaptiveSettingsTile<bool>.toggle(
+                title: _text(
+                    context, '自动适配界面大小', '自動適配介面大小', 'Automatic UI Scale'),
+                subtitle: _text(
+                  context,
+                  '启动时根据显示分辨率和系统缩放选择大小；手动调节下方滑块可关闭自动适配',
+                  '啟動時依顯示解析度和系統縮放選擇大小；手動調整下方滑桿可關閉自動適配',
+                  'Choose a scale at startup using the display resolution and system density. Adjusting the slider switches to manual scaling.',
+                ),
+                icon: Ionicons.expand_outline,
+                phoneIcon:
+                    cupertino.CupertinoIcons.arrow_up_left_arrow_down_right,
+                value: appearanceSettings.useAutomaticUiScale,
+                onChanged: appearanceSettings.setAutomaticUiScale,
+              ),
             AdaptiveSettingsTile<double>.slider(
               title: _text(context, '界面缩放', '介面縮放', 'UI Scale'),
               subtitle: _text(

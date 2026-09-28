@@ -37,6 +37,22 @@ void main() {
     );
   });
 
+  test('media library NEW badge defaults on and persists', () async {
+    SharedPreferences.setMockInitialValues({});
+    final provider = AppearanceSettingsProvider();
+    await _waitForInitialLoad(provider);
+
+    expect(provider.showMediaLibraryNewBadge, isTrue);
+    await provider.setShowMediaLibraryNewBadge(false);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(SettingsKeys.showMediaLibraryNewBadge), isFalse);
+
+    final reloaded = AppearanceSettingsProvider();
+    await _waitForInitialLoad(reloaded);
+    expect(reloaded.showMediaLibraryNewBadge, isFalse);
+  });
+
   test('fast playback setting loads and persists', () async {
     SharedPreferences.setMockInitialValues({
       SettingsKeys.fastPlaybackStartup: true,

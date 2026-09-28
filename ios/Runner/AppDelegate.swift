@@ -124,6 +124,16 @@ import Photos
 
         var items: [Any] = []
         if let filePath = filePath, !filePath.isEmpty {
+          guard FileManager.default.fileExists(atPath: filePath) else {
+            result(
+              FlutterError(
+                code: "FILE_NOT_FOUND",
+                message: "The file to share does not exist",
+                details: filePath
+              )
+            )
+            return
+          }
           items.append(URL(fileURLWithPath: filePath))
         }
         if let urlString = urlString, let url = URL(string: urlString) {
@@ -145,13 +155,23 @@ import Photos
         }
 
         DispatchQueue.main.async {
+          guard let controller = controller else {
+            result(
+              FlutterError(
+                code: "NO_CONTROLLER",
+                message: "No view controller is available",
+                details: nil
+              )
+            )
+            return
+          }
           let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
-          if let popover = activity.popoverPresentationController, let view = controller?.view {
+          if let popover = activity.popoverPresentationController, let view = controller.view {
             popover.sourceView = view
             popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
             popover.permittedArrowDirections = []
           }
-          controller?.present(activity, animated: true)
+          controller.present(activity, animated: true)
           result(true)
         }
       }

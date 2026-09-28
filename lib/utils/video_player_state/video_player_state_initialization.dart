@@ -75,6 +75,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载播放速度设置
     await _loadPlaybackRate();
+    _initialDanmakuSettingsReady.complete();
 
     // 加载快进快退时间设置
     await _loadSeekStepSeconds();
@@ -89,6 +90,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDesktopHoverSettingsMenuEnabled();
     await _loadInstantHidePlayerUiEnabled();
     await _loadPlayerTopButtonVisibilitySettings();
+    await _loadPlayerMenuQuickControlsVisibility();
     await _loadChapterMarkersEnabled(); // 加载 MKV 章节标记开关
     await loadIntroSkipEnabled(); // 加载跳过片头开关
     await _loadScreenshotSaveTarget();
@@ -407,6 +409,17 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     } catch (error, stackTrace) {
       debugPrint('保存播放进度失败: $error\n$stackTrace');
     }
+  }
+
+  /// 立即持久化当前播放位置到 PlaybackPositionStore。
+  /// 供内核热切换前调用，确保新 player 的 initializePlayer
+  /// 内部的 _getVideoPosition 能读到最新位置。
+  Future<void> persistCurrentPositionForHotSwap({
+    required String path,
+    required int positionMs,
+  }) async {
+    if (path.isEmpty) return;
+    await _saveVideoPosition(path, positionMs);
   }
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）
