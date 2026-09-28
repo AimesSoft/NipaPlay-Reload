@@ -777,56 +777,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     icon: Icons.photo_size_select_small_outlined,
                     value: videoState.timelinePreviewEnabled,
                     onChanged: (bool value) async {
-                      if (value) {
-                        final bool? confirm = AdaptiveSettingsScope
-                                .isPhoneLayout(context)
-                            ? await cupertino.showCupertinoDialog<bool>(
-                                context: context,
-                                builder: (dialogContext) =>
-                                    cupertino.CupertinoAlertDialog(
-                                  title: const Text('开启警告'),
-                                  content: const Text(
-                                      '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
-                                  actions: [
-                                    cupertino.CupertinoDialogAction(
-                                      onPressed: () =>
-                                          Navigator.of(dialogContext)
-                                              .pop(false),
-                                      child: const Text('取消'),
-                                    ),
-                                    cupertino.CupertinoDialogAction(
-                                      isDefaultAction: true,
-                                      onPressed: () =>
-                                          Navigator.of(dialogContext).pop(true),
-                                      child: const Text('确认'),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : await showDialog<bool>(
-                                context: context,
-                                builder: (dialogContext) => AlertDialog(
-                                  title: const Text('开启警告'),
-                                  content: const Text(
-                                      '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
-                                  actions: [
-                                    AdaptiveSettingsActionButton(
-                                      label: '取消',
-                                      onPressed: () =>
-                                          Navigator.of(dialogContext)
-                                              .pop(false),
-                                    ),
-                                    AdaptiveSettingsActionButton(
-                                      label: '确认',
-                                      primary: true,
-                                      onPressed: () =>
-                                          Navigator.of(dialogContext).pop(true),
-                                    ),
-                                  ],
-                                ),
-                              );
-                        if (confirm != true) return;
-                      }
+                      // Windows 上原开启确认对话框的半透明遮罩会在部分显卡
+                      // （如 Intel Iris Xe）的合成层挂死，表现为点击开关瞬间
+                      // 窗口"未响应"；且 Windows 已改用 ffmpeg 独立子进程抽帧，
+                      // 不再有第二个播放器带来的性能开销，警告前提已不成立，
+                      // 故直接切换，与其他普通开关行为一致。
                       await videoState.setTimelinePreviewEnabled(value);
                       if (!context.mounted) return;
                       BlurSnackBar.show(
