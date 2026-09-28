@@ -80,36 +80,38 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [
-            Consumer<VideoPlayerState>(
-              builder: (context, videoState, child) {
-                final currentPath =
-                    (videoState.screenshotSaveDirectory ?? '').trim();
-                final updatedMessage =
-                    context.l10n.screenshotSaveLocationUpdated;
-                return AdaptiveSettingsTile<void>.card(
-                  title: context.l10n.screenshotSaveLocation,
-                  subtitle: currentPath.isEmpty
-                      ? context.l10n.defaultDownloadDir
-                      : currentPath,
-                  icon: Icons.camera_alt_outlined,
-                  phoneIcon: cupertino.CupertinoIcons.camera,
-                  onTap: () async {
-                    final selected = await FilePickerService().pickDirectory(
-                      initialDirectory:
-                          currentPath.isEmpty ? null : currentPath,
-                    );
-                    if (selected == null || selected.trim().isEmpty) return;
-                    await videoState.setScreenshotSaveDirectory(selected);
-                    if (!mounted) return;
-                    AdaptiveSnackBar.show(
-                      this.context,
-                      message: updatedMessage,
-                      type: AdaptiveSnackBarType.success,
-                    );
-                  },
-                );
-              },
-            ),
+            if (defaultTargetPlatform != TargetPlatform.iOS &&
+                defaultTargetPlatform != TargetPlatform.android)
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  final currentPath =
+                      (videoState.screenshotSaveDirectory ?? '').trim();
+                  final updatedMessage =
+                      context.l10n.screenshotSaveLocationUpdated;
+                  return AdaptiveSettingsTile<void>.card(
+                    title: context.l10n.screenshotSaveLocation,
+                    subtitle: currentPath.isEmpty
+                        ? context.l10n.defaultDownloadDir
+                        : currentPath,
+                    icon: Icons.camera_alt_outlined,
+                    phoneIcon: cupertino.CupertinoIcons.camera,
+                    onTap: () async {
+                      final selected = await FilePickerService().pickDirectory(
+                        initialDirectory:
+                            currentPath.isEmpty ? null : currentPath,
+                      );
+                      if (selected == null || selected.trim().isEmpty) return;
+                      await videoState.setScreenshotSaveDirectory(selected);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        this.context,
+                        message: updatedMessage,
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  );
+                },
+              ),
             if (defaultTargetPlatform == TargetPlatform.iOS)
               Consumer<VideoPlayerState>(
                 builder: (context, videoState, child) {
@@ -146,6 +148,68 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
                   );
                 },
               ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                return AdaptiveSettingsTile<ScreenshotQuality>.dropdown(
+                  title: '截图质量',
+                  subtitle: 'JPEG 质量：体积约为 PNG 的十分之一',
+                  icon: Icons.high_quality,
+                  phoneIcon: cupertino.CupertinoIcons.gauge,
+                  items: [
+                    for (final q in ScreenshotQuality.values)
+                      DropdownMenuItemData(
+                        title: q.label,
+                        value: q,
+                        isSelected: videoState.screenshotQuality == q,
+                        description: 'JPEG ${q.jpegQuality}',
+                      ),
+                  ],
+                  onChanged: videoState.setScreenshotQuality,
+                );
+              },
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含弹幕',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图输出原始视频帧，无法合成弹幕'
+                    : '关闭后截图不叠加当前弹幕',
+                icon: Icons.subtitles_outlined,
+                phoneIcon: cupertino.CupertinoIcons.chat_bubble,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
+                value: videoState.screenshotCaptureIncludesDanmaku,
+                onChanged: videoState.setScreenshotCaptureIncludesDanmaku,
+              ),
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图包含字幕',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图输出原始视频帧，无法合成字幕'
+                    : '关闭后截图不叠加内嵌与外挂字幕',
+                icon: Icons.closed_caption_outlined,
+                phoneIcon: cupertino.CupertinoIcons.text_bubble,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
+                value: videoState.screenshotCaptureIncludesSubtitles,
+                onChanged: videoState.setScreenshotCaptureIncludesSubtitles,
+              ),
+            ),
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) =>
+                  AdaptiveSettingsTile<bool>.toggle(
+                title: '截图裁剪黑边',
+                subtitle: videoState.player.getPlayerKernelName() == 'Erika'
+                    ? 'Erika 截图直接输出无播放器黑边的原始视频帧'
+                    : '截图不包含视频画面外的上下/左右黑边',
+                icon: Icons.crop_outlined,
+                phoneIcon: cupertino.CupertinoIcons.crop,
+                enabled: videoState.player.getPlayerKernelName() != 'Erika',
+                value: videoState.screenshotCropLetterbox,
+                onChanged: videoState.setScreenshotCropLetterbox,
+              ),
+            ),
             AdaptiveSettingsTile<void>.card(
               title: l10n.clearImageCache,
               subtitle: _isClearingImageCache

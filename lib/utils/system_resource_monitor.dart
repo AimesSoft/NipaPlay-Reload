@@ -33,7 +33,8 @@ class SystemResourceMonitor {
   String _thermalState = 'N/A';
 
   String _activeDecoder = '未知';
-  String _mdkVersion = '未知';
+    String _pixelFormat = '';
+    String _mdkVersion = '未知';
   String _playerKernelType = '未知';
   String _danmakuKernelType = '未知';
 
@@ -65,7 +66,8 @@ class SystemResourceMonitor {
   String get thermalState => _thermalState;
 
   String get activeDecoder => _activeDecoder;
-  String get mdkVersion => _mdkVersion;
+    String get pixelFormat => _pixelFormat;
+    String get mdkVersion => _mdkVersion;
   String get playerKernelType => _playerKernelType;
   String get danmakuKernelType => _danmakuKernelType;
 
@@ -375,8 +377,12 @@ class SystemResourceMonitor {
   }
 
   void setActiveDecoder(String decoder) {
-    _activeDecoder = decoder;
-  }
+      _activeDecoder = decoder;
+    }
+
+    void setPixelFormat(String format) {
+      _pixelFormat = format;
+    }
 
   void _updateDanmakuKernelType() {
     try {

@@ -1576,6 +1576,7 @@ class MainFlutterWindow: NSWindow {
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     PasswordInputModePlugin.register(with: flutterViewController.registrar(forPlugin: "PasswordInputModePlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
+    ClipboardImagePlugin.register(with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
 
     super.awakeFromNib()

@@ -17,11 +17,13 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 class ManualDanmakuMatchDialog extends StatefulWidget {
   final String? initialVideoTitle;
   final bool embedded;
+  final bool searchOnOpen;
 
   const ManualDanmakuMatchDialog({
     super.key,
     this.initialVideoTitle,
     this.embedded = false,
+    this.searchOnOpen = false,
   });
 
   @override
@@ -83,7 +85,11 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     }
     // 禁用全局热键
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       disableHotkeys();
+      if (widget.searchOnOpen && _searchController.text.trim().isNotEmpty) {
+        _performSearch();
+      }
     });
   }
 
@@ -291,19 +297,6 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: _accentColor.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            Icons.subtitles,
-            color: _accentColor,
-            size: 20,
-          ),
-        ),
-        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

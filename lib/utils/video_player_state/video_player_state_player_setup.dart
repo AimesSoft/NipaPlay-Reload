@@ -27,7 +27,38 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
+    bool manualMatchHandled = false,
   }) async {
+    final resolutionGeneration = ++_sourceResolutionGeneration;
+    final previousPlaybackGeneration = _playbackGeneration;
+    final resolutionContext = _context;
+    bool resolutionCancelled() =>
+        _isDisposed ||
+        resolutionGeneration != _sourceResolutionGeneration ||
+        previousPlaybackGeneration != _playbackGeneration;
+    if (actualPlayUrl == null &&
+        resolutionContext != null &&
+        resolutionContext.mounted &&
+        (videoPath.startsWith('https://') || videoPath.startsWith('http://'))) {
+      try {
+        final resolved = await PluginPlaybackService.prepare(
+          resolutionContext,
+          videoPath,
+          interactive: false,
+          historyItem: historyItem,
+          isCancelled: resolutionCancelled,
+        );
+        if (resolutionCancelled()) return;
+        if (resolved != null) {
+          videoPath = resolved.videoPath;
+          actualPlayUrl = resolved.actualPlayUrl;
+          historyItem = resolved.historyItem;
+          manualMatchHandled = true;
+        }
+      } on PluginResolutionCancelled {
+        return;
+      }
+    }
     _playbackErrorDialogRequested = false;
     final isRequestedEmbyStream = videoPath.startsWith('emby://');
     final requestedEmbyAccountKey = isRequestedEmbyStream
@@ -304,8 +335,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           '${_redactMediaUrlForLog(resolvedActualPlayUrl)}',
         );
       } catch (e) {
-        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $e');
-        _setStatus(PlayerStatus.error, message: '解析远程媒体路径失败: $e');
+        final safeError = MediaSourceUtils.safeRemotePathError(e);
+        debugPrint('VideoPlayerState: 解析远程媒体路径失败: $safeError');
+        _setStatus(
+          PlayerStatus.error,
+          message: '解析远程媒体路径失败，请检查连接配置（$safeError）',
+        );
         _error = '解析远程媒体路径失败';
         _requestPlaybackErrorDialog();
         return;
@@ -474,6 +509,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 准备播放器
       mediaPrepareStarted = true;
       await player.prepare();
+      debugPrint('[PlayerSetup] prepare 完成 kernel=${player.getPlayerKernelName()} '
+          'state=${player.state}');
+      // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
+      debugPrint('[PlayerSetup] 媒体已 prepare，内核自动进入播放');
       final bool isMediaServer = videoPath.startsWith('jellyfin://') ||
           videoPath.startsWith('emby://');
       final bool isNetworkMedia = isMediaServer ||
@@ -533,8 +572,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // 其他内核保持原有最多10秒的兼容轮询，不改变其启动体验。
         for (var waitCount = 0; waitCount < 100; waitCount++) {
           await Future.delayed(const Duration(milliseconds: 100));
-          if (player.state == PlaybackState.playing ||
-              player.state == PlaybackState.paused ||
+          if (player.state == PlaybackState.playing) {
+            break;
+          }
+          if (player.state == PlaybackState.paused ||
               (player.mediaInfo.duration > 0 &&
                   (player.prefersPlatformVideoSurface ||
                       player.textureId.value != null))) {
@@ -542,6 +583,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           }
         }
       }
+      debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
+          '进入纹理阶段');
       mediaPrepareCompleted = true;
 
       //debugPrint('5. 获取视频纹理...');
@@ -925,6 +968,25 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           return;
         }
 
+        if (manualMatchHandled) {
+          if (_episodeId != null &&
+              _animeId != null &&
+              _episodeId! > 0 &&
+              _animeId! > 0) {
+            try {
+              await loadDanmaku(_episodeId.toString(), _animeId.toString());
+            } catch (e) {
+              if (!canContinue()) return;
+              _clearDanmakuAutoLoadState();
+              _addStatusMessage('手动匹配的弹幕加载失败');
+            }
+          }
+          if (!canContinue()) return;
+          _applyTimelineDanmakuTrackForCurrentVideo();
+          _updateMergedDanmakuList();
+          return;
+        }
+
         // 针对Jellyfin流媒体视频的特殊处理
         bool jellyfinDanmakuHandled = false;
         try {
@@ -1020,7 +1082,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // media clock paused while the loading layer mounts the real DFM+
         // instance, fills its glyph atlas, and publishes its first frame.
         if (player.state == PlaybackState.playing) {
-          await player.pauseDirectly();
+          unawaited(player.pauseDirectly());
         }
         if (_isDisposed || initializationGeneration != _playbackGeneration) {
           return;
@@ -1089,7 +1151,6 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       //debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
       if (lastPosition == 0) {
         // 从头播放
-        // debugPrint('VideoPlayerState: Initializing playback from start, calling play().'); // <--- REMOVED PRINT
         play(); // Call our central play method
       } else {
         // 从中间恢复
@@ -1099,12 +1160,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             PlayerStatus.playing,
             message: '正在播放 (恢复)',
           ); // Sync our status
-          // debugPrint('VideoPlayerState: Player already playing on resume. Directly starting screenshot timer.'); // <--- REMOVED PRINT
           _startScreenshotTimer(); // Start timer directly
         } else {
           // Player did not auto-play after seek, or was paused. We need to start it.
           // _status should be 'ready' from earlier _setStatus call in initializePlayer
-          // debugPrint('VideoPlayerState: Resuming playback (player was not auto-playing), calling play().'); // <--- REMOVED PRINT
           play(); // Call our central play method
         }
       }

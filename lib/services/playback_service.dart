@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -26,6 +27,18 @@ class PlaybackService {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (!settings.useExternalPlayer) return false;
 
+    if (item.actualPlayUrl == null &&
+        (item.videoPath.startsWith('https://') ||
+            item.videoPath.startsWith('http://'))) {
+      item = await PluginPlaybackService.prepare(
+            context,
+            item.videoPath,
+            interactive: false,
+            historyItem: item.historyItem,
+          ) ??
+          item;
+      if (!context.mounted) return false;
+    }
     final launched = await ExternalPlayerService.play(settings, item);
     if (!launched) return false;
     if (settings.externalPlayerConsoleWindowMode) {

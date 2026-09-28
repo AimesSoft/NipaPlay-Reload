@@ -174,7 +174,21 @@ class ScanService with ChangeNotifier {
   int _totalFilesFound = 0;
   int get totalFilesFound => _totalFilesFound;
 
-  ScanService() {
+  final Future<List<VideoProcessResult>> Function(List<String>)
+      _completedFilesProcessor;
+
+  @visibleForTesting
+  ScanService.forTesting({
+    required Future<List<VideoProcessResult>> Function(List<String>)
+        completedFilesProcessor,
+  }) : _completedFilesProcessor = completedFilesProcessor;
+
+  static Future<List<VideoProcessResult>> _processCompletedFiles(
+          List<String> paths) =>
+      ConcurrentVideoProcessor.processVideoPaths(paths,
+          skipPreviouslyMatchedUnwatched: true);
+
+  ScanService() : _completedFilesProcessor = _processCompletedFiles {
     // 媒体文件夹列表从 SharedPreferences 异步加载，
     // 保留这个 Future，等它加载完成后再触发启动智能刷新。
     final foldersLoaded = _loadScannedFolders();
@@ -952,6 +966,37 @@ class ScanService with ChangeNotifier {
     } else if (isPartOfBatch) {
       _totalFilesFound += videoPaths.length;
       await _updateFileHashes(directoryPath, precomputedDiff: diff);
+    }
+  }
+
+  /// Import the exact completed files, without registering a shared download
+  /// directory that could later expose other torrents' unfinished files.
+  Future<bool> scanCompletedFiles(List<String> paths,
+      {required String folderPath}) async {
+    if (kIsWeb || _isScanning) return false;
+    if (paths.isEmpty) return true;
+    _updateScanState(scanning: true, progress: 0, message: '正在扫描已完成的下载文件');
+    try {
+      final results = await _completedFilesProcessor(paths);
+      if (!_isScanning) return false;
+      final failures = results.where((result) => !result.success).toList();
+      final scannedPaths = paths.toSet();
+      _failedScanFiles.removeWhere((file) => scannedPaths.contains(file.filePath));
+      _recordFailedScanFiles(folderPath, failures);
+      _totalFilesFound = paths.length;
+      final succeeded = failures.isEmpty;
+      _updateScanState(
+        scanning: false,
+        progress: 1,
+        message: succeeded ? '下载文件已加入媒体库' : '部分下载文件扫描失败，稍后重试',
+        completed: true,
+      );
+      return succeeded;
+    } catch (error) {
+      _updateScanState(scanning: false, message: '扫描下载文件失败: $error', completed: true);
+      return false;
+    } finally {
+      if (_isScanning) _updateScanState(scanning: false);
     }
   }
 

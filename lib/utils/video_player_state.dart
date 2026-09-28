@@ -1,6 +1,11 @@
 library video_player_state;
 
+export 'video_aspect_geometry.dart' show VideoAspectMode;
+
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay/services/plugin_playback_service.dart';
+import 'package:nipaplay/plugins/url_resolver.dart';
+import 'video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -11,6 +16,7 @@ import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
+import '../player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
@@ -223,9 +229,38 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
 
 enum ScreenshotSaveTarget { ask, photos, file }
 
+/// 截图保存质量档（JPEG 质量；体积与清晰度取舍）
+enum ScreenshotQuality { standard, high, ultra, max }
+
+extension ScreenshotQualityDisplay on ScreenshotQuality {
+  static ScreenshotQuality fromPrefs(int? value) {
+    if (value == null) return ScreenshotQuality.ultra;
+    if (value < 0 || value >= ScreenshotQuality.values.length) {
+      return ScreenshotQuality.ultra;
+    }
+    return ScreenshotQuality.values[value];
+  }
+
+  int get prefsValue => index;
+
+  int get jpegQuality => switch (this) {
+        ScreenshotQuality.standard => 70,
+        ScreenshotQuality.high => 85,
+        ScreenshotQuality.ultra => 92,
+        ScreenshotQuality.max => 100,
+      };
+
+  String get label => switch (this) {
+        ScreenshotQuality.standard => '标准（体积最小）',
+        ScreenshotQuality.high => '高清（推荐）',
+        ScreenshotQuality.ultra => '超清（默认）',
+        ScreenshotQuality.max => '极致（接近无损）',
+      };
+}
+
 extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
   static ScreenshotSaveTarget fromPrefs(int? value) {
-    if (value == null) return ScreenshotSaveTarget.ask;
+    if (value == null) return ScreenshotSaveTarget.file;
     if (value < 0 || value >= ScreenshotSaveTarget.values.length) {
       return ScreenshotSaveTarget.ask;
     }
@@ -275,6 +310,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
   int _playbackGeneration = 0;
+  /// Changes whenever a new playback session starts, including a reload of
+  /// the same video path.
+  int get playbackGeneration => _playbackGeneration;
+  int _sourceResolutionGeneration = 0;
+  int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;
   bool _isDfmStartupGatePending = false;
@@ -325,6 +365,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _playerTopSkipButtonVisible = false;
   bool _playerTopResizeButtonVisible = false;
   bool _playerTopFrameStepButtonsVisible = false;
+  bool _showPlayerMenuQuickControls = false;
   // MKV 章节标记开关：显示 MKV 自带章节在进度条上的分割线标记/当前章节高亮/点击跳转
   final String _chapterMarkersEnabledKey = 'chapter_markers_enabled';
   bool _chapterMarkersEnabled = true; // 默认开启
@@ -417,8 +458,49 @@ int _exactEndStreak = 0;
     debugLabel: 'player_screenshot_boundary',
   );
   bool _isCapturingScreenshot = false;
-  bool _screenshotCaptureIncludesDanmaku = true; // 上游截图/录屏：截图是否包含弹幕
-  bool _screenshotCaptureIncludesSubtitles = true; // 上游截图/录屏：截图是否包含字幕
+  // 截图/GIF 导出时是否包含弹幕与字幕（由截图对话框临时切换）
+  bool _screenshotCaptureIncludesDanmaku = true;
+  bool _screenshotCaptureIncludesSubtitles = true;
+  // 截图时裁剪视频画面外的黑边（letterbox/pillarbox），默认开启
+  bool _screenshotCropLetterbox = true;
+  // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
+  VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  final String _videoAspectModeKey = 'video_aspect_mode';
+  // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
+    String _softDecodePixelFormat = '';
+    final String _softDecodePixelFormatKey = 'soft_decode_pixel_format';
+    // 硬解模式（mpv hwdec 值，照搬 PiliPlus），默认自动
+    HwDecType _hwdecMode = HwDecType.auto;
+    final String _hwdecModeKey = 'hwdec_mode';
+  final String _screenshotIncludeDanmakuKey = 'screenshot_include_danmaku';
+  final String _screenshotIncludeSubtitlesKey = 'screenshot_include_subtitles';
+  final String _screenshotCropLetterboxKey = 'screenshot_crop_letterbox';
+  bool get screenshotCaptureIncludesDanmaku =>
+      _screenshotCaptureIncludesDanmaku;
+  bool get screenshotCaptureIncludesSubtitles =>
+      _screenshotCaptureIncludesSubtitles;
+  bool get screenshotCropLetterbox => _screenshotCropLetterbox;
+  /// Window-hosted native video is composited outside Flutter's clip/scale tree.
+  bool get supportsVideoAspectModes {
+    if (player.usesWindowOverlayVideoSurface) return false;
+    if (kIsWeb || !player.prefersPlatformVideoSurface) return true;
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] == '1' ||
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] == '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] ==
+          '1';
+    }
+    return true;
+  }
+
+  // 截图帧合成期间（_isCapturingScreenshot=true）且设置不含弹幕/字幕时，
+  // 弹幕层与字幕叠层临时隐藏——只影响截图帧，不影响正常观看。
+  bool get shouldHideDanmakuForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesDanmaku;
+  bool get shouldHideSubtitlesForScreenshot =>
+      _isCapturingScreenshot && !_screenshotCaptureIncludesSubtitles;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
@@ -430,7 +512,9 @@ int _exactEndStreak = 0;
   final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
   final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
-  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
+  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
+  final String _screenshotQualityKey = 'screenshot_quality';
+  ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -575,6 +659,7 @@ int _exactEndStreak = 0;
       ? defaultTvOSErikaDanmakuOutlineWidthLevel
       : defaultDanmakuOutlineWidthLevel;
   TitanDanmakuSettings _titanDanmakuSettings = const TitanDanmakuSettings();
+  final Completer<void> _initialDanmakuSettingsReady = Completer<void>();
   Timer? _titanDanmakuSettingsPersistenceTimer;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
@@ -621,8 +706,6 @@ int _exactEndStreak = 0;
   final String _subtitleOverrideModeKey = 'subtitle_override_mode';
     final String _srtSubtitleDelayKey = 'srt_subtitle_delay';
     double _subtitleScale = defaultSubtitleScale;
-  // 字体列表缓存（listSubtitleFonts 复用，面板即时显示）
-  static List<String>? _cachedSubtitleFontNames;
   // 已注册进 Flutter 引擎的字幕字体文件路径（FontLoader 重复加载同一族会抛错）
   static final Set<String> _registeredSubtitleRuntimeFontPaths = <String>{};
   static bool _subtitleFontRegistrationWarned = false;
@@ -640,8 +723,16 @@ int _exactEndStreak = 0;
   bool _subtitleBold = false;
   bool _subtitleItalic = false;
   int _subtitleColorValue = defaultSubtitleColorValue;
-  int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
-  int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
+    int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+    // 外挂叠层独立颜色（默认白）——长按外挂的调色板设这里，
+    // 不影响字幕设置面板颜色（那只管内嵌轨 sub-color）
+    int _externalSubtitleColorValue = 0xFFFFFFFF;
+      final String _externalSubtitleColorKey = 'external_subtitle_color';
+      // 外挂叠层独立字体（默认空=系统字体）——长按外挂选字体设这里，
+      // 不影响播放器设置（subtitleFontName 只管内嵌 sub-font）
+      String _externalSubtitleFontName = '';
+      final String _externalSubtitleFontNameKey = 'external_subtitle_font_name';
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
@@ -864,7 +955,12 @@ int _exactEndStreak = 0;
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     PlayerRemoteControlBridge.instance.attach(this);
-    _initialize();
+    unawaited(_initialize().whenComplete(() {
+      // Do not leave the renderer waiting if initialization exits early.
+      if (!_initialDanmakuSettingsReady.isCompleted) {
+        _initialDanmakuSettingsReady.complete();
+      }
+    }));
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
@@ -1140,9 +1236,7 @@ int _exactEndStreak = 0;
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
-  bool get screenshotCaptureIncludesDanmaku => _screenshotCaptureIncludesDanmaku;
-  bool get screenshotCaptureIncludesSubtitles =>
-      _screenshotCaptureIncludesSubtitles;
+  ScreenshotQuality get screenshotQuality => _screenshotQuality;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1173,6 +1267,8 @@ int _exactEndStreak = 0;
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   TitanDanmakuSettings get titanDanmakuSettings => _titanDanmakuSettings;
+  Future<void> get initialDanmakuSettingsReady =>
+      _initialDanmakuSettingsReady.future;
   double get subtitleScale => _subtitleScale;
   double get srtSubtitleScale => _srtSubtitleScale;
   double get subtitleDelayCustomLimitSeconds {
@@ -1191,6 +1287,7 @@ int _exactEndStreak = 0;
   bool get playerTopResizeButtonVisible => _playerTopResizeButtonVisible;
   bool get playerTopFrameStepButtonsVisible =>
       _playerTopFrameStepButtonsVisible;
+  bool get showPlayerMenuQuickControls => _showPlayerMenuQuickControls;
 
   double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
     final limit = subtitleDelayCustomLimitSeconds;
@@ -1496,8 +1593,10 @@ int _exactEndStreak = 0;
   bool get subtitleBold => _subtitleBold;
   bool get subtitleItalic => _subtitleItalic;
   Color get subtitleColor => Color(_subtitleColorValue);
-  Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
-  Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
+    Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+    Color get externalSubtitleColor => Color(_externalSubtitleColorValue);
+  String get externalSubtitleFontName => _externalSubtitleFontName;
   String get subtitleFontName => _subtitleFontName;
   String get subtitleFontDir => _subtitleFontDir;
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;
@@ -1528,7 +1627,9 @@ int _exactEndStreak = 0;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentMediaKey => _currentMediaKey;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
-  // 兼容上游：当前实际播放地址（优先）或视频路径经远程路径解析后的地址
+
+  /// 当前已解析的媒体源 URL（实际播放地址优先，回退视频路径）；
+  /// 截图/GIF 导出等需要直链的功能使用。
   String? get currentResolvedMediaSource {
     final actual = _currentActualPlayUrl?.trim();
     if (actual != null && actual.isNotEmpty) {

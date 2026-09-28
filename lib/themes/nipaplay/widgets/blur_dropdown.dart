@@ -26,6 +26,12 @@ class BlurDropdown<T> extends StatefulWidget {
   final List<DropdownMenuItemData<T>> items;
   final FutureOr<void> Function(T value) onItemSelected;
   final BlurDropdownControlBuilder? controlBuilder;
+  final double? menuWidth;
+
+  /// 打开菜单时是否预先高亮一行（默认 true，与既有下拉一致）。
+  /// 纯动作菜单没有“当前选中项”语义，可置 false：指针打开时不高亮任何一行，
+  /// 键盘/手柄导航仍会在菜单获得焦点后正常高亮。
+  final bool highlightInitialItem;
 
   const BlurDropdown({
     super.key,
@@ -33,6 +39,8 @@ class BlurDropdown<T> extends StatefulWidget {
     required this.items,
     required this.onItemSelected,
     this.controlBuilder,
+    this.menuWidth,
+    this.highlightInitialItem = true,
   });
 
   static bool get isAnyExpanded => _BlurDropdownGlobalState.expandedCount > 0;
@@ -67,7 +75,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   void initState() {
     super.initState();
     _currentSelectedValue = _findInitialValue();
-    _keyboardHighlightedIndex = _findSelectedIndex();
+    _keyboardHighlightedIndex = _initialHighlightIndex();
     _animationController = AnimationController(
       vsync: this,
       duration: _animationDuration,
@@ -177,6 +185,15 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       return 0;
     }
     return selectedIndex;
+  }
+
+  /// 菜单打开时的初始高亮行。-1 表示不高亮任何一行。
+  /// 以键盘/手柄打开（大屏模式主动请求焦点）时仍需有高亮行供确认键操作。
+  int _initialHighlightIndex({bool forKeyboardFocus = false}) {
+    if (!widget.highlightInitialItem && !forKeyboardFocus) {
+      return -1;
+    }
+    return _findSelectedIndex();
   }
 
   void _moveHighlighted(int delta) {
@@ -436,6 +453,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         _closeDropdown(restoreControlFocus: true);
         return KeyEventResult.handled;
       }
+      // highlightInitialItem 为 false 时可能尚无高亮行（例如鼠标展开菜单后
+      // Tab 进入菜单再按确认键），此时不做任何操作，避免越界取值。
+      if (_keyboardHighlightedIndex < 0 ||
+          _keyboardHighlightedIndex >= widget.items.length) {
+        return KeyEventResult.handled;
+      }
       final item = widget.items[_keyboardHighlightedIndex];
       if (!item.enabled) {
         return KeyEventResult.handled;
@@ -509,7 +532,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     final Color dropdownBgColor =
         isDark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFFFF);
 
-    _keyboardHighlightedIndex = _findSelectedIndex();
+    _keyboardHighlightedIndex = _initialHighlightIndex(
+      forKeyboardFocus: requestMenuFocus,
+    );
 
     _overlayEntry = OverlayEntry(
       builder: (overlayContext) {
@@ -549,9 +574,11 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     onTap: () {},
                     child: Container(
                       constraints: BoxConstraints(
-                        maxWidth: screenWidth - left - safeRight > 100
-                            ? screenWidth - left - safeRight
-                            : size.width * 1.5,
+                        minWidth: widget.menuWidth ?? 0,
+                        maxWidth: widget.menuWidth ??
+                            (screenWidth - left - safeRight > 100
+                                ? screenWidth - left - safeRight
+                                : size.width * 1.5),
                         maxHeight: screenHeight - top - 10,
                       ),
                       decoration: BoxDecoration(
@@ -579,7 +606,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                             final item = widget.items[index];
                             final isHighlighted =
                                 index == _keyboardHighlightedIndex;
-                            final isSelected =
+                            final isSelected = widget.highlightInitialItem &&
                                 item.value == _currentSelectedValue;
                             final backgroundColor = isHighlighted
                                 ? AppAccentColors.current.withValues(alpha: 0.2)

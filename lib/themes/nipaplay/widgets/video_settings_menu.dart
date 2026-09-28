@@ -499,7 +499,11 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             .build()
             .where((item) => item.paneId != PlayerMenuPaneId.playlist)
             .toList();
-        final double menuHeight = _heightForSettingsItemCount(menuItems.length + 4);
+        final showQuickControls =
+            videoState.showPlayerMenuQuickControls && videoState.hasVideo;
+        final double menuHeight = _heightForSettingsItemCount(
+          menuItems.length + (showQuickControls ? 4 : 1),
+        );
         final bool hideBackForStandaloneInitialPane =
             widget.hideBackButtonForInitialPane &&
                 widget.initialPaneId != null &&
@@ -521,7 +525,8 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const PlayerQuickControls(),
+                      if (showQuickControls)
+                        const PlayerQuickControls(),
                       ...menuItems.map((item) => _buildSettingsItem(item)),
                     ],
                   ),

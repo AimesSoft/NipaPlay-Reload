@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
@@ -39,7 +40,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   bool _isLoadingWindow = false;
 
   // 用于计算位置的参数
-  final double _estimatedItemHeight = 80.0; // 预估每项高度
+  double _estimatedItemHeight = 80.0; // 预估每项高度（首次定位后按真实布局校准）
+  // 当前高亮条目的 Key，用于基于真实 RenderBox 精确定位（估算高度存在偏差）
+  final GlobalKey _currentItemKey = GlobalKey();
+  bool _locatingUnbuiltItem = false;
 
   @override
   void initState() {
@@ -69,7 +73,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
   // 处理滚动事件
   void _handleScroll() {
-    if (_isLoadingWindow || _allSubtitleEntries.isEmpty) return;
+    if (_isLoadingWindow ||
+        _locatingUnbuiltItem ||
+        _allSubtitleEntries.isEmpty) {
+      return;
+    }
 
     // 计算当前滚动位置对应的索引
     final scrollPosition = _scrollController.position.pixels;
@@ -270,14 +278,133 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
     // 设置滚动位置到当前时间对应的字幕
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        final localIndex = centerIndex - _windowStartIndex;
-        if (localIndex >= 0 && localIndex < _visibleEntries.length) {
-          final targetPosition = localIndex * _estimatedItemHeight;
-          _scrollController.jumpTo(targetPosition);
-        }
-      }
+      _scrollToCurrentItem(centerIndex, animated: false);
     });
+  }
+
+  // 精确定位到当前高亮条目。
+  // 根因：条目真实高度随台词行数变化（估算 80px，两/三行台词约 81~101px），
+  // 初始窗口以当前条目为中心（局部索引约 50），估算偏移误差被线性放大
+  // （50 条 × ±10~20px ≈ ±500~1000px，约 5~10 条），高亮会落到可视区
+  // （约 9 条）之外，需要再手动滑动才能看到（用户反馈）。
+  // 策略：先用估算高度粗定位（让目标条目进入构建范围），等真实布局完成
+  // 后用 Scrollable.ensureVisible 基于实际 RenderBox 校正到视口 30% 处；
+  // 若目标条目仍未被构建，则先用实测内容高度校准估算值再重跳一次。
+  void _scrollToCurrentItem(int globalIndex, {required bool animated}) {
+    final localIndex = globalIndex - _windowStartIndex;
+    if (localIndex < 0 || localIndex >= _visibleEntries.length) return;
+
+    // 1) 粗定位：按当前估算高度跳转
+    if (_scrollController.hasClients) {
+      final target = (localIndex * _estimatedItemHeight)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      if ((_scrollController.offset - target).abs() > 1) {
+        _scrollController.jumpTo(target);
+      }
+    }
+
+    // 2) 下一帧基于真实布局精确校正
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _calibrateItemHeight();
+      final itemContext = _currentItemKey.currentContext;
+      if (itemContext != null) {
+        Scrollable.ensureVisible(
+          itemContext,
+          alignment: 0.3,
+          duration:
+              animated ? const Duration(milliseconds: 250) : Duration.zero,
+          curve: Curves.easeInOut,
+        );
+        return;
+      }
+
+      // 3) 目标条目仍未构建（估算偏差超出预渲染范围）：用校准后的高度重跳，
+      //    再等一帧做最终校正。
+      if (!_scrollController.hasClients) return;
+      final target = (localIndex * _estimatedItemHeight)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      _scrollController.jumpTo(target);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final ctx = _currentItemKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.3,
+            duration:
+                animated ? const Duration(milliseconds: 250) : Duration.zero,
+            curve: Curves.easeInOut,
+          );
+        } else {
+          _locateUnbuiltItem(globalIndex);
+        }
+      });
+    });
+  }
+
+  // Variable-height rows can defeat both estimated jumps. Put the target at
+  // the start of a new window so SliverList must build it, then reveal it.
+  void _locateUnbuiltItem(int globalIndex) {
+    if (_locatingUnbuiltItem || !_scrollController.hasClients) return;
+    _locatingUnbuiltItem = true;
+    _updateVisibleWindow(globalIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _locatingUnbuiltItem = false;
+        return;
+      }
+      _scrollController.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final itemContext = _currentItemKey.currentContext;
+          if (itemContext != null) {
+            Scrollable.ensureVisible(itemContext, alignment: 0.3);
+          }
+        }
+        _locatingUnbuiltItem = false;
+      });
+    });
+  }
+
+  void _keepCurrentItemVisible(int globalIndex) {
+    if (!_scrollController.hasClients) return;
+    final itemContext = _currentItemKey.currentContext;
+    if (itemContext == null) {
+      _locateUnbuiltItem(globalIndex);
+      return;
+    }
+    final item = itemContext.findRenderObject();
+    final viewport = RenderAbstractViewport.maybeOf(item);
+    if (item == null || viewport == null) return;
+    final pixels = _scrollController.position.pixels;
+    final leading = viewport.getOffsetToReveal(item, 0).offset;
+    final trailing = viewport.getOffsetToReveal(item, 1).offset;
+    if (leading >= pixels - 1 && trailing <= pixels + 1) return;
+    Scrollable.ensureVisible(
+      itemContext,
+      alignment: 0.3,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  // 用列表实际内容高度校准估算条目高度：
+  // 内容高度 = maxScrollExtent + 视口高度，平均条目高度 = 内容高度 / 条目数。
+  // ListView 的 maxScrollExtent 基于已构建条目的实测平均高度推算，
+  // 因此该值是接近真实的样本，可显著收敛估算偏差。
+  void _calibrateItemHeight() {
+    if (!_scrollController.hasClients || _visibleEntries.isEmpty) return;
+    final position = _scrollController.position;
+    if (position.viewportDimension <= 0 || position.maxScrollExtent <= 0) {
+      return;
+    }
+    final contentHeight = position.maxScrollExtent + position.viewportDimension;
+    final measured = contentHeight / _visibleEntries.length;
+    if (measured > 0 &&
+        (measured - _estimatedItemHeight).abs() / _estimatedItemHeight > 0.05) {
+      _estimatedItemHeight = measured;
+    }
   }
 
   // 更新可见窗口
@@ -348,21 +475,19 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       }
     }
 
-    // 如果没有匹配的，查找最接近的字幕
-    int closestIndex = 0;
-    int minDistance = -1;
-
+    // 没有区间命中=台词间隙：取"已开始(start<=position)的最后一条"，
+    // 与 cupertino_subtitle_list_pane 语义一致（iOS/Android 行为对齐）。
+    // 旧实现按 |start-position| 绝对最近，间隙不对称时会漂到下一条台词。
+    int lastIndex = 0;
     for (int i = 0; i < _allSubtitleEntries.length; i++) {
       final entry = _allSubtitleEntries[i];
-      final distance = (entry.startTimeMs - currentTimeMs).abs();
-
-      if (minDistance == -1 || distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
+      if (entry.startTimeMs <= currentTimeMs) {
+        lastIndex = i;
+      } else {
+        return lastIndex;
       }
     }
-
-    return closestIndex;
+    return lastIndex;
   }
 
   // 更新当前高亮的字幕索引
@@ -410,9 +535,14 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     final isInVisibleWindow =
         localIndex >= 0 && localIndex < _visibleEntries.length;
 
-    // 如果当前字幕不在可见窗口中，更新窗口
+    // 如果当前字幕不在可见窗口中，更新窗口并重新定位到该条目
     if (!isInVisibleWindow) {
       _updateVisibleWindow(globalIndex - (_windowSize ~/ 2));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToCurrentItem(globalIndex, animated: true);
+        }
+      });
       return;
     }
 
@@ -422,22 +552,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
         _currentSubtitleIndex = localIndex;
       });
 
-      // 如果当前字幕在可见窗口中但不在可见区域，自动滚动到该位置
-      if (_scrollController.hasClients) {
-        final itemOffset = localIndex * _estimatedItemHeight;
-        final visibleStart = _scrollController.offset;
-        final visibleEnd =
-            visibleStart + _scrollController.position.viewportDimension;
-
-        if (itemOffset < visibleStart ||
-            itemOffset > visibleEnd - _estimatedItemHeight) {
-          _scrollController.animateTo(
-            itemOffset,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
+      // 切句后只在高亮条目超出视口时滚动，避免每句都重新对齐。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _currentSubtitleIndex != localIndex) return;
+        _keepCurrentItemVisible(globalIndex);
+      });
     }
   }
 
@@ -586,6 +705,9 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                         }
 
                                         return Material(
+                                          key: isCurrentSubtitle
+                                              ? _currentItemKey
+                                              : null,
                                           color: isCurrentSubtitle
                                               ? menuColors.selectedBackground
                                               : Colors.transparent,
@@ -748,6 +870,9 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                           }
 
                                           return Material(
+                                            key: isCurrentSubtitle
+                                                ? _currentItemKey
+                                                : null,
                                             color: isCurrentSubtitle
                                                 ? menuColors.selectedBackground
                                                 : Colors.transparent,

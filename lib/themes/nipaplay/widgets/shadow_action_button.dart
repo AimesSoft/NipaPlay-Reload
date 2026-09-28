@@ -7,6 +7,7 @@ class ShadowActionButton extends StatefulWidget {
   final String? tooltip;
   final IconData icon;
   final VoidCallback onPressed;
+  final VoidCallback? onLongPress;
   final double iconSize;
   final EdgeInsetsGeometry padding;
 
@@ -15,6 +16,7 @@ class ShadowActionButton extends StatefulWidget {
     this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.onLongPress,
     this.iconSize = 28,
     this.padding = const EdgeInsets.all(8.0),
   });
@@ -35,10 +37,9 @@ class _ShadowActionButtonState extends State<ShadowActionButton> {
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapCancel: () => setState(() => _isPressed = false),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onPressed();
-      },
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTap: widget.onPressed,
+      onLongPress: widget.onLongPress,
       child: Padding(
         padding: widget.padding,
         child: AnimatedScale(

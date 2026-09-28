@@ -86,7 +86,7 @@ void main() {
 
   test('字节预算淘汰只丢索引，不释放正在显示的句柄', () async {
     final originalBudget = ImageCacheManager.maxBytes;
-    ImageCacheManager.maxBytes = 1; // 存进任何一张都超预算，逼出淘汰路径
+    ImageCacheManager.maxBytes = 4; // 单张 1x1 RGBA 可缓存，第二张触发淘汰
     try {
       const urlA = 'https://example.com/budget-a.png';
       const urlB = 'https://example.com/budget-b.png';
@@ -146,7 +146,7 @@ void main() {
 
   test('touch 让正在显示的图片不再是最久未访问的那一个', () async {
     final originalBudget = ImageCacheManager.maxBytes;
-    ImageCacheManager.maxBytes = 1;
+    ImageCacheManager.maxBytes = 4;
     try {
       const urlA = 'https://example.com/touch-a.png';
       const urlB = 'https://example.com/touch-b.png';

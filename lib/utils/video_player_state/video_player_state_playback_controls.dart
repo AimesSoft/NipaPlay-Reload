@@ -401,7 +401,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         BlurDialog.show<void>(
           context: dialogContext,
           title: '播放错误',
-          content: _error ?? '远程视频载入失败，请检查网络或存储设备。',
+          content: MediaSourceUtils.playbackErrorForDisplay(
+            _error ?? '远程视频载入失败，请检查网络或存储设备。',
+            _currentVideoPath,
+          ),
           actions: [
             TextButton(
               onPressed: () {
@@ -509,6 +512,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void pause() {
+    _playbackIntentGeneration++;
     if (_status == PlayerStatus.playing) {
       final bool isWindowsMediaKit = !kIsWeb &&
           Platform.isWindows &&
@@ -587,6 +591,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void play() {
+    _playbackIntentGeneration++;
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
       '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, '

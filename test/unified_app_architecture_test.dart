@@ -1543,7 +1543,8 @@ void main() {
     const deleteDialog = TorrentDeleteDialogViewModel(task: task);
 
     expect(item.primaryAction.label, '播放');
-    item.primaryAction.onPressed();
+    expect(item.primaryAction.onPressed, isNotNull);
+    item.primaryAction.onPressed!();
     expect(played, isTrue);
     expect(item.scanStatusText, '已加入媒体库');
     expect(deleteDialog.title, '删除任务和文件');
