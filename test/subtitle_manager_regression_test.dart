@@ -10,6 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _UnusedPlayerDelegate extends Fake implements AbstractPlayer {
   @override
   bool get supportsExternalSubtitles => false;
+
+  @override
+  List<int> get activeSubtitleTracks => [];
 }
 
 void main() {
@@ -72,6 +75,30 @@ void main() {
     } finally {
       manager.dispose();
       await subtitleDir.delete(recursive: true);
+    }
+  });
+  test('episode reset clears the stack and pending stack additions', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final dir = await Directory.systemTemp.createTemp('subtitle_reset_');
+    final subtitle = File('${dir.path}/episode1.srt');
+    await subtitle.writeAsString('1\n00:00:00,000 --> 00:00:01,000\nHello\n');
+    final manager =
+        SubtitleManager(player: Player.withDelegate(_UnusedPlayerDelegate()));
+    try {
+      manager.setCurrentVideoPath('${dir.path}/episode1.mkv');
+      manager.setExternalSubtitle(subtitle.path);
+      await manager.preloadSubtitleFile(subtitle.path);
+      manager.clearExternalSubtitle(notifyListenersToo: false);
+      manager.setCurrentVideoPath('${dir.path}/episode2.mkv');
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      expect(manager.shouldRenderCurrentExternalSubtitleInApp(), isFalse);
+      final pending = manager.addExternalSubtitleToStack(subtitle.path);
+      manager.clearExternalSubtitle(notifyListenersToo: false);
+      await pending;
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+    } finally {
+      manager.dispose();
+      await dir.delete(recursive: true);
     }
   });
 }
