@@ -9,7 +9,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/media_library/pick_local_media_directory.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
@@ -71,7 +71,13 @@ Future<AdaptiveAddMediaResult?> _addLocalFolder(
     _showMessage(context, '已有扫描任务在进行中，请稍后');
     return null;
   }
-  final directory = await FilePickerService().pickDirectory();
+  String? directory;
+  try {
+    directory = await pickLocalMediaDirectory(context);
+  } catch (error) {
+    if (context.mounted) _showMessage(context, '添加本地媒体失败：$error');
+    return null;
+  }
   if (!context.mounted || directory == null || directory.trim().isEmpty) {
     return null;
   }
