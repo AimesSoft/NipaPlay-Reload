@@ -32,6 +32,10 @@ class _CupertinoSubtitleTracksPaneState
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
 
+  /// 远程字幕选择弹窗打开期间为 true：`_isLoading` 在弹窗出现前就复位了，
+  /// 没有它，弹窗开着时再点按钮会叠出第二个选择弹窗。
+  bool _isPickingRemote = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +52,21 @@ class _CupertinoSubtitleTracksPaneState
     try {
       final subtitles = await _subtitleService.loadExternalSubtitles(path);
       if (!mounted) return;
+      // 哈希名条目（旧版本写入的远程缓存路径）用下载登记的原名归正展示
+      for (final subtitle in subtitles) {
+        final entryPath = subtitle['path']?.toString() ?? '';
+        final entryName = subtitle['name']?.toString() ?? '';
+        if (entryPath.isEmpty) continue;
+        final isHashNamed = entryName.isEmpty ||
+            (entryName == entryPath.split('/').last.split('\\').last &&
+                entryPath.contains('remote_subtitles'));
+        if (!isHashNamed) continue;
+        final registered = await RemoteSubtitleService.instance
+            .lookupDisplayName(entryPath);
+        if (registered != null && registered.isNotEmpty) {
+          subtitle['name'] = registered;
+        }
+      }
       setState(() {
         _externalSubtitles = subtitles;
       });
@@ -138,7 +157,10 @@ class _CupertinoSubtitleTracksPaneState
     }
 
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _isPickingRemote = true;
+      });
       final candidates = await RemoteSubtitleService.instance
           .listCandidatesForVideo(videoPath);
       if (!mounted) return;
@@ -172,8 +194,8 @@ class _CupertinoSubtitleTracksPaneState
       if (selected == null) return;
 
       setState(() => _isLoading = true);
-      final cachedPath =
-          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      final cachedPath = await RemoteSubtitleService.instance
+          .ensureSubtitleCached(selected, allCandidates: candidates);
       if (!mounted) return;
 
       final subtitleInfo = <String, dynamic>{
@@ -218,7 +240,12 @@ class _CupertinoSubtitleTracksPaneState
     } catch (error) {
       _showMessage('加载远程字幕失败：$error');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isPickingRemote = false;
+        });
+      }
     }
   }
 
@@ -386,7 +413,9 @@ class _CupertinoSubtitleTracksPaneState
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: AdaptiveButton.child(
             style: AdaptiveButtonStyle.prominentGlass,
-            onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
+            onPressed: (_isLoading || _isPickingRemote)
+                ? null
+                : _loadRemoteSubtitleFile,
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [

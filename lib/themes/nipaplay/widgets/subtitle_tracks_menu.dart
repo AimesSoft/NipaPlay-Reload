@@ -38,6 +38,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   // 存储外部字幕信息的列表
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+
+  /// 远程字幕选择弹窗打开期间为 true：`_isLoading` 在弹窗出现前就复位了，
+  /// 没有它，弹窗开着时再点按钮会叠出第二个选择弹窗。
+  bool _isPickingRemote = false;
   VideoPlayerState? _videoPlayerState; // Add this member variable
 
   @override
@@ -90,6 +94,21 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         final List<dynamic> decoded = json.decode(subtitlesJson);
         _externalSubtitles =
             decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+        // 哈希名条目（旧版本写入的远程缓存路径）用下载登记的原名归正展示
+        for (final subtitle in _externalSubtitles) {
+          final entryPath = subtitle['path']?.toString() ?? '';
+          final entryName = subtitle['name']?.toString() ?? '';
+          if (entryPath.isEmpty) continue;
+          final isHashNamed = entryName.isEmpty ||
+              (entryName == p.basename(entryPath) &&
+                  entryPath.contains('remote_subtitles'));
+          if (!isHashNamed) continue;
+          final registered = await RemoteSubtitleService.instance
+              .lookupDisplayName(entryPath);
+          if (registered != null && registered.isNotEmpty) {
+            subtitle['name'] = registered;
+          }
+        }
       }
     } catch (e) {
       // print('加载外部字幕失败: $e');
@@ -148,6 +167,9 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       BlurSnackBar.show(context, 'Web平台不支持加载本地字幕文件');
       return;
     }
+    // 防重入：文件选择器是异步的，期间再点按钮会叠起第二个选择器，
+    // 取消后两个调用互相覆盖 _isLoading，出现永远转圈。
+    if (_isLoading) return;
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     try {
       if (mounted) {
@@ -172,7 +194,14 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (!supportedSubtitleExtensions.contains(extension)) {
         if (context.mounted) {
           BlurSnackBar.show(
-              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
+              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub, .sup 或 .idx 文件');
+          setState(() => _isLoading = false);
+        }
+        return;
+      }
+      if (!isVobSubPairComplete(filePath)) {
+        if (context.mounted) {
+          BlurSnackBar.show(context, 'VobSub 字幕需要同名 .sub 与 .idx 成对选择');
           setState(() => _isLoading = false);
         }
         return;
@@ -237,6 +266,9 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       BlurSnackBar.show(context, 'Web平台不支持加载远程字幕');
       return;
     }
+    // 防重入：_isLoading 在弹窗出现前就复位了，需要 _isPickingRemote 覆盖
+    // 从点按钮到弹窗关闭的全程，否则弹窗开着时再点会叠出第二个弹窗。
+    if (_isLoading || _isPickingRemote) return;
 
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     final videoPath = videoState.currentVideoPath;
@@ -246,7 +278,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     }
 
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _isPickingRemote = true;
+      });
 
       final candidates = await RemoteSubtitleService.instance
           .listCandidatesForVideo(videoPath);
@@ -292,8 +327,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (selected == null) return;
 
       setState(() => _isLoading = true);
-      final cachedPath =
-          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      final cachedPath = await RemoteSubtitleService.instance
+          .ensureSubtitleCached(selected, allCandidates: candidates);
       if (!mounted) return;
 
       final existingIndex =
@@ -347,7 +382,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         BlurSnackBar.show(context, '加载远程字幕失败: $e');
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isPickingRemote = false;
+        });
+      }
     }
   }
 
@@ -634,7 +674,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                           BlurButton(
                             icon: Icons.add_circle_outline,
                             text: "加载本地字幕文件",
-                            onTap: () => _loadExternalSubtitle(context),
+                            // 加载中禁用按钮（iOS 端 onPressed: isLoading ? null : ... 同语义）
+                            onTap: _isLoading
+                                ? null
+                                : () => _loadExternalSubtitle(context),
                             padding: const EdgeInsets.symmetric(
                                 vertical: 12, horizontal: 16),
                             margin: const EdgeInsets.symmetric(horizontal: 0),
@@ -649,7 +692,9 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                             BlurButton(
                               icon: Icons.cloud_download_outlined,
                               text: "从远程媒体库加载字幕",
-                              onTap: () => _loadRemoteSubtitle(context),
+                              onTap: (_isLoading || _isPickingRemote)
+                                  ? null
+                                  : () => _loadRemoteSubtitle(context),
                               padding: const EdgeInsets.symmetric(
                                   vertical: 12, horizontal: 16),
                               margin: const EdgeInsets.symmetric(horizontal: 0),
