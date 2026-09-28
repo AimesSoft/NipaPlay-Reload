@@ -15,6 +15,7 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
 class SharedEpisodeInfo {
   SharedEpisodeInfo({
@@ -114,6 +115,7 @@ class LocalMediaShareService {
     '.srt': 2,
     '.sub': 3,
     '.sup': 4,
+    '.idx': 4,
   };
 
   final Map<String, SharedEpisodeInfo> _shareEpisodeMap = {};
@@ -486,16 +488,28 @@ class LocalMediaShareService {
     final String videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
     final List<Map<String, dynamic>> items = <Map<String, dynamic>>[];
 
+    final dirEntries = <File>[];
     await for (final entry in videoDir.list(followLinks: false)) {
       if (entry is! File) continue;
-
-      final filePath = entry.path;
-      if (p.normalize(filePath) == p.normalize(videoPath)) {
+      if (p.normalize(entry.path) == p.normalize(videoPath)) {
         continue;
       }
+      dirEntries.add(entry);
+    }
+
+    final dirNames = dirEntries
+        .map((entry) => p.basename(entry.path).toLowerCase())
+        .toSet();
+
+    for (final entry in dirEntries) {
+      final filePath = entry.path;
 
       final ext = p.extension(filePath).toLowerCase();
       if (!subtitleExtensions.contains(ext)) {
+        continue;
+      }
+      // .idx 无独立播放语义：目录中无同名 .sub 的孤立 IDX 不作为候选
+      if (!isVobSubPairCompleteInNames(p.basename(filePath), dirNames)) {
         continue;
       }
 
@@ -1108,6 +1122,12 @@ class LocalMediaShareService {
     final resolvedPath = p.join(videoFile.parent.path, sanitizedName);
     final resolvedFile = File(resolvedPath);
     if (!await resolvedFile.exists()) {
+      return null;
+    }
+
+    // .idx 请求需要同名 .sub 配对才有效
+    if (ext == '.idx' &&
+        !await File(p.setExtension(resolvedPath, '.sub')).exists()) {
       return null;
     }
 

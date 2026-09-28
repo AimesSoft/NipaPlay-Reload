@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
 import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:path/path.dart' as p;
 
 const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.ass': 70,
@@ -10,6 +11,7 @@ const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.srt': 50,
   '.sub': 35,
   '.sup': 20,
+  '.idx': 20,
 };
 
 const Set<String> supportedSubtitleExtensions = <String>{
@@ -18,6 +20,7 @@ const Set<String> supportedSubtitleExtensions = <String>{
   '.srt',
   '.sub',
   '.sup',
+  '.idx',
 };
 
 const int minReliableLocalSubtitleMatchScore = 100;
@@ -42,6 +45,7 @@ const Set<String> _subtitleNoiseTokens = <String>{
   'ssa',
   'sub',
   'sup',
+  'idx',
   'subtitle',
   'subtitles',
   'subs',
@@ -94,6 +98,26 @@ final RegExp _subtitleCodecPattern = RegExp(
   r'^(x26[45]|h26[45]|hevc|av1|avc|aac\d*|flac|ac3|eac3|opus|truehd|dts|dtsx|atmos|hdr\d*|dv|uhd|remux|webdl|web|webrip|bluray|bdrip|10bit|8bit)$',
 );
 final RegExp _subtitleLongNumberPattern = RegExp(r'^\d{3,4}$');
+
+/// VobSub 配对：.idx 必须有同名 .sub 才算有效候选；.sub 单独出现仍是候选
+/// （可能是 MicroDVD 文本或 VobSub 主体，运行期由解析层嗅探）。
+bool isVobSubPairComplete(String subtitlePath) {
+  final ext = p.extension(subtitlePath).toLowerCase();
+  if (ext == '.idx') {
+    final subPath = p.setExtension(subtitlePath, '.sub');
+    return File(subPath).existsSync();
+  }
+  return true;
+}
+
+/// 列表来源的配对校验：candidateNames 为同一目录下可见字幕文件名集合。
+/// 远程列表（WebDAV/SMB/共享库/弹弹play）中 .idx 孤立（无同名 .sub）时剔除。
+bool isVobSubPairCompleteInNames(String fileName, Set<String> candidateNames) {
+  final ext = p.extension(fileName).toLowerCase();
+  if (ext != '.idx') return true;
+  final base = p.basenameWithoutExtension(fileName).toLowerCase();
+  return candidateNames.contains('$base.sub');
+}
 
 String normalizeExternalSubtitleTrackUri(String path) {
   final trimmed = path.trim();
@@ -255,7 +279,51 @@ int computeLocalSubtitleMatchScore({
     }
   }
 
+  score += computeSubtitleLanguagePreferenceBonus(subtitleName);
+
   return score;
+}
+
+/// 语言偏好加权：同名多字幕（如 .ass 与 .SC.ass）时优先默认激活简体/简日，
+/// 繁中次之。其余语言不加权。
+int computeSubtitleLanguagePreferenceBonus(String subtitleName) {
+  final lower = subtitleName.toLowerCase();
+  // 语言标记通常是文件名末段（.SC.ass / .chs&sja），按点分段检测
+  final segments = lower.split(RegExp(r'[.\[\] ()_-]+'));
+  const simplified = {
+    'sc',
+    'chs',
+    'gb',
+    'scjp',
+    'chsjpn',
+    'sc&jp',
+    'sc&jpn',
+    'chs&jpn',
+    'chs&jp',
+  };
+  const traditional = {'tc', 'cht', 'big5', 'tcjp', 'chtjpn', 'tc&jp', 'tc&jpn'};
+  for (final segment in segments) {
+    if (simplified.contains(segment) ||
+        segment.contains('简中') ||
+        segment.contains('简体') ||
+        segment.contains('简日')) {
+      return 15;
+    }
+    if (segment.contains('jp') ||
+        segment.contains('jpn') ||
+        segment == 'ja' ||
+        segment.contains('日')) {
+      return 12;
+    }
+  }
+  for (final segment in segments) {
+    if (traditional.contains(segment) ||
+        segment.contains('繁中') ||
+        segment.contains('繁体')) {
+      return 6;
+    }
+  }
+  return 0;
 }
 
 bool _isSubtitleNoiseToken(String token) {
