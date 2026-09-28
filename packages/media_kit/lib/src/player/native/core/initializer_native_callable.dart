@@ -57,20 +57,22 @@ class InitializerNativeCallable {
   }
 
   /// Disposes [Pointer<mpv_handle>].
-  void dispose(Pointer<generated.mpv_handle> ctx) {
-    _locks.remove(ctx.address);
+  Future<void> dispose(Pointer<generated.mpv_handle> ctx) async {
+    final lock = _locks.remove(ctx.address);
     _eventCallbacks.remove(ctx.address);
 
     // Clear the wakeup callback in libmpv before closing NativeCallable
     // to prevent libmpv from invoking a deleted callback
     mpv.mpv_set_wakeup_callback(ctx, nullptr, nullptr);
-    
+
     _wakeUpNativeCallables.remove(ctx.address)?.close();
+    // Drain an event callback already running before releasing its native handle.
+    await lock?.synchronized(() {});
   }
 
   void _callback(Pointer<generated.mpv_handle> ctx) {
     _locks[ctx.address]?.synchronized(() async {
-      while (true) {
+      while (_locks.containsKey(ctx.address)) {
         final event = mpv.mpv_wait_event(ctx, 0);
         if (event == nullptr) return;
         if (event.ref.event_id == generated.mpv_event_id.MPV_EVENT_NONE) return;

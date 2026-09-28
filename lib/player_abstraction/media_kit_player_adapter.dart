@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -59,7 +60,8 @@ bool isRetryableMediaKitLoadError(String message) {
 
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter
-    implements AbstractPlayer, MediaLoadAwarePlayer, TickerProvider {
+    implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
+        TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
@@ -1036,6 +1038,9 @@ class MediaKitPlayerAdapter
         //debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
         // 延迟一点时间确保视频已经真正开始播放
         Future.delayed(const Duration(milliseconds: 500), () {
+          // 热切换/退出后原生 player 已销毁：不能再读 _player.state，
+          // 否则触发 "[Player] has been disposed" 断言（debug）/ 释放后访问（release）
+          if (_isDisposed) return;
           if (_player.state.width != null &&
               _player.state.height != null &&
               _player.state.width! > 0 &&
@@ -2301,6 +2306,10 @@ class MediaKitPlayerAdapter
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
     Future.delayed(const Duration(milliseconds: 500), () {
+      // 热切换/退出后原生 player 已销毁：延迟回调不能再访问 platform，
+      // 否则触发 "[Player] has been disposed" 断言（debug，实测热切换复现）
+      // 或释放后访问原生对象（release）。与下方 track-info 延迟块同样加守卫。
+      if (_isDisposed) return;
       try {
         final dynamic platform = _player.platform;
         if (platform != null && platform.setProperty != null) {
@@ -2310,6 +2319,7 @@ class MediaKitPlayerAdapter
 
           // 延迟检查设置是否生效
           Future.delayed(const Duration(milliseconds: 500), () async {
+            if (_isDisposed) return;
             try {
               var videoAspect = platform.getProperty('video-aspect');
               if (videoAspect is Future) {
@@ -2574,44 +2584,34 @@ class MediaKitPlayerAdapter
     _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
+  Future<void>? _disposeAsyncFuture;
+
   @override
   void dispose() {
-    if (_isDisposed) {
-      return;
-    }
+    unawaited(disposeAsync().catchError((Object error, StackTrace stack) {
+      debugPrint('MediaKit: asynchronous disposal failed: $error');
+    }));
+  }
+
+  @override
+  Future<void> disposeAsync() => _disposeAsyncFuture ??= _disposeAsyncInternal();
+
+  Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
-    if (!_mediaReadyCompleter.isCompleted) {
-      _mediaReadyCompleter.complete(false);
-    }
+    if (!_mediaReadyCompleter.isCompleted) _mediaReadyCompleter.complete(false);
     _ticker?.dispose();
-    _trackSubscription?.cancel();
-    _positionSubscription?.cancel();
+    await _trackSubscription?.cancel();
+    await _positionSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
     _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
-
-    void disposePlayerCore() {
-      try {
-        _player.dispose();
-      } catch (e) {
-        debugPrint('MediaKit: 销毁播放器失败: $e');
-      }
-    }
-
-    if (_prefersPlatformVideoSurface) {
-      unawaited(
-        detachPlatformVideoSurface().whenComplete(disposePlayerCore),
-      );
-    } else {
-      //  优化：异步执行销毁，不阻塞主线程
-      // Future.microtask 仍在当前事件循环执行，会阻塞 UI
-      // Future.delayed 让出一帧时间，确保页面过渡动画完成
-      unawaited(
-          Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
-    }
+    if (_prefersPlatformVideoSurface) await detachPlatformVideoSurface();
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: native dispose');
+    await _player.dispose();
     _textureIdNotifier.dispose();
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: complete');
   }
 
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
@@ -3249,6 +3249,7 @@ class MediaKitPlayerAdapter
         }
       } catch (e) {
         debugPrint('MediaKit: 解绑平台原生视频面失败: $e');
+        if (_isDisposed) rethrow;
       }
     }();
 
