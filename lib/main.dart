@@ -1,5 +1,6 @@
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
+import 'package:nipaplay/services/harmony_local_media_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -174,6 +175,18 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Restore directory grants before storage, history, scanning or playback.
+  if (globals.isHarmonyOS) {
+    try {
+      final failed = await HarmonyLocalMediaService.restoreDirectoryPermissions();
+      if (failed.isNotEmpty) {
+        debugPrint('部分媒体文件夹授权已失效，请重新添加文件夹: $failed');
+      }
+    } catch (error) {
+      debugPrint('鸿蒙媒体文件夹授权恢复失败: $error');
+    }
+  }
+
   try {
     await FluentIconFontLoader.instance.ensureLoaded();
   } catch (error, stackTrace) {

@@ -185,6 +185,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // transfers an owned file descriptor to Rust. Treating this as a
         // normal File path would reject it before the player can open it.
         fileExists = true;
+      } else if (globals.isHarmonyOS) {
+        final validPath = await FilePickerService().getValidFilePath(videoPath);
+        fileExists = validPath != null;
+        if (validPath != null) videoPath = validPath;
       } else if (Platform.isIOS) {
         final filePickerService = FilePickerService();
 

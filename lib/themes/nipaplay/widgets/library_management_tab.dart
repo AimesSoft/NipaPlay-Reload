@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/media_library/pick_local_media_directory.dart';
+import 'package:nipaplay/services/harmony_local_media_service.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platformIdentity;
 import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -14,7 +17,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
-import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import 'package:nipaplay/utils/android_storage_helper.dart'; // 导入Android存储辅助类
@@ -557,8 +559,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     // 使用FilePickerService选择目录（适用于Android和桌面平台）
     String? selectedDirectory;
     try {
-      final filePickerService = FilePickerService();
-      selectedDirectory = await filePickerService.pickDirectory();
+      selectedDirectory = await pickLocalMediaDirectory(context);
 
       if (selectedDirectory == null) {
         if (mounted) {
@@ -569,7 +570,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
       // 验证选择的目录是否可访问
       bool accessCheck = false;
-      if (io.Platform.isAndroid &&
+      if (platformIdentity.isHarmonyOS) {
+        accessCheck = await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
+      } else if (io.Platform.isAndroid &&
           AndroidSafService.isSafUri(selectedDirectory)) {
         // SAF content:// URI（SD/OTG/U盘）：用 SAF canAccessTree 检查权限。
         // io.Directory / StorageService.isValidStorageDirectory 不支持 content://，
