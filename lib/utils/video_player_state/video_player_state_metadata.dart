@@ -137,12 +137,21 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
       // 使用超时处理网络请求
       try {
-        debugPrint('[弹幕自动匹配] 正在读取文件元数据并查询匹配信息');
+        final recognitionTimeout = danmakuVideoInfoTimeout(
+          videoPath,
+          probePath: probePath,
+        );
+        debugPrint(
+          '[弹幕自动匹配] 正在读取文件元数据并查询匹配信息: '
+          'timeout=${recognitionTimeout.inSeconds}s',
+        );
         final videoInfo = await DanmakuMatchingService.instance
             .getVideoInfo(videoPath, probePath: probePath)
-            .timeout(const Duration(seconds: 15), onTimeout: () {
+            .timeout(recognitionTimeout, onTimeout: () {
           //debugPrint('获取视频信息超时');
-          throw TimeoutException('连接服务器超时');
+          throw TimeoutException(
+            '视频识别超时 (${recognitionTimeout.inSeconds}s)',
+          );
         });
         if (!canContinue()) return;
         debugPrint(

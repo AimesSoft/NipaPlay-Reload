@@ -151,3 +151,19 @@ String resolveDanmakuProbePath(
   }
   return resolved;
 }
+
+Duration danmakuVideoInfoTimeout(
+  String videoPath, {
+  String? probePath,
+}) {
+  final candidate = probePath?.trim().isNotEmpty == true
+      ? probePath!.trim().toLowerCase()
+      : videoPath.trim().toLowerCase();
+  final requiresRemoteProbe = candidate.startsWith('http://') ||
+      candidate.startsWith('https://') ||
+      MediaSourceUtils.isNewWebDavPath(videoPath) ||
+      MediaSourceUtils.isNewSmbPath(videoPath);
+  return requiresRemoteProbe
+      ? const Duration(seconds: 60)
+      : const Duration(seconds: 15);
+}

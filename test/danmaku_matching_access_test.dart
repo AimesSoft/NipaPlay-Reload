@@ -36,6 +36,24 @@ void main() {
       );
     });
 
+    test('remote probing gets enough time to hash the first 16MB', () {
+      expect(
+        danmakuVideoInfoTimeout(
+          'webdav://connection/anime/episode.mkv',
+          probePath: 'https://example.test/dav/anime/episode.mkv',
+        ),
+        const Duration(seconds: 60),
+      );
+      expect(
+        danmakuVideoInfoTimeout('smb://connection/anime/episode.mkv'),
+        const Duration(seconds: 60),
+      );
+      expect(
+        danmakuVideoInfoTimeout('/videos/episode.mkv'),
+        const Duration(seconds: 15),
+      );
+    });
+
     test('remote library scrapers separate stable and probe paths', () {
       final sources = [
         File('lib/services/local_media_management_api.dart')
