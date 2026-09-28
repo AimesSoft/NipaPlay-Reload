@@ -99,13 +99,95 @@ final RegExp _subtitleCodecPattern = RegExp(
 );
 final RegExp _subtitleLongNumberPattern = RegExp(r'^\d{3,4}$');
 
-/// VobSub 配对：.idx 必须有同名 .sub 才算有效候选；.sub 单独出现仍是候选
-/// （可能是 MicroDVD 文本或 VobSub 主体，运行期由解析层嗅探）。
+/// Read only the MPEG-PS signature; MicroDVD .sub files remain text subtitles.
+bool isVobSubBinaryFile(String path) {
+  if (p.extension(path).toLowerCase() != '.sub') return false;
+  RandomAccessFile? file;
+  try {
+    file = File(path).openSync();
+    final header = file.readSync(4);
+    return header.length == 4 &&
+        header[0] == 0 &&
+        header[1] == 0 &&
+        header[2] == 1 &&
+        header[3] == 0xba;
+  } on FileSystemException {
+    return false;
+  } finally {
+    file?.closeSync();
+  }
+}
+
+/// Candidate matching must reject other episodes even when a series title matches.
+bool subtitleMatchesVideo(String videoName, String subtitleName) {
+  (int?, int?) episode(String name) {
+    final serial =
+        RegExp(r's(\d+)e(\d+)', caseSensitive: false).firstMatch(name);
+    if (serial != null) return (int.parse(serial[1]!), int.parse(serial[2]!));
+    final tokens = extractSubtitleMatchTokens(name);
+    final numbers = tokens.where((t) => RegExp(r'^\d+$').hasMatch(t)).toList();
+    final number = pickLikelyEpisodeNumber(numbers);
+    return (null, number == null ? null : int.tryParse(number));
+  }
+
+  final videoEpisode = episode(videoName), subEpisode = episode(subtitleName);
+  if (videoEpisode.$2 != null &&
+      subEpisode.$2 != null &&
+      videoEpisode.$2 != subEpisode.$2) return false;
+  if (videoEpisode.$1 != null &&
+      subEpisode.$1 != null &&
+      videoEpisode.$1 != subEpisode.$1) return false;
+  Set<String> titleTokens(String name) => extractSubtitleMatchTokens(name)
+      .where((t) => !RegExp(r'^\d+$|^s\d+e\d+$').hasMatch(t))
+      .toSet();
+  final videoTitle = titleTokens(videoName),
+      subTitle = titleTokens(subtitleName);
+  if (videoTitle.isNotEmpty &&
+      subTitle.isNotEmpty &&
+      videoTitle.intersection(subTitle).isEmpty) return false;
+  final numbers =
+      RegExp(r'(\d+)').allMatches(videoName).map((m) => m[0]!).toList();
+  return computeLocalSubtitleMatchScore(
+          videoName: videoName,
+          subtitleName: subtitleName,
+          extension: '',
+          videoNumbers: numbers,
+          episodeNumber: videoEpisode.$2?.toString()) >=
+      minReliableLocalSubtitleMatchScore;
+}
+
+/// Locate a companion without assuming lowercase extensions on case-sensitive disks.
+String? vobSubCompanionPath(String path, String extension) {
+  final expected = p.setExtension(path, extension);
+  try {
+    final name = p.basename(expected).toLowerCase();
+    for (final entry in File(path).parent.listSync()) {
+      if (entry is File && p.basename(entry.path).toLowerCase() == name)
+        return entry.path;
+    }
+  } on FileSystemException {
+    return null;
+  }
+  return null;
+}
+
+/// Bitmap .sub files are selected through their index; text .sub files stand alone.
+String canonicalSubtitlePath(String path) => isVobSubBinaryFile(path)
+    ? (vobSubCompanionPath(path, '.idx') ?? path)
+    : path;
+
+/// Both VobSub members must exist. A MicroDVD text .sub needs no companion.
 bool isVobSubPairComplete(String subtitlePath) {
   final ext = p.extension(subtitlePath).toLowerCase();
   if (ext == '.idx') {
-    final subPath = p.setExtension(subtitlePath, '.sub');
-    return File(subPath).existsSync();
+    final subPath = vobSubCompanionPath(subtitlePath, '.sub');
+    return File(subtitlePath).existsSync() &&
+        subPath != null &&
+        isVobSubBinaryFile(subPath);
+  }
+  if (ext == '.sub' && isVobSubBinaryFile(subtitlePath)) {
+    final idx = vobSubCompanionPath(subtitlePath, '.idx');
+    return idx != null && File(idx).lengthSync() > 0;
   }
   return true;
 }
@@ -301,7 +383,15 @@ int computeSubtitleLanguagePreferenceBonus(String subtitleName) {
     'chs&jpn',
     'chs&jp',
   };
-  const traditional = {'tc', 'cht', 'big5', 'tcjp', 'chtjpn', 'tc&jp', 'tc&jpn'};
+  const traditional = {
+    'tc',
+    'cht',
+    'big5',
+    'tcjp',
+    'chtjpn',
+    'tc&jp',
+    'tc&jpn'
+  };
   for (final segment in segments) {
     if (simplified.contains(segment) ||
         segment.contains('简中') ||

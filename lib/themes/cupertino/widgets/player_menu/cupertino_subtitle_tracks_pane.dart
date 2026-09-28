@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
+import 'package:nipaplay/utils/player_event_log.dart';
 
 class CupertinoSubtitleTracksPane extends StatefulWidget {
   const CupertinoSubtitleTracksPane({
@@ -31,9 +32,6 @@ class _CupertinoSubtitleTracksPaneState
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
-
-  /// 远程字幕选择弹窗打开期间为 true：`_isLoading` 在弹窗出现前就复位了，
-  /// 没有它，弹窗开着时再点按钮会叠出第二个选择弹窗。
   bool _isPickingRemote = false;
 
   @override
@@ -48,36 +46,20 @@ class _CupertinoSubtitleTracksPaneState
     final path = widget.videoState.currentVideoPath;
     if (path == null || kIsWeb) return;
 
-    setState(() => _isLoading = true);
+    // 面板可能在异步间隙被卸载：数据仍然要落到 _externalSubtitles 供
+    // 后续挂载流程使用，UI 通知按 mounted 保护。
+    if (mounted) setState(() => _isLoading = true);
     try {
       final subtitles = await _subtitleService.loadExternalSubtitles(path);
-      if (!mounted) return;
-      // 哈希名条目（旧版本写入的远程缓存路径）用下载登记的原名归正展示
-      for (final subtitle in subtitles) {
-        final entryPath = subtitle['path']?.toString() ?? '';
-        final entryName = subtitle['name']?.toString() ?? '';
-        if (entryPath.isEmpty) continue;
-        final isHashNamed = entryName.isEmpty ||
-            (entryName == entryPath.split('/').last.split('\\').last &&
-                entryPath.contains('remote_subtitles'));
-        if (!isHashNamed) continue;
-        final registered = await RemoteSubtitleService.instance
-            .lookupDisplayName(entryPath);
-        if (registered != null && registered.isNotEmpty) {
-          subtitle['name'] = registered;
-        }
-      }
-      setState(() {
-        _externalSubtitles = subtitles;
-      });
+      _externalSubtitles = subtitles;
+      if (mounted) setState(() {});
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _loadExternalSubtitleFile() async {
+    if (_isLoading || _isPickingRemote) return;
     if (kIsWeb) {
       _showMessage('当前平台暂不支持加载本地字幕');
       return;
@@ -145,6 +127,7 @@ class _CupertinoSubtitleTracksPaneState
   }
 
   Future<void> _loadRemoteSubtitleFile() async {
+    if (_isLoading || _isPickingRemote) return;
     if (kIsWeb) {
       _showMessage('当前平台暂不支持加载远程字幕');
       return;
@@ -156,21 +139,19 @@ class _CupertinoSubtitleTracksPaneState
       return;
     }
 
+    _isPickingRemote = true;
     try {
-      setState(() {
-        _isLoading = true;
-        _isPickingRemote = true;
-      });
+      if (mounted) setState(() => _isLoading = true);
       final candidates = await RemoteSubtitleService.instance
           .listCandidatesForVideo(videoPath);
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
 
       if (candidates.isEmpty) {
         _showMessage('当前远程目录未找到字幕文件');
         return;
       }
 
+      if (!mounted) return;
       final selected = await CupertinoBottomSheet.show<RemoteSubtitleCandidate>(
         context: context,
         title: '选择远程字幕',
@@ -191,13 +172,23 @@ class _CupertinoSubtitleTracksPaneState
         ),
       );
 
-      if (selected == null) return;
+      if (selected == null) {
+        logPlayerEvent('Subtitle', '远程字幕挂载取消：未选择任何字幕', level: 'WARN');
+        return;
+      }
 
-      setState(() => _isLoading = true);
+      logPlayerEvent(
+        'Subtitle',
+        '远程字幕挂载开始: ${selected.name}（${selected.sourceLabel}）',
+      );
+
+      // 注意：选择弹窗关闭时面板可能已被卸载（大屏模式路由层级），
+      // 挂载流程必须继续执行到底，UI 操作按 mounted 逐点保护。
+      if (mounted) setState(() => _isLoading = true);
       final cachedPath = await RemoteSubtitleService.instance
           .ensureSubtitleCached(selected, allCandidates: candidates);
-      if (!mounted) return;
 
+      if (widget.videoState.currentVideoPath != videoPath) return;
       final subtitleInfo = <String, dynamic>{
         'path': cachedPath,
         'name': selected.name,
@@ -221,7 +212,7 @@ class _CupertinoSubtitleTracksPaneState
           _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
       if (existingIndex >= 0) {
         await _applyExternalSubtitle(cachedPath, existingIndex);
-        _showMessage('已切换到字幕：${selected.name}');
+        if (mounted) _showMessage('已切换到字幕：${selected.name}');
         return;
       }
 
@@ -236,16 +227,17 @@ class _CupertinoSubtitleTracksPaneState
         widget.videoState.forceSetExternalSubtitle(cachedPath);
       }
 
-      _showMessage('已加载远程字幕：${selected.name}');
+      logPlayerEvent(
+        'Subtitle',
+        '远程字幕挂载完成: ${selected.name} -> $cachedPath',
+      );
+      if (mounted) _showMessage('已加载远程字幕：${selected.name}');
     } catch (error) {
-      _showMessage('加载远程字幕失败：$error');
+      logPlayerEvent('Subtitle', '远程字幕挂载失败: $error', level: 'ERROR');
+      if (mounted) _showMessage('加载远程字幕失败：$error');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isPickingRemote = false;
-        });
-      }
+      _isPickingRemote = false;
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -413,9 +405,7 @@ class _CupertinoSubtitleTracksPaneState
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: AdaptiveButton.child(
             style: AdaptiveButtonStyle.prominentGlass,
-            onPressed: (_isLoading || _isPickingRemote)
-                ? null
-                : _loadRemoteSubtitleFile,
+            onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -436,7 +426,8 @@ class _CupertinoSubtitleTracksPaneState
           children: _externalSubtitles.asMap().entries.map((entry) {
             final index = entry.key;
             final data = entry.value;
-            final bool isActive = data['isActive'] == true;
+            final bool isActive = widget.videoState.activeExternalSubtitlePaths
+                .contains(data['path']);
             final String name = data['name']?.toString() ?? '字幕 $index';
             final String type = data['type']?.toString().toUpperCase() ?? '';
 
@@ -463,22 +454,23 @@ class _CupertinoSubtitleTracksPaneState
               ),
               onTap: () async {
                 if (isActive) {
-                  await _switchToEmbeddedSubtitle(
-                    -1,
-                    persistEmbyPreference: false,
-                  );
-                } else {
-                  await runMediaServerMenuSelection(
-                    MediaServerMenuSurface.cupertinoSubtitle,
-                    false,
-                    () => _applyExternalSubtitle(
-                      data['path'] as String,
-                      index,
-                    ),
-                    () async => false,
-                  );
+                  // 已激活点击 = 移出叠加（保留在列表，可再点激活）
+                  await _subtitleService.setExternalSubtitleActive(
+                      widget.videoState.currentVideoPath ?? '', index, false);
+                  await widget.videoState
+                      .removeExternalSubtitle(data['path'] as String);
+                  if (mounted) setState(() {});
+                  _showMessage('已取消该字幕');
+                  return;
                 }
+                // 多选开关：加入叠加，不影响已激活的其他字幕
+                await _subtitleService.setExternalSubtitleActive(
+                    widget.videoState.currentVideoPath ?? '', index, true);
+                await widget.videoState.addExternalSubtitleToStack(
+                    data['path'] as String,
+                    displayName: data['name'] as String?);
                 if (mounted) setState(() {});
+                _showMessage('已叠加字幕');
               },
             );
           }).toList(),

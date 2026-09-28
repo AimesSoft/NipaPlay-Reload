@@ -524,8 +524,7 @@ class LocalMediaShareService {
       }
 
       final subtitleBaseName = p.basenameWithoutExtension(filePath).toLowerCase();
-      final bool isLikelyMatch =
-          subtitleBaseName == videoBaseName || subtitleBaseName.contains(videoBaseName);
+      final isLikelyMatch = subtitleMatchesVideo(videoBaseName, subtitleBaseName);
 
       items.add({
         'name': p.basename(filePath),
@@ -1126,8 +1125,7 @@ class LocalMediaShareService {
     }
 
     // .idx 请求需要同名 .sub 配对才有效
-    if (ext == '.idx' &&
-        !await File(p.setExtension(resolvedPath, '.sub')).exists()) {
+    if (!isVobSubPairComplete(resolvedPath)) {
       return null;
     }
 
