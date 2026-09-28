@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
 import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:path/path.dart' as p;
 
 const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.ass': 70,
@@ -10,6 +11,7 @@ const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.srt': 50,
   '.sub': 35,
   '.sup': 20,
+  '.idx': 20,
 };
 
 const Set<String> supportedSubtitleExtensions = <String>{
@@ -18,6 +20,7 @@ const Set<String> supportedSubtitleExtensions = <String>{
   '.srt',
   '.sub',
   '.sup',
+  '.idx',
 };
 
 const int minReliableLocalSubtitleMatchScore = 100;
@@ -42,6 +45,7 @@ const Set<String> _subtitleNoiseTokens = <String>{
   'ssa',
   'sub',
   'sup',
+  'idx',
   'subtitle',
   'subtitles',
   'subs',
@@ -94,6 +98,108 @@ final RegExp _subtitleCodecPattern = RegExp(
   r'^(x26[45]|h26[45]|hevc|av1|avc|aac\d*|flac|ac3|eac3|opus|truehd|dts|dtsx|atmos|hdr\d*|dv|uhd|remux|webdl|web|webrip|bluray|bdrip|10bit|8bit)$',
 );
 final RegExp _subtitleLongNumberPattern = RegExp(r'^\d{3,4}$');
+
+/// Read only the MPEG-PS signature; MicroDVD .sub files remain text subtitles.
+bool isVobSubBinaryFile(String path) {
+  if (p.extension(path).toLowerCase() != '.sub') return false;
+  RandomAccessFile? file;
+  try {
+    file = File(path).openSync();
+    final header = file.readSync(4);
+    return header.length == 4 &&
+        header[0] == 0 &&
+        header[1] == 0 &&
+        header[2] == 1 &&
+        header[3] == 0xba;
+  } on FileSystemException {
+    return false;
+  } finally {
+    file?.closeSync();
+  }
+}
+
+/// Candidate matching must reject other episodes even when a series title matches.
+bool subtitleMatchesVideo(String videoName, String subtitleName) {
+  (int?, int?) episode(String name) {
+    final serial =
+        RegExp(r's(\d+)e(\d+)', caseSensitive: false).firstMatch(name);
+    if (serial != null) return (int.parse(serial[1]!), int.parse(serial[2]!));
+    final tokens = extractSubtitleMatchTokens(name);
+    final numbers = tokens.where((t) => RegExp(r'^\d+$').hasMatch(t)).toList();
+    final number = pickLikelyEpisodeNumber(numbers);
+    return (null, number == null ? null : int.tryParse(number));
+  }
+
+  final videoEpisode = episode(videoName), subEpisode = episode(subtitleName);
+  if (videoEpisode.$2 != null &&
+      subEpisode.$2 != null &&
+      videoEpisode.$2 != subEpisode.$2) return false;
+  if (videoEpisode.$1 != null &&
+      subEpisode.$1 != null &&
+      videoEpisode.$1 != subEpisode.$1) return false;
+  Set<String> titleTokens(String name) => extractSubtitleMatchTokens(name)
+      .where((t) => !RegExp(r'^\d+$|^s\d+e\d+$').hasMatch(t))
+      .toSet();
+  final videoTitle = titleTokens(videoName),
+      subTitle = titleTokens(subtitleName);
+  if (videoTitle.isNotEmpty &&
+      subTitle.isNotEmpty &&
+      videoTitle.intersection(subTitle).isEmpty) return false;
+  final numbers =
+      RegExp(r'(\d+)').allMatches(videoName).map((m) => m[0]!).toList();
+  return computeLocalSubtitleMatchScore(
+          videoName: videoName,
+          subtitleName: subtitleName,
+          extension: '',
+          videoNumbers: numbers,
+          episodeNumber: videoEpisode.$2?.toString()) >=
+      minReliableLocalSubtitleMatchScore;
+}
+
+/// Locate a companion without assuming lowercase extensions on case-sensitive disks.
+String? vobSubCompanionPath(String path, String extension) {
+  final expected = p.setExtension(path, extension);
+  try {
+    final name = p.basename(expected).toLowerCase();
+    for (final entry in File(path).parent.listSync()) {
+      if (entry is File && p.basename(entry.path).toLowerCase() == name)
+        return entry.path;
+    }
+  } on FileSystemException {
+    return null;
+  }
+  return null;
+}
+
+/// Bitmap .sub files are selected through their index; text .sub files stand alone.
+String canonicalSubtitlePath(String path) => isVobSubBinaryFile(path)
+    ? (vobSubCompanionPath(path, '.idx') ?? path)
+    : path;
+
+/// Both VobSub members must exist. A MicroDVD text .sub needs no companion.
+bool isVobSubPairComplete(String subtitlePath) {
+  final ext = p.extension(subtitlePath).toLowerCase();
+  if (ext == '.idx') {
+    final subPath = vobSubCompanionPath(subtitlePath, '.sub');
+    return File(subtitlePath).existsSync() &&
+        subPath != null &&
+        isVobSubBinaryFile(subPath);
+  }
+  if (ext == '.sub' && isVobSubBinaryFile(subtitlePath)) {
+    final idx = vobSubCompanionPath(subtitlePath, '.idx');
+    return idx != null && File(idx).lengthSync() > 0;
+  }
+  return true;
+}
+
+/// 列表来源的配对校验：candidateNames 为同一目录下可见字幕文件名集合。
+/// 远程列表（WebDAV/SMB/共享库/弹弹play）中 .idx 孤立（无同名 .sub）时剔除。
+bool isVobSubPairCompleteInNames(String fileName, Set<String> candidateNames) {
+  final ext = p.extension(fileName).toLowerCase();
+  if (ext != '.idx') return true;
+  final base = p.basenameWithoutExtension(fileName).toLowerCase();
+  return candidateNames.contains('$base.sub');
+}
 
 String normalizeExternalSubtitleTrackUri(String path) {
   final trimmed = path.trim();
@@ -255,7 +361,59 @@ int computeLocalSubtitleMatchScore({
     }
   }
 
+  score += computeSubtitleLanguagePreferenceBonus(subtitleName);
+
   return score;
+}
+
+/// 语言偏好加权：同名多字幕（如 .ass 与 .SC.ass）时优先默认激活简体/简日，
+/// 繁中次之。其余语言不加权。
+int computeSubtitleLanguagePreferenceBonus(String subtitleName) {
+  final lower = subtitleName.toLowerCase();
+  // 语言标记通常是文件名末段（.SC.ass / .chs&sja），按点分段检测
+  final segments = lower.split(RegExp(r'[.\[\] ()_-]+'));
+  const simplified = {
+    'sc',
+    'chs',
+    'gb',
+    'scjp',
+    'chsjpn',
+    'sc&jp',
+    'sc&jpn',
+    'chs&jpn',
+    'chs&jp',
+  };
+  const traditional = {
+    'tc',
+    'cht',
+    'big5',
+    'tcjp',
+    'chtjpn',
+    'tc&jp',
+    'tc&jpn'
+  };
+  for (final segment in segments) {
+    if (simplified.contains(segment) ||
+        segment.contains('简中') ||
+        segment.contains('简体') ||
+        segment.contains('简日')) {
+      return 15;
+    }
+    if (segment.contains('jp') ||
+        segment.contains('jpn') ||
+        segment == 'ja' ||
+        segment.contains('日')) {
+      return 12;
+    }
+  }
+  for (final segment in segments) {
+    if (traditional.contains(segment) ||
+        segment.contains('繁中') ||
+        segment.contains('繁体')) {
+      return 6;
+    }
+  }
+  return 0;
 }
 
 bool _isSubtitleNoiseToken(String token) {

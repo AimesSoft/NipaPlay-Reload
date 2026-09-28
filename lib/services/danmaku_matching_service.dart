@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 /// Shared data source for every manual or batch danmaku matching surface.
 class DanmakuMatchingService {
@@ -28,9 +29,16 @@ class DanmakuMatchingService {
     );
   }
 
-  Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
+  Future<Map<String, dynamic>> getVideoInfo(
+    String videoPath, {
+    String? probePath,
+  }) async {
     await ensureAccess();
-    return DandanplayService.getVideoInfo(videoPath);
+    final resolvedProbePath = resolveDanmakuProbePath(
+      videoPath,
+      probePath: probePath,
+    );
+    return DandanplayService.getVideoInfo(resolvedProbePath);
   }
 
   Future<List<Map<String, dynamic>>> searchAnime(String keyword) async {
@@ -123,4 +131,39 @@ class DanmakuMatchingService {
   Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) {
     return DandanplayService.getDanmaku(episodeId, animeId);
   }
+}
+
+String resolveDanmakuProbePath(
+  String videoPath, {
+  String? probePath,
+}) {
+  final explicitProbePath = probePath?.trim();
+  if (explicitProbePath?.isNotEmpty == true) return explicitProbePath!;
+
+  if (!MediaSourceUtils.isNewWebDavPath(videoPath) &&
+      !MediaSourceUtils.isNewSmbPath(videoPath)) {
+    return videoPath;
+  }
+
+  final resolved = MediaSourceUtils.resolveRemotePathToUrl(videoPath)?.trim();
+  if (resolved == null || resolved.isEmpty || resolved == videoPath) {
+    throw StateError('无法解析远程媒体路径用于弹幕识别');
+  }
+  return resolved;
+}
+
+Duration danmakuVideoInfoTimeout(
+  String videoPath, {
+  String? probePath,
+}) {
+  final candidate = probePath?.trim().isNotEmpty == true
+      ? probePath!.trim().toLowerCase()
+      : videoPath.trim().toLowerCase();
+  final requiresRemoteProbe = candidate.startsWith('http://') ||
+      candidate.startsWith('https://') ||
+      MediaSourceUtils.isNewWebDavPath(videoPath) ||
+      MediaSourceUtils.isNewSmbPath(videoPath);
+  return requiresRemoteProbe
+      ? const Duration(seconds: 60)
+      : const Duration(seconds: 15);
 }

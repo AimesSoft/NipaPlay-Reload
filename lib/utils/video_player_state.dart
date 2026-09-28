@@ -332,6 +332,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _playerKernelSwapRequested = 0;
   int _playerKernelSwapApplied = 0;
   Future<void>? _playerKernelSwapDrain;
+  // 内核热切换的 UI surface 重建代数：每次切换开始前自增，渲染层
+  // （Texture / PlatformView / macOS 原生视图）以此作为 ValueKey——代数变化
+  // 时 Flutter 强制销毁重建整棵 surface 子树，等效于"关闭页面重开"。
+  // 没有它时 Texture 会跨内核实例被复用，旧内核的纹理句柄/平台视图
+  // 状态残留在新内核的渲染路径上，是播放中切换闪退的一类根因。
+  int _playerSurfaceGeneration = 0;
+  int get playerSurfaceGeneration => _playerSurfaceGeneration;
+
+  /// 内核热切换开始时调用：surface 代数自增并广播，渲染层 ValueKey 变化
+  /// → Flutter 销毁旧 surface 子树（Texture/PlatformView），新内核起播后
+  /// 以全新 Widget 生命周期挂载。热切换导致的渲染层闪退由此类别清零。
+  void beginKernelSurfaceSwap() {
+    _playerSurfaceGeneration++;
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    notifyListeners();
+  }
+
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _isStartupMessageFlowActive = false;
@@ -945,6 +962,11 @@ int _exactEndStreak = 0;
 
   bool get _usesWindowsPlatformVideoSurface =>
       !kIsWeb && Platform.isWindows && player.prefersPlatformVideoSurface;
+
+  /// Windows 上的 Media Kit (libmpv) 内核：暂停态对其渲染管线取帧
+  /// （snapshot）会冻死 platform 线程，暂停后的截图路径必须跳过。
+  bool get _isWindowsMediaKitKernel =>
+      !kIsWeb && Platform.isWindows && player.getPlayerKernelName() == 'Media Kit';
 
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换

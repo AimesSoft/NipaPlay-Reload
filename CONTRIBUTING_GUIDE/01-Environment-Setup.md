@@ -64,6 +64,10 @@ Flutter 是我们用来开发 NipaPlay-Reload 的框架，它允许我们用一�
 - HarmonyOS：DevEco Studio、OpenHarmony Native SDK、签名配置和 `OHOS_NDK_HOME`/`OHOS_SDK_NATIVE`。
 - Erika：请同时准备 Rust stable（核心开发）和 tvOS 所需 nightly + `rust-src`；完整依赖见 Erika 仓库的 `docs/building.zh.md`。
 
+Android 真机调试使用 `flutter run -d <设备 ID>`。Debug 构建的包名为
+`com.aimessoft.nipaplay.debug`，显示名称为「NipaPlay 调试版」，可与正式版并行安装。
+两者的应用数据独立，调试版首次启动需要单独配置媒体库；正式版的数据会保留。
+
 ### 1.3 一个好的代码编辑器：VS Code + Codex
 
 代码编辑器是你编写和修改代码的地方。一个好的编辑器能让你事半功倍。对于 NipaPlay-Reload，我们现在最推荐的组合是 **Visual Studio Code (VS Code) + Codex**: VS Code 负责稳定、成熟的 Flutter 开发体验，Codex 负责帮助你理解项目、起草修改方案、解释报错和生成补丁。

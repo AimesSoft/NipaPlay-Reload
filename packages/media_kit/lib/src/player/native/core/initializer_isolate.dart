@@ -43,6 +43,8 @@ class InitializerIsolate {
   }) async {
     final completer = Completer();
     final receiver = ReceivePort();
+    final exited = Completer<void>();
+    Future<void> pendingCallback = Future<void>.value();
     late SendPort port;
     late Pointer<generated.mpv_handle> handle;
     final isolate = await Isolate.spawn(
@@ -64,7 +66,8 @@ class InitializerIsolate {
         else if (message != null) {
           Pointer<generated.mpv_event> event = Pointer.fromAddress(message);
           try {
-            await callback(event);
+            pendingCallback = callback(event);
+            await pendingCallback;
           } catch (exception, stacktrace) {
             print(exception.toString());
             print(stacktrace.toString());
@@ -72,6 +75,8 @@ class InitializerIsolate {
           port.send(true);
         } else {
           receiver.close();
+          await pendingCallback;
+          if (!exited.isCompleted) exited.complete();
         }
       },
     );
@@ -79,6 +84,7 @@ class InitializerIsolate {
     await completer.future;
 
     // Save the references.
+    _exits[handle.address] = exited.future;
     _ports[handle.address] = port;
     _isolates[handle.address] = isolate;
 
@@ -86,20 +92,15 @@ class InitializerIsolate {
   }
 
   /// Disposes [Pointer<mpv_handle>].
-  void dispose(generated.MPV mpv, Pointer<generated.mpv_handle> handle) {
-    final port = _ports[handle.address];
-    final isolate = _isolates[handle.address];
-    if (port != null && isolate != null) {
+  Future<void> dispose(
+      generated.MPV mpv, Pointer<generated.mpv_handle> handle) async {
+    final port = _ports.remove(handle.address);
+    final exited = _exits.remove(handle.address);
+    _isolates.remove(handle.address);
+    if (port != null && exited != null) {
       port.send(null);
-
-      _ports.remove(handle.address);
-      _isolates.remove(handle.address);
-
       mpv.mpv_wakeup(handle);
-
-      Future.delayed(const Duration(seconds: 2), () {
-        isolate.kill(priority: Isolate.immediate);
-      });
+      await exited;
     }
   }
 
@@ -124,11 +125,11 @@ class InitializerIsolate {
           mpv = generated.MPV(DynamicLibrary.open(message));
           completer.complete();
         } else if (message is bool) {
-          completer.complete();
+          if (!completer.isCompleted) completer.complete();
         } else if (message == null) {
           if (handle != null) {
             disposed = true;
-            completer.complete();
+            if (!completer.isCompleted) completer.complete();
           }
         }
       },
@@ -167,6 +168,7 @@ class InitializerIsolate {
     receiver.close();
   }
 
+  final _exits = HashMap<int, Future<void>>();
   final _ports = HashMap<int, SendPort>();
   final _isolates = HashMap<int, Isolate>();
 }

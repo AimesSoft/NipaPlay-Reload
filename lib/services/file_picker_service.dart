@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
 import 'android_saf_service.dart';
 import 'security_bookmark_service.dart';
+import 'harmony_local_media_service.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platformIdentity;
 import 'package:nipaplay/utils/mpv_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
@@ -514,7 +516,7 @@ class FilePickerService {
       // 定义字幕文件类型组
       XTypeGroup subtitleGroup = XTypeGroup(
         label: '字幕文件',
-        extensions: const ['srt', 'ass', 'ssa', 'sub', 'sup'],
+        extensions: const ['srt', 'ass', 'ssa', 'sub', 'sup', 'idx'],
         uniformTypeIdentifiers: io.Platform.isIOS
             ? [
                 'public.text',
@@ -747,6 +749,9 @@ class FilePickerService {
 
   // 获取文件的有效路径(处理iOS路径问题)
   Future<String?> getValidFilePath(String originalPath) async {
+    if (platformIdentity.isHarmonyOS && originalPath.startsWith('/')) {
+      await HarmonyLocalMediaService.ensureDirectoryAccess(p.dirname(originalPath));
+    }
     // macOS沙盒下首先尝试恢复书签访问
     if (io.Platform.isMacOS) {
       final resolvedPath =
@@ -802,7 +807,7 @@ class FilePickerService {
         'acceptedTypeGroups': [
           {
             'label': '字幕文件',
-            'extensions': ['srt', 'ass', 'ssa', 'sub'],
+            'extensions': ['srt', 'ass', 'ssa', 'sub', 'sup', 'idx'],
           }
         ],
         'confirmButtonText': '选择字幕文件',

@@ -44,6 +44,21 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   // 当前高亮条目的 Key，用于基于真实 RenderBox 精确定位（估算高度存在偏差）
   final GlobalKey _currentItemKey = GlobalKey();
   bool _locatingUnbuiltItem = false;
+  // 程序化滚动（点击定位/自动校正的 ensureVisible）进行中：抑制滚动监听
+  // 的窗口更新，否则动画滚入绝对阈值区（500px）会反复触发窗口滑动+
+  // jumpTo 回跳，列表在视口边缘来回跳动。
+  int _programmaticScrollDepth = 0;
+
+  bool get _isProgrammaticScroll => _programmaticScrollDepth > 0;
+
+  Future<void> _scrollProgrammatic(Future<void> Function() scrollAction) async {
+    _programmaticScrollDepth++;
+    try {
+      await scrollAction();
+    } finally {
+      _programmaticScrollDepth--;
+    }
+  }
 
   @override
   void initState() {
@@ -75,6 +90,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   void _handleScroll() {
     if (_isLoadingWindow ||
         _locatingUnbuiltItem ||
+        _isProgrammaticScroll ||
         _allSubtitleEntries.isEmpty) {
       return;
     }
@@ -276,6 +292,9 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     _visibleEntries =
         _allSubtitleEntries.sublist(_windowStartIndex, windowEndIndex);
 
+    // 设置初始高亮局部索引（否则首次打开无高亮；cupertino 版同此）
+    _currentSubtitleIndex = centerIndex - _windowStartIndex;
+
     // 设置滚动位置到当前时间对应的字幕
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentItem(centerIndex, animated: false);
@@ -309,13 +328,13 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       _calibrateItemHeight();
       final itemContext = _currentItemKey.currentContext;
       if (itemContext != null) {
-        Scrollable.ensureVisible(
-          itemContext,
-          alignment: 0.3,
-          duration:
-              animated ? const Duration(milliseconds: 250) : Duration.zero,
-          curve: Curves.easeInOut,
-        );
+        _scrollProgrammatic(() => Scrollable.ensureVisible(
+              itemContext,
+              alignment: 0.3,
+              duration:
+                  animated ? const Duration(milliseconds: 250) : Duration.zero,
+              curve: Curves.easeInOut,
+            ));
         return;
       }
 
@@ -324,18 +343,21 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       if (!_scrollController.hasClients) return;
       final target = (localIndex * _estimatedItemHeight)
           .clamp(0.0, _scrollController.position.maxScrollExtent);
-      _scrollController.jumpTo(target);
+      _scrollProgrammatic(() async {
+        _scrollController.jumpTo(target);
+        await WidgetsBinding.instance.endOfFrame;
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final ctx = _currentItemKey.currentContext;
         if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.3,
-            duration:
-                animated ? const Duration(milliseconds: 250) : Duration.zero,
-            curve: Curves.easeInOut,
-          );
+          _scrollProgrammatic(() => Scrollable.ensureVisible(
+                ctx,
+                alignment: 0.3,
+                duration:
+                    animated ? const Duration(milliseconds: 250) : Duration.zero,
+                curve: Curves.easeInOut,
+              ));
         } else {
           _locateUnbuiltItem(globalIndex);
         }
@@ -381,12 +403,12 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     final leading = viewport.getOffsetToReveal(item, 0).offset;
     final trailing = viewport.getOffsetToReveal(item, 1).offset;
     if (leading >= pixels - 1 && trailing <= pixels + 1) return;
-    Scrollable.ensureVisible(
-      itemContext,
-      alignment: 0.3,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    _scrollProgrammatic(() => Scrollable.ensureVisible(
+          itemContext,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ));
   }
 
   // 用列表实际内容高度校准估算条目高度：
@@ -407,7 +429,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     }
   }
 
-  // 更新可见窗口
+  // 更新可见窗口（与 cupertino_subtitle_list_pane 行为对齐）：
+  // 完全替换窗口内容并同步重算高亮局部索引。不做"相对滚动位置恢复"的
+  // jumpTo——那次程序化滚动会再次触发监听、把高亮推回视口之外，形成
+  // "视口 9 条来回跳动"；定位交给 _scrollToCurrentItem 的 ensureVisible。
   void _updateVisibleWindow(int newStartIndex) {
     if (_isLoadingWindow || _allSubtitleEntries.isEmpty) return;
 
@@ -415,51 +440,20 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       _isLoadingWindow = true;
     });
 
-    // 边界检查
-    newStartIndex = newStartIndex.clamp(0, _allSubtitleEntries.length - 1);
+    final int maxStart = _allSubtitleEntries.length - 1;
+    newStartIndex = newStartIndex.clamp(0, maxStart);
+    final int newEndIndex =
+        (newStartIndex + _windowSize).clamp(0, _allSubtitleEntries.length);
 
-    // 计算窗口结束索引，允许窗口增长
-    int newEndIndex =
-        (newStartIndex + _windowSize * 2).clamp(0, _allSubtitleEntries.length);
-
-    // 保持当前滚动位置的相对索引
-    final currentScrollPosition =
-        _scrollController.hasClients ? _scrollController.position.pixels : 0;
-    final currentEstimatedIndex =
-        (currentScrollPosition / _estimatedItemHeight).floor();
-    final relativePosition = currentEstimatedIndex - _windowStartIndex;
-
-    // 更新窗口索引和可见条目
     setState(() {
-      // 如果是新窗口，完全替换
-      if (newStartIndex != _windowStartIndex) {
-        _windowStartIndex = newStartIndex;
-        _visibleEntries =
-            _allSubtitleEntries.sublist(newStartIndex, newEndIndex);
-      }
-      // 如果是追加内容（向下滚动）
-      else if (newEndIndex > _windowStartIndex + _visibleEntries.length) {
-        // 只添加新内容
-        final additionalEntries = _allSubtitleEntries.sublist(
-            _windowStartIndex + _visibleEntries.length, newEndIndex);
-        _visibleEntries.addAll(additionalEntries);
-      }
-
+      _windowStartIndex = newStartIndex;
+      _visibleEntries =
+          _allSubtitleEntries.sublist(newStartIndex, newEndIndex);
       _isLoadingWindow = false;
+      _currentSubtitleIndex = _currentTimeMs == 0
+          ? -1
+          : _findNearestSubtitleIndex(_currentTimeMs) - _windowStartIndex;
     });
-
-    // 如果是窗口替换，保持相对滚动位置
-    if (newStartIndex != _windowStartIndex && relativePosition >= 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          final newScrollPosition =
-              (relativePosition + newStartIndex) * _estimatedItemHeight;
-          if (newScrollPosition != currentScrollPosition) {
-            _scrollController.jumpTo(newScrollPosition);
-          }
-        }
-      });
-    }
   }
 
   // 找到离当前时间最近的字幕索引
@@ -753,7 +747,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                         ),
                                                       ),
                                                       const Text(
-                                                        ' → ',
+                                                        '  ',
                                                         locale: Locale(
                                                             "zh-Hans", "zh"),
                                                         style: TextStyle(
@@ -916,7 +910,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                           ),
                                                         ),
                                                         Text(
-                                                          ' → ',
+                                                          '  ',
                                                           locale: Locale(
                                                               "zh-Hans", "zh"),
                                                           style: TextStyle(

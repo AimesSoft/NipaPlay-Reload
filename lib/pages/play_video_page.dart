@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -410,7 +411,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           includeDanmaku: includeDanmaku,
           includeSubtitles: includeSubtitles,
         ),
-        barrierDismissible: !_shouldDisableDialogDismiss(videoState),
+        // Tap-outside dismiss stays enabled even in fullscreen on tablets,
+        // so the dialog closes like every other Nipaplay window.
+        barrierDismissible: true,
       ),
     );
   }
@@ -956,8 +959,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         DesktopPictureInPictureScope.isEnabledOf(context);
     final showPictureInPictureButton =
         DesktopPlayerWindowService.isFeatureEnabled;
-    final double horizontalCutoutInset =
-        globals.isPhone && portraitUiScale >= 0.999 ? 24.0 : 0.0;
+    final bool isMobileLandscape = globals.isMobilePlatform &&
+        !isCompactPortrait &&
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final minimumSideInset = globals.isPhone ? 24.0 : 0.0;
+    final double leftCutoutInset =
+        isMobileLandscape ? math.max(minimumSideInset, viewPadding.left) : 0.0;
+    final double rightCutoutInset =
+        isMobileLandscape ? math.max(minimumSideInset, viewPadding.right) : 0.0;
 
     final int rightButtonCount = (showPictureInPictureButton
             ? (detachedWindow != null ? (isPictureInPicture ? 1 : 2) : 1)
@@ -969,9 +979,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
         : 0.0;
     final double availableTitleWidth = (MediaQuery.of(context).size.width -
-            (16.0 + horizontalCutoutInset) -
+            (16.0 + leftCutoutInset) -
             (isPictureInPicture ? 0.0 : 116.0) -
-            (16.0 + horizontalCutoutInset) -
+            (16.0 + rightCutoutInset) -
             rightButtonsWidth -
             (globals.isMobilePlatform ? 86.0 : 0.0) -
             24.0)
@@ -999,7 +1009,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 alignment: Alignment.topLeft,
                 child: Padding(
                   padding: EdgeInsets.only(
-                    left: horizontalCutoutInset,
+                    left: leftCutoutInset,
                     top: 6.0,
                     bottom: 12.0,
                   ),
@@ -1134,7 +1144,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 alignment: Alignment.topRight,
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: horizontalCutoutInset,
+                    right: rightCutoutInset,
                     top: 6.0,
                     bottom: 12.0,
                   ),
@@ -1303,7 +1313,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           VideoControlsOverlay(compactPortrait: portraitUiScale < 0.999),
         if (!isPictureInPicture)
           Positioned(
-            right: 16.0 + horizontalCutoutInset,
+            right: 16.0 + rightCutoutInset,
             bottom: isCompactPortrait ? 84.0 : 96.0,
             child: AnimatedOpacity(
               opacity: videoState.hasActiveSkipSegment && !uiLocked ? 1.0 : 0.0,
@@ -1334,7 +1344,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         if (globals.isMobilePlatform && !isCompactPortrait)
           Positioned(
-            left: 16.0 + horizontalCutoutInset,
+            left: 16.0 + leftCutoutInset,
             top: 0,
             bottom: 0,
             child: Center(

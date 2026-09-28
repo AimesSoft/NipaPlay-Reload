@@ -185,6 +185,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // transfers an owned file descriptor to Rust. Treating this as a
         // normal File path would reject it before the player can open it.
         fileExists = true;
+      } else if (globals.isHarmonyOS) {
+        final validPath = await FilePickerService().getValidFilePath(videoPath);
+        fileExists = validPath != null;
+        if (validPath != null) videoPath = validPath;
       } else if (Platform.isIOS) {
         final filePickerService = FilePickerService();
 
@@ -957,6 +961,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (!canContinue()) return;
         final danmakuAutoLoadSettings = await _resolveDanmakuAutoLoadSettings();
         if (!canContinue()) return;
+        debugPrint(
+          '[弹幕自动匹配] 启动加载流程: path=$videoPath, '
+          'strategy=${danmakuAutoLoadSettings.strategy.name}, '
+          'skipMatching=${danmakuAutoLoadSettings.skipMatching}, '
+          'existingAnimeId=$_animeId, existingEpisodeId=$_episodeId',
+        );
 
         // “跳过弹幕匹配”表示启动时完全跳过弹幕流程。手动搜索只能由用户
         // 从播放器弹幕菜单主动触发，不能在这里自动弹出。
@@ -1025,10 +1035,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             } else {
               // 没有手动匹配的弹幕ID，使用常规方式识别和加载弹幕
               try {
-                await _recognizeVideo(videoPath);
+                debugPrint('[弹幕自动匹配] 没有可用的现成 ID，开始远程识别');
+                await _recognizeVideo(
+                  videoPath,
+                  probePath: resolvedActualPlayUrl,
+                );
               } catch (e) {
                 if (!canContinue()) return;
-                //debugPrint('弹幕加载失败: $e');
+                debugPrint('[弹幕自动匹配] 远程识别流程抛出异常: $e');
                 // 设置空弹幕列表，确保播放不受影响
                 _clearDanmakuAutoLoadState();
                 _addStatusMessage('无法连接服务器，跳过加载弹幕');

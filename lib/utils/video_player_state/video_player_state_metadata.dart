@@ -92,7 +92,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
     }
   }
 
-  Future<void> _recognizeVideo(String videoPath) async {
+  Future<void> _recognizeVideo(
+    String videoPath, {
+    String? probePath,
+  }) async {
     if (videoPath.isEmpty || _isDisposed || _currentVideoPath != videoPath) {
       return;
     }
@@ -119,7 +122,12 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
       final canMatch = await DanmakuMatchingService.instance.canAccess();
       if (!canContinue()) return;
+      debugPrint(
+        '[弹幕自动匹配] 远程服务访问检查: canAccess=$canMatch, '
+        'loggedIn=${DandanplayService.isLoggedIn}',
+      );
       if (!canMatch) {
+        debugPrint('[弹幕自动匹配] 官方服务缺少有效登录凭据，请求未发出');
         _addStatusMessage('未登录弹弹play，已跳过在线弹幕匹配');
         unawaited(_promptDandanplayLogin());
         return;
@@ -129,14 +137,27 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
       // 使用超时处理网络请求
       try {
-        //debugPrint('尝试获取视频信息...');
+        final recognitionTimeout = danmakuVideoInfoTimeout(
+          videoPath,
+          probePath: probePath,
+        );
+        debugPrint(
+          '[弹幕自动匹配] 正在读取文件元数据并查询匹配信息: '
+          'timeout=${recognitionTimeout.inSeconds}s',
+        );
         final videoInfo = await DanmakuMatchingService.instance
-            .getVideoInfo(videoPath)
-            .timeout(const Duration(seconds: 15), onTimeout: () {
+            .getVideoInfo(videoPath, probePath: probePath)
+            .timeout(recognitionTimeout, onTimeout: () {
           //debugPrint('获取视频信息超时');
-          throw TimeoutException('连接服务器超时');
+          throw TimeoutException(
+            '视频识别超时 (${recognitionTimeout.inSeconds}s)',
+          );
         });
         if (!canContinue()) return;
+        debugPrint(
+          '[弹幕自动匹配] 查询完成: isMatched=${videoInfo['isMatched']}, '
+          'matches=${videoInfo['matches'] is List ? (videoInfo['matches'] as List).length : 'invalid'}',
+        );
 
         if (videoInfo['isMatched'] == true) {
           //debugPrint('视频匹配成功，开始加载弹幕...');
@@ -300,14 +321,17 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
             _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
           }
+        } else {
+          debugPrint('[弹幕自动匹配] 哈希和文件名兜底均未找到匹配，跳过网络弹幕');
         }
       } on DandanplayLoginRequired {
         if (!canContinue()) return;
+        debugPrint('[弹幕自动匹配] 请求前鉴权失败，请求未发出');
         _addStatusMessage('未登录弹弹play，已跳过在线弹幕匹配');
         unawaited(_promptDandanplayLogin());
       } catch (e) {
         if (!canContinue()) return;
-        //debugPrint('视频识别网络错误: $e\n$s');
+        debugPrint('[弹幕自动匹配] 视频识别或网络请求失败: $e');
         _danmakuList = [];
         _danmakuListVersion++;
         _danmakuTracks.clear();

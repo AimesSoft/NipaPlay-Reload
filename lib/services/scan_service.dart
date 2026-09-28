@@ -7,6 +7,8 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/services/rust_file_scan_service.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
+import 'package:nipaplay/services/harmony_local_media_service.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platformIdentity;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'dart:convert';
 // Import Provider if ScanService needs to directly refresh other providers,
@@ -362,6 +364,9 @@ class ScanService with ChangeNotifier {
   Future<_FolderFileDiff> _calculateFolderFileDiffWithRust(
     String folderPath,
   ) async {
+    if (platformIdentity.isHarmonyOS) {
+      await HarmonyLocalMediaService.ensureDirectoryAccess(folderPath);
+    }
     if (_isAndroidSafPath(folderPath)) {
       return _calculateFolderFileDiffWithSaf(folderPath);
     }
@@ -462,6 +467,15 @@ class ScanService with ChangeNotifier {
         continue;
       }
 
+      if (platformIdentity.isHarmonyOS) {
+        try {
+          await HarmonyLocalMediaService.ensureDirectoryAccess(folderPath);
+        } catch (_) {
+          // Lost authorization or a disconnected volume is not a deletion.
+          continue;
+        }
+      }
+
       if (_isAndroidSafPath(folderPath)) {
         if (!await AndroidSafService.canAccessTree(folderPath)) {
           keysToRemove.add(folderPath);
@@ -522,6 +536,9 @@ class ScanService with ChangeNotifier {
   Future<FolderChangeInfo?> _detectDetailedFolderChanges(
       String folderPath) async {
     if (kIsWeb) return null;
+    if (platformIdentity.isHarmonyOS) {
+      await HarmonyLocalMediaService.ensureDirectoryAccess(folderPath);
+    }
     if (!_isAndroidSafPath(folderPath)) {
       final directory = Directory(folderPath);
       if (!await directory.exists()) {
@@ -1096,7 +1113,16 @@ class ScanService with ChangeNotifier {
     }
 
     final missingFolders = <String>[];
+    var inaccessibleFolders = 0;
     for (final folderPath in List<String>.from(_scannedFolders)) {
+      if (platformIdentity.isHarmonyOS) {
+        try {
+          await HarmonyLocalMediaService.ensureDirectoryAccess(folderPath);
+        } catch (_) {
+          inaccessibleFolders++;
+          continue;
+        }
+      }
       if (_isAndroidSafPath(folderPath)) {
         if (!await AndroidSafService.canAccessTree(folderPath)) {
           missingFolders.add(folderPath);
@@ -1111,7 +1137,9 @@ class ScanService with ChangeNotifier {
     }
 
     if (missingFolders.isEmpty) {
-      _updateScanMessage("没有需要清理的不存在文件夹。");
+      _updateScanMessage(inaccessibleFolders > 0
+          ? '有 $inaccessibleFolders 个文件夹暂时无法访问，已保留，请恢复访问授权后重试。'
+          : "没有需要清理的不存在文件夹。");
       return 0;
     }
 

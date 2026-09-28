@@ -287,7 +287,7 @@ class StorageService {
       }
       
       // 最后的最后才考虑Documents，但要警告
-      debugPrint('⚠️ 警告：无法创建XDG目录，临时使用Documents目录');
+      debugPrint(' 警告：无法创建XDG目录，临时使用Documents目录');
       return getApplicationDocumentsDirectory();
     }
   }

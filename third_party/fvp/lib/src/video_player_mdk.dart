@@ -23,13 +23,13 @@ class MdkVideoPlayer extends mdk.Player {
   bool _initialized = false;
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     onMediaStatus(null);
     onEvent(null);
     onStateChanged(null);
-    streamCtl.close();
+    await streamCtl.close();
     _initialized = false;
-    super.dispose();
+    await super.dispose();
   }
 
   MdkVideoPlayer() : super() {
@@ -265,7 +265,7 @@ class MdkVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<void> dispose(int textureId) async {
-    _players.remove(textureId)?.dispose();
+    await _players.remove(textureId)?.dispose();
   }
 
   @override
