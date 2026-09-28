@@ -6,6 +6,47 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 class MediaSourceUtils {
   MediaSourceUtils._();
 
+  /// Decode a remote playback URL only for the error dialog. The media URL
+  /// used by the player remains encoded; credentials are omitted from the
+  /// displayed URL so decoding cannot reveal an encoded password.
+  static String playbackErrorForDisplay(String message, String? mediaPath) {
+    if (mediaPath == null ||
+        !(isNewWebDavPath(mediaPath) ||
+            isNewSmbPath(mediaPath) ||
+            isWebDavPath(mediaPath) ||
+            isSmbPath(mediaPath))) {
+      return message;
+    }
+
+    final urlPattern = RegExp(
+      r'''(?:https?|webdav|smb)://[^\s<>"'）)]+''',
+      caseSensitive: false,
+    );
+    return message.replaceAllMapped(urlPattern, (match) {
+      final rawUrl = match.group(0)!;
+      final authorityStart = rawUrl.indexOf('://') + 3;
+      final authorityEnd = rawUrl.indexOf(
+        RegExp(r'[/?#]'),
+        authorityStart,
+      );
+      final end = authorityEnd < 0 ? rawUrl.length : authorityEnd;
+      final userInfoEnd = rawUrl.lastIndexOf('@', end - 1);
+      final safeUrl = userInfoEnd < authorityStart
+          ? rawUrl
+          : rawUrl.substring(0, authorityStart) +
+              rawUrl.substring(userInfoEnd + 1);
+      try {
+        // This is display text, so decode encoded separators in an SMB
+        // proxy's `path` parameter as well as non-ASCII directory names.
+        return Uri.decodeComponent(safeUrl);
+      } on ArgumentError {
+        return safeUrl;
+      } on FormatException {
+        return safeUrl;
+      }
+    });
+  }
+
   static List<WebDAVConnection> _remoteWebDavConnections = const [];
 
   static void updateRemoteWebDavConnections(
@@ -16,6 +57,14 @@ class MediaSourceUtils {
   static bool isContentUri(String value) {
     final uri = Uri.tryParse(value.trim());
     return uri != null && uri.scheme.toLowerCase() == 'content';
+  }
+
+  /// Returns a credential-safe description for remote path resolution errors.
+  ///
+  /// In particular, [FormatException.toString] includes its source value,
+  /// which may be a WebDAV `username:password` user-info string.
+  static String safeRemotePathError(Object error) {
+    return error.runtimeType.toString();
   }
 
   static bool isSmbPath(String filePath) {

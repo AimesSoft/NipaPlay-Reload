@@ -134,7 +134,11 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
       grouped.putIfAbsent(item.category, () => []).add(item);
     }
 
-    final sections = <Widget>[const PlayerQuickControls(cupertino: true)];
+    final videoState = context.watch<VideoPlayerState>();
+    final sections = <Widget>[
+      if (videoState.showPlayerMenuQuickControls && videoState.hasVideo)
+        const PlayerQuickControls(cupertino: true),
+    ];
     grouped.forEach((category, defs) {
       sections.add(
         AdaptivePlayerMenuSection(

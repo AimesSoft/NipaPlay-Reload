@@ -15,7 +15,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/multi_address_manager_widget.da
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -642,15 +641,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     }
   }
 
-  String get _serverIconAsset {
-    switch (widget.serverType) {
-      case MediaServerType.jellyfin:
-        return 'assets/jellyfin.svg';
-      case MediaServerType.emby:
-        return 'assets/emby.svg';
-    }
-  }
-
   bool get _supportsTranscode =>
       widget.serverType == MediaServerType.jellyfin ||
       widget.serverType == MediaServerType.emby;
@@ -783,27 +773,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   Widget _buildHeader() {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: _accentColor.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _accentColor.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: SvgPicture.asset(
-            _serverIconAsset,
-            width: 28,
-            height: 28,
-            colorFilter: ColorFilter.mode(
-              _accentColor,
-              BlendMode.srcIn,
-            ),
-          ),
-        ),
-        SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -844,15 +813,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _accentColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.dns, color: _accentColor, size: 20),
-              ),
-              SizedBox(width: 12),
               Text(
                 '服务器:',
                 locale: Locale("zh-Hans", "zh"),
@@ -871,15 +831,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
           SizedBox(height: 12),
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _accentColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.person, color: _accentColor, size: 20),
-              ),
-              SizedBox(width: 12),
               Text(
                 '用户:',
                 locale: Locale("zh-Hans", "zh"),
@@ -903,15 +854,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
       children: [
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _accentColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.library_books, color: _accentColor, size: 20),
-            ),
-            SizedBox(width: 12),
             Text(
               '媒体库选择',
               locale: Locale("zh-Hans", "zh"),
@@ -1077,19 +1019,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: _accentColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.high_quality,
-                        color: _accentColor,
-                        size: 20,
-                      ),
-                    ),
-                    SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

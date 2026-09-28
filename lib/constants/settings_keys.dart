@@ -17,6 +17,11 @@ class SettingsKeys {
 
   static const String fastPlaybackStartup = 'fast_playback_startup';
 
+  static const String showPlayerMenuQuickControls =
+      'show_player_menu_quick_controls';
+
+  static const String showMediaLibraryNewBadge = 'show_media_library_new_badge';
+
   // =========================== 外部播放器相关设置 ============================
 
   static const String useExternalPlayer =
@@ -56,6 +61,9 @@ class SettingsKeys {
   static const String labsEnableErikaPlayerKernel =
       'labs_enable_erika_player_kernel';
 
+  static const String labsEnableImmersiveAnimeDetail =
+      'labs_enable_immersive_anime_detail';
+
   static const String danmakuEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';
 
@@ -80,12 +88,18 @@ class SettingsKeys {
   static const String downloaderAutoScanCompletedTasks =
       'downloader_auto_scan_completed_tasks';
 
+  static const String downloaderVerifiedScannedCompletedTaskKeys = 'downloader_verified_scanned_completed_task_keys';
   static const String downloaderAutoScannedCompletedTaskKeys =
       'downloader_auto_scanned_completed_task_keys';
 
   static const String githubProxyUrl = 'github_proxy_url';
 
   static const String danmakuSupersample = 'danmaku_supersample';
+
+  /// 弹幕超采样的规范化字符串存档键（'0.0'/'1.5'/'2.0'）。
+  /// 旧 double 键上“关闭(0.0)”曾出现重启后丢失/回退的问题，改用字符串键
+  /// 作为权威存档；旧键仍同步写入以兼容降级与旧日志对照。
+  static const String danmakuSupersampleV2 = 'danmaku_supersample_v2';
 
   // ===========================================================================
   // ============================ 弹幕相关设置 =================================

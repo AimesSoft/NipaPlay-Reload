@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
@@ -590,7 +589,6 @@ class _RemoteAccessReceiverSettingsSectionState
       children: [
         _buildRemoteHeader(
           context,
-          icon: Icons.cast_connected,
           title: '远程访问与遥控',
           subtitle: '在同一网络内访问本机媒体库，也可以让手机或其他客户端遥控播放。',
           status: statusText,
@@ -599,7 +597,6 @@ class _RemoteAccessReceiverSettingsSectionState
         const SizedBox(height: 16),
         _buildRemoteSwitchRow(
           context,
-          icon: Icons.power_settings_new,
           title: '启用远程访问服务',
           subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
           value: _webServerEnabled,
@@ -607,7 +604,6 @@ class _RemoteAccessReceiverSettingsSectionState
         ),
         _buildRemoteSwitchRow(
           context,
-          icon: Icons.settings_remote,
           title: '启用被遥控端',
           subtitle: '允许控制端读取播放器状态、菜单参数并进行遥控',
           value: _receiverEnabled,
@@ -615,7 +611,6 @@ class _RemoteAccessReceiverSettingsSectionState
         ),
         _buildRemoteSwitchRow(
           context,
-          icon: Icons.auto_awesome,
           title: '软件打开自动开启',
           subtitle: '启动 NipaPlay 时自动开启远程访问服务',
           value: _autoStartEnabled,
@@ -623,7 +618,6 @@ class _RemoteAccessReceiverSettingsSectionState
         ),
         _buildRemoteSwitchRow(
           context,
-          icon: Icons.router,
           title: '启用 IPv6 访问地址',
           subtitle: '地址列表和二维码会包含可用的 IPv6 地址',
           value: _ipv6Enabled,
@@ -631,7 +625,6 @@ class _RemoteAccessReceiverSettingsSectionState
         ),
         _buildRemoteSwitchRow(
           context,
-          icon: Icons.qr_code_2,
           title: '显示远程访问二维码',
           subtitle: '用于另一台设备扫码连接共享媒体库与遥控器',
           value: showRemoteAccessQrCode,
@@ -639,7 +632,6 @@ class _RemoteAccessReceiverSettingsSectionState
         ),
         _buildRemoteActionRow(
           context,
-          icon: Icons.settings_ethernet,
           title: '远程访问端口',
           subtitle: '当前端口: $_currentPort',
           onTap: _showPortDialog,
@@ -667,29 +659,16 @@ class _RemoteAccessReceiverSettingsSectionState
 
   Widget _buildRemoteHeader(
     BuildContext context, {
-    required IconData icon,
     required String title,
     required String subtitle,
     required String status,
     required bool active,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final statusColor =
-        active ? colorScheme.primary : colorScheme.onSurfaceVariant;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: statusColor),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -746,7 +725,6 @@ class _RemoteAccessReceiverSettingsSectionState
 
   Widget _buildRemoteSwitchRow(
     BuildContext context, {
-    required IconData icon,
     required String title,
     required String subtitle,
     required bool value,
@@ -754,7 +732,6 @@ class _RemoteAccessReceiverSettingsSectionState
   }) {
     return _buildRemoteActionRow(
       context,
-      icon: icon,
       title: title,
       subtitle: subtitle,
       onTap: () => onChanged(!value),
@@ -767,7 +744,6 @@ class _RemoteAccessReceiverSettingsSectionState
 
   Widget _buildRemoteActionRow(
     BuildContext context, {
-    required IconData icon,
     required String title,
     required String subtitle,
     VoidCallback? onTap,
@@ -775,7 +751,6 @@ class _RemoteAccessReceiverSettingsSectionState
     bool destructive = false,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final accentColor = destructive ? colorScheme.error : colorScheme.primary;
 
     return MouseRegion(
       cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
@@ -786,16 +761,6 @@ class _RemoteAccessReceiverSettingsSectionState
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 18, color: accentColor),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1036,7 +1001,6 @@ class _RemoteAccessReceiverSettingsSectionState
       children: [
         _buildRemoteHeader(
           context,
-          icon: Ionicons.shield_checkmark_outline,
           title: '受信任设备',
           subtitle: '已经确认过的遥控端会显示在这里，移除后下次连接需要重新确认。',
           status: '${_trustedDevices.length} 台',
@@ -1061,7 +1025,6 @@ class _RemoteAccessReceiverSettingsSectionState
     final clientKey = device['clientKey'] as String?;
     return _buildRemoteActionRow(
       context,
-      icon: Ionicons.phone_portrait_outline,
       title: device['clientName'] as String? ?? '未知设备',
       subtitle: _trustedDeviceSubtitle(device),
       trailing: AdaptiveSettingsActionButton(

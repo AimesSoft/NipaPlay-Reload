@@ -75,6 +75,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载播放速度设置
     await _loadPlaybackRate();
+    _initialDanmakuSettingsReady.complete();
 
     // 加载快进快退时间设置
     await _loadSeekStepSeconds();
@@ -89,6 +90,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDesktopHoverSettingsMenuEnabled();
     await _loadInstantHidePlayerUiEnabled();
     await _loadPlayerTopButtonVisibilitySettings();
+    await _loadPlayerMenuQuickControlsVisibility();
     await _loadChapterMarkersEnabled(); // 加载 MKV 章节标记开关
     await loadIntroSkipEnabled(); // 加载跳过片头开关
     await _loadScreenshotSaveTarget();
@@ -212,6 +214,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   void startBrightnessDrag() {
     if (!globals.isMobilePlatform) return;
+    if (_subtitleDragActive) return; // 字幕拖动中不响应亮度手势
     // Refresh _initialDragBrightness with the most up-to-date _currentBrightness
     // This handles cases where brightness might have been changed by other means
     // or if a previous drag was interrupted.

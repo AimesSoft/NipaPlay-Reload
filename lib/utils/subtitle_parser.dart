@@ -325,7 +325,7 @@ class SubtitleParser {
       if (endTimeMs <= startTimeMs) continue;
 
       final contentLines = lines.sublist(timeLineIndex + 1);
-      final text = contentLines.join('\n').trim();
+      final text = _cleanAssText(contentLines.join('\n').trim());
       if (text.isEmpty) continue;
 
       entries.add(SubtitleEntry(
@@ -499,7 +499,7 @@ class SubtitleParser {
   // 清理ASS文本中的样式标记
   static String _cleanAssText(String text) {
     // 移除 {\xxx} 格式的样式标记
-    String result = text.replaceAll(RegExp(r'\{\\[^}]*\}'), '');
+    String result = text.replaceAll(RegExp(r'\{[^}]*\}'), '');
 
     // 根据需要添加更多清理，例如处理\N表示的换行
     result = result.replaceAll('\\N', '\n');
@@ -791,7 +791,7 @@ class SubtitleParser {
             }
             if (nativeResult != null) {
               final result = _fromNativeResult(nativeResult);
-              // 防御性检查: C++ 返回 0 条目但文件非空 → 可能编码转换失败
+              // 防御性检查: C++ 返回 0 条目但文件非空  可能编码转换失败
               if (result.entries.isNotEmpty ||
                   result.format != SubtitleFormat.unknown) {
                 _log('[SubtitleParser] C++ 路径成功: '

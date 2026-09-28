@@ -31,11 +31,16 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color iconColor = isDarkMode ? Colors.white : Colors.black87;
     final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color backgroundTint = useVideoBackground
-        ? (isDarkMode ? Colors.black : Colors.white).withValues(alpha: 0.5)
-        : isDarkMode
-            ? Colors.black.withValues(alpha: 0.18)
-            : Colors.white.withValues(alpha: 0.14);
+    final Color backgroundColor = isDarkMode ? Colors.black : Colors.white;
+    final Color backgroundTint = TvSafeBackdropFilter.shouldSkipBlur
+        ? backgroundColor
+        : backgroundColor.withValues(
+            alpha: useVideoBackground
+                ? 0.5
+                : isDarkMode
+                    ? 0.18
+                    : 0.14,
+          );
     final Color dividerColor = isDarkMode
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.12);
@@ -82,7 +87,7 @@ class NipaplayLargeScreenBottomHintOverlay extends StatelessWidget {
     return SizedBox(
       height: kNipaplayLargeScreenBottomHintHeight,
       child: ClipRect(
-        // 电视上跳过 σ25 的常驻底栏模糊（每帧重算）。
+        // 电视上使用不透明底色，并跳过常驻底栏模糊。
         child: TvSafeBackdropFilter(
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: DecoratedBox(

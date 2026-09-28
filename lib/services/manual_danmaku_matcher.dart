@@ -45,6 +45,7 @@ class ManualDanmakuMatcher {
   static Future<Map<String, dynamic>?> showMatchDialog(
     BuildContext context, {
     String? initialVideoTitle,
+    bool searchOnOpen = false,
   }) async {
     try {
       await DanmakuMatchingService.instance.ensureAccess();
@@ -65,6 +66,7 @@ class ManualDanmakuMatcher {
         autofocusClose: false,
         builder: (_) => ManualDanmakuMatchDialog(
           initialVideoTitle: initialVideoTitle,
+          searchOnOpen: searchOnOpen,
           embedded: true,
         ),
       );
@@ -77,6 +79,7 @@ class ManualDanmakuMatcher {
         floatingTitle: true,
         child: ManualDanmakuMatchDialog(
           initialVideoTitle: initialVideoTitle,
+          searchOnOpen: searchOnOpen,
           embedded: true,
         ),
       );
@@ -93,6 +96,7 @@ class ManualDanmakuMatcher {
       barrierDismissible: true,
       child: ManualDanmakuMatchDialog(
         initialVideoTitle: initialVideoTitle,
+        searchOnOpen: searchOnOpen,
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:file_selector/file_selector.dart';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -32,31 +33,31 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   final TextEditingController _subtitleDelayController =
       TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
-  final TextEditingController _textColorController = TextEditingController();
-  final TextEditingController _borderColorController = TextEditingController();
-  final TextEditingController _shadowColorController = TextEditingController();
   final FocusNode _subtitleDelayFocus = FocusNode();
   final FocusNode _fontNameFocus = FocusNode();
-  final FocusNode _textColorFocus = FocusNode();
-  final FocusNode _borderColorFocus = FocusNode();
-  final FocusNode _shadowColorFocus = FocusNode();
   String? _subtitleDelayError;
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
+  final TextEditingController _srtDelayController = TextEditingController();
+  final FocusNode _srtDelayFocus = FocusNode();
+  String? _srtDelayError;
   String? _fontImportMessage;
+  Future<List<String>>? _fontLibraryFuture;
+
+  void _refreshFontLibrary() {
+    setState(() {
+      _fontLibraryFuture = null;
+    });
+  }
 
   @override
   void dispose() {
     _subtitleDelayController.dispose();
+    _srtDelayController.dispose();
+    _srtDelayFocus.dispose();
     _fontNameController.dispose();
-    _textColorController.dispose();
-    _borderColorController.dispose();
-    _shadowColorController.dispose();
     _subtitleDelayFocus.dispose();
     _fontNameFocus.dispose();
-    _textColorFocus.dispose();
-    _borderColorFocus.dispose();
-    _shadowColorFocus.dispose();
     super.dispose();
   }
 
@@ -84,20 +85,97 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     }
   }
 
+  /// 多选中的字体名集合（点击 toggle；再点取消）。
+  /// 初始化自持久化的 subtitleFontName：否则重开菜单后所有芯片都无高亮，
+  /// 且下一次 toggle 会把之前的多选结果整体覆盖丢失。
+  late final Set<String> _selectedFonts;
+
+  @override
+  void initState() {
+    super.initState();
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    _selectedFonts = videoState.subtitleFontName
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  void _toggleFontSelection(
+      VideoPlayerState videoState, String name) {
+    setState(() {
+      if (!_selectedFonts.remove(name)) {
+        _selectedFonts.add(name);
+      }
+    });
+    // 多选字体用英文逗号自动隔开；取消则删除对应项
+    final joined = _selectedFonts.join(', ');
+    _fontNameController.text = joined;
+    videoState.setSubtitleFontName(joined);
+  }
+
   Future<void> _pickFontFile(VideoPlayerState videoState) async {
-    final file = await openFile(
+    // 多选导入：导入后不自动套用字体名，由用户从字体库列表自由选择
+    final files = await openFiles(
       acceptedTypeGroups: [
-        const XTypeGroup(
+        XTypeGroup(
           label: 'Font',
-          extensions: ['ttf', 'otf', 'ttc'],
+          extensions: const ['ttf', 'otf', 'ttc'],
+          uniformTypeIdentifiers: const [
+            'public.truetype-font',
+            'public.opentype-font',
+            'public.font',
+            'public.data',
+            'public.item',
+          ],
         ),
       ],
     );
-    if (file == null) return;
-    await videoState.importSubtitleFontFile(file.path);
+    if (files.isEmpty) return;
+    var count = 0;
+    for (final f in files) {
+      await videoState.importSubtitleFontFile(f.path, applyName: false);
+      count++;
+    }
+    if (!mounted) return;
+    setState(() {
+      _fontImportMessage = '已导入 $count 个字体文件';
+    });
+    _refreshFontLibrary();
   }
 
   Future<void> _pickFontDirectory(VideoPlayerState videoState) async {
+    // iOS 上 file_selector 的 getDirectoryPath 不受支持，改为多选字体文件
+    if (io.Platform.isIOS) {
+      final files = await openFiles(
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: 'Font',
+            extensions: const ['ttf', 'otf', 'ttc'],
+            uniformTypeIdentifiers: const [
+              'public.truetype-font',
+              'public.opentype-font',
+              'public.font',
+              'public.data',
+              'public.item'
+            ],
+          ),
+        ],
+      );
+      if (files.isEmpty) return;
+      var count = 0;
+      for (final f in files) {
+        // 多选导入：不自动套用当前字体名，让用户从字体库列表自由选择
+        await videoState.importSubtitleFontFile(f.path, applyName: false);
+        count++;
+      }
+      if (!mounted) return;
+      setState(() {
+        _fontImportMessage = '已导入 $count 个字体文件';
+      });
+      _refreshFontLibrary();
+      return;
+    }
     final directory = await getDirectoryPath();
     if (directory == null) return;
     final count = await videoState.importSubtitleFontDirectory(directory);
@@ -111,9 +189,11 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
         _fontImportMessage = '未在目录中找到字体文件';
       });
     }
+    _refreshFontLibrary();
   }
 
   double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
+    // 全局字幕延迟（对 MKV 内嵌/ASS 生效）；SRT 独立偏移走 _srtDelayController 区块
     return _subtitleDelayPreviewValue ?? videoState.subtitleDelaySeconds;
   }
 
@@ -131,8 +211,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
 
   void _syncSubtitleDelayController(VideoPlayerState videoState) {
     if (_subtitleDelayFocus.hasFocus || _subtitleDelayDirty) return;
-    final value =
-        _formatDelayInput(_currentSubtitleDelayDisplayValue(videoState));
+    final value = _formatDelayInput(_currentSubtitleDelayDisplayValue(videoState));
     if (_subtitleDelayController.text != value) {
       _subtitleDelayController.text = value;
     }
@@ -256,25 +335,11 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
         final menuColors = PlayerMenuTheme.colorsOf(context);
         final videoState = controller.videoState;
         _syncSubtitleDelayController(videoState);
+        _syncSrtDelayController(videoState);
         _syncController(
           controller: _fontNameController,
           focus: _fontNameFocus,
           value: videoState.subtitleFontName,
-        );
-        _syncController(
-          controller: _textColorController,
-          focus: _textColorFocus,
-          value: _colorToHex(videoState.subtitleColor),
-        );
-        _syncController(
-          controller: _borderColorController,
-          focus: _borderColorFocus,
-          value: _colorToHex(videoState.subtitleBorderColor),
-        );
-        _syncController(
-          controller: _shadowColorController,
-          focus: _shadowColorFocus,
-          value: _colorToHex(videoState.subtitleShadowColor),
         );
 
         return BaseSettingsMenu(
@@ -343,7 +408,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
 
     return _buildOptionButtonsSection(
       title: '样式覆盖',
-      description: 'ASS 字幕样式覆盖策略',
+      description: '自定义样式：外挂字幕应用下方所选字体；内嵌字幕按此策略覆盖 ASS 自带样式',
       items: items,
       onSelected: videoState.setSubtitleOverrideMode,
     );
@@ -453,9 +518,52 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
           const SizedBox(height: 4),
           const SettingsHintText('滑块用于快速微调，正值延后，负值提前'),
           SettingsHintText(_buildSubtitleDelayLimitHint(videoState)),
+
         ],
       ),
     );
+  }
+
+  Future<void> _handleSrtDelaySliderEnd(
+    VideoPlayerState videoState,
+    double value,
+  ) async {
+    await videoState.setSrtSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    _subtitleDelayPreviewValue = null;
+  }
+
+  Future<void> _applySrtCustomDelay(VideoPlayerState videoState) async {
+    final input = _normalizeNumberInput(_srtDelayController.text);
+    if (input.isEmpty) {
+      setState(() => _srtDelayError = '请输入 SRT 偏移秒数');
+      return;
+    }
+    final value = double.tryParse(input);
+    if (value == null) {
+      setState(() => _srtDelayError = '请输入有效的数字');
+      return;
+    }
+    final limit = videoState.subtitleDelayCustomLimitSeconds;
+    if (value.abs() - limit > 0.0001) {
+      final limitText = _formatDelayInput(limit);
+      setState(() => _srtDelayError = '当前视频仅支持 -$limitText ~ +$limitText 秒');
+      return;
+    }
+    await videoState.setSrtSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _srtDelayError = null);
+    BlurSnackBar.show(
+        context, '已设置 SRT 时轴偏移 ${_formatDelayDisplay(value)} 秒');
+  }
+
+  void _syncSrtDelayController(VideoPlayerState videoState) {
+    if (_srtDelayFocus.hasFocus) return;
+    final value = _formatDelayInput(videoState.srtSubtitleDelaySeconds);
+    if (_srtDelayController.text != value) {
+      _srtDelayController.text = value;
+    }
   }
 
   Widget _buildPositionSection(VideoPlayerState videoState) {
@@ -611,46 +719,25 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '文字颜色',
-            controller: _textColorController,
-            focusNode: _textColorFocus,
             color: videoState.subtitleColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleColor(parsed),
           ),
           const SizedBox(height: 8),
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '描边颜色',
-            controller: _borderColorController,
-            focusNode: _borderColorFocus,
             color: videoState.subtitleBorderColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleBorderColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleBorderColor(parsed),
           ),
           const SizedBox(height: 8),
-          _buildColorInputRow(
+          _buildColorEditRow(
             label: '阴影颜色',
-            controller: _shadowColorController,
-            focusNode: _shadowColorFocus,
             color: videoState.subtitleShadowColor,
-            onSubmit: (value) {
-              final parsed = _parseHexColor(value);
-              if (parsed != null) {
-                videoState.setSubtitleShadowColor(parsed);
-              }
-            },
+            onPicked: (parsed) => videoState.setSubtitleShadowColor(parsed),
           ),
           const SizedBox(height: 4),
-          const SettingsHintText('输入颜色十六进制，例如 #FFFFFF'),
+          const SettingsHintText('点击颜色行输入十六进制，例如 #FFFFFF'),
         ],
       ),
     );
@@ -693,6 +780,60 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
             onSubmitted: (value) => videoState.setSubtitleFontName(value),
           ),
           const SizedBox(height: 8),
+          FutureBuilder<List<String>>(
+            future: _fontLibraryFuture ??= videoState.listSubtitleFonts(),
+            builder: (context, snapshot) {
+              final fonts = snapshot.data ?? const <String>[];
+              if (fonts.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '字体库（点击应用）',
+                    style: TextStyle(
+                      color: menuColors.disabledForeground,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final name in fonts)
+                            ActionChip(
+                              label: Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _selectedFonts.contains(name)
+                                      ? menuColors.accent
+                                      : menuColors.foreground,
+                                ),
+                              ),
+                              backgroundColor: menuColors.controlBackground,
+                              side: BorderSide(
+                                color: _selectedFonts.contains(name)
+                                    ? menuColors.accent
+                                    : menuColors.controlBorder,
+                              ),
+                              onPressed: () => _toggleFontSelection(
+                                  videoState, name),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -724,6 +865,22 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
                   onTap: () {
                     videoState.setSubtitleFontName('');
                     videoState.setSubtitleFontDir('');
+                  },
+                  expandHorizontally: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BlurButton(
+                  text: '清理字体缓存',
+                  icon: Icons.cleaning_services_outlined,
+                  onTap: () async {
+                    await videoState.clearSubtitleFontCache();
+                    if (!mounted) return;
+                    setState(() {
+                      _fontImportMessage = '已清空字体库（subtitle_fonts 目录）';
+                    });
+                    _refreshFontLibrary();
                   },
                   expandHorizontally: true,
                 ),
@@ -875,57 +1032,96 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     );
   }
 
-  Widget _buildColorInputRow({
+  /// 颜色编辑行：色块 + 标签 + 当前 hex 只读文本，整体可点击。
+  /// 点击弹出独立的 hex 输入对话框——面板内嵌 TextField 在横屏播放器里
+  /// 贴屏幕右下角，键盘弹出后输入框会被顶到画面角落难以操作；对话框
+  /// （Dialog 自带 viewInsets 避让）始终显示在键盘上方居中位置。
+  Widget _buildColorEditRow({
     required String label,
-    required TextEditingController controller,
-    required FocusNode focusNode,
     required Color color,
-    required ValueChanged<String> onSubmit,
+    required ValueChanged<Color> onPicked,
   }) {
     final menuColors = PlayerMenuTheme.colorsOf(context);
-    return Row(
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: menuColors.controlBorder),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: menuColors.foreground, fontSize: 13),
-          ),
-        ),
-        SizedBox(
-          width: 110,
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            style: TextStyle(color: menuColors.foreground, fontSize: 12),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              filled: true,
-              fillColor: menuColors.controlBackground,
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: menuColors.controlBorder),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: menuColors.accent),
-                borderRadius: BorderRadius.circular(6),
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showHexInputDialog(label, color, onPicked),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: menuColors.controlBorder),
               ),
             ),
-            onSubmitted: onSubmit,
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: menuColors.foreground, fontSize: 13),
+              ),
+            ),
+            Text(
+              _colorToHex(color),
+              style: TextStyle(
+                color: menuColors.disabledForeground,
+                fontSize: 12,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.edit_outlined,
+                size: 14, color: menuColors.disabledForeground),
+          ],
         ),
-      ],
+      ),
     );
+  }
+
+  /// 单行 hex 输入对话框：实时解析（onChanged 输入即应用，与旧内嵌框
+  /// 语义一致），Dialog 自动避让键盘。
+  Future<void> _showHexInputDialog(
+    String label,
+    Color initial,
+    ValueChanged<Color> onPicked,
+  ) async {
+    final controller = TextEditingController(text: _colorToHex(initial));
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(label, style: const TextStyle(fontSize: 16)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 7,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              hintText: '#FFFFFF',
+              counterText: '',
+              isDense: true,
+            ),
+            onChanged: (value) {
+              final parsed = _parseHexColor(value);
+              if (parsed != null) {
+                onPicked(parsed);
+              }
+            },
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 }

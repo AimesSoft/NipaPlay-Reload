@@ -7,9 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/video_aspect_geometry.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
@@ -31,7 +34,6 @@ import 'danmaku_density_bar.dart';
 import 'speed_boost_indicator.dart';
 import 'loading_overlay.dart';
 import 'macos_hdr_probe_overlay.dart';
-import 'media_capture_dialog.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'base_settings_menu.dart';
@@ -151,7 +153,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
         isPlaying: videoState.status == PlayerStatus.playing,
         fontSize: getFontSize(videoState) * widget.danmakuScale,
-        isVisible: videoState.danmakuVisible,
+        isVisible: videoState.danmakuVisible &&
+            !videoState.shouldHideDanmakuForScreenshot,
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
@@ -166,7 +169,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
           isPlaying: videoState.status == PlayerStatus.playing,
           fontSize: getFontSize(videoState) * widget.danmakuScale,
-          isVisible: videoState.danmakuVisible,
+          isVisible: videoState.danmakuVisible &&
+              !videoState.shouldHideDanmakuForScreenshot,
           opacity: videoState.mappedDanmakuOpacity,
         );
       },
@@ -313,9 +317,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   bool _shouldUseWindowHostedVideoOverlay(VideoPlayerState videoState) {
-    return videoState.player.usesWindowOverlayVideoSurface ||
-        (_shouldUseMacOSWindowHostedVideoOverlay &&
-            videoState.player.prefersPlatformVideoSurface);
+    return !videoState.supportsVideoAspectModes;
   }
 
   double getFontSize(VideoPlayerState videoState) {
@@ -375,6 +377,42 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
   }
 
+  Widget _buildVideoSurfaceWithAspectMode(
+      VideoPlayerState videoState, int? textureId) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final videoTracks = videoState.player.mediaInfo.video;
+        Size? naturalSize;
+        if (videoTracks != null && videoTracks.isNotEmpty) {
+          final codec = videoTracks.first.codec;
+          if (codec.width > 0 && codec.height > 0) {
+            naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
+          }
+        }
+        final rect = VideoAspectGeometry.displayRect(
+          mode: videoState.videoAspectMode,
+          viewport: constraints.biggest,
+          sourceAspect: videoState.aspectRatio,
+          naturalSize: naturalSize,
+        );
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.center,
+            minWidth: 0,
+            minHeight: 0,
+            maxWidth: double.infinity,
+            maxHeight: double.infinity,
+            child: SizedBox(
+              width: rect.width,
+              height: rect.height,
+              child: _buildVideoSurface(videoState, textureId),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _updateMacOSNativeVideoViewId(int? viewId) {
     if (!mounted || _macosNativeVideoViewId == viewId) {
       return;
@@ -426,12 +464,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       return _buildVideoSurface(videoState, textureId);
     }
 
-    final surface = Center(
-      child: AspectRatio(
-        aspectRatio: videoState.aspectRatio,
-        child: _buildVideoSurface(videoState, textureId),
-      ),
-    );
+    final surface = _buildVideoSurfaceWithAspectMode(videoState, textureId);
     return ColoredBox(color: Colors.black, child: surface);
   }
 
@@ -484,8 +517,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
             () async {
           if (mounted && _videoPlayerStateInstance != null) {
             // 获取当前的错误信息用于显示
-            final String errorMessage =
-                _videoPlayerStateInstance!.error ?? "发生未知播放错误，已停止播放。";
+            final videoState = _videoPlayerStateInstance!;
+            final errorMessage = MediaSourceUtils.playbackErrorForDisplay(
+              videoState.error ?? "发生未知播放错误，已停止播放。",
+              videoState.currentVideoPath,
+            );
 
             // 显示 BlurDialog
             BlurDialog.show<void>(
@@ -662,6 +698,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // 添加长按手势处理方法
   void _handleLongPressStart(VideoPlayerState videoState) {
+    // 字幕编辑框可见/字幕拖动中不启动长按倍速
+    if (videoState.subtitleEditBoxVisible || videoState.subtitleDragActive) {
+      return;
+    }
     if (!globals.isMobilePlatform || !videoState.hasVideo) return;
 
     // 开始倍速播放
@@ -946,31 +986,29 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     _playbackInfoOverlay = null;
   }
 
-  Future<void> _captureScreenshot(
-    VideoPlayerState videoState,
-    ScreenshotSaveTarget target, {
-    required bool includeDanmaku,
-    required bool includeSubtitles,
-  }) async {
+  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
-      if (!kIsWeb &&
-          defaultTargetPlatform == TargetPlatform.iOS &&
-          target == ScreenshotSaveTarget.photos) {
-        final ok = await videoState.captureScreenshotToPhotos(
-          includeDanmaku: includeDanmaku,
-          includeSubtitles: includeSubtitles,
-        );
-        if (!mounted) return;
-        BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
-        return;
-      }
+      final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+      final isAndroid =
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
       final path = await videoState.captureScreenshot(
-        includeDanmaku: includeDanmaku,
-        includeSubtitles: includeSubtitles,
+        temporary: isIos || isAndroid,
       );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      if (isAndroid) {
+        await PhotoLibraryService.saveTemporaryFileToPhotos(
+          path,
+          mimeType: 'image/jpeg',
+        );
+        if (mounted) BlurSnackBar.show(context, '截图已保存到相册');
+        return;
+      }
+      if (isIos) {
+        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
         return;
       }
       final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
@@ -1056,25 +1094,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       ),
       ContextMenuAction(
         icon: Icons.camera_alt_outlined,
-        label: '画面截取',
+        label: '截图',
         enabled: videoState.hasVideo,
-        onPressed: () => unawaited(
-          showMediaCaptureDialog(
-            context: context,
-            videoState: videoState,
-            onCaptureImage: (
-              target, {
-              required includeDanmaku,
-              required includeSubtitles,
-            }) =>
-                _captureScreenshot(
-              videoState,
-              target,
-              includeDanmaku: includeDanmaku,
-              includeSubtitles: includeSubtitles,
-            ),
-          ),
-        ),
+        onPressed: () => unawaited(_captureScreenshot(videoState)),
       ),
       ContextMenuAction(
         icon: Icons.double_arrow_rounded,
@@ -1232,9 +1254,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     if ((videoState.hasVideo ||
                                             videoState
                                                 .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible &&
-                                        videoState
-                                            .screenshotCaptureIncludesDanmaku)
+                                        videoState.danmakuVisible)
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
@@ -1247,9 +1267,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                    if (videoState.hasVideo &&
-                                        videoState
-                                            .screenshotCaptureIncludesSubtitles)
+                                    if (videoState.hasVideo)
                                       Positioned.fill(
                                         child: Consumer<VideoPlayerState>(
                                           builder: (context, videoState, _) {
@@ -1324,9 +1342,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       if ((videoState.hasVideo ||
                                               videoState
                                                   .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible &&
-                                          videoState
-                                              .screenshotCaptureIncludesDanmaku)
+                                          videoState.danmakuVisible)
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,
@@ -1340,9 +1356,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                             ),
                                           ),
                                         ),
-                                      if (videoState.hasVideo &&
-                                          videoState
-                                              .screenshotCaptureIncludesSubtitles)
+                                      if (videoState.hasVideo)
                                         Positioned.fill(
                                           child: Consumer<VideoPlayerState>(
                                             builder: (context, videoState, _) {
