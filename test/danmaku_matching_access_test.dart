@@ -8,6 +8,50 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('danmaku matching access', () {
+    test('private remote paths use the resolved playback URL for probing', () {
+      expect(
+        resolveDanmakuProbePath(
+          'webdav://connection/anime/episode.mkv',
+          probePath: 'https://example.test/dav/anime/episode.mkv',
+        ),
+        'https://example.test/dav/anime/episode.mkv',
+      );
+      expect(
+        resolveDanmakuProbePath(
+          'smb://connection/anime/episode.mkv',
+          probePath: 'http://127.0.0.1:33221/smb/stream?id=episode',
+        ),
+        'http://127.0.0.1:33221/smb/stream?id=episode',
+      );
+    });
+
+    test('regular paths remain unchanged for probing', () {
+      expect(
+        resolveDanmakuProbePath('/videos/episode.mkv'),
+        '/videos/episode.mkv',
+      );
+      expect(
+        resolveDanmakuProbePath('https://example.test/episode.mkv'),
+        'https://example.test/episode.mkv',
+      );
+    });
+
+    test('remote library scrapers separate stable and probe paths', () {
+      final sources = [
+        File('lib/services/local_media_management_api.dart')
+            .readAsStringSync(),
+        File('lib/themes/nipaplay/widgets/library_management_tab.dart')
+            .readAsStringSync(),
+      ];
+      for (final source in sources) {
+        expect(source, contains('final String probePath;'));
+        expect(source, contains('MediaSourceUtils.buildWebDavPath('));
+        expect(source, contains('MediaSourceUtils.buildSmbPath('));
+      }
+      expect(sources.first, contains('probePath: candidate.probePath'));
+      expect(sources.last, contains('candidate.probePath,'));
+    });
+
     test('logged-out users are rejected before a match request is created',
         () async {
       SharedPreferences.setMockInitialValues({});

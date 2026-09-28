@@ -14,14 +14,17 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
 class _RemoteScrapeCandidate {
   final String filePath;
+  final String probePath;
   final String fileName;
 
   const _RemoteScrapeCandidate({
     required this.filePath,
+    required this.probePath,
     required this.fileName,
   });
 }
@@ -267,7 +270,11 @@ class LocalMediaManagementApi {
 
       final candidates = files
           .map((file) => _RemoteScrapeCandidate(
-                filePath: _webdavService.getFileUrl(connection, file.path),
+                filePath: MediaSourceUtils.buildWebDavPath(
+                  connection.id,
+                  file.path,
+                ),
+                probePath: _webdavService.getFileUrl(connection, file.path),
                 fileName: file.name,
               ))
           .toList();
@@ -430,7 +437,11 @@ class LocalMediaManagementApi {
 
       final candidates = files
           .map((file) => _RemoteScrapeCandidate(
-                filePath: SMBProxyService.instance.buildStreamUrl(
+                filePath: MediaSourceUtils.buildSmbPath(
+                  connection.id,
+                  file.path,
+                ),
+                probePath: SMBProxyService.instance.buildStreamUrl(
                   connection,
                   file.path,
                 ),
@@ -516,6 +527,7 @@ class LocalMediaManagementApi {
       try {
         final videoInfo = await DanmakuMatchingService.instance.getVideoInfo(
           candidate.filePath,
+          probePath: candidate.probePath,
         );
         final matches = videoInfo['matches'];
         if (videoInfo['isMatched'] != true ||

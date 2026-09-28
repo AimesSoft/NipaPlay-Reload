@@ -1032,7 +1032,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               // 没有手动匹配的弹幕ID，使用常规方式识别和加载弹幕
               try {
                 debugPrint('[弹幕自动匹配] 没有可用的现成 ID，开始远程识别');
-                await _recognizeVideo(videoPath);
+                await _recognizeVideo(
+                  videoPath,
+                  probePath: resolvedActualPlayUrl,
+                );
               } catch (e) {
                 if (!canContinue()) return;
                 debugPrint('[弹幕自动匹配] 远程识别流程抛出异常: $e');

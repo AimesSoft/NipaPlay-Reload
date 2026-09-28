@@ -92,7 +92,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
     }
   }
 
-  Future<void> _recognizeVideo(String videoPath) async {
+  Future<void> _recognizeVideo(
+    String videoPath, {
+    String? probePath,
+  }) async {
     if (videoPath.isEmpty || _isDisposed || _currentVideoPath != videoPath) {
       return;
     }
@@ -136,7 +139,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       try {
         debugPrint('[弹幕自动匹配] 正在读取文件元数据并查询匹配信息');
         final videoInfo = await DanmakuMatchingService.instance
-            .getVideoInfo(videoPath)
+            .getVideoInfo(videoPath, probePath: probePath)
             .timeout(const Duration(seconds: 15), onTimeout: () {
           //debugPrint('获取视频信息超时');
           throw TimeoutException('连接服务器超时');
