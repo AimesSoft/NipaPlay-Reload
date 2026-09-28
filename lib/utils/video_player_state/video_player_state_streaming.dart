@@ -103,7 +103,11 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
     );
     try {
       String? newThumbnailPath = await _captureVideoFrameWithoutPausing();
-      if (newThumbnailPath == null && player.state == PlaybackState.paused) {
+      // Windows+MediaKit 暂停态对 mpv 渲染管线取帧会冻死 platform 线程
+      // （本地大文件 MFT 硬解必现），跳过暂停态补拍。
+      if (newThumbnailPath == null &&
+          player.state == PlaybackState.paused &&
+          !_isWindowsMediaKitKernel) {
         newThumbnailPath = await captureVideoFrame();
       }
       if (newThumbnailPath != null) {

@@ -40,6 +40,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   // 存储外部字幕信息的列表
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+  bool _isPickingRemote = false;
   VideoPlayerState? _videoPlayerState; // Add this member variable
 
   @override
@@ -97,15 +98,20 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         final staleCount = _externalSubtitles.length;
         _externalSubtitles.removeWhere((s) {
           final path = s['path'] as String?;
-          return path == null ||
-              path.isEmpty ||
-              !File(path).existsSync();
+          return path == null || path.isEmpty || !File(path).existsSync();
         });
         if (_externalSubtitles.length != staleCount) {
           await _saveExternalSubtitles(videoState.currentVideoPath ?? '');
         }
       }
 
+      for (final entry in _externalSubtitles) {
+        final path = entry['path'] as String?;
+        if (path == null) continue;
+        final name =
+            await RemoteSubtitleService.instance.lookupDisplayName(path);
+        if (name != null) entry['name'] = name;
+      }
       // 合并当前已激活的外部字幕：自动加载挂载的不在持久化列表里，
       // 不合并的话轨道列表看不到自动加载的 ass/srt（"没自动加载到字幕轨道"）。
       for (final path in videoState.activeExternalSubtitlePaths) {
@@ -149,6 +155,13 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       final prefs = await SharedPreferences.getInstance();
       final videoHashKey = _getVideoHashKey(videoPath);
 
+      final videoState = _videoPlayerState;
+      if (videoState != null && videoState.currentVideoPath == videoPath) {
+        for (final entry in _externalSubtitles) {
+          entry['isActive'] =
+              videoState.activeExternalSubtitlePaths.contains(entry['path']);
+        }
+      }
       await prefs.setString(
           'external_subtitles_$videoHashKey', json.encode(_externalSubtitles));
 
@@ -174,6 +187,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
   // 加载外部字幕文件
   Future<void> _loadExternalSubtitle(BuildContext context) async {
+    if (_isLoading || _isPickingRemote) return;
     if (kIsWeb) {
       BlurSnackBar.show(context, 'Web平台不支持加载本地字幕文件');
       return;
@@ -186,7 +200,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
       // 使用FilePickerService选择字幕文件
       final filePickerService = FilePickerService();
-      final filePath = await filePickerService.pickSubtitleFile();
+      var filePath = await filePickerService.pickSubtitleFile();
 
       if (filePath == null) {
         if (mounted) {
@@ -202,12 +216,16 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (!supportedSubtitleExtensions.contains(extension)) {
         if (context.mounted) {
           BlurSnackBar.show(
-              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
+              context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 或 .idx 文件');
           setState(() => _isLoading = false);
         }
         return;
       }
 
+      if (!isVobSubPairComplete(filePath)) {
+        throw StateError('VobSub 字幕需要同名 .sub 与 .idx 文件');
+      }
+      filePath = canonicalSubtitlePath(filePath);
       // 检查是否已经添加过相同路径的字幕
       final existingIndex =
           _externalSubtitles.indexWhere((s) => s['path'] == filePath);
@@ -263,6 +281,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   }
 
   Future<void> _loadRemoteSubtitle(BuildContext context) async {
+    if (_isLoading || _isPickingRemote) return;
     if (kIsWeb) {
       BlurSnackBar.show(context, 'Web平台不支持加载远程字幕');
       return;
@@ -275,6 +294,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       return;
     }
 
+    _isPickingRemote = true;
     try {
       if (mounted) setState(() => _isLoading = true);
 
@@ -289,6 +309,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         return;
       }
 
+      if (!context.mounted) return;
       // 多选远程字幕（支持一次挂载多个 SRT）
       final checked = <RemoteSubtitleCandidate>{};
       final selected = await BlurDialog.show<List<RemoteSubtitleCandidate>>(
@@ -335,8 +356,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     children: [
                       HoverScaleTextButton(
                         child: const Text('取消'),
-                        onPressed: () =>
-                            Navigator.of(dialogContext).pop(null),
+                        onPressed: () => Navigator.of(dialogContext).pop(null),
                       ),
                       const SizedBox(width: 8),
                       HoverScaleTextButton(
@@ -369,7 +389,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       logPlayerEvent(
         'Subtitle',
         '远程字幕挂载开始: 已选 ${selected.length} 个 '
-        '(${selected.map((c) => c.name).join(', ')})',
+            '(${selected.map((c) => c.name).join(', ')})',
       );
 
       // 注意：iPad 大屏模式下选择弹窗是全屏页面路由，弹窗关闭时菜单面板
@@ -379,7 +399,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       var loadedCount = 0;
       for (final candidate in selected) {
         final cachedPath = await RemoteSubtitleService.instance
-            .ensureSubtitleCached(candidate);
+            .ensureSubtitleCached(candidate, allCandidates: candidates);
+        if (videoState.currentVideoPath != videoPath) return;
         final existingIndex =
             _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
         if (existingIndex >= 0) {
@@ -415,12 +436,16 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       // 不再对 ASS 单独 forceSet（那会清空整个叠层栈，导致先挂的字幕消失）
       for (final candidate in selected) {
         final cached = await RemoteSubtitleService.instance
-            .ensureSubtitleCached(candidate);
+            .ensureSubtitleCached(candidate, allCandidates: candidates);
+        if (videoState.currentVideoPath != videoPath) return;
         await videoState.addExternalSubtitleToStack(cached,
             displayName: candidate.name);
-        final idx =
-            _externalSubtitles.indexWhere((s) => s['path'] == cached);
+        final idx = _externalSubtitles.indexWhere((s) => s['path'] == cached);
         if (idx >= 0) _externalSubtitles[idx]['isActive'] = true;
+      }
+      for (final entry in _externalSubtitles) {
+        entry['isActive'] =
+            videoState.activeExternalSubtitlePaths.contains(entry['path']);
       }
       if (mounted) setState(() {});
       logPlayerEvent(
@@ -439,6 +464,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         BlurSnackBar.show(context, '加载远程字幕失败: $e');
       }
     } finally {
+      _isPickingRemote = false;
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -773,14 +799,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                     .clearSubtitleCache();
                                 // 清完重新走自动检测：当前视频字幕立即重新
                                 // 下载并挂载（不需要重开视频）。
-                                final vp =
-                                    videoState.currentVideoPath;
+                                final vp = videoState.currentVideoPath;
                                 if (vp != null && vp.isNotEmpty) {
                                   await videoState.redetectAndLoadSubtitle(vp);
                                 }
                                 if (context.mounted) {
-                                  BlurSnackBar.show(
-                                      context, '已清除字幕缓存并重新加载');
+                                  BlurSnackBar.show(context, '已清除字幕缓存并重新加载');
                                 }
                               },
                               padding: const EdgeInsets.symmetric(
@@ -815,7 +839,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                 ..._externalSubtitles.asMap().entries.map((entry) {
                   final index = entry.key;
                   final subtitle = entry.value;
-                  final isActive = subtitle['isActive'] == true;
+                  final isActive = videoState.activeExternalSubtitlePaths
+                      .contains(subtitle['path']);
                   final fileName = subtitle['name'] as String;
                   final fileType = subtitle['type'] as String;
 
@@ -836,8 +861,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                         } else {
                           final filePath = subtitle['path'] as String;
                           // 多选开关：加入叠加，不影响已激活的其他字幕
-                          await videoState.addExternalSubtitleToStack(
-                              filePath,
+                          await videoState.addExternalSubtitleToStack(filePath,
                               displayName: fileName);
                           setState(() {
                             subtitle['isActive'] = true;

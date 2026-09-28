@@ -963,6 +963,11 @@ int _exactEndStreak = 0;
   bool get _usesWindowsPlatformVideoSurface =>
       !kIsWeb && Platform.isWindows && player.prefersPlatformVideoSurface;
 
+  /// Windows 上的 Media Kit (libmpv) 内核：暂停态对其渲染管线取帧
+  /// （snapshot）会冻死 platform 线程，暂停后的截图路径必须跳过。
+  bool get _isWindowsMediaKitKernel =>
+      !kIsWeb && Platform.isWindows && player.getPlayerKernelName() == 'Media Kit';
+
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
     player = Player();

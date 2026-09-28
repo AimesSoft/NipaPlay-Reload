@@ -514,7 +514,7 @@ class FilePickerService {
       // 定义字幕文件类型组
       XTypeGroup subtitleGroup = XTypeGroup(
         label: '字幕文件',
-        extensions: const ['srt', 'ass', 'ssa', 'sub', 'sup'],
+        extensions: const ['srt', 'ass', 'ssa', 'sub', 'sup', 'idx'],
         uniformTypeIdentifiers: io.Platform.isIOS
             ? [
                 'public.text',
@@ -802,7 +802,7 @@ class FilePickerService {
         'acceptedTypeGroups': [
           {
             'label': '字幕文件',
-            'extensions': ['srt', 'ass', 'ssa', 'sub'],
+            'extensions': ['srt', 'ass', 'ssa', 'sub', 'sup', 'idx'],
           }
         ],
         'confirmButtonText': '选择字幕文件',
