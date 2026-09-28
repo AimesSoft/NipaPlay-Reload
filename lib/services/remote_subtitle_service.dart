@@ -12,8 +12,10 @@ import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
 sealed class RemoteSubtitleCandidate {
   const RemoteSubtitleCandidate();
@@ -231,8 +233,11 @@ class RemoteSubtitleService {
     return const [];
   }
 
-  Future<String> ensureSubtitleCached(RemoteSubtitleCandidate candidate,
-      {bool forceRefresh = false}) async {
+  Future<String> ensureSubtitleCached(
+    RemoteSubtitleCandidate candidate, {
+    bool forceRefresh = false,
+    List<RemoteSubtitleCandidate> allCandidates = const [],
+  }) async {
     if (kIsWeb) {
       throw UnsupportedError('Web 平台不支持缓存远程字幕');
     }
@@ -277,12 +282,107 @@ class RemoteSubtitleService {
         await target.delete();
       }
       await tmp.rename(target.path);
+      await registerRemoteSubtitleDisplayName(target.path, candidate.name);
+      await _ensureVobSubPairCached(candidate, allCandidates, target, extension);
       return target.path;
     } catch (e) {
       if (await tmp.exists()) {
         await tmp.delete();
       }
       rethrow;
+    }
+  }
+
+  static const String _displayNamePrefsKey =
+      'remote_subtitle_display_names_v1';
+
+  /// 远程字幕缓存路径 → 原始文件名 的持久化注册表。
+  /// 缓存文件名是哈希，跨进程/跨平台（iOS/Windows）读取列表时都要用
+  /// 原名展示；下载完成即登记，任何端随时可查。
+  Future<void> registerRemoteSubtitleDisplayName(
+      String cachedPath, String originalName) async {
+    try {
+      if (cachedPath.isEmpty || originalName.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_displayNamePrefsKey);
+      final Map<String, dynamic> table = raw != null && raw.isNotEmpty
+          ? (json.decode(raw) as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      table[cachedPath] = originalName;
+      // 上限保护：注册表只增不减会无限膨胀，超量时丢弃最早写入的一半
+      if (table.length > 200) {
+        final keys = table.keys.toList();
+        for (final key in keys.take(table.length - 100)) {
+          table.remove(key);
+        }
+      }
+      await prefs.setString(_displayNamePrefsKey, json.encode(table));
+    } catch (e) {
+      debugPrint('RemoteSubtitleService: 登记字幕显示名失败: $e');
+    }
+  }
+
+  /// 查询远程字幕缓存路径的原始文件名；未登记（或条目仍是哈希名）返回 null。
+  /// 异步版查询：读持久化注册表，未命中返回 null。
+  Future<String?> lookupDisplayName(String cachedPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_displayNamePrefsKey);
+      if (raw == null || raw.isEmpty) return null;
+      final table = (json.decode(raw) as Map).cast<String, dynamic>();
+      final name = table[cachedPath]?.toString();
+      if (name == null || name.isEmpty) return null;
+      return name;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// VobSub 成对落盘：播放器内核按 .idx 旁的同名 .sub 定位位图数据。
+  /// 远程 .idx 的配对 .sub 下载后按 IDX 的缓存键哈希落盘为 <hash>.sub，
+  /// 保证缓存目录内 .idx 与 .sub 同名成对。
+  Future<void> _ensureVobSubPairCached(
+    RemoteSubtitleCandidate candidate,
+    List<RemoteSubtitleCandidate> allCandidates,
+    File idxTarget,
+    String extension,
+  ) async {
+    if (extension != '.idx') return;
+    final subName = p.setExtension(candidate.name, '.sub').toLowerCase();
+
+    RemoteSubtitleCandidate? subCandidate;
+    for (final other in allCandidates) {
+      if (other.name.toLowerCase() == subName) {
+        subCandidate = other;
+        break;
+      }
+    }
+    if (subCandidate == null) {
+      debugPrint('RemoteSubtitleService: 未找到 VobSub 配对的 .sub: $subName');
+      return;
+    }
+
+    final subTarget = File(p.setExtension(idxTarget.path, '.sub'));
+    if (await subTarget.exists() && await subTarget.length() > 0) {
+      return;
+    }
+
+    final tmp = File('${subTarget.path}.downloading');
+    if (await tmp.exists()) {
+      await tmp.delete();
+    }
+    try {
+      await _downloadToFile(subCandidate, tmp);
+      if (await subTarget.exists()) {
+        await subTarget.delete();
+      }
+      await tmp.rename(subTarget.path);
+      debugPrint('RemoteSubtitleService: VobSub 配对 .sub 已落盘: ${subTarget.path}');
+    } catch (e) {
+      if (await tmp.exists()) {
+        await tmp.delete();
+      }
+      debugPrint('RemoteSubtitleService: VobSub 配对 .sub 下载失败: $e');
     }
   }
 
@@ -507,12 +607,17 @@ class RemoteSubtitleService {
     final subtitles =
         await DandanplayRemoteService.instance.getSubtitleList(entryId);
 
+    final candidateNames = subtitles
+        .map((item) => item.fileName.trim().toLowerCase())
+        .toSet();
+
     final candidates = <RemoteSubtitleCandidate>[];
     for (final item in subtitles) {
       final name = item.fileName.trim();
       if (name.isEmpty) continue;
       final ext = p.extension(name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(name, candidateNames)) continue;
       candidates.add(
         DandanplayRemoteSubtitleCandidate(
           entryId: entryId,
@@ -648,6 +753,10 @@ class RemoteSubtitleService {
     }
 
     final candidates = <RemoteSubtitleCandidate>[];
+    final managedNames = rawItems
+        .whereType<Map>()
+        .map((item) => (item['name']?.toString() ?? '').trim().toLowerCase())
+        .toSet();
     for (final item in rawItems) {
       if (item is! Map) continue;
       final map = item.cast<String, dynamic>();
@@ -655,6 +764,7 @@ class RemoteSubtitleService {
       if (name.isEmpty) continue;
       final ext = p.extension(name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(name, managedNames)) continue;
 
       final subtitleUri = info.streamUri.replace(
         path: '/api/media/local/manage/subtitle',
@@ -749,6 +859,10 @@ class RemoteSubtitleService {
     }
 
     final candidates = <RemoteSubtitleCandidate>[];
+    final sharedNames = rawItems
+        .whereType<Map>()
+        .map((item) => (item['name']?.toString() ?? '').trim().toLowerCase())
+        .toSet();
     for (final item in rawItems) {
       if (item is! Map) continue;
       final map = item.cast<String, dynamic>();
@@ -756,6 +870,7 @@ class RemoteSubtitleService {
       if (name.isEmpty) continue;
       final ext = p.extension(name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(name, sharedNames)) continue;
 
       final subtitleUri = info.streamUri.replace(
         path: info.subtitlePath,
@@ -1156,11 +1271,17 @@ class RemoteSubtitleService {
     final entries = await WebDAVService.instance
         .listDirectoryAll(resolved.connection, directory);
 
+    final webdavNames = entries
+        .where((entry) => !entry.isDirectory)
+        .map((entry) => entry.name.toLowerCase())
+        .toSet();
+
     final candidates = <RemoteSubtitleCandidate>[];
     for (final entry in entries) {
       if (entry.isDirectory) continue;
       final ext = p.extension(entry.name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(entry.name, webdavNames)) continue;
       candidates.add(
         WebDavRemoteSubtitleCandidate(
           connection: resolved.connection,
@@ -1194,11 +1315,17 @@ class RemoteSubtitleService {
     final entries =
         await SMBService.instance.listDirectoryAll(connection, directory);
 
+    final smbNames = entries
+        .where((entry) => !entry.isDirectory)
+        .map((entry) => entry.name.toLowerCase())
+        .toSet();
+
     final candidates = <RemoteSubtitleCandidate>[];
     for (final entry in entries) {
       if (entry.isDirectory) continue;
       final ext = p.extension(entry.name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
           connection: connection,
@@ -1404,11 +1531,17 @@ class RemoteSubtitleService {
     final entries =
         await SMBService.instance.listDirectoryAll(connection, directory);
 
+    final smbNames = entries
+        .where((entry) => !entry.isDirectory)
+        .map((entry) => entry.name.toLowerCase())
+        .toSet();
+
     final candidates = <RemoteSubtitleCandidate>[];
     for (final entry in entries) {
       if (entry.isDirectory) continue;
       final ext = p.extension(entry.name).toLowerCase();
       if (!subtitleExtensions.contains(ext)) continue;
+      if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
           connection: connection,
