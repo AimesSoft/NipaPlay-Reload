@@ -36,6 +36,7 @@ class DfmPlusOverlay extends StatefulWidget {
     this.blockWords = const [],
     this.onLayoutCalculated,
     this.startupGateToken = 0,
+    this.seekRevision = 0,
     this.onStartupReady,
     required this.isPlaying,
     required this.playbackRate,
@@ -63,6 +64,9 @@ class DfmPlusOverlay extends StatefulWidget {
   final List<String> blockWords;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
   final int startupGateToken;
+
+  /// Explicit player seeks must reset the clock even below the drift threshold.
+  final int seekRevision;
   final ValueChanged<int>? onStartupReady;
   final bool isPlaying;
   final double playbackRate;
@@ -278,6 +282,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       oldWidget.playbackTimeMs.removeListener(_onPlaybackTimeChanged);
       widget.playbackTimeMs.addListener(_onPlaybackTimeChanged);
       _resetDisplayTimeToMedia();
+      _queueUpdate();
+    }
+
+    if (oldWidget.seekRevision != widget.seekRevision) {
+      _resetDisplayTimeToMedia();
+      _lastMotionSubmitWallUs = -_motionSubmitIntervalUs;
       _queueUpdate();
     }
 
