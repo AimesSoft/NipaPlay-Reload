@@ -1,5 +1,7 @@
 part of video_player_state;
 
+const String _timelinePreviewEnabledKey = 'timelinePreviewEnabled';
+const int _timelinePreviewIntervalMs = 15000;
 const int _timelinePreviewMaxHeight = 180;
 const int _timelinePreviewDefaultWidth = 320;
 
@@ -34,20 +36,23 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
   Future<void> setTimelinePreviewEnabled(bool enabled) async {
     if (_timelinePreviewEnabled == enabled) return;
+    _timelinePreviewEnabled = enabled;
+    _notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_timelinePreviewEnabledKey, enabled);
     } catch (e) {
       debugPrint('保存时间轴缩略图开关失败: $e');
     }
-
-    _timelinePreviewEnabled = enabled;
-    if (!enabled) {
+    if (enabled) {
+      _timelinePreviewSupported = _isTimelinePreviewKernelSupported();
+      if (_currentVideoPath != null) {
+        _timelinePreviewSessionId++;
+        unawaited(_prefetchInitialTimelineThumbnails());
+      }
+    } else {
       _resetTimelinePreviewState();
-    } else if (_currentVideoPath != null) {
-      unawaited(_setupTimelinePreviewForVideo(_currentVideoPath!));
     }
-    _notifyListeners();
   }
 
   void _resetTimelinePreviewState() {
@@ -61,45 +66,56 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     _timelinePreviewSerialTask = Future.value();
   }
 
-  Future<void> _setupTimelinePreviewForVideo(String path) async {
-    _resetTimelinePreviewState();
-    if (!_timelinePreviewEnabled || kIsWeb) return;
-
-    if (!_isTimelinePreviewKernelSupported()) {
-      _timelinePreviewSupported = false;
-      _notifyListeners();
-      return;
+  Future<void> _clearTimelinePreviewFiles() async {
+    String? dirPath = _timelinePreviewDirectory;
+    try {
+      if (dirPath == null && _timelinePreviewVideoKey != null) {
+        final appDir = await StorageService.getAppStorageDirectory();
+        dirPath =
+            '${appDir.path}/timeline_thumbnails/${_timelinePreviewVideoKey}';
+      }
+      if (dirPath == null) return;
+      final dir = Directory(dirPath);
+      if (!dir.existsSync()) return;
+      await dir.delete(recursive: true);
+    } catch (e) {
+      debugPrint('清理时间轴缩略图失败: $e');
     }
-
-    _timelinePreviewIntervalMs = _resolveTimelineInterval(_duration);
-    final session = _timelinePreviewSessionId;
-
-    final supported = await _isTimelinePreviewSourceSupported(path);
-    if (session != _timelinePreviewSessionId) return;
-    _timelinePreviewSupported = supported;
-    if (!supported) {
-      _notifyListeners();
-      return;
-    }
-
-    _timelinePreviewVideoKey =
-        _currentVideoHash ?? md5.convert(utf8.encode(path)).toString();
-    final dir = await _ensureTimelinePreviewDirectory();
-    if (session != _timelinePreviewSessionId) return;
-    _timelinePreviewDirectory = dir.path;
-    _hydrateTimelinePreviewCache(dir);
-    _notifyListeners();
-
-    unawaited(_prefetchInitialTimelineThumbnails(session));
-    unawaited(_backgroundFillTimelineThumbnails(session));
   }
 
-  int _resolveTimelineInterval(Duration duration) {
-    final totalMs = duration.inMilliseconds;
-    if (totalMs <= 0) return 15000;
-    final computed = (totalMs / 120).round().clamp(5000, 30000);
-    if (computed is int) return computed;
-    return (computed as num).toInt();
+  Future<void> _setupTimelinePreviewForVideo(String videoPath) async {
+    if (!_timelinePreviewEnabled) return;
+    _timelinePreviewSupported = _isTimelinePreviewKernelSupported();
+    if (!_timelinePreviewSupported) return;
+    _timelinePreviewSessionId++;
+    _disposeTimelinePreviewPlayer();
+    _timelinePreviewCache.clear();
+    _timelinePreviewVideoKey = null;
+    unawaited(() async {
+      final dir = await _ensureTimelinePreviewDirectory();
+      _timelinePreviewDirectory = dir.path;
+      _hydrateTimelinePreviewCache(dir);
+      if (_timelinePreviewEnabled && _timelinePreviewSupported) {
+        unawaited(_prefetchInitialTimelineThumbnails());
+        unawaited(_backgroundFillTimelineThumbnails());
+      }
+    }());
+  }
+
+  int _computeTimelineThumbnailCount() {
+    final duration = _duration.inMilliseconds;
+    if (duration <= 0) return 0;
+    final interval =
+        _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
+    return math.max(1, duration ~/ interval + 1);
+  }
+
+  int _computeTimelineThumbnailWidth() {
+    final count = _computeTimelineThumbnailCount();
+    final ratio = 8000.0 / count;
+    final raw = (_timelinePreviewDefaultWidth * math.sqrt(ratio)).toInt();
+    return raw.clamp(_timelinePreviewDefaultWidth, _timelinePreviewDefaultWidth * 3)
+        .toInt();
   }
 
   Future<Directory> _ensureTimelinePreviewDirectory() async {
@@ -176,6 +192,22 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       _timelinePreviewPending.add(bucket);
 
       try {
+        // Windows 平台改用独立 ffmpeg.exe 子进程抽帧，不再创建第二个 MDK
+        // 播放器。fvp 的 updateTexture/snapshot 在第二播放器（无 widget 挂载）
+        // 场景下无法获得渲染回调，textureId 永远为 null，snapshot 永远超时
+        // 返回空帧——这是 fvp 的架构限制（设计上只服务挂载在 widget tree
+        // 上的播放器）。子进程与主程序完全隔离，卡死/崩溃最多损失单张
+        // 缩略图（20s 超时自动 kill），物理上不可能让主窗口未响应。
+        if (!kIsWeb && Platform.isWindows) {
+          final ok = await _captureTimelineFrameWithFfmpeg(
+              source, bucket, targetPath);
+          if (!ok || session != _timelinePreviewSessionId) return null;
+          if (!File(targetPath).existsSync()) return null;
+          _timelinePreviewCache[bucket] = targetPath;
+          return targetPath;
+        }
+
+        // 非 Windows 平台：保留原始 MDK 第二播放器抽帧路径（已验证可用）。
         final kernel = PlayerFactory.getKernelType();
         final previewPlayer =
             await _ensureTimelinePreviewPlayer(kernel, source);
@@ -203,6 +235,144 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       }
     });
   }
+
+  // ===========================================================================
+  // Windows: ffmpeg.exe 子进程抽帧
+  // ===========================================================================
+
+  /// 查找随包分发的 ffmpeg.exe。优先与可执行文件同目录，其次 PATH。
+  Future<String?> _findFfmpegExecutable() async {
+    // 1. 与主程序同目录（CI 打包时放入）
+    try {
+      final exeDir = p.dirname(Platform.resolvedExecutable);
+      final candidate = p.join(exeDir, 'ffmpeg.exe');
+      if (await File(candidate).exists()) return candidate;
+      // portable 模式可能在 data/ 子目录
+      final dataCandidate = p.join(exeDir, 'data', 'ffmpeg.exe');
+      if (await File(dataCandidate).exists()) return dataCandidate;
+    } catch (_) {}
+
+    // 2. PATH 查找
+    try {
+      final result = await Process.run('where', ['ffmpeg.exe'],
+          stdoutEncoding: systemEncoding,
+          stderrEncoding: systemEncoding);
+      if (result.exitCode == 0) {
+        final out = (result.stdout as String).trim();
+        if (out.isNotEmpty) {
+          final first = out.split(RegExp(r'\r?\n')).first.trim();
+          if (first.isNotEmpty && await File(first).exists()) return first;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// 将媒体源路径转换为 ffmpeg 可接受的输入参数。
+  /// - 本地盘符路径：直接用
+  /// - file:// URI：解码为路径
+  /// - UNC（\\server\share）：直接用
+  /// - http(s) 直链：直接用
+  String _ffmpegInputFromSource(String source) {
+    if (source.startsWith('file://')) {
+      try {
+        return Uri.parse(source).toFilePath();
+      } catch (_) {
+        return source.substring(7);
+      }
+    }
+    return source;
+  }
+
+  /// 用 ffmpeg.exe 抽取指定时间点的帧并缩放为 JPEG。
+  /// 成功写出文件返回 true，任何失败（找不到 ffmpeg、超时、非零退出）返回 false。
+  Future<bool> _captureTimelineFrameWithFfmpeg(
+      String source, int bucketMs, String targetPath) async {
+    final ffmpeg = await _findFfmpegExecutable();
+    if (ffmpeg == null) {
+      debugPrint('时间轴预览：未找到 ffmpeg.exe，请确保随包分发或已加入 PATH');
+      return false;
+    }
+
+    final input = _ffmpegInputFromSource(source);
+    final seekSec = (bucketMs / 1000.0).toStringAsFixed(3);
+
+    // 输入级 seek（-ss 在 -i 之前）速度快、对大多数格式可靠。
+    // scale 保持宽高比，高度固定 180，宽度上限 960 防止超宽。
+    // -frames:v 1 只取一帧，-q:v 2 是 JPEG 高质量。
+    final args = [
+      '-y',                          // 覆盖已存在文件
+      '-ss', seekSec,                // 输入级 seek
+      '-i', input,                   // 输入
+      '-frames:v', '1',              // 只取一帧
+      '-vf', 'scale=\'min(960,iw)\':180:force_original_aspect_ratio=decrease',
+      '-q:v', '2',                   // JPEG 高质量
+      targetPath,                    // 输出
+    ];
+
+    final Process proc;
+    try {
+      proc = await Process.start(ffmpeg, args);
+    } catch (e) {
+      debugPrint('时间轴预览：启动 ffmpeg 失败: $e');
+      return false;
+    }
+
+    // ffmpeg 会向 stderr 输出大量进度信息，必须排空管道，否则缓冲区写满
+    // 后子进程会阻塞挂起。
+    unawaited(proc.stdout.drain<void>());
+    unawaited(proc.stderr.drain<void>());
+
+    // 20 秒超时：子进程卡死/网络流缓慢时自动 kill，不影响主程序。
+    final done = Completer<bool>();
+    var killed = false;
+
+    proc.exitCode.then((code) {
+      if (!done.isCompleted) {
+        done.complete(code == 0);
+      }
+    });
+
+    final timer = Timer(const Duration(seconds: 20), () {
+      if (!done.isCompleted) {
+        killed = true;
+        try {
+          proc.kill(ProcessSignal.sigkill);
+        } catch (_) {}
+        done.complete(false);
+      }
+    });
+
+    final ok = await done.future;
+    timer.cancel();
+
+    if (!ok) {
+      if (killed) {
+        debugPrint('时间轴预览：ffmpeg 超时（20s）已终止 bucket=${bucketMs}ms');
+      } else {
+        // 非零退出：常见于 seek 超过时长、流损坏等，清理可能的空文件。
+        try {
+          if (await File(targetPath).exists()) {
+            await File(targetPath).delete();
+          }
+        } catch (_) {}
+      }
+      return false;
+    }
+
+    // 验证输出文件非空
+    try {
+      final f = File(targetPath);
+      return (await f.length()) > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // 非 Windows：保留原始 MDK 第二播放器抽帧路径
+  // ===========================================================================
 
   bool _isTimelinePreviewKernelSupported() {
     final kernel = PlayerFactory.getKernelType();
@@ -442,120 +612,50 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     return img.ChannelOrder.rgba;
   }
 
-  Future<void> _prefetchInitialTimelineThumbnails(int session) async {
-    if (session != _timelinePreviewSessionId ||
-        !isTimelinePreviewAvailable ||
-        _duration.inMilliseconds <= 0) {
-      return;
-    }
+  Future<void> _prefetchInitialTimelineThumbnails() async {
+    if (!_timelinePreviewEnabled || !_timelinePreviewSupported) return;
+    final duration = _duration.inMilliseconds;
+    if (duration <= 0) return;
 
-    final total = _duration.inMilliseconds;
-    final samples = <int>{
-      0,
-      total ~/ 4,
-      total ~/ 2,
-      (total - _timelinePreviewIntervalMs).clamp(0, total - 1),
-    };
-
-    for (final bucket in samples) {
-      if (session != _timelinePreviewSessionId || !isTimelinePreviewAvailable) {
-        return;
-      }
-      await _createTimelineThumbnail(bucket, session);
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
-  }
-
-  Future<void> _backgroundFillTimelineThumbnails(int session) async {
-    if (session != _timelinePreviewSessionId ||
-        !isTimelinePreviewAvailable ||
-        _duration.inMilliseconds <= 0) {
-      return;
-    }
-
-    final total = _duration.inMilliseconds;
     final interval =
         _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
-    const int maxThumbnails = 80;
-    int generated = 0;
+    final count = math.min(2, duration ~/ interval + 1);
+    final sessionId = _timelinePreviewSessionId;
 
-    for (int bucket = 0;
-        bucket <= total && generated < maxThumbnails;
-        bucket += interval) {
-      if (session != _timelinePreviewSessionId || !isTimelinePreviewAvailable) {
-        return;
+    for (var i = 0; i < count; i++) {
+      if (sessionId != _timelinePreviewSessionId) return;
+      final bucket = (i * duration ~/ count) ~/ interval * interval;
+      final cached = _timelinePreviewCache[bucket];
+      if (cached == null || !File(cached).existsSync()) {
+        await _createTimelineThumbnail(bucket, sessionId);
+        // 批量预取间隔：避免短时间启动过多子进程。
+        await Future.delayed(const Duration(milliseconds: 600));
       }
-      if (_timelinePreviewCache.containsKey(bucket)) {
-        continue;
-      }
-      await _createTimelineThumbnail(bucket, session);
-      generated++;
-      await Future.delayed(const Duration(milliseconds: 220));
     }
   }
 
-  Future<bool> _isTimelinePreviewSourceSupported(String path) async {
-    if (path.isEmpty || kIsWeb) return false;
-    final lower = path.toLowerCase();
+  Future<void> _backgroundFillTimelineThumbnails() async {
+    if (!_timelinePreviewEnabled || !_timelinePreviewSupported) return;
+    final duration = _duration.inMilliseconds;
+    if (duration <= 0) return;
 
-    if (lower.startsWith('jellyfin://') || lower.startsWith('emby://')) {
-      return false;
-    }
+    final interval =
+        _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
+    final total = duration ~/ interval + 1;
+    // 后台批量生成上限 24 张（原 80 张过多，子进程方案下减少以降低 CPU/IO 压力）。
+    final limit = math.min(24, total);
+    final sessionId = _timelinePreviewSessionId;
 
-    if (lower.startsWith('sharedremote://')) {
-      return true;
-    }
-
-    if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(path)) {
-      return true;
-    }
-
-    if (MediaSourceUtils.isSmbPath(path)) {
-      return true;
-    }
-
-    if (_looksLikeLocalFile(path)) {
-      return true;
-    }
-
-    if (lower.startsWith('http://') || lower.startsWith('https://')) {
-      try {
-        final resolved = WebDAVService.instance.resolveFileUrl(path);
-        if (resolved != null) {
-          return true;
-        }
-      } catch (_) {}
-    }
-
-    return false;
-  }
-
-  bool _looksLikeLocalFile(String path) {
-    if (path.startsWith('file://')) return true;
-    final uri = Uri.tryParse(path);
-    if (uri == null) return true;
-    if (uri.scheme.isEmpty) return true;
-    if (Platform.isWindows && uri.scheme.length == 1) {
-      // Windows 盘符
-      return true;
-    }
-    return false;
-  }
-
-  Future<void> _clearTimelinePreviewFiles() async {
-    String? dirPath = _timelinePreviewDirectory;
-    try {
-      if (dirPath == null && _timelinePreviewVideoKey != null) {
-        final appDir = await StorageService.getAppStorageDirectory();
-        dirPath =
-            '${appDir.path}/timeline_thumbnails/${_timelinePreviewVideoKey}';
+    for (var i = 0; i < limit; i++) {
+      if (sessionId != _timelinePreviewSessionId) return;
+      if (!_timelinePreviewEnabled) return;
+      final bucket = i * interval;
+      if (bucket > duration) break;
+      final cached = _timelinePreviewCache[bucket];
+      if (cached == null || !File(cached).existsSync()) {
+        await _createTimelineThumbnail(bucket, sessionId);
+        await Future.delayed(const Duration(milliseconds: 600));
       }
-      if (dirPath == null) return;
-      final dir = Directory(dirPath);
-      if (!dir.existsSync()) return;
-      await dir.delete(recursive: true);
-    } catch (e) {
-      debugPrint('清理时间轴缩略图失败: $e');
     }
   }
 }
