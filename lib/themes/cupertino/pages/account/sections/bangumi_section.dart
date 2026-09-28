@@ -137,9 +137,6 @@ class CupertinoBangumiSection extends StatelessWidget {
 
   Widget _buildStatusCard(BuildContext context) {
     final String title = data.connectionTitle;
-    final Color iconColor = data.isAuthorized
-        ? CupertinoColors.activeGreen
-        : CupertinoColors.systemGrey;
     final Color textColor = CupertinoDynamicColor.resolve(
       data.isAuthorized
           ? CupertinoColors.activeGreen
@@ -162,16 +159,6 @@ class CupertinoBangumiSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(CupertinoIcons.cloud_upload, color: iconColor),
-              ),
-              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

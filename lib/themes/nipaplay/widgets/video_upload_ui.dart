@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:nipaplay/plugins/url_resolver.dart';
+import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -109,14 +111,16 @@ class _VideoUploadUIState extends State<VideoUploadUI>
       context: context,
       title: unifiedPlaybackEntryContent.enterUrlLabel,
       hidePhoneBottomBar: false,
-      contentWidget: AdaptivePlaybackUrlDialogContent(
-        content: unifiedPlaybackEntryContent,
-        controller: _urlController,
-        focusNode: _urlFocusNode,
-        isSubmitting: _isSubmittingUrl,
-        onPaste: _pasteUrlFromClipboard,
-        onEditOneTimeUserAgent: _showOneTimeUADialog,
-        onPlay: _handlePlayFromUrl,
+      contentWidget: Builder(
+        builder: (dialogContext) => AdaptivePlaybackUrlDialogContent(
+          content: unifiedPlaybackEntryContent,
+          controller: _urlController,
+          focusNode: _urlFocusNode,
+          isSubmitting: _isSubmittingUrl,
+          onPaste: _pasteUrlFromClipboard,
+          onEditOneTimeUserAgent: _showOneTimeUADialog,
+          onPlay: () => _handlePlayFromUrl(dialogContext),
+        ),
       ),
     );
   }
@@ -159,7 +163,10 @@ class _VideoUploadUIState extends State<VideoUploadUI>
     );
   }
 
-  Future<bool> _handlePlayFromUrl() async {
+  Future<bool> _handlePlayFromUrl(BuildContext dialogContext) async {
+    final inputRoute = ModalRoute.of(dialogContext);
+    bool cancelled() =>
+        !mounted || !dialogContext.mounted || inputRoute?.isActive == false;
     if (_isSubmittingUrl.value) return false;
 
     final rawInput = _urlController.text.trim();
@@ -178,10 +185,17 @@ class _VideoUploadUIState extends State<VideoUploadUI>
     _isSubmittingUrl.value = true;
 
     final videoState = context.read<VideoPlayerState>();
-    videoState.setPreInitLoadingState('正在准备串流链接...');
-
+    var startedPlayback = false;
     try {
-      final playableItem = PlayableItem(videoPath: rawInput);
+      final resolved = await PluginPlaybackService.prepare(
+        dialogContext,
+        rawInput,
+        isCancelled: cancelled,
+      );
+      if (!mounted || cancelled()) return false;
+      final playableItem = resolved ?? PlayableItem(videoPath: rawInput);
+      startedPlayback = true;
+      videoState.setPreInitLoadingState('正在准备串流链接...');
       if (await PlaybackService().tryPlayExternally(
         context,
         playableItem,
@@ -190,13 +204,20 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         return true;
       }
 
-      await videoState.initializePlayer(rawInput);
+      await videoState.initializePlayer(
+        playableItem.videoPath,
+        actualPlayUrl: playableItem.actualPlayUrl,
+        historyItem: playableItem.historyItem,
+        manualMatchHandled: resolved != null,
+      );
       return true;
+    } on PluginResolutionCancelled {
+      return false;
     } catch (e) {
       if (mounted) {
         BlurSnackBar.show(context, '播放链接失败: $e');
       }
-      await videoState.resetPlayer();
+      if (startedPlayback) await videoState.resetPlayer();
       return false;
     } finally {
       if (mounted) {

@@ -72,9 +72,18 @@ class DandanplayHttpClient extends transport.BaseClient {
         addOrReplaceHeaders(request.headers, authorization);
       }
     } else {
-      // Older callers may still supply the account header for custom servers.
       final token = authorization['Authorization'];
-      if (token != null) {
+      final isSelectedCustomTarget = token != null &&
+          await NetworkSettings.isSelectedCustomDandanplayServiceUri(target);
+      if (isSelectedCustomTarget && !isAccountEntry(request.method, target)) {
+        // A selected custom server is an explicit trust decision. Give a
+        // compatible self-hosted proxy the same current account credential as
+        // the built-in gateways, even when an older caller omitted the header.
+        addOrReplaceHeaders(request.headers, authorization);
+      } else if (token != null && !isSelectedCustomTarget) {
+        // Only the custom server explicitly selected by the user is trusted to
+        // receive their Dandanplay account token. Keep stripping it from every
+        // unrelated provider handled by this shared client.
         removeHeaderIfValueMatches(request.headers, 'authorization', token);
       }
     }

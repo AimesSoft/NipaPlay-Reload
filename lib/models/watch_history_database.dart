@@ -12,6 +12,7 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 import 'dart:io' as io;
 
 class WatchHistoryBulkMergeResult {
@@ -484,12 +485,27 @@ class WatchHistoryDatabase {
         skippedCount: 0,
       );
     }
+    // 防倒灌：同步/备份恢复的批量写入前，跳过已显式删除番剧（墓碑
+    // 命中）的条目，避免云端残留数据回灌本地。
+    final deletedAnimeIds = await AnimeDeletionTombstones.deletedAnimeIds();
+    List<WatchHistoryItem> incoming = items;
+    if (deletedAnimeIds.isNotEmpty) {
+      incoming = items
+          .where((item) => !deletedAnimeIds.contains(item.animeId))
+          .toList();
+      if (incoming.isEmpty) {
+        return WatchHistoryBulkMergeResult(
+          restoredCount: 0,
+          skippedCount: items.length,
+        );
+      }
+    }
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
       var restored = 0;
       var skipped = 0;
       final positions = <String, int>{};
-      for (final item in items) {
+      for (final item in incoming) {
         final existing = _webStore[item.filePath];
         if (existing == null ||
             item.lastWatchTime.isAfter(existing.lastWatchTime)) {
@@ -517,12 +533,12 @@ class WatchHistoryDatabase {
     final db = await database;
     return db.transaction((txn) async {
       final existing =
-          await _prefetchByFilePaths(txn, items.map((e) => e.filePath));
+          await _prefetchByFilePaths(txn, incoming.map((e) => e.filePath));
       var restored = 0;
       var skipped = 0;
       final positions = <String, int>{};
       final writes = txn.batch();
-      for (final item in items) {
+      for (final item in incoming) {
         final local = existing[item.filePath] ??
             existing[_iosAlternativePath(item.filePath)];
         if (local == null || item.lastWatchTime.isAfter(local.lastWatchTime)) {
@@ -570,11 +586,27 @@ class WatchHistoryDatabase {
         skippedCount: 0,
       );
     }
+    // 防倒灌：命中删除墓碑的剧集匹配会在恢复时以「未知动画」空壳
+    // 记录重建观看历史，一并跳过。
+    final deletedMatchAnimeIds =
+        await AnimeDeletionTombstones.deletedAnimeIds();
+    List<EpisodeMatchRestoreItem> incomingMatches = matches;
+    if (deletedMatchAnimeIds.isNotEmpty) {
+      incomingMatches = matches
+          .where((match) => !deletedMatchAnimeIds.contains(match.animeId))
+          .toList();
+      if (incomingMatches.isEmpty) {
+        return WatchHistoryBulkMergeResult(
+          restoredCount: 0,
+          skippedCount: matches.length,
+        );
+      }
+    }
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
       var restored = 0;
       var skipped = 0;
-      for (final match in matches) {
+      for (final match in incomingMatches) {
         final existing = _webStore[match.filePath];
         if (existing != null &&
             existing.animeId == match.animeId &&
@@ -615,11 +647,11 @@ class WatchHistoryDatabase {
     final db = await database;
     return db.transaction((txn) async {
       final existing =
-          await _prefetchByFilePaths(txn, matches.map((e) => e.filePath));
+          await _prefetchByFilePaths(txn, incomingMatches.map((e) => e.filePath));
       var restored = 0;
       var skipped = 0;
       final writes = txn.batch();
-      for (final match in matches) {
+      for (final match in incomingMatches) {
         final local = existing[match.filePath] ??
             existing[_iosAlternativePath(match.filePath)];
         if (local != null &&

@@ -1149,6 +1149,19 @@ class _NipaplayLargeScreenScaffoldLayoutState
     final bool showSystemBars =
         !usePlayerContextPanel || videoControlsVisible || showPanelBackdrop;
 
+    Widget buildSystemBar(Widget child) {
+      final bar = IgnorePointer(ignoring: !showSystemBars, child: child);
+      // TV bars stay opaque while sliding in/out, without a retained opacity
+      // layer that can lose their text and icons on older television GPUs.
+      if (globals.isTelevision) return bar;
+      return AnimatedOpacity(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        opacity: showSystemBars ? 1 : 0,
+        child: bar,
+      );
+    }
+
     final content = Focus(
       focusNode: _inputFocusNode,
       autofocus: true,
@@ -1299,16 +1312,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
             left: 0,
             right: 0,
             top: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              opacity: showSystemBars ? 1 : 0,
-              child: IgnorePointer(
-                ignoring: !showSystemBars,
-                child: NipaplayLargeScreenTopStatusOverlay(
-                  isDarkMode: useDarkSystemBars,
-                  useVideoBackground: usePlayerContextPanel,
-                ),
+            child: buildSystemBar(
+              NipaplayLargeScreenTopStatusOverlay(
+                isDarkMode: useDarkSystemBars,
+                useVideoBackground: usePlayerContextPanel,
               ),
             ),
           ),
@@ -1318,26 +1325,19 @@ class _NipaplayLargeScreenScaffoldLayoutState
             left: 0,
             right: 0,
             bottom: showSystemBars ? 0 : -kNipaplayLargeScreenBottomHintHeight,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              opacity: showSystemBars ? 1 : 0,
-              child: IgnorePointer(
-                ignoring: !showSystemBars,
-                child: NipaplayLargeScreenBottomHintOverlay(
-                  isDarkMode: useDarkSystemBars,
-                  useVideoBackground: usePlayerContextPanel,
-                  onToggleMenu: usePlayerContextPanel
-                      ? _togglePlayerMenu
-                      : _toggleTabPanel,
-                  menuLabel: usePlayerContextPanel ? '播放器菜单' : '菜单',
-                  contextKey: _contextActionKey,
-                  contextIcon: Icons.settings_rounded,
-                  contextLabel: '设置',
-                  onOpenContext: globals.isTelevision || usePlayerContextPanel
-                      ? null
-                      : () => _toggleContextPanel(usePlayerMenu: false),
-                ),
+            child: buildSystemBar(
+              NipaplayLargeScreenBottomHintOverlay(
+                isDarkMode: useDarkSystemBars,
+                useVideoBackground: usePlayerContextPanel,
+                onToggleMenu:
+                    usePlayerContextPanel ? _togglePlayerMenu : _toggleTabPanel,
+                menuLabel: usePlayerContextPanel ? '播放器菜单' : '菜单',
+                contextKey: _contextActionKey,
+                contextIcon: Icons.settings_rounded,
+                contextLabel: '设置',
+                onOpenContext: globals.isTelevision || usePlayerContextPanel
+                    ? null
+                    : () => _toggleContextPanel(usePlayerMenu: false),
               ),
             ),
           ),

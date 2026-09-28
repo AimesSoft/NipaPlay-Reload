@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/torrent_magnet_preview.dart';
+import 'package:nipaplay/models/torrent_add_result.dart';
+import 'package:nipaplay/services/torrent_session_storage.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
@@ -17,7 +21,9 @@ class TorrentDownloadService {
     bool Function()? isIos,
     Future<io.Directory> Function()? getDownloadsDirectory,
     Future<bool> Function(String path)? directoryExists,
-  })  : _isIos = isIos ?? (() => io.Platform.isIOS),
+    Future<void> Function(String)? initializeSession,
+  })  : _initializeSessionOverride = initializeSession,
+        _isIos = isIos ?? (() => io.Platform.isIOS),
         _getDownloadsDirectory =
             getDownloadsDirectory ?? StorageService.getDownloadsDirectory,
         _directoryExists =
@@ -30,8 +36,10 @@ class TorrentDownloadService {
     required bool Function() isIos,
     required Future<io.Directory> Function() getDownloadsDirectory,
     required Future<bool> Function(String path) directoryExists,
+    Future<void> Function(String)? initializeSession,
   }) {
     return TorrentDownloadService._(
+      initializeSession: initializeSession,
       isIos: isIos,
       getDownloadsDirectory: getDownloadsDirectory,
       directoryExists: directoryExists,
@@ -40,12 +48,13 @@ class TorrentDownloadService {
 
   static const int _maxRecentDownloadDirectories = 8;
 
+  final Future<void> Function(String)? _initializeSessionOverride;
   final bool Function() _isIos;
   final Future<io.Directory> Function() _getDownloadsDirectory;
   final Future<bool> Function(String path) _directoryExists;
 
   bool _sessionInitialized = false;
-  String _sessionDownloadDir = '';
+  Future<void>? _sessionInitialization;
 
   Future<String> getDownloadDirectory() async {
     final saved = await SettingsStorage.loadString(
@@ -122,7 +131,6 @@ class TorrentDownloadService {
       resolved,
     );
     await rememberRecentDownloadDirectory(resolved);
-    _sessionDownloadDir = resolved;
   }
 
   Future<List<String>> loadRecentDownloadDirectories() async {
@@ -271,20 +279,31 @@ class TorrentDownloadService {
   Future<TorrentMagnetPreview> previewMagnet(
     String magnetUri, {
     String? downloadDirectory,
+    required TorrentPreviewRequest request,
   }) async {
-    final downloadDir = await _resolveDownloadDirectoryForAction(
-      downloadDirectory,
-    );
+    final downloadDir =
+        await _resolveDownloadDirectoryForAction(downloadDirectory);
     await _initSession(downloadDir);
-    final jsonText = await rust_torrent.torrentPreviewMagnet(
-      magnetUri: magnetUri,
-      downloadDir: downloadDir,
-    );
-    return TorrentMagnetPreview.fromJson(jsonText);
+    request.throwIfCancelled();
+    final id = rust_torrent.torrentBeginPreview();
+    request.attach(id);
+    try {
+      final jsonText = await rust_torrent.torrentPreviewMagnet(
+        magnetUri: magnetUri,
+        downloadDir: downloadDir,
+        requestId: id,
+      );
+      request.throwIfCancelled();
+      return TorrentMagnetPreview.fromJson(jsonText, requestId: id);
+    } catch (_) {
+      request.cancel();
+      rethrow;
+    }
   }
 
-  Future<void> addMagnet(
+  Future<TorrentAddResult> addMagnet(
     String magnetUri, {
+    required int previewId,
     String? downloadDirectory,
     bool? createFolderForTask,
   }) async {
@@ -298,12 +317,13 @@ class TorrentDownloadService {
     );
     try {
       await _initSession(downloadDir);
-      await rust_torrent.torrentAddMagnet(
+      final json = await rust_torrent.torrentAddMagnet(
         magnetUri: magnetUri,
+        previewId: previewId,
         downloadDir: downloadDir,
         createFolderForTask: createFolder,
       );
-      _log('addMagnet success: ${_summarizeMagnetForLog(magnetUri)}');
+      return TorrentAddResult.fromJson(json);
     } catch (error, stackTrace) {
       _log('addMagnet failed: $error');
       _log('addMagnet stackTrace: $stackTrace');
@@ -311,7 +331,7 @@ class TorrentDownloadService {
     }
   }
 
-  Future<void> addTorrentFile(
+  Future<TorrentAddResult> addTorrentFile(
     String torrentFilePath, {
     String? downloadDirectory,
     bool? createFolderForTask,
@@ -326,12 +346,12 @@ class TorrentDownloadService {
     );
     try {
       await _initSession(downloadDir);
-      await rust_torrent.torrentAddFile(
+      final json = await rust_torrent.torrentAddFile(
         torrentFilePath: torrentFilePath,
         downloadDir: downloadDir,
         createFolderForTask: createFolder,
       );
-      _log('addTorrentFile success: path="$torrentFilePath"');
+      return TorrentAddResult.fromJson(json);
     } catch (error, stackTrace) {
       _log('addTorrentFile failed: $error');
       _log('addTorrentFile stackTrace: $stackTrace');
@@ -360,13 +380,57 @@ class TorrentDownloadService {
   }
 
   Future<void> _initSession(String downloadDir) async {
-    if (_sessionInitialized && _sessionDownloadDir == downloadDir) {
+    if (_sessionInitialized) return;
+    final pending = _sessionInitialization ??= _initializeSession(downloadDir);
+    try {
+      await pending;
+    } finally {
+      if (identical(_sessionInitialization, pending)) {
+        _sessionInitialization = null;
+      }
+    }
+  }
+
+  Future<void> _initializeSession(String downloadDir) async {
+    if (_initializeSessionOverride != null) {
+      await _initializeSessionOverride(downloadDir);
+      _sessionInitialized = true;
       return;
     }
     await ensureRustInitialized();
-    await rust_torrent.torrentInitSession(downloadDir: downloadDir);
+    String? sessionDir;
+    if (io.Platform.isAndroid || io.Platform.operatingSystem == 'ohos') {
+      final support = await getApplicationSupportDirectory();
+      sessionDir = await TorrentSessionStorage.prepare(
+        io.Directory(p.join(support.path, 'torrent_session')),
+        [
+          downloadDir,
+          ...await loadRecentDownloadDirectories(),
+          (await _getDownloadsDirectory()).path
+        ],
+      );
+    }
+    await rust_torrent.torrentInitSession(
+        downloadDir: downloadDir, sessionDir: sessionDir);
     _sessionInitialized = true;
-    _sessionDownloadDir = downloadDir;
+  }
+
+  Future<List<String>> listCompletedVideoPaths(TorrentTask task) async {
+    if (!task.finished) throw StateError('下载尚未完成');
+    final files = await listPlayableFiles(task);
+    final paths = <String>[];
+    for (final file in files) {
+      final root = await _resolveDownloadDirectoryAccess(task.outputFolder);
+      final path = p.normalize(p.join(root, file.displayName));
+      if (!p.isWithin(p.normalize(root), path)) throw StateError('下载文件路径无效');
+      final localFile = io.File(path);
+      if (!await localFile.exists() ||
+          await localFile.length() != file.length) {
+        throw StateError('已完成的文件缺失或大小不符：${file.displayName}');
+      }
+      paths.add(path);
+    }
+    return paths;
   }
 
   Future<String> _resolveDownloadDirectoryForAction(String? directory) async {
@@ -486,7 +550,7 @@ class TorrentDownloadService {
 
   Future<Set<String>> loadAutoScannedCompletedTaskKeys() async {
     final keys = await SettingsStorage.loadStringList(
-      SettingsKeys.downloaderAutoScannedCompletedTaskKeys,
+      SettingsKeys.downloaderVerifiedScannedCompletedTaskKeys,
     );
     return keys.toSet();
   }
@@ -497,7 +561,7 @@ class TorrentDownloadService {
     final keys = await loadAutoScannedCompletedTaskKeys();
     keys.add(trimmed);
     await SettingsStorage.saveStringList(
-      SettingsKeys.downloaderAutoScannedCompletedTaskKeys,
+      SettingsKeys.downloaderVerifiedScannedCompletedTaskKeys,
       keys.toList(growable: false),
     );
   }
@@ -559,4 +623,30 @@ class TorrentPlaybackSource {
   final String videoPath;
   final String? actualPlayUrl;
   final WatchHistoryItem? historyItem;
+}
+
+/// Owns one native resolution request; cancellation releases network work and
+/// cached metadata, including when the dialog closes before FFI dispatch.
+class TorrentPreviewRequest {
+  int? _id;
+  bool _cancelled = false;
+
+  void throwIfCancelled() {
+    if (_cancelled) throw StateError('预览已取消');
+  }
+
+  void attach(int id) {
+    _id = id;
+    if (_cancelled) {
+      rust_torrent.torrentCancelPreview(requestId: id);
+      throwIfCancelled();
+    }
+  }
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final id = _id;
+    if (id != null) rust_torrent.torrentCancelPreview(requestId: id);
+  }
 }

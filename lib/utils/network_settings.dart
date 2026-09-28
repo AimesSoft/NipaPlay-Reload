@@ -60,6 +60,21 @@ class NetworkSettings {
     return host == '139.224.252.88' && uri.port == 16001;
   }
 
+  /// Whether [uri] belongs to the custom Dandanplay-compatible server that the
+  /// user explicitly selected.
+  ///
+  /// Selecting a custom server is also the trust decision that allows account
+  /// credentials to be sent to that server. Merely using a compatible API path
+  /// on another origin is not enough.
+  static Future<bool> isSelectedCustomDandanplayServiceUri(Uri uri) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (await getDandanplayServerMode() != DandanplayServerMode.custom) {
+      return false;
+    }
+    final customServer = customServerOf(prefs);
+    return customServer.isNotEmpty && _matchesGateway(uri, customServer);
+  }
+
   static bool _matchesGateway(Uri uri, String base) {
     final gateway = Uri.parse(base);
     if (hostOf(uri) != hostOf(gateway)) return false;
@@ -206,8 +221,19 @@ class NetworkSettings {
   /// 设置 Bangumi 服务器地址
   static Future<void> setBangumiServer(String serverUrl) async {
     final prefs = await SharedPreferences.getInstance();
+    final previous = await getBangumiServer();
     final normalized = _normalizeServerUrl(serverUrl);
     await prefs.setString(_bangumiServerKey, normalized);
+    // 换 API 地址后清旧域名图片/详情缓存，否则旧缓存仍指向旧域名一直加载失败
+    if (normalized != previous) {
+      final stale = prefs.getKeys()
+          .where((k) => k.startsWith('media_library_image_url_') ||
+              k.startsWith('bangumi_detail_'))
+          .toList();
+      for (final key in stale) {
+        await prefs.remove(key);
+      }
+    }
     print('[网络设置] Bangumi服务器已切换到: $normalized');
   }
 

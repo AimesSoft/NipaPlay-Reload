@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/ui_scale_policy.dart';
 
 // 定义番剧卡片点击行为的枚举
 enum AnimeCardAction {
@@ -34,7 +35,10 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _animeCardActionKey = 'anime_card_action';
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
+  static const String _automaticUiScaleKey = 'ui_scale_automatic';
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
+  static const String _showQuarterlyAnimeReviewKey =
+      'show_quarterly_anime_review';
   static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
   static const String _accentColorPresetKey = 'app_accent_color_preset';
   static const String _folderNameDisplayModeKey = 'folder_name_display_mode';
@@ -47,9 +51,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _showHomeHeroSideCardBottomKey =
       'show_home_hero_side_card_bottom';
 
-  static const double uiScaleMin = 1.0;
-  static const double uiScaleMax = 1.3;
-  static const double uiScaleStep = 0.05;
+  static const double uiScaleMin = UiScalePolicy.min;
+  static const double uiScaleMax = UiScalePolicy.max;
+  static const double uiScaleStep = UiScalePolicy.step;
   static const double defaultUiScale = 1.0;
   static const double defaultTabletUiScale = 1.2;
   static const double defaultTelevisionUiScale = 1.2;
@@ -58,7 +62,11 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late bool _showDanmakuDensityChart;
   late RecentWatchingStyle _recentWatchingStyle;
   late double _uiScale;
+  final double? _automaticUiScale;
+  late bool _useAutomaticUiScale;
   late bool _showAnimeCardSummary;
+  late bool _showQuarterlyAnimeReview;
+  late bool _showMediaLibraryNewBadge;
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
   late FolderNameDisplayMode _folderNameDisplayMode;
@@ -76,7 +84,11 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
+  bool get supportsAutomaticUiScale => _automaticUiScale != null;
+  bool get useAutomaticUiScale => _useAutomaticUiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
+  bool get showQuarterlyAnimeReview => _showQuarterlyAnimeReview;
+  bool get showMediaLibraryNewBadge => _showMediaLibraryNewBadge;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
   FolderNameDisplayMode get folderNameDisplayMode => _folderNameDisplayMode;
@@ -96,13 +108,17 @@ class AppearanceSettingsProvider extends ChangeNotifier {
           : TextOverflow.visible;
 
   // 构造函数
-  AppearanceSettingsProvider() {
+  AppearanceSettingsProvider({double? automaticUiScale})
+      : _automaticUiScale = automaticUiScale ?? _readAutomaticUiScale() {
     // 初始化默认值
     _animeCardAction = AnimeCardAction.synopsis; // 默认行为是显示简介
     _showDanmakuDensityChart = true; // 默认显示弹幕密度曲线图
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
     _uiScale = _resolveDefaultUiScale();
+    _useAutomaticUiScale = supportsAutomaticUiScale;
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
+    _showQuarterlyAnimeReview = true;
+    _showMediaLibraryNewBadge = true;
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _accentColorPreset = AppAccentColorPreset.rose;
     _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
@@ -116,6 +132,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   }
 
   double _resolveDefaultUiScale() {
+    if (_automaticUiScale != null) return _automaticUiScale;
     if (kIsWeb) {
       return defaultUiScale;
     }
@@ -123,6 +140,16 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       return defaultTelevisionUiScale;
     }
     return globals.isTablet ? defaultTabletUiScale : defaultUiScale;
+  }
+
+  static double? _readAutomaticUiScale() {
+    if (!globals.isAndroidTv) return null;
+    final view = PlatformDispatcher.instance.implicitView;
+    if (view == null) return defaultUiScale;
+    return UiScalePolicy.forTelevisionDisplay(
+      physicalSize: view.physicalSize,
+      devicePixelRatio: view.devicePixelRatio,
+    );
   }
 
   NipaplayWindowDisplayMode _resolveDefaultWindowDisplayMode() {
@@ -139,6 +166,10 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _showDanmakuDensityChart =
           prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
+      _showQuarterlyAnimeReview =
+          prefs.getBool(_showQuarterlyAnimeReviewKey) ?? true;
+      _showMediaLibraryNewBadge =
+          prefs.getBool(SettingsKeys.showMediaLibraryNewBadge) ?? true;
       _diffuseLowResolutionPosters =
           prefs.getBool(_diffuseLowResolutionPostersKey) ?? true;
       _showHomeHeroBanner = prefs.getBool(_showHomeHeroBannerKey) ?? true;
@@ -162,7 +193,13 @@ class AppearanceSettingsProvider extends ChangeNotifier {
         _folderNameDisplayMode = FolderNameDisplayMode.ellipsis;
       }
       final savedUiScale = prefs.getDouble(_uiScaleKey);
-      _uiScale = (savedUiScale ?? _resolveDefaultUiScale())
+      // Older versions only saved this value after a manual adjustment. Keep
+      // those choices; installations with no saved scale opt into adaptation.
+      _useAutomaticUiScale = supportsAutomaticUiScale &&
+          (prefs.getBool(_automaticUiScaleKey) ?? savedUiScale == null);
+      _uiScale = (_useAutomaticUiScale
+              ? _automaticUiScale!
+              : savedUiScale ?? _resolveDefaultUiScale())
           .clamp(uiScaleMin, uiScaleMax)
           .toDouble();
       final savedWindowDisplayModeIndex = prefs.getInt(_windowDisplayModeKey);
@@ -255,16 +292,36 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
   Future<void> setUiScale(double value) async {
     final clampedValue = value.clamp(uiScaleMin, uiScaleMax).toDouble();
-    if (_uiScale == clampedValue) return;
+    if (_uiScale == clampedValue && !_useAutomaticUiScale) return;
 
     _uiScale = clampedValue;
+    _useAutomaticUiScale = false;
     notifyListeners();
 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_uiScaleKey, clampedValue);
+      await prefs.setBool(_automaticUiScaleKey, false);
     } catch (e) {
       debugPrint('保存界面缩放设置时出错: $e');
+    }
+  }
+
+  Future<void> setAutomaticUiScale(bool enabled) async {
+    if (!supportsAutomaticUiScale || enabled == _useAutomaticUiScale) return;
+    if (!enabled) {
+      await setUiScale(_uiScale);
+      return;
+    }
+    _useAutomaticUiScale = true;
+    _uiScale = _automaticUiScale!;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Store the mode, not the computed scale: recalculate at the next launch.
+      await prefs.setBool(_automaticUiScaleKey, true);
+    } catch (e) {
+      debugPrint('保存自动界面缩放设置时出错: $e');
     }
   }
 
@@ -279,6 +336,34 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_showAnimeCardSummaryKey, value);
     } catch (e) {
       debugPrint('保存番剧卡片简介显示设置时出错: $e');
+    }
+  }
+
+  Future<void> setShowQuarterlyAnimeReview(bool value) async {
+    if (_showQuarterlyAnimeReview == value) return;
+
+    _showQuarterlyAnimeReview = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showQuarterlyAnimeReviewKey, value);
+    } catch (e) {
+      debugPrint('保存首页新番回顾显示设置时出错: $e');
+    }
+  }
+
+  Future<void> setShowMediaLibraryNewBadge(bool value) async {
+    if (_showMediaLibraryNewBadge == value) return;
+
+    _showMediaLibraryNewBadge = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(SettingsKeys.showMediaLibraryNewBadge, value);
+    } catch (e) {
+      debugPrint('保存媒体库 NEW 标识显示设置时出错: $e');
     }
   }
 

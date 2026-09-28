@@ -42,16 +42,20 @@ class UiScaleWrapper extends StatelessWidget {
 
     return MediaQuery(
       data: scaledData,
-      child: Align(
+      // A scale below 1 needs a larger logical viewport. Let the child exceed
+      // the physical constraints before scaling it back to fill the screen.
+      // Keeping the overflow box outside the transform also preserves hit tests
+      // across the entire physical viewport.
+      child: OverflowBox(
         alignment: Alignment.topLeft,
+        minWidth: scaledSize.width,
+        maxWidth: scaledSize.width,
+        minHeight: scaledSize.height,
+        maxHeight: scaledSize.height,
         child: Transform.scale(
           scale: effectiveScale,
           alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: scaledSize.width,
-            height: scaledSize.height,
-            child: child,
-          ),
+          child: child,
         ),
       ),
     );
