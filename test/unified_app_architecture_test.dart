@@ -739,11 +739,36 @@ void main() {
     expect(player, contains('final portraitUiScale'));
     expect(player, contains('portraitUiScale: portraitUiScale'));
     expect(player, contains('clipBehavior: Clip.hardEdge'));
-    expect(player, contains('final double horizontalCutoutInset'));
+    // Landscape controls use each side's safe area independently; compact
+    // portrait controls must not inherit the landscape cutout padding.
     expect(
       player,
-      contains('portraitUiScale >= 0.999 ? 24.0 : 0.0'),
+      matches(
+        RegExp(
+          r'final bool isMobileLandscape = globals\.isMobilePlatform &&\s*'
+          r'!isCompactPortrait &&\s*'
+          r'MediaQuery\.orientationOf\(context\) == Orientation\.landscape;',
+        ),
+      ),
     );
+    expect(player, contains('MediaQuery.viewPaddingOf(context)'));
+    expect(player, contains('minimumSideInset = globals.isPhone ? 24.0 : 0.0'));
+    expect(
+      player,
+      contains(
+        'isMobileLandscape ? math.max(minimumSideInset, viewPadding.left) : 0.0',
+      ),
+    );
+    expect(
+      player,
+      contains(
+        'isMobileLandscape ? math.max(minimumSideInset, viewPadding.right) : 0.0',
+      ),
+    );
+    expect(player, contains('left: leftCutoutInset'));
+    expect(player, contains('right: rightCutoutInset'));
+    expect(player, contains('left: 16.0 + leftCutoutInset'));
+    expect(player, contains('right: 16.0 + rightCutoutInset'));
     expect(player, contains('AnimeDetailPage('));
     expect(player, contains('playbackDetailContext: detailContext'));
     expect(player, isNot(contains('AdaptivePlaybackDetailView(')));
