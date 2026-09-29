@@ -18,7 +18,13 @@ if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_RUST_MANIFEST_REL}/Cargo.toml")
   message(FATAL_ERROR
     "Failed to locate rust/Cargo.toml at ${CMAKE_CURRENT_SOURCE_DIR}/${_RUST_MANIFEST_REL}")
 endif()
-apply_cargokit(${PROJECT_NAME} "${_RUST_MANIFEST_REL}" rust_lib_nipaplay "")
+if(DEFINED ENV{NIPAPLAY_RUST_LIBRARY} AND EXISTS "$ENV{NIPAPLAY_RUST_LIBRARY}")
+  # Supports distro Cargo toolchains as well as rustup-managed builds.
+  set(${PROJECT_NAME}_cargokit_lib "$ENV{NIPAPLAY_RUST_LIBRARY}")
+  add_custom_target(${PROJECT_NAME}_cargokit DEPENDS "$ENV{NIPAPLAY_RUST_LIBRARY}")
+else()
+  apply_cargokit(${PROJECT_NAME} "${_RUST_MANIFEST_REL}" rust_lib_nipaplay "")
+endif()
 
 add_library(
   ${PLUGIN_NAME} SHARED
@@ -29,7 +35,9 @@ add_dependencies(${PLUGIN_NAME} "${PROJECT_NAME}_cargokit")
 apply_standard_settings(${PLUGIN_NAME})
 target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_17)
 set_target_properties(${PLUGIN_NAME} PROPERTIES
-  CXX_VISIBILITY_PRESET hidden)
+  CXX_VISIBILITY_PRESET hidden
+  BUILD_WITH_INSTALL_RPATH TRUE
+  INSTALL_RPATH "$ORIGIN")
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 
 target_include_directories(${PLUGIN_NAME} INTERFACE
