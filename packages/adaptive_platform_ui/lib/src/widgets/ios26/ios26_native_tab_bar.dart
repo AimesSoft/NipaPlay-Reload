@@ -58,6 +58,9 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   void didUpdateWidget(covariant IOS26NativeTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncPropsToNativeIfNeeded();
+    if (oldWidget.height != null && widget.height == null) {
+      _requestIntrinsicSize();
+    }
   }
 
   @override
@@ -200,7 +203,10 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
-    if (call.method == 'valueChanged') {
+    if (call.method == 'intrinsicSizeChanged') {
+      final args = call.arguments as Map?;
+      _updateIntrinsicHeight((args?['height'] as num?)?.toDouble());
+    } else if (call.method == 'valueChanged') {
       final args = call.arguments as Map?;
       final idx = (args?['index'] as num?)?.toInt();
       if (idx != null) {
@@ -209,6 +215,18 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       }
     }
     return null;
+  }
+
+  void _updateIntrinsicHeight(double? height) {
+    if (!mounted ||
+        widget.height != null ||
+        height == null ||
+        !height.isFinite ||
+        height <= 0 ||
+        height == _intrinsicHeight) {
+      return;
+    }
+    setState(() => _intrinsicHeight = height);
   }
 
   Future<void> _syncPropsToNativeIfNeeded() async {
@@ -317,10 +335,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
     try {
       final size = await ch.invokeMethod<Map>('getIntrinsicSize');
       final h = (size?['height'] as num?)?.toDouble();
-      if (!mounted) return;
-      setState(() {
-        if (h != null && h > 0) _intrinsicHeight = h;
-      });
+      _updateIntrinsicHeight(h);
     } catch (_) {}
   }
 }
