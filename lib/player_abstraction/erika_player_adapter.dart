@@ -670,12 +670,18 @@ class ErikaPlayerAdapter
   static bool get _isHarmonyOS =>
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
 
+  // Enabled by the source-build script that bundles Erika's Linux plugin.
+  // The published 0.2.0 package does not yet contain that native backend.
+  static const bool linuxBuildEnabled =
+      bool.fromEnvironment('NIPAPLAY_LINUX_ERIKA');
+
   static bool get _isSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.android ||
+          (defaultTargetPlatform == TargetPlatform.linux && linuxBuildEnabled) ||
           _isHarmonyOS);
 
   @override
@@ -732,6 +738,7 @@ class ErikaPlayerAdapter
   bool get usesWindowOverlayVideoSurface =>
       _isSupported &&
       defaultTargetPlatform != TargetPlatform.android &&
+      defaultTargetPlatform != TargetPlatform.linux &&
       !_isHarmonyOS;
 
   @override
@@ -898,6 +905,8 @@ class ErikaPlayerAdapter
       _lastPresenterStats = const <String, dynamic>{};
       _lastOutputStatus = const <String, dynamic>{};
       _lastDecoderStatus = const <String, dynamic>{};
+      _properties.remove('decoder.video');
+      _properties.remove('video.decoder');
       _lastAudioOutputStatus = const <String, dynamic>{};
       _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
@@ -1270,6 +1279,13 @@ class ErikaPlayerAdapter
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      return ErikaTextureVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onTextureIdChanged: onPlatformViewIdChanged,
+      );
+    }
     if (defaultTargetPlatform == TargetPlatform.android || _isHarmonyOS) {
       return ErikaVideoView(
         player: _player,
@@ -1615,6 +1631,14 @@ class ErikaPlayerAdapter
 
     final decoder = event.decoder;
     if (event.kind == ErikaEventKind.videoDecoderChanged && decoder != null) {
+      final decoderName = switch (decoder.activeBackend) {
+        'cuda' => 'CUDA / NVDEC',
+        'vaapi' => 'VA-API',
+        'software' => 'FFmpeg (software)',
+        final backend => backend,
+      };
+      _properties['decoder.video'] = decoderName;
+      _properties['video.decoder'] = decoderName;
       _lastDecoderStatus = <String, dynamic>{
         'stage': decoder.stage,
         'requestedBackend': decoder.requestedBackend,
@@ -1878,7 +1902,7 @@ class ErikaPlayerAdapter
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-        'Erika is currently only wired on Android/iOS/macOS/Windows/HarmonyOS.',
+        'Erika requires a supported platform and a matching native plugin.',
       );
     }
   }

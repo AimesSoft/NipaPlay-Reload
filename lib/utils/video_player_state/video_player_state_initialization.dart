@@ -101,7 +101,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // Ensure wakelock is disabled on initialization
     try {
-      WakelockPlus.disable();
+      _setWakelockSafely(false);
       //debugPrint("Wakelock disabled on VideoPlayerState initialization.");
     } catch (e) {
       //debugPrint("Error disabling wakelock on init: $e");

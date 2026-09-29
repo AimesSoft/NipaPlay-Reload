@@ -1990,7 +1990,7 @@ int _exactEndStreak = 0;
       _hoverSettingsMenuOverlay!.remove();
       _hoverSettingsMenuOverlay = null;
     }
-    WakelockPlus.disable();
+    _setWakelockSafely(false);
     //debugPrint("Wakelock disabled on dispose.");
     if (globals.isDesktop) {
       windowManager.removeListener(this);
@@ -1998,6 +1998,14 @@ int _exactEndStreak = 0;
     _playerKernelChangeSubscription?.cancel(); // 取消播放器内核切换事件订阅
     _danmakuKernelChangeSubscription?.cancel(); // 取消弹幕内核切换事件订阅
     super.dispose();
+  }
+
+  // WSLg and minimal Linux sessions may not provide a ScreenSaver D-Bus service.
+  // Wakelock failure must not become an unhandled playback exception.
+  void _setWakelockSafely(bool enabled) {
+    unawaited(WakelockPlus.toggle(enable: enabled).catchError((Object error) {
+      debugPrint('Wakelock unavailable: $error');
+    }));
   }
 
   // 设置窗口管理器监听器

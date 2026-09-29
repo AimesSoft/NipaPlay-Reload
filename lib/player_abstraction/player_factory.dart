@@ -72,6 +72,8 @@ class PlayerFactory {
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.android ||
+        (defaultTargetPlatform == TargetPlatform.linux &&
+            ErikaPlayerAdapter.linuxBuildEnabled) ||
         isHarmonyOS;
   }
 
@@ -234,11 +236,17 @@ class PlayerFactory {
   }
 
   static PlayerKernelType get _defaultKernelType =>
-      globals.isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk;
+      globals.isTvOS ||
+              (!kIsWeb &&
+                  defaultTargetPlatform == TargetPlatform.linux &&
+                  ErikaPlayerAdapter.linuxBuildEnabled)
+          ? PlayerKernelType.erika
+          : PlayerKernelType.mdk;
 
   static bool _isKernelSupportedOnCurrentPlatform(PlayerKernelType type) {
     if (kIsWeb) return type == PlayerKernelType.videoPlayer;
     if (globals.isTvOS) return isKernelSupportedOnTvOS(type);
+    if (type == PlayerKernelType.erika) return isErikaKernelSupported;
     return true;
   }
 
