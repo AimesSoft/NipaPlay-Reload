@@ -9,6 +9,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class QuarterlyReviewCache {
   QuarterlyReviewCache._();
 
+  @visibleForTesting
+  QuarterlyReviewCache.forTesting();
+
+  @visibleForTesting
+  void dispose() {
+    _expiryTimer?.cancel();
+    revision.dispose();
+  }
+
   static final QuarterlyReviewCache instance = QuarterlyReviewCache._();
   static const _storageKey = 'quarterly_review_cache_v1';
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
@@ -26,6 +35,13 @@ class QuarterlyReviewCache {
   int _metadataProbeAt = 0;
   String _collectionProbeDay = '';
   int _collectionProbeCount = 0;
+  int _initialCollectionProbeCount = 0;
+  int _collectionProbeAt = 0;
+  int _collectionBackoffUntil = 0;
+  final Map<String, int> _collectionAttempts = {};
+
+  static const collectionProbeInterval = Duration(seconds: 2);
+  static const initialCollectionDailyLimit = 20;
 
   static int seasonMonth(DateTime date) => ((date.month - 1) ~/ 3) * 3 + 1;
 
@@ -147,12 +163,25 @@ class QuarterlyReviewCache {
         _collectionProbeDay = data['collectionProbeDay'] as String? ?? '';
         _collectionProbeCount =
             (data['collectionProbeCount'] as num?)?.toInt() ?? 0;
+        _initialCollectionProbeCount =
+            (data['initialCollectionProbeCount'] as num?)?.toInt() ?? 0;
+        _collectionProbeAt = (data['collectionProbeAt'] as num?)?.toInt() ?? 0;
+        _collectionBackoffUntil =
+            (data['collectionBackoffUntil'] as num?)?.toInt() ?? 0;
+        for (final entry
+            in (data['collectionAttempts'] as Map? ?? {}).entries) {
+          if (entry.value is num) {
+            _collectionAttempts[entry.key.toString()] =
+                (entry.value as num).toInt();
+          }
+        }
       }
     } catch (_) {
       _anime.clear();
       _collections.clear();
       _metadataAttempts.clear();
       _checkedLocal.clear();
+      _collectionAttempts.clear();
     }
     if (needsReindex) {
       // Upgrade existing review rows from the local detail cache without
@@ -228,6 +257,12 @@ class QuarterlyReviewCache {
     _collections.removeWhere((key, _) =>
         !retainedSubjects.contains(int.tryParse(key.split(':').last)));
     if (_collections.length != collectionBefore) changed = true;
+    final attemptBefore = _collectionAttempts.length;
+    _collectionAttempts.removeWhere((key, time) =>
+        !retainedSubjects.contains(int.tryParse(key.split(':').last)) ||
+        now.millisecondsSinceEpoch - time >
+            const Duration(days: 14).inMilliseconds);
+    if (_collectionAttempts.length != attemptBefore) changed = true;
     return changed;
   }
 
@@ -249,6 +284,10 @@ class QuarterlyReviewCache {
             'metadataProbeAt': _metadataProbeAt,
             'collectionProbeDay': _collectionProbeDay,
             'collectionProbeCount': _collectionProbeCount,
+            'initialCollectionProbeCount': _initialCollectionProbeCount,
+            'collectionProbeAt': _collectionProbeAt,
+            'collectionBackoffUntil': _collectionBackoffUntil,
+            'collectionAttempts': _collectionAttempts,
           }));
     });
     _pendingWrite = next;
@@ -381,6 +420,7 @@ class QuarterlyReviewCache {
       'updatedAt': updatedAt,
       'checkedAt': DateTime.now().millisecondsSinceEpoch,
     };
+    _collectionAttempts.remove('$username:$subjectId');
     await _save();
     revision.value++;
   }
@@ -440,15 +480,24 @@ class QuarterlyReviewCache {
   }
 
   Future<int?> reserveCollectionProbe(
-      Set<int> ids, String username, DateTime now) async {
+      Set<int> ids, String username, DateTime now,
+      {bool initialOnly = false}) async {
     await load();
     if (username.isEmpty) return null;
     final day = '${now.year}-${now.month}-${now.day}';
     if (_collectionProbeDay != day) {
       _collectionProbeDay = day;
       _collectionProbeCount = 0;
+      _initialCollectionProbeCount = 0;
     }
-    if (_collectionProbeCount >= 1) return null;
+    if (now.millisecondsSinceEpoch < _collectionBackoffUntil ||
+        now.millisecondsSinceEpoch - _collectionProbeAt <
+            collectionProbeInterval.inMilliseconds ||
+        (initialOnly
+            ? _initialCollectionProbeCount >= initialCollectionDailyLimit
+            : _collectionProbeCount >= 1)) {
+      return null;
+    }
     final targetSeason =
         visibleReviewSeason(now) ?? DateTime(now.year, seasonMonth(now));
     for (final id in ids) {
@@ -464,18 +513,45 @@ class QuarterlyReviewCache {
       }
       final sid = subjectId(data['bangumiUrl'] as String?);
       if (sid == null) continue;
-      final checked =
-          (_collections['$username:$sid']?['checkedAt'] as num?)?.toInt();
+      final key = '$username:$sid';
+      if (initialOnly && _collections.containsKey(key)) continue;
+      if (!initialOnly &&
+          !_collections.containsKey(key) &&
+          _initialCollectionProbeCount >= initialCollectionDailyLimit) {
+        continue;
+      }
+      final attempted = _collectionAttempts[key];
+      if (attempted != null &&
+          now.millisecondsSinceEpoch - attempted <
+              const Duration(days: 1).inMilliseconds) {
+        continue;
+      }
+      final checked = (_collections[key]?['checkedAt'] as num?)?.toInt();
       if (checked != null &&
           now.millisecondsSinceEpoch - checked <
               const Duration(days: 14).inMilliseconds) {
         continue;
       }
-      _collectionProbeCount++;
+      if (initialOnly) {
+        _initialCollectionProbeCount++;
+      } else {
+        _collectionProbeCount++;
+      }
+      _collectionProbeAt = now.millisecondsSinceEpoch;
+      _collectionAttempts[key] = _collectionProbeAt;
       await _save();
       return sid;
     }
     return null;
+  }
+
+  Future<void> deferCollectionProbes(DateTime now, {int? statusCode}) async {
+    await load();
+    final delay = statusCode == 429 || statusCode == 401 || statusCode == 403
+        ? const Duration(days: 1)
+        : const Duration(hours: 1);
+    _collectionBackoffUntil = now.add(delay).millisecondsSinceEpoch;
+    await _save();
   }
 }
 

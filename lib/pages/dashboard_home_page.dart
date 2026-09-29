@@ -33,6 +33,8 @@ import 'package:nipaplay/models/trending_bangumi.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/quarterly_review_comment.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
@@ -208,6 +210,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _isLoadingQuarterlyReview = false;
   bool _reviewReloadAfterCurrent = false;
   bool _reviewWarmScheduled = false;
+  bool _reviewCollectionsScheduled = false;
+  bool _isEditingQuarterlyReviewComment = false;
   _QuarterlyReviewSort _quarterlyReviewSort = _QuarterlyReviewSort.airDate;
   final ScrollController _quarterlyReviewScrollController = ScrollController();
   final GlobalKey _quarterlyReviewSortDropdownKey = GlobalKey();

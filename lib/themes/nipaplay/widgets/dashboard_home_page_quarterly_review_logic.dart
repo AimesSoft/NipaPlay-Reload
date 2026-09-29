@@ -125,6 +125,10 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
         _quarterlyReviewYear = targetSeason.year;
         _quarterlyReviewMonth = targetSeason.month;
       });
+      if (!_reviewCollectionsScheduled) {
+        _reviewCollectionsScheduled = true;
+        unawaited(_syncQuarterlyReviewCollections());
+      }
       if (!_reviewWarmScheduled) {
         _reviewWarmScheduled = true;
         unawaited(_warmQuarterlyReview(ids));
@@ -140,9 +144,8 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
     }
   }
 
-  /// At most two detail requests and one collection request per day, even if
-  /// the user opens the app repeatedly. Normal detail/collection use also fills
-  /// the same persistent index without any extra requests.
+  /// Metadata still uses the small daily quota. Known subjects have a separate
+  /// paced collection queue so an uncached detail cannot delay their comments.
   Future<void> _warmQuarterlyReview(Set<int> ids) async {
     try {
       await Future.delayed(const Duration(seconds: 5));
@@ -169,27 +172,128 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
           }
         } catch (_) {}
       }
-      if (!mounted || !_isQuarterlyReviewEnabled) return;
-      await BangumiApiService.initialize();
-      if (!mounted || !_isQuarterlyReviewEnabled) return;
-      final userInfo = BangumiApiService.userInfo;
-      final username = BangumiApiService.isLoggedIn && userInfo != null
-          ? userInfo['username']?.toString()
-          : null;
-      if (username != null && username.isNotEmpty) {
-        final subjectId =
-            await cache.reserveCollectionProbe(ids, username, DateTime.now());
-        if (!mounted || !_isQuarterlyReviewEnabled) return;
-        if (subjectId != null) {
-          try {
-            await BangumiApiService.getUserCollection(subjectId);
-          } catch (_) {}
-        }
-      }
     } catch (error) {
       debugPrint('季度回顾后台补全失败: $error');
     } finally {
       _reviewWarmScheduled = false;
+    }
+  }
+
+  Future<void> _syncQuarterlyReviewCollections() async {
+    String? username;
+    try {
+      await BangumiApiService.initialize();
+      username = BangumiApiService.isLoggedIn
+          ? (BangumiApiService.userInfo?['username']?.toString())
+          : null;
+      if (username == null || username.isEmpty) return;
+      final account = username;
+      final cache = QuarterlyReviewCache.instance;
+      bool canContinue() =>
+          mounted &&
+          _isQuarterlyReviewEnabled &&
+          BangumiApiService.isLoggedIn &&
+          BangumiApiService.userInfo?['username']?.toString() == account;
+
+      Future<bool> fetchCollection(int subjectId) async {
+        try {
+          final result = await BangumiApiService.getUserCollection(
+            subjectId,
+            username: account,
+          );
+          if (result['success'] == true) return true;
+          await cache.deferCollectionProbes(DateTime.now(),
+              statusCode: result['statusCode'] as int?);
+        } catch (_) {
+          await cache.deferCollectionProbes(DateTime.now());
+        }
+        return false;
+      }
+
+      // Start after the local cards are rendered. Each reservation persists
+      // before sending, so reopening Home cannot restart a failed request burst.
+      await Future.delayed(QuarterlyReviewCache.collectionProbeInterval);
+      while (canContinue()) {
+        final subjectId = await cache.reserveCollectionProbe(
+          _reviewLibraryIds(),
+          account,
+          DateTime.now(),
+          initialOnly: true,
+        );
+        if (subjectId == null || !canContinue()) break;
+        if (!await fetchCollection(subjectId)) return;
+        await Future.delayed(QuarterlyReviewCache.collectionProbeInterval);
+      }
+      if (!canContinue()) return;
+      // Existing collections retain the slower one-per-day refresh quota.
+      final subjectId = await cache.reserveCollectionProbe(
+          _reviewLibraryIds(), account, DateTime.now());
+      if (subjectId != null && canContinue()) {
+        await fetchCollection(subjectId);
+      }
+    } catch (error) {
+      debugPrint('季度回顾评论补全失败: $error');
+    } finally {
+      _reviewCollectionsScheduled = false;
+      final currentUsername = BangumiApiService.isLoggedIn
+          ? (BangumiApiService.userInfo?['username']?.toString())
+          : null;
+      if (mounted &&
+          _isQuarterlyReviewEnabled &&
+          currentUsername != null &&
+          currentUsername != username) {
+        unawaited(_loadQuarterlyReview());
+      }
+    }
+  }
+
+  Future<void> _editQuarterlyReviewComment(_QuarterlyReviewItem item) async {
+    final subjectId = QuarterlyReviewCache.subjectId(item.anime.bangumiUrl);
+    final username = BangumiApiService.userInfo?['username']?.toString();
+    if (_isEditingQuarterlyReviewComment ||
+        !BangumiApiService.isLoggedIn ||
+        username == null ||
+        subjectId == null) {
+      return;
+    }
+    _isEditingQuarterlyReviewComment = true;
+    try {
+      await BangumiCommentDialog.show(
+        context: context,
+        animeTitle:
+            item.anime.nameCn.isNotEmpty ? item.anime.nameCn : item.anime.name,
+        initialRating: item.rating ?? 0,
+        initialComment: item.comment,
+        // The short-comment editor does not expose collection status. Saving
+        // below only sends rating/comment to preserve status and progress.
+        collectionType: 3,
+        onSubmit: (submission) async {
+          try {
+            if (!BangumiApiService.isLoggedIn ||
+                BangumiApiService.userInfo?['username']?.toString() !=
+                    username) {
+              throw StateError('Bangumi账号已变更，请重新打开短评编辑');
+            }
+            final result = await BangumiApiService.updateUserCollection(
+              subjectId,
+              rate: submission.rating,
+              comment: submission.comment.trim(),
+            );
+            if (result['success'] != true) {
+              throw StateError(result['message']?.toString() ?? '短评保存失败');
+            }
+          } catch (error) {
+            if (mounted) BlurSnackBar.show(context, '短评保存失败：$error');
+            rethrow;
+          }
+          if (mounted) {
+            await _loadQuarterlyReview();
+            if (mounted) BlurSnackBar.show(context, '短评已更新');
+          }
+        },
+      );
+    } finally {
+      _isEditingQuarterlyReviewComment = false;
     }
   }
 

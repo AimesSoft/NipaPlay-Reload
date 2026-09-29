@@ -3269,8 +3269,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         ),
       );
     }
+    final targetEpisode = _resolveImmersivePrimary(episodes).episode;
     return ImmersiveEpisodeRail(
+      key: ValueKey('immersive-episode-rail-${anime.id}'),
       episodeCount: displayed.length,
+      targetEpisodeIndex: displayed.indexWhere(
+        (episode) => episode.id == targetEpisode.id,
+      ),
       onSelectEpisodes: () => _showImmersiveEpisodeSelector(anime),
       itemBuilder: (context, index) {
         final episode = displayed[index];
