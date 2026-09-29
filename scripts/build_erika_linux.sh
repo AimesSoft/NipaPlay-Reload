@@ -24,6 +24,9 @@ overrides += '\n  erika_flutter:\n    path: ' + str(erika.resolve() / 'packages/
 (root / 'pubspec_overrides.yaml').write_text(overrides)
 PY
 export CARGO_TARGET_DIR=${ERIKA_TARGET_DIR:-$HOME/.cache/erika-target}
+if [[ ${NIPAPLAY_WSL_GPU_COPY:-0} == 1 ]]; then
+  export ERIKA_LINUX_D3D12_INTEROP=1
+fi
 if [[ ${ERIKA_SKIP_BUILD:-0} != 1 ]]; then
   (cd "$ERIKA_SOURCE_DIR" && cargo build --locked --release -p erika_capi)
 fi
@@ -37,6 +40,9 @@ cargo rustc --locked --release --manifest-path rust/Cargo.toml --lib -- \
 install_dir=${NIPAPLAY_INSTALL_DIR:-$HOME/.local/opt/nipaplay-erika}
 mkdir -p "$install_dir" "$HOME/.local/bin" "$HOME/.local/share/applications"
 rsync -a build/linux/x64/release/bundle/ "$install_dir/"
+if [[ -f "$ERIKA_SOURCE_DIR/scripts/run_wsl_gpu_copy.sh" ]]; then
+  install -m755 "$ERIKA_SOURCE_DIR/scripts/run_wsl_gpu_copy.sh" "$install_dir/run_wsl_gpu_copy.sh"
+fi
 cat > "$HOME/.local/bin/nipaplay-erika" <<EOF
 #!/usr/bin/env bash
 set -e
@@ -47,6 +53,9 @@ if [[ -e /dev/dxg ]]; then
 fi
 export ERIKA_REQUIRE_HARDWARE_GPU=\${ERIKA_REQUIRE_HARDWARE_GPU:-1}
 export ERIKA_REQUIRE_HARDWARE_DECODE=\${ERIKA_REQUIRE_HARDWARE_DECODE:-1}
+if [[ -e /dev/dxg && \${NIPAPLAY_WSL_GPU_COPY:-${NIPAPLAY_WSL_GPU_COPY:-0}} == 1 ]]; then
+  exec bash "$install_dir/run_wsl_gpu_copy.sh" "$install_dir/NipaPlay" "\$@"
+fi
 exec "$install_dir/NipaPlay" "\$@"
 EOF
 chmod +x "$HOME/.local/bin/nipaplay-erika"
