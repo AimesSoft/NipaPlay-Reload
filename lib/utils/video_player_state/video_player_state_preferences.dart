@@ -349,7 +349,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 获取映射后的弹幕不透明度
   double get mappedDanmakuOpacity {
     // 使用平方函数进行映射，使低值区域变化更平缓
-    return _danmakuOpacity * _danmakuOpacity;
+    return danmakuOpacity * danmakuOpacity;
   }
 
   // 加载弹幕可见性
@@ -1792,11 +1792,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   // 获取实际使用的弹幕字体大小
   double get actualDanmakuFontSize {
-    if (_danmakuFontSize <= 0) {
+    if (danmakuFontSize <= 0) {
       // 使用默认值
       return globals.isPhone ? 20.0 : 30.0;
     }
-    return _danmakuFontSize;
+    return danmakuFontSize;
   }
 
   double _clampSubtitleScale(double value) {
