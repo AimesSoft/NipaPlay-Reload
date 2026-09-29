@@ -19,6 +19,11 @@ abstract interface class AsyncSeekPlayer {
   Future<void> seekAndWait({required int position});
 }
 
+/// Native buffering is independent of the user's play/pause intent.
+abstract interface class BufferingAwarePlayer {
+  ValueListenable<bool> get buffering;
+}
+
 /// Optional capability for backends whose external subtitle replacement is
 /// completed through an asynchronous platform bridge.
 abstract interface class AsyncExternalSubtitlePlayer {
