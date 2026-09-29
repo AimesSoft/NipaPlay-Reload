@@ -115,6 +115,23 @@ class WatchHistoryItem {
       mediaKey: mediaKey ?? this.mediaKey,
     );
   }
+
+  /// Clears the visible match while retaining episode IDs for progress recovery.
+  WatchHistoryItem withoutMatchInfo() => WatchHistoryItem(
+        filePath: filePath,
+        animeName: '',
+        episodeTitle: null,
+        episodeId: episodeId,
+        animeId: animeId,
+        watchProgress: watchProgress,
+        lastPosition: lastPosition,
+        duration: duration,
+        lastWatchTime: lastWatchTime,
+        thumbnailPath: thumbnailPath,
+        isFromScan: false,
+        videoHash: videoHash,
+        mediaKey: mediaKey,
+      );
 }
 
 class WatchHistoryManager {
@@ -801,6 +818,77 @@ class WatchHistoryManager {
     }
   }
 
+  static Future<List<WatchHistoryItem>> getMatchedItemsForEpisode(
+      int animeId, int episodeId) async {
+    if (!_initialized) await initialize();
+    if (_migratedToDatabase) {
+      return WatchHistoryDatabase.instance
+          .getMatchedHistoriesByEpisode(animeId, episodeId);
+    }
+    return _cachedItems
+        .where((item) =>
+            item.animeId == animeId &&
+            item.episodeId == episodeId &&
+            item.animeName.trim().isNotEmpty &&
+            item.filePath.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+  }
+
+  static Future<WatchHistoryItem?> getClearedHistoryItemByEpisode(
+      int animeId, int episodeId) async {
+    if (!_initialized) await initialize();
+    if (_migratedToDatabase) {
+      return WatchHistoryDatabase.instance
+          .getClearedHistoryByEpisode(animeId, episodeId);
+    }
+    final cleared = _cachedItems
+        .where((item) =>
+            item.animeId == animeId &&
+            item.episodeId == episodeId &&
+            item.animeName.trim().isEmpty)
+        .toList()
+      ..sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+    return cleared.isEmpty ? null : cleared.first;
+  }
+
+  /// Unlinks this file only. A concurrent rematch to another episode is retained.
+  static Future<bool> clearMatchInfoForFile(WatchHistoryItem expected) async {
+    if (!_initialized) await initialize();
+    if (_migratedToDatabase) {
+      final changed = await WatchHistoryDatabase.instance
+          .clearMatchInfoForFile(expected);
+      if (!changed) return false;
+      final index = _cachedItems.indexWhere(
+          (item) => item.filePath == expected.filePath);
+      if (index >= 0) _cachedItems[index] = _cachedItems[index].withoutMatchInfo();
+      _scheduleIncrementalSyncAfterChange();
+      return true;
+    }
+    // Serialize with the legacy JSON writer, and propagate write failures.
+    while (_isWriting) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    final index = _cachedItems.indexWhere((item) =>
+        item.filePath == expected.filePath &&
+        item.animeId == expected.animeId &&
+        item.episodeId == expected.episodeId);
+    if (index < 0) return false;
+    _isWriting = true;
+    try {
+      final updated = List<WatchHistoryItem>.of(_cachedItems);
+      updated[index] = updated[index].withoutMatchInfo();
+      await io.File(_historyFilePath)
+          .writeAsString(jsonEncode(updated.map((item) => item.toJson()).toList()));
+      _cachedItems[index] = updated[index];
+      _lastWriteTime = DateTime.now();
+      _scheduleIncrementalSyncAfterChange();
+      return true;
+    } finally {
+      _isWriting = false;
+    }
+  }
+
   // 获取缓存中的所有历史记录项 (同步方法)
   static List<WatchHistoryItem> getAllCachedHistory() {
     return List.from(_cachedItems);
@@ -913,8 +1001,7 @@ class WatchHistoryManager {
   // 清空的内容：animeName 置空串、episodeTitle 置 null、isFromScan 置 false。
   // 保留的内容：animeId、episodeId、watchProgress、lastPosition、duration 等。
   // 保留 animeId/episodeId 的原因：当用户更换文件路径重新匹配同一部番时，
-  // concurrent_video_processor 可通过 getHistoryByEpisode(animeId, episodeId)
-  // 找到旧记录并迁移观看进度到新文件，避免进度丢失。
+  // 路径变更后仅从已清除匹配的旧记录迁移进度；仍有效的同集其他版本不受影响。
   // 注意：animeName 不再用文件名覆盖——在线媒体的 filePath 是 URL，
   // 取 basename 会得到 URL 转义片段，并非"清空"。空串与未匹配状态一致，
   // UI 显示时按既有逻辑自行 fallback。

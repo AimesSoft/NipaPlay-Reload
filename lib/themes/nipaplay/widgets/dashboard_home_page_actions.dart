@@ -184,133 +184,25 @@ extension DashboardHomePageActions on _DashboardHomePageState {
 
   void _navigateToJellyfinDetail(String jellyfinId) {
     MediaServerDetailPage.showJellyfin(context, jellyfinId)
-        .then((result) async {
-      if (result != null) {
-        // 通过 PlaybackInfo 获取播放会话
-        PlaybackSession? playbackSession;
-        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
-        final isEmbyProtocol = result.filePath.startsWith('emby://');
-
-        if (isJellyfinProtocol) {
-          try {
-            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
-            final jellyfinService = JellyfinService.instance;
-            if (jellyfinService.isConnected) {
-              playbackSession = await jellyfinService.createPlaybackSession(
-                itemId: jellyfinId,
-                startPositionMs:
-                    result.lastPosition > 0 ? result.lastPosition : null,
-              );
-            } else {
-              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
-              return;
-            }
-          } catch (e) {
-            BlurSnackBar.show(context, '获取Jellyfin播放会话失败: $e');
-            return;
-          }
-        } else if (isEmbyProtocol) {
-          try {
-            final embyId = result.filePath.replaceFirst('emby://', '');
-            final embyService = EmbyService.instance;
-            if (embyService.isConnected) {
-              playbackSession = await embyService.createPlaybackSession(
-                itemId: embyId,
-                startPositionMs:
-                    result.lastPosition > 0 ? result.lastPosition : null,
-              );
-            } else {
-              BlurSnackBar.show(context, '未连接到Emby服务器');
-              return;
-            }
-          } catch (e) {
-            BlurSnackBar.show(context, '获取Emby播放会话失败: $e');
-            return;
-          }
-        }
-
-        // 创建PlayableItem并播放
-        final playableItem = PlayableItem(
-          videoPath: result.filePath,
-          title: result.animeName,
-          subtitle: result.episodeTitle,
-          animeId: result.animeId,
-          episodeId: result.episodeId,
-          historyItem: result,
-          playbackSession: playbackSession,
-        );
-
-        PlaybackService().play(playableItem);
-
-        // 刷新观看历史
-        Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
-      }
-    });
+        .then(_playMediaServerDetailResult);
   }
 
   void _navigateToEmbyDetail(String embyId) {
-    MediaServerDetailPage.showEmby(context, embyId).then((result) async {
-      if (result != null) {
-        // 通过 PlaybackInfo 获取播放会话
-        PlaybackSession? playbackSession;
-        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
-        final isEmbyProtocol = result.filePath.startsWith('emby://');
+    MediaServerDetailPage.showEmby(context, embyId)
+        .then(_playMediaServerDetailResult);
+  }
 
-        if (isJellyfinProtocol) {
-          try {
-            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
-            final jellyfinService = JellyfinService.instance;
-            if (jellyfinService.isConnected) {
-              playbackSession = await jellyfinService.createPlaybackSession(
-                itemId: jellyfinId,
-                startPositionMs:
-                    result.lastPosition > 0 ? result.lastPosition : null,
-              );
-            } else {
-              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
-              return;
-            }
-          } catch (e) {
-            BlurSnackBar.show(context, '获取Jellyfin播放会话失败: $e');
-            return;
-          }
-        } else if (isEmbyProtocol) {
-          try {
-            final embyId = result.filePath.replaceFirst('emby://', '');
-            final embyService = EmbyService.instance;
-            if (embyService.isConnected) {
-              playbackSession = await embyService.createPlaybackSession(
-                itemId: embyId,
-                startPositionMs:
-                    result.lastPosition > 0 ? result.lastPosition : null,
-              );
-            } else {
-              BlurSnackBar.show(context, '未连接到Emby服务器');
-              return;
-            }
-          } catch (e) {
-            BlurSnackBar.show(context, '获取Emby播放会话失败: $e');
-            return;
-          }
-        }
-
-        // 创建PlayableItem并播放
-        final playableItem = PlayableItem(
-          videoPath: result.filePath,
-          title: result.animeName,
-          subtitle: result.episodeTitle,
-          animeId: result.animeId,
-          episodeId: result.episodeId,
-          historyItem: result,
-          playbackSession: playbackSession,
-        );
-
-        PlaybackService().play(playableItem);
-
-        // 刷新观看历史
-        Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
-      }
-    });
+  Future<void> _playMediaServerDetailResult(WatchHistoryItem? result) async {
+    if (result == null || !mounted) return;
+    await PlaybackService().play(PlayableItem(
+      videoPath: result.filePath,
+      title: result.animeName,
+      subtitle: result.episodeTitle,
+      animeId: result.animeId,
+      episodeId: result.episodeId,
+      historyItem: result,
+    ));
+    if (mounted) context.read<WatchHistoryProvider>().refresh();
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
@@ -322,7 +214,17 @@ extension DashboardHomePageActions on _DashboardHomePageState {
     final skipDanmakuMatching =
         context.read<SettingsProvider>().skipDanmakuMatching;
 
-    var currentItem = item;
+    final selected = await EpisodeFileSelectionService.select(
+      context,
+      PlayableItem(
+        videoPath: item.filePath,
+        historyItem: item,
+        animeId: item.animeId,
+        episodeId: item.episodeId,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    var currentItem = selected.historyItem ?? item;
     // 检查是否为网络URL或流媒体协议URL
     final isNetworkUrl = currentItem.filePath.startsWith('http://') ||
         currentItem.filePath.startsWith('https://');
@@ -334,7 +236,9 @@ extension DashboardHomePageActions on _DashboardHomePageState {
     String filePath = currentItem.filePath;
     PlaybackSession? playbackSession;
 
-    if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
+    if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol ||
+        MediaSourceUtils.isWebDavPath(currentItem.filePath) ||
+        MediaSourceUtils.isSmbPath(currentItem.filePath)) {
       fileExists = true;
       if (isJellyfinProtocol) {
         try {
@@ -437,7 +341,7 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       playbackSession: playbackSession,
     );
 
-    await PlaybackService().play(playableItem);
+    await PlaybackService().play(playableItem, episodeFileSelectionHandled: true);
   }
 
   Future<WatchHistoryItem> _performHistoryAutoMatch(

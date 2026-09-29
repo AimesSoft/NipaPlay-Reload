@@ -28,6 +28,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
     bool manualMatchHandled = false,
+    bool episodeFileSelectionHandled = false,
   }) async {
     final resolutionGeneration = ++_sourceResolutionGeneration;
     final previousPlaybackGeneration = _playbackGeneration;
@@ -36,6 +37,36 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _isDisposed ||
         resolutionGeneration != _sourceResolutionGeneration ||
         previousPlaybackGeneration != _playbackGeneration;
+    final selectionContext = resolutionContext?.mounted == true
+        ? resolutionContext
+        : globals.navigatorKey.currentContext;
+    if (!episodeFileSelectionHandled && selectionContext?.mounted == true) {
+      final selected = await EpisodeFileSelectionService.select(
+        selectionContext!,
+        PlayableItem(
+          videoPath: videoPath,
+          historyItem: historyItem,
+          actualPlayUrl: actualPlayUrl,
+          playbackSession: playbackSession,
+          detailContext: playbackDetailContext,
+          mediaKey: mediaKey,
+        ),
+        isCancelled: resolutionCancelled,
+      );
+      if (selected == null || resolutionCancelled()) return;
+      if (!MediaIdentityResolver.samePath(videoPath, selected.videoPath)) {
+        // A session/track bundle belongs to the originally requested file.
+        embyTrackSelection = null;
+        historyFilePath = null;
+        preserveEmbyAccountKey = false;
+      }
+      videoPath = selected.videoPath;
+      historyItem = selected.historyItem;
+      actualPlayUrl = selected.actualPlayUrl;
+      playbackSession = selected.playbackSession;
+      playbackDetailContext = selected.detailContext;
+      mediaKey = selected.mediaKey;
+    }
     if (actualPlayUrl == null &&
         resolutionContext != null &&
         resolutionContext.mounted &&

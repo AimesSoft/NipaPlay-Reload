@@ -11,6 +11,7 @@ class BlurDialog {
   static Future<T?> show<T>({
     required BuildContext context,
     required String title,
+    AppDisplaySurface? displaySurface,
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
@@ -22,7 +23,8 @@ class BlurDialog {
     double? desktopMaxHeightFactor,
     double phoneHeightRatio = 0.86,
   }) {
-    if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
+    if ((displaySurface ?? AppDisplaySurfaceScope.of(context)) ==
+        AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
         context: context,
         title: title,
