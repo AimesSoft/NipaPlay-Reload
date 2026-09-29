@@ -56,11 +56,15 @@ NVIDIA RTX 5070 on WSLg has passed H.264, HEVC Main10 and AV1 hardware decoding.
 Intel/AMD implementations still need physical-device validation. Decoder frames
 on the tested WSL OpenGL path are transferred through CPU memory. The native
 Wayland output removes the additional Flutter RGBA readback, but does not make
-decoder import zero-copy. The experimental Vulkan GPU plane-copy bridge needs
-compatible drivers; CUDA/Vulkan transfer is blocked on FFmpeg 8 because its
+decoder import zero-copy. Erika now implements direct VA-API/DRM NV12/P010
+sampling with compatible Vulkan drivers. Its GPU image/synchronization tests
+passed on Dozen, but Intel/AMD decoder-to-display validation is outstanding.
+NVIDIA NVDEC direct zero-copy is not implemented; CUDA/Vulkan copy transfer is blocked on FFmpeg 8 because its
 failure cleanup can crash (fixed upstream in FFmpeg 9; integration unverified).
 `ERIKA_REQUIRE_GPU_FRAMES=1` rejects CPU transfers and
-`ERIKA_REQUIRE_ZERO_COPY=1` rejects the current Linux import paths.
+`ERIKA_REQUIRE_ZERO_COPY=1` accepts direct VA-API import and rejects CPU uploads,
+CUDA copies and failed imports. This flag will still reject the deployed WSL
+OpenGL/NVDEC path; it does not switch the renderer or install another driver.
 
 Native Wayland presentation requests automatic HDR/SDR output. HDR requires an
 FP16 scRGB Vulkan WSI surface and a supporting compositor/display. SDR-only

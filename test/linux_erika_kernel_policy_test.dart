@@ -53,4 +53,10 @@ void main() {
     await PlayerFactory.initialize();
     expect(PlayerFactory.getKernelType(), PlayerKernelType.mdk);
   });
+
+  test('Linux build flag does not change the Android default', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await PlayerFactory.initialize();
+    expect(PlayerFactory.getKernelType(), PlayerKernelType.mdk);
+  });
 }
