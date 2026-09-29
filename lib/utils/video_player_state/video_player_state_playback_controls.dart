@@ -234,7 +234,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 关闭唤醒锁
       try {
-        WakelockPlus.disable();
+        _setWakelockSafely(false);
       } catch (e) {
         //debugPrint("Error disabling wakelock: $e");
       }
@@ -347,7 +347,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         unawaited(preloadPlaybackPlaylist());
       }
       try {
-        WakelockPlus.enable();
+        _setWakelockSafely(true);
         ////debugPrint("Wakelock enabled: Playback started/resumed.");
       } catch (e) {
         ////debugPrint("Error enabling wakelock: $e");
@@ -366,7 +366,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     } else {
       // Disable for any other status (paused, error, idle, disposed, ready, loading, recognizing)
       try {
-        WakelockPlus.disable();
+        _setWakelockSafely(false);
         ////debugPrint("Wakelock disabled. Status: $_status");
       } catch (e) {
         ////debugPrint("Error disabling wakelock: $e");
@@ -584,7 +584,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _pausedPlaybackTimeMs = _playbackTimeMs.value;
       // 停止UI更新Ticker，避免继续产帧
       _uiUpdateTicker?.stop();
-      // WakelockPlus.disable(); // Already handled by _setStatus
+      // _setWakelockSafely(false); // Already handled by _setStatus
     }
   }
 

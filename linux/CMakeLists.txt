@@ -9,6 +9,15 @@ set(BINARY_NAME "NipaPlay")
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
 set(APPLICATION_ID "com.aimessoft.nipaplay")
 
+# Establish the application bundle before plugins configure their own projects.
+# flutter_js otherwise changes the shared install prefix to its plugin folder.
+set(BUILD_BUNDLE_DIR "${CMAKE_BINARY_DIR}/bundle")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT OR
+   CMAKE_INSTALL_PREFIX STREQUAL "${CMAKE_BINARY_DIR}/plugins/flutter_js/bundle")
+  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "Application bundle" FORCE)
+endif()
+set(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT FALSE)
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(SET CMP0063 NEW)
@@ -99,7 +108,15 @@ if(MIMALLOC_FOUND)
   target_compile_options(${BINARY_NAME} PRIVATE ${MIMALLOC_CFLAGS_OTHER})
   message(STATUS "Using mimalloc for better memory management")
 else()
-  message(WARNING "mimalloc not found - using default allocator")
+  # Some distribution packages provide the library without a .pc file.
+  find_library(NIPAPLAY_MIMALLOC_LIBRARY NAMES mimalloc)
+  if(NIPAPLAY_MIMALLOC_LIBRARY)
+    set(MIMALLOC_USE_STATIC_LIBS OFF CACHE BOOL "Use system mimalloc" FORCE)
+    target_link_libraries(${BINARY_NAME} PRIVATE "${NIPAPLAY_MIMALLOC_LIBRARY}")
+    message(STATUS "Using system mimalloc: ${NIPAPLAY_MIMALLOC_LIBRARY}")
+  else()
+    message(WARNING "mimalloc not found - using default allocator")
+  endif()
 endif()
 
 # Run the Flutter tool portions of the build. This must not be removed.
