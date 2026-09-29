@@ -21,9 +21,11 @@ void main() {
     ).readAsStringSync();
 
     expect(
-      playerFactory,
+      playerFactory.replaceAll(RegExp(r'\s+'), ' '),
       contains(
-        'globals.isTvOS ? PlayerKernelType.erika : PlayerKernelType.mdk',
+        'globals.isTvOS || (!kIsWeb && defaultTargetPlatform == '
+        'TargetPlatform.linux && ErikaPlayerAdapter.linuxBuildEnabled) '
+        '? PlayerKernelType.erika : PlayerKernelType.mdk',
       ),
     );
     expect(playerSettings, contains('if (!kIsWeb && !globals.isTvOS)'));
