@@ -574,7 +574,11 @@ impl Next2Renderer {
             });
     }
 
-    fn draw_to_present(&mut self, present: &mut PresentTarget) {
+    fn draw_to_present(
+        &mut self,
+        present: &mut PresentTarget,
+        presentation_time: Option<std::time::Instant>,
+    ) {
         match present {
             #[cfg(target_os = "android")]
             PresentTarget::Surface(surface) => {
@@ -612,7 +616,13 @@ impl Next2Renderer {
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let glyph_pipeline = self.surface_pipeline.as_ref().unwrap().clone();
                 let screen_pipeline = self.surface_screen_pipeline.as_ref().unwrap().clone();
-                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, surface_format);
+                self.draw_to_view(
+                    &view,
+                    &glyph_pipeline,
+                    &screen_pipeline,
+                    surface_format,
+                    presentation_time,
+                );
                 frame.present();
             }
             PresentTarget::Texture(texture_target) => {
@@ -652,7 +662,13 @@ impl Next2Renderer {
                         ..Default::default()
                     },
                 );
-                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, target_format);
+                self.draw_to_view(
+                    &view,
+                    &glyph_pipeline,
+                    &screen_pipeline,
+                    target_format,
+                    presentation_time,
+                );
             }
         }
     }

@@ -5,6 +5,7 @@ impl Next2Renderer {
         glyph_pipeline: &wgpu::RenderPipeline,
         screen_pipeline: &wgpu::RenderPipeline,
         target_format: wgpu::TextureFormat,
+        presentation_time: Option<std::time::Instant>,
     ) {
         // Ensure frame_texture format matches target_format so that pipeline
         // color target formats align with the attachment view format (required
@@ -29,7 +30,7 @@ impl Next2Renderer {
             let _ = self.resize(self.width, self.height);
         }
 
-        self.build_vertices();
+        self.build_vertices(presentation_time);
 
         if self.vertices.is_empty() {
             self.clear_target_view(target_view);
@@ -455,7 +456,7 @@ impl Next2Renderer {
             .any(|item| item.scroll_speed != 0.0)
     }
 
-    fn build_vertices(&mut self) {
+    fn build_vertices(&mut self, presentation_time: Option<std::time::Instant>) {
         self.vertices.clear();
         self.shadow_vertices.clear();
 
@@ -474,7 +475,9 @@ impl Next2Renderer {
         };
         let interp_dt = self.interp_dt as f64;
         let continuous = self.motion_mode == MotionMode::ContinuousAnchor;
-        let motion_now = std::time::Instant::now();
+        // Frame position follows the display timestamp even if the worker wakes
+        // late or atlas/command work takes a different amount of time each frame.
+        let motion_now = presentation_time.unwrap_or_else(std::time::Instant::now);
         let media = self.motion_clock.media_at(motion_now);
         if continuous && self.motion_clock.playing && !self.motion_clock.active(motion_now) {
             self.frame_items.clear();
