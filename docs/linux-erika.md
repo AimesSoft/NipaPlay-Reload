@@ -1,11 +1,13 @@
 # Linux NipaPlay + Erika
 
-Source builds with Erika's Linux Flutter texture plugin support the Erika kernel.
+Source builds with Erika's Linux Flutter plugin support the Erika kernel.
 The build script enables `NIPAPLAY_LINUX_ERIKA`; fresh installs of that build
 default to Erika, and existing saved kernel choices remain selectable. Standard
 builds using the published Erika 0.2.0 package retain their existing kernel setup.
-The Linux view uses a Flutter texture, including native subtitles/danmaku and
-the normal NipaPlay controls. Windows overlay support remains available.
+On Wayland, the Linux view uses a native video subsurface below transparent
+Flutter controls, including native subtitles/danmaku. It avoids per-frame RGBA
+readback into Flutter. X11 uses the compatible SDR texture path. Set
+`ERIKA_LINUX_PRESENTATION=texture` to explicitly select that path on Wayland.
 
 ## Build (Ubuntu 26.04 x86_64)
 
@@ -20,6 +22,7 @@ Install these additional packages:
 sudo apt install cmake ninja-build clang pkg-config rsync python3 \
   libgtk-3-dev liblzma-dev libmpv-dev libmimalloc-dev libsqlite3-dev \
   libayatana-appindicator3-dev libkeybinder-3.0-dev libsecret-1-dev \
+  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libevdev-dev \
   fonts-noto-cjk fonts-noto-color-emoji
 export ERIKA_SOURCE_DIR=/path/to/Erika
 export FLUTTER_LINUX_BIN=/path/to/linux-flutter/bin/flutter
@@ -43,7 +46,7 @@ the build/cache/install locations. `PUB_HOSTED_URL` and
 ## GPU requirements
 
 The launcher requires both hardware rendering and hardware decoding. WSL uses
-Mesa D3D12/OpenGL; native Linux can use Vulkan/EGL. Erika selects NVIDIA NVDEC
+Wayland with Mesa D3D12/OpenGL; native Linux can use Vulkan/EGL. Erika selects NVIDIA NVDEC
 or Intel/AMD VA-API. Use `ERIKA_HWDEC=cuda` / `vaapi` and optionally
 `ERIKA_CUDA_DEVICE=0` / `ERIKA_VAAPI_DEVICE=/dev/dri/renderD128` for explicit
 selection. Unsupported videos report an error in strict mode. To deliberately
@@ -51,8 +54,21 @@ allow software fallback, run `ERIKA_REQUIRE_HARDWARE_DECODE=0 nipaplay-erika`.
 
 NVIDIA RTX 5070 on WSLg has passed H.264, HEVC Main10 and AV1 hardware decoding.
 Intel/AMD implementations still need physical-device validation. Decoder frames
-are transferred through CPU memory and the Flutter output uses RGBA readback;
-this does not provide zero-copy, HDR output or Linux MPRIS media keys.
+on the tested WSL OpenGL path are transferred through CPU memory. The native
+Wayland output removes the additional Flutter RGBA readback, but does not make
+decoder import zero-copy. The experimental Vulkan GPU plane-copy bridge needs
+compatible drivers; CUDA/Vulkan transfer is blocked on FFmpeg 8 because its
+failure cleanup can crash (fixed upstream in FFmpeg 9; integration unverified).
+`ERIKA_REQUIRE_GPU_FRAMES=1` rejects CPU transfers and
+`ERIKA_REQUIRE_ZERO_COPY=1` rejects the current Linux import paths.
+
+Native Wayland presentation requests automatic HDR/SDR output. HDR requires an
+FP16 scRGB Vulkan WSI surface and a supporting compositor/display. SDR-only
+surfaces tone-map HDR; `ERIKA_REQUIRE_HDR=1` makes that an explicit error.
+The tested WSLg output does not expose HDR. An isolated Mesa Dozen experiment
+enabled Vulkan hardware rendering on the RTX 5070, but CUDA external memory
+import returned `CUDA_ERROR_NOT_SUPPORTED`. No HDR or zero-copy result is claimed.
+The launcher continues using the tested OpenGL driver. Linux MPRIS is not provided.
 
 ## Local validation (2026-09-29)
 
@@ -70,14 +86,25 @@ The native texture lifecycle test also passed a 12.5-second pause: 200 hardware
 frames, zero software frames, zero audio/render errors. The final focused
 presenter unit tests passed 24 cases.
 
-The PR is ported to the current main branch; the runtime results above describe
-the installed 1.10.12 build and must not be read as a full current-main regression.
+The earlier runtime results above describe the installed 1.10.12 texture build
+and must not be read as a full current-main regression.
 On main `70a45645` (NipaPlay 1.11.9), using the required Flutter
 3.47.0-0.3.pre SDK, focused analysis of the changed Dart files and new test
 reported no errors (existing warnings and info remain). The kernel policy test
 passed all four cases both with and without
 `--dart-define=NIPAPLAY_LINUX_ERIKA=true`, covering fresh defaults, saved
 alternative kernels, saved Erika settings and the Windows default.
+
+Both Rust and Flutter release builds of 1.11.9 now succeed. A separate Wayland
+Weston session verified native video below Flutter UI, Chinese external SRT,
+CUDA/NVDEC selection, progress danmaku, pause, fullscreen enter/exit and 427x240
+screenshot capture. The separate native-view
+probe also exercised pause, resize, detach/reattach and seek with the paused
+picture preserved on OpenGL and experimental Dozen Vulkan. These are SDR runtime checks, not HDR/zero-copy
+hardware acceptance. The test environment's remote audio underflow counters
+were nonzero; smooth audio on a native Linux desktop remains to be verified.
+The updated 1.11.9 bundle was installed with the source-build script; the earlier
+1.10.12 installation was retained in a separate backup directory.
 
 The Linux plugin preserves GTK's EGL/GLX context around Erika calls. On WSLg,
 paused audio keeps the remote transport running with silence without consuming

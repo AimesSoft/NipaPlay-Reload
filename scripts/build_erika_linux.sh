@@ -41,7 +41,7 @@ cat > "$HOME/.local/bin/nipaplay-erika" <<EOF
 #!/usr/bin/env bash
 set -e
 if [[ -e /dev/dxg ]]; then
-  export GDK_BACKEND=\${GDK_BACKEND:-x11}
+  export GDK_BACKEND=\${GDK_BACKEND:-wayland}
   export GALLIUM_DRIVER=\${GALLIUM_DRIVER:-d3d12}
   export WGPU_BACKEND=\${WGPU_BACKEND:-gl}
 fi

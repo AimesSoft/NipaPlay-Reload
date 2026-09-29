@@ -657,6 +657,11 @@ class ErikaPlayerAdapter
   static ErikaOutputMode? _resolveNativeOutputMode(
     PlayerErikaAndroidOutputMode mode,
   ) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.linux &&
+        linuxNativeSurfaceEnabled) {
+      return ErikaOutputMode.auto;
+    }
     if (defaultTargetPlatform != TargetPlatform.android) {
       return null;
     }
@@ -674,6 +679,14 @@ class ErikaPlayerAdapter
   // The published 0.2.0 package does not yet contain that native backend.
   static const bool linuxBuildEnabled =
       bool.fromEnvironment('NIPAPLAY_LINUX_ERIKA');
+
+  static bool get linuxNativeSurfaceEnabled =>
+      linuxBuildEnabled &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.linux &&
+      Platform.environment['ERIKA_LINUX_PRESENTATION'] != 'texture' &&
+      Platform.environment['GDK_BACKEND']?.split(',').first.trim() != 'x11' &&
+      (Platform.environment['WAYLAND_DISPLAY']?.isNotEmpty ?? false);
 
   static bool get _isSupported =>
       !kIsWeb &&
@@ -738,7 +751,8 @@ class ErikaPlayerAdapter
   bool get usesWindowOverlayVideoSurface =>
       _isSupported &&
       defaultTargetPlatform != TargetPlatform.android &&
-      defaultTargetPlatform != TargetPlatform.linux &&
+      (defaultTargetPlatform != TargetPlatform.linux ||
+          linuxNativeSurfaceEnabled) &&
       !_isHarmonyOS;
 
   @override
@@ -1279,7 +1293,8 @@ class ErikaPlayerAdapter
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
-    if (defaultTargetPlatform == TargetPlatform.linux) {
+    if (defaultTargetPlatform == TargetPlatform.linux &&
+        !linuxNativeSurfaceEnabled) {
       return ErikaTextureVideoView(
         player: _player,
         debugLabel: debugLabel,
