@@ -45,6 +45,41 @@ the build/cache/install locations. `PUB_HOSTED_URL` and
 
 ## GPU requirements
 
+### Optional WSL decoded-frame GPU copy
+
+Erika now provides an experimental Mesa D3D12 VA-API → GPU plane copy → Vulkan
+path. Build the isolated Mesa drivers first using Erika's
+[`docs/wsl-gpu-copy.md`](https://github.com/AimesSoft/Erika/blob/linux-support/docs/wsl-gpu-copy.md),
+then run this source-build installer with `NIPAPLAY_WSL_GPU_COPY=1`:
+
+```sh
+NIPAPLAY_WSL_GPU_COPY=1 bash scripts/build_erika_linux.sh
+~/.local/bin/nipaplay-erika /path/to/video.mp4
+```
+
+The flag compiles Erika's optional bridge, installs its scoped driver wrapper
+and enables it in the generated launcher. A runtime `NIPAPLAY_WSL_GPU_COPY=0`
+selects the ordinary OpenGL path again. Custom driver installations use
+`ERIKA_WSL_MESA_PREFIX`. The default installer remains compatible with ordinary
+Linux and does not install experimental Mesa automatically.
+
+The RTX 5070 passed 4K60 HEVC Main10 playback with zero **decoded-frame** CPU
+fallback; GPU copies are counted as shared imports, never direct zero-copy.
+`ERIKA_REQUIRE_ZERO_COPY=1` rejects this path. Dozen's Linux software WSI may
+still read back the rendered output, so this does not establish end-to-end
+zero-copy. Physical HDR and native Linux NVIDIA direct NVDEC import remain
+outstanding. These limits also apply to the counter shown in NipaPlay's HUD.
+
+The deployed 1.11.9 build loaded the new library. Nested Weston screenshots
+verified Main10 video, progress danmaku, paused seek, resume near 59.9 fps,
+fullscreen enter/exit and thumbnail capture. CPU fallback and import/render
+failure counters were zero; whole-session audio underflow counts were nonzero.
+Erika's separate C ABI benchmark measured 960 source frames over 16 seconds,
+zero decoded-frame CPU transfers and P99 tick time of 4.149 ms. That benchmark
+does not measure full NipaPlay or physical display latency.
+
+### Ordinary launcher and direct-import paths
+
 The launcher requires both hardware rendering and hardware decoding. WSL uses
 Wayland with Mesa D3D12/OpenGL; native Linux can use Vulkan/EGL. Erika selects NVIDIA NVDEC
 or Intel/AMD VA-API. Use `ERIKA_HWDEC=cuda` / `vaapi` and optionally
@@ -72,7 +107,8 @@ surfaces tone-map HDR; `ERIKA_REQUIRE_HDR=1` makes that an explicit error.
 The tested WSLg output does not expose HDR. An isolated Mesa Dozen experiment
 enabled Vulkan hardware rendering on the RTX 5070, but CUDA external memory
 import returned `CUDA_ERROR_NOT_SUPPORTED`. No HDR or zero-copy result is claimed.
-The launcher continues using the tested OpenGL driver. Linux MPRIS is not provided.
+The ordinary launcher uses OpenGL unless the WSL GPU-copy option above is selected.
+Linux MPRIS is not provided.
 
 ## Local validation (2026-09-29)
 
