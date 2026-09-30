@@ -61,6 +61,7 @@ bool isRetryableMediaKitLoadError(String message) {
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter
     implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
+        BufferingAwarePlayer,
         TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
@@ -265,6 +266,11 @@ class MediaKitPlayerAdapter
   String _currentMedia = '';
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
+  final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
+  StreamSubscription<bool>? _bufferingSubscription;
+
+  @override
+  ValueListenable<bool> get buffering => _buffering;
   List<int> _activeSubtitleTracks = [];
   List<int> _activeAudioTracks = [];
 
@@ -980,6 +986,16 @@ class MediaKitPlayerAdapter
   }
 
   void _addEventListeners() {
+    _buffering.value = _player.state.buffering;
+    _bufferingSubscription = _player.stream.buffering.listen((buffering) {
+      if (_isDisposed) return;
+      // Do not extrapolate through a native clock stop, or include the wait
+      // in the first position sample after recovery.
+      _lastActualPosition = _player.state.position;
+      _interpolatedPosition = _lastActualPosition;
+      _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
+      _buffering.value = buffering;
+    });
     _player.stream.playing.listen((playing) {
       _state = playing
           ? PlayerPlaybackState.playing
@@ -1146,6 +1162,7 @@ class MediaKitPlayerAdapter
     _interpolatedPosition = Duration.zero;
     _lastActualPosition = Duration.zero;
     _lastPositionTimestampUs = 0;
+    _buffering.value = false;
   }
 
   void _markCurrentMediaReady(String evidence) {
@@ -2602,6 +2619,8 @@ class MediaKitPlayerAdapter
     _ticker?.dispose();
     await _trackSubscription?.cancel();
     await _positionSubscription?.cancel();
+    await _bufferingSubscription?.cancel();
+    _buffering.dispose();
     _jellyfinRetryTimer?.cancel();
     _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
@@ -3420,7 +3439,8 @@ class MediaKitPlayerAdapter
     // may still have no demuxed metadata at this point, so do not manufacture
     // a position from wall time until readiness and a real time-pos event have
     // both been observed.
-    if (_player.state.playing && _mediaReady && _hasReceivedRealPosition) {
+    if (_player.state.playing && !_buffering.value &&
+        _mediaReady && _hasReceivedRealPosition) {
       // 使用微秒精度的 DateTime.now() 替代原来的毫秒精度。
       // Windows 平台上毫秒级时钟默认粒度约 15.6ms，导致插值 delta
       // 在连续帧之间跳变，造成弹幕可见的"抽帧"。微秒精度（~1µs）

@@ -407,6 +407,39 @@ mod tests {
         assert!(clock.active(now));
     }
     #[test]
+    fn buffering_reanchors_a_clock_that_ran_ahead_of_the_frozen_video() {
+        let start = Instant::now();
+        let mut clock = MotionClock::new(start);
+        clock.anchor(start, 1, 10.0, 0.0, 1.0, true, 120.0, 11.0);
+        let stopped_at = start + Duration::from_millis(450);
+        assert!(clock.media_at(stopped_at) > 10.4);
+
+        // The decoder stopped at 10.03 while native motion was extrapolating.
+        // Freeze must reset the epoch so scene membership and sampled x use
+        // the same time, including an item near its lifetime boundary.
+        clock.anchor(stopped_at, 2, 10.03, 0.0, 1.0, false, 120.0, 10.28);
+        let frozen_x = sample_x(
+            20.0, -100.0, 10.03, clock.media_at(stopped_at), Some(9.0), Some(10.2),
+        );
+        assert_eq!(frozen_x, Some(20.0));
+        let recovered_at = stopped_at + Duration::from_secs(2);
+        assert_eq!(clock.media_at(recovered_at), 10.03);
+        assert_eq!(
+            sample_x(
+                20.0, -100.0, 10.03, clock.media_at(recovered_at), Some(9.0), Some(10.2),
+            ),
+            frozen_x,
+        );
+        assert!(!clock.active(recovered_at));
+
+        clock.anchor(recovered_at, 3, 10.04, 0.0, 1.0, true, 120.0, 10.29);
+        assert_eq!(clock.media_at(recovered_at), 10.04);
+        let after = recovered_at + Duration::from_millis(50);
+        assert!((clock.media_at(after) - 10.09).abs() < 1e-9);
+        assert!(clock.active(after));
+    }
+
+    #[test]
     fn pause_rate_seek_and_expiration_are_explicit() {
         let start = Instant::now();
         let mut clock = MotionClock::new(start);

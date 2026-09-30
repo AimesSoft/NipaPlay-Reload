@@ -9,6 +9,24 @@ class _NativePlayer extends Fake implements mdk.Player {
   @override
   String media = '';
   @override
+  mdk.MediaStatus mediaStatus = const mdk.MediaStatus(mdk.MediaStatus.loaded);
+  bool Function(mdk.MediaStatus, mdk.MediaStatus)? statusCallback;
+
+  @override
+  void onMediaStatus(
+    bool Function(mdk.MediaStatus, mdk.MediaStatus)? callback, {
+    bool reply = false,
+  }) {
+    statusCallback = callback;
+  }
+
+  void emitStatus(int flags) {
+    final oldStatus = mediaStatus;
+    mediaStatus = mdk.MediaStatus(flags);
+    statusCallback?.call(oldStatus, mediaStatus);
+  }
+
+  @override
   Future<void> dispose() {
     disposals++;
     return completion.future;
@@ -16,6 +34,37 @@ class _NativePlayer extends Fake implements mdk.Player {
 }
 
 void main() {
+  test('MDK buffering follows native status and ignores post-dispose events',
+      () async {
+    final native = _NativePlayer();
+    final adapter = MdkPlayerAdapter.withPlayer(native);
+    final changes = <bool>[];
+    adapter.buffering.addListener(() => changes.add(adapter.buffering.value));
+
+    native.emitStatus(mdk.MediaStatus.loaded | mdk.MediaStatus.buffering);
+    native.emitStatus(mdk.MediaStatus.loaded | mdk.MediaStatus.buffering);
+    expect(adapter.buffering.value, isTrue);
+    native.emitStatus(mdk.MediaStatus.loaded | mdk.MediaStatus.buffered);
+    expect(changes, [true, false]);
+
+    final disposal = adapter.disposeAsync();
+    expect(() => native.emitStatus(mdk.MediaStatus.buffering), returnsNormally);
+    native.completion.complete();
+    await disposal;
+  });
+
+  test('MDK samples buffering already active when the adapter attaches',
+      () async {
+    final native = _NativePlayer()
+      ..mediaStatus = const mdk.MediaStatus(mdk.MediaStatus.buffering);
+    final adapter = MdkPlayerAdapter.withPlayer(native);
+    expect(adapter.buffering.value, isTrue);
+    adapter.media = 'new-episode.mkv';
+    expect(adapter.buffering.value, isFalse);
+    native.completion.complete();
+    await adapter.disposeAsync();
+  });
+
   test('media changes reuse MDK and teardown waits for the native future once',
       () async {
     final native = _NativePlayer();

@@ -189,7 +189,12 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
   );
 }
 
-class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
+class MdkPlayerAdapter
+    implements AbstractPlayer, AsyncDisposablePlayer, BufferingAwarePlayer {
+  final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
+
+  @override
+  ValueListenable<bool> get buffering => _buffering;
   late mdk.Player _mdkPlayer;
   double _playbackRate = 1.0;
   List<String> _videoDecoders = const [];
@@ -213,9 +218,21 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   @visibleForTesting
   MdkPlayerAdapter.withPlayer(mdk.Player player) : _httpProxy = '' {
     _mdkPlayer = player;
+    _attachMdkBufferingListener();
+  }
+
+  void _attachMdkBufferingListener() {
+    _mdkPlayer.onMediaStatus((oldStatus, status) {
+      if (!_isDisposed) {
+        _buffering.value = status.test(mdk.MediaStatus.buffering);
+      }
+      return true;
+    });
+    _buffering.value = _mdkPlayer.mediaStatus.test(mdk.MediaStatus.buffering);
   }
 
   void _attachMdkEventListeners() {
+    _attachMdkBufferingListener();
     try {
       void handleEvent(mdk.MediaEvent e) {
         switch (e.category) {
@@ -349,6 +366,7 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
   set media(String value) {
     if (_isDisposed) throw StateError('MDK player is disposed');
     if (_mdkPlayer.media != value) {
+      _buffering.value = false;
       _activeVideoDecoder = null;
       _activeAudioDecoder = null;
       _internalAudioTrackCount = 0;
@@ -420,6 +438,9 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
+      _buffering.value = false;
+    }
     if (type == PlayerMediaType.audio) {
       if (path.isNotEmpty) {
         // 记录当前内部音频轨道数，用于区分外挂MKA轨道
@@ -467,6 +488,7 @@ class MdkPlayerAdapter implements AbstractPlayer, AsyncDisposablePlayer {
 
   Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
+    _buffering.dispose();
     PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
     await _mdkPlayer.dispose();
     PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');

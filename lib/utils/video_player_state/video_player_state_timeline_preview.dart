@@ -12,8 +12,6 @@ bool supportsTimelinePreviewForKernel(PlayerKernelType kernel) {
 
 extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   bool get timelinePreviewEnabled => _timelinePreviewEnabled;
-  bool get isTimelinePreviewAvailable =>
-      _timelinePreviewEnabled && _timelinePreviewSupported;
 
   Future<void> _loadTimelinePreviewSetting() async {
     try {

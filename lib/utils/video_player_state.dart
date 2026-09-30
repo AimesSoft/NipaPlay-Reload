@@ -305,7 +305,44 @@ class _VideoDimensionSnapshot {
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
-  late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
+  late Player _player;
+  ValueListenable<bool>? _playerBuffering;
+
+  Player get player => _player;
+  set player(Player value) {
+    _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    _player = value;
+    _playerBuffering = value.buffering;
+    _playerBuffering!.addListener(_onPlayerBufferingChanged);
+  }
+
+  bool get isBuffering => player.isBuffering;
+  bool get isTimelinePreviewAvailable =>
+      _timelinePreviewEnabled && _timelinePreviewSupported;
+  int _dfmClockRevision = 0;
+  int get dfmClockRevision => _dfmClockRevision;
+
+  void _onPlayerBufferingChanged() {
+    if (_isDisposed) return;
+    // Preserve a short buffer/resume pair even when Flutter coalesces rebuilds.
+    _dfmClockRevision++;
+    if (hasVideo && _status == PlayerStatus.playing) {
+      // Keep the existing scene on entry. On recovery accept the native
+      // position once, even when it is behind the old interpolated clock.
+      final mediaMs = isBuffering
+          ? _playbackTimeMs.value
+          : (_seekTargetMs ?? player.position.toDouble());
+      _smoothAnchorMs = mediaMs;
+      _smoothAnchorElapsedUs = _lastElapsedUs;
+      _lastRawPlayerMs = player.position;
+      _rawSpikeStreak = 0;
+      _playbackTimeMs.value = mediaMs;
+      debugPrint('[DFM-BUFFER] kernel=${player.getPlayerKernelName()} '
+          'buffering=$isBuffering mediaMs=${mediaMs.toStringAsFixed(1)} '
+          'seekRevision=$_seekRevision');
+    }
+    _notifyListeners();
+  }
   BuildContext? _context;
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
@@ -1840,6 +1877,8 @@ int _exactEndStreak = 0;
   @override
   void dispose() {
     _isDisposed = true;
+    _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    _playerBuffering = null;
     _cancelDfmStartupGate();
 
     if (_currentVideoPath != null) {

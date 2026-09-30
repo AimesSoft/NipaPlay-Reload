@@ -37,6 +37,7 @@ class DfmPlusOverlay extends StatefulWidget {
     this.onLayoutCalculated,
     this.startupGateToken = 0,
     this.seekRevision = 0,
+    this.clockRevision = 0,
     this.onStartupReady,
     required this.isPlaying,
     required this.playbackRate,
@@ -67,6 +68,8 @@ class DfmPlusOverlay extends StatefulWidget {
 
   /// Explicit player seeks must reset the clock even below the drift threshold.
   final int seekRevision;
+  /// Buffer transitions can happen twice between Flutter builds.
+  final int clockRevision;
   final ValueChanged<int>? onStartupReady;
   final bool isPlaying;
   final double playbackRate;
@@ -285,7 +288,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       _queueUpdate();
     }
 
-    if (oldWidget.seekRevision != widget.seekRevision) {
+    if (oldWidget.seekRevision != widget.seekRevision ||
+        oldWidget.clockRevision != widget.clockRevision) {
       _resetDisplayTimeToMedia();
       _lastMotionSubmitWallUs = -_motionSubmitIntervalUs;
       _queueUpdate();
@@ -321,9 +325,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
     // ── isPlaying transition: reset wall dt baseline ──
     if (oldWidget.isPlaying != widget.isPlaying) {
-      if (widget.isPlaying) {
-        _resetDisplayTimeToMedia();
-      }
+      // Freeze and resume both need an explicit epoch. Otherwise native keeps
+      // its extrapolated position while the replacement scene uses media time.
+      _resetDisplayTimeToMedia();
     }
   }
 
