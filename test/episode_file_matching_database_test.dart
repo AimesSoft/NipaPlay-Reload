@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,16 +32,15 @@ void main() {
     temp = await Directory.systemTemp.createTemp('episode_file_matching_');
     previousPaths = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _Paths(temp.path);
-    WatchHistoryDatabase.debugDatabasePathOverride =
-        File('${temp.path}/watch_history.db').path;
+    StorageService.debugAppStorageDirectoryOverride = temp;
     db = await historyDatabase.database;
-    expect(db.path, WatchHistoryDatabase.debugDatabasePathOverride);
+    expect(db.path, File('${temp.path}/watch_history.db').path);
   });
 
   tearDown(() async {
     await historyDatabase.close();
     PathProviderPlatform.instance = previousPaths;
-    WatchHistoryDatabase.debugDatabasePathOverride = null;
+    StorageService.debugAppStorageDirectoryOverride = null;
     await temp.delete(recursive: true);
   });
 
