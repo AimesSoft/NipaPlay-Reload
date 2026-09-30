@@ -630,6 +630,7 @@ int _exactEndStreak = 0;
   Future<void> _timelinePreviewSerialTask = Future.value();
   double _danmakuOpacity = 1.0; // 默认透明度
   bool _danmakuVisible = true; // 默认显示弹幕
+  bool _hasExplicitDanmakuVisibility = false;
   bool _mergeDanmaku = false; // 默认不合并弹幕
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
   bool _danmakuRandomColorEnabled = false; // 默认关闭随机染色
