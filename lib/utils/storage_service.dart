@@ -7,6 +7,9 @@ import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 import 'macos_storage_migration.dart'; // 导入macOS存储迁移
 
 class StorageService {
+  @visibleForTesting
+  static Directory? debugAppStorageDirectoryOverride;
+
   // 用户自定义存储路径的SharedPreferences键
   static const String _customStoragePathKey = 'custom_storage_path';
   
@@ -138,6 +141,9 @@ class StorageService {
 
   // 主应用存储目录
   static Future<Directory> getAppStorageDirectory() async {
+    if (debugAppStorageDirectoryOverride != null) {
+      return debugAppStorageDirectoryOverride!;
+    }
     // Linux平台特殊处理 - 使用XDG规范目录并处理迁移
     if (Platform.isLinux) {
       return _getLinuxStorageDirectory();
@@ -331,4 +337,4 @@ class StorageService {
     }
     return videosDir;
   }
-} 
+}
