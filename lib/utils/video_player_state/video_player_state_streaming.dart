@@ -693,6 +693,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         playbackSession: newSession,
         playbackDetailContext: _playbackDetailContext,
         resetManualDanmakuOffset: false,
+        episodeFileSelectionHandled: true,
       );
 
       // 恢复播放状态（等待状态稳定后再操作）
@@ -906,6 +907,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
             playbackDetailContext: currentDetailContext,
             resetManualDanmakuOffset: false,
             preserveEmbyAccountKey: true,
+            episodeFileSelectionHandled: true,
           );
           ensureEmbyPlayerOpened(_error, hasVideo);
           EmbyPlaybackSyncService().updatePlaybackSession(session);

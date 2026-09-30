@@ -490,7 +490,7 @@ class MdkPlayerAdapter
     _isDisposed = true;
     _buffering.dispose();
     PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
-    await _mdkPlayer.dispose();
+    await Future<void>.sync(_mdkPlayer.dispose);
     PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
   }
 

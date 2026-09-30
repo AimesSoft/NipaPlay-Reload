@@ -4361,11 +4361,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(filePath);
 
-        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
-        // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景
+        // 仅从已解除匹配的旧路径迁移进度，同集其他版本保留。
         WatchHistoryItem? migratedHistory;
         if (existingHistory == null && animeId > 0 && episodeId > 0) {
-          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+          migratedHistory =
+              await WatchHistoryManager.getClearedHistoryItemByEpisode(
             animeId,
             episodeId,
           );
@@ -4401,7 +4401,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
 
-        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        // 仅删除已解除匹配的进度来源。
         if (migratedHistory != null && migratedHistory.filePath != filePath) {
           await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
         }
@@ -5856,10 +5856,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(candidate.filePath);
 
-        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        // 仅从已解除匹配的旧路径迁移进度，同集其他版本保留。
         WatchHistoryItem? migratedHistory;
         if (existingHistory == null && animeId > 0 && episodeId > 0) {
-          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+          migratedHistory =
+              await WatchHistoryManager.getClearedHistoryItemByEpisode(
             animeId,
             episodeId,
           );
@@ -5907,7 +5908,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         await WatchHistoryManager.addOrUpdateHistory(historyItem);
 
-        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        // 仅删除已解除匹配的进度来源。
         if (migratedHistory != null &&
             migratedHistory.filePath != candidate.filePath) {
           await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);

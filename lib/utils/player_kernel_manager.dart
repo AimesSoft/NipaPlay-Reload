@@ -227,6 +227,7 @@ class PlayerKernelManager {
       currentPath,
       historyItem: historyItem,
       resetManualDanmakuOffset: false,
+      episodeFileSelectionHandled: true,
     );
     if (videoPlayerState.isDisposed) return;
 

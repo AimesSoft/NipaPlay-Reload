@@ -10,11 +10,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:path/path.dart' as path;
-import 'dart:io';
-import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
@@ -346,90 +341,17 @@ class _TagSearchModalState extends State<TagSearchModal> {
   // 新增：处理播放剧集的方法，与其他页面保持一致
   Future<void> _handlePlayEpisode(WatchHistoryItem historyItem) async {
     if (!mounted) return;
-
-    debugPrint('[TagSearchWidget] _handlePlayEpisode: 开始处理播放请求');
-    debugPrint('[TagSearchWidget] 文件路径: ${historyItem.filePath}');
-
-    // 检查文件是否存在
-    if (!kIsWeb) {
-      final videoFile = File(historyItem.filePath);
-      if (!videoFile.existsSync()) {
-        debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
-        BlurSnackBar.show(
-            context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
-        return;
-      }
-    }
-
-    final playableItem = PlayableItem(
-      videoPath: historyItem.filePath,
-      title: historyItem.animeName,
-      subtitle: historyItem.episodeTitle,
-      animeId: historyItem.animeId,
-      episodeId: historyItem.episodeId,
-      historyItem: historyItem,
-    );
-
-    if (await PlaybackService().tryPlayExternally(context, playableItem)) {
-      return;
-    }
-
-    bool tabChangeLogicExecuted = false;
-
     try {
-      // 获取视频播放状态
-      final videoPlayerState =
-          Provider.of<VideoPlayerState>(context, listen: false);
-      debugPrint(
-          '[TagSearchWidget] 获取到VideoPlayerState，当前状态: ${videoPlayerState.status}');
-
-      late VoidCallback statusListener;
-      statusListener = () {
-        if (!mounted) {
-          debugPrint('[TagSearchWidget] Widget已销毁，移除监听器');
-          videoPlayerState.removeListener(statusListener);
-          return;
-        }
-
-        debugPrint('[TagSearchWidget] 播放器状态变化: ${videoPlayerState.status}');
-
-        if ((videoPlayerState.status == PlayerStatus.ready ||
-                videoPlayerState.status == PlayerStatus.playing) &&
-            !tabChangeLogicExecuted) {
-          tabChangeLogicExecuted = true;
-          debugPrint('[TagSearchWidget] 播放器准备就绪，开始切换页面');
-
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              context.read<TabChangeNotifier>().changePage(AppPageIds.video);
-              videoPlayerState.removeListener(statusListener);
-            } else {
-              videoPlayerState.removeListener(statusListener);
-            }
-          });
-        } else if (videoPlayerState.status == PlayerStatus.error) {
-          videoPlayerState.removeListener(statusListener);
-          debugPrint('[TagSearchWidget] 播放器错误: ${videoPlayerState.error}');
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              BlurSnackBar.show(
-                  context, '播放器加载失败: ${videoPlayerState.error ?? '未知错误'}');
-            }
-          });
-        }
-      };
-
-      videoPlayerState.addListener(statusListener);
-      debugPrint('[TagSearchWidget] 添加状态监听器，开始初始化播放器');
-
-      // 启动视频播放
-      videoPlayerState.initializePlayer(historyItem.filePath,
-          historyItem: historyItem);
-    } catch (e) {
-      debugPrint('[TagSearchWidget] 播放器初始化异常: $e');
-      if (mounted) {
-        BlurSnackBar.show(context, '播放器初始化失败: $e');
-      }
+      await PlaybackService().play(PlayableItem(
+        videoPath: historyItem.filePath,
+        title: historyItem.animeName,
+        subtitle: historyItem.episodeTitle,
+        animeId: historyItem.animeId,
+        episodeId: historyItem.episodeId,
+        historyItem: historyItem,
+      ));
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '播放器初始化失败: $error');
     }
   }
 

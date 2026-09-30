@@ -18,6 +18,8 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/episode_file_selection_service.dart';
+import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -1813,7 +1815,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         debugPrint('  episodeId: ${historyItem.episodeId}');
       }
 
-      final playableHistoryItem = WatchHistoryItem(
+      var playableHistoryItem = WatchHistoryItem(
         filePath: historyItem.filePath,
         animeName: historyItem.animeName,
         episodeTitle: historyItem.episodeTitle,
@@ -1827,6 +1829,31 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         isFromScan: false,
         videoHash: historyItem.videoHash,
       );
+
+      final selected = await EpisodeFileSelectionService.select(
+        context,
+        PlayableItem(
+          videoPath: playableHistoryItem.filePath,
+          historyItem: playableHistoryItem,
+          animeId: playableHistoryItem.animeId,
+          episodeId: playableHistoryItem.episodeId,
+        ),
+      );
+      if (selected == null || !mounted) return;
+      if (!MediaIdentityResolver.samePath(
+          selected.videoPath, playableHistoryItem.filePath)) {
+        final detailRoute = ModalRoute.of(context);
+        final detailNavigator = Navigator.of(context);
+        final started = await PlaybackService().play(
+          selected,
+          episodeFileSelectionHandled: true,
+        );
+        if (started && detailRoute?.isCurrent == true && detailNavigator.mounted) {
+          detailNavigator.pop();
+        }
+        return;
+      }
+      playableHistoryItem = selected.historyItem ?? playableHistoryItem;
 
       final startPositionMs = playableHistoryItem.lastPosition > 0
           ? playableHistoryItem.lastPosition
@@ -1912,7 +1939,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         playbackSession: playbackSession,
       );
       final handled =
-          await PlaybackService().tryPlayExternally(context, playableItem);
+          await PlaybackService().tryPlayExternally(context, playableItem,
+              episodeFileSelectionHandled: true);
       if (!mounted) return;
       if (handled) {
         onPlaybackStarted?.call();
@@ -1943,6 +1971,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             historyItem.filePath,
             historyItem: historyItem,
             playbackSession: playbackSession,
+            episodeFileSelectionHandled: true,
           );
           videoPlayerState.play();
         } catch (playError) {
@@ -1962,6 +1991,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             historyItem: historyItem,
             playbackSession: playbackSession,
             embyTrackSelection: embyTrackSelection,
+            episodeFileSelectionHandled: true,
           ),
           readError: () => videoPlayerState.error,
           hasVideo: () => videoPlayerState.hasVideo,

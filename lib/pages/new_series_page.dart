@@ -11,12 +11,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -769,100 +766,26 @@ class _NewSeriesPageState extends State<NewSeriesPage>
 
   Future<void> _handlePlayEpisode(WatchHistoryItem historyItem) async {
     if (!mounted) return;
-
     setState(() {
       _isLoadingVideoFromDetail = true;
       _loadingMessageForDetail = context.l10n.newSeriesInitializingPlayer;
     });
-
-    final playableItem = PlayableItem(
-      videoPath: historyItem.filePath,
-      title: historyItem.animeName,
-      subtitle: historyItem.episodeTitle,
-      animeId: historyItem.animeId,
-      episodeId: historyItem.episodeId,
-      historyItem: historyItem,
-    );
-
-    if (await PlaybackService().tryPlayExternally(context, playableItem)) {
-      if (mounted) {
-        setState(() {
-          _isLoadingVideoFromDetail = false;
-        });
-      }
-      return;
-    }
-
-    bool tabChangeLogicExecutedInDetail = false;
-
     try {
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-
-      late VoidCallback statusListener;
-      statusListener = () {
-        if (!mounted) {
-          videoState.removeListener(statusListener);
-          return;
-        }
-
-        if ((videoState.status == PlayerStatus.ready ||
-                videoState.status == PlayerStatus.playing) &&
-            !tabChangeLogicExecutedInDetail) {
-          tabChangeLogicExecutedInDetail = true;
-
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _isLoadingVideoFromDetail = false;
-              });
-
-              debugPrint(
-                  '[NewSeriesPage _handlePlayEpisode] Player ready/playing. Attempting to switch tab.');
-              context.read<TabChangeNotifier>().changePage(AppPageIds.video);
-              videoState.removeListener(statusListener);
-            } else {
-              videoState.removeListener(statusListener);
-            }
-          });
-        } else if (videoState.status == PlayerStatus.error) {
-          videoState.removeListener(statusListener);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _isLoadingVideoFromDetail = false;
-              });
-              BlurSnackBar.show(
-                context,
-                context.l10n.newSeriesPlayerLoadFailedWithError(
-                  videoState.error ?? context.l10n.unknownErrorOccurred,
-                ),
-              );
-            }
-          });
-        } else if (tabChangeLogicExecutedInDetail &&
-            (videoState.status == PlayerStatus.ready ||
-                videoState.status == PlayerStatus.playing)) {
-          debugPrint(
-              '[NewSeriesPage _handlePlayEpisode] Tab logic executed, player still ready/playing. Ensuring listener removed.');
-          videoState.removeListener(statusListener);
-        }
-      };
-
-      videoState.addListener(statusListener);
-      await videoState.initializePlayer(historyItem.filePath,
-          historyItem: historyItem);
-    } catch (e) {
+      await PlaybackService().play(PlayableItem(
+        videoPath: historyItem.filePath,
+        title: historyItem.animeName,
+        subtitle: historyItem.episodeTitle,
+        animeId: historyItem.animeId,
+        episodeId: historyItem.episodeId,
+        historyItem: historyItem,
+      ));
+    } catch (error) {
       if (mounted) {
-        setState(() {
-          _isLoadingVideoFromDetail = false;
-          _loadingMessageForDetail =
-              context.l10n.newSeriesErrorOccurredWithError('$e');
-        });
-        BlurSnackBar.show(
-          context,
-          context.l10n.newSeriesHandlePlayRequestFailedWithError('$e'),
-        );
+        BlurSnackBar.show(context,
+            context.l10n.newSeriesHandlePlayRequestFailedWithError('$error'));
       }
+    } finally {
+      if (mounted) setState(() => _isLoadingVideoFromDetail = false);
     }
   }
 
