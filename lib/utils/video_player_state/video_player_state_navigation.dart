@@ -126,7 +126,17 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
-          final resolvedHistory = historyItem;
+          final requested = PlayableItem(
+            videoPath: historyItem.filePath,
+            historyItem: historyItem,
+            detailContext: _playbackDetailContext,
+          );
+          final selectionContext = _context ?? globals.navigatorKey.currentContext;
+          final selected = selectionContext?.mounted == true
+              ? await EpisodeFileSelectionService.select(selectionContext!, requested)
+              : requested;
+          if (selected == null) return;
+          final resolvedHistory = selected.historyItem ?? historyItem;
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
           if (resolvedHistory.filePath.startsWith('jellyfin://')) {
             try {
@@ -146,7 +156,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
-                playbackDetailContext: _playbackDetailContext,
+                playbackDetailContext: selected.detailContext,
+                actualPlayUrl: selected.actualPlayUrl,
+                episodeFileSelectionHandled: true,
               );
             } catch (e) {
               debugPrint('[上一话] 获取Jellyfin播放会话失败: $e');
@@ -173,7 +185,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
-                playbackDetailContext: _playbackDetailContext,
+                playbackDetailContext: selected.detailContext,
+                actualPlayUrl: selected.actualPlayUrl,
+                episodeFileSelectionHandled: true,
               );
             } catch (e) {
               debugPrint('[上一话] 获取Emby播放会话失败: $e');
@@ -185,7 +199,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
-              playbackDetailContext: _playbackDetailContext,
+              playbackDetailContext: selected.detailContext,
+              actualPlayUrl: selected.actualPlayUrl,
+              episodeFileSelectionHandled: true,
             );
           }
         } else {
@@ -384,6 +400,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       }
     }
 
+    final selected = await EpisodeFileSelectionService.select(
+      _context!,
+      PlayableItem(
+        videoPath: episode.videoPath,
+        historyItem: historyItem,
+        animeId: historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
+        episodeId: historyItem?.episodeId ?? episode.episodeId,
+        actualPlayUrl: episode.actualPlayUrl,
+        playbackSession: episode.playbackSession,
+      ),
+    );
+    if (selected == null) return;
+    if (!MediaIdentityResolver.samePath(selected.videoPath, episode.videoPath)) {
+      await PlaybackService().play(selected, episodeFileSelectionHandled: true);
+      return;
+    }
+    historyItem = selected.historyItem ?? historyItem;
+
     PlaybackSession? playbackSession = episode.playbackSession;
     if (episode.videoPath.startsWith('jellyfin://')) {
       playbackSession ??= await JellyfinService.instance.createPlaybackSession(
@@ -433,7 +467,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
     // 与番剧详情页点击剧集使用同一个正式入口。该入口会完整传递
     // PlayableItem 的番剧/剧集元数据并统一解析播放来源。
-    await PlaybackService().play(playableItem);
+    await PlaybackService().play(playableItem, episodeFileSelectionHandled: true);
   }
 
   Future<void> _playNextEpisodeUsingLegacyNavigation() async {
@@ -538,7 +572,17 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
-          final resolvedHistory = historyItem;
+          final requested = PlayableItem(
+            videoPath: historyItem.filePath,
+            historyItem: historyItem,
+            detailContext: _playbackDetailContext,
+          );
+          final selectionContext = _context ?? globals.navigatorKey.currentContext;
+          final selected = selectionContext?.mounted == true
+              ? await EpisodeFileSelectionService.select(selectionContext!, requested)
+              : requested;
+          if (selected == null) return;
+          final resolvedHistory = selected.historyItem ?? historyItem;
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
           if (resolvedHistory.filePath.startsWith('jellyfin://')) {
             try {
@@ -558,7 +602,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
-                playbackDetailContext: _playbackDetailContext,
+                playbackDetailContext: selected.detailContext,
+                actualPlayUrl: selected.actualPlayUrl,
+                episodeFileSelectionHandled: true,
               );
             } catch (e) {
               debugPrint('[下一话] 获取Jellyfin播放会话失败: $e');
@@ -585,7 +631,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
-                playbackDetailContext: _playbackDetailContext,
+                playbackDetailContext: selected.detailContext,
+                actualPlayUrl: selected.actualPlayUrl,
+                episodeFileSelectionHandled: true,
               );
             } catch (e) {
               debugPrint('[下一话] 获取Emby播放会话失败: $e');
@@ -597,7 +645,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
-              playbackDetailContext: _playbackDetailContext,
+              playbackDetailContext: selected.detailContext,
+              actualPlayUrl: selected.actualPlayUrl,
+              episodeFileSelectionHandled: true,
             );
           }
         } else {

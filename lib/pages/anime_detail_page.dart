@@ -20,7 +20,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:provider/provider.dart'; // 重新添加
 // import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
-import 'dart:io'; // Added for File operations
 // import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
@@ -599,6 +598,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   void _dismissDetailIfNeeded() {
     if (!mounted || widget.embeddedInPlayback) return;
+    if (ModalRoute.of(context)?.isCurrent == false) return;
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop();
@@ -1018,8 +1018,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     required PlayableItem? sourcePlayable,
   }) async {
     if (sourcePlayableAvailable && sourcePlayable != null) {
-      await PlaybackService().play(sourcePlayable);
-      _dismissDetailIfNeeded();
+      if (await PlaybackService().play(sourcePlayable)) {
+        _dismissDetailIfNeeded();
+      }
       return;
     }
 
@@ -1027,61 +1028,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         historyItem != null &&
         historyItem.filePath.isNotEmpty) {
       final filePath = historyItem.filePath;
-      final lowerPath = filePath.toLowerCase();
-      final bool isRemoteSource = historyItem.isDandanplayRemote ||
-          lowerPath.startsWith('http://') ||
-          lowerPath.startsWith('https://') ||
-          lowerPath.startsWith('jellyfin://') ||
-          lowerPath.startsWith('emby://') ||
-          MediaSourceUtils.isWebDavPath(filePath) ||
-          MediaSourceUtils.isSmbPath(filePath);
-
-      if (isRemoteSource) {
-        final playableItem = PlayableItem(
-          videoPath: filePath,
-          title: anime.nameCn,
-          subtitle: episode.title,
-          animeId: anime.id,
-          episodeId: episode.id,
-          historyItem: historyItem,
-        );
-        await PlaybackService().play(playableItem);
-        if (mounted && !widget.embeddedInPlayback) {
-          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
-          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
-          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
-          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
-          final nav = Navigator.of(context);
-          if (nav.canPop()) {
-            nav.pop();
-          }
-        }
-        return;
-      }
-
-      final file = File(filePath);
-      if (await file.exists()) {
-        final playableItem = PlayableItem(
-          videoPath: filePath,
-          title: anime.nameCn,
-          subtitle: episode.title,
-          animeId: anime.id,
-          episodeId: episode.id,
-          historyItem: historyItem,
-        );
-        await PlaybackService().play(playableItem);
-        if (mounted && !widget.embeddedInPlayback) {
-          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
-          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
-          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
-          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
-          final nav = Navigator.of(context);
-          if (nav.canPop()) {
-            nav.pop();
-          }
-        }
-      } else if (mounted) {
-        BlurSnackBar.show(context, '文件已不存在于: ${historyItem.filePath}');
+      // Choose among all matches before checking any single file's availability.
+      final playableItem = PlayableItem(
+        videoPath: filePath,
+        title: anime.nameCn,
+        subtitle: episode.title,
+        animeId: anime.id,
+        episodeId: episode.id,
+        historyItem: historyItem,
+      );
+      if (await PlaybackService().play(playableItem)) {
+        _dismissDetailIfNeeded();
       }
       return;
     }
@@ -3269,8 +3226,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         ),
       );
     }
+    final targetEpisode = _resolveImmersivePrimary(episodes).episode;
     return ImmersiveEpisodeRail(
+      key: ValueKey('immersive-episode-rail-${anime.id}'),
       episodeCount: displayed.length,
+      targetEpisodeIndex: displayed.indexWhere(
+        (episode) => episode.id == targetEpisode.id,
+      ),
       onSelectEpisodes: () => _showImmersiveEpisodeSelector(anime),
       itemBuilder: (context, index) {
         final episode = displayed[index];

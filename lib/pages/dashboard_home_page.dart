@@ -33,6 +33,8 @@ import 'package:nipaplay/models/trending_bangumi.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/quarterly_review_comment.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
@@ -46,6 +48,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
@@ -208,6 +211,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _isLoadingQuarterlyReview = false;
   bool _reviewReloadAfterCurrent = false;
   bool _reviewWarmScheduled = false;
+  bool _reviewCollectionsScheduled = false;
+  bool _isEditingQuarterlyReviewComment = false;
   _QuarterlyReviewSort _quarterlyReviewSort = _QuarterlyReviewSort.airDate;
   final ScrollController _quarterlyReviewScrollController = ScrollController();
   final GlobalKey _quarterlyReviewSortDropdownKey = GlobalKey();

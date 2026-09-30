@@ -39,6 +39,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           actualPlayUrl: actualUrl,
           playbackDetailContext: _playbackDetailContext,
           resetManualDanmakuOffset: false,
+          episodeFileSelectionHandled: true,
         );
       } else {
         _setStatus(PlayerStatus.idle, message: '请重新选择视频');
@@ -2908,6 +2909,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         path,
         historyItem: history,
         resetManualDanmakuOffset: false,
+        episodeFileSelectionHandled: true,
       );
       // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
       if (hasVideo) {
@@ -2974,6 +2976,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           path,
           historyItem: history,
           resetManualDanmakuOffset: false,
+          episodeFileSelectionHandled: true,
         );
         // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
         if (hasVideo) {

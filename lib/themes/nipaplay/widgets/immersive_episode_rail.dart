@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -13,11 +14,13 @@ class ImmersiveEpisodeRail extends StatefulWidget {
     required this.episodeCount,
     required this.itemBuilder,
     required this.onSelectEpisodes,
+    this.targetEpisodeIndex,
   });
 
   final int episodeCount;
   final IndexedWidgetBuilder itemBuilder;
   final VoidCallback? onSelectEpisodes;
+  final int? targetEpisodeIndex;
 
   @override
   State<ImmersiveEpisodeRail> createState() => _ImmersiveEpisodeRailState();
@@ -25,6 +28,12 @@ class ImmersiveEpisodeRail extends StatefulWidget {
 
 class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
   final ScrollController _controller = ScrollController();
+  double? _wheelTarget;
+  int _wheelAnimation = 0;
+  bool _userScrolled = false;
+  int? _positionedIndex;
+  double? _positionedWidth;
+  bool _positionScheduled = false;
 
   @override
   void dispose() {
@@ -34,17 +43,51 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
 
   void _handlePointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent || !_controller.hasClients) return;
-    final delta = event.scrollDelta.dx.abs() > event.scrollDelta.dy.abs()
-        ? event.scrollDelta.dx
-        : event.scrollDelta.dy;
-    if (delta == 0) return;
-    final next = (_controller.offset + delta)
-        .clamp(0.0, _controller.position.maxScrollExtent);
-    _controller.animateTo(
-      next,
-      duration: const Duration(milliseconds: 140),
-      curve: Curves.easeOut,
-    );
+    // Horizontal gestures stay with Scrollable. Resolve vertical wheel events
+    // only when the list has not already consumed them (e.g. Shift + wheel).
+    if (event.scrollDelta.dy == 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      _userScrolled = true;
+      final next =
+          ((_wheelTarget ?? _controller.offset) + event.scrollDelta.dy * 3)
+              .clamp(0.0, _controller.position.maxScrollExtent);
+      _wheelTarget = next;
+      final animation = ++_wheelAnimation;
+      _controller
+          .animateTo(next,
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut)
+          .whenComplete(() {
+        if (animation == _wheelAnimation) _wheelTarget = null;
+      });
+    });
+  }
+
+  void _positionTarget(double viewportWidth, double cardWidth) {
+    final index = widget.targetEpisodeIndex;
+    if (_userScrolled ||
+        index == null ||
+        index < 0 ||
+        index >= widget.episodeCount ||
+        (_positionedIndex == index && _positionedWidth == viewportWidth) ||
+        _positionScheduled) {
+      return;
+    }
+    _positionScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _positionScheduled = false;
+      if (!mounted || _userScrolled || !_controller.hasClients) return;
+      final target = widget.targetEpisodeIndex;
+      if (target == null || target < 0 || target >= widget.episodeCount) return;
+      // Place the card centre at 42% of the rail, leaving nearby episodes on
+      // both sides. At the list ends, keep the offset inside the scroll range.
+      final offset =
+          (target * (cardWidth + 12) + cardWidth / 2 - viewportWidth * 0.42)
+              .clamp(0.0, _controller.position.maxScrollExtent);
+      _controller.jumpTo(offset);
+      _positionedIndex = target;
+      _positionedWidth = viewportWidth;
+    });
   }
 
   @override
@@ -64,6 +107,7 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
         final cardWidth =
             ((usableWidth - 12 * (targetVisible - 1)) / targetVisible)
                 .clamp(168.0, 250.0);
+        _positionTarget(usableWidth, cardWidth);
 
         return Padding(
           padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
@@ -111,22 +155,30 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
               ),
               const SizedBox(height: 10),
               Expanded(
-                child: Listener(
-                  onPointerSignal: _handlePointerSignal,
-                  child: Scrollbar(
-                    controller: _controller,
-                    thumbVisibility: false,
-                    child: ListView.separated(
+                child: NotificationListener<UserScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.direction != ScrollDirection.idle) {
+                      _userScrolled = true;
+                    }
+                    return false;
+                  },
+                  child: Listener(
+                    onPointerSignal: _handlePointerSignal,
+                    child: Scrollbar(
                       controller: _controller,
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
-                      itemCount: widget.episodeCount,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) => SizedBox(
-                        width: cardWidth,
-                        child: widget.itemBuilder(context, index),
+                      thumbVisibility: false,
+                      child: ListView.builder(
+                        controller: _controller,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        itemCount: widget.episodeCount,
+                        itemExtent: cardWidth + 12,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: widget.itemBuilder(context, index),
+                        ),
                       ),
                     ),
                   ),

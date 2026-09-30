@@ -8,6 +8,55 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
     final muted = foreground.withValues(alpha: 0.62);
     final seasonMonth = _quarterlyReviewMonth!;
     final items = _sortedQuarterlyReviewItems;
+    final cardWidth = isPhone ? 320.0 : 360.0;
+    final detailsWidth = cardWidth - 132;
+    final titleStyle =
+        TextStyle(color: foreground, fontSize: 16, fontWeight: FontWeight.w600);
+    final dateStyle = TextStyle(color: muted, fontSize: 12);
+    final ratingStyle =
+        TextStyle(color: foreground, fontSize: 13, fontWeight: FontWeight.w600);
+    double textHeight(String text, TextStyle style, {int? maxLines}) {
+      final painter = TextPainter(
+        text: TextSpan(
+            text: text, style: DefaultTextStyle.of(context).style.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        textHeightBehavior: DefaultTextStyle.of(context).textHeightBehavior,
+        locale: Localizations.maybeLocaleOf(context),
+        maxLines: maxLines,
+      )..layout(maxWidth: detailsWidth);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    // Keep every card aligned while ensuring even a two-line title cannot
+    // squeeze a two-line short comment into a scrolling viewport.
+    final cardHeight = items.fold<double>(196, (height, item) {
+      final title =
+          item.anime.nameCn.isNotEmpty ? item.anime.nameCn : item.anime.name;
+      final requiredHeight = textHeight(title, titleStyle, maxLines: 2) +
+          5 +
+          textHeight(
+              '${item.airDate.month}月${item.airDate.day}日${item.dateLabel}',
+              dateStyle) +
+          (item.rating != null
+              ? 10 +
+                  math.max(15, textHeight('${item.rating} / 10', ratingStyle))
+              : 0) +
+          (item.comment != null
+              ? 8 +
+                  QuarterlyReviewComment.minimumHeight(context,
+                      width: detailsWidth,
+                      comment: item.comment!,
+                      hasTimestamp: item.commentAt != null,
+                      editable: BangumiApiService.isLoggedIn &&
+                          QuarterlyReviewCache.subjectId(
+                                  item.anime.bangumiUrl) !=
+                              null)
+              : 0);
+      return math.max(height, requiredHeight.ceilToDouble());
+    });
     final daysUntilClose = QuarterlyReviewCache.daysUntilReviewCloses(
       DateTime(_quarterlyReviewYear!, seasonMonth),
       DateTime.now(),
@@ -26,7 +75,8 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
                 )),
             if (!isPhone) ...[
               const SizedBox(width: 8),
-              _buildScrollButtons(_quarterlyReviewScrollController, 330),
+              _buildScrollButtons(
+                  _quarterlyReviewScrollController, cardWidth + 12),
             ],
             const SizedBox(width: 12),
             BlurDropdown<_QuarterlyReviewSort>(
@@ -62,7 +112,7 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 190,
+          height: cardHeight + 20,
           child: ListView.separated(
             controller: _quarterlyReviewScrollController,
             scrollDirection: Axis.horizontal,
@@ -80,16 +130,16 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
                   behavior: HitTestBehavior.opaque,
                   onTap: onTap,
                   child: SizedBox(
-                    width: isPhone ? 292 : 330,
-                    height: 168,
+                    width: cardWidth,
+                    height: cardHeight,
                     child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(5),
                             child: SizedBox(
-                              width: 106,
-                              height: 168,
+                              width: 120,
+                              height: cardHeight,
                               child: anime.imageUrl.isEmpty
                                   ? Icon(Icons.movie_outlined, color: muted)
                                   : CachedNetworkImageWidget(
@@ -105,16 +155,13 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(title,
-                                  maxLines: 3,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: foreground,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600)),
+                                  style: titleStyle),
                               const SizedBox(height: 5),
                               Text(
                                   '${item.airDate.month}月${item.airDate.day}日${item.dateLabel}',
-                                  style: TextStyle(color: muted, fontSize: 12)),
+                                  style: dateStyle),
                               if (item.rating != null) ...[
                                 const SizedBox(height: 10),
                                 Row(
@@ -124,23 +171,26 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
                                         size: 15, color: Colors.amber),
                                     const SizedBox(width: 4),
                                     Text('${item.rating} / 10',
-                                        style: TextStyle(
-                                            color: foreground,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600)),
+                                        style: ratingStyle),
                                   ],
                                 ),
                               ],
                               if (item.comment != null) ...[
                                 const SizedBox(height: 8),
                                 Expanded(
-                                    child: Text('“${item.comment}”',
-                                        maxLines: 5,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            color: muted,
-                                            fontSize: 12,
-                                            height: 1.4))),
+                                  child: QuarterlyReviewComment(
+                                    key: ValueKey(anime.id),
+                                    comment: item.comment!,
+                                    updatedAt: item.commentAt,
+                                    onEdit: BangumiApiService.isLoggedIn &&
+                                            QuarterlyReviewCache.subjectId(
+                                                    anime.bangumiUrl) !=
+                                                null
+                                        ? () =>
+                                            _editQuarterlyReviewComment(item)
+                                        : null,
+                                  ),
+                                ),
                               ],
                             ],
                           )),
@@ -148,10 +198,13 @@ extension _DashboardQuarterlyReviewUi on _DashboardHomePageState {
                   ),
                 ),
               );
-              return _wrapLargeScreenFocusable(
-                child: card,
-                onActivate: onTap,
-                borderRadius: BorderRadius.circular(8),
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: _wrapLargeScreenFocusable(
+                  child: card,
+                  onActivate: onTap,
+                  borderRadius: BorderRadius.circular(8),
+                ),
               );
             },
           ),
