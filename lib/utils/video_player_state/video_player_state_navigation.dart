@@ -847,6 +847,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
       if (!_isSeeking && hasVideo) {
         if (_status == PlayerStatus.playing) {
+          if (isBuffering) {
+            // Buffering is not a user pause. Keep the ticker available for
+            // recovery, but freeze its media anchor and skip drift correction.
+            _lastElapsedUs = elapsed.inMicroseconds;
+            _smoothAnchorElapsedUs = _lastElapsedUs;
+            return;
+          }
           var playerPosition = player.position;
           final playerDuration = player.mediaInfo.duration;
 

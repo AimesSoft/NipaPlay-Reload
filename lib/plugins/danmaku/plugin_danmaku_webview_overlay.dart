@@ -39,6 +39,7 @@ class _PluginDanmakuWebViewOverlayState
   int _lastSeekRevision = -1;
   String _lastSettingsJson = '';
   String _lastPlaybackState = '';
+  bool _lastBuffering = false;
   Future<void> _sendQueue = Future<void>.value();
   int _loadGeneration = 0;
 
@@ -246,22 +247,27 @@ class _PluginDanmakuWebViewOverlayState
     final now = DateTime.now().millisecondsSinceEpoch;
     final state = widget.videoState;
     final playbackState = state.status.toString().split('.').last;
+    final isBuffering = state.isBuffering;
     final seekChanged = state.seekRevision != _lastSeekRevision;
     final stateChanged = playbackState != _lastPlaybackState;
+    final bufferingChanged = isBuffering != _lastBuffering;
+    // Buffer/resume transitions must reach JS even within one clock interval.
     if (!force &&
         !seekChanged &&
         !stateChanged &&
+        !bufferingChanged &&
         now - _lastClockSentAtMs < 100) {
       return;
     }
     _lastClockSentAtMs = now;
     _lastSeekRevision = state.seekRevision;
     _lastPlaybackState = playbackState;
+    _lastBuffering = isBuffering;
     await _send(<String, dynamic>{
       'type': 'clock',
       'positionSeconds': state.playbackTimeMs.value / 1000,
       'durationSeconds': state.videoDuration.inMilliseconds / 1000,
-      'playing': playbackState == 'playing',
+      'playing': playbackState == 'playing' && !isBuffering,
       'playbackRate': state.effectivePlaybackRate,
       'seekRevision': state.seekRevision,
     });

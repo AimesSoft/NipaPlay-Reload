@@ -7,6 +7,7 @@ export './abstract_player.dart'
         AsyncDisposablePlayer,
         AsyncExternalSubtitlePlayer,
         AsyncSeekPlayer,
+        BufferingAwarePlayer,
         GifExportCapablePlayer,
         GifExportQuality,
         GifExportRequest,
@@ -44,6 +45,7 @@ enum MediaType { unknown, video, audio, subtitle }
 /// It instantiates to `Player()` and delegates all operations to an internal `AbstractPlayer` instance
 /// obtained from the `PlayerFactory`.
 class Player implements core_player.AsyncExternalSubtitlePlayer {
+  static final ValueNotifier<bool> _noBuffering = ValueNotifier<bool>(false);
   final core_player.AbstractPlayer _delegate;
   Future<void>? _disposeFuture;
   bool _disposeErrorHandlerAttached = false;
@@ -114,6 +116,14 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   set activeAudioTracks(List<int> value) => _delegate.activeAudioTracks = value;
 
   int get position => _delegate.position;
+  ValueListenable<bool> get buffering {
+    final delegate = _delegate;
+    return delegate is core_player.BufferingAwarePlayer
+        ? (delegate as core_player.BufferingAwarePlayer).buffering
+        : _noBuffering;
+  }
+
+  bool get isBuffering => buffering.value;
   int get bufferedPosition => _delegate.bufferedPosition;
   void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) =>
       _delegate.setBufferRange(minMs: minMs, maxMs: maxMs, drop: drop);

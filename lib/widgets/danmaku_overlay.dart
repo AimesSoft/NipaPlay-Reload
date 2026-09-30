@@ -241,8 +241,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockWords: videoState.danmakuBlockWords,
             seekRevision: videoState.seekRevision,
             startupGateToken: videoState.dfmStartupGateToken,
+            clockRevision: videoState.dfmClockRevision,
             onStartupReady: videoState.completeDfmStartupGate,
-            isPlaying: widget.isPlaying,
+            isPlaying: widget.isPlaying && !videoState.isBuffering,
             playbackRate: videoState.effectivePlaybackRate,
           );
         }

@@ -56,6 +56,9 @@ class _VideoProgressBarState extends State<VideoProgressBar>
   bool _isHovering = false;
   bool _isThumbHovered = false;
   OverlayEntry? _overlayEntry;
+  double _overlayProgress = 0;
+  Duration? _overlayTime;
+  String? _overlayThumbnailPath;
   Timer? _previewDebounceTimer;
   late final AnimationController _thumbHoverController;
   late final AnimationController _thumbDeformController;
@@ -109,102 +112,119 @@ class _VideoProgressBarState extends State<VideoProgressBar>
 
   void _removeOverlay() {
     _overlayEntry?.remove();
+    _overlayEntry?.dispose();
     _overlayEntry = null;
   }
 
   void _showOverlay(BuildContext context, double progress,
       {Duration? displayTime, String? thumbnailPath}) {
     if (!widget.showHoverPreview) return;
-    _removeOverlay();
 
+    _overlayProgress = progress;
+    _overlayTime = displayTime ?? widget.videoState.position;
+    _overlayThumbnailPath = thumbnailPath;
+    if (_overlayEntry != null) {
+      _overlayEntry!.markNeedsBuild();
+      return;
+    }
+
+    _overlayEntry = OverlayEntry(builder: _buildOverlay);
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  Widget _buildOverlay(BuildContext context) {
     final RenderBox? sliderBox =
         _sliderKey.currentContext?.findRenderObject() as RenderBox?;
-    if (sliderBox == null) return;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (sliderBox == null || overlayBox == null) return const SizedBox.shrink();
 
-    final position = sliderBox.localToGlobal(Offset.zero);
-    final size = sliderBox.size;
+    final anchor = overlayBox.globalToLocal(sliderBox.localToGlobal(
+      Offset(_overlayProgress * sliderBox.size.width, 0),
+    ));
+    final thumbnailPath = _overlayThumbnailPath;
     final hasPreview = thumbnailPath != null &&
         thumbnailPath.isNotEmpty &&
         _isPreviewReady(thumbnailPath);
     final previewWidth = globals.isPhone ? 140.0 : 200.0;
     final previewHeight = previewWidth * 9 / 16;
     final text =
-        widget.formatDuration(displayTime ?? widget.videoState.position);
-    final textWidth = _measureTextWidth(text);
+        widget.formatDuration(_overlayTime ?? widget.videoState.position);
+    final textWidth = _measureTextWidth(text, context);
     final bubbleWidth = hasPreview ? previewWidth + 16 : textWidth + 24;
-    final bubbleHeight = hasPreview ? previewHeight + 46 : 40.0;
-    final bubbleX = position.dx + (progress * size.width) - (bubbleWidth / 2);
-    final bubbleY = position.dy - bubbleHeight - 8;
 
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Material(
+    // A preview is display-only. Its actual scaled height must remain above
+    // the track, and it must never trigger MouseRegion exit/enter feedback.
+    return IgnorePointer(
+      child: Material(
         type: MaterialType.transparency,
         child: Stack(
           children: [
             Positioned(
-              left: bubbleX,
-              top: bubbleY,
-              child: Builder(
-                builder: (context) {
-                  final colors = PlayerMenuTheme.colorsOf(context);
-                  final textStyle = TextStyle(
-                    color: colors.foreground,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  );
-                  return PlayerOverlaySurface(
-                    width: bubbleWidth,
-                    borderRadius: 8,
-                    padding: const EdgeInsets.all(8),
-                    child: hasPreview
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: _buildPreviewImage(
-                                  thumbnailPath,
-                                  previewWidth,
-                                  previewHeight,
+              left: anchor.dx,
+              top: anchor.dy - 8,
+              child: FractionalTranslation(
+                translation: const Offset(-0.5, -1),
+                child: Builder(
+                  builder: (context) {
+                    final colors = PlayerMenuTheme.colorsOf(context);
+                    final textStyle = TextStyle(
+                      color: colors.foreground,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    );
+                    return PlayerOverlaySurface(
+                      width: bubbleWidth,
+                      borderRadius: 8,
+                      padding: const EdgeInsets.all(8),
+                      child: hasPreview
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: _buildPreviewImage(
+                                    thumbnailPath,
+                                    previewWidth,
+                                    previewHeight,
+                                  ),
                                 ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: 6,
+                                    left: 4,
+                                    right: 4,
+                                    bottom: 2,
+                                  ),
+                                  child: Text(
+                                    text,
+                                    style: textStyle,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.visible,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Text(
+                                text,
+                                style: textStyle,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.visible,
                               ),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 6,
-                                  left: 4,
-                                  right: 4,
-                                  bottom: 2,
-                                ),
-                                child: Text(
-                                  text,
-                                  style: textStyle,
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  overflow: TextOverflow.visible,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Center(
-                            child: Text(
-                              text,
-                              style: textStyle,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.visible,
                             ),
-                          ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ],
         ),
       ),
     );
-
-    Overlay.of(context).insert(_overlayEntry!);
   }
 
   @override
@@ -806,7 +826,7 @@ class _VideoProgressBarState extends State<VideoProgressBar>
     });
   }
 
-  double _measureTextWidth(String text) {
+  double _measureTextWidth(String text, BuildContext context) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
@@ -816,7 +836,8 @@ class _VideoProgressBarState extends State<VideoProgressBar>
           fontWeight: FontWeight.w500,
         ),
       ),
-      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
       maxLines: 1,
     )..layout(minWidth: 0, maxWidth: double.infinity);
     return painter.width;
