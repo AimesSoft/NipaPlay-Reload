@@ -511,7 +511,7 @@ class AdaptiveMediaSearchField extends material.StatelessWidget {
     final secondary = textColor.withValues(alpha: 0.52);
     final active = theme.colorScheme.primary;
     return material.ListenableBuilder(
-      listenable: focusNode,
+      listenable: material.Listenable.merge([focusNode, controller]),
       builder: (context, child) => material.AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         height: 40,
@@ -544,34 +544,27 @@ class AdaptiveMediaSearchField extends material.StatelessWidget {
             ),
             const material.SizedBox(width: 9),
             material.Expanded(
-              child: material.Stack(
-                alignment: material.Alignment.centerLeft,
-                children: [
-                  if (controller.text.isEmpty)
-                    material.IgnorePointer(
-                      child: material.Text(
-                        placeholder,
-                        maxLines: 1,
-                        overflow: material.TextOverflow.ellipsis,
-                        style: material.TextStyle(
-                          color: secondary,
-                          fontSize: 14,
-                        ),
-                      ),
+              // 使用完整的输入控件处理点击聚焦、选区和 iPad 输入法连接。
+              child: material.Material(
+                type: material.MaterialType.transparency,
+                child: material.TextField(
+                  key: const material.ValueKey('media-library-search-input'),
+                  controller: controller,
+                  focusNode: focusNode,
+                  style: material.TextStyle(color: textColor, fontSize: 14),
+                  cursorColor: active,
+                  decoration: material.InputDecoration.collapsed(
+                    hintText: placeholder,
+                    hintStyle: material.TextStyle(
+                      color: secondary,
+                      fontSize: 14,
                     ),
-                  material.EditableText(
-                    controller: controller,
-                    focusNode: focusNode,
-                    style: material.TextStyle(color: textColor, fontSize: 14),
-                    cursorColor: active,
-                    backgroundCursorColor: secondary,
-                    selectionColor: active.withValues(alpha: 0.28),
-                    onChanged: onChanged,
-                    onSubmitted: onSubmitted,
-                    textInputAction: material.TextInputAction.search,
-                    maxLines: 1,
                   ),
-                ],
+                  onChanged: onChanged,
+                  onSubmitted: onSubmitted,
+                  textInputAction: material.TextInputAction.search,
+                  maxLines: 1,
+                ),
               ),
             ),
             if (controller.text.isNotEmpty)

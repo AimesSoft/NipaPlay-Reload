@@ -442,8 +442,10 @@ class _DandanplayRemoteLibraryViewState
     if (AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone) {
       return CupertinoMediaSearchToolbar(
         controller: _searchController,
+        focusNode: _searchFocusNode,
         placeholder: '搜索番剧或剧集…',
         onChanged: _updateSearchQueryDebounced,
+        onSubmitted: _commitSearchQuery,
         actions: [
           CupertinoMediaSearchToolbarAction(
             label: provider.isLoading ? '刷新中' : '刷新',
