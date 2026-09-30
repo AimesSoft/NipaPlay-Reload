@@ -50,6 +50,8 @@ class WatchHistoryDatabase {
   static final WatchHistoryDatabase instance = WatchHistoryDatabase._init();
   static const String _dbName = 'watch_history.db';
   static const int _dbVersion = 2;
+  @visibleForTesting
+  static String? debugDatabasePathOverride;
   static bool _migrationCompleted = false;
   static bool _ffiInitialized = false;
   static final Map<String, WatchHistoryItem> _webStore = {};
@@ -73,10 +75,8 @@ class WatchHistoryDatabase {
     // 确保在桌面平台上初始化SQLite FFI
     ensureInitialized();
 
-    // 使用StorageService获取正确的存储目录
-    final io.Directory storageDir =
-        await StorageService.getAppStorageDirectory();
-    final String dbPath = path.join(storageDir.path, _dbName);
+    final String dbPath = debugDatabasePathOverride ??
+        path.join((await StorageService.getAppStorageDirectory()).path, _dbName);
 
     // 确保目录存在
     final dbDir = io.Directory(path.dirname(dbPath));

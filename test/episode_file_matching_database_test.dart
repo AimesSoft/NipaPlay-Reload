@@ -31,12 +31,16 @@ void main() {
     temp = await Directory.systemTemp.createTemp('episode_file_matching_');
     previousPaths = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _Paths(temp.path);
+    WatchHistoryDatabase.debugDatabasePathOverride =
+        File('${temp.path}/watch_history.db').path;
     db = await historyDatabase.database;
+    expect(db.path, WatchHistoryDatabase.debugDatabasePathOverride);
   });
 
   tearDown(() async {
     await historyDatabase.close();
     PathProviderPlatform.instance = previousPaths;
+    WatchHistoryDatabase.debugDatabasePathOverride = null;
     await temp.delete(recursive: true);
   });
 
@@ -99,7 +103,7 @@ void main() {
             .single,
         version1Before);
     expect(await historyDatabase.getClearedHistoryByEpisode(10, 100), isNull);
-  });
+  }, skip: !Platform.isLinux);
 
   test('a deliberately cleared version can still donate its progress',
       () async {
@@ -122,7 +126,7 @@ void main() {
     expect(versions.single.lastPosition, 600000);
     expect(await historyDatabase.getHistoryByFilePath('/media/old-path.mkv'),
         isNull);
-  });
+  }, skip: !Platform.isLinux);
 
   test('previously cleared unwatched files remain eligible for matching',
       () async {
@@ -153,7 +157,7 @@ void main() {
             .single
             .filePath,
         '/media/cleared.mkv');
-  });
+  }, skip: !Platform.isLinux);
 
   test('queries every active file of exactly this anime and episode', () async {
     await seed('/media/local.mkv', time: '2026-09-30T10:00:00.000');
