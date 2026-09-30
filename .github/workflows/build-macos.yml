@@ -98,6 +98,7 @@ jobs:
             echo "patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch | awk '{print $1}')"
             echo "swift-target-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-swift-deployment-target.patch | awk '{print $1}')"
             echo "dav1d-source-patch=$(shasum -a 256 .github/patches/libmpv-darwin-build-dav1d-release-source.patch | awk '{print $1}')"
+            echo "coreaudio-lifetime-patch=$(shasum -a 256 .github/patches/mpv-coreaudio-init-lifetime.patch | awk '{print $1}')"
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
             echo "sdk=$(xcrun --sdk macosx --show-sdk-version)"
           } > "$RUNNER_TEMP/libmpv-cache-inputs.txt"
@@ -150,6 +151,17 @@ jobs:
             echo "Failed to download from ${url}, trying next mirror..."
           done
           echo "WARNING: Could not pre-fetch uchardet; Nix build will attempt direct download."
+
+      # Backport mpv-player/mpv af067b5ea8e5 and c5d391adba7b: a failed
+      # CoreAudio init must not leave a hotplug listener pointing to a freed ao.
+      - name: Patch mpv CoreAudio initialization and hotplug cleanup
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH_FILE="$GITHUB_WORKSPACE/.github/patches/mpv-coreaudio-init-lifetime.patch"
+          git -C third_party/mpv apply --check "$PATCH_FILE"
+          git -C third_party/mpv apply "$PATCH_FILE"
 
       - name: Patch libmpv-darwin-build for target-arch HDR deps
         if: steps.libmpv-cache.outputs.cache-hit != 'true'
