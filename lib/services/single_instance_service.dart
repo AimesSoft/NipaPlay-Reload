@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 class SingleInstanceMessage {
   final bool focus;
@@ -46,23 +47,47 @@ class SingleInstanceService {
       return true;
     }
 
-    final lockPath = _lockFilePath();
-    final infoPath = _infoFilePath();
-
-    final lockHandle = await File(lockPath).open(mode: FileMode.append);
+    RandomAccessFile? lockHandle;
     try {
-      await lockHandle.lock(FileLock.exclusive);
+      // 主、次实例必须从同一目录读取锁和连接信息，才能正常转发启动请求。
+      final directory = await _instanceDirectory();
+      final lockPath = path.join(directory.path, _lockFileName);
+      final infoPath = path.join(directory.path, _infoFileName);
+      lockHandle = await File(lockPath).open(mode: FileMode.append);
+      try {
+        await lockHandle.lock(FileLock.exclusive);
+      } on FileSystemException catch (error) {
+        // 只有锁竞争才通知已有实例；权限或文件系统错误走启动降级路径。
+        if (!_isLockContention(error)) {
+          rethrow;
+        }
+        await lockHandle.close();
+        lockHandle = null;
+        final notified = await _notifyExistingInstance(
+          infoPath,
+          launchFilePath,
+          startupScriptPath,
+        );
+        if (!notified) {
+          debugPrint(
+            '[SingleInstance] Existing instance did not respond; continuing startup.',
+          );
+        }
+        return !notified;
+      }
+
       _lockFile = lockHandle;
+      lockHandle = null;
       await _startServer(infoPath);
       return true;
-    } on FileSystemException {
-      await lockHandle.close();
-      await _notifyExistingInstance(
-          infoPath, launchFilePath, startupScriptPath);
-      return false;
     } catch (e) {
-      await lockHandle.close();
-      debugPrint('[SingleInstance] Failed to create lock: $e');
+      try {
+        await lockHandle?.close();
+      } catch (_) {}
+      // 服务器或信息文件初始化失败时也必须释放已获得的锁和监听 socket。
+      await dispose();
+      debugPrint(
+          '[SingleInstance] Initialization failed; continuing startup: $e');
       return true;
     }
   }
@@ -162,7 +187,7 @@ class SingleInstanceService {
     await handler(message);
   }
 
-  static Future<void> _notifyExistingInstance(
+  static Future<bool> _notifyExistingInstance(
     String infoPath,
     String? launchFilePath,
     String? startupScriptPath,
@@ -180,10 +205,11 @@ class SingleInstanceService {
         startupScriptPath,
       );
       if (ok) {
-        return;
+        return true;
       }
       await Future.delayed(_retryDelay);
     }
+    return false;
   }
 
   static Future<_InstanceInfo?> _readInfo(String infoPath) async {
@@ -255,14 +281,25 @@ class SingleInstanceService {
     }
   }
 
-  static String _lockFilePath() {
-    final root = Directory.systemTemp.path;
-    return path.join(root, _lockFileName);
+  static Future<Directory> _instanceDirectory() async {
+    if (!Platform.isMacOS) {
+      return Directory.systemTemp;
+    }
+    // path_provider 使用容器内的 Application Support，避免沙盒访问共享 /tmp。
+    final supportDirectory = await getApplicationSupportDirectory();
+    return Directory(path.join(supportDirectory.path, 'single_instance'))
+        .create(recursive: true);
   }
 
-  static String _infoFilePath() {
-    final root = Directory.systemTemp.path;
-    return path.join(root, _infoFileName);
+  static bool _isLockContention(FileSystemException error) {
+    final code = error.osError?.errorCode;
+    if (Platform.isMacOS) {
+      return code == 35; // EAGAIN / EWOULDBLOCK
+    }
+    if (Platform.isWindows) {
+      return code == 33; // ERROR_LOCK_VIOLATION
+    }
+    return code == 11; // EAGAIN / EWOULDBLOCK on Linux
   }
 
   static String _generateToken() {
