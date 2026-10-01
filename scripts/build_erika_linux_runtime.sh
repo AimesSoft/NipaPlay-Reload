@@ -7,6 +7,7 @@ mkdir -p "$output"
 output=$(cd "$output" && pwd)
 erika_commit=70f12bf325ce8d020d2155635f5992eff4654321
 nvcodec_commit=e844e5b26f46bb77479f063029595293aa8f812d
+vulkan_headers_commit=b379292b2ab6df5771ba9870d53cf8b2c9295daf
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/nipaplay-erika.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
@@ -18,6 +19,11 @@ git clone --depth 1 --branch n13.0.19.0 https://github.com/FFmpeg/nv-codec-heade
 test "$(git -C "$work/nv-codec-headers" rev-parse HEAD)" = "$nvcodec_commit"
 make -C "$work/nv-codec-headers" install PREFIX="$work/nvcodec"
 export ERIKA_LINUX_PKG_CONFIG_DIRS="$work/nvcodec/lib/pkgconfig:$(pkg-config --variable pc_path pkg-config)"
+# FFmpeg 8 needs newer Vulkan declarations than Ubuntu 22.04/24.04 ship.
+# The Vulkan loader still comes from the target desktop system.
+git clone --depth 1 --branch v1.3.290 https://github.com/KhronosGroup/Vulkan-Headers.git "$work/Vulkan-Headers"
+test "$(git -C "$work/Vulkan-Headers" rev-parse HEAD)" = "$vulkan_headers_commit"
+export CPATH="$work/Vulkan-Headers/include${CPATH:+:$CPATH}"
 export ERIKA_USE_SYSTEM_LIBS=0
 # CMake static dependencies are linked into the shared Erika runtime.
 export CFLAGS="${CFLAGS:-} -fPIC"
@@ -39,6 +45,8 @@ unzip -q "$work/erika-linux.zip" -d "$work/bundle"
 mkdir -p "$output"
 cp -a "$work/bundle/erika-linux/." "$output/"
 cp third_party/src/fribidi-1.0.16/COPYING "$output/licenses/LICENSE.FriBidi"
+cp -a "$work/Vulkan-Headers/LICENSES" "$output/licenses/Vulkan-Headers"
+cp "$work/Vulkan-Headers/LICENSE.md" "$output/licenses/Vulkan-Headers/"
 python3 - "$work/nv-codec-headers/include/ffnvcodec" "$output/licenses/LICENSE.nv-codec-headers" <<'PYLICENSE'
 from pathlib import Path
 import sys
@@ -48,8 +56,8 @@ notice.write_text("\n\n".join(
     for p in sorted(headers.glob("*.h"))
 ) + "\n")
 PYLICENSE
-printf 'erika_ref=v0.2.1\nerika_source=%s\nnvcodec_source=%s\nnative_deps_patch=%s\n' \
-  "$erika_commit" "$nvcodec_commit" \
+printf 'erika_ref=v0.2.1\nerika_source=%s\nnvcodec_source=%s\nvulkan_headers_source=%s\nnative_deps_patch=%s\n' \
+  "$erika_commit" "$nvcodec_commit" "$vulkan_headers_commit" \
   "$(sha256sum "$project_root/.github/patches/erika-linux-native-deps.patch" | cut -d ' ' -f1)" \
   >> "$output/MANIFEST.txt"
 ldd "$output/lib/liberika_capi.so"

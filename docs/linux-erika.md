@@ -15,7 +15,8 @@ The Linux workflow builds amd64 and arm64 independently on their existing
 Ubuntu runners. It compiles the pinned Erika 0.2.1 source and statically links
 FFmpeg 8, dav1d, patched libass and its font libraries. PulseAudio, Vulkan and
 VA-API use the desktop system libraries. The dependency build enables NVDEC
-and VA-API; CUDA drivers are loaded at runtime.
+and VA-API with Vulkan interop; CUDA drivers are loaded at runtime. The build
+uses pinned Vulkan headers while keeping the system Vulkan loader.
 
 The runtime is cached by architecture, build scripts and workflow configuration.
 A C ABI smoke check opens a real video and exports a GIF before packaging.
