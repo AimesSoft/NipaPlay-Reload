@@ -19,6 +19,9 @@ test "$(git -C "$work/nv-codec-headers" rev-parse HEAD)" = "$nvcodec_commit"
 make -C "$work/nv-codec-headers" install PREFIX="$work/nvcodec"
 export ERIKA_LINUX_PKG_CONFIG_DIRS="$work/nvcodec/lib/pkgconfig:$(pkg-config --variable pc_path pkg-config)"
 export ERIKA_USE_SYSTEM_LIBS=0
+# CMake static dependencies are linked into the shared Erika runtime.
+export CFLAGS="${CFLAGS:-} -fPIC"
+export CXXFLAGS="${CXXFLAGS:-} -fPIC"
 export CARGO_TARGET_DIR="$work/target"
 # Keep native and Rust builds within the memory budget of both hosted runners.
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-2}
