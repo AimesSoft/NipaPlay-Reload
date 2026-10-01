@@ -34,7 +34,7 @@ export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-2}
 cd "$work/Erika"
 cargo run --locked -p xtask -- deps build --all --profile lgpl --jobs "${ERIKA_BUILD_JOBS:-4}"
 cargo rustc --locked --release -p erika_capi --lib -- \
-  -C link-arg=-Wl,-soname,liberika_capi.so \
+  -C link-arg=-Wl,-soname,liberika_capi.so -C link-arg=-Wl,-z,defs \
   -C link-arg=-lva -C link-arg=-lva-drm -C link-arg=-lva-x11 \
   -C link-arg=-ldrm -C link-arg=-ldl -C link-arg=-lm
 

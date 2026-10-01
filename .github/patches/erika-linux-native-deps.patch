@@ -32,3 +32,34 @@
      configure
          .arg(format!(
              "--pkg-config={}",
+--- a/crates/erika/build.rs
++++ b/crates/erika/build.rs
+@@ -219,10 +219,24 @@
+         );
+     }
+ 
+-    println!("cargo:rustc-link-lib=static=ass");
+-    println!("cargo:rustc-link-lib=static=fribidi");
+-    println!("cargo:rustc-link-lib=static=harfbuzz");
+-    println!("cargo:rustc-link-lib=static=freetype");
++    if target_os.as_deref() == Some("linux") {
++        // pkg-config also adds system library directories. Give bundled
++        // archives unique names so Rust cannot pack the distro's .a files.
++        let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
++        println!("cargo:rustc-link-search=native={}", out_dir.display());
++        for (dir, name) in [(&libass, "ass"), (&fribidi, "fribidi"),
++                            (&harfbuzz, "harfbuzz"), (&freetype, "freetype")] {
++            fs::copy(dir.join("lib").join(format!("lib{name}.a")),
++                     out_dir.join(format!("liberika_bundled_{name}.a")))
++                .expect("copy bundled Linux subtitle archive");
++            println!("cargo:rustc-link-lib=static=erika_bundled_{name}");
++        }
++    } else {
++        println!("cargo:rustc-link-lib=static=ass");
++        println!("cargo:rustc-link-lib=static=fribidi");
++        println!("cargo:rustc-link-lib=static=harfbuzz");
++        println!("cargo:rustc-link-lib=static=freetype");
++    }
+ 
+     if target_os.as_deref() == Some("windows") {
+         println!("cargo:rustc-link-lib=dwrite");

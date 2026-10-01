@@ -68,7 +68,7 @@ runs:
 
     - name: Cache Erika Linux runtime
       id: erika-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: build/erika-linux-runtime
         key: erika-linux-0.2.1-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('scripts/build_erika_linux_runtime.sh', '.github/patches/erika-linux-native-deps.patch', '.github/workflows/build-linux.yml', '.github/actions/build-linux/action.yml') }}
@@ -86,6 +86,13 @@ runs:
     - name: Smoke test Erika Linux runtime
       shell: bash
       run: python3 scripts/smoke_erika_linux_runtime.py "$ERIKA_LIBRARY_DIR"
+
+    - name: Cache verified Erika Linux runtime
+      if: steps.erika-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: build/erika-linux-runtime
+        key: ${{ steps.erika-cache.outputs.cache-primary-key }}
 
     - name: Build Web and copy assets
       shell: bash
