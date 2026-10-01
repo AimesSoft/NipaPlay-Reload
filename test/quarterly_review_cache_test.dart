@@ -68,13 +68,15 @@ void main() {
     final cache = QuarterlyReviewCache.forTesting();
     addTearDown(cache.dispose);
     final now = DateTime.now();
-    final season = QuarterlyReviewCache.seasonMonth(now);
+    final reviewSeason = QuarterlyReviewCache.visibleReviewSeason(now) ??
+        DateTime(now.year, QuarterlyReviewCache.seasonMonth(now));
+    final season = reviewSeason.month;
     final anime = BangumiAnime(
       id: 812345,
       name: 'Review test',
       nameCn: '回顾测试',
       imageUrl: 'https://example.com/poster.jpg',
-      airDate: '${now.year}-$season-01',
+      airDate: '${reviewSeason.year}-$season-01',
       bangumiUrl: 'https://bgm.tv/subject/987654',
     );
 
@@ -107,7 +109,7 @@ void main() {
       name: 'Second review test',
       nameCn: '第二部',
       imageUrl: '',
-      airDate: '${now.year}-$season-02',
+      airDate: '${reviewSeason.year}-$season-02',
       bangumiUrl: 'https://bgm.tv/subject/987655',
     );
     await cache.recordAnime(secondAnime);
@@ -120,8 +122,6 @@ void main() {
             .reserveCollectionProbe({secondAnime.id}, 'review-test-user', now),
         isNull);
 
-    final reviewSeason = QuarterlyReviewCache.visibleReviewSeason(now) ??
-        DateTime(now.year, season);
     final previewDate = DateTime(reviewSeason.year, reviewSeason.month - 1, 20);
     final broadcastDate = DateTime(reviewSeason.year, reviewSeason.month, 3);
     final existingDetail = BangumiAnime(
@@ -164,10 +164,10 @@ void main() {
             {secondAnime.id}, probeDay.add(const Duration(days: 1))),
         secondAnime.id);
 
-    final graceEnd = DateTime(now.year, season + 3, 7, 23, 59);
+    final graceEnd = DateTime(reviewSeason.year, season + 3, 7, 23, 59);
     expect(await cache.itemsFor({anime.id}, graceEnd, 'review-test-user'),
         hasLength(1));
-    final afterGrace = DateTime(now.year, season + 3, 8);
+    final afterGrace = DateTime(reviewSeason.year, season + 3, 8);
     expect(await cache.itemsFor({anime.id}, afterGrace, 'review-test-user'),
         isEmpty);
     final stored = json.decode(prefs.getString('quarterly_review_cache_v1')!)
@@ -177,14 +177,16 @@ void main() {
         (stored['collections'] as Map).containsKey('review-test-user:987654'),
         isFalse);
 
-    final nextSeason = DateTime(now.year, season + 3);
+    final nextSeason = DateTime(reviewSeason.year, season + 3);
     final preview = BangumiAnime(
       id: 812349,
       name: 'Preview retained for broadcast',
       nameCn: '跨季度预播',
       imageUrl: '',
-      airDate:
-          DateTime(now.year, season, 15).toIso8601String().split('T').first,
+      airDate: DateTime(reviewSeason.year, season, 15)
+          .toIso8601String()
+          .split('T')
+          .first,
       metadata: ['放送开始: ${nextSeason.toIso8601String().split('T').first}'],
     );
     await cache.recordAnime(preview);

@@ -8,12 +8,12 @@ NipaPlay 提供多种播放器内核，各有特点：
 
 - **Erika（自研内核）**：
   - ✅ NipaPlay 自研播放内核，Rust 实现
-  - ✅ 硬件解码 (VideoToolbox) + 零拷贝 Metal 渲染
+  - ✅ macOS/iOS 使用 VideoToolbox + Metal；Linux 使用 NVDEC / VA-API
   - ✅ 原生 HDR/EDR 支持，PQ (BT.2020) tone mapping
   - ✅ AI 超分 (ArtCNN 2x)、弹幕 GPU 原生渲染
-  - ✅ 覆盖所有当前原生客户端平台，**仅 Linux 不支持**；tvOS 会强制使用 Erika，Android TV 仍可选择其它已支持内核
+  - ✅ 覆盖所有当前原生客户端平台，Linux 从 1.11.9 起内置并默认使用；tvOS 会强制使用 Erika，Android TV 仍可选择其它已支持内核
   - ⚠️ 各平台的 HDR、硬解、surface 合成和真机验证状态不同，请查看 [平台能力矩阵](platform-matrix.md)
-  - 🔬 需在 设置 → 实验室 中开启
+  - 🔬 可在 设置 → 实验室 中选择；Linux 新安装默认启用，tvOS 固定使用
 
 - **Media Kit（libmpv）**：
   - ℹ️ Media Kit 是 Flutter 接入层，实际后端为 libmpv；设置页中的“Libmpv”和文档中的“Media Kit”是同一个内核选项
@@ -36,7 +36,7 @@ NipaPlay 提供多种播放器内核，各有特点：
 
 - **macOS/iOS/Windows/Android/HarmonyOS 用户**：均可在实验室功能中尝试 Erika；HDR、硬解和超分取决于设备与平台路径
 - **tvOS 用户**：播放器固定为 Erika，不能切换到其他内核
-- **Linux 用户**：Erika 不可用；使用 Media Kit（libmpv）或 MDK
+- **Linux 用户**：1.11.9 起默认使用 Erika，也可选择 Media Kit（libmpv）或 MDK
 - **问题排查**：除 tvOS 外，可在 Erika、Media Kit（libmpv）和 MDK 之间切换对比
 
 ## Windows 平台解码器优化
@@ -111,7 +111,7 @@ NipaPlay 提供多种弹幕渲染引擎，可在 设置 → 弹幕设置 中切�
 
 设置 → 实验室 中提供了一些正在开发中的实验性功能：
 
-- **Erika 播放器内核**：除 Linux 外可启用自研 Erika；仅 tvOS 始终使用 Erika。HDR 路径和回退行为见 [平台能力矩阵](platform-matrix.md)
+- **Erika 播放器内核**：各原生客户端平台均可使用 Erika，Linux 新安装默认启用；仅 tvOS 始终使用 Erika。HDR 路径和回退行为见 [平台能力矩阵](platform-matrix.md)
 - **Next2 弹幕内核**：启用 Next2 弹幕渲染引擎
 - **Next++ 激进优化**：启用 NipaPlay Next++ 弹幕引擎
 - **大屏幕模式**：针对平板/电视等大屏设备优化布局
