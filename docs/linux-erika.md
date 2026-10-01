@@ -1,21 +1,46 @@
 # Linux NipaPlay + Erika
 
-Source builds with Erika's Linux Flutter plugin support the Erika kernel.
-The build script enables `NIPAPLAY_LINUX_ERIKA`; fresh installs of that build
-default to Erika, and existing saved kernel choices remain selectable. Standard
-builds using the published Erika 0.2.0 package retain their existing kernel setup.
-On Wayland, the Linux view uses a native video subsurface below transparent
-Flutter controls, including native subtitles/danmaku. It avoids per-frame RGBA
-readback into Flutter. X11 uses the compatible SDR texture path. Set
-`ERIKA_LINUX_PRESENTATION=texture` to explicitly select that path on Wayland.
+NipaPlay 1.11.9 uses Erika Flutter 0.2.1. Linux release packages bundle the
+matching `liberika_capi.so` and enable `NIPAPLAY_LINUX_ERIKA`; fresh installs
+default to Erika, while existing saved kernel choices remain available.
+
+On Wayland, Erika renders into a native video subsurface below transparent
+Flutter controls, including native subtitles and danmaku. X11 uses the SDR
+Flutter texture path. Set `ERIKA_LINUX_PRESENTATION=texture` to use that path
+on Wayland too.
+
+## Release builds
+
+The Linux workflow builds amd64 and arm64 independently on their existing
+Ubuntu runners. It compiles the pinned Erika 0.2.1 source and statically links
+FFmpeg 8, dav1d, patched libass and its font libraries. PulseAudio, Vulkan and
+VA-API use the desktop system libraries. The dependency build enables NVDEC
+and VA-API with Vulkan interop; CUDA drivers are loaded at runtime. The build
+uses pinned Vulkan headers while keeping the system Vulkan loader.
+
+The runtime is cached by architecture, build scripts and workflow configuration.
+A C ABI smoke check opens a real video and exports a GIF before packaging.
+The Flutter bundle includes the runtime and its licenses, so users can select
+Erika after installing the regular DEB, RPM, AppImage or tar.gz package.
+
+To reproduce the native build on Linux, install the dependencies from
+[the build action](../.github/actions/build-linux/action.yml), then run:
+
+```sh
+bash scripts/build_erika_linux_runtime.sh "$PWD/build/erika-linux-runtime"
+export ERIKA_LIBRARY_DIR="$PWD/build/erika-linux-runtime/lib"
+python3 scripts/smoke_erika_linux_runtime.py "$ERIKA_LIBRARY_DIR"
+dart run tool/configure_flutter_dependencies.dart linux
+flutter pub get
+flutter build linux --release --dart-define=NIPAPLAY_LINUX_ERIKA=true
+```
 
 ## Build (Ubuntu 26.04 x86_64)
 
 Use the Linux Flutter SDK version in `.flutter-version-linux`, Cargo,
 and the Linux Erika checkout with FFmpeg 8 and patched libass already built.
-The required Linux plugin is introduced by
-[Erika PR #147](https://github.com/AimesSoft/Erika/pull/147); it is not included
-in the published Erika 0.2.0 package.
+The published Erika 0.2.1 package includes the Linux plugin. This source-build
+installer can also use a local Erika checkout for kernel development.
 Install these additional packages:
 
 ```sh
@@ -49,7 +74,7 @@ the build/cache/install locations. `PUB_HOSTED_URL` and
 
 Erika now provides an experimental Mesa D3D12 VA-API → GPU plane copy → Vulkan
 path. Build the isolated Mesa drivers first using Erika's
-[`docs/wsl-gpu-copy.md`](https://github.com/AimesSoft/Erika/blob/linux-support/docs/wsl-gpu-copy.md),
+[`docs/wsl-gpu-copy.md`](https://github.com/AimesSoft/Erika/blob/v0.2.1/docs/wsl-gpu-copy.md),
 then run this source-build installer with `NIPAPLAY_WSL_GPU_COPY=1`:
 
 ```sh

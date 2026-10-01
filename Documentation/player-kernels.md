@@ -6,7 +6,7 @@ NipaPlay 通过 `lib/player_abstraction/` 统一播放器接口，再由工厂�
 
 | 内核 | 适合场景 | 优点 | 注意事项 |
 |---|---|---|---|
-| Erika | 除 Linux 外的所有当前原生客户端平台；tvOS 唯一可用内核 | 自研 Rust 内核、原生 surface、硬件路径、ArtCNN、GPU 弹幕 | Linux 尚未支持；HDR 和硬解细节仍受设备、显示器和驱动影响 |
+| Erika | 所有当前原生客户端平台；Linux 1.11.9 起默认使用，tvOS 唯一可用内核 | 自研 Rust 内核、原生 surface、硬件路径、ArtCNN、GPU 弹幕 | Linux 支持 NVDEC / VA-API 与软件回退；HDR 和硬解能力取决于设备、显示器和驱动 |
 | Media Kit（libmpv） | 兼容性优先、复杂格式、桌面长期使用 | Flutter 接入 Media Kit、实际后端为 libmpv；格式覆盖广，Windows Release 通常带完整 libmpv | 自建包要确认 `libmpv-2.dll` 或对应动态库完整 |
 | MDK/FVP | 需要跨平台硬解或已有 MDK 兼容行为 | 依赖成熟、回退路径清晰 | 不同系统驱动差异可能影响硬解 |
 | Video Player | 最小依赖、基础播放和回归对比 | Flutter 官方 API，便于诊断 | 能力较基础，不适合作为复杂媒体的唯一内核 |

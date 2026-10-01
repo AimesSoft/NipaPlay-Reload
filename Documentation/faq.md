@@ -14,7 +14,7 @@
 - 启动后黑屏/无声/卡顿
 	- 见[故障排查](troubleshooting.md)；可先尝试切换内核、更新驱动、启用硬解。
 - 用哪个播放器内核最好？
-	- Media Kit（Libmpv）是通用兼容性选择；Erika 覆盖除 Linux 外的原生客户端平台，tvOS 固定使用 Erika。差异与取舍见[高级设置 - 播放器内核选择](settings.md#播放器内核选择)。
+	- Media Kit（Libmpv）是通用兼容性选择；Erika 覆盖所有当前原生客户端平台，Linux 从 1.11.9 起默认使用 Erika，tvOS 固定使用 Erika。差异与取舍见[高级设置 - 播放器内核选择](settings.md#播放器内核选择)。
 
 ## 资源获取
 

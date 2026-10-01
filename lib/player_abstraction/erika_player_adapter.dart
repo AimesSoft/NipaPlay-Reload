@@ -675,8 +675,7 @@ class ErikaPlayerAdapter
   static bool get _isHarmonyOS =>
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
 
-  // Enabled by the source-build script that bundles Erika's Linux plugin.
-  // The published 0.2.0 package does not yet contain that native backend.
+  // Enabled by Linux builds that bundle the matching Erika native runtime.
   static const bool linuxBuildEnabled =
       bool.fromEnvironment('NIPAPLAY_LINUX_ERIKA');
 

@@ -54,6 +54,46 @@ runs:
         # Install keybinder-3.0 for hotkey_manager
         sudo apt-get install -y libkeybinder-3.0-dev
 
+    - name: Install Erika native build dependencies
+      shell: bash
+      run: |
+        sudo apt-get install -y build-essential curl git patch zip unzip nasm \
+          python3-venv ffmpeg libclang-dev libpulse-dev libvulkan-dev libva-dev \
+          libdrm-dev libepoxy-dev libwayland-dev
+
+    - name: Setup Rust for Erika
+      uses: dtolnay/rust-toolchain@d0befba8b9ddf874327619e84c39b094edd58b66
+      with:
+        toolchain: 1.93.0
+
+    - name: Cache Erika Linux runtime
+      id: erika-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: build/erika-linux-runtime
+        key: erika-linux-0.2.1-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('scripts/build_erika_linux_runtime.sh', '.github/patches/erika-linux-native-deps.patch', '.github/workflows/build-linux.yml', '.github/actions/build-linux/action.yml') }}
+
+    - name: Build Erika Linux runtime
+      if: steps.erika-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash scripts/build_erika_linux_runtime.sh "$GITHUB_WORKSPACE/build/erika-linux-runtime"
+
+    - name: Configure Erika Linux plugin
+      shell: bash
+      run: |
+        echo "ERIKA_LIBRARY_DIR=$GITHUB_WORKSPACE/build/erika-linux-runtime/lib" >> "$GITHUB_ENV"
+
+    - name: Smoke test Erika Linux runtime
+      shell: bash
+      run: python3 scripts/smoke_erika_linux_runtime.py "$ERIKA_LIBRARY_DIR"
+
+    - name: Cache verified Erika Linux runtime
+      if: steps.erika-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: build/erika-linux-runtime
+        key: ${{ steps.erika-cache.outputs.cache-primary-key }}
+
     - name: Build Web and copy assets
       shell: bash
       run: |
@@ -172,7 +212,16 @@ runs:
         pkg-config --modversion mpv
         # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
         # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
-        flutter build linux --release --obfuscate --split-debug-info=build/symbols-linux
+        flutter build linux --release --obfuscate --split-debug-info=build/symbols-linux \
+          --dart-define=NIPAPLAY_LINUX_ERIKA=true
+        arch_dir=x64
+        if [ "${{ inputs.arch }}" = arm64 ]; then arch_dir=arm64; fi
+        bundle="build/linux/$arch_dir/release/bundle"
+        test -f "$bundle/lib/liberika_capi.so"
+        mkdir -p "$bundle/lib/erika-licenses"
+        cp -a build/erika-linux-runtime/licenses/. "$bundle/lib/erika-licenses/"
+        cp build/erika-linux-runtime/LICENSE build/erika-linux-runtime/THIRD_PARTY_NOTICES.md \
+          build/erika-linux-runtime/MANIFEST.txt "$bundle/lib/erika-licenses/"
     
     - name: Linux packaging and cleanup
       id: package
