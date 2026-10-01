@@ -23,11 +23,15 @@ class CupertinoMediaSearchToolbar extends material.StatelessWidget {
     required this.onChanged,
     required this.actions,
     this.leadingAction,
+    this.focusNode,
+    this.onSubmitted,
   });
 
   static const double controlHeight = 38;
 
   final material.TextEditingController controller;
+  final material.FocusNode? focusNode;
+  final material.ValueChanged<String>? onSubmitted;
   final String placeholder;
   final material.ValueChanged<String> onChanged;
   final CupertinoMediaSearchToolbarAction? leadingAction;
@@ -48,8 +52,10 @@ class CupertinoMediaSearchToolbar extends material.StatelessWidget {
               height: controlHeight,
               child: cupertino.CupertinoSearchTextField(
                 controller: controller,
+                focusNode: focusNode,
                 placeholder: placeholder,
                 onChanged: onChanged,
+                onSubmitted: onSubmitted,
                 onSuffixTap: () {
                   controller.clear();
                   onChanged('');
