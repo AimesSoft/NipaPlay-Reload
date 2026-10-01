@@ -18,26 +18,51 @@
          }
          if target.is_android() {
              assert_android_software_decoder_fallbacks(&flags);
-@@ -2610,7 +2621,12 @@
+@@ -1376,6 +1387,7 @@
+         .arg(&layout.fribidi_build_dir)
+         .arg(&layout.fribidi_source_dir)
+         .arg(format!("--prefix={}", layout.fribidi_prefix.display()))
++        .arg("--libdir=lib")
+         .arg("--default-library=static")
+         .arg("--buildtype=release")
+         .arg("-Ddocs=false")
+@@ -1460,6 +1472,7 @@
+         .arg(&layout.libass_build_dir)
+         .arg(&layout.libass_source_dir)
+         .arg(format!("--prefix={}", layout.libass_prefix.display()))
++        .arg("--libdir=lib")
+         .arg("--default-library=static")
+         .arg("--buildtype=release")
+         .arg("-Dtest=disabled")
+@@ -2610,7 +2623,20 @@
          path_to_forward_slashes(&layout.ffmpeg_prefix)
      ));
      let pkg_config = ensure_ffmpeg_pkg_config_shim(layout)?;
 -    let dav1d_pkg_config_dir = layout.dav1d_prefix.join("lib/pkgconfig");
-+    let dav1d_pkg_config_dir = if cfg!(target_os = "linux") && matches!(options.target, NativeTarget::Host) {
-+        format!("{}:{}", layout.dav1d_prefix.join("lib/pkgconfig").display(),
-+            env::var("ERIKA_LINUX_PKG_CONFIG_DIRS").unwrap_or_default())
-+    } else {
-+        layout.dav1d_prefix.join("lib/pkgconfig").display().to_string()
-+    };
++    let dav1d_pkg_config_dir =
++        if cfg!(target_os = "linux") && matches!(options.target, NativeTarget::Host) {
++            format!(
++                "{}:{}",
++                layout.dav1d_prefix.join("lib/pkgconfig").display(),
++                env::var("ERIKA_LINUX_PKG_CONFIG_DIRS").unwrap_or_default()
++            )
++        } else {
++            layout
++                .dav1d_prefix
++                .join("lib/pkgconfig")
++                .display()
++                .to_string()
++        };
      configure
          .arg(format!(
              "--pkg-config={}",
 --- a/crates/erika/build.rs
 +++ b/crates/erika/build.rs
-@@ -219,10 +219,24 @@
+@@ -219,10 +219,30 @@
          );
      }
- 
+-
++
 -    println!("cargo:rustc-link-lib=static=ass");
 -    println!("cargo:rustc-link-lib=static=fribidi");
 -    println!("cargo:rustc-link-lib=static=harfbuzz");
@@ -47,11 +72,17 @@
 +        // archives unique names so Rust cannot pack the distro's .a files.
 +        let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
 +        println!("cargo:rustc-link-search=native={}", out_dir.display());
-+        for (dir, name) in [(&libass, "ass"), (&fribidi, "fribidi"),
-+                            (&harfbuzz, "harfbuzz"), (&freetype, "freetype")] {
-+            fs::copy(dir.join("lib").join(format!("lib{name}.a")),
-+                     out_dir.join(format!("liberika_bundled_{name}.a")))
-+                .expect("copy bundled Linux subtitle archive");
++        for (dir, name) in [
++            (&libass, "ass"),
++            (&fribidi, "fribidi"),
++            (&harfbuzz, "harfbuzz"),
++            (&freetype, "freetype"),
++        ] {
++            fs::copy(
++                dir.join("lib").join(format!("lib{name}.a")),
++                out_dir.join(format!("liberika_bundled_{name}.a")),
++            )
++            .expect("copy bundled Linux subtitle archive");
 +            println!("cargo:rustc-link-lib=static=erika_bundled_{name}");
 +        }
 +    } else {
@@ -60,6 +91,7 @@
 +        println!("cargo:rustc-link-lib=static=harfbuzz");
 +        println!("cargo:rustc-link-lib=static=freetype");
 +    }
- 
+-
++
      if target_os.as_deref() == Some("windows") {
          println!("cargo:rustc-link-lib=dwrite");
