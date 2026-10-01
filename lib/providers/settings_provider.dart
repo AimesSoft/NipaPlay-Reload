@@ -9,6 +9,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SettingsProvider with ChangeNotifier {
   late SharedPreferences _prefs;
+  late final Future<void> _settingsLoaded;
 
   // --- Settings ---
   double _blurPower = 0.0; // Default blur power (无模糊)
@@ -81,7 +82,7 @@ class SettingsProvider with ChangeNotifier {
     // default immediately so iPad does not create a transient 2x texture and
     // rebuild it at 1.5x moments later during player startup.
     _danmakuSupersample = _defaultDanmakuSupersample();
-    _loadSettings();
+    _settingsLoaded = _loadSettings();
   }
 
   Future<void> _loadSettings() async {
@@ -165,8 +166,17 @@ class SettingsProvider with ChangeNotifier {
     _githubProxyUrl = _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
     // 弹幕超采样：iPad 默认 1.5x；其他平板和低 DPR 桌面设备维持 2x。
     // 已保存过设置的用户继续使用其现有值，仅影响首次默认值。
-    _danmakuSupersample = _prefs.getDouble(SettingsKeys.danmakuSupersample) ??
-        _defaultDanmakuSupersample();
+    final savedSupersample =
+        _parseDanmakuSupersample(_prefs.get(SettingsKeys.danmakuSupersampleV2)) ??
+            _parseDanmakuSupersample(
+                _prefs.get(SettingsKeys.danmakuSupersample));
+    _danmakuSupersample = savedSupersample ?? _defaultDanmakuSupersample();
+    if (savedSupersample != null) {
+      await _prefs.setString(
+        SettingsKeys.danmakuSupersampleV2,
+        savedSupersample.toStringAsFixed(1),
+      );
+    }
     notifyListeners();
   }
 
@@ -191,6 +201,18 @@ class SettingsProvider with ChangeNotifier {
       return 2.0;
     }
     return 0.0;
+  }
+
+  static double? _parseDanmakuSupersample(Object? value) {
+    // 字符串键明确区分“关闭”和未保存；兼容旧数值/开关存档。
+    final parsed = value is bool
+        ? (value ? 2.0 : 0.0)
+        : value is num
+            ? value.toDouble()
+            : value is String
+                ? double.tryParse(value)
+                : null;
+    return parsed == 0.0 || parsed == 1.5 || parsed == 2.0 ? parsed : null;
   }
 
   /// Toggles the background blur effect.
@@ -334,7 +356,14 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> setDanmakuSupersample(double value) async {
+    if (_parseDanmakuSupersample(value) == null) return;
+    // 等待首轮加载，避免设置尚未初始化或后到的默认值覆盖用户选择。
+    await _settingsLoaded;
     _danmakuSupersample = value;
+    await _prefs.setString(
+      SettingsKeys.danmakuSupersampleV2,
+      value.toStringAsFixed(1),
+    );
     await _prefs.setDouble(SettingsKeys.danmakuSupersample, value);
     notifyListeners();
   }
