@@ -14,7 +14,7 @@ on:
         required: true
         type: boolean
       run_linux:
-        description: 'Run Linux amd64 release build'
+        description: 'Run Linux amd64 and arm64 release builds'
         default: false
         required: true
         type: boolean
@@ -81,7 +81,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
 
   build-linux:
-    name: Linux amd64 Release Build
+    name: Linux Release Builds
     if: github.event_name == 'workflow_dispatch' && inputs.run_linux
     uses: ./.github/workflows/build-linux.yml
 
