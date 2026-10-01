@@ -27,6 +27,11 @@ const List<MediaSortOption> jellyfinSortOptions = [
     description: '按文件创建时间排序',
   ),
   MediaSortOption(
+    value: 'DateLastContentAdded',
+    label: '剧集添加日期',
+    description: '按最新剧集添加时间排序，最近更新的番剧排在前面',
+  ),
+  MediaSortOption(
     value: 'SortName',
     label: '名称',
     description: '按名称字母顺序排序',
