@@ -1,11 +1,12 @@
 --- a/xtask/src/main.rs
 +++ b/xtask/src/main.rs
-@@ -283,6 +283,15 @@
+@@ -283,6 +283,16 @@
              }
          } else if target.is_apple() {
              flags.push("--enable-videotoolbox");
 +        } else if matches!(target, NativeTarget::Host) && cfg!(target_os = "linux") {
 +            flags.extend([
++                "--enable-ffnvcodec",
 +                "--enable-cuda",
 +                "--enable-cuvid",
 +                "--enable-nvdec",
@@ -16,7 +17,7 @@
          }
          if target.is_android() {
              assert_android_software_decoder_fallbacks(&flags);
-@@ -2610,7 +2619,12 @@
+@@ -2610,7 +2620,12 @@
          path_to_forward_slashes(&layout.ffmpeg_prefix)
      ));
      let pkg_config = ensure_ffmpeg_pkg_config_shim(layout)?;
