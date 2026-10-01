@@ -111,7 +111,7 @@ NipaPlay 提供多种弹幕渲染引擎，可在 设置 → 弹幕设置 中切�
 
 设置 → 实验室 中提供了一些正在开发中的实验性功能：
 
-- **Erika 播放器内核**：除 Linux 外可启用自研 Erika；仅 tvOS 始终使用 Erika。HDR 路径和回退行为见 [平台能力矩阵](platform-matrix.md)
+- **Erika 播放器内核**：各原生客户端平台均可使用 Erika，Linux 新安装默认启用；仅 tvOS 始终使用 Erika。HDR 路径和回退行为见 [平台能力矩阵](platform-matrix.md)
 - **Next2 弹幕内核**：启用 Next2 弹幕渲染引擎
 - **Next++ 激进优化**：启用 NipaPlay Next++ 弹幕引擎
 - **大屏幕模式**：针对平板/电视等大屏设备优化布局
