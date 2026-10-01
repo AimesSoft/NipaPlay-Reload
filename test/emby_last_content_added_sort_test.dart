@@ -9,18 +9,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   const sortBy = 'DateLastContentAdded';
 
-  test('Emby exposes last episode added with both sort orders', () {
+  test('Emby and Jellyfin expose last episode added with both sort orders', () {
     final option = getMediaSortOptions(MediaLibraryType.emby).singleWhere(
       (option) => option.value == sortBy,
     );
 
     expect(option.label, '最后一集添加时间');
     expect(option.description, '按最后一集添加时间排序');
-    expect(
-      getMediaSortOptions(MediaLibraryType.jellyfin)
-          .where((option) => option.value == sortBy),
-      isEmpty,
+    final jellyfinOption =
+        getMediaSortOptions(MediaLibraryType.jellyfin).singleWhere(
+      (option) => option.value == sortBy,
     );
+    expect(jellyfinOption.label, '剧集添加日期');
     expect(
       mediaLibrarySortOrders,
       <Map<String, String>>[

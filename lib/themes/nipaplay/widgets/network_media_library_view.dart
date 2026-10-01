@@ -1017,8 +1017,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final provider = _provider;
     final currentSortSettings = _getCurrentRemoteSortSettings(provider);
     final items = _buildRemoteSortItems(
-      currentSortSettings['sortBy']!,
-      currentSortSettings['sortOrder']!,
+      currentSortSettings['sortBy'] ?? provider.currentSortBy,
+      currentSortSettings['sortOrder'] ?? provider.currentSortOrder,
     );
     final selection = await showInViewDialog<_RemoteSortSelection>(
       context: context,
@@ -2009,16 +2009,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               await (service as JellyfinService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
-            sortBy: sortSettings['sortBy']!,
-            sortOrder: sortSettings['sortOrder']!,
+            sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
+            sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
           break;
         case NetworkMediaServerType.emby:
           items = await (service as EmbyService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
-            sortBy: sortSettings['sortBy']!,
-            sortOrder: sortSettings['sortOrder']!,
+            sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
+            sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
           break;
       }
@@ -2204,8 +2204,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final provider = _provider;
     final currentSortSettings = _getCurrentRemoteSortSettings(provider);
     final items = _buildRemoteSortItems(
-      currentSortSettings['sortBy']!,
-      currentSortSettings['sortOrder']!,
+      currentSortSettings['sortBy'] ?? provider.currentSortBy,
+      currentSortSettings['sortOrder'] ?? provider.currentSortOrder,
     );
 
     final screenHeight = MediaQuery.sizeOf(context).height;

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/media_library_sort_settings.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -55,10 +56,11 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 获取特定媒体库的排序设置
   Map<String, String> getLibrarySortSettings(String libraryId) {
-    return _librarySpecificSortSettings[libraryId] ?? {
-      'sortBy': _currentSortBy,
-      'sortOrder': _currentSortOrder,
-    };
+    return resolveMediaLibrarySortSettings(
+      _librarySpecificSortSettings[libraryId],
+      defaultSortBy: _currentSortBy,
+      defaultSortOrder: _currentSortOrder,
+    );
   }
   
   // 设置特定媒体库的排序设置
@@ -92,7 +94,14 @@ class JellyfinProvider extends ChangeNotifier {
       final sortSettingsJson = prefs.getString('jellyfin_library_sort_settings');
       if (sortSettingsJson != null) {
         final Map<String, dynamic> decoded = json.decode(sortSettingsJson);
-        _librarySpecificSortSettings = decoded.map((key, value) => MapEntry(key, Map<String, String>.from(value)));
+        _librarySpecificSortSettings = decoded.map((key, value) => MapEntry(
+              key,
+              resolveMediaLibrarySortSettings(
+                value,
+                defaultSortBy: _currentSortBy,
+                defaultSortOrder: _currentSortOrder,
+              ),
+            ));
         print('JellyfinProvider: 加载了媒体库排序设置: $_librarySpecificSortSettings');
       }
     } catch (e) {
