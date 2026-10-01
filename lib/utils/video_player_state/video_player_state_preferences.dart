@@ -356,11 +356,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 加载弹幕可见性
   Future<void> _loadDanmakuVisible() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_hasExplicitDanmakuVisibility) return;
     _danmakuVisible = prefs.getBool(SettingsKeys.danmakuVisible) ?? true;
     _notifyListeners();
   }
 
-  void setDanmakuVisible(bool visible) async {
+  Future<void> setDanmakuVisible(bool visible) async {
+    _hasExplicitDanmakuVisibility = true;
     if (_danmakuVisible != visible) {
       _danmakuVisible = visible;
       // Visibility is latency-sensitive and Erika exposes a dedicated toggle.
@@ -370,9 +372,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         unawaited(player.setNativeDanmakuEnabled(visible));
       }
       _notifyListeners();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.danmakuVisible, visible);
     }
+    // 即使内存值相同也保存显式选择，避免启动默认值掩盖旧存档。
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SettingsKeys.danmakuVisible, visible);
   }
 
   void toggleDanmakuVisible() {

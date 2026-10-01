@@ -25,6 +25,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   Future<void> _initialize() async {
+    await _loadDanmakuVisible(); // 在耗时的平台初始化前恢复弹幕开关
     if (globals.isMobilePlatform) {
       // 使用新的屏幕方向管理器设置初始方向
       await ScreenOrientationManager.instance.setInitialOrientation();
@@ -45,7 +46,6 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await applyPrecacheBufferSettings(); // 应用预缓存设置
     await _loadTimelinePreviewSetting(); // 加载时间轴缩略图开关
     await _loadDanmakuOpacity(); // 加载保存的弹幕不透明度
-    await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
     await _loadDanmakuRandomColorEnabled(); // 加载弹幕随机染色设置

@@ -872,9 +872,9 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                     subtitle: '以更高像素密度渲染弹幕，使文字更清晰',
                     icon: Ionicons.expand_outline,
                     items: items,
-                    onChanged: (dynamic value) {
+                    onChanged: (dynamic value) async {
                       if (value is! double) return;
-                      settingsProvider.setDanmakuSupersample(value);
+                      await settingsProvider.setDanmakuSupersample(value);
                       if (context.mounted) {
                         final label = value == 0.0 ? '关闭' : '${value}x';
                         BlurSnackBar.show(
