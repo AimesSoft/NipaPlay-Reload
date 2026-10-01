@@ -6,7 +6,7 @@ output=${1:-"$project_root/build/erika-linux-runtime"}
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
 erika_commit=70f12bf325ce8d020d2155635f5992eff4654321
-nvcodec_commit=57f8cc0bb68e5f16f3787ea92cea59000f7bf97f
+nvcodec_commit=e844e5b26f46bb77479f063029595293aa8f812d
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/nipaplay-erika.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
@@ -30,10 +30,12 @@ cargo rustc --locked --release -p erika_capi --lib -- \
   -C link-arg=-ldrm -C link-arg=-ldl -C link-arg=-lm
 
 # Use Erika's own packaging to include every dependency/asset license.
-bash packaging/bundle.sh erika-linux "$work/erika-linux.zip" "$CARGO_TARGET_DIR/release/liberika_capi.so"
+GITHUB_SHA="$erika_commit" GITHUB_REF_NAME=v0.2.1 ERIKA_NATIVE_PROFILE=lgpl \
+  bash packaging/bundle.sh erika-linux "$work/erika-linux.zip" "$CARGO_TARGET_DIR/release/liberika_capi.so"
 unzip -q "$work/erika-linux.zip" -d "$work/bundle"
 mkdir -p "$output"
 cp -a "$work/bundle/erika-linux/." "$output/"
+cp third_party/src/fribidi-1.0.16/COPYING "$output/licenses/LICENSE.FriBidi"
 python3 - "$work/nv-codec-headers/include/ffnvcodec" "$output/licenses/LICENSE.nv-codec-headers" <<'PYLICENSE'
 from pathlib import Path
 import sys

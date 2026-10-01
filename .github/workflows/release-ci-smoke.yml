@@ -71,6 +71,9 @@ jobs:
         if: steps.detect_tests.outputs.has_tests == 'true'
         run: flutter test --no-pub --reporter expanded
 
+      - name: Verify enabled Linux Erika kernel policy
+        run: flutter test --no-pub --dart-define=NIPAPLAY_LINUX_ERIKA=true test/linux_erika_kernel_policy_test.dart
+
       - name: Skip flutter test
         if: steps.detect_tests.outputs.has_tests != 'true'
         run: echo "No root-level *_test.dart files found. Skipping flutter test."
