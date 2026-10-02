@@ -1,3 +1,6 @@
+Never exit(int code) =>
+    throw UnsupportedError('Process exit is unavailable on the web');
+
 // A stub for the 'dart:io' Platform class.
 class Platform {
   static bool get isAndroid => false;
@@ -29,4 +32,4 @@ class Directory {
   void createSync({bool recursive = false}) {
     // no-op on web
   }
-} 
+}
