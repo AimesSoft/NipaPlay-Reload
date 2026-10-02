@@ -637,9 +637,15 @@ class NipaplayWindow {
       context.read<LargeScreenUiSfxService>().playOpenSubPage();
       result = Navigator.of(context).push<T>(
         NipaplayLargeScreenWindowPageRoute<T>(
-          builder: (_) => NipaplayLargeScreenContentPage(
-            closeOnBack: true,
-            child: child,
+          builder: (_) => NipaplayLargeScreenModeScope(
+            isActive: true,
+            child: Material(
+              type: MaterialType.transparency,
+              child: NipaplayLargeScreenContentPage(
+                closeOnBack: true,
+                child: child,
+              ),
+            ),
           ),
           enableAnimation: enableAnimation,
           dismissible: barrierDismissible,

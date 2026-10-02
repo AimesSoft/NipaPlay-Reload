@@ -139,6 +139,16 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
 
   TabController? _tabController;
   String? _hoveredEpisodeId;
+  final FocusNode _largeScreenPlayFocusNode =
+      FocusNode(debugLabel: 'media_detail_play');
+  final FocusNode _largeScreenCloseFocusNode =
+      FocusNode(debugLabel: 'media_detail_close');
+  final FocusNode _largeScreenSeasonFocusNode =
+      FocusNode(debugLabel: 'media_detail_selected_season');
+  final FocusNode _largeScreenEpisodeFocusNode =
+      FocusNode(debugLabel: 'media_detail_first_episode');
+  final FocusNode _largeScreenRetryFocusNode =
+      FocusNode(debugLabel: 'media_detail_retry');
   late final CachedEmbyMediaSourceCatalog _embyMediaSourceCatalog;
   late final Future<EmbyMediaPreferenceStore> _embyPreferenceStore;
   late final String _embyPageCacheScope;
@@ -232,7 +242,46 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
   @override
   void dispose() {
     _tabController?.dispose();
+    _largeScreenPlayFocusNode.dispose();
+    _largeScreenCloseFocusNode.dispose();
+    _largeScreenSeasonFocusNode.dispose();
+    _largeScreenEpisodeFocusNode.dispose();
+    _largeScreenRetryFocusNode.dispose();
     super.dispose();
+  }
+
+  void _requestLargeScreenContentFocus({String? seasonId}) {
+    if (!mounted || !NipaplayLargeScreenModeScope.isActiveOf(context)) return;
+
+    // Async content must be mounted before focus moves from the loading state.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !NipaplayLargeScreenModeScope.isActiveOf(context) ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          (seasonId != null && seasonId != _selectedSeasonId)) {
+        return;
+      }
+
+      final episodes = _episodesBySeasonId[_selectedSeasonId] ?? [];
+      final FocusNode target;
+      if (_error != null) {
+        target = _largeScreenRetryFocusNode;
+      } else if (_isPlayableItem) {
+        target = _largeScreenPlayFocusNode;
+      } else if (!_isLoading && episodes.isNotEmpty) {
+        target = _largeScreenEpisodeFocusNode;
+      } else if (_seasons.isNotEmpty) {
+        target = _largeScreenSeasonFocusNode;
+      } else {
+        target = _largeScreenCloseFocusNode;
+      }
+
+      if (target.context != null && target.canRequestFocus) {
+        target.requestFocus();
+      } else if (_largeScreenCloseFocusNode.context != null) {
+        _largeScreenCloseFocusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _loadMediaDetail() async {
@@ -287,6 +336,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         }
       });
 
+      if (_isPlayableItem) {
+        _requestLargeScreenContentFocus();
+      }
+
       // 如果是剧集，才加载季节信息
       if (!_isPlayableItem) {
         dynamic seasons;
@@ -302,12 +355,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             _seasons = seasons;
             _isLoading = false;
 
-            // 如果有季，选择第一个季
-            if (seasons.isNotEmpty) {
-              _selectedSeasonId = seasons.first.id;
-              _loadEpisodesForSeason(seasons.first.id);
-            }
+            _selectedSeasonId = seasons.isNotEmpty ? seasons.first.id : null;
           });
+          if (_selectedSeasonId != null) {
+            unawaited(_loadEpisodesForSeason(_selectedSeasonId!));
+          } else {
+            _requestLargeScreenContentFocus();
+          }
         }
       }
     } catch (e) {
@@ -316,16 +370,21 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           _error = e.toString();
           _isLoading = false;
         });
+        _requestLargeScreenContentFocus();
       }
     }
   }
 
   Future<void> _loadEpisodesForSeason(String seasonId) async {
+    if (!mounted) return;
     // 如果已经加载过，不重复加载
     if (_episodesBySeasonId.containsKey(seasonId)) {
       setState(() {
         _selectedSeasonId = seasonId;
+        _isLoading = false;
+        _error = null;
       });
+      _requestLargeScreenContentFocus(seasonId: seasonId);
       return;
     }
 
@@ -334,6 +393,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       _error = null;
       _selectedSeasonId = seasonId;
     });
+    _requestLargeScreenContentFocus(seasonId: seasonId);
 
     try {
       // 确保_mediaDetail不为null且有有效id
@@ -343,6 +403,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             _error = '无法获取剧集详情，无法加载剧集列表。';
             _isLoading = false;
           });
+          _requestLargeScreenContentFocus(seasonId: seasonId);
         }
         return;
       }
@@ -359,18 +420,24 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       if (mounted) {
         setState(() {
           _episodesBySeasonId[seasonId] = episodes;
-          _isLoading = false;
+          if (_selectedSeasonId == seasonId) {
+            _isLoading = false;
+          }
         });
+        if (_selectedSeasonId == seasonId) {
+          _requestLargeScreenContentFocus(seasonId: seasonId);
+        }
         if (widget.serverType == MediaServerType.emby) {
           unawaited(_loadSavedEmbySourceLabels(List<dynamic>.from(episodes)));
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _selectedSeasonId == seasonId) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
         });
+        _requestLargeScreenContentFocus(seasonId: seasonId);
       }
     }
   }
@@ -897,6 +964,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         action: NipaplayLargeScreenActionButton(
           icon: Icons.refresh_rounded,
           label: '重试',
+          focusNode: _largeScreenRetryFocusNode,
           onPressed: _loadMediaDetail,
         ),
       );
@@ -937,12 +1005,14 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             NipaplayLargeScreenActionButton(
               icon: Icons.play_arrow_rounded,
               label: '播放',
-              autofocus: true,
+              focusNode: _largeScreenPlayFocusNode,
               onPressed: _isDetailAutoMatching ? null : _playMediaItem,
             ),
           NipaplayLargeScreenIconButton(
             icon: Icons.close_rounded,
             tooltip: '关闭',
+            focusNode: _largeScreenCloseFocusNode,
+            autofocus: _mediaDetail == null,
             onPressed: () => Navigator.of(context).maybePop(),
           ),
         ],
@@ -1134,6 +1204,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                   final season = _seasons[index];
                   final selected = season.id == _selectedSeasonId;
                   return NipaplayLargeScreenFocusableAction(
+                    key: ValueKey('media_detail_season_${season.id}'),
+                    focusNode: selected ? _largeScreenSeasonFocusNode : null,
                     onActivate: () => _loadEpisodesForSeason(season.id),
                     borderRadius: BorderRadius.circular(8),
                     padding: const EdgeInsets.symmetric(
@@ -1193,6 +1265,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         action: NipaplayLargeScreenActionButton(
           icon: Icons.refresh_rounded,
           label: '重试',
+          focusNode: _largeScreenRetryFocusNode,
           onPressed: () => _loadEpisodesForSeason(_selectedSeasonId!),
         ),
       );
@@ -1210,6 +1283,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         final columns =
             (constraints.maxWidth / 310).floor().clamp(2, 5).toInt();
         return GridView.builder(
+          key: ValueKey('media_detail_episodes_$_selectedSeasonId'),
           padding: const EdgeInsets.only(bottom: 18),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
@@ -1219,14 +1293,19 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           ),
           itemCount: episodes.length,
           itemBuilder: (context, index) {
-            return _buildLargeScreenEpisodeCard(episodes[index], service);
+            return _buildLargeScreenEpisodeCard(
+              episodes[index],
+              service,
+              focusNode: index == 0 ? _largeScreenEpisodeFocusNode : null,
+            );
           },
         );
       },
     );
   }
 
-  Widget _buildLargeScreenEpisodeCard(dynamic episode, dynamic service) {
+  Widget _buildLargeScreenEpisodeCard(dynamic episode, dynamic service,
+      {FocusNode? focusNode}) {
     final episodeImageUrl = episode.imagePrimaryTag != null
         ? _getEpisodeImageUrl(episode, service)
         : '';
@@ -1242,6 +1321,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         .replaceAll('<br />', ' ');
 
     return NipaplayLargeScreenFocusableAction(
+      key: ValueKey('media_detail_episode_${episode.id}'),
+      focusNode: focusNode,
       onActivate: _isDetailAutoMatching ? null : () => _playEpisode(episode),
       borderRadius: BorderRadius.circular(8),
       focusScale: 1.025,
