@@ -1134,6 +1134,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                   final season = _seasons[index];
                   final selected = season.id == _selectedSeasonId;
                   return NipaplayLargeScreenFocusableAction(
+                    // 大屏/遥控端：详情页打开时必须有一个可交互控件自动拿到
+                    // 焦点，否则焦点停在页面级 scope 上，屏幕上没有任何高亮，
+                    // 遥控器也难以上焦到内容区。选中季（默认第一季）即初始落点。
+                    autofocus: selected,
                     onActivate: () => _loadEpisodesForSeason(season.id),
                     borderRadius: BorderRadius.circular(8),
                     padding: const EdgeInsets.symmetric(
