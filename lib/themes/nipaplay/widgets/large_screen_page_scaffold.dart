@@ -270,6 +270,7 @@ class NipaplayLargeScreenActionButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.focusNode,
     this.autofocus = false,
     this.compact = false,
     this.tooltip,
@@ -278,6 +279,7 @@ class NipaplayLargeScreenActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
+  final FocusNode? focusNode;
   final bool autofocus;
   final bool compact;
   final String? tooltip;
@@ -285,6 +287,7 @@ class NipaplayLargeScreenActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final child = NipaplayLargeScreenFocusableAction(
+      focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onPressed,
       borderRadius: BorderRadius.circular(8),
@@ -328,12 +331,14 @@ class NipaplayLargeScreenIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.focusNode,
     this.autofocus = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
+  final FocusNode? focusNode;
   final bool autofocus;
 
   @override
@@ -341,6 +346,7 @@ class NipaplayLargeScreenIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: NipaplayLargeScreenFocusableAction(
+        focusNode: focusNode,
         autofocus: autofocus,
         onActivate: onPressed,
         borderRadius: BorderRadius.circular(8),
