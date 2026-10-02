@@ -34,6 +34,23 @@ class _NativePlayer extends Fake implements mdk.Player {
 }
 
 void main() {
+  test('OHOS MDK status streams forward changes and cancel on teardown',
+      () async {
+    final source = StreamController<
+        ({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>(sync: true);
+    final statuses = <mdk.MediaStatus>[];
+    final subscription = listenMdkMediaStatus(source.stream, statuses.add);
+    final buffering = const mdk.MediaStatus(mdk.MediaStatus.buffering);
+    final buffered = const mdk.MediaStatus(mdk.MediaStatus.buffered);
+    source.add((oldValue: buffered, newValue: buffering));
+    source.add((oldValue: buffering, newValue: buffered));
+    expect(statuses, [buffering, buffered]);
+    await subscription!.cancel();
+    source.add((oldValue: buffered, newValue: buffering));
+    expect(statuses, [buffering, buffered]);
+    await source.close();
+  });
+
   test('MDK buffering follows native status and ignores post-dispose events',
       () async {
     final native = _NativePlayer();

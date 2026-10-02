@@ -9,6 +9,26 @@ import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
 @visibleForTesting
+StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
+    listenMdkMediaStatus(
+  Object source,
+  void Function(mdk.MediaStatus status) onStatus,
+) {
+  if (source
+      is Stream<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>) {
+    return source.listen((event) => onStatus(event.newValue));
+  }
+  // Mainline FVP 0.33 registers a callback; the OHOS 0.37 fork uses a stream.
+  (source as void Function(
+    bool Function(mdk.MediaStatus oldStatus, mdk.MediaStatus status),
+  ))((oldStatus, status) {
+    onStatus(status);
+    return true;
+  });
+  return null;
+}
+
+@visibleForTesting
 void applyMdkUserAgentProperties(
   void Function(String key, String value) setter,
   String userAgent,
@@ -208,6 +228,8 @@ class MdkPlayerAdapter
   // disposeAsync，必须合并为同一次 teardown，杜绝 double mdkPlayerAPI_delete。
   bool _isDisposed = false;
   Future<void>? _disposeAsyncFuture;
+  StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
+      _mediaStatusSubscription;
   MdkPlayerAdapter({String? httpProxy})
       : _httpProxy = (httpProxy ?? '').trim() {
     _mdkPlayer = mdk.Player();
@@ -222,11 +244,11 @@ class MdkPlayerAdapter
   }
 
   void _attachMdkBufferingListener() {
-    _mdkPlayer.onMediaStatus((oldStatus, status) {
+    _mediaStatusSubscription =
+        listenMdkMediaStatus(_mdkPlayer.onMediaStatus, (status) {
       if (!_isDisposed) {
         _buffering.value = status.test(mdk.MediaStatus.buffering);
       }
-      return true;
     });
     _buffering.value = _mdkPlayer.mediaStatus.test(mdk.MediaStatus.buffering);
   }
@@ -489,6 +511,7 @@ class MdkPlayerAdapter
   Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
     _buffering.dispose();
+    await _mediaStatusSubscription?.cancel();
     PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
     await Future<void>.sync(_mdkPlayer.dispose);
     PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
