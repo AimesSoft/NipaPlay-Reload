@@ -665,14 +665,6 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.publish_ios_from_run_id }}
 
-      - name: Download generated GitHub release notes from source run
-        uses: actions/download-artifact@v4
-        with:
-          name: release-notes
-          path: ${{ runner.temp }}/release-notes
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.publish_ios_from_run_id }}
-
       - name: Validate and inspect existing App Store artifact
         shell: bash
         env:
@@ -705,12 +697,6 @@ jobs:
             exit 1
           fi
 
-          release_notes="$RUNNER_TEMP/release-notes/release_notes.md"
-          if [ ! -s "$release_notes" ]; then
-            echo "Generated GitHub release notes are empty." >&2
-            exit 1
-          fi
-
           info_plist_entry="$(unzip -Z1 "$signed_ipa" | grep -E '^Payload/[^/]+\.app/Info\.plist$' | head -n 1)"
           if [ -z "$info_plist_entry" ]; then
             echo "Unable to locate the app Info.plist inside the signed IPA." >&2
@@ -729,9 +715,24 @@ jobs:
 
           echo "Publishing existing iOS artifact: version $app_version, build $app_build_number"
           echo "SIGNED_IPA=$signed_ipa" >> "$GITHUB_ENV"
-          echo "GITHUB_RELEASE_NOTES=$release_notes" >> "$GITHUB_ENV"
           echo "APP_VERSION=$app_version" >> "$GITHUB_ENV"
           echo "APP_BUILD_NUMBER=$app_build_number" >> "$GITHUB_ENV"
+
+      - name: Read published GitHub release notes for the IPA version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-notes"
+          release_notes="$RUNNER_TEMP/release-notes/release_notes.md"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$APP_VERSION" \
+            --jq '.body' > "$release_notes"
+          if [ ! -s "$release_notes" ]; then
+            echo "Published GitHub release notes are empty for v$APP_VERSION." >&2
+            exit 1
+          fi
+          echo "GITHUB_RELEASE_NOTES=$release_notes" >> "$GITHUB_ENV"
 
       - name: Generate Chinese and English App Store release notes
         shell: bash
