@@ -409,6 +409,16 @@ class MediaSourceUtils {
     );
   }
 
+  /// 同 [resolveWebDavPathToUrl]，但会先确保 WebDAV 连接配置已从本地存储加载。
+  ///
+  /// WebDAVService 的连接列表要等 initialize() 完成才有内容；调用链上若没有
+  /// 其它环节触发过初始化（例如播放器内的续播/下一话逻辑），同步版本会因为
+  /// 连接列表为空而返回 null，表现为"无法解析远程媒体路径"。
+  static Future<String?> resolveWebDavPathToUrlInitialized(String filePath) async {
+    await WebDAVService.instance.initialize();
+    return resolveWebDavPathToUrl(filePath);
+  }
+
   /// 将新格式 SMB 路径解析为可播放的代理 URL
   /// 返回 null 如果找不到对应连接
   static String? resolveSmbPathToUrl(String filePath) {

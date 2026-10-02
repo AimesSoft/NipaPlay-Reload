@@ -866,6 +866,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                     CachedNetworkImageWidget(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
+                      // 封面 URL 本身就是 460 宽的缩放版本；不限制解码尺寸时
+                      // 会按原始分辨率整图解码（每张可达数 MB），在 32MB 的
+                      // 电视字节预算下反复淘汰重解码，封面墙会加载到一半停住。
+                      memCacheWidth: 460,
+                      memCacheHeight: 690,
                       errorBuilder: (_, __) =>
                           _buildLargeScreenFallbackPoster(textColor),
                     ),
