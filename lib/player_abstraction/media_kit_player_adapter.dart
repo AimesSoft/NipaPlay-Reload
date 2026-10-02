@@ -2697,6 +2697,20 @@ class MediaKitPlayerAdapter
     return _properties[name];
   }
 
+  /// 直读 mpv 实时属性（绕过本地缓存）。media_kit 的 platform.getProperty
+  /// 是异步通道，供 sub-text 等需要逐帧新鲜值的调用方使用。
+  Future<String?> getLiveProperty(String name) async {
+    try {
+      final dynamic platform = _player.platform;
+      if (platform == null) return null;
+      final value = platform.getProperty?.call(name);
+      final resolved = value is Future ? await value : value;
+      return resolved?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void setUserAgent(String ua) {
     try {

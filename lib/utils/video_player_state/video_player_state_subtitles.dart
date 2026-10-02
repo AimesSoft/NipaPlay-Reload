@@ -159,12 +159,17 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     _subtitleManager.setExternalSubtitle(path,
         isManualSetting: isManualSetting);
+    // Activation changes which kernel track owns the sid; the whole-block
+    // mode must step aside for a kernel-rendered external ASS (and resume
+    // for embedded tracks), so re-sync sub-visibility.
+    applyEmbeddedSubtitleOverlayKernelState();
     _notifyListeners();
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
+    applyEmbeddedSubtitleOverlayKernelState();
     _notifyListeners();
   }
 
@@ -255,6 +260,143 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 桥接方法：当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     _subtitleManager.onSubtitleTrackChanged();
+  }
+
+  // ---- Whole-block embedded subtitle mode (bilingual, non-overlapping) ----
+
+  /// Whether whole-block mode is enabled. With it on, the kernel only
+  /// decodes (sub-visibility=no) while the app renders the whole block from
+  /// sub-text polling: the position slider moves the entire block so the
+  /// authored bilingual line gap never collapses, and the horizontal margin
+  /// applies in screen pixels regardless of the script's PlayRes.
+  ///
+  /// Exception: while a kernel-rendered external ASS/SSA is active the mode
+  /// steps aside (see [isKernelRenderedExternalAssActive]) so libass keeps
+  /// rendering that track with its script styles.
+  bool get embeddedSubtitleOverlayMode => _embeddedSubtitleOverlayMode;
+
+  /// Whether the currently active external subtitle is a kernel-track
+  /// ASS/SSA. Whole-block mode only serves embedded tracks — an external
+  /// ASS is rendered by libass with script-dominant styling; flattening it
+  /// through sub-visibility=no + a sub-text text block would strip \pos
+  /// positioning and colors.
+  bool get isKernelRenderedExternalAssActive =>
+      _subtitleManager.isKernelRenderedExternalAssActive();
+
+  Future<void> setEmbeddedSubtitleOverlayMode(bool enabled) async {
+    if (_embeddedSubtitleOverlayMode == enabled) return;
+    _embeddedSubtitleOverlayMode = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_embeddedSubtitleOverlayModeKey, enabled);
+    applyEmbeddedSubtitleOverlayKernelState();
+    _notifyListeners();
+  }
+
+  /// Whole-block text for the current position (kernel sub-text polling;
+  /// empty = no subtitle right now).
+  String get embeddedSubtitleOverlayText => _embeddedSubtitleOverlayText;
+
+  /// The text actually rendered: bilingual line order auto-correction.
+  /// The kernel orders sub-text lines by event order, which may put the
+  /// Japanese line first. Lines containing kana are treated as the original
+  /// (bottom), pure-Han lines as the translation (top); when there is no
+  /// kana evidence the kernel order is kept.
+  String get embeddedSubtitleOverlayDisplayText {
+    final text = _embeddedSubtitleOverlayText;
+    if (!text.contains('\n')) return text;
+    final lines = text.split('\n');
+    bool hasKana(String s) {
+      for (final r in s.runes) {
+        if ((r >= 0x3041 && r <= 0x309F) || // Hiragana
+            (r >= 0x30A0 && r <= 0x30FF) || // Katakana
+            (r >= 0x31F0 && r <= 0x31FF) || // Katakana phonetic extensions
+            (r >= 0xFF66 && r <= 0xFF9D)) {
+          // Halfwidth katakana
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final kanaCount = lines.where(hasKana).length;
+    if (kanaCount == 0 || kanaCount == lines.length) return text;
+    final japanese = lines.where(hasKana).toList();
+    final chinese = lines.where((l) => !hasKana(l)).toList();
+    return [...chinese, ...japanese].join('\n');
+  }
+
+  /// Sync the kernel render switch with the current mode. Idempotent; call
+  /// after mode toggles, video open, kernel hot-swap, and external-subtitle
+  /// activation changes. Media Kit + mode on + no kernel-rendered external
+  /// ASS -> sub-visibility=no; otherwise yes (and residue text is cleared).
+  void applyEmbeddedSubtitleOverlayKernelState() {
+    if (kIsWeb || _isDisposed) return;
+    try {
+      if (player.getPlayerKernelName() == 'Media Kit' &&
+          _embeddedSubtitleOverlayMode &&
+          !isKernelRenderedExternalAssActive) {
+        player.setProperty('sub-visibility', 'no');
+      } else {
+        player.setProperty('sub-visibility', 'yes');
+        if (_embeddedSubtitleOverlayText.isNotEmpty) {
+          _embeddedSubtitleOverlayText = '';
+          _notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('VideoPlayerState: sync whole-block kernel state failed: $e');
+    }
+  }
+
+  /// Throttled poll entry from the position ticker (~8Hz, notifies only on
+  /// text change).
+  void pollEmbeddedSubtitleOverlayText() {
+    if (!_embeddedSubtitleOverlayMode || kIsWeb || _isDisposed) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastEmbeddedSubTextPollMs < 120) return;
+    _lastEmbeddedSubTextPollMs = nowMs;
+    unawaited(_pollEmbeddedSubtitleOverlayText());
+  }
+
+  /// Reduced-frequency poll while paused (800ms): keeps the text fresh when
+  /// the user drags style sliders on a paused frame — otherwise the stale
+  /// line can be pushed off-frame by a kernel style recompute and the user
+  /// perceives "subtitle vanished until the next seek".
+  void pollEmbeddedSubtitleOverlayTextPaused() {
+    if (!_embeddedSubtitleOverlayMode || kIsWeb || _isDisposed) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastEmbeddedSubTextPollMs < 800) return;
+    _lastEmbeddedSubTextPollMs = nowMs;
+    unawaited(_pollEmbeddedSubtitleOverlayText());
+  }
+
+  Future<void> _pollEmbeddedSubtitleOverlayText() async {
+    try {
+      // While a kernel-rendered external ASS is active the whole block must
+      // not render (libass owns the styling); clear any residue collected
+      // before the switch so it never overlays the libass render.
+      if (isKernelRenderedExternalAssActive) {
+        if (_embeddedSubtitleOverlayText.isNotEmpty) {
+          _embeddedSubtitleOverlayText = '';
+          _notifyListeners();
+        }
+        return;
+      }
+      final text = await player.getLiveProperty('sub-text') ?? '';
+      if (_isDisposed) return;
+      final trimmed = text.trim();
+      if (trimmed == _embeddedSubtitleOverlayText) return;
+      _embeddedSubtitleOverlayText = trimmed;
+      _notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Test-only: inject the whole-block text directly (bypasses the real
+  /// clock throttle so widget tests on FakeAsync can drive it with pump).
+  @visibleForTesting
+  void debugSetEmbeddedSubtitleOverlayText(String text) {
+    _embeddedSubtitleOverlayText = text;
+    _notifyListeners();
   }
 
   // 桥接方法：获取缓存的字幕内容

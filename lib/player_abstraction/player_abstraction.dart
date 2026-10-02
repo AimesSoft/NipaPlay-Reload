@@ -511,6 +511,24 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     return getDetailedMediaInfo();
   }
 
+  /// 读取底层内核的实时属性（绕过适配器的本地缓存 getProperty）。
+  /// 用于需要逐帧新鲜值的场景，如 sub-text（内嵌字幕整块移动模式的
+  /// 文本源）。不支持的内核返回 null。
+  Future<String?> getLiveProperty(String name) async {
+    try {
+      final dyn = _delegate as dynamic;
+      final f = dyn.getLiveProperty(name);
+      if (f is Future) {
+        return await f as String?;
+      }
+    } on NoSuchMethodError {
+      return null;
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
   bool get supportsUpscaler {
     try {
       final value = (_delegate as dynamic).supportsUpscaler;

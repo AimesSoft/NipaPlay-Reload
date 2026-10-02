@@ -1913,6 +1913,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         VideoPlayerState.defaultSubtitleMarginX;
     _subtitleMarginY = prefs.getDouble(_subtitleMarginYKey) ??
         VideoPlayerState.defaultSubtitleMarginY;
+    // 内嵌字幕整块移动模式（双语不重叠）：跨会话记忆。
+    _embeddedSubtitleOverlayMode =
+        prefs.getBool(_embeddedSubtitleOverlayModeKey) ?? false;
     _subtitleOpacity = _clampSubtitleOpacity(
       prefs.getDouble(_subtitleOpacityKey) ??
           VideoPlayerState.defaultSubtitleOpacity,
