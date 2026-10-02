@@ -274,6 +274,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         return KeyEventResult.handled;
       case LogicalKeyboardKey.escape:
         if (isLargeScreen) {
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            return NipaplayLargeScreenPlayerMenuScope.maybeHandleBackPress(
+              context,
+            )
+                ? KeyEventResult.handled
+                : KeyEventResult.ignored;
+          }
           if (!NipaplayLargeScreenPlayerMenuScope.maybeHandleMenuPress(
             context,
           )) {

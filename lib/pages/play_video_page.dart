@@ -154,6 +154,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       isLargeScreen: NipaplayLargeScreenModeScope.isActiveOf(context),
       hasVideo: videoState.hasVideo,
     )) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        if (!NipaplayLargeScreenPlayerMenuScope.maybeHandleBackPress(context)) {
+          final shouldExit = await videoState.handleBackButton();
+          if (shouldExit) {
+            await videoState.resetPlayer();
+          }
+        }
+        return false;
+      }
       if (!NipaplayLargeScreenPlayerMenuScope.maybeHandleMenuPress(context)) {
         videoState.setControlsHovered(false);
         videoState.revealLargeScreenControls();
