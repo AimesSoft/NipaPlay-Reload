@@ -306,7 +306,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         onPressed: (value) => setState(() => _isAspectModePressed = value),
         // 菜单打开时传空文本让 TooltipBubble 立即收起气泡；
         // 菜单关闭后若指针仍在按钮上会自动恢复显示。
-        tooltip: _hasOpenMenu ? '' : '画面比例（适应/填充/拉伸/16:9/4:3）',
+        tooltip: _hasOpenMenu ? '' : '画面比例',
       ),
     );
   }
