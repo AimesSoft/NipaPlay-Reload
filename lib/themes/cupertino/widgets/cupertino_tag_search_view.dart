@@ -123,7 +123,8 @@ class _CupertinoTagSearchViewState extends State<CupertinoTagSearchView> {
           child: CupertinoSearchTextField(
             controller: _keywordController,
             placeholder: '作品标题关键词',
-            onChanged: controller.setKeyword,
+            // Draft edits do not change the displayed search results.
+            onChanged: (value) => controller.setKeyword(value, notify: false),
             onSubmitted: (_) => controller.performSmartSearch(),
           ),
         ),

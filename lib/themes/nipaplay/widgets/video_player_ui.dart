@@ -1252,20 +1252,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       ),
                                     if (videoState.hasVideo)
                                       Positioned.fill(
-                                        child: Consumer<VideoPlayerState>(
-                                          builder: (context, videoState, _) {
-                                            return ValueListenableBuilder<
-                                                double>(
-                                              valueListenable:
-                                                  videoState.playbackTimeMs,
-                                              builder: (context, posMs, __) {
-                                                return ExternalSubtitleOverlay(
-                                                  currentPositionMs: posMs,
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
+                                        child: const ExternalSubtitleOverlay(),
                                       ),
                                     if (videoState.status ==
                                             PlayerStatus.recognizing ||
@@ -1341,20 +1328,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       if (videoState.hasVideo)
                                         Positioned.fill(
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
-                                              return ValueListenableBuilder<
-                                                  double>(
-                                                valueListenable:
-                                                    videoState.playbackTimeMs,
-                                                builder: (context, posMs, __) {
-                                                  return ExternalSubtitleOverlay(
-                                                    currentPositionMs: posMs,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          ),
+                                          child:
+                                              const ExternalSubtitleOverlay(),
                                         ),
                                       if (videoState.status ==
                                               PlayerStatus.recognizing ||

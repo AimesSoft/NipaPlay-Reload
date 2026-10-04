@@ -78,8 +78,7 @@ class _CupertinoBangumiCollectionSheetState
       0,
       widget.totalEpisodes > 0 ? widget.totalEpisodes : 999,
     );
-    _episodeController =
-        TextEditingController(text: _episodeStatus.toString());
+    _episodeController = TextEditingController(text: _episodeStatus.toString());
   }
 
   @override
@@ -176,10 +175,11 @@ class _CupertinoBangumiCollectionSheetState
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                        fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
-                      ),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoColors.secondaryLabel,
+                          ),
                 ),
               ],
             ),
@@ -346,8 +346,7 @@ class _CupertinoBangumiCollectionSheetState
         return GestureDetector(
           onTap: () => setState(() => _selectedCollectionType = value),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: isSelected
                   ? activeColor.withOpacity(0.15)
@@ -423,9 +422,7 @@ class _CupertinoBangumiCollectionSheetState
         ),
         const SizedBox(height: 6),
         Text(
-          total > 0
-              ? '共$total 集，当前$_episodeStatus 集'
-              : '当前$_episodeStatus 集',
+          total > 0 ? '共$total 集，当前$_episodeStatus 集' : '当前$_episodeStatus 集',
           style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                 fontSize: 12,
                 color: CupertinoColors.secondaryLabel,
@@ -473,17 +470,19 @@ class _CupertinoBangumiCollectionSheetState
           inputFormatters: [
             LengthLimitingTextInputFormatter(200),
           ],
-          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerRight,
-          child: Text(
-            '${_commentController.text.length}/200',
-            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  fontSize: 11,
-                  color: CupertinoColors.secondaryLabel,
-                ),
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _commentController,
+            builder: (context, value, _) => Text(
+              '${value.text.length}/200',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 11,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+            ),
           ),
         ),
       ],
@@ -520,7 +519,8 @@ class _CupertinoBangumiCollectionSheetState
   }
 
   void _updateEpisodeStatus(int value) {
-    final int maxEpisode = widget.totalEpisodes > 0 ? widget.totalEpisodes : 999;
+    final int maxEpisode =
+        widget.totalEpisodes > 0 ? widget.totalEpisodes : 999;
     final int clamped = value.clamp(0, maxEpisode);
     if (_episodeStatus == clamped) {
       if (_episodeController.text != clamped.toString()) {

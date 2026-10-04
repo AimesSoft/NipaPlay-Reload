@@ -172,9 +172,7 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
                     child: cupertino.CupertinoSearchTextField(
                       controller: _searchController,
                       placeholder: '搜索文件…',
-                      onChanged: (value) => setState(() {
-                        _searchKeyword = value;
-                      }),
+                      onChanged: (value) => _searchKeyword = value,
                       onSubmitted: (_) {
                         if (_searchController.text.trim().isNotEmpty) {
                           _startSearch();
@@ -188,17 +186,21 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
                     ),
                   ),
                   const SizedBox(width: 7),
-                  cupertino.CupertinoButton.filled(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 9,
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _searchController,
+                    builder: (context, value, _) =>
+                        cupertino.CupertinoButton.filled(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 9,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      onPressed:
+                          _isSearching || _searchController.text.trim().isEmpty
+                              ? null
+                              : _startSearch,
+                      child: Text(_isSearching ? '搜索中' : '搜索'),
                     ),
-                    borderRadius: BorderRadius.circular(8),
-                    onPressed:
-                        _isSearching || _searchController.text.trim().isEmpty
-                            ? null
-                            : _startSearch,
-                    child: Text(_isSearching ? '搜索中' : '搜索'),
                   ),
                 ],
               ),
@@ -446,9 +448,12 @@ extension _CupertinoWebDavBrowserControls on _WebDAVBrowserPageState {
     }
     if (_searchResults.isEmpty) {
       return Center(
-        child: Text(
-          _searchKeyword.isEmpty ? '输入关键词搜索文件' : '未找到匹配的文件',
-          style: TextStyle(color: secondary),
+        child: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _searchController,
+          builder: (context, value, _) => Text(
+            value.text.isEmpty ? '输入关键词搜索文件' : '未找到匹配的文件',
+            style: TextStyle(color: secondary),
+          ),
         ),
       );
     }

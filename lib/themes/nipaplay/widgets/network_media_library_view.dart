@@ -800,9 +800,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (items.isEmpty) {
       final filteredEmpty = !_isSearching && _showOnlyUnwatched;
       return NipaplayLargeScreenEmptyState(
-        icon: filteredEmpty
-            ? Ionicons.eye_off_outline
-            : Icons.search_off_rounded,
+        icon:
+            filteredEmpty ? Ionicons.eye_off_outline : Icons.search_off_rounded,
         title: filteredEmpty ? '没有未观看的条目' : '没有匹配结果',
         subtitle: filteredEmpty ? '关闭“只看未观看”或刷新后再试' : '换个关键词再试试',
       );
@@ -1369,8 +1368,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                           gridDelegate:
                               SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: showSummary
-                                ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
-                                : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                                ? HorizontalAnimeCard
+                                    .detailedGridMaxCrossAxisExtent
+                                : HorizontalAnimeCard
+                                    .compactGridMaxCrossAxisExtent,
                             mainAxisExtent: showSummary
                                 ? HorizontalAnimeCard.detailedCardHeight
                                 : HorizontalAnimeCard.compactCardHeight,
@@ -1701,15 +1702,27 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         return;
       }
 
-      final keyword = query.trim().toLowerCase();
-      final results = _mediaItems
-          .where((item) => item.title.toLowerCase().contains(keyword))
-          .toList();
-
-      setState(() {
-        _isSearching = true;
-        _searchResults = results;
-        _isSearchLoading = false;
+      final items = _mediaItems;
+      final folderId = _currentFolderId;
+      final libraryId = _selectedLibraryId;
+      _searchDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+        if (!mounted ||
+            !_isFolderNavigation ||
+            !identical(items, _mediaItems) ||
+            folderId != _currentFolderId ||
+            libraryId != _selectedLibraryId ||
+            _searchController.text != query) {
+          return;
+        }
+        final keyword = query.trim().toLowerCase();
+        final results = items
+            .where((item) => item.title.toLowerCase().contains(keyword))
+            .toList();
+        setState(() {
+          _isSearching = true;
+          _searchResults = results;
+          _isSearchLoading = false;
+        });
       });
       return;
     }
@@ -2213,8 +2226,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final effectiveHeightRatio =
         (contentHeight / screenHeight).clamp(0.3, 0.82).toDouble();
 
-    final selection =
-        await CupertinoBottomSheet.show<_RemoteSortSelection>(
+    final selection = await CupertinoBottomSheet.show<_RemoteSortSelection>(
       context: context,
       title: '排序',
       heightRatio: effectiveHeightRatio,

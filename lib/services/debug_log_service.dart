@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
@@ -27,7 +28,8 @@ class LogEntry {
 
   /// 格式化为适合复制的文本
   String toFormattedString() {
-    final dateStr = '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
     final timeStr = '${timestamp.hour.toString().padLeft(2, '0')}:'
         '${timestamp.minute.toString().padLeft(2, '0')}:'
         '${timestamp.second.toString().padLeft(2, '0')}.'
@@ -42,6 +44,19 @@ class DebugLogService extends ChangeNotifier {
   static final DebugLogService _instance = DebugLogService._internal();
   factory DebugLogService() => _instance;
   DebugLogService._internal();
+
+  @visibleForTesting
+  DebugLogService.forTesting();
+
+  final StreamController<LogEntry> _entries =
+      StreamController.broadcast(sync: true);
+
+  /// File consumers receive entries independently of UI frames and history eviction.
+  Stream<LogEntry> get entries => _entries.stream;
+  int _revision = 0;
+  int get revision => _revision;
+  bool _notificationPending = false;
+  bool _disposed = false;
 
   /// 日志条目队列，限制最大数量避免内存溢出
   static const int _maxLogEntries = 5000;
@@ -64,7 +79,8 @@ class DebugLogService extends ChangeNotifier {
   void initialize() {
     if (!_isCollecting) return;
 
-    // 保存原始的debugPrint函数
+    // Avoid intercepting our own interceptor on repeated initialization.
+    if (debugPrint == _interceptDebugPrint) return;
     _originalDebugPrint = debugPrint;
 
     // 替换debugPrint函数
@@ -104,9 +120,13 @@ class DebugLogService extends ChangeNotifier {
     }
 
     // 根据消息内容推断标签
-    if (message.contains('网络') || message.contains('HTTP') || message.contains('API')) {
+    if (message.contains('网络') ||
+        message.contains('HTTP') ||
+        message.contains('API')) {
       return 'Network';
-    } else if (message.contains('播放') || message.contains('视频') || message.contains('音频')) {
+    } else if (message.contains('播放') ||
+        message.contains('视频') ||
+        message.contains('音频')) {
       return 'Player';
     } else if (message.contains('数据库') || message.contains('存储')) {
       return 'Database';
@@ -128,12 +148,19 @@ class DebugLogService extends ChangeNotifier {
       _logEntries.removeFirst();
     }
 
-    // 延迟通知监听器，避免在构建阶段调用
+    _revision++;
+    _entries.add(entry);
+    _scheduleNotification();
+  }
+
+  void _scheduleNotification() {
+    if (_disposed || _notificationPending || !hasListeners) return;
+    _notificationPending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_isCollecting) {
-        notifyListeners();
-      }
+      _notificationPending = false;
+      if (!_disposed) notifyListeners();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// 手动添加日志
@@ -172,7 +199,7 @@ class DebugLogService extends ChangeNotifier {
     if (_isCollecting) {
       addLog('日志收集即将停止', level: 'INFO', tag: 'LogService');
       _isCollecting = false;
-      
+
       // 恢复原始的debugPrint
       if (_originalDebugPrint != null) {
         debugPrint = _originalDebugPrint!;
@@ -183,6 +210,8 @@ class DebugLogService extends ChangeNotifier {
   /// 清空所有日志
   void clearLogs() {
     _logEntries.clear();
+    _revision++;
+    _scheduleNotification();
     addLog('日志已清空', level: 'INFO', tag: 'LogService');
     // 移除直接调用 notifyListeners()，因为 addLog 中的 _addLogEntry 已经处理了
   }
@@ -210,7 +239,8 @@ class DebugLogService extends ChangeNotifier {
     buffer.writeln('============ NipaPlay 调试日志 ============');
     buffer.writeln('导出时间: ${DateTime.now().toIso8601String()}');
     buffer.writeln('日志条目数: ${_logEntries.length}');
-    buffer.writeln('系统信息: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+    buffer.writeln(
+        '系统信息: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
     buffer.writeln('');
 
     for (final entry in _logEntries) {
@@ -225,7 +255,7 @@ class DebugLogService extends ChangeNotifier {
   /// 获取日志统计信息
   Map<String, int> getLogStatistics() {
     final stats = <String, int>{};
-    
+
     // 按级别统计
     for (final entry in _logEntries) {
       final levelKey = 'level_${entry.level}';
@@ -245,8 +275,10 @@ class DebugLogService extends ChangeNotifier {
   /// 释放资源
   @override
   void dispose() {
+    _disposed = true;
     stopCollecting();
     _logEntries.clear();
+    unawaited(_entries.close());
     super.dispose();
   }
-} 
+}
