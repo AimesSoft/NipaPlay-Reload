@@ -2939,9 +2939,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
-  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）
-  VideoAspectMode get videoAspectMode => _videoAspectMode;
-
   Future<void> setVideoAspectMode(VideoAspectMode mode) async {
     if (_videoAspectMode == mode) return;
     _videoAspectMode = mode;

@@ -1,3 +1,4 @@
+import 'package:nipaplay/playback/player_ui_snapshot.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -1127,8 +1128,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Widget build(BuildContext context) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Selector<VideoPlayerState, List<Object?>>(
+      selector: (_, state) => playerUiSnapshot(state),
+      builder: (context, snapshot, child) {
+        final videoState = context.read<VideoPlayerState>();
         return ValueListenableBuilder<int?>(
           valueListenable: videoState.player.textureId,
           builder: (context, textureId, _) {
@@ -1219,7 +1222,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                               _handleHorizontalDragEnd(context, details)
                           : null,
                       child: FocusScope(
-                        node: FocusScopeNode(),
                         child: globals.isMobilePlatform
                             ? RepaintBoundary(
                                 key: videoState.screenshotBoundaryKey,
@@ -1241,10 +1243,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
+                                          child: Selector<VideoPlayerState,
+                                              List<Object?>>(
+                                            selector: (_, state) =>
+                                                danmakuUiSnapshot(state),
+                                            builder: (context, snapshot, _) {
                                               return _buildDanmakuOverlay(
-                                                videoState,
+                                                context
+                                                    .read<VideoPlayerState>(),
                                               );
                                             },
                                           ),
@@ -1316,11 +1322,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,
-                                            child: Consumer<VideoPlayerState>(
-                                              builder:
-                                                  (context, videoState, _) {
+                                            child: Selector<VideoPlayerState,
+                                                List<Object?>>(
+                                              selector: (_, state) =>
+                                                  danmakuUiSnapshot(state),
+                                              builder: (context, snapshot, _) {
                                                 return _buildDanmakuOverlay(
-                                                  videoState,
+                                                  context
+                                                      .read<VideoPlayerState>(),
                                                 );
                                               },
                                             ),

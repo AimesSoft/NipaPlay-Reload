@@ -520,6 +520,8 @@ int _exactEndStreak = 0;
   bool _screenshotCropLetterbox = true;
   // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
   VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）。
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
   final String _videoAspectModeKey = 'video_aspect_mode';
   // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
     String _softDecodePixelFormat = '';

@@ -607,19 +607,10 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
 
   // 构建滚动按钮
   Widget _buildScrollButtons(ScrollController controller, double itemWidth) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        // 如果没有绑定或内容不足以滚动，直接不显示整个区域
-        if (!controller.hasClients ||
-            controller.position.maxScrollExtent <= 0) {
-          return const SizedBox.shrink();
-        }
-
-        final canScrollLeft = controller.offset > 5;
-        final canScrollRight =
-            controller.offset < controller.position.maxScrollExtent - 5;
-
+    return ScrollEdgeBuilder(
+      controller: controller,
+      builder: (context, canScrollLeft, canScrollRight) {
+        if (!canScrollLeft && !canScrollRight) return const SizedBox.shrink();
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [

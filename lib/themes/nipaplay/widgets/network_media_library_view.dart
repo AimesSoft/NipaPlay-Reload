@@ -1,3 +1,4 @@
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
@@ -169,7 +170,7 @@ class NetworkMediaLibraryView extends StatefulWidget {
 }
 
 class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin {
   static Color get _accentColor => AppAccentColors.current;
 
   // “只看未观看”状态的持久化 Key（按服务器类型区分）
@@ -2103,9 +2104,24 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  bool _hasBeenActive = false;
+  @override
+  void onPageActivityChanged(bool active) {
+    if (active) {
+      _setupRefreshTimer();
+      if (_hasBeenActive && !_isLoadingLibraryContent) {
+        unawaited(_manualRefresh());
+      }
+      _hasBeenActive = true;
+    } else {
+      _refreshTimer?.cancel();
+    }
+  }
+
   // 设置刷新定时器
   void _setupRefreshTimer() {
     _refreshTimer?.cancel();
+    if (!mounted || !isPageActive) return;
     _refreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
       if (_isShowingLibraryContent) {
         if (_isFolderNavigation) {
