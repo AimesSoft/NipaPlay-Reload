@@ -9,6 +9,7 @@ import 'package:nipaplay/app/unified_app_pages.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -136,9 +137,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     });
     _playBounce(_selectedPageId);
     _initializeFileAssociationListeners();
-    if (widget.launchFilePath case final filePath?) {
-      unawaited(_handleLaunchFile(filePath));
-    }
+    final launchPath = widget.launchFilePath;
+    final playbackReady = launchPath == null
+        ? Future<void>.value()
+        : _handleLaunchFile(launchPath);
+    unawaited(ServiceProvider.scanService.startStartupRefresh(
+      playbackReady: playbackReady,
+    ));
   }
 
   void _initializeFileAssociationListeners() {

@@ -23,7 +23,7 @@ class ServiceProvider {
   static final ServerHistorySyncService serverHistorySyncService =
       ServerHistorySyncService.instance;
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool deferBackground = false}) async {
     // 可以在这里添加服务的初始化逻辑
     // 并行初始化网络媒体库服务，不等待连接验证完成
     await Future.wait([
@@ -32,10 +32,16 @@ class ServiceProvider {
       dandanplayRemoteProvider.initialize(),
     ]);
 
-    // 本地观看历史需要同步等待加载完成
-    await watchHistoryProvider.loadHistory();
-    // 让 WatchHistoryProvider 能响应扫描完成（包括来自远程 API 的扫描请求）
     watchHistoryProvider.setScanService(scanService);
+    if (!deferBackground) await initializeAfterFirstFrame();
+  }
+
+  static Future<void>? _backgroundInitialization;
+  static Future<void> initializeAfterFirstFrame() =>
+      _backgroundInitialization ??= _initializeBackground();
+
+  static Future<void> _initializeBackground() async {
+    await watchHistoryProvider.loadHistory();
 
     // 初始化服务器观看历史同步（当前仅支持 Jellyfin 下行同步）
     serverHistorySyncService.initialize(

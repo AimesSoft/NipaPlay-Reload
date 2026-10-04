@@ -16,6 +16,7 @@ class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
   bool _isLoading = false;
   bool _isLoaded = false;
+  bool _disposed = false;
   // 加载进行中又收到刷新请求时置位，当前加载结束后补加载一次
   bool _reloadQueued = false;
   final FilePickerService _filePickerService = FilePickerService();
@@ -35,7 +36,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     return _deduplicateContinueWatching(filtered);
   }
 
-  bool get isLoading => _isLoading;
+  bool get isLoading => _isLoading && _history.isEmpty;
   bool get isLoaded => _isLoaded;
 
   // 设置ScanService监听器
@@ -81,6 +82,7 @@ class WatchHistoryProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     // 移除监听器
     if (_scanService != null) {
       _scanService!.removeListener(_onScanServiceStateChanged);
@@ -145,13 +147,22 @@ class WatchHistoryProvider extends ChangeNotifier {
       // 迁移JSON数据到SQLite (如果需要)
       await _database.migrateFromJson();
 
-      // 调试：打印数据库全部内容
-      await _database.debugPrintAllData();
-
+      // Give the home page a bounded first snapshot before loading the full library.
+      if (!_isLoaded && _history.isEmpty) {
+        final recent = await _database.getRecentWatchHistory(limit: 40);
+        if (_disposed) return;
+        _history = recent;
+        notifyListeners();
+        await Future<void>.delayed(Duration.zero);
+      }
       // 从数据库获取历史记录
       final rawHistory = await _database.getAllWatchHistory();
 
-      // 过滤掉不存在的文件，并修复iOS路径问题
+      if (_disposed) return;
+      // Publish a usable snapshot before background path checks complete.
+      _history = rawHistory;
+      _isLoaded = true;
+      notifyListeners();
       _history = await _validateFilePaths(rawHistory);
       _isLoaded = true;
     } catch (e) {
@@ -161,6 +172,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     }
 
     _isLoading = false;
+    if (_disposed) return;
     notifyListeners();
 
     // 加载期间又有刷新请求到达：补加载一次，保证媒体库拿到最新数据
@@ -173,11 +185,29 @@ class WatchHistoryProvider extends ChangeNotifier {
   // 验证文件路径并修复iOS路径问题
   Future<List<WatchHistoryItem>> _validateFilePaths(
       List<WatchHistoryItem> items) async {
+    if (kIsWeb) return items;
+    final result = <WatchHistoryItem>[];
+    const batchSize = 4;
+    for (var offset = 0; offset < items.length; offset += batchSize) {
+      if (_disposed) return result;
+      final batch =
+          items.sublist(offset, (offset + batchSize).clamp(0, items.length));
+      final validated = await Future.wait(
+          batch.map((item) => _validateFilePathBatch([item])));
+      for (final entries in validated) {
+        result.addAll(entries);
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    return result;
+  }
+
+  Future<List<WatchHistoryItem>> _validateFilePathBatch(
+      List<WatchHistoryItem> items) async {
     if (kIsWeb) {
       return items;
     }
     List<WatchHistoryItem> validItems = [];
-    List<String> invalidPaths = [];
 
     // 每处理若干条就让出一次事件循环。
     //
@@ -310,15 +340,12 @@ class WatchHistoryProvider extends ChangeNotifier {
       } else {
         // 将无效路径添加到缓存集合
         _knownInvalidPaths.add(originalPath);
-        invalidPaths.add(originalPath);
         debugPrint('跳过无效文件: ${item.filePath}');
       }
     }
 
-    // 从数据库中删除无效的记录
-    for (var path in invalidPaths) {
-      await _database.deleteHistory(path);
-    }
+    // Missing files may be on an offline drive or awaiting authorization.
+    // Validation hides them in this snapshot; only explicit deletion removes DB rows.
 
     return validItems;
   }

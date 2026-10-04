@@ -571,7 +571,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       // 验证选择的目录是否可访问
       bool accessCheck = false;
       if (platformIdentity.isHarmonyOS) {
-        accessCheck = await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
+        accessCheck =
+            await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
       } else if (io.Platform.isAndroid &&
           AndroidSafService.isSafUri(selectedDirectory)) {
         // SAF content:// URI（SD/OTG/U盘）：用 SAF canAccessTree 检查权限。
@@ -6255,6 +6256,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           BlurSnackBar.show(context, '正在刮削 $folderName...');
         }
 
+        await SMBProxyService.instance.initialize();
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
                   filePath: MediaSourceUtils.buildSmbPath(

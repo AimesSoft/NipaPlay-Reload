@@ -101,7 +101,6 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
@@ -178,7 +177,8 @@ void main(List<String> args) async {
   // Restore directory grants before storage, history, scanning or playback.
   if (globals.isHarmonyOS) {
     try {
-      final failed = await HarmonyLocalMediaService.restoreDirectoryPermissions();
+      final failed =
+          await HarmonyLocalMediaService.restoreDirectoryPermissions();
       if (failed.isNotEmpty) {
         debugPrint('部分媒体文件夹授权已失效，请重新添加文件夹: $failed');
       }
@@ -388,8 +388,12 @@ void main(List<String> args) async {
   //   }
   // }
 
-  // 请求Android存储权限
-  if (!kIsWeb && Platform.isAndroid) {
+  // Only a configured external app-data directory may require authorization
+  // before storage initialization. Normal media access requests stay at the
+  // picker/library entry points, after the UI is available.
+  if (!kIsWeb &&
+      Platform.isAndroid &&
+      (await StorageService.getCustomStoragePath())?.isNotEmpty == true) {
     debugPrint("正在请求Android存储权限...");
 
     // 先检查当前权限状态
@@ -476,9 +480,9 @@ void main(List<String> args) async {
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
     // 初始化弹弹play服务
-    DandanplayService.initialize(),
+    DandanplayService.initialize(renewToken: false),
     // 初始化服务提供者
-    ServiceProvider.initialize(),
+    ServiceProvider.initialize(deferBackground: true),
 
     // 加载设置
     Future.wait(<Future<dynamic>>[
@@ -531,27 +535,22 @@ void main(List<String> args) async {
 
     // 初始化 BangumiService
     BangumiService.instance.initialize(),
-
-    // 初始化观看记录管理器
-    WatchHistoryManager.initialize(),
-
-    // 初始化多端增量同步服务（Web 端暂不启用本地索引）
-    if (!kIsWeb) AutoSyncService.instance.initialize() else Future.value(),
-
-    // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
-    if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
   ]).then((results) async {
-    // BangumiService初始化完成后，检查并刷新缺少标签的缓存
-    Future.microtask(() async {
-      try {
-        await BangumiService.instance.checkAndRefreshCacheWithoutTags();
-      } catch (e) {
-        debugPrint('检查缓存标签失败: $e');
+    // Noncritical work is dispatched only after the application has a frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_runDeferredStartupTask(
+          'services', ServiceProvider.initializeAfterFirstFrame));
+      unawaited(_runDeferredStartupTask('token', DandanplayService.loadToken));
+      unawaited(_runDeferredStartupTask('connectivity', () async {
+        await ServerConnectivityService.instance.checkConnectivity();
+      }));
+      if (!kIsWeb) {
+        unawaited(_runDeferredStartupTask(
+            'sync', AutoSyncService.instance.initialize));
+        unawaited(_runDeferredStartupTask(
+            'danmaku-cache', DanmakuCacheManager.clearExpiredCache));
       }
     });
-
-    // 服务器连接状态检测（后台执行，不阻塞启动）
-    ServerConnectivityService.instance.checkConnectivity();
 
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, dynamic>;
@@ -687,6 +686,19 @@ void main(List<String> args) async {
   });
 }
 
+Future<void> _runDeferredStartupTask(
+    String name, Future<void> Function() task) async {
+  final watch = Stopwatch()..start();
+  try {
+    await task();
+  } catch (error) {
+    debugPrint('[Startup] $name failed: $error');
+  } finally {
+    debugPrint(
+        '[Startup] $name ${watch.elapsedMilliseconds}ms (after first frame)');
+  }
+}
+
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
   if (kIsWeb) return;
@@ -714,8 +726,6 @@ Future<void> _prepareDanmakuCachePolicy() async {
     );
     if (clearOnLaunch) {
       await DanmakuCacheManager.clearAllCache();
-    } else {
-      await DanmakuCacheManager.clearExpiredCache();
     }
   } catch (e) {
     debugPrint('初始化弹幕缓存策略失败: $e');
@@ -1593,9 +1603,12 @@ class MainPageState extends State<MainPage>
 
   void _postFrameCallbacks() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.launchFilePath != null) {
-        _handleLaunchFile(widget.launchFilePath!);
-      }
+      final playbackReady = widget.launchFilePath == null
+          ? Future<void>.value()
+          : _handleLaunchFile(widget.launchFilePath!);
+      unawaited(ServiceProvider.scanService.startStartupRefresh(
+        playbackReady: playbackReady,
+      ));
 
       if (globals.isDesktop) {
         _checkWindowMaximizedState();
@@ -1619,22 +1632,8 @@ class MainPageState extends State<MainPage>
   }
 
   void _startSplashScreenSequence() {
-    // 确保在第一帧后执行
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // 使用 _getInitialTabIndex() 设置的初始 Tab
-      // 如果需要启动动画，可以在这里实现
-
-      // 延迟一段时间后隐藏启动画面
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        setState(() {
-          _showSplash = false;
-        });
-      }
-    });
+    // Invoked from the first-frame callback after the initial tab is ready.
+    if (mounted && _showSplash) setState(() => _showSplash = false);
   }
 
   // 处理启动文件

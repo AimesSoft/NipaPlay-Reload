@@ -138,6 +138,7 @@ class WatchHistoryManager {
   static const String _historyFileName = 'watch_history.json';
   static late String _historyFilePath;
   static bool _initialized = false;
+  static Future<void>? _initializing;
   static bool _isWriting = false; // 添加写入锁标志
   static final List<WatchHistoryItem> _cachedItems = []; // 添加内存缓存
   static DateTime _lastWriteTime = DateTime.now(); // 记录最后写入时间
@@ -153,6 +154,15 @@ class WatchHistoryManager {
   // 初始化历史记录管理器
   static Future<void> initialize() async {
     if (_initialized) return;
+    final pending = _initializing ??= _initialize();
+    try {
+      await pending;
+    } finally {
+      if (identical(_initializing, pending)) _initializing = null;
+    }
+  }
+
+  static Future<void> _initialize() async {
     if (kIsWeb) {
       try {
         _migratedToDatabase = true;
@@ -446,7 +456,10 @@ class WatchHistoryManager {
 
   // 获取所有历史记录
   static Future<List<WatchHistoryItem>> getAllHistory() async {
-    if (!_initialized) await initialize();
+    if (!_initialized) {
+      await initialize();
+      return List.from(_cachedItems);
+    }
     
     // 如果已迁移到数据库，则直接从数据库获取
     if (_migratedToDatabase) {
