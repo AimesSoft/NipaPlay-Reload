@@ -150,24 +150,45 @@ class _StorageSettingsContentState extends State<StorageSettingsContent> {
               ),
             Consumer<VideoPlayerState>(
               builder: (context, videoState, child) {
-                return AdaptiveSettingsTile<ScreenshotQuality>.dropdown(
-                  title: '截图质量',
-                  subtitle: 'JPEG 质量：体积约为 PNG 的十分之一',
-                  icon: Icons.high_quality,
-                  phoneIcon: cupertino.CupertinoIcons.gauge,
+                return AdaptiveSettingsTile<ScreenshotFormat>.dropdown(
+                  title: '截图格式',
+                  subtitle: 'JPEG 可调整质量，PNG 无损保存',
+                  icon: Icons.image_outlined,
+                  phoneIcon: cupertino.CupertinoIcons.photo,
                   items: [
-                    for (final q in ScreenshotQuality.values)
+                    for (final format in ScreenshotFormat.values)
                       DropdownMenuItemData(
-                        title: q.label,
-                        value: q,
-                        isSelected: videoState.screenshotQuality == q,
-                        description: 'JPEG ${q.jpegQuality}',
+                        title: format.label,
+                        value: format,
+                        isSelected: videoState.screenshotFormat == format,
                       ),
                   ],
-                  onChanged: videoState.setScreenshotQuality,
+                  onChanged: videoState.setScreenshotFormat,
                 );
               },
             ),
+            if (context.watch<VideoPlayerState>().screenshotFormat ==
+                ScreenshotFormat.jpeg)
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return AdaptiveSettingsTile<ScreenshotQuality>.dropdown(
+                    title: '截图质量',
+                    subtitle: 'JPEG 质量：体积约为 PNG 的十分之一',
+                    icon: Icons.high_quality,
+                    phoneIcon: cupertino.CupertinoIcons.gauge,
+                    items: [
+                      for (final q in ScreenshotQuality.values)
+                        DropdownMenuItemData(
+                          title: q.label,
+                          value: q,
+                          isSelected: videoState.screenshotQuality == q,
+                          description: 'JPEG ${q.jpegQuality}',
+                        ),
+                    ],
+                    onChanged: videoState.setScreenshotQuality,
+                  );
+                },
+              ),
             Consumer<VideoPlayerState>(
               builder: (context, videoState, child) =>
                   AdaptiveSettingsTile<bool>.toggle(

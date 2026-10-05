@@ -2835,6 +2835,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
     _screenshotQuality =
         ScreenshotQualityDisplay.fromPrefs(prefs.getInt(_screenshotQualityKey));
+    _screenshotFormat =
+        ScreenshotFormat.fromPreference(prefs.getString(_screenshotFormatKey));
     _screenshotCaptureIncludesDanmaku =
         prefs.getBool(_screenshotIncludeDanmakuKey) ?? true;
     _screenshotCaptureIncludesSubtitles =
@@ -2869,6 +2871,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotFormat(ScreenshotFormat format) async {
+    if (_screenshotFormat == format) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_screenshotFormatKey, format.name);
+    _screenshotFormat = format;
     _notifyListeners();
   }
 
