@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// Lets content dismiss its native popup and parent-view input barrier before
+/// Lets content dismiss its owning popup or OverlayEntry input barrier before
 /// presenting a route on the parent navigator.
 class DesktopTransientOverlayScope extends InheritedWidget {
   const DesktopTransientOverlayScope({

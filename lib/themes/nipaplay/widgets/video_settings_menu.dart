@@ -21,6 +21,7 @@ import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
+import 'package:nipaplay/widgets/desktop_transient_overlay_scope.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -540,14 +541,19 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                     ? _heightForPane(_activePaneId!)
                     : menuHeight,
               );
-        final Widget animatedMenuContent = FadeTransition(
-          opacity: _menuFadeAnimation,
-          child: SlideTransition(
-            position: slideAnimation,
-            child: ScaleTransition(
-              alignment: scaleAlignment,
-              scale: _menuScaleAnimation,
-              child: menuContent,
+        // Close the owning popup/OverlayEntry, rather than only returning
+        // from a pane to this menu, before presenting a navigator dialog.
+        final Widget animatedMenuContent = DesktopTransientOverlayScope(
+          close: widget.onClose,
+          child: FadeTransition(
+            opacity: _menuFadeAnimation,
+            child: SlideTransition(
+              position: slideAnimation,
+              child: ScaleTransition(
+                alignment: scaleAlignment,
+                scale: _menuScaleAnimation,
+                child: menuContent,
+              ),
             ),
           ),
         );
