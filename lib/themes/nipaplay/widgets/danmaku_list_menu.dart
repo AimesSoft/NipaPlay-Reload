@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/danmaku_list_window.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart'; // Import the base menu
 import 'player_menu_theme.dart';
@@ -172,9 +173,11 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
   // 初始化可见窗口
   void _initializeVisibleWindow(int centerIndex) {
     // 计算窗口起始索引，确保不超出边界
-    _windowStartIndex = (centerIndex - _windowSize ~/ 2)
-        .clamp(0, _allSortedDanmakus.length - _windowSize);
-    if (_windowStartIndex < 0) _windowStartIndex = 0;
+    _windowStartIndex = danmakuListWindowStart(
+      centerIndex,
+      _allSortedDanmakus.length,
+      _windowSize,
+    );
 
     // 计算窗口结束索引，确保不超出边界
     int windowEndIndex = _windowStartIndex + _windowSize;
