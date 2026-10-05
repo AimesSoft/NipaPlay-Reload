@@ -7,6 +7,7 @@ import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/subtitle_manager.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,6 +44,8 @@ void main() {
           await Directory.systemTemp.createTemp('dandan_sidecar_');
       final oldPaths = PathProviderPlatform.instance;
       PathProviderPlatform.instance = _Paths(directory.path);
+      final oldStorage = StorageService.debugAppStorageDirectoryOverride;
+      StorageService.debugAppStorageDirectoryOverride = directory;
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final downloaded = <String>[];
       server.listen((request) async {
@@ -71,6 +74,7 @@ void main() {
         await DandanplayRemoteService.instance.disconnect();
         await server.close(force: true);
         PathProviderPlatform.instance = oldPaths;
+        StorageService.debugAppStorageDirectoryOverride = oldStorage;
         await directory.delete(recursive: true);
       });
       SharedPreferences.setMockInitialValues({
@@ -116,6 +120,8 @@ void main() {
     final directory = await Directory.systemTemp.createTemp('dav_sidecar_');
     final oldPaths = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _Paths(directory.path);
+    final oldStorage = StorageService.debugAppStorageDirectoryOverride;
+    StorageService.debugAppStorageDirectoryOverride = directory;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final requests = <String>[];
     final downloaded = <String>[];
@@ -163,6 +169,7 @@ void main() {
     addTearDown(() async {
       await server.close(force: true);
       PathProviderPlatform.instance = oldPaths;
+      StorageService.debugAppStorageDirectoryOverride = oldStorage;
       SharedPreferences.setMockInitialValues({'webdav_connections': '[]'});
       await WebDAVService.instance.initialize();
       await directory.delete(recursive: true);
