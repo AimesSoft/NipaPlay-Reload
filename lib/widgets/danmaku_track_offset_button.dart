@@ -24,10 +24,21 @@ class DanmakuTrackOffsetButton extends StatelessWidget {
           tooltip: '轨道调轴：${formatDanmakuTrackOffset(offset)}',
           icon: const Icon(Icons.more_time, size: 18),
           onPressed: () async {
-            final result = await showDialog<double>(
-              context: context,
-              builder: (_) =>
-                  _OffsetDialog(trackName: trackName, offset: offset),
+            final navigator = Navigator.of(context, rootNavigator: true);
+            final themes = InheritedTheme.capture(
+              from: context,
+              to: navigator.context,
+            );
+            // Keep this player editor in the current view. Experimental
+            // desktop windowing can promote showDialog to a native window,
+            // whose first-frame ShowWindow blocks the Windows platform thread.
+            final result = await navigator.push<double>(
+              DialogRoute<double>(
+                context: context,
+                themes: themes,
+                builder: (_) =>
+                    _OffsetDialog(trackName: trackName, offset: offset),
+              ),
             );
             if (result != null) onChanged(result);
           },
