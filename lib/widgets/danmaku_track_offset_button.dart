@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'desktop_transient_overlay_scope.dart';
 
 String formatDanmakuTrackOffset(double offset) {
   if (offset == 0) return '原始时间';
@@ -32,18 +33,20 @@ class DanmakuTrackOffsetButton extends StatelessWidget {
             // Keep this player editor in the current view. Experimental
             // desktop windowing can promote showDialog to a native window,
             // whose first-frame ShowWindow blocks the Windows platform thread.
-            final result = await navigator.push<double>(
-              DialogRoute<double>(
-                context: context,
-                themes: themes,
-                barrierColor: DialogTheme.of(context).barrierColor ??
-                    Theme.of(context).dialogTheme.barrierColor ??
-                    Colors.black54,
-                traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-                builder: (_) =>
-                    _OffsetDialog(trackName: trackName, offset: offset),
-              ),
+            final route = DialogRoute<double>(
+              context: context,
+              themes: themes,
+              barrierColor: DialogTheme.of(context).barrierColor ??
+                  Theme.of(context).dialogTheme.barrierColor ??
+                  Colors.black54,
+              traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+              builder: (_) =>
+                  _OffsetDialog(trackName: trackName, offset: offset),
             );
+            // A native popup's parent-view barrier sits above Navigator routes.
+            // Close it before pushing, so the first dialog click reaches its UI.
+            DesktopTransientOverlayScope.closeOf(context)?.call();
+            final result = await navigator.push<double>(route);
             if (result != null) onChanged(result);
           },
         ),
