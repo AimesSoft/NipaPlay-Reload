@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/danmaku_track_offset_button.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -178,6 +179,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                 final trackName = trackData['name'] as String;
                 final source = trackData['source'] as String;
                 final count = trackData['count'] as int;
+                final generation = videoState.playbackGeneration;
+                final offset = videoState.danmakuTrackOffset(trackId);
 
                 IconData trackIcon;
 
@@ -251,7 +254,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                                   ),
                                 ),
                                 Text(
-                                  '$count条弹幕',
+                                  '$count条弹幕 · ${formatDanmakuTrackOffset(offset)}',
                                   locale: Locale("zh-Hans", "zh"),
                                   style: TextStyle(
                                     color: menuColors.secondaryForeground,
@@ -260,6 +263,16 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                                 ),
                               ],
                             ),
+                          ),
+                          DanmakuTrackOffsetButton(
+                            trackName: trackName,
+                            offset: offset,
+                            onChanged: (value) {
+                              if (videoState.playbackGeneration == generation &&
+                                  identical(videoState.danmakuTracks[trackId], trackData)) {
+                                videoState.setDanmakuTrackOffset(trackId, value);
+                              }
+                            },
                           ),
                           // 删除按钮（本地轨道才显示）
                           if (source == 'local')
