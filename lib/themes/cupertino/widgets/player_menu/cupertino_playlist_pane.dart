@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_me
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/media_server_playlist_loader.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -412,9 +413,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await JellyfinService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Jellyfin 剧集信息');
 
-    final episodes = await JellyfinService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: JellyfinService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
@@ -445,9 +448,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await EmbyService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Emby 剧集信息');
 
-    final episodes = await EmbyService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: EmbyService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
