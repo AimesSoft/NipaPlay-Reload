@@ -3,6 +3,9 @@ include!("engine/frame_completion.rs");
 mod motion;
 #[path = "engine/command_channel.rs"]
 mod command_channel;
+#[path = "engine/logging.rs"]
+mod logging;
+pub(crate) use logging::n2log;
 include!("engine/runtime.rs");
 include!("engine/rendering.rs");
 include!("engine/renderer_core.rs");
