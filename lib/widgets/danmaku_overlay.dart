@@ -159,6 +159,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           if (DanmakuKernelFactory.isNextPlusPlusEnabled) {
             return NipaPlayNextOverlay(
               danmakuList: activeDanmakuList,
+              danmakuListVersion: videoState.danmakuListVersion,
               playbackTimeMs: videoState.playbackTimeMs,
               currentTimeSeconds: widget.currentPosition / 1000,
               fontSize: widget.fontSize,
