@@ -575,6 +575,19 @@ class EmbyService extends MediaServerServiceBase
     return [];
   }
 
+  /// Views 已经提供库类型；兼容没有实现库详情接口的第三方 Emby 服务。
+  Future<String> _getLibraryCollectionType(String libraryId) async {
+    for (final library in _availableLibraries) {
+      if (library.id == libraryId) {
+        return _resolveCollectionType(library.type);
+      }
+    }
+    final response = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items/$libraryId');
+    final data = json.decode(response.body);
+    return _resolveCollectionType(data['CollectionType']);
+  }
+
   // 按特定媒体库获取最新内容
   Future<List<EmbyMediaItem>> getLatestMediaItemsByLibrary(
     String libraryId, {
@@ -591,17 +604,7 @@ class EmbyService extends MediaServerServiceBase
       final defaultSortBy = sortBy ?? 'DateCreated,SortName';
       final defaultSortOrder = sortOrder ?? 'Descending';
 
-      // 首先获取媒体库信息以确定类型
-      final libraryResponse =
-          await _makeAuthenticatedRequest('/Users/$_userId/Items/$libraryId');
-
-      if (libraryResponse.statusCode != 200) {
-        return [];
-      }
-
-      final libraryData = json.decode(libraryResponse.body);
-      final String collectionType =
-          _resolveCollectionType(libraryData['CollectionType']);
+      final collectionType = await _getLibraryCollectionType(libraryId);
 
       // 根据媒体库类型选择不同的IncludeItemTypes
       String includeItemTypes;
@@ -614,7 +617,7 @@ class EmbyService extends MediaServerServiceBase
       }
 
       final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
+          '/emby/Users/$_userId/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
         return _decodeEmbyItemsMaybeIsolated(response.body);
@@ -636,17 +639,7 @@ class EmbyService extends MediaServerServiceBase
     }
 
     try {
-      // 首先获取媒体库信息以确定类型
-      final libraryResponse =
-          await _makeAuthenticatedRequest('/Users/$_userId/Items/$libraryId');
-
-      if (libraryResponse.statusCode != 200) {
-        return [];
-      }
-
-      final libraryData = json.decode(libraryResponse.body);
-      final String collectionType =
-          _resolveCollectionType(libraryData['CollectionType']);
+      final collectionType = await _getLibraryCollectionType(libraryId);
 
       // 根据媒体库类型选择不同的IncludeItemTypes
       String includeItemTypes;
@@ -660,7 +653,7 @@ class EmbyService extends MediaServerServiceBase
 
       // 使用Emby的随机排序获取随机内容，并请求Overview字段
       final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&Fields=Overview,CommunityRating');
+          '/emby/Users/$_userId/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
         return _decodeEmbyItemsMaybeIsolated(response.body);

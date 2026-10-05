@@ -274,7 +274,12 @@ class _PosterFixture {
     if (path == '/Users/user/Items/library') {
       return http.Response(jsonEncode({'CollectionType': 'tvshows'}), 200);
     }
-    if (path == '/Items') {
+    final itemsPath = server == NetworkMediaServerType.emby
+        ? '/Users/user/Items'
+        : '/Items';
+    if (path == itemsPath) {
+      expect(request.url.queryParameters['ParentId'], 'library');
+      expect(request.url.queryParameters['IncludeItemTypes'], 'Series');
       return http.Response(jsonEncode({'Items': items}), 200);
     }
     throw StateError('Unexpected request: ${request.url}');
