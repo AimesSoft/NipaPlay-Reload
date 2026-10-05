@@ -363,6 +363,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     if (kIsWeb) return;
     if (!videoState.hasVideo) return;
 
+    final format = videoState.screenshotFormat;
     try {
       if (Platform.isIOS && target == ScreenshotSaveTarget.photos) {
         final ok = await videoState.captureScreenshotToPhotos(
@@ -375,6 +376,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       }
 
       final path = await videoState.captureScreenshot(
+        format: format,
         includeDanmaku: includeDanmaku,
         includeSubtitles: includeSubtitles,
         temporary: Platform.isIOS || Platform.isAndroid,
@@ -387,14 +389,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       if (Platform.isAndroid) {
         await PhotoLibraryService.saveTemporaryFileToPhotos(
           path,
-          mimeType: 'image/jpeg',
+          mimeType: format.mimeType,
         );
         if (!mounted) return;
         BlurSnackBar.show(context, '截图已保存到相册');
         return;
       }
       if (Platform.isIOS) {
-        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
+        await SystemShareService.exportFile(
+          path,
+          mimeType: format.mimeType,
+        );
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');
