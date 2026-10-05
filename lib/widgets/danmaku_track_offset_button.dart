@@ -36,6 +36,10 @@ class DanmakuTrackOffsetButton extends StatelessWidget {
               DialogRoute<double>(
                 context: context,
                 themes: themes,
+                barrierColor: DialogTheme.of(context).barrierColor ??
+                    Theme.of(context).dialogTheme.barrierColor ??
+                    Colors.black54,
+                traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
                 builder: (_) =>
                     _OffsetDialog(trackName: trackName, offset: offset),
               ),

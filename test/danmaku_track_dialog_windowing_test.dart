@@ -3,6 +3,7 @@
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/src/foundation/_features.dart' as features;
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,4 +85,64 @@ void main() {
     expect(result, -1.25);
     expect(root.currentState!.canPop(), isFalse);
   });
+
+  testWidgets('Tab and Shift-Tab wrap inside the editor', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: DanmakuTrackOffsetButton(
+        trackName: 'track',
+        offset: 0,
+        onChanged: (_) {},
+      )),
+    ));
+    await tester.tap(find.byIcon(Icons.more_time));
+    await tester.pumpAndSettle();
+    final fieldFocus =
+        tester.widget<EditableText>(find.byType(EditableText)).focusNode;
+    expect(
+      ModalRoute.of(tester.element(find.byType(EditableText)))!
+          .traversalEdgeBehavior,
+      TraversalEdgeBehavior.closedLoop,
+    );
+    expect(fieldFocus.hasFocus, isTrue);
+    for (final label in ['取消', '重置', '应用']) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(Focus.of(tester.element(find.text(label))).hasFocus, isTrue);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(fieldFocus.hasFocus, isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(Focus.of(tester.element(find.text('应用'))).hasFocus, isTrue);
+  });
+
+  for (final entry in [
+    ('local dialog theme', Colors.green, Colors.red, Colors.green),
+    ('app dialog theme', null, Colors.red, Colors.red),
+    ('default barrier', null, null, Colors.black54),
+  ]) {
+    testWidgets('barrier respects ${entry.$1}', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(dialogTheme: DialogThemeData(barrierColor: entry.$3)),
+        home: Scaffold(
+            body: DialogTheme(
+          data: DialogThemeData(barrierColor: entry.$2),
+          child: DanmakuTrackOffsetButton(
+            trackName: 'track',
+            offset: 0,
+            onChanged: (_) {},
+          ),
+        )),
+      ));
+      await tester.tap(find.byIcon(Icons.more_time));
+      await tester.pumpAndSettle();
+      final barrier =
+          tester.widget<ModalBarrier>(find.byType(ModalBarrier).last);
+      expect(barrier.color, entry.$4);
+    });
+  }
 }
