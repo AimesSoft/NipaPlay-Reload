@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -264,7 +265,8 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
-    _pluginIndex = await _pluginStorage.loadPluginIndex();
+    _pluginIndex = await PerformanceTrace.measure(
+        'plugins.index', _pluginStorage.loadPluginIndex);
     await _reloadPlugins();
     _isLoaded = true;
     notifyListeners();
@@ -897,12 +899,15 @@ class PluginService extends ChangeNotifier {
     _pluginStorageValues.clear();
 
     final enabledIds = await _loadEnabledIds();
-    final discoveredPlugins = await _discoverPlugins();
+    final discoveredPlugins = await PerformanceTrace.measure(
+        'plugins.discovery', _discoverPlugins,
+        itemCount: (items) => items.length);
 
     // 第一遍：解析清单并登记描述符（暂不加载运行时）。
     for (final discovered in discoveredPlugins) {
       try {
-        final parsed = _parsePluginMetadata(discovered.script);
+        final parsed = PerformanceTrace.measureSync(
+            'plugins.metadata', () => _parsePluginMetadata(discovered.script));
         final manifest = parsed.manifest;
         if (_scriptByPluginId.containsKey(manifest.id)) {
           continue;
@@ -959,18 +964,25 @@ class PluginService extends ChangeNotifier {
     // 关键：必须在加载运行时、触发 pluginOnInitialize 之前，先把用户保存的设置
     // 读入内存。否则插件初始化时读取到的是空值，只能回退到默认值——表现为打开软件
     // 后插件用默认配置生效，必须到设置里关闭再打开才读取到真实配置。
-    await _loadTextSettingValues();
-    await _loadSwitchSettingValues();
-    await _loadPluginStorageValues();
+    await PerformanceTrace.measure('plugins.settings', () async {
+      await _loadTextSettingValues();
+      await _loadSwitchSettingValues();
+      await _loadPluginStorageValues();
+    });
 
-    // 第二遍：加载运行时并触发 pluginOnInitialize，此时设置已就绪。
+    // Preserve settings-before-initialize and serial plugin ordering.
+    var ordinal = 0;
     for (final plugin in _plugins) {
+      final index = ordinal++;
       if (!plugin.enabled) continue;
       try {
-        await _loadPluginRuntime(plugin.manifest.id);
-        await _invokeLifecycleEvent(plugin.manifest.id, 'initialize');
+        await PerformanceTrace.measure('plugin.$index.runtime',
+            () => _loadPluginRuntime(plugin.manifest.id));
+        await PerformanceTrace.measure('plugin.$index.initialize',
+            () => _invokeLifecycleEvent(plugin.manifest.id, 'initialize'));
       } catch (_) {}
     }
+    PerformanceTrace.flush();
 
     final existingIds = _plugins.map((e) => e.manifest.id).toSet();
     final sanitizedEnabled = enabledIds.where(existingIds.contains).toList();

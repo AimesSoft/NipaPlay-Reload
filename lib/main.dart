@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
 import 'package:nipaplay/services/harmony_local_media_service.dart';
@@ -123,29 +124,21 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
 
 void _installFrameTimingTrace() {
-  const enabled = bool.fromEnvironment('NIPAPLAY_FRAME_TIMING_TRACE');
-  if (!enabled) {
-    return;
-  }
-
-  var frameCount = 0;
+  if (!PerformanceTrace.enabled) return;
   SchedulerBinding.instance.addTimingsCallback((timings) {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    final refreshRate = views.isEmpty ? 60.0 : views.first.display.refreshRate;
     for (final timing in timings) {
-      frameCount += 1;
-      final buildMs = timing.buildDuration.inMicroseconds / 1000.0;
-      final rasterMs = timing.rasterDuration.inMicroseconds / 1000.0;
-      final totalMs = timing.totalSpan.inMicroseconds / 1000.0;
-      final isSlowFrame = buildMs > 8.0 || rasterMs > 8.0 || totalMs > 16.7;
-      if (isSlowFrame || frameCount % 60 == 0) {
-        debugPrint(
-          '[nipa-frame-trace] frame=$frameCount '
-          'build_ms=${buildMs.toStringAsFixed(2)} '
-          'raster_ms=${rasterMs.toStringAsFixed(2)} '
-          'total_ms=${totalMs.toStringAsFixed(2)} '
-          'slow=$isSlowFrame',
-        );
-      }
+      PerformanceTrace.frame(
+        buildUs: timing.buildDuration.inMicroseconds,
+        rasterUs: timing.rasterDuration.inMicroseconds,
+        refreshRate: refreshRate,
+      );
     }
+  });
+  // A background application may receive no more frames to flush a partial window.
+  AppLifecycleListener(onStateChange: (state) {
+    if (state != AppLifecycleState.resumed) PerformanceTrace.flush();
   });
 }
 

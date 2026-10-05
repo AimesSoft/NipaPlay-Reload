@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -33,10 +34,12 @@ const int _kEmbyInlineDecodeLimit = 64 * 1024;
 
 /// 解析 `/Items` 响应，大响应自动转到后台 isolate。
 Future<List<EmbyMediaItem>> _decodeEmbyItemsMaybeIsolated(String body) {
-  if (body.length < _kEmbyInlineDecodeLimit) {
-    return Future.value(_decodeEmbyItems(body));
-  }
-  return compute(_decodeEmbyItems, body);
+  return PerformanceTrace.measure('emby.items.decode', () {
+    if (body.length < _kEmbyInlineDecodeLimit) {
+      return Future.value(_decodeEmbyItems(body));
+    }
+    return compute(_decodeEmbyItems, body);
+  }, itemCount: (items) => items.length);
 }
 
 class EmbyService extends MediaServerServiceBase
@@ -430,8 +433,14 @@ class EmbyService extends MediaServerServiceBase
       {String method = 'GET',
       Map<String, dynamic>? body,
       Duration? timeout}) async {
-    return makeAuthenticatedRequest(path,
-        method: method, body: body, timeout: timeout);
+    return PerformanceTrace.measure(
+        PerformanceTrace.enabled && PerformanceTrace.isItemListing(path)
+            ? 'emby.http.items'
+            : 'emby.http.other',
+        () => makeAuthenticatedRequest(path,
+            method: method, body: body, timeout: timeout),
+        responseBytes: (response) => response.bodyBytes.length,
+        isFailure: (response) => response.statusCode >= 400);
   }
 
   @override

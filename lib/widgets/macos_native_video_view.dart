@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -307,7 +308,10 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         : const Duration(milliseconds: 250);
     _frameTimer = Timer.periodic(
       interval,
-      (_) => _scheduleFrameUpdate(),
+      (_) {
+        PerformanceTrace.count('overlay.timer');
+        _scheduleFrameUpdate();
+      },
     );
   }
 
@@ -386,6 +390,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       return;
     }
 
+    PerformanceTrace.count('overlay.geometry');
     final Rect platformRect;
     final Rect? cutoutRect;
     int? flutterViewId;
@@ -435,6 +440,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
 
     _frameUpdateInFlight = visible;
     try {
+      PerformanceTrace.count('overlay.send');
       await _platformNativeVideoChannel.invokeMethod<void>(
         'setOverlayFrame',
         <String, dynamic>{

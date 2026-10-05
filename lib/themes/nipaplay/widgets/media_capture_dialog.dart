@@ -77,6 +77,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   late double _startMillis;
   late double _endMillis;
   late double _maximumMillis;
+  late final ValueNotifier<(double, double)> _timeRange;
   int _framesPerSecond = 15;
   GifExportQuality _quality = GifExportQuality.normal;
   String? _previewPath;
@@ -101,6 +102,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
       _startMillis = (_maximumMillis - 5000).clamp(0, _maximumMillis);
       _endMillis = _maximumMillis;
     }
+    _timeRange = ValueNotifier((_startMillis, _endMillis));
     _startTimeController =
         TextEditingController(text: _formatTime(_startMillis));
     _endTimeController = TextEditingController(text: _formatTime(_endMillis));
@@ -131,6 +133,7 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   @override
   void dispose() {
     _tabController.dispose();
+    _timeRange.dispose();
     _widthController.dispose();
     _heightController.dispose();
     _startTimeController.dispose();
@@ -173,10 +176,8 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   }
 
   void _setOutputSize((int, int) size) {
-    setState(() {
-      _widthController.text = '${size.$1}';
-      _heightController.text = '${size.$2}';
-    });
+    _widthController.text = '${size.$1}';
+    _heightController.text = '${size.$2}';
   }
 
   String _formatTime(double milliseconds) {
@@ -210,13 +211,13 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
       start ? _startTimeController.text : _endTimeController.text,
     );
     if (parsed == null) return;
-    setState(() {
-      if (start) {
-        _startMillis = parsed;
-      } else {
-        _endMillis = parsed;
-      }
-    });
+    if (start) {
+      _startMillis = parsed;
+    } else {
+      _endMillis = parsed;
+    }
+    // Editing text only changes these two labels, not the preview or form tree.
+    _timeRange.value = (_startMillis, _endMillis);
   }
 
   void _fillCurrentTime() {
@@ -224,16 +225,15 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
         .clamp(0, _maximumMillis.toInt())
         .toDouble();
     final previousDuration = (_endMillis - _startMillis).clamp(500, 30000);
-    setState(() {
-      _startMillis = current;
-      _endMillis = (current + previousDuration).clamp(0, _maximumMillis);
-      if (_endMillis <= _startMillis) {
-        _startMillis = (_maximumMillis - 500).clamp(0, _maximumMillis);
-        _endMillis = _maximumMillis;
-      }
-      _startTimeController.text = _formatTime(_startMillis);
-      _endTimeController.text = _formatTime(_endMillis);
-    });
+    _startMillis = current;
+    _endMillis = (current + previousDuration).clamp(0, _maximumMillis);
+    if (_endMillis <= _startMillis) {
+      _startMillis = (_maximumMillis - 500).clamp(0, _maximumMillis);
+      _endMillis = _maximumMillis;
+    }
+    _startTimeController.text = _formatTime(_startMillis);
+    _endTimeController.text = _formatTime(_endMillis);
+    _timeRange.value = (_startMillis, _endMillis);
   }
 
   void _focusGifField(FocusNode focusNode) {
@@ -765,7 +765,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
-        final preview = _buildPreview(colors);
+        final preview = RepaintBoundary(
+          key: const ValueKey('gif-preview'),
+          child: _buildPreview(colors),
+        );
         final settings = _buildSettings(colors,
             phoneLayout: phoneLayout, phoneLandscape: phoneLandscape);
         if (phoneLandscape) {
@@ -815,13 +818,15 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
         fit: StackFit.expand,
         children: [
           if (_previewPath != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Image.file(
-                File(_previewPath!),
-                key: ValueKey(_previewPath),
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
+            RepaintBoundary(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Image.file(
+                  File(_previewPath!),
+                  key: ValueKey(_previewPath),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
               ),
             )
           else
@@ -840,9 +845,12 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
           Positioned(
             left: 12,
             top: 12,
-            child: _Badge(
-              icon: Icons.play_circle_outline_rounded,
-              text: '${_formatTime(_startMillis)} – ${_formatTime(_endMillis)}',
+            child: ValueListenableBuilder<(double, double)>(
+              valueListenable: _timeRange,
+              builder: (context, range, _) => _Badge(
+                icon: Icons.play_circle_outline_rounded,
+                text: '${_formatTime(range.$1)} – ${_formatTime(range.$2)}',
+              ),
             ),
           ),
           if (_isWorking)
@@ -924,14 +932,17 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
               ),
             ),
             const SizedBox(width: 12),
-            Text(
-              _endMillis > _startMillis
-                  ? '共 ${((_endMillis - _startMillis) / 1000).toStringAsFixed(1)} 秒'
-                  : '时间范围无效',
-              style: TextStyle(
-                color: _endMillis > _startMillis
-                    ? colors.onSurface.withValues(alpha: 0.68)
-                    : colors.error,
+            ValueListenableBuilder<(double, double)>(
+              valueListenable: _timeRange,
+              builder: (context, range, _) => Text(
+                range.$2 > range.$1
+                    ? '共 ${((range.$2 - range.$1) / 1000).toStringAsFixed(1)} 秒'
+                    : '时间范围无效',
+                style: TextStyle(
+                  color: range.$2 > range.$1
+                      ? colors.onSurface.withValues(alpha: 0.68)
+                      : colors.error,
+                ),
               ),
             ),
           ],

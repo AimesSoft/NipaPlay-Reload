@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -33,13 +34,13 @@ List<JellyfinMediaItem> _decodeJellyfinItems(String body) {
 const int _kJellyfinInlineDecodeLimit = 64 * 1024;
 
 /// 解析 `/Items` 响应，大响应自动转到后台 isolate。
-Future<List<JellyfinMediaItem>> _decodeJellyfinItemsMaybeIsolated(
-  String body,
-) {
-  if (body.length < _kJellyfinInlineDecodeLimit) {
-    return Future.value(_decodeJellyfinItems(body));
-  }
-  return compute(_decodeJellyfinItems, body);
+Future<List<JellyfinMediaItem>> _decodeJellyfinItemsMaybeIsolated(String body) {
+  return PerformanceTrace.measure('jellyfin.items.decode', () {
+    if (body.length < _kJellyfinInlineDecodeLimit) {
+      return Future.value(_decodeJellyfinItems(body));
+    }
+    return compute(_decodeJellyfinItems, body);
+  }, itemCount: (items) => items.length);
 }
 
 class JellyfinService extends MediaServerServiceBase
@@ -1919,7 +1920,13 @@ class JellyfinService extends MediaServerServiceBase
       {String method = 'GET',
       Map<String, dynamic>? body,
       Duration? timeout}) async {
-    return makeAuthenticatedRequest(endpoint,
-        method: method, body: body, timeout: timeout);
+    return PerformanceTrace.measure(
+        PerformanceTrace.enabled && PerformanceTrace.isItemListing(endpoint)
+            ? 'jellyfin.http.items'
+            : 'jellyfin.http.other',
+        () => makeAuthenticatedRequest(endpoint,
+            method: method, body: body, timeout: timeout),
+        responseBytes: (response) => response.bodyBytes.length,
+        isFailure: (response) => response.statusCode >= 400);
   }
 }
