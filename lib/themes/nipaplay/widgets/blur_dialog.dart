@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class BlurDialog {
+  /// Build dismissing actions with [actionsBuilder] so their context belongs
+  /// to the dialog route, including when the caller uses a nested Navigator.
   static Future<T?> show<T>({
     required BuildContext context,
     required String title,
@@ -15,6 +17,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     Color? backgroundColor,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
@@ -23,6 +26,7 @@ class BlurDialog {
     double? desktopMaxHeightFactor,
     double phoneHeightRatio = 0.86,
   }) {
+    assert(actions == null || actionsBuilder == null);
     if ((displaySurface ?? AppDisplaySurfaceScope.of(context)) ==
         AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -31,6 +35,7 @@ class BlurDialog {
         content: content,
         contentWidget: contentWidget,
         actions: actions,
+        actionsBuilder: actionsBuilder,
         barrierDismissible: barrierDismissible,
         hidePhoneBottomBar: hidePhoneBottomBar,
         phoneBarrierColor: phoneBarrierColor,
@@ -45,6 +50,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      actionsBuilder: actionsBuilder,
       backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
       maxWidth: desktopMaxWidth,
@@ -58,6 +64,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     Color? backgroundColor,
     bool barrierDismissible = true,
     double? maxWidth,
@@ -89,7 +96,7 @@ class BlurDialog {
               title: title,
               content: content,
               contentWidget: contentWidget,
-              actions: actions,
+              actions: actionsBuilder?.call(dialogContext) ?? actions,
               includeTitle: hasTitle,
             ),
           );
@@ -117,6 +124,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
@@ -128,6 +136,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      actionsBuilder: actionsBuilder,
       barrierDismissible: barrierDismissible,
       hidePhoneBottomBar: hidePhoneBottomBar,
       phoneBarrierColor: phoneBarrierColor,
@@ -141,6 +150,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
@@ -171,7 +181,7 @@ class BlurDialog {
                 title: title,
                 content: content,
                 contentWidget: contentWidget,
-                actions: actions,
+                actions: actionsBuilder?.call(sheetContext) ?? actions,
                 includeTitle: false,
               ),
             ),

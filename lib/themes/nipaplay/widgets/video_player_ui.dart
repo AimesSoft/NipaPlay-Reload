@@ -512,13 +512,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               context: context, // 使用 VideoPlayerUI 的 context
               title: '播放错误',
               content: errorMessage,
-              actions: [
+              actionsBuilder: (dialogContext) => [
                 HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog
-                    //    这里的 context 是 BlurDialog.show 内部创建的用于对话框的 context
-                    Navigator.of(context).pop();
+                    //    使用弹窗路由内部的 context 关闭弹窗。
+                    Navigator.of(dialogContext).pop();
 
                     // 2. Reset the player state.
                     //    这将导致 VideoPlayerUI 重建并因 hasVideo 为 false 而显示 VideoUploadUI。

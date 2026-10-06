@@ -663,11 +663,11 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: _text(context, '取消', '取消', 'Cancel'),
           idleColor: colorScheme.onSurface.withValues(alpha: 0.7),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         HoverScaleTextButton(
           text: _text(context, '确定', '確定', 'OK'),
@@ -700,7 +700,7 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
               );
               return;
             }
-            Navigator.of(context)
+            Navigator.of(dialogContext)
                 .pop(Size(width.toDouble(), height.toDouble()));
           },
         ),

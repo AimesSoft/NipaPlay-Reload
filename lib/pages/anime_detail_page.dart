@@ -3603,11 +3603,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       title: '清理本地记录',
       content:
           '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除匹配显示信息（含扫描与手动匹配），保留观看进度。重新匹配同一番剧时可自动迁移进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text('清除所有匹配信息', locale: Locale('zh-Hans', 'zh')),
           onPressed: () {
-            Navigator.of(context).pop(_EpisodeCleanupAction.clearMatchInfo);
+            Navigator.of(dialogContext).pop(_EpisodeCleanupAction.clearMatchInfo);
           },
         ),
         HoverScaleTextButton(
@@ -3617,7 +3617,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             style: TextStyle(color: Colors.redAccent),
           ),
           onPressed: () {
-            Navigator.of(context).pop(_EpisodeCleanupAction.deleteWatchHistory);
+            Navigator.of(dialogContext).pop(_EpisodeCleanupAction.deleteWatchHistory);
           },
         ),
         HoverScaleTextButton(
@@ -3627,7 +3627,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             style: TextStyle(color: Colors.white70),
           ),
           onPressed: () {
-            Navigator.of(context).pop();
+            Navigator.of(dialogContext).pop();
           },
         ),
       ],

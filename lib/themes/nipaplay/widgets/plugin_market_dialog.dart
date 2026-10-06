@@ -368,17 +368,17 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       context: context,
       title: '确认删除',
       content: '确定要删除插件「${plugin.name}」吗？此操作不可撤销。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         AdaptiveMediaActionButton(
           label: '取消',
           compact: true,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         AdaptiveMediaActionButton(
           label: '删除',
           compact: true,
           emphasis: AdaptiveMediaActionEmphasis.destructive,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
