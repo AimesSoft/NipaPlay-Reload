@@ -159,7 +159,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
-        if (isStableKernel && child != null) {
+        if ((isStableKernel || !videoState.danmakuVisible) && child != null) {
           return child;
         }
         return DanmakuOverlay(
@@ -1236,10 +1236,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       ),
                                     ),
-                                    if ((videoState.hasVideo ||
-                                            videoState
-                                                .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible)
+                                    if (videoState.hasVideo ||
+                                        videoState.isDfmStartupGatePending)
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
@@ -1315,10 +1313,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                      if ((videoState.hasVideo ||
-                                              videoState
-                                                  .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible)
+                                      if (videoState.hasVideo ||
+                                          videoState.isDfmStartupGatePending)
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,

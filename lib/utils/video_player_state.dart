@@ -6,6 +6,7 @@ import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
+import 'video_frame_image.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -27,7 +28,6 @@ import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';

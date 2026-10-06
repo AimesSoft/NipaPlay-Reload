@@ -20,6 +20,8 @@ class _VideoState extends ChangeNotifier implements VideoPlayerState {
   @override
   bool isBuffering = false;
   @override
+  bool danmakuVisible = true;
+  @override
   int seekRevision = 0;
   @override
   double effectivePlaybackRate = 1.5;
@@ -44,7 +46,6 @@ class _VideoState extends ChangeNotifier implements VideoPlayerState {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       switch (invocation.memberName) {
-        #danmakuVisible => true,
         #danmakuOpacity ||
         #danmakuFontSize ||
         #danmakuDisplayArea ||
@@ -215,6 +216,59 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump();
   }
+
+  testWidgets('hide pauses the retained host and show seeks without reloading',
+      (tester) async {
+    final controller = await mount(tester);
+    controller.messages.clear();
+    state.danmakuVisible = false;
+    state.notifyListeners();
+    await flushMessages(tester);
+    expect(controller.clocks.last['playing'], isFalse);
+    final hiddenClockCount = controller.clocks.length;
+    state.playbackTimeMs.value = 30000;
+    await tester.pump(const Duration(seconds: 1));
+    await flushMessages(tester);
+    expect(controller.clocks.length, hiddenClockCount);
+
+    state.danmakuVisible = true;
+    state.notifyListeners();
+    await flushMessages(tester);
+    expect(platform.controller, same(controller));
+    expect(controller.clocks.last['playing'], isTrue);
+    expect(controller.clocks.last['positionSeconds'], 30.0);
+    expect(controller.clocks.last['seekRevision'], 1);
+    expect(controller.messages.where((m) => m['type'] == 'load'), isEmpty);
+    expect(controller.messages.where((m) => m['type'] == 'dispose'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('temporary screenshot hiding retains WebView and restores clock',
+      (tester) async {
+    final controller = await mount(tester);
+    final original = tester.widget<PluginDanmakuWebViewOverlay>(
+        find.byType(PluginDanmakuWebViewOverlay));
+    Future<void> setVisible(bool visible) async {
+      await tester.pumpWidget(MaterialApp(
+        home: PluginDanmakuWebViewOverlay(
+          renderer: original.renderer,
+          videoState: state,
+          isVisible: visible,
+        ),
+      ));
+      await flushMessages(tester);
+    }
+
+    controller.messages.clear();
+    await setVisible(false);
+    expect(controller.clocks.last['playing'], isFalse);
+    await setVisible(true);
+    expect(controller.clocks.last['playing'], isTrue);
+    expect(platform.controller, same(controller));
+    expect(controller.messages.where((m) => m['type'] == 'load'), isEmpty);
+    expect(controller.messages.where((m) => m['type'] == 'dispose'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('rapid buffering and recovery bypass clock throttling',
       (tester) async {
