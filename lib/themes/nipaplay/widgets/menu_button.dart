@@ -25,9 +25,7 @@ class WindowControlButtons extends StatelessWidget {
     return SizedBox(
       width: totalWidth,
       height: buttonHeight,
-      // 窗口按钮是指针操作入口，不能抢占播放器方向键/空格的焦点。
-      child: ExcludeFocus(
-          child: Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _WindowControlIconButton(
@@ -53,7 +51,7 @@ class WindowControlButtons extends StatelessWidget {
             onPressed: onClose,
           ),
         ],
-      )),
+      ),
     );
   }
 }
