@@ -46,6 +46,7 @@ void main() {
         await server.close(force: true);
       });
       server.listen((request) async {
+        if (emby) expect(request.uri.path, '/emby/Users/user/Items');
         final query = request.uri.queryParameters;
         final start = int.parse(query['StartIndex']!);
         final limit = int.parse(query['Limit']!);
@@ -98,6 +99,9 @@ void main() {
       });
       server.listen((request) async {
         request.response.headers.contentType = ContentType.json;
+        if (emby) {
+          expect(request.uri.path.startsWith('/emby/Users/user/Items'), isTrue);
+        }
         if (request.uri.path.endsWith('/Items/library')) {
           request.response.write('{"CollectionType":"movies"}');
         } else {

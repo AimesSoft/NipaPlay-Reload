@@ -839,6 +839,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         ? Colors.white
         : const Color(0xFF151820);
     final imageUrl = _getNetworkMediaImageUrl(item, width: 460);
+    final fallbackPoster = item.isFolder
+        ? _buildLargeScreenFolderPoster(textColor)
+        : _buildLargeScreenFallbackPoster(textColor);
 
     return NipaplayLargeScreenFocusableAction(
       autofocus: autofocus,
@@ -861,15 +864,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (item.isFolder)
-                    _buildLargeScreenFolderPoster(textColor)
-                  else
+                  if (imageUrl.isNotEmpty)
                     CachedNetworkImageWidget(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __) =>
-                          _buildLargeScreenFallbackPoster(textColor),
-                    ),
+                      errorBuilder: (_, __) => fallbackPoster,
+                    )
+                  else
+                    fallbackPoster,
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(

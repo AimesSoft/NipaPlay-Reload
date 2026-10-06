@@ -32,13 +32,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       compute(encodeVideoThumbnail, _frameImageRequest(frame),
           debugLabel: 'video-thumbnail');
 
-  Uint8List? _encodeFrameToScreenshotJpegBytes(PlayerFrame frame) {
+  Uint8List? _encodeFrameToScreenshotBytes(
+      PlayerFrame frame, ScreenshotFormat format) {
     final decoded = _decodeFrameToImage(frame);
     if (decoded == null) {
       return null;
     }
     return Uint8List.fromList(
-      img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality),
+      encodeScreenshotImage(decoded,
+          format: format, jpegQuality: _screenshotQuality.jpegQuality),
     );
   }
 
@@ -282,11 +284,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<String?> captureScreenshot({
+    ScreenshotFormat? format,
     bool? includeDanmaku,
     bool? includeSubtitles,
     bool temporary = false,
   }) async {
-    final bytes = await _captureScreenshotJpegBytes(
+    if (kIsWeb || !hasVideo) return null;
+    format ??= _screenshotFormat;
+    final bytes = await _captureScreenshotBytes(
+      format: format,
       // 未显式传参时回退到截图设置页的开关
       includeDanmaku: includeDanmaku ?? _screenshotCaptureIncludesDanmaku,
       includeSubtitles: includeSubtitles ?? _screenshotCaptureIncludesSubtitles,
@@ -297,7 +303,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final directoryPath = temporary
           ? (await path_provider.getTemporaryDirectory()).path
           : await _resolveScreenshotSaveDirectoryPath();
-      final fileName = _buildScreenshotFileName();
+      final fileName = _buildScreenshotFileName(format);
       final file = File(p.join(directoryPath, fileName));
       await file.writeAsBytes(bytes, flush: true);
       return file.path;
@@ -317,7 +323,8 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     if (!Platform.isIOS) return false;
     if (!hasVideo) return false;
 
-    final bytes = await _captureScreenshotJpegBytes(
+    final bytes = await _captureScreenshotBytes(
+      format: _screenshotFormat,
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
@@ -331,18 +338,20 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     bool includeDanmaku = true,
     bool includeSubtitles = true,
   }) {
-    return _captureScreenshotJpegBytes(
+    return _captureScreenshotBytes(
       includeDanmaku: includeDanmaku,
       includeSubtitles: includeSubtitles,
     );
   }
 
-  Future<Uint8List?> _captureScreenshotJpegBytes({
+  Future<Uint8List?> _captureScreenshotBytes({
+    ScreenshotFormat? format,
     required bool includeDanmaku,
     required bool includeSubtitles,
   }) async {
     if (kIsWeb) return null;
     if (!hasVideo) return null;
+    format ??= _screenshotFormat;
 
     if (_isCapturingScreenshot) {
       return null;
@@ -356,7 +365,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
           height: targetSize.height,
         );
         if (frame != null) {
-          final bytes = _encodeFrameToScreenshotJpegBytes(frame);
+          final bytes = _encodeFrameToScreenshotBytes(frame, format);
           if (bytes != null && bytes.isNotEmpty) {
             return bytes;
           }
@@ -410,8 +419,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final pixelRatio = devicePixelRatio.clamp(1.0, 2.0);
 
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
-      // JPEG(92) 而非 PNG：1080p 帧的 PNG 可达 10MB 级，JPEG 同画质约
-      // 0.3~1MB；RGBA 原始字节经 image 包编码，透明区域按黑底压实。
+      // 先读取原始 RGBA，再按用户选择编码 PNG 或指定质量的 JPEG。
       final rgbaData =
           await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       final imageWidth = image.width;
@@ -468,12 +476,14 @@ extension VideoPlayerStateCapture on VideoPlayerState {
           final cropped =
               img.copyCrop(decoded, x: x, y: y, width: cw, height: ch);
           final jpegBytes =
-              img.encodeJpg(cropped, quality: _screenshotQuality.jpegQuality);
+              encodeScreenshotImage(cropped,
+                  format: format, jpegQuality: _screenshotQuality.jpegQuality);
           return Uint8List.fromList(jpegBytes);
         }
       }
       final jpegBytes =
-          img.encodeJpg(decoded, quality: _screenshotQuality.jpegQuality);
+          encodeScreenshotImage(decoded,
+              format: format, jpegQuality: _screenshotQuality.jpegQuality);
       return Uint8List.fromList(jpegBytes);
     } catch (e) {
       debugPrint('截图失败: $e');
@@ -519,7 +529,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     return directory.path;
   }
 
-  String _buildScreenshotFileName() {
+  String _buildScreenshotFileName(ScreenshotFormat format) {
     String baseName;
 
     final titleParts = <String>[
@@ -539,7 +549,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
     final now = DateTime.now();
     final timestamp = _formatTimestamp(now);
-    return '${baseName}_$timestamp.jpg';
+    return '${baseName}_$timestamp.${format.extension}';
   }
 
   String _formatTimestamp(DateTime time) {

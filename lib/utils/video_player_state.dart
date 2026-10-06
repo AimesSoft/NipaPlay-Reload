@@ -1,14 +1,17 @@
 library video_player_state;
 
 export 'video_aspect_geometry.dart' show VideoAspectMode;
+export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
 import 'video_frame_image.dart';
+import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/danmaku_track_timing.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -572,6 +575,8 @@ int _exactEndStreak = 0;
   ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
   final String _screenshotQualityKey = 'screenshot_quality';
   ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
+  final String _screenshotFormatKey = 'screenshot_format';
+  ScreenshotFormat _screenshotFormat = ScreenshotFormat.jpeg;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -1300,6 +1305,7 @@ int _exactEndStreak = 0;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   ScreenshotQuality get screenshotQuality => _screenshotQuality;
+  ScreenshotFormat get screenshotFormat => _screenshotFormat;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;

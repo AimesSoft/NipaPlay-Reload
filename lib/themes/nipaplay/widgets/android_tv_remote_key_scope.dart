@@ -26,6 +26,7 @@ class NipaplayAndroidTvRemoteKeyScope extends StatefulWidget {
 class _NipaplayAndroidTvRemoteKeyScopeState
     extends State<NipaplayAndroidTvRemoteKeyScope> {
   bool _isPopping = false;
+  late final FocusHighlightStrategy _previousHighlightStrategy;
 
   bool _isBack(LogicalKeyboardKey key) =>
       key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape;
@@ -36,6 +37,10 @@ class _NipaplayAndroidTvRemoteKeyScopeState
   @override
   void initState() {
     super.initState();
+    _previousHighlightStrategy = FocusManager.instance.highlightStrategy;
+    // TV focus must remain visible even after pointer or virtual-key input.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
     FocusManager.instance.addEarlyKeyEventHandler(_handleEarlyKeyEvent);
     FocusManager.instance.addLateKeyEventHandler(_handleLateKeyEvent);
   }
@@ -44,6 +49,7 @@ class _NipaplayAndroidTvRemoteKeyScopeState
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_handleEarlyKeyEvent);
     FocusManager.instance.removeLateKeyEventHandler(_handleLateKeyEvent);
+    FocusManager.instance.highlightStrategy = _previousHighlightStrategy;
     super.dispose();
   }
 

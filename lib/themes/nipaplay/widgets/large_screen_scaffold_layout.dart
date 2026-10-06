@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_gamepad/universal_gamepad.dart';
@@ -79,6 +80,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
   bool _isSettingsPanelVisible = false;
   bool _isPlayerMenuVisible = false;
   DateTime? _lastPlayerMenuPressAt;
+  bool _isExitingPlayback = false;
   int _focusedMenuIndex = 0;
   int _focusedSettingsIndex = 0;
   int _settingsEntryCount = 0;
@@ -279,6 +281,29 @@ class _NipaplayLargeScreenScaffoldLayoutState
     return true;
   }
 
+  bool _handlePlayerBackPress() {
+    if (_isExitingPlayback) return true;
+    if (_isSettingsPanelVisible) {
+      _closeSettingsPanel();
+    } else if (_isPlayerMenuVisible) {
+      _closePlayerMenu();
+    } else if (_isTabPanelVisible) {
+      _closeTabPanel();
+    } else {
+      unawaited(_exitPlaybackFromPlayerMenu(returnToMediaLibrary: true));
+    }
+    return true;
+  }
+
+  bool _handlePlayerInputCommand(VideoPlayerState videoState,
+      NipaplayLargeScreenInputCommand command) {
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        command == NipaplayLargeScreenInputCommand.back) {
+      return _handlePlayerBackPress();
+    }
+    return _handlePlayerMenuPress(videoState);
+  }
+
   KeyEventResult _handlePlayerMediaKey(
     VideoPlayerState videoState,
     KeyEvent event,
@@ -347,15 +372,34 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
   }
 
-  Future<void> _exitPlaybackFromPlayerMenu() async {
+  Future<void> _exitPlaybackFromPlayerMenu(
+      {bool returnToMediaLibrary = false}) async {
+    if (_isExitingPlayback) return;
+    setState(() => _isExitingPlayback = true);
     // 退出播放时取消续播倒计时。
-    AutoNextEpisodeService.instance.cancelAutoNext();
-
-    final videoState = context.read<VideoPlayerState>();
-    _closePlayerMenu();
-    final shouldExit = await videoState.handleBackButton();
-    if (shouldExit) {
-      await videoState.resetPlayer();
+    try {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+      final videoState = context.read<VideoPlayerState>();
+      _closePlayerMenu();
+      final shouldExit = await videoState.handleBackButton();
+      if (shouldExit) {
+        await videoState.resetPlayer();
+        if (mounted && returnToMediaLibrary) {
+          AppNavigationScope.maybeOf(context)
+              ?.onSelectPage(AppPageIds.mediaLibrary);
+        }
+      }
+    } catch (error, stack) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'nipaplay',
+        context: ErrorDescription('while exiting large-screen playback'),
+      ));
+    } finally {
+      if (mounted) {
+        setState(() => _isExitingPlayback = false);
+      }
     }
   }
 
@@ -553,9 +597,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
   }
 
-  bool _handleTvOSRootPopRoute() {
+  bool _handleRootPopRoute() {
+    if (_isExitingPlayback) return true;
     final videoState = context.read<VideoPlayerState>();
     if (_isPlayerPlaybackContext(videoState)) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return _handlePlayerBackPress();
+      }
       return _handlePlayerMenuPress(videoState);
     }
     if (_isSettingsPanelVisible) {
@@ -826,7 +874,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (isPlayerPlaybackContext &&
         (command == NipaplayLargeScreenInputCommand.toggleMenu ||
             command == NipaplayLargeScreenInputCommand.back)) {
-      _handlePlayerMenuPress(videoState);
+      _handlePlayerInputCommand(videoState, command);
       return;
     }
 
@@ -978,7 +1026,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (isPlayerPlaybackContext &&
         (command == NipaplayLargeScreenInputCommand.toggleMenu ||
             command == NipaplayLargeScreenInputCommand.back)) {
-      return _handlePlayerMenuPress(videoState)
+      return _handlePlayerInputCommand(videoState, command)
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
@@ -1175,6 +1223,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
               removeTop: true,
               removeBottom: true,
               child: NipaplayLargeScreenPlayerMenuScope(
+                onBackPressed: _handlePlayerBackPress,
                 onMenuPressed: () {
                   _handlePlayerMenuPress(context.read<VideoPlayerState>());
                 },
@@ -1344,12 +1393,22 @@ class _NipaplayLargeScreenScaffoldLayoutState
         ],
       ),
     );
-    return NipaplayTvOSPopRouteGuard(
-      // Only Siri Remote MENU uses root popRoute to open the menu.
-      // Android BACK must retain its normal navigation/exit behavior.
-      enabled: globals.isTvOS,
-      onRootPopRoute: _handleTvOSRootPopRoute,
-      child: content,
+    // System/predictive BACK bypasses Focus; the root route must advertise
+    // that playback and open panels consume it instead of exiting Android.
+    final handlesAndroidBack = defaultTargetPlatform == TargetPlatform.android &&
+        (usePlayerContextPanel || showPanelBackdrop || _isExitingPlayback);
+    return PopScope<Object?>(
+      canPop: !handlesAndroidBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && handlesAndroidBack) {
+          _handleRootPopRoute();
+        }
+      },
+      child: NipaplayTvOSPopRouteGuard(
+        enabled: globals.isTvOS,
+        onRootPopRoute: _handleRootPopRoute,
+        child: content,
+      ),
     );
   }
 }

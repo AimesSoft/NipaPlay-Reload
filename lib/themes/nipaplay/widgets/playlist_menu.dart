@@ -6,6 +6,7 @@ import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
 import 'dart:io';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/media_server_playlist_loader.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
@@ -564,8 +565,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       }
 
       // 获取该季的所有剧集
-      final episodes = await JellyfinService.instance
-          .getSeasonEpisodes(episodeInfo.seriesId!, episodeInfo.seasonId!);
+      final episodes = await loadMediaServerPlaylist(
+        currentItem: episodeInfo,
+        seriesId: episodeInfo.seriesId,
+        seasonId: episodeInfo.seasonId,
+        loadSeason: JellyfinService.instance.getSeasonEpisodes,
+      );
 
       if (episodes.isEmpty) {
         throw Exception('该季没有找到剧集');
@@ -617,8 +622,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       }
 
       // 获取该季的所有剧集
-      final episodes = await EmbyService.instance
-          .getSeasonEpisodes(episodeInfo.seriesId!, episodeInfo.seasonId!);
+      final episodes = await loadMediaServerPlaylist(
+        currentItem: episodeInfo,
+        seriesId: episodeInfo.seriesId,
+        seasonId: episodeInfo.seasonId,
+        loadSeason: EmbyService.instance.getSeasonEpisodes,
+      );
 
       if (episodes.isEmpty) {
         throw Exception('该季没有找到剧集');
