@@ -78,8 +78,8 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   late double _endMillis;
   late double _maximumMillis;
   late final ValueNotifier<(double, double)> _timeRange;
-  int _framesPerSecond = 15;
-  GifExportQuality _quality = GifExportQuality.normal;
+  final _framesPerSecond = ValueNotifier<int>(15);
+  final _quality = ValueNotifier<GifExportQuality>(GifExportQuality.normal);
   String? _previewPath;
   Uint8List? _imagePreviewBytes;
   bool _includeDanmaku = true;
@@ -134,6 +134,8 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
   void dispose() {
     _tabController.dispose();
     _timeRange.dispose();
+    _framesPerSecond.dispose();
+    _quality.dispose();
     _widthController.dispose();
     _heightController.dispose();
     _startTimeController.dispose();
@@ -236,28 +238,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     _timeRange.value = (_startMillis, _endMillis);
   }
 
-  void _focusGifField(FocusNode focusNode) {
-    if (_isWorking) return;
-    focusNode.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !focusNode.hasFocus) return;
-      final fieldContext = focusNode.context;
-      if (fieldContext != null) {
-        unawaited(Scrollable.ensureVisible(
-          fieldContext,
-          duration: const Duration(milliseconds: 180),
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        ));
-      }
-      if (!kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.iOS ||
-              defaultTargetPlatform == TargetPlatform.android)) {
-        unawaited(
-            SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
-      }
-    });
-  }
-
   String? _validateSource() {
     if (!widget.videoState.player.supportsGifExport) {
       return '当前平台暂不支持 Erika GIF 导出工具。';
@@ -301,10 +281,10 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
           outputPath: outputPath,
           start: Duration(milliseconds: start.round()),
           end: Duration(milliseconds: end.round()),
-          framesPerSecond: _framesPerSecond,
+          framesPerSecond: _framesPerSecond.value,
           outputWidth: int.parse(_widthController.text),
           outputHeight: int.parse(_heightController.text),
-          quality: _quality,
+          quality: _quality.value,
         ),
       );
       return result;
@@ -762,15 +742,15 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
 
   Widget _buildGifTab(ColorScheme colors,
       {bool phoneLayout = false, bool phoneLandscape = false}) {
+    final preview = RepaintBoundary(
+      key: const ValueKey('gif-preview'),
+      child: _buildPreview(colors),
+    );
+    final settings = _buildSettings(colors,
+        phoneLayout: phoneLayout, phoneLandscape: phoneLandscape);
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
-        final preview = RepaintBoundary(
-          key: const ValueKey('gif-preview'),
-          child: _buildPreview(colors),
-        );
-        final settings = _buildSettings(colors,
-            phoneLayout: phoneLayout, phoneLandscape: phoneLandscape);
         if (phoneLandscape) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -978,40 +958,53 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _sectionLabel('帧率')),
-            Text('$_framesPerSecond fps',
-                style: TextStyle(color: AppAccentColors.current)),
-          ],
-        ),
-        Slider(
-          min: 5,
-          max: 30,
-          divisions: 25,
-          value: _framesPerSecond.toDouble(),
-          onChanged: _isWorking
-              ? null
-              : (value) => setState(() => _framesPerSecond = value.round()),
+        RepaintBoundary(
+          key: const ValueKey('gif-frame-rate'),
+          child: ValueListenableBuilder<int>(
+            valueListenable: _framesPerSecond,
+            child: _sectionLabel('帧率'),
+            builder: (context, fps, label) => Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: label!),
+                    Text('$fps fps',
+                        style: TextStyle(color: AppAccentColors.current)),
+                  ],
+                ),
+                Slider(
+                  min: 5,
+                  max: 30,
+                  divisions: 25,
+                  value: fps.toDouble(),
+                  onChanged: _isWorking
+                      ? null
+                      : (value) => _framesPerSecond.value = value.round(),
+                ),
+              ],
+            ),
+          ),
         ),
         _sectionLabel('输出质量'),
-        SegmentedButton<GifExportQuality>(
-          segments: const [
-            ButtonSegment(
-              value: GifExportQuality.normal,
-              icon: Icon(Icons.bolt_rounded),
-              label: Text('普通'),
-            ),
-            ButtonSegment(
-              value: GifExportQuality.high,
-              icon: Icon(Icons.auto_awesome_rounded),
-              label: Text('高质量'),
-            ),
-          ],
-          selected: {_quality},
-          onSelectionChanged: _isWorking
-              ? null
-              : (value) => setState(() => _quality = value.first),
+        ValueListenableBuilder<GifExportQuality>(
+          valueListenable: _quality,
+          builder: (context, quality, _) => SegmentedButton<GifExportQuality>(
+            segments: const [
+              ButtonSegment(
+                value: GifExportQuality.normal,
+                icon: Icon(Icons.bolt_rounded),
+                label: Text('普通'),
+              ),
+              ButtonSegment(
+                value: GifExportQuality.high,
+                icon: Icon(Icons.auto_awesome_rounded),
+                label: Text('高质量'),
+              ),
+            ],
+            selected: {quality},
+            onSelectionChanged:
+                _isWorking ? null : (value) => _quality.value = value.first,
+          ),
         ),
         if (!phoneLandscape) ...[
           const SizedBox(height: 18),
@@ -1038,7 +1031,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     return TextField(
       controller: controller,
       focusNode: focusNode,
-      onTap: () => _focusGifField(focusNode),
       enabled: !_isWorking,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1059,7 +1051,6 @@ class _MediaCaptureDialogContentState extends State<MediaCaptureDialogContent>
     return TextField(
       controller: controller,
       focusNode: focusNode,
-      onTap: () => _focusGifField(focusNode),
       enabled: !_isWorking,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [

@@ -81,10 +81,9 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       child: Builder(
         builder: (BuildContext dialogContext) {
-          final screenSize = MediaQuery.of(dialogContext).size;
+          final screenSize = MediaQuery.sizeOf(dialogContext);
           final dialogWidth =
               maxWidth ?? globals.DialogSizes.getDialogWidth(screenSize.width);
-          final keyboardHeight = MediaQuery.of(dialogContext).viewInsets.bottom;
           final shortestSide = screenSize.shortestSide;
           final bool isRealPhone = globals.isPhone && shortestSide < 600;
           final bool hasTitle = title.isNotEmpty;
@@ -108,10 +107,7 @@ class BlurDialog {
                 ? () => Navigator.of(dialogContext).maybePop()
                 : null,
             backgroundColor: backgroundColor,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: dialogContent,
-            ),
+            child: _KeyboardInsetScrollView(child: dialogContent),
           );
         },
       ),
@@ -163,30 +159,22 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       barrierColor: phoneBarrierColor,
       hideBottomBar: hidePhoneBottomBar,
-      child: Builder(
-        builder: (sheetContext) {
-          final keyboardHeight = MediaQuery.of(sheetContext).viewInsets.bottom;
-          return SafeArea(
-            top: false,
-            bottom: false,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                24,
-                16,
-                24,
-                24 + keyboardHeight,
-              ),
-              child: _buildDialogContent(
-                context: sheetContext,
-                title: title,
-                content: content,
-                contentWidget: contentWidget,
-                actions: actionsBuilder?.call(sheetContext) ?? actions,
-                includeTitle: false,
-              ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: _KeyboardInsetScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Builder(
+            builder: (sheetContext) => _buildDialogContent(
+              context: sheetContext,
+              title: title,
+              content: content,
+              contentWidget: contentWidget,
+              actions: actionsBuilder?.call(sheetContext) ?? actions,
+              includeTitle: false,
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -257,4 +245,22 @@ class BlurDialog {
       ],
     );
   }
+}
+
+// Only the scrolling inset subscribes to keyboard metrics. The dialog body is
+// a stable child, so successive IME animation frames do not rebuild its form.
+class _KeyboardInsetScrollView extends StatelessWidget {
+  const _KeyboardInsetScrollView({
+    required this.child,
+    this.padding = EdgeInsets.zero,
+  });
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        padding: padding +
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: child,
+      );
 }

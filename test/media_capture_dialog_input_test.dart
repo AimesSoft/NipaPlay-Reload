@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_capture_dialog.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -146,6 +148,140 @@ void main() {
     } finally {
       videoState.dispose();
       await tester.binding.setSurfaceSize(null);
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('GIF slider updates stay local and preserve active input',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await tester.binding.setSurfaceSize(const Size(1100, 900));
+    final videoState = _TestVideoState();
+    try {
+      await tester.pumpWidget(AppDisplaySurfaceScope(
+        surface: AppDisplaySurface.phone,
+        child: MaterialApp(
+            home: Scaffold(
+                body: SingleChildScrollView(
+          child: MediaCaptureDialogContent(
+            videoState: videoState,
+            onCaptureImage: (_,
+                {required includeDanmaku, required includeSubtitles}) async {},
+          ),
+        ))),
+      ));
+      await tester.tap(find.text('GIF 截取'));
+      await tester.pumpAndSettle();
+      final fieldFinder = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.labelText == '结束时间');
+      await tester.showKeyboard(fieldFinder);
+      const editing = TextEditingValue(
+          text: '00:09.5',
+          selection: TextSelection.collapsed(offset: 7),
+          composing: TextRange(start: 6, end: 7));
+      tester.testTextInput.updateEditingValue(editing);
+      await tester.pumpAndSettle();
+      final field = tester.widget<TextField>(fieldFinder);
+      final preview = tester.widget(find.byKey(const ValueKey('gif-preview')));
+      final quality =
+          tester.widget(find.byType(SegmentedButton<GifExportQuality>));
+      for (final fps in [16.0, 20.0, 25.0, 30.0, 5.0]) {
+        tester.widget<Slider>(find.byType(Slider)).onChanged!(fps);
+        await tester.pump();
+        expect(find.text('${fps.round()} fps'), findsOneWidget);
+        expect(tester.widget(fieldFinder), same(field));
+        expect(tester.widget(find.byKey(const ValueKey('gif-preview'))),
+            same(preview));
+        expect(tester.widget(find.byType(SegmentedButton<GifExportQuality>)),
+            same(quality));
+        expect(field.controller!.value, editing);
+        expect(field.focusNode!.hasFocus, isTrue);
+      }
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      slider.onChanged!(5.2);
+      await tester.pump();
+      expect(tester.widget(find.byType(Slider)), same(slider));
+      expect(videoState.player.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    } finally {
+      videoState.dispose();
+      await tester.binding.setSurfaceSize(null);
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('GIF phone sheet preserves form during Android IME inset frames',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final videoState = _TestVideoState();
+    try {
+      await tester.pumpWidget(ChangeNotifierProvider(
+        create: (_) => BottomBarProvider(),
+        child: MaterialApp(
+            home: AppDisplaySurfaceScope(
+          surface: AppDisplaySurface.phone,
+          child: Builder(
+              builder: (context) => Scaffold(
+                  body: TextButton(
+                      onPressed: () => showMediaCaptureDialog(
+                            context: context,
+                            videoState: videoState,
+                            onCaptureImage: (_,
+                                {required includeDanmaku,
+                                required includeSubtitles}) async {},
+                          ),
+                      child: const Text('Open capture')))),
+        )),
+      ));
+      await tester.tap(find.text('Open capture'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GIF 截取'));
+      await tester.pumpAndSettle();
+      final fieldFinder = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.labelText == '宽度');
+      await tester.ensureVisible(fieldFinder);
+      await tester.tap(fieldFinder);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isTrue);
+      final field = tester.widget<TextField>(fieldFinder);
+      final preview = tester.widget(find.byKey(const ValueKey('gif-preview')));
+      final slider = tester.widget(find.byType(Slider));
+      for (final bottom in [
+        60.0,
+        120.0,
+        200.0,
+        300.0,
+        200.0,
+        120.0,
+        60.0,
+        0.0
+      ]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: bottom);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(tester.widget(fieldFinder), same(field));
+        expect(tester.widget(find.byKey(const ValueKey('gif-preview'))),
+            same(preview));
+        expect(tester.widget(find.byType(Slider)), same(slider));
+        expect(field.focusNode!.hasFocus, isTrue);
+        if (bottom == 300) {
+          await tester.pumpAndSettle();
+          expect(tester.getRect(fieldFinder).bottom, lessThanOrEqualTo(544));
+        }
+      }
+      await tester.pumpAndSettle();
+      expect(videoState.player.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    } finally {
+      tester.view.resetViewInsets();
+      videoState.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
       debugDefaultTargetPlatformOverride = null;
     }
   });
@@ -374,6 +510,12 @@ void main() {
         await tester.enterText(field, entry.value);
       }
       await tester.pumpAndSettle();
+      tester.widget<Slider>(find.byType(Slider)).onChanged!(25);
+      tester
+          .widget<SegmentedButton<GifExportQuality>>(
+              find.byType(SegmentedButton<GifExportQuality>))
+          .onSelectionChanged!({GifExportQuality.high});
+      await tester.pump();
       final exportButton = find.text('导出动图文件');
       await tester.ensureVisible(exportButton);
       await tester.pumpAndSettle();
@@ -398,6 +540,8 @@ void main() {
       expect(request.end, const Duration(milliseconds: 8500));
       expect(request.outputWidth, 320);
       expect(request.outputHeight, 180);
+      expect(request.framesPerSecond, 25);
+      expect(request.quality, GifExportQuality.high);
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
