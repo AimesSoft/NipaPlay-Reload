@@ -903,8 +903,16 @@ class PluginService extends ChangeNotifier {
         'plugins.discovery', _discoverPlugins,
         itemCount: (items) => items.length);
 
+    final workBudget = Stopwatch()..start();
+    Future<void> yieldBetweenPlugins() async {
+      if (workBudget.elapsedMilliseconds < 4) return;
+      await Future<void>.delayed(Duration.zero);
+      workBudget.reset();
+    }
+
     // 第一遍：解析清单并登记描述符（暂不加载运行时）。
     for (final discovered in discoveredPlugins) {
+      await yieldBetweenPlugins();
       try {
         final parsed = PerformanceTrace.measureSync(
             'plugins.metadata', () => _parsePluginMetadata(discovered.script));
@@ -975,6 +983,7 @@ class PluginService extends ChangeNotifier {
     for (final plugin in _plugins) {
       final index = ordinal++;
       if (!plugin.enabled) continue;
+      await yieldBetweenPlugins();
       try {
         await PerformanceTrace.measure('plugin.$index.runtime',
             () => _loadPluginRuntime(plugin.manifest.id));

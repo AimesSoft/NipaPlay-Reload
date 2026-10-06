@@ -188,6 +188,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   bool _isLoadingLibraryContent = false;
   bool _isFolderNavigation = false;
   final List<_FolderNode> _folderStack = [];
+  int _contentLoadRevision = 0;
 
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
@@ -1595,7 +1596,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       return;
     }
 
-    if (mounted) {
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        !_isShowingLibraryContent;
+    if (current()) {
       setState(() {
         _error = null;
       });
@@ -1609,6 +1617,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         case NetworkMediaServerType.jellyfin:
           items = await (service as JellyfinService).getLatestMediaItems(
             limit: 99999,
+            isCurrent: current,
             sortBy: provider.currentSortBy,
             sortOrder: provider.currentSortOrder,
           );
@@ -1617,21 +1626,22 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as EmbyService).getLatestMediaItems(
             limitPerLibrary: 99999,
             totalLimit: 99999,
+            isCurrent: current,
             sortBy: provider.currentSortBy,
             sortOrder: provider.currentSortOrder,
           );
           break;
       }
 
-      if (mounted && !_isShowingLibraryContent) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
         });
@@ -2003,6 +2013,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   // 加载媒体库内容
   Future<void> _loadLibraryContent(String libraryId) async {
     if (!mounted) return;
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        _selectedLibraryId == libraryId;
 
     if (_isFolderNavigation) {
       await _loadFolderItems(libraryId);
@@ -2023,6 +2040,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               await (service as JellyfinService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
+            isCurrent: current,
             sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
             sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
@@ -2031,13 +2049,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as EmbyService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
+            isCurrent: current,
             sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
             sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
           break;
       }
 
-      if (mounted) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
@@ -2045,9 +2064,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
           _isLoadingLibraryContent = false;
@@ -2058,8 +2077,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   Future<void> _loadFolderItems(String parentId) async {
     if (!mounted) return;
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        _folderStack.isNotEmpty &&
+        _folderStack.last.id == parentId;
 
-    if (mounted) {
+    if (current()) {
       setState(() {
         _isLoadingLibraryContent = true;
         _error = null;
@@ -2075,17 +2102,19 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as JellyfinService).getFolderItems(
             parentId,
             limit: 99999,
+            isCurrent: current,
           );
           break;
         case NetworkMediaServerType.emby:
           items = await (service as EmbyService).getFolderItems(
             parentId,
             limit: 99999,
+            isCurrent: current,
           );
           break;
       }
 
-      if (mounted) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
@@ -2093,9 +2122,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
           _isLoadingLibraryContent = false;

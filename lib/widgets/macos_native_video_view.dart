@@ -1,3 +1,4 @@
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -238,7 +239,9 @@ class MacOSWindowNativeVideoOverlaySurface extends StatefulWidget {
 
 class _MacOSWindowNativeVideoOverlaySurfaceState
     extends State<MacOSWindowNativeVideoOverlaySurface>
-    with WidgetsBindingObserver {
+    with
+        WidgetsBindingObserver,
+        PageActivityMixin<MacOSWindowNativeVideoOverlaySurface> {
   static int _windowsPointerLogCount = 0;
 
   Timer? _retryTimer;
@@ -259,7 +262,6 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     WidgetsBinding.instance.addObserver(this);
     _surfaceGeneration = identityHashCode(this);
     widget.onPlatformViewIdChanged?.call(_windowHostedPlatformSurfaceId);
-    _startFrameTimer();
     _scheduleAttach();
   }
 
@@ -299,6 +301,18 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     widget.onFrameRectChanged?.call(null);
     unawaited(_hideOverlayFrame());
     super.dispose();
+  }
+
+  @override
+  void onPageActivityChanged(bool active) {
+    _frameTimer?.cancel();
+    if (active) {
+      _startFrameTimer();
+      _scheduleFrameUpdate(force: true);
+      // Activity callbacks run after a frame; make the queued geometry update
+      // run even if the resumed scene has no animation requesting another one.
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
   }
 
   void _startFrameTimer() {

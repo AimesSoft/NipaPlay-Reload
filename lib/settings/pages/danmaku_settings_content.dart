@@ -1053,6 +1053,24 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   color: colorScheme.onSurface.withValues(alpha: 0.12),
                   height: 1),
               AdaptiveSettingsTile.slider(
+                title: 'Titan 弹幕轨道间距',
+                subtitle: '增大间距可减少重叠，减小间距可显示更多弹幕',
+                icon: Icons.reorder,
+                value: videoState.titanDanmakuSettings.trackGap,
+                min: 0.0,
+                max: 0.5,
+                divisions: 50,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(trackGap: value),
+                  );
+                },
+                labelFormatter: (value) => '${(value * 100).round()}%',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
                 title: 'Titan 弹幕密度',
                 subtitle: '限制同屏轨道占用密度',
                 icon: Icons.density_medium,
