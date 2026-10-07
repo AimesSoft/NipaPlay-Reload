@@ -280,7 +280,7 @@ class CupertinoBangumiSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           AdaptiveButton.child(
-            onPressed: data.onOpenNipaplayHelp,
+            onPressed: data.onOpenTokenPage,
             style: AdaptiveButtonStyle.plain,
             color: CupertinoTheme.of(context).primaryColor,
             child: Row(

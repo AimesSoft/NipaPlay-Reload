@@ -288,6 +288,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         onOpenNipaplayHelp: () => _showBangumiSyncHelpDialog(
           _BangumiSyncHelpService.nipaplay,
         ),
+        onOpenTokenPage: _openBangumiAccessTokenPage,
       ),
     );
   }
@@ -527,6 +528,23 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         ),
       ],
     );
+  }
+
+  /// 打开 Bangumi 访问令牌创建页面。
+  ///
+  /// 之前在账户页重构时丢失了跳转链接，只保留了说明弹窗，用户无法直接
+  /// 前往官方页面创建令牌。这里恢复跳转：优先在外部浏览器打开官方页面，
+  /// 若打开失败（例如 Web 端）则回退到说明弹窗并把链接展示给用户。
+  Future<void> _openBangumiAccessTokenPage() async {
+    final opened = await _openExternalUrl(
+      BangumiAccountViewModel.bangumiAccessTokenUrl,
+      cannotOpenMessage: '无法打开访问令牌页面，请手动访问：'
+          '${BangumiAccountViewModel.bangumiAccessTokenUrl}',
+    );
+    if (!mounted) return;
+    if (!opened) {
+      await _showBangumiSyncHelpDialog(_BangumiSyncHelpService.nipaplay);
+    }
   }
 
   Future<void> _startDandanBangumiAuthorize() async {
