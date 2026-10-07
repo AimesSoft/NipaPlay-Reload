@@ -567,15 +567,49 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildPositionSection(VideoPlayerState videoState) {
-    return _buildSliderSection(
-      label: '字幕位置',
-      value: videoState.subtitlePosition,
-      min: VideoPlayerState.minSubtitlePosition,
-      max: VideoPlayerState.maxSubtitlePosition,
-      step: 1.0,
-      displayTextBuilder: (v) => '${v.toStringAsFixed(0)}%',
-      onChanged: videoState.setSubtitlePosition,
-      hint: '0=顶部，100=底部',
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    final kernelName = videoState.player.getPlayerKernelName();
+    final embeddedOverlayAvailable = kernelName == 'Media Kit';
+    return Column(
+      children: [
+        _buildSliderSection(
+          label: '字幕位置',
+          value: videoState.subtitlePosition,
+          min: VideoPlayerState.minSubtitlePosition,
+          max: VideoPlayerState.maxSubtitlePosition,
+          step: 1.0,
+          displayTextBuilder: (v) => '${v.toStringAsFixed(0)}%',
+          onChanged: videoState.setSubtitlePosition,
+          hint: embeddedOverlayAvailable && videoState.embeddedSubtitleOverlayMode
+              ? '整块移动模式：双语行距不随滑块收拢'
+              : '0=顶部，100=底部',
+        ),
+        // 双语整块移动（仅 libmpv）：内核渲染的 ASS 轨受 libass 逐行
+        // 插值约束——位置偏离 100 时双语两行按比例收拢、0 处在顶端重叠
+        // （内核语义，无整体平移原语）。此开关把内嵌字幕改为 App 整块渲
+        // 染（sub-text 轮询），位置/边距按块生效，行距永不变化；代价是
+        // 字幕样式改用应用渲染（跟随下方全局设置，不再保留 ASS 特效）。
+        // 外挂 ASS/SSA 不受影响：整块模式为它让位，始终按脚本样式渲染。
+        if (embeddedOverlayAvailable) ...[
+          _buildSwitchRow(
+            label: '双语整块移动（不重叠）',
+            value: videoState.embeddedSubtitleOverlayMode,
+            onChanged: (v) => videoState.setEmbeddedSubtitleOverlayMode(v),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              '内嵌字幕整块渲染：双语行距固定不重叠，样式跟随全局设置'
+              '（ASS 特效失效）；外挂 ASS 保留自带样式',
+              locale: const Locale('zh', 'CN'),
+              style: TextStyle(
+                color: menuColors.foreground.withValues(alpha: 0.55),
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -626,18 +660,37 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildMarginSection(VideoPlayerState videoState) {
+    final menuColors = PlayerMenuTheme.colorsOf(context);
+    final kernelName = videoState.player.getPlayerKernelName();
+    final kernelSupportsEmbeddedMarginX = kernelName != 'Erika' &&
+        kernelName != '未知';
     return Column(
       children: [
-        _buildSliderSection(
-          label: '水平边距',
-          value: videoState.subtitleMarginX,
-          min: 0,
-          max: 200,
-          step: 1.0,
-          displayTextBuilder: (v) => '${v.toStringAsFixed(0)}px',
-          onChanged: videoState.setSubtitleMarginX,
-          hint: '字幕与左右边缘距离',
-        ),
+        if (kernelSupportsEmbeddedMarginX)
+          _buildSliderSection(
+            label: '水平边距',
+            value: videoState.subtitleMarginX,
+            min: 0,
+            max: 200,
+            step: 1.0,
+            displayTextBuilder: (v) => '${v.toStringAsFixed(0)}px',
+            onChanged: videoState.setSubtitleMarginX,
+            hint: '位移幅度取决于字幕脚本分辨率，老压制双语字幕会被放大、'
+                '可能移出画面——出现跑出画面时请调回小值',
+          )
+        else
+          // Erika 未实现字幕样式属性接口；"未知"= 懒包装未实例化。
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              '当前内核不支持内嵌字幕水平边距；外挂字幕可长按拖动调整水平位置',
+              locale: const Locale('zh', 'CN'),
+              style: TextStyle(
+                color: menuColors.foreground.withValues(alpha: 0.55),
+                fontSize: 12,
+              ),
+            ),
+          ),
         _buildSliderSection(
           label: '垂直边距',
           value: videoState.subtitleMarginY,

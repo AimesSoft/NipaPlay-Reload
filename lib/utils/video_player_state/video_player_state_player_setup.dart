@@ -818,6 +818,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       final previousSubtitleDelay = subtitleDelaySeconds;
       _duration = Duration(milliseconds: player.mediaInfo.duration);
+      // Whole-block overlay mode: sync the kernel render switch for the
+      // new video and drop the previous video's residue text (polling
+      // refills it).
+      _embeddedSubtitleOverlayText = '';
+      applyEmbeddedSubtitleOverlayKernelState();
       if ((previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
         unawaited(applySubtitleStylePreference());
       }
@@ -964,6 +969,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
                         isCurrentPlayback()) {
                       player.activeSubtitleTracks = activeEmbeddedTracks;
                     }
+                    applyEmbeddedSubtitleOverlayKernelState();
                   }
                 },
                 loadExternal: (action) async {
@@ -1387,6 +1393,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   void _onExternalSubtitleAutoLoaded(String path, String fileName) {
     // 这里可以处理回调，例如显示提示或更新UI
     debugPrint('VideoPlayerState: 外部字幕自动加载: $fileName');
+    // Auto-load activates the subtitle inside SubtitleManager without going
+    // through VideoPlayerState.setExternalSubtitle. If a kernel-rendered
+    // external ASS became active, whole-block mode must step aside; if an
+    // external was cleared, the mode resumes. Re-sync sub-visibility.
+    applyEmbeddedSubtitleOverlayKernelState();
+    _notifyListeners();
   }
 
   // 预先计算视频哈希值

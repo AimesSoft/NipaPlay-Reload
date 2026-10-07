@@ -967,6 +967,21 @@ class SubtitleManager extends ChangeNotifier {
   bool externalSubtitleRenderedInApp(String path) =>
       _shouldRenderExternalSubtitleInApp(path);
 
+  /// Whether the currently active external subtitle is a kernel-track
+  /// ASS/SSA (rendered by libass with script styles under libmpv).
+  ///
+  /// The whole-block embedded subtitle mode must step aside for it: writing
+  /// sub-visibility=no stops libass rendering and sub-text only exposes
+  /// plain text, which strips the script's positioning and colors (colored
+  /// \pos annotations collapse into white centered text).
+  bool isKernelRenderedExternalAssActive() {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null || path.isEmpty) return false;
+    if (_shouldRenderExternalSubtitleInApp(path)) return false;
+    final ext = p.extension(path).toLowerCase();
+    return ext == '.ass' || ext == '.ssa';
+  }
+
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
     // 其他仍在叠加的字幕块跟着消失（旧实现读单条当前路径）。

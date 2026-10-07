@@ -798,6 +798,14 @@ int _exactEndStreak = 0;
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
 
+  // 内嵌字幕整块移动模式（双语不重叠）：开启后内核只解码不渲染
+  // （sub-visibility=no），App 按 sub-text 轮询取文本整块渲染——位置
+  // 滑块移动整个字幕块（行距永不收拢）、水平边距按屏幕像素生效。
+  bool _embeddedSubtitleOverlayMode = false;
+  final String _embeddedSubtitleOverlayModeKey = 'embedded_subtitle_overlay_mode';
+  String _embeddedSubtitleOverlayText = '';
+  int _lastEmbeddedSubTextPollMs = 0;
+
   // 弹幕轨道显示区域设置
   double _danmakuDisplayArea =
       1.0; // 默认全屏显示（0.0=单行，1.0=全屏，0.67=2/3，0.33=1/3，0.25=1/4，0.125=1/8）
