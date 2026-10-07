@@ -99,15 +99,12 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: _dismissKeyboard,
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardHeight),
+        child: _KeyboardInsetPadding(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,4 +347,17 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
       }
     }
   }
+}
+
+// Keyboard metrics rebuild only this wrapper, keeping the form child stable.
+class _KeyboardInsetPadding extends StatelessWidget {
+  const _KeyboardInsetPadding({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: child,
+      );
 }

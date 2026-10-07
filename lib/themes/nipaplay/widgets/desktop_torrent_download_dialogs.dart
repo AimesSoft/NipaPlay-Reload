@@ -17,16 +17,16 @@ class DesktopTorrentDownloadDialogs {
       context: context,
       title: data.title,
       content: data.message,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           child: Text(
             data.cancelLabel,
             style: TextStyle(color: colors.onSurface.withValues(alpha: 0.7)),
           ),
         ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           idleColor: colors.error,
           hoverColor: colors.error,
           child: Text(data.confirmLabel),
@@ -94,9 +94,9 @@ class DesktopTorrentDownloadDialogs {
           },
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(
             data.cancelLabel,
             style: TextStyle(color: colors.onSurface.withValues(alpha: 0.7)),

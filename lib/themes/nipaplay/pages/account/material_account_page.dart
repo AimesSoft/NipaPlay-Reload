@@ -204,13 +204,13 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         context: context,
         title: '账号注销确认',
         content: '账号注销不可逆，将永久删除账号及其关联数据。继续后会在浏览器中打开注销页面。',
-        actions: [
+        actionsBuilder: (dialogContext) => [
           BlurButton(
             icon: fluent.FluentIcons.cancel,
             text: '取消',
             flatStyle: true,
             hoverScale: _buttonHoverScale,
-            onTap: () => Navigator.of(context).pop(),
+            onTap: () => Navigator.of(dialogContext).pop(),
           ),
           BlurButton(
             icon: fluent.FluentIcons.delete,
@@ -218,7 +218,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
             flatStyle: true,
             hoverScale: _buttonHoverScale,
             onTap: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               unawaited(
                 _openExternalUrl(
                   deleteAccountUrl,
@@ -517,13 +517,13 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
       context: context,
       title: title,
       content: message,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         BlurButton(
           icon: fluent.FluentIcons.accept,
           text: '知道了',
           flatStyle: true,
           hoverScale: _buttonHoverScale,
-          onTap: () => Navigator.of(context).pop(),
+          onTap: () => Navigator.of(dialogContext).pop(),
         ),
       ],
     );

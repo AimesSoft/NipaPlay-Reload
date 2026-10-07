@@ -22,6 +22,8 @@ class JellyfinProvider extends ChangeNotifier {
   Map<String, JellyfinMovieInfo> _movieDetailsCache = {};
   Timer? _notifyTimer;
   bool _disposed = false;
+  int _mediaLoadRevision = 0;
+  int _movieLoadRevision = 0;
   
   // Provider 级 ready：首次媒体/电影列表加载完成后触发
   bool _isReady = false;
@@ -123,6 +125,7 @@ class JellyfinProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _jellyfinService.removeConnectionStateListener(_onConnectionStateChanged);
     _notifyTimer?.cancel();
     super.dispose();
   }
@@ -206,6 +209,14 @@ class JellyfinProvider extends ChangeNotifier {
   
   /// 连接状态变化回调
   void _onConnectionStateChanged(bool isConnected) {
+    _mediaLoadRevision++;
+    _movieLoadRevision++;
+    _isLoading = false;
+    _mediaDetailsCache.clear();
+    _movieDetailsCache.clear();
+    _mediaItems = [];
+    _movieItems = [];
+
     print('JellyfinProvider: 连接状态变化 - isConnected: $isConnected');
     
     // 连接状态变化需要立即通知UI，不能延迟
@@ -228,6 +239,8 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 加载Jellyfin媒体项
   Future<void> loadMediaItems() async {
+    final revision = ++_mediaLoadRevision;
+    bool current() => !_disposed && revision == _mediaLoadRevision;
     if (!_jellyfinService.isConnected) return;
     
     _isLoading = true;
@@ -235,39 +248,52 @@ class JellyfinProvider extends ChangeNotifier {
     _notifyCoalesced();
     
     try {
-      _mediaItems = await _jellyfinService.getLatestMediaItems(
+      final items = await _jellyfinService.getLatestMediaItems(
+        isCurrent: current,
         sortBy: _currentSortBy,
         sortOrder: _currentSortOrder,
       );
+      if (!current()) return;
+      _mediaItems = items;
     } catch (e) {
+      if (!current()) return;
       _hasError = true;
       _errorMessage = e.toString();
       _mediaItems = [];
     } finally {
-      _isLoading = false;
-      _notifyCoalesced();
-      if (_initializingAfterConnect) {
-        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
-        _maybeMarkReady();
+      if (current()) {
+        _isLoading = false;
+        _notifyCoalesced();
+        if (_initializingAfterConnect) {
+          _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+          _maybeMarkReady();
+        }
       }
     }
   }
   
   // 加载Jellyfin电影项
   Future<void> loadMovieItems() async {
+    final revision = ++_movieLoadRevision;
+    bool current() => !_disposed && revision == _movieLoadRevision;
     if (!_jellyfinService.isConnected) return;
     
     try {
-      _movieItems = await _jellyfinService.getLatestMovies();
+      final items = await _jellyfinService.getLatestMovies(isCurrent: current);
+      if (!current()) return;
+      _movieItems = items;
     } catch (e) {
+      if (!current()) return;
       _hasError = true;
       _errorMessage = e.toString();
       _movieItems = [];
     } finally {
-      _notifyCoalesced();
-      if (_initializingAfterConnect) {
-        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
-        _maybeMarkReady();
+      if (current()) {
+        _notifyCoalesced();
+        if (_initializingAfterConnect) {
+          _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+          _maybeMarkReady();
+        }
       }
     }
   }
@@ -347,14 +373,19 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 获取媒体详情
   Future<JellyfinMediaItemDetail> getMediaItemDetails(String itemId) async {
+    final session = (_jellyfinService.serverUrl, _jellyfinService.userId);
+    final cacheKey = json.encode([session.$1, session.$2, itemId]);
     // 如果已经缓存了详情，直接返回
-    if (_mediaDetailsCache.containsKey(itemId)) {
-      return _mediaDetailsCache[itemId]!;
+    if (_mediaDetailsCache.containsKey(cacheKey)) {
+      return _mediaDetailsCache[cacheKey]!;
     }
     
     try {
       final details = await _jellyfinService.getMediaItemDetails(itemId);
-      _mediaDetailsCache[itemId] = details;
+      if (_disposed || session != (_jellyfinService.serverUrl, _jellyfinService.userId)) {
+        throw StateError('Media detail request superseded');
+      }
+      _mediaDetailsCache[cacheKey] = details;
       return details;
     } catch (e) {
       rethrow;
@@ -363,15 +394,20 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 获取电影详情
   Future<JellyfinMovieInfo?> getMovieDetails(String movieId) async {
+    final session = (_jellyfinService.serverUrl, _jellyfinService.userId);
+    final cacheKey = json.encode([session.$1, session.$2, movieId]);
     // 如果已经缓存了详情，直接返回
-    if (_movieDetailsCache.containsKey(movieId)) {
-      return _movieDetailsCache[movieId]!;
+    if (_movieDetailsCache.containsKey(cacheKey)) {
+      return _movieDetailsCache[cacheKey]!;
     }
     
     try {
       final details = await _jellyfinService.getMovieDetails(movieId);
+      if (_disposed || session != (_jellyfinService.serverUrl, _jellyfinService.userId)) {
+        throw StateError('Media detail request superseded');
+      }
       if (details != null) {
-        _movieDetailsCache[movieId] = details;
+        _movieDetailsCache[cacheKey] = details;
       }
       return details;
     } catch (e) {

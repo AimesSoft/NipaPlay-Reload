@@ -28,7 +28,19 @@ class SMBProxyService {
   bool get isRunning => _isRunning;
   int get port => _port;
 
+  Future<void>? _initializing;
+
   Future<void> initialize() async {
+    if (_isRunning || kIsWeb) return;
+    final pending = _initializing ??= _initialize();
+    try {
+      await pending;
+    } finally {
+      if (identical(_initializing, pending)) _initializing = null;
+    }
+  }
+
+  Future<void> _initialize() async {
     if (kIsWeb) {
       return;
     }
@@ -69,18 +81,34 @@ class SMBProxyService {
         );
         _port = _server!.port;
         _isRunning = true;
-        await prefs.setInt(_portKey, _port);
+        try {
+          await prefs.setInt(_portKey, _port);
+        } catch (error) {
+          debugPrint('SMB proxy port preference could not be saved: $error');
+        }
         return;
       } catch (e) {
         lastError = e;
       }
     }
 
-    debugPrint('SMBProxyService failed to start: $lastError');
+    throw StateError('SMBProxyService failed to start: $lastError');
+  }
+
+  Future<void> stop() async {
+    await _initializing;
+    await _server?.close(force: true);
+    _server = null;
+    _port = 0;
+    _isRunning = false;
   }
 
   String buildStreamUrl(SMBConnection connection, String smbPath) {
-    final normalizedConnection = SMBService.instance.getConnection(connection.name) ?? connection;
+    if (!_isRunning)
+      throw StateError(
+          'SMB proxy must be initialized before building a stream URL');
+    final normalizedConnection =
+        SMBService.instance.getConnection(connection.name) ?? connection;
     final connName = normalizedConnection.name.trim();
     final normalizedPath = _normalizeSmbPath(smbPath);
 
@@ -111,7 +139,10 @@ class SMBProxyService {
   }) async {
     final connName = request.url.queryParameters['conn']?.trim();
     final rawPath = request.url.queryParameters['path']?.trim();
-    if (connName == null || connName.isEmpty || rawPath == null || rawPath.isEmpty) {
+    if (connName == null ||
+        connName.isEmpty ||
+        rawPath == null ||
+        rawPath.isEmpty) {
       return Response(HttpStatus.badRequest, body: 'Missing conn or path');
     }
 

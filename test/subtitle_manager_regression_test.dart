@@ -18,6 +18,27 @@ class _UnusedPlayerDelegate extends Fake implements AbstractPlayer {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('subtitle index is replaced when a cached file changes', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final directory =
+        await Directory.systemTemp.createTemp('subtitle-index-refresh-');
+    final file = File('${directory.path}/track.srt');
+    final manager =
+        SubtitleManager(player: Player.withDelegate(_UnusedPlayerDelegate()));
+    await file.writeAsString('1\n00:00:00,000 --> 00:00:01,000\nFirst\n');
+    manager.setExternalSubtitle(file.path);
+    await manager.preloadSubtitleFile(file.path);
+    expect(manager.getCurrentExternalSubtitleTextAt(500), 'First');
+    await file
+        .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nReplacement text\n');
+    await manager.preloadSubtitleFile(file.path);
+    expect(manager.getCurrentExternalSubtitleTextAt(500), 'Replacement text');
+    expect(manager.getCurrentExternalSubtitleTextAt(1000), 'Replacement text');
+    expect(manager.getCurrentExternalSubtitleTextAt(1001), '');
+    manager.dispose();
+    await directory.delete(recursive: true);
+  });
+
   test('preserves a saved remote subtitle with the current SHA-1 cache name',
       () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});

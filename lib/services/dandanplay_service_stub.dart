@@ -67,7 +67,8 @@ class DandanplayService {
     final hasLocalToken = _token != null && _token!.isNotEmpty;
     final usesLoggedInWebProxy =
         _useWebApiProxy && _webApiBaseUrl?.isNotEmpty == true;
-    return !NetworkSettings.isDandanplayServiceUri(Uri.parse(await getApiBaseUrl())) ||
+    return !NetworkSettings.isDandanplayServiceUri(
+            Uri.parse(await getApiBaseUrl())) ||
         (_isLoggedIn && (hasLocalToken || usesLoggedInWebProxy));
   }
 
@@ -171,7 +172,7 @@ class DandanplayService {
     return null;
   }
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool renewToken = true}) async {
     // 从localStorage加载登录状态
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dandanplay_app_secret');

@@ -463,9 +463,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('关闭'),
         ),
       ],

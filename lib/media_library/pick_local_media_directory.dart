@@ -38,13 +38,13 @@ Future<String?> pickHarmonyLocalMediaDirectory(BuildContext context) async {
       content: '${error.message ?? '当前设备无法直接添加文件夹。'}\n\n'
           '可以选择一个或多个 MP4、MKV 视频，复制到 NipaPlay 的本地媒体库。'
           '导入会额外占用存储空间，原文件会保留；卸载应用会删除导入的副本。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           child: const Text('取消'),
         ),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           child: const Text('选择视频并导入'),
         ),
       ],

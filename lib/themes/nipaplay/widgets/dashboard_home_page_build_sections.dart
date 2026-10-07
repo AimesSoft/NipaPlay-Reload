@@ -24,35 +24,40 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
     for (final entry in _recentJellyfinItemsByLibrary.entries) {
       addSection(
-        _buildRecentSection(
-          title: 'Jellyfin - 新增${entry.key}',
-          items: entry.value,
-          scrollController: _getJellyfinLibraryScrollController(entry.key),
-          onItemTap: (item) => _onJellyfinItemTap(item as JellyfinMediaItem),
-        ),
+        Builder(
+            builder: (_) => _buildRecentSection(
+                  title: 'Jellyfin - 新增${entry.key}',
+                  items: entry.value,
+                  scrollController:
+                      _getJellyfinLibraryScrollController(entry.key),
+                  onItemTap: (item) =>
+                      _onJellyfinItemTap(item as JellyfinMediaItem),
+                )),
       );
     }
 
     for (final entry in _recentEmbyItemsByLibrary.entries) {
       addSection(
-        _buildRecentSection(
-          title: 'Emby - 新增${entry.key}',
-          items: entry.value,
-          scrollController: _getEmbyLibraryScrollController(entry.key),
-          onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
-        ),
+        Builder(
+            builder: (_) => _buildRecentSection(
+                  title: 'Emby - 新增${entry.key}',
+                  items: entry.value,
+                  scrollController: _getEmbyLibraryScrollController(entry.key),
+                  onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
+                )),
       );
     }
 
     if (_recentDandanplayGroups.isNotEmpty) {
       addSection(
-        _buildRecentSection(
-          title: '弹弹play - 最近添加',
-          items: _recentDandanplayGroups,
-          scrollController: _getDandanplayLibraryScrollController(),
-          onItemTap: (item) =>
-              _onDandanplayGroupTap(item as DandanplayRemoteAnimeGroup),
-        ),
+        Builder(
+            builder: (_) => _buildRecentSection(
+                  title: '弹弹play - 最近添加',
+                  items: _recentDandanplayGroups,
+                  scrollController: _getDandanplayLibraryScrollController(),
+                  onItemTap: (item) =>
+                      _onDandanplayGroupTap(item as DandanplayRemoteAnimeGroup),
+                )),
       );
     }
 
@@ -86,17 +91,32 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         case UnifiedHomeComponentType.hero:
           break;
         case UnifiedHomeComponentType.todaySeries:
-          addSectionWidgets(section, [_buildTodaySeriesSection()]);
+          addSectionWidgets(section, [
+            Builder(
+                key: const ValueKey('home-today'),
+                builder: (_) => _buildTodaySeriesSection())
+          ]);
           break;
         case UnifiedHomeComponentType.trending:
-          addSectionWidgets(section, [_buildTrendingSection()]);
+          addSectionWidgets(section, [
+            Builder(
+                key: const ValueKey('home-trending'),
+                builder: (_) => _buildTrendingSection())
+          ]);
           break;
         case UnifiedHomeComponentType.randomRecommendations:
-          addSectionWidgets(section, [_buildRandomRecommendationsSection()]);
+          addSectionWidgets(section, [
+            Builder(
+                key: const ValueKey('home-random'),
+                builder: (_) => _buildRandomRecommendationsSection())
+          ]);
           break;
         case UnifiedHomeComponentType.continueWatching:
-          addSectionWidgets(
-              section, [_buildContinueWatching(isPhone: isPhone)]);
+          addSectionWidgets(section, [
+            Builder(
+                key: const ValueKey('home-continue'),
+                builder: (_) => _buildContinueWatching(isPhone: isPhone))
+          ]);
           break;
         case UnifiedHomeComponentType.remoteLibraries:
           final remoteSections = _buildRemoteLibrarySections(isPhone: isPhone);
@@ -106,13 +126,14 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
           addSectionWidgets(
             section,
             [
-              _buildRecentSection(
-                title: '本地媒体库 - 最近添加',
-                items: _localAnimeItems,
-                scrollController: _getLocalLibraryScrollController(),
-                onItemTap: (item) =>
-                    _onLocalAnimeItemTap(item as LocalAnimeItem),
-              ),
+              Builder(
+                  builder: (_) => _buildRecentSection(
+                        title: '本地媒体库 - 最近添加',
+                        items: _localAnimeItems,
+                        scrollController: _getLocalLibraryScrollController(),
+                        onItemTap: (item) =>
+                            _onLocalAnimeItemTap(item as LocalAnimeItem),
+                      )),
             ],
           );
           break;

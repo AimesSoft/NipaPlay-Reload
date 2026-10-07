@@ -1,15 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class ExternalSubtitleOverlay extends StatefulWidget {
-  final double currentPositionMs;
-
   const ExternalSubtitleOverlay({
     super.key,
-    required this.currentPositionMs,
   });
 
   @override
@@ -39,6 +37,29 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   Timer? _twoFingerTimer; // 双指长按识别定时器
   final Map<int, Offset> _pointerStarts = {};
   VideoPlayerState? _boundVideoState;
+  Map<String, String> _visibleTexts = const {};
+
+  Map<String, String> _textSnapshot(VideoPlayerState state) {
+    if (!state.shouldRenderCurrentExternalSubtitleInApp() ||
+        state.shouldHideSubtitlesForScreenshot) {
+      return const {};
+    }
+    final position = state.playbackTimeMs.value.round();
+    return {
+      for (final path in state.activeExternalSubtitlePaths)
+        path: state.pathSubtitleTextAt(path,
+            position - (state.pathSubtitleDelaySeconds(path) * 1000).round()),
+    };
+  }
+
+  void _handlePlaybackTime() {
+    final state = _boundVideoState;
+    if (!mounted || state == null || state.isDisposed) return;
+    final next = _textSnapshot(state);
+    if (mapEquals(next, _visibleTexts)) return;
+    setState(() => _visibleTexts = next);
+  }
+
   // 记录编辑框所属的视频路径：换视频/内核热切换重载时自动收框。
   // 否则框在新视频加载完成后立即显示（同名外挂字幕路径仍命中
   // _editingPath），框层（白边框+按钮）随播放进度每帧重建，与同 Stack
@@ -81,6 +102,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   @override
   void dispose() {
     _stopTwoFingerLongPress();
+    _boundVideoState?.playbackTimeMs.removeListener(_handlePlaybackTime);
     final videoState = _boundVideoState;
     if (_editingPath != null && videoState != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -96,7 +118,12 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
-        _boundVideoState = videoState;
+        if (!identical(_boundVideoState, videoState)) {
+          _boundVideoState?.playbackTimeMs.removeListener(_handlePlaybackTime);
+          _boundVideoState = videoState;
+          videoState.playbackTimeMs.addListener(_handlePlaybackTime);
+        }
+        _visibleTexts = _textSnapshot(videoState);
         final mediaPath = videoState.currentVideoPath;
         final generation = videoState.playbackGeneration;
         if (mediaPath != _boundMediaPath ||
@@ -135,9 +162,9 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
 
   /// 渲染单条外挂字幕块（占满整个舞台，内部按该条字幕的位置对齐）
   Widget _buildPathBlock(VideoPlayerState videoState, String path) {
-    final subtitleTimeMs = widget.currentPositionMs.round() -
+    final subtitleTimeMs = videoState.playbackTimeMs.value.round() -
         (videoState.pathSubtitleDelaySeconds(path) * 1000).round();
-    final subtitleText = videoState.pathSubtitleTextAt(path, subtitleTimeMs);
+    final subtitleText = _visibleTexts[path] ?? '';
 
     // 编辑期间字幕切换到下一句：自动收框——否则框随新文本缩到很小，
     // 收框/设置按钮点不中、拖动锚点也丢失（用户反馈）。间隙期
@@ -794,7 +821,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     _lastSyncLogAtMs = nowMs;
     debugPrint(
       '[SubtitleSync] kernel=${videoState.player.getPlayerKernelName()} '
-      'smooth=${widget.currentPositionMs.round()}ms '
+      'smooth=${videoState.playbackTimeMs.value.round()}ms '
       'raw=${videoState.player.position}ms '
       'lookup=${subtitleTimeMs}ms '
       'delay=${videoState.pathSubtitleDelaySeconds(path).toStringAsFixed(1)}s '

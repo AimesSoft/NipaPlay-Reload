@@ -1447,13 +1447,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadTitanDanmakuSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = prefs.getString(SettingsKeys.titanDanmakuSettings);
-    if (encoded == null || encoded.isEmpty) return;
+    if (encoded == null || encoded.isEmpty) {
+      if (globals.isPhone) {
+        _titanDanmakuSettings =
+            _titanDanmakuSettings.copyWith(trackGap: 0.15);
+        _notifyListeners();
+      }
+      return;
+    }
     try {
       final decoded = jsonDecode(encoded);
       if (decoded is Map) {
-        _titanDanmakuSettings = TitanDanmakuSettings.fromJson(
-          Map<String, dynamic>.from(decoded),
-        );
+        final json = Map<String, dynamic>.from(decoded);
+        // 旧版本未持久化轨道间距时，按设备类型补齐默认值（手机 0.15，其他 0）。
+        json.putIfAbsent('trackGap', () => globals.isPhone ? 0.15 : 0.0);
+        _titanDanmakuSettings = TitanDanmakuSettings.fromJson(json);
         _notifyListeners();
       }
     } catch (error) {
@@ -2948,9 +2956,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setBool(_screenshotCropLetterboxKey, value);
     _notifyListeners();
   }
-
-  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）
-  VideoAspectMode get videoAspectMode => _videoAspectMode;
 
   Future<void> setVideoAspectMode(VideoAspectMode mode) async {
     if (_videoAspectMode == mode) return;

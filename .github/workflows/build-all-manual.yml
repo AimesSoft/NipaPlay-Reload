@@ -1,0 +1,78 @@
+name: Build All Platforms (Manual)
+
+# 手动触发，仅执行全平台构建并上传 Actions artifacts，不创建 Release、不上架应用商店、不更新版本号与 Homebrew Tap。
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+# 同名工作流再次触发时取消上一次仍在运行的构建
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # 并行构建所有平台，fail-fast: false 策略由各子工作流保证
+  Build-Android:
+    name: Build Android
+    uses: ./.github/workflows/build-android.yml
+    secrets:
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+      ALIAS: ${{ secrets.ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+  Build-iOS:
+    name: Build iOS
+    uses: ./.github/workflows/build-ios.yml
+    with:
+      upload-to-app-store: false
+    secrets:
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+
+  Build-macOS:
+    name: Build macOS
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-macos.yml
+    secrets:
+      MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+
+  Build-Windows:
+    name: Build Windows
+    uses: ./.github/workflows/build-windows.yml
+
+  Build-Linux:
+    name: Build Linux
+    uses: ./.github/workflows/build-linux.yml
+
+  Build-HarmonyOS:
+    name: Build HarmonyOS sideload package
+    uses: ./.github/workflows/build-ohos.yml
+    with:
+      sign_hap: true
+    secrets:
+      OHOS_SIGNING_CERT_BASE64: ${{ secrets.OHOS_SIGNING_CERT_BASE64 }}
+      OHOS_SIGNING_PROFILE_BASE64: ${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}
+      OHOS_SIGNING_KEYSTORE_BASE64: ${{ secrets.OHOS_SIGNING_KEYSTORE_BASE64 }}
+      OHOS_SIGNING_KEY_ALIAS: ${{ secrets.OHOS_SIGNING_KEY_ALIAS }}
+      OHOS_SIGNING_KEYSTORE_PASSWORD: ${{ secrets.OHOS_SIGNING_KEYSTORE_PASSWORD }}
+      OHOS_SIGNING_KEY_PASSWORD: ${{ secrets.OHOS_SIGNING_KEY_PASSWORD }}
+
+  Build-tvOS:
+    name: Build Apple TV sideload package
+    uses: ./.github/workflows/build-tvos.yml

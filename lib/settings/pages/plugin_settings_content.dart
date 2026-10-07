@@ -283,13 +283,13 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
       context: context,
       title: _confirmDeleteTitle(context),
       content: _confirmDeleteMessage(context, plugin.manifest.name),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: context.l10n.cancel,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           child: Text(
             _deleteText(context),
             style: const TextStyle(color: Colors.redAccent),
@@ -415,19 +415,19 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
           ),
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: Text(
             context.l10n.cancel,
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         HoverScaleTextButton(
           child: Text(
             _saveText(context),
             style: const TextStyle(color: Colors.lightBlueAccent),
           ),
-          onPressed: () => Navigator.of(context).pop(controller.text),
+          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
         ),
       ],
     );

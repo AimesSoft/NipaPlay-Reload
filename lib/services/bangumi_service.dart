@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,13 +26,53 @@ class BangumiService {
   static const int _maxConcurrentRequests = 3;
 
   final Map<String, BangumiAnime> _listCache = {};
-  final Map<int, BangumiAnime> _detailsCache = {};
+  final LinkedHashMap<int, BangumiAnime> _detailsCache = LinkedHashMap();
+  static const int _maxHotDetails = 100;
+  final Map<(int, bool), Future<BangumiAnime>> _detailRequests = {};
+  final Map<int, DateTime> _tagRefreshAttempts = {};
+  final Map<int, Object> _pendingDetailEdits = {};
+
+  void _rememberDetail(int id, BangumiAnime anime, DateTime time) {
+    _detailsCache.remove(id);
+    _detailsCache[id] = anime;
+    _detailsCacheTime[id] = time;
+    while (_detailsCache.length > _maxHotDetails) {
+      final oldest = _detailsCache.keys.first;
+      _detailsCache.remove(oldest);
+      _detailsCacheTime.remove(oldest);
+    }
+    // Only memory entries are evicted; custom metadata stays persisted on disk.
+  }
+
+  void _refreshMissingTags(int id) {
+    if (id < 0) return;
+    final lastAttempt = _tagRefreshAttempts[id];
+    if (lastAttempt != null &&
+        DateTime.now().difference(lastAttempt) < const Duration(hours: 6))
+      return;
+    _tagRefreshAttempts[id] = DateTime.now();
+    if (_tagRefreshAttempts.length > 1000)
+      _tagRefreshAttempts.remove(_tagRefreshAttempts.keys.first);
+    unawaited(_refreshDetailQuietly(id));
+  }
+
+  Future<void> _refreshDetailQuietly(int id) async {
+    try {
+      await getAnimeDetails(id, forceRefresh: true);
+    } catch (error) {
+      debugPrint('详情标签更新失败: $error');
+    }
+  }
+
   final Map<int, DateTime> _detailsCacheTime = {};
   bool _isInitialized = false;
   List<BangumiAnime>? _preloadedAnimes;
   late http.Client _client;
   final _requestQueue = <_RequestItem>[];
   bool _isProcessingQueue = false;
+
+  @visibleForTesting
+  BangumiService.forTesting(http.Client client) : _client = client;
 
   BangumiService._() {
     _client = http.DandanplayHttpClient();
@@ -53,67 +94,9 @@ class BangumiService {
   Future<void> initialize() async {
     if (_isInitialized) return;
     _isInitialized = true;
-    // 初始化时预加载已缓存的详情数据到内存
-    await _preloadDetailsCacheFromDisk();
+    // Individual details are decoded on demand by _loadDetailFromCache.
   }
 
-  // 预加载已缓存的详情数据到内存
-  Future<void> _preloadDetailsCacheFromDisk() async {
-    try {
-      //debugPrint('[番剧服务] 正在预加载缓存的番剧详情到内存');
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-
-      final detailsKeys =
-          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
-      int loadedCount = 0;
-
-      for (var key in detailsKeys) {
-        try {
-          final String? cachedString = prefs.getString(key);
-          if (cachedString != null) {
-            final data = json.decode(cachedString);
-            final timestamp = data['timestamp'] as int;
-            final now = DateTime.now().millisecondsSinceEpoch;
-            final animeId =
-                int.parse(key.substring(_detailsCacheKeyPrefix.length));
-
-            // 使用动态缓存时间检查是否过期
-            final cacheDuration = _getCacheDurationForAnime(animeId);
-
-            // 检查是否过期
-            bool isExpired = now - timestamp > cacheDuration.inMilliseconds;
-
-            // 对于自定义媒体信息（animeId为负数），即使过期也保留
-            final Map<String, dynamic> animeData =
-                Map<String, dynamic>.from(data['animeDetail'] as Map);
-            final animeDetail = BangumiAnime.fromJson(animeData);
-            await _persistCustomBackground(animeDetail);
-
-            if (!isExpired || animeId < 0) {
-              _detailsCache[animeId] = animeDetail;
-              _detailsCacheTime[animeId] =
-                  DateTime.fromMillisecondsSinceEpoch(timestamp);
-              loadedCount++;
-            } else if (animeDetail.backgroundImageUrl?.trim().isNotEmpty !=
-                true) {
-              // 过期的缓存自动删除
-              await prefs.remove(key);
-            }
-          }
-        } catch (e) {
-          //debugPrint('[番剧服务] 预加载单个番剧详情缓存失败: $e');
-          continue;
-        }
-      }
-
-      //debugPrint('[番剧服务] 预加载了 $loadedCount 条番剧详情到内存缓存');
-    } catch (e) {
-      //debugPrint('[番剧服务] 预加载番剧详情缓存失败: $e');
-    }
-  }
-
-  // 同步获取内存缓存中的番剧详情
   BangumiAnime? getAnimeDetailsFromMemory(int animeId) {
     if (_detailsCache.containsKey(animeId)) {
       // 即使缓存过期也返回数据，优先保证显示
@@ -395,84 +378,38 @@ class BangumiService {
     }
   }
 
-  Future<BangumiAnime> getAnimeDetails(int animeId) async {
+  Future<BangumiAnime> getAnimeDetails(int animeId,
+      {bool forceRefresh = false}) async {
+    final key = (animeId, forceRefresh);
+    final pending = _detailRequests[key] ??=
+        _getAnimeDetails(animeId, forceRefresh: forceRefresh);
+    try {
+      return await pending;
+    } finally {
+      if (identical(_detailRequests[key], pending)) _detailRequests.remove(key);
+    }
+  }
+
+  Future<BangumiAnime> _getAnimeDetails(int animeId,
+      {required bool forceRefresh}) async {
     // 检查是否需要繁体中文
     final isTraditional =
         await ChineseConverter.isTraditionalChineseEnvironment(null);
     final expectedLanguage = isTraditional ? 'zh_Hant' : 'zh';
 
-    // 检查内存缓存
-    if (_detailsCache.containsKey(animeId)) {
-      final cacheTime = _detailsCacheTime[animeId];
-      if (cacheTime != null && _isCacheValid(animeId, cacheTime)) {
-        final cachedAnime = _detailsCache[animeId]!;
-        // 检查缓存数据是否包含标签信息
-        if (cachedAnime.tags != null && cachedAnime.tags!.isNotEmpty) {
-          // 检查语言是否匹配
-          if (cachedAnime.language == expectedLanguage) {
-            //debugPrint('[番剧服务] 从内存缓存获取番剧 $animeId 的详情 (缓存时间: ${_getCacheDurationForAnime(animeId).inHours}小时)');
-            return cachedAnime;
-          } else {
-            // 对于自定义媒体信息，即使语言不匹配也返回
-            if (animeId < 0) {
-              //debugPrint('[番剧服务] 从内存缓存获取语言不匹配的自定义番剧 $animeId 的详情');
-              return cachedAnime;
-            }
-            //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存语言不匹配，将重新获取');
-            // 移除缓存，强制重新获取
-            _detailsCache.remove(animeId);
-            _detailsCacheTime.remove(animeId);
-          }
-        } else {
-          // 对于自定义媒体信息，即使缺少标签也返回
-          if (animeId < 0) {
-            //debugPrint('[番剧服务] 从内存缓存获取缺少标签的自定义番剧 $animeId 的详情');
-            return cachedAnime;
-          }
-          //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存缺少标签信息，将重新获取');
-          // 移除缓存，强制重新获取
-          _detailsCache.remove(animeId);
-          _detailsCacheTime.remove(animeId);
-        }
-      } else {
-        // 对于自定义媒体信息，即使缓存过期也返回
-        if (animeId < 0 && _detailsCache.containsKey(animeId)) {
-          //debugPrint('[番剧服务] 从内存缓存获取过期的自定义番剧 $animeId 的详情');
-          return _detailsCache[animeId]!;
-        }
-        //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存已过期');
-      }
-    }
-
-    // 检查磁盘缓存
-    final diskCachedDetail = await _loadDetailFromCache(animeId);
+    final diskCachedDetail = _detailsCache[animeId] ??
+        await _loadDetailFromCache(animeId, allowExpired: true);
     if (diskCachedDetail != null) {
-      // 对于自定义媒体信息，直接返回缓存数据，不检查标签和语言
-      if (animeId < 0) {
-        //debugPrint('[番剧服务] 从磁盘缓存获取自定义番剧 $animeId 的详情');
+      final cacheTime =
+          _detailsCacheTime[animeId] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      _rememberDetail(animeId, diskCachedDetail, cacheTime);
+      if (animeId < 0 ||
+          (!forceRefresh &&
+              _isCacheValid(animeId, cacheTime) &&
+              diskCachedDetail.language == expectedLanguage)) {
+        if (!forceRefresh && (diskCachedDetail.tags?.isEmpty ?? true))
+          _refreshMissingTags(animeId);
         return diskCachedDetail;
-      }
-
-      // 对于正常番剧，检查标签和语言
-      // 检查磁盘缓存是否包含标签信息
-      if (diskCachedDetail.tags != null && diskCachedDetail.tags!.isNotEmpty) {
-        // 检查语言是否匹配
-        if (diskCachedDetail.language == expectedLanguage) {
-          //debugPrint('[番剧服务] 从磁盘缓存获取番剧 $animeId 的详情成功');
-          return diskCachedDetail;
-        } else {
-          //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存语言不匹配，将重新获取');
-          // 删除有问题的磁盘缓存
-          final prefs = await SharedPreferences.getInstance();
-          final cacheKey = '$_detailsCacheKeyPrefix$animeId';
-          await prefs.remove(cacheKey);
-        }
-      } else {
-        //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存缺少标签信息，将重新获取');
-        // 删除有问题的磁盘缓存
-        final prefs = await SharedPreferences.getInstance();
-        final cacheKey = '$_detailsCacheKeyPrefix$animeId';
-        await prefs.remove(cacheKey);
       }
     }
 
@@ -506,18 +443,19 @@ class BangumiService {
       );
 
       // 保存到缓存
-      _detailsCache[animeId] = anime;
-      _detailsCacheTime[animeId] = DateTime.now();
+      _rememberDetail(animeId, anime, DateTime.now());
       _saveDetailToCache(animeId, anime);
 
       return anime;
     }
 
+    final editToken = Object();
+    _pendingDetailEdits[animeId] = editToken;
     // 从API获取
-    final baseUrl = await DandanplayService.getApiBaseUrl();
-    final detailUrl = '$baseUrl$_basePath/bangumi/$animeId';
-    //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
     try {
+      final baseUrl = await DandanplayService.getApiBaseUrl();
+      final detailUrl = '$baseUrl$_basePath/bangumi/$animeId';
+      //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
       final response = await _makeRequest(detailUrl);
 
       if (response.statusCode == 200) {
@@ -540,9 +478,13 @@ class BangumiService {
           // 用户背景是本地元数据，API 刷新不能覆盖它。
           anime = await _mergeCustomBackground(anime);
 
+          if (!identical(_pendingDetailEdits[animeId], editToken)) {
+            return _detailsCache[animeId] ??
+                await _loadDetailFromCache(animeId, allowExpired: true) ??
+                anime;
+          }
           // 更新内存缓存
-          _detailsCache[animeId] = anime;
-          _detailsCacheTime[animeId] = DateTime.now();
+          _rememberDetail(animeId, anime, DateTime.now());
           final cacheDuration = _getCacheDurationForAnime(animeId);
           //debugPrint('[番剧服务] 成功从API获取番剧 $animeId 的详情并缓存到内存 (缓存时间: ${cacheDuration.inHours}小时)');
 
@@ -565,8 +507,12 @@ class BangumiService {
         throw Exception('获取番剧 $animeId 详情失败: ${response.statusCode}');
       }
     } catch (e) {
-      //debugPrint('[番剧服务] 获取番剧 $animeId 详情时出错: $e');
+      // A failed refresh must not destroy usable cached content.
+      if (diskCachedDetail != null) return diskCachedDetail;
       rethrow;
+    } finally {
+      if (identical(_pendingDetailEdits[animeId], editToken))
+        _pendingDetailEdits.remove(animeId);
     }
   }
 
@@ -667,7 +613,8 @@ class BangumiService {
   }
 
   // 从磁盘缓存加载详情数据
-  Future<BangumiAnime?> _loadDetailFromCache(int animeId) async {
+  Future<BangumiAnime?> _loadDetailFromCache(int animeId,
+      {bool allowExpired = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
@@ -696,11 +643,10 @@ class BangumiService {
             .catchError((Object _) {}));
         await _persistCustomBackground(animeDetail);
 
-        if (!isExpired || animeId < 0) {
+        if (allowExpired || !isExpired || animeId < 0) {
           // 加载到内存缓存
-          _detailsCache[animeId] = animeDetail;
-          _detailsCacheTime[animeId] =
-              DateTime.fromMillisecondsSinceEpoch(timestamp);
+          _rememberDetail(animeId, animeDetail,
+              DateTime.fromMillisecondsSinceEpoch(timestamp));
 
           //debugPrint('[番剧服务] 从磁盘缓存成功加载番剧 $animeId 的详情 (缓存时间: ${cacheDuration.inHours}小时)');
           return animeDetail;
@@ -799,91 +745,22 @@ class BangumiService {
 
   // 检查并刷新缺少标签的缓存数据
   Future<void> checkAndRefreshCacheWithoutTags() async {
-    try {
-      //debugPrint('[番剧服务] 开始检查缺少标签的缓存数据');
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-      final detailsKeys =
-          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
-      final keysToRefresh = <int>[];
-
-      // 检查内存缓存
-      _detailsCache.forEach((animeId, anime) {
-        // 跳过自定义媒体信息（animeId为负数）
-        if (animeId < 0) return;
-        if (anime.tags == null || anime.tags!.isEmpty) {
-          keysToRefresh.add(animeId);
-        }
-      });
-
-      // 检查磁盘缓存
-      for (var key in detailsKeys) {
-        try {
-          final String? cachedString = prefs.getString(key);
-          if (cachedString != null) {
-            final data = json.decode(cachedString);
-            final animeId =
-                int.parse(key.substring(_detailsCacheKeyPrefix.length));
-
-            // 跳过自定义媒体信息（animeId为负数）
-            if (animeId < 0) continue;
-
-            // 跳过已在内存中检查过的
-            if (keysToRefresh.contains(animeId)) continue;
-
-            final Map<String, dynamic> animeData = data['animeDetail'];
-
-            // 检查是否缺少标签
-            final tags = animeData['tags'] as List<dynamic>?;
-            if (tags == null || tags.isEmpty) {
-              keysToRefresh.add(animeId);
-            }
-          }
-        } catch (e) {
-          //debugPrint('[番剧服务] 检查单个缓存失败: $e');
-          continue;
-        }
-      }
-
-      if (keysToRefresh.isNotEmpty) {
-        //debugPrint('[番剧服务] 发现 ${keysToRefresh.length} 个缺少标签的缓存，将在后台刷新');
-
-        // 后台刷新这些缓存（不阻塞UI）
-        Future.microtask(() async {
-          for (var animeId in keysToRefresh) {
-            try {
-              // 移除旧缓存
-              _detailsCache.remove(animeId);
-              _detailsCacheTime.remove(animeId);
-              final cacheKey = '$_detailsCacheKeyPrefix$animeId';
-              await prefs.remove(cacheKey);
-
-              // 重新获取（这会触发网络请求并重新缓存）
-              await getAnimeDetails(animeId);
-              //debugPrint('[番剧服务] 已刷新番剧 $animeId 的缓存');
-
-              // 每次请求后稍微延迟，避免过于频繁的网络请求
-              await Future.delayed(const Duration(milliseconds: 200));
-            } catch (e) {
-              //debugPrint('[番剧服务] 刷新番剧 $animeId 缓存失败: $e');
-            }
-          }
-          //debugPrint('[番剧服务] 完成缺少标签的缓存刷新');
-        });
-      } else {
-        //debugPrint('[番剧服务] 所有缓存数据都包含标签信息');
-      }
-    } catch (e) {
-      //debugPrint('[番剧服务] 检查缓存标签失败: $e');
+    // Maintain only a bounded set of already requested details. Never scan and
+    // delete all SharedPreferences detail payloads during application startup.
+    for (final anime in _detailsCache.values
+        .toList()
+        .where((anime) => anime.id >= 0 && (anime.tags?.isEmpty ?? true))
+        .take(5)) {
+      _refreshMissingTags(anime.id);
     }
   }
 
   // 保存自定义媒体信息到缓存
   Future<void> saveCustomAnimeDetail(
       int animeId, BangumiAnime animeDetail) async {
+    _pendingDetailEdits.remove(animeId);
     final resolved = await _mergeCustomBackground(animeDetail);
-    _detailsCache[animeId] = resolved;
-    _detailsCacheTime[animeId] = DateTime.now();
+    _rememberDetail(animeId, resolved, DateTime.now());
     await _persistCustomBackground(resolved);
     await _saveDetailToCache(animeId, resolved);
   }

@@ -18,6 +18,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
 
   Widget _buildCupertinoHomePage() {
     final sectionsProvider = context.watch<HomeSectionsSettingsProvider>();
+    final sections = _buildCupertinoConfiguredSections(sectionsProvider);
 
     return ColoredBox(
       color: Colors.transparent,
@@ -39,7 +40,10 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
               padding: const EdgeInsets.only(top: 22),
               sliver: SliverToBoxAdapter(child: _buildQuarterlyReviewSection()),
             ),
-          ..._buildCupertinoConfiguredSections(sectionsProvider),
+          SliverList(
+              delegate: SliverChildBuilderDelegate(
+                  (context, index) => sections[index],
+                  childCount: sections.length)),
           const SliverPadding(padding: EdgeInsets.only(bottom: 84)),
         ],
       ),
@@ -51,9 +55,9 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
   ) {
     final slivers = <Widget>[];
 
-    void addSection(Widget section) {
-      slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 22)));
-      slivers.add(SliverToBoxAdapter(child: section));
+    void addSection(WidgetBuilder section) {
+      slivers.add(const SizedBox(height: 22));
+      slivers.add(Builder(builder: section));
     }
 
     for (final component in _buildHomeComponents(sectionsProvider)) {
@@ -61,21 +65,21 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
         case UnifiedHomeComponentType.hero:
           break;
         case UnifiedHomeComponentType.todaySeries:
-          addSection(_buildCupertinoTodaySection());
+          addSection((_) => _buildCupertinoTodaySection());
           break;
         case UnifiedHomeComponentType.trending:
-          addSection(_buildCupertinoTrendingSection());
+          addSection((_) => _buildCupertinoTrendingSection());
           break;
         case UnifiedHomeComponentType.randomRecommendations:
-          addSection(_buildCupertinoRandomSection());
+          addSection((_) => _buildCupertinoRandomSection());
           break;
         case UnifiedHomeComponentType.continueWatching:
-          addSection(_buildCupertinoContinueWatching());
+          addSection((_) => _buildCupertinoContinueWatching());
           break;
         case UnifiedHomeComponentType.remoteLibraries:
           for (final entry in _recentJellyfinItemsByLibrary.entries) {
             addSection(
-              _buildCupertinoMediaSection<JellyfinMediaItem>(
+              (_) => _buildCupertinoMediaSection<JellyfinMediaItem>(
                 title: 'Jellyfin - 新增${entry.key}',
                 items: entry.value,
                 imageUrl: (item) {
@@ -94,7 +98,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           }
           for (final entry in _recentEmbyItemsByLibrary.entries) {
             addSection(
-              _buildCupertinoMediaSection<EmbyMediaItem>(
+              (_) => _buildCupertinoMediaSection<EmbyMediaItem>(
                 title: 'Emby - 新增${entry.key}',
                 items: entry.value,
                 imageUrl: (item) {
@@ -113,7 +117,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           }
           if (_recentDandanplayGroups.isNotEmpty) {
             addSection(
-              _buildCupertinoMediaSection<DandanplayRemoteAnimeGroup>(
+              (_) => _buildCupertinoMediaSection<DandanplayRemoteAnimeGroup>(
                 title: '弹弹play - 最近添加',
                 items: _recentDandanplayGroups,
                 imageUrl: _getDandanGroupImage,
@@ -126,7 +130,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           break;
         case UnifiedHomeComponentType.localLibrary:
           addSection(
-            _buildCupertinoMediaSection<LocalAnimeItem>(
+            (_) => _buildCupertinoMediaSection<LocalAnimeItem>(
               title: '本地媒体库 - 最近添加',
               items: _localAnimeItems,
               imageUrl: (item) =>

@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_backdrop_focus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
@@ -8,7 +7,7 @@ import 'loading_placeholder.dart';
 
 // 图片加载模式
 enum CachedImageLoadMode {
-  // 当前混合模式：先快速加载基础图，再通过缓存/压缩通道加载高清图
+  // 优先显示内存缓存；未命中时仅执行一次加载/解码。
   hybrid,
   // 旧版模式（699387b 提交之前）：仅走缓存管理器的单通道加载
   legacy,
@@ -35,8 +34,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Widget Function(BuildContext, Object)? errorBuilder;
   final bool shouldRelease;
   final Duration fadeDuration;
-  final bool shouldCompress; // 新增参数，控制是否压缩图片
-  final bool delayLoad; // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
+  final bool shouldCompress; // 兼容旧参数：允许原始字节落盘，不做额外压缩
+  final bool delayLoad; // 保留调用兼容性；原先仅延迟的冗余基础图通道已移除
   final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
   final int? memCacheWidth; // 新增：指定内存缓存宽度（用于解码降采样）
   final int? memCacheHeight; // 新增：指定内存缓存高度（用于解码降采样）
@@ -89,6 +88,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 
   /// 本次 URL 已经自动重试过几次。
   int _autoRetryCount = 0;
+  int _loadGeneration = 0;
 
   /// 一次性加载失败后最多自动重试几次。
   ///
@@ -176,6 +176,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       _autoRetryCount = 0;
     }
     _currentUrl = widget.imageUrl;
+    _loadGeneration++;
     _hasRetriedLowRes = false;
 
     final target = _resolveDecodeTarget();
@@ -183,39 +184,20 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     final int? targetWidth = target?.$1;
     final int? targetHeight = target?.$2;
 
-    // 旧版：仅使用缓存管理器单通道加载
-    if (widget.loadMode == CachedImageLoadMode.legacy) {
-      _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-      return;
-    }
-
-    final cachedImage = ImageCacheManager.instance.getCachedImage(
+    // Keep a cached preview, but use a single load/decode for the final image.
+    _basicImage = ImageCacheManager.instance.getCachedImage(
+          widget.imageUrl,
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        ) ??
+        _basicImage;
+    _imageFuture = ImageCacheManager.instance.loadImage(
       widget.imageUrl,
       targetWidth: targetWidth,
       targetHeight: targetHeight,
+      cacheOnDisk: widget.loadMode == CachedImageLoadMode.legacy ||
+          widget.shouldCompress,
     );
-
-    if (cachedImage != null) {
-      _basicImage = cachedImage;
-    } else {
-      // 混合模式：立即拉取基础图 + 异步加载高清图
-      _loadBasicImage();
-    }
-
-    // 异步加载高清图片
-    if (widget.shouldCompress) {
-      _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-    } else {
-      _imageFuture = _loadOriginalImage(widget.imageUrl);
-    }
   }
 
   /// 解析本次解码的目标尺寸（物理像素）。
@@ -276,52 +258,12 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   void _scheduleAutoRetry() {
     if (_isDisposed || _autoRetryCount >= _maxAutoRetries) return;
     _autoRetryCount++;
+    final generation = _loadGeneration;
     Future.delayed(Duration(milliseconds: 600 * _autoRetryCount), () {
-      if (!mounted || _isDisposed) return;
+      if (!mounted || _isDisposed || generation != _loadGeneration) return;
       _loadImage(force: true);
       setState(() {});
     });
-  }
-
-  // 新增方法：立即加载基础图片
-  void _loadBasicImage() async {
-    // 🔥 根据delayLoad参数决定是否延迟（避免与HEAD验证竞争）
-    if (widget.delayLoad) {
-      await Future.delayed(const Duration(milliseconds: 1500));
-    }
-
-    try {
-      final imageBytes = await loadNetworkImageBytes(
-        Uri.parse(widget.imageUrl),
-      );
-      final codec = await ui.instantiateImageCodec(
-        imageBytes,
-        targetWidth: _decodeTarget?.$1,
-        targetHeight: _decodeTarget?.$2,
-      );
-      final frame = await codec.getNextFrame();
-
-      // 如果组件还在使用，更新基础图片
-      if (mounted && !_isDisposed) {
-        setState(() {
-          _basicImage = frame.image;
-        });
-      }
-    } catch (e) {
-      debugPrint('加载基础图片失败: $e');
-    }
-  }
-
-  // 新增方法：直接加载原始图片，不进行压缩
-  Future<ui.Image> _loadOriginalImage(String imageUrl) async {
-    final imageBytes = await loadNetworkImageBytes(Uri.parse(imageUrl));
-    final codec = await ui.instantiateImageCodec(
-      imageBytes,
-      targetWidth: _decodeTarget?.$1,
-      targetHeight: _decodeTarget?.$2,
-    );
-    final frame = await codec.getNextFrame();
-    return frame.image;
   }
 
   // 安全获取图片，添加多重保护
@@ -486,7 +428,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
           return FutureBuilder<ui.Image>(
             // A resized decode may reuse its previous frame, but a new URL
             // must not expose the previous poster while its request starts.
-            key: widget.smartCrop ? ValueKey(widget.imageUrl) : null,
+            key: ValueKey(widget.imageUrl),
             future: _imageFuture,
             builder: (context, snapshot) {
               final baseImage = _getSafeImage(_basicImage);
