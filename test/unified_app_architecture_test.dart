@@ -774,7 +774,7 @@ void main() {
     expect(player, isNot(contains('AdaptivePlaybackDetailView(')));
     expect(player, contains('renderInWindowScaffold: false'));
     expect(
-        phoneShell, contains('Consumer2<BottomBarProvider, VideoPlayerState>'));
+        phoneShell, contains('Selector2<BottomBarProvider, VideoPlayerState,'));
     expect(phoneShell, contains('final isFullscreenPlayback'));
     expect(phoneShell, contains('selectedPage.id == AppPageIds.video'));
     expect(

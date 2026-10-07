@@ -58,10 +58,10 @@ class SharedRemoteLanScanDialog {
       title: '扫描局域网',
       contentWidget: _SharedRemoteLanScanDialogContent(provider: provider),
       backgroundColor: backgroundColor,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         AdaptiveMediaActionButton(
           label: '关闭',
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           compact: true,
         ),
       ],

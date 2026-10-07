@@ -1,3 +1,4 @@
+import 'package:nipaplay/playback/player_ui_snapshot.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -158,7 +159,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
-        if (isStableKernel && child != null) {
+        if ((isStableKernel || !videoState.danmakuVisible) && child != null) {
           return child;
         }
         return DanmakuOverlay(
@@ -518,13 +519,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               context: context, // 使用 VideoPlayerUI 的 context
               title: '播放错误',
               content: errorMessage,
-              actions: [
+              actionsBuilder: (dialogContext) => [
                 HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog
-                    //    这里的 context 是 BlurDialog.show 内部创建的用于对话框的 context
-                    Navigator.of(context).pop();
+                    //    使用弹窗路由内部的 context 关闭弹窗。
+                    Navigator.of(dialogContext).pop();
 
                     // 2. Reset the player state.
                     //    这将导致 VideoPlayerUI 重建并因 hasVideo 为 false 而显示 VideoUploadUI。
@@ -1134,8 +1135,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Widget build(BuildContext context) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Selector<VideoPlayerState, List<Object?>>(
+      selector: (_, state) => playerUiSnapshot(state),
+      builder: (context, snapshot, child) {
+        final videoState = context.read<VideoPlayerState>();
         return ValueListenableBuilder<int?>(
           valueListenable: videoState.player.textureId,
           builder: (context, textureId, _) {
@@ -1226,7 +1229,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                               _handleHorizontalDragEnd(context, details)
                           : null,
                       child: FocusScope(
-                        node: FocusScopeNode(),
                         child: globals.isMobilePlatform
                             ? RepaintBoundary(
                                 key: videoState.screenshotBoundaryKey,
@@ -1241,17 +1243,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       ),
                                     ),
-                                    if ((videoState.hasVideo ||
-                                            videoState
-                                                .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible)
+                                    if (videoState.hasVideo ||
+                                        videoState.isDfmStartupGatePending)
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: true,
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
+                                          child: Selector<VideoPlayerState,
+                                              List<Object?>>(
+                                            selector: (_, state) =>
+                                                danmakuUiSnapshot(state),
+                                            builder: (context, snapshot, _) {
                                               return _buildDanmakuOverlay(
-                                                videoState,
+                                                context
+                                                    .read<VideoPlayerState>(),
                                               );
                                             },
                                           ),
@@ -1259,20 +1263,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       ),
                                     if (videoState.hasVideo)
                                       Positioned.fill(
-                                        child: Consumer<VideoPlayerState>(
-                                          builder: (context, videoState, _) {
-                                            return ValueListenableBuilder<
-                                                double>(
-                                              valueListenable:
-                                                  videoState.playbackTimeMs,
-                                              builder: (context, posMs, __) {
-                                                return ExternalSubtitleOverlay(
-                                                  currentPositionMs: posMs,
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
+                                        child: const ExternalSubtitleOverlay(),
                                       ),
                                     if (videoState.status ==
                                             PlayerStatus.recognizing ||
@@ -1329,18 +1320,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                      if ((videoState.hasVideo ||
-                                              videoState
-                                                  .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible)
+                                      if (videoState.hasVideo ||
+                                          videoState.isDfmStartupGatePending)
                                         Positioned.fill(
                                           child: IgnorePointer(
                                             ignoring: true,
-                                            child: Consumer<VideoPlayerState>(
-                                              builder:
-                                                  (context, videoState, _) {
+                                            child: Selector<VideoPlayerState,
+                                                List<Object?>>(
+                                              selector: (_, state) =>
+                                                  danmakuUiSnapshot(state),
+                                              builder: (context, snapshot, _) {
                                                 return _buildDanmakuOverlay(
-                                                  videoState,
+                                                  context
+                                                      .read<VideoPlayerState>(),
                                                 );
                                               },
                                             ),
@@ -1348,20 +1340,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       if (videoState.hasVideo)
                                         Positioned.fill(
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
-                                              return ValueListenableBuilder<
-                                                  double>(
-                                                valueListenable:
-                                                    videoState.playbackTimeMs,
-                                                builder: (context, posMs, __) {
-                                                  return ExternalSubtitleOverlay(
-                                                    currentPositionMs: posMs,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          ),
+                                          child:
+                                              const ExternalSubtitleOverlay(),
                                         ),
                                       if (videoState.status ==
                                               PlayerStatus.recognizing ||

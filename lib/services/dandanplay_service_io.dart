@@ -172,7 +172,7 @@ class DandanplayService {
   /// 这一步在首帧之前的关键路径上，慢网络下会让启动界面长时间不消失。
   static const Duration _tokenLoadTimeout = Duration(seconds: 5);
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool renewToken = true}) async {
     final prefs = await SharedPreferences.getInstance();
     // 新版由服务端保管 AppSecret，清理旧版本曾缓存到本地的副本。
     await prefs.remove('dandanplay_app_secret');
@@ -183,6 +183,8 @@ class DandanplayService {
     // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
     // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
     // 续期交由后续请求自然重试，不阻塞首帧。
+    _token = prefs.getString('dandanplay_token');
+    if (!renewToken) return;
     await loadToken().timeout(
       _tokenLoadTimeout,
       onTimeout: () {
@@ -298,8 +300,19 @@ class DandanplayService {
   }
 
   // 检查并刷新Token
+  static Future<void>? _renewingToken;
   static Future<void> _checkAndRenewToken() async {
+    final pending = _renewingToken ??= _renewToken();
+    try {
+      await pending;
+    } finally {
+      if (identical(_renewingToken, pending)) _renewingToken = null;
+    }
+  }
+
+  static Future<void> _renewToken() async {
     if (_token == null) return;
+    final tokenAtStart = _token;
 
     final prefs = await SharedPreferences.getInstance();
     final lastRenewTime = prefs.getInt(_lastTokenRenewKey) ?? 0;
@@ -329,6 +342,7 @@ class DandanplayService {
         final requestMethod =
             requestResult['requestMethod']?.toString() ?? 'POST';
 
+        if (_token != tokenAtStart) return;
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['success'] == true && data['token'] != null) {

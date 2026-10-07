@@ -1,3 +1,4 @@
+import 'package:nipaplay/widgets/lazy_page_stack.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -9,6 +10,7 @@ import 'package:nipaplay/app/unified_app_pages.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -71,8 +73,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   bool _showWebDAV = false;
   bool _showDownloader = false;
   bool _didApplyInitialPage = false;
-  final CupertinoPageActionsController _pageActionsController =
-      CupertinoPageActionsController();
+  final Map<String, CupertinoPageActionsController> _pageActionControllers = {};
+  CupertinoPageActionsController _actionsFor(String id) =>
+      _pageActionControllers.putIfAbsent(
+          id, CupertinoPageActionsController.new);
 
   TabChangeNotifier? _tabChangeNotifier;
   StreamSubscription<String>? _fileAssociationSubscription;
@@ -136,9 +140,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     });
     _playBounce(_selectedPageId);
     _initializeFileAssociationListeners();
-    if (widget.launchFilePath case final filePath?) {
-      unawaited(_handleLaunchFile(filePath));
-    }
+    final launchPath = widget.launchFilePath;
+    final playbackReady = launchPath == null
+        ? Future<void>.value()
+        : _handleLaunchFile(launchPath);
+    unawaited(ServiceProvider.scanService.startStartupRefresh(
+      playbackReady: playbackReady,
+    ));
   }
 
   void _initializeFileAssociationListeners() {
@@ -212,7 +220,9 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     _webdavProvider?.removeListener(_handleWebDAVChanged);
     _downloaderProvider?.removeListener(_handleDownloaderChanged);
     _pluginService?.removeListener(_handleDownloaderChanged);
-    _pageActionsController.dispose();
+    for (final controller in _pageActionControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -229,7 +239,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   void _selectPage(String pageId) {
     final effectiveId = effectiveAppPageId(_pages, pageId);
     if (effectiveId == _selectedPageId) return;
-    _pageActionsController.reset();
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _selectedPageId = effectiveId);
     _playBounce(effectiveId);
   }
@@ -242,7 +252,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
   void _playBounce(String pageId) {
     Future<void>.delayed(const Duration(milliseconds: 50), () {
-      if (!mounted) return;
+      if (!mounted || pageId != _selectedPageId) return;
       CupertinoBounceWrapper.playAnimation(_bounceKey(pageId));
     });
   }
@@ -316,8 +326,19 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             ? _lightPhoneNavigationGlassSettings
             : _darkPhoneNavigationGlassSettings;
 
-    return Consumer2<BottomBarProvider, VideoPlayerState>(
-      builder: (context, bottomBar, videoState, _) {
+    return Selector2<BottomBarProvider, VideoPlayerState,
+        (bool, bool, bool, bool, Rect?, bool)>(
+      selector: (_, bar, video) => (
+        bar.isBottomBarVisible,
+        video.hasVideo,
+        video.isFullscreen,
+        video.player.usesWindowOverlayVideoSurface,
+        video.windowHostedVideoRect,
+        bar.useNativeBottomBar
+      ),
+      builder: (context, snapshot, _) {
+        final bottomBar = context.read<BottomBarProvider>();
+        final videoState = context.read<VideoPlayerState>();
         final isFullscreenPlayback = selectedPage.id == AppPageIds.video &&
             videoState.hasVideo &&
             videoState.isFullscreen;
@@ -332,26 +353,26 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               ? videoState.windowHostedVideoRect
               : null,
           child: CupertinoPageActionsScope(
-            controller: _pageActionsController,
+            controller: _actionsFor(selectedPage.id),
             child: AppNavigationScope(
               selectedPageId: selectedPage.id,
               pageIds: pages.map((page) => page.id).toList(growable: false),
               onSelectPage: _selectPage,
               child: Stack(
                 children: [
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 90),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    child: KeyedSubtree(
-                      key: ValueKey<String>(selectedPage.id),
+                  LazyPageStack(
+                    pageIds:
+                        pages.map((page) => page.id).toList(growable: false),
+                    selectedId: selectedPage.id,
+                    builder: (context, id) => CupertinoPageActionsScope(
+                      controller: _actionsFor(id),
                       child: CupertinoBounceWrapper(
-                        key: _bounceKey(selectedPage.id),
+                        key: _bounceKey(id),
                         autoPlay: false,
-                        child: selectedPage.build(
-                          context,
-                          AppDisplaySurface.phone,
-                        ),
+                        child: pages.firstWhere((page) => page.id == id).build(
+                              context,
+                              AppDisplaySurface.phone,
+                            ),
                       ),
                     ),
                   ),

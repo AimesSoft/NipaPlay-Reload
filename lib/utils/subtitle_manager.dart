@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
+import 'subtitle_timeline_index.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
@@ -37,6 +38,7 @@ class SubtitleManager extends ChangeNotifier {
   String? _currentExternalSubtitlePath;
   final Map<String, Map<String, dynamic>> _subtitleTrackInfo = {};
   final Map<String, List<dynamic>> _subtitleCache = {};
+  final Expando<SubtitleTimelineIndex> _subtitleIndexes = Expando();
 
   /// 缓存指纹：path -> "size:mtime"，用于检测字幕文件内容变化
   final Map<String, String> _subtitleCacheFingerprint = {};
@@ -1001,28 +1003,14 @@ class SubtitleManager extends ChangeNotifier {
     if (!_shouldRenderExternalSubtitleInApp(path)) return '';
 
     final cachedEntries = _subtitleCache[path];
-    if (cachedEntries == null || cachedEntries.isEmpty) {
+    if (cachedEntries == null) {
       unawaited(preloadSubtitleFile(path));
       return '';
     }
 
-    final activeContents = <String>[];
-    for (final entry in cachedEntries) {
-      if (entry is! SubtitleEntry) {
-        continue;
-      }
-      if (positionMs < entry.startTimeMs || positionMs > entry.endTimeMs) {
-        continue;
-      }
-
-      final content = entry.content.trim();
-      if (content.isEmpty || activeContents.contains(content)) {
-        continue;
-      }
-      activeContents.add(content);
-    }
-
-    return activeContents.join('\n');
+    final index = _subtitleIndexes[cachedEntries] ??=
+        SubtitleTimelineIndex(cachedEntries.whereType<SubtitleEntry>());
+    return index.textAt(positionMs);
   }
 
   List<String> _snapshotCurrentSubtitleTrackSignatures() {

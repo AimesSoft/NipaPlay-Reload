@@ -478,6 +478,20 @@ class _CupertinoDanmakuSettingsPaneState
                   ),
                   _buildSliderTile(
                     context,
+                    title: 'Titan 轨道间距',
+                    description: '${(titan.trackGap * 100).round()}%',
+                    value: titan.trackGap,
+                    min: 0.0,
+                    max: 0.5,
+                    divisions: 50,
+                    onChanged: (value) =>
+                        widget.videoState.setTitanDanmakuSettings(
+                      widget.videoState.titanDanmakuSettings
+                          .copyWith(trackGap: value),
+                    ),
+                  ),
+                  _buildSliderTile(
+                    context,
                     title: 'Titan 弹幕密度',
                     description: titan.density.toStringAsFixed(1),
                     value: titan.density,

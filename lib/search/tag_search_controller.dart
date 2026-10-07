@@ -171,10 +171,10 @@ class TagSearchController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setKeyword(String value) {
+  void setKeyword(String value, {bool notify = true}) {
     if (keyword == value) return;
     keyword = value;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   void setSelectedType(int? value) {

@@ -571,7 +571,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       // 验证选择的目录是否可访问
       bool accessCheck = false;
       if (platformIdentity.isHarmonyOS) {
-        accessCheck = await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
+        accessCheck =
+            await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
       } else if (io.Platform.isAndroid &&
           AndroidSafService.isSafUri(selectedDirectory)) {
         // SAF content:// URI（SD/OTG/U盘）：用 SAF canAccessTree 检查权限。
@@ -1523,9 +1524,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           },
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(
             '关闭',
             locale: const Locale("zh-Hans", "zh"),
@@ -5071,17 +5072,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: title,
       content: message,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text('取消'),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           child: const Text(
             '删除',
             style: TextStyle(color: Colors.redAccent),
           ),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -5940,18 +5941,18 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       title: '刮削WebDAV文件夹',
       content:
           '确定要刮削WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 WebDAV 媒体库中。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: '取消',
           idleColor: colorScheme.onSurface.withOpacity(0.7),
           hoverColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           text: '刮削',
           idleColor: colorScheme.primary,
           hoverColor: colorScheme.primary,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -6175,18 +6176,18 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: '刮削SMB文件夹',
       content: '确定要刮削SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 SMB 媒体库中。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: '取消',
           idleColor: colorScheme.onSurface.withOpacity(0.7),
           hoverColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           text: '刮削',
           idleColor: colorScheme.primary,
           hoverColor: colorScheme.primary,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -6255,6 +6256,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           BlurSnackBar.show(context, '正在刮削 $folderName...');
         }
 
+        await SMBProxyService.instance.initialize();
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
                   filePath: MediaSourceUtils.buildSmbPath(

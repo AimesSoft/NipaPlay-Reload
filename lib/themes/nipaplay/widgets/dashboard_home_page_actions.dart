@@ -236,7 +236,9 @@ extension DashboardHomePageActions on _DashboardHomePageState {
     String filePath = currentItem.filePath;
     PlaybackSession? playbackSession;
 
-    if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol ||
+    if (isNetworkUrl ||
+        isJellyfinProtocol ||
+        isEmbyProtocol ||
         MediaSourceUtils.isWebDavPath(currentItem.filePath) ||
         MediaSourceUtils.isSmbPath(currentItem.filePath)) {
       fileExists = true;
@@ -341,7 +343,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       playbackSession: playbackSession,
     );
 
-    await PlaybackService().play(playableItem, episodeFileSelectionHandled: true);
+    await PlaybackService()
+        .play(playableItem, episodeFileSelectionHandled: true);
   }
 
   Future<WatchHistoryItem> _performHistoryAutoMatch(
@@ -434,13 +437,15 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       // 手机全宽；桌面只在左侧PageView区域显示：总宽度的2/3减去间距
       right: fullWidth ? 0 : (MediaQuery.of(context).size.width - 32) / 3 + 12,
       child: Center(
-        child: ValueListenableBuilder<int>(
-          valueListenable: _heroBannerIndexNotifier,
-          builder: (context, currentIndex, child) {
+        child: ListenableBuilder(
+          listenable: Listenable.merge(
+              [_heroBannerIndexNotifier, _hoveredIndicatorIndex]),
+          builder: (context, child) {
+            final currentIndex = _heroBannerIndexNotifier.value;
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(count, (index) {
-                final bool isHovered = _hoveredIndicatorIndex == index;
+                final bool isHovered = _hoveredIndicatorIndex.value == index;
                 final bool isSelected = currentIndex == index;
                 double size;
                 if (isSelected && isHovered) {
@@ -452,10 +457,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
                 }
 
                 return MouseRegion(
-                  onEnter: (event) =>
-                      setState(() => _hoveredIndicatorIndex = index),
-                  onExit: (event) =>
-                      setState(() => _hoveredIndicatorIndex = null),
+                  onEnter: (event) => _hoveredIndicatorIndex.value = index,
+                  onExit: (event) => _hoveredIndicatorIndex.value = null,
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
                     onTap: () {

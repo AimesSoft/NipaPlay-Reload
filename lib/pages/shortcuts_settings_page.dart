@@ -381,10 +381,10 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
         context: context,
         title: '快捷键冲突',
         content: '快捷键"$shortcut"已被"$conflictAction"使用，是否替换？',
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               _stopRecording();
             },
             child: const Text('取消',
@@ -392,7 +392,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
           ),
           HoverScaleTextButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               _updateShortcut(_recordingAction!, shortcut);
               _stopRecording();
             },

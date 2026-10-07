@@ -110,15 +110,15 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
       title: '删除地址',
       content: '确定要删除地址 "${address.name}" 吗？\n${address.url}',
       barrierDismissible: false,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         AdaptiveMediaActionButton(
           label: '取消',
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           compact: true,
         ),
         AdaptiveMediaActionButton(
           label: '删除',
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           emphasis: AdaptiveMediaActionEmphasis.destructive,
           compact: true,
         ),

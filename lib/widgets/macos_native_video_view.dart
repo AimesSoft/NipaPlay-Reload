@@ -1,3 +1,5 @@
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -237,7 +239,9 @@ class MacOSWindowNativeVideoOverlaySurface extends StatefulWidget {
 
 class _MacOSWindowNativeVideoOverlaySurfaceState
     extends State<MacOSWindowNativeVideoOverlaySurface>
-    with WidgetsBindingObserver {
+    with
+        WidgetsBindingObserver,
+        PageActivityMixin<MacOSWindowNativeVideoOverlaySurface> {
   static int _windowsPointerLogCount = 0;
 
   Timer? _retryTimer;
@@ -258,7 +262,6 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     WidgetsBinding.instance.addObserver(this);
     _surfaceGeneration = identityHashCode(this);
     widget.onPlatformViewIdChanged?.call(_windowHostedPlatformSurfaceId);
-    _startFrameTimer();
     _scheduleAttach();
   }
 
@@ -300,6 +303,18 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     super.dispose();
   }
 
+  @override
+  void onPageActivityChanged(bool active) {
+    _frameTimer?.cancel();
+    if (active) {
+      _startFrameTimer();
+      _scheduleFrameUpdate(force: true);
+      // Activity callbacks run after a frame; make the queued geometry update
+      // run even if the resumed scene has no animation requesting another one.
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
+  }
+
   void _startFrameTimer() {
     _frameTimer?.cancel();
     final interval = defaultTargetPlatform == TargetPlatform.windows
@@ -307,7 +322,10 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         : const Duration(milliseconds: 250);
     _frameTimer = Timer.periodic(
       interval,
-      (_) => _scheduleFrameUpdate(),
+      (_) {
+        PerformanceTrace.count('overlay.timer');
+        _scheduleFrameUpdate();
+      },
     );
   }
 
@@ -386,6 +404,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       return;
     }
 
+    PerformanceTrace.count('overlay.geometry');
     final Rect platformRect;
     final Rect? cutoutRect;
     int? flutterViewId;
@@ -435,6 +454,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
 
     _frameUpdateInFlight = visible;
     try {
+      PerformanceTrace.count('overlay.send');
       await _platformNativeVideoChannel.invokeMethod<void>(
         'setOverlayFrame',
         <String, dynamic>{
