@@ -1212,6 +1212,7 @@ void main() {
       onClearCache: () {},
       onOpenDandanHelp: () {},
       onOpenNipaplayHelp: () {},
+      onOpenTokenPage: () {},
     );
 
     expect(dandanplay.actions.map((action) => action.label), [
