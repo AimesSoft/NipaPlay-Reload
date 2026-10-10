@@ -7,6 +7,10 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import '../kernel.dart';
 
+/// MCP tool name for an action id. Some agent runtimes reject dots in tool
+/// names, so `playback.open` is exposed as `playback_open`.
+String mcpToolName(String actionId) => actionId.replaceAll('.', '_');
+
 final class McpServerInfo {
   const McpServerInfo({
     required this.name,
@@ -27,7 +31,7 @@ final class McpEndpoint {
     this.instructions,
   }) {
     for (final spec in harness.catalog) {
-      final name = spec.id.replaceAll('.', '_');
+      final name = mcpToolName(spec.id);
       if (_tools.containsKey(name)) {
         throw ArgumentError.value(name, 'name', 'MCP tool name collision.');
       }
