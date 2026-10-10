@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'android_storage_helper.dart'; // 导入Android存储帮助类
 import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 import 'macos_storage_migration.dart'; // 导入macOS存储迁移
+import 'package:nipaplay/services/macos_process_environment.dart';
 
 class StorageService {
   @visibleForTesting
@@ -172,7 +173,8 @@ class StorageService {
         }
       
         // 检查是否需要迁移
-        if (await MacOSStorageMigration.needsMigration()) {
+        if (await MacOSProcessEnvironment.isSandboxed() &&
+            await MacOSStorageMigration.needsMigration()) {
           debugPrint('检测到macOS平台需要数据迁移，开始迁移...');
           final result = await MacOSStorageMigration.performMigration();
           if (result.success) {

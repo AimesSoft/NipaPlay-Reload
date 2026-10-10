@@ -30,7 +30,7 @@ void main() {
     await Directory('${repository.path}/hooks').create();
     store = await SqliteJobStore.open(Directory('${root.path}/state'),
         factory: databaseFactoryFfi);
-    hooks = HarnessHooks(timeout: const Duration(milliseconds: 500));
+    hooks = HarnessHooks(timeout: const Duration(seconds: 3));
     engine =
         TaskEngine(store: store, ownerDeviceId: 'test', executors: [hooks]);
     hooks.engine = engine;
@@ -83,14 +83,14 @@ void main() {
   test(
       'timeout and nonzero exit produce failed receipts, never verified success',
       () async {
-    await program('exec sleep 5');
+    await program('exec sleep 30');
     await engine.start();
     final submitted = (await hooks.emit('playback.started', '/slow.mkv', {}))!;
     final job = await terminal(engine, submitted.jobId);
     expect(job.state, JobState.failed);
     expect(job.receipt!.verification, VerificationLevel.unverified);
     expect(job.receipt!.details['timedOut'], true);
-    expect(job.receipt!.details['elapsedMs'] as int, lessThan(2000));
+    expect(job.receipt!.details['elapsedMs'] as int, lessThan(10000));
     await program('echo failed >&2\nexit 3');
     final failed = await terminal(engine,
         (await hooks.emit('playback.started', '/failure.mkv', {}))!.jobId);

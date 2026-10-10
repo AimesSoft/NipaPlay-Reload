@@ -1,0 +1,398 @@
+import Foundation
+import CryptoKit
+import Darwin
+
+@_silgen_name("sandbox_check")
+private func processSandboxCheck(_ pid: pid_t, _ operation: UnsafePointer<CChar>?, _ filter: Int32) -> Int32
+
+enum MacOSProcessEnvironment {
+    // A nil operation queries whether this process is sandboxed, independent of build mode.
+    static var isSandboxed: Bool { processSandboxCheck(getpid(), nil, 0) != 0 }
+}
+
+private final class MigrationCopyDelegate: NSObject, FileManagerDelegate {
+    func fileManager(_ fileManager: FileManager, shouldCopyItemAt srcURL: URL, to dstURL: URL) -> Bool {
+        var info = stat()
+        // External mpv IPC can leave a socket in Data/tmp after a crash. It has no persistent bytes.
+        return lstat(srcURL.path, &info) != 0 || (info.st_mode & S_IFMT) != S_IFSOCK
+    }
+}
+
+/// Runs before Flutter, UserDefaults consumers, databases and background workers start.
+/// The container is never changed. Journal decisions survive process death.
+final class SandboxMigration {
+    struct Unit: Codable {
+        let source: String
+        let destination: String
+        let digest: String
+        let temporary: String
+    }
+    struct Archive: Codable {
+        let destination: String
+        let digest: String
+        let temporary: String
+        let copying: String
+        let retired: String
+        // cfprefsd owns the live plist; archive its bytes without moving that file.
+        let copyOnly: Bool
+    }
+    struct Journal: Codable {
+        var complete = false
+        var preferencesPublished = false
+        let snapshotDigest: String
+        let preferencesDigest: String
+        let ordinaryPreferencesDigest: String
+        let units: [Unit]
+        let archives: [Archive]
+    }
+    private let fm = FileManager()
+    private let copyDelegate = MigrationCopyDelegate()
+    private var omittedSockets = Set<String>()
+    private let home: URL
+    private let source: URL
+    private let state: URL
+    private let bundleID: String
+    private let readPreferences: () throws -> [String: Any]
+    private let writePreferences: ([String: Any]) throws -> Void
+    // Test hook also covers the gap between atomic publication and completion recording.
+    var checkpoint: (String) throws -> Void = { _ in }
+
+    init(home: URL, source: URL, state: URL, bundleID: String,
+         readPreferences: @escaping () throws -> [String: Any],
+         writePreferences: @escaping ([String: Any]) throws -> Void) {
+        self.home = home.standardizedFileURL.resolvingSymlinksInPath()
+        self.source = source.standardizedFileURL.resolvingSymlinksInPath()
+        self.state = state.standardizedFileURL.resolvingSymlinksInPath()
+        self.bundleID = bundleID
+        self.readPreferences = readPreferences
+        self.writePreferences = writePreferences
+        fm.delegate = copyDelegate
+    }
+
+    static func runBeforeEngine() throws {
+        guard !MacOSProcessEnvironment.isSandboxed else { return }
+        #if DEBUG
+        // Match Dart's existing isolated debug startup; it must not migrate the user's production data.
+        if ProcessInfo.processInfo.environment["NIPAPLAY_DATA_DIR"] != nil { return }
+        #endif
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let bundleID = Bundle.main.bundleIdentifier!
+        let migration = SandboxMigration(
+            home: home,
+            source: home.appendingPathComponent("Library/Containers/\(bundleID)/Data"),
+            state: home.appendingPathComponent("Library/Application Support/NipaPlay Sandbox Migration/\(bundleID)/v1"),
+            bundleID: bundleID,
+            readPreferences: { UserDefaults.standard.persistentDomain(forName: bundleID) ?? [:] },
+            writePreferences: { values in
+                UserDefaults.standard.setPersistentDomain(values, forName: bundleID)
+                guard UserDefaults.standard.synchronize() else {
+                    throw failure("无法持久保存偏好设置")
+                }
+                let actual = UserDefaults.standard.persistentDomain(forName: bundleID) ?? [:]
+                guard NSDictionary(dictionary: actual).isEqual(to: values) else {
+                    throw failure("偏好设置校验失败")
+                }
+            })
+        try migration.run()
+    }
+
+    func run() throws {
+        try fm.createDirectory(at: state, withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o700])
+        let lock = open(state.appendingPathComponent("lock").path, O_CREAT | O_RDWR, 0o600)
+        guard lock >= 0 else { throw Self.failure("无法打开迁移锁") }
+        defer { close(lock) }
+        guard flock(lock, LOCK_EX) == 0 else { throw Self.failure("无法锁定迁移") }
+        defer { flock(lock, LOCK_UN) }
+
+        let journalURL = state.appendingPathComponent("journal.plist")
+        let snapshot = state.appendingPathComponent("container-copy")
+        var journal: Journal
+        if try exists(journalURL) {
+            journal = try PropertyListDecoder().decode(Journal.self, from: Data(contentsOf: journalURL))
+            if journal.complete { return }
+            guard try digest(snapshot) == journal.snapshotDigest else {
+                throw Self.failure("迁移归档校验失败；原容器仍保留")
+            }
+        } else {
+            // No journal means nothing has been published; an interrupted snapshot can be rebuilt.
+            guard try exists(source) else { return }
+            if try exists(snapshot) { try fm.removeItem(at: snapshot) }
+            let sourceDigest = try digest(source)
+            try fm.copyItem(at: source, to: snapshot)
+            try checkpoint("snapshotCopied")
+            guard try digest(snapshot) == sourceDigest, try digest(source) == sourceDigest else {
+                throw Self.failure("复制期间容器数据发生变化；请关闭旧版本后重试")
+            }
+            let socketIndex = try PropertyListSerialization.data(fromPropertyList: omittedSockets.sorted(), format: .binary, options: 0)
+            try socketIndex.write(to: state.appendingPathComponent("volatile-sockets.plist"), options: .atomic)
+            let (units, archives) = try plan(snapshot: snapshot)
+            let oldPlist = snapshot.appendingPathComponent("Library/Preferences/\(bundleID).plist")
+            let preferences = try exists(oldPlist) ? Self.preferences(at: oldPlist) : [:]
+            let preferencesURL = state.appendingPathComponent("preferences.plist")
+            try Self.plist(preferences).write(to: preferencesURL, options: .atomic)
+            let ordinaryPreferencesURL = state.appendingPathComponent("ordinary-preferences.plist")
+            try Self.plist(readPreferences()).write(to: ordinaryPreferencesURL, options: .atomic)
+            journal = Journal(snapshotDigest: sourceDigest,
+                              preferencesDigest: try digest(preferencesURL),
+                              ordinaryPreferencesDigest: try digest(ordinaryPreferencesURL),
+                              units: units, archives: archives)
+            try save(journal, to: journalURL)
+            try checkpoint("planned")
+        }
+
+        guard try digest(state.appendingPathComponent("ordinary-preferences.plist")) == journal.ordinaryPreferencesDigest else {
+            throw Self.failure("原偏好归档校验失败")
+        }
+        // Archive all ordinary groups (including SQLite sidecars absent from the container)
+        // before publishing any container group. Each move is recoverable from the journal.
+        for (index, archive) in journal.archives.enumerated() {
+            try archiveOrdinary(archive, index: index)
+        }
+        try verifyRetiredSidecars(journal)
+        for (index, unit) in journal.units.enumerated() {
+            let target = home.appendingPathComponent(unit.destination)
+            let input = state.appendingPathComponent(unit.source)
+            guard try digest(input) == unit.digest else { throw Self.failure("迁移输入校验失败") }
+            if try exists(target) {
+                if try isDirectory(target), try children(target).isEmpty {
+                    // Only an empty placeholder can be removed. rmdir fails if another process adds data.
+                    guard rmdir(target.path) == 0 else { throw Self.failure("迁移目标目录已改变") }
+                } else {
+                    // A rename can have succeeded immediately before process death.
+                    guard try digest(target) == unit.digest else {
+                        throw Self.failure("迁移目标已改变，未覆盖现有数据：\(unit.destination)")
+                    }
+                    continue
+                }
+            }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let temporary = home.appendingPathComponent(unit.temporary)
+            if try exists(temporary) { try fm.removeItem(at: temporary) }
+            try fm.copyItem(at: input, to: temporary)
+            try checkpoint("unitCopied:\(index)")
+            guard try digest(temporary) == unit.digest else { throw Self.failure("迁移副本校验失败") }
+            // rename is atomic on the destination filesystem; never replace a pre-existing target.
+            guard renamex_np(temporary.path, target.path, UInt32(RENAME_EXCL)) == 0 else {
+                throw Self.failure("无法发布迁移数据：\(unit.destination)")
+            }
+            try checkpoint("unitPublished:\(index)")
+        }
+        let preferencesURL = state.appendingPathComponent("preferences.plist")
+        guard try digest(preferencesURL) == journal.preferencesDigest else {
+            throw Self.failure("容器偏好计划校验失败")
+        }
+        if !journal.preferencesPublished {
+            let preferences = try Self.preferences(at: preferencesURL)
+            try writePreferences(preferences)
+            guard NSDictionary(dictionary: try readPreferences()).isEqual(to: preferences) else {
+                throw Self.failure("偏好设置校验失败")
+            }
+            try checkpoint("preferencesWritten")
+            journal.preferencesPublished = true
+            try save(journal, to: journalURL)
+            try checkpoint("preferencesPublished")
+        }
+        for unit in journal.units {
+            guard try digest(home.appendingPathComponent(unit.destination)) == unit.digest else {
+                throw Self.failure("迁移完成校验失败")
+            }
+        }
+        for archive in journal.archives {
+            guard try digest(state.appendingPathComponent("ordinary-archive/" + archive.destination)) == archive.digest else {
+                throw Self.failure("原数据归档完成校验失败")
+            }
+        }
+        try verifyRetiredSidecars(journal)
+        var completed = journal
+        completed.complete = true
+        try save(completed, to: journalURL)
+    }
+
+    private func verifyRetiredSidecars(_ journal: Journal) throws {
+        let publishedPaths = Set(journal.units.map { $0.destination })
+        for archive in journal.archives where !archive.copyOnly && !publishedPaths.contains(archive.destination) {
+            guard try !exists(home.appendingPathComponent(archive.destination)) else {
+                throw Self.failure("已归档的旧数据库附属文件重新出现：\(archive.destination)")
+            }
+        }
+    }
+
+    private func archiveOrdinary(_ archive: Archive, index: Int) throws {
+        let target = home.appendingPathComponent(archive.destination)
+        let saved = state.appendingPathComponent("ordinary-archive/" + archive.destination)
+        let temporary = home.appendingPathComponent(archive.temporary)
+        let retired = home.appendingPathComponent(archive.retired)
+        if try exists(saved) {
+            guard try digest(saved) == archive.digest else { throw Self.failure("原数据归档校验失败") }
+        } else {
+            if try !archive.copyOnly && !exists(temporary) {
+                guard try exists(target), try digest(target) == archive.digest else {
+                    throw Self.failure("待归档的普通数据已改变：\(archive.destination)")
+                }
+                // Move out of the live path atomically on its filesystem. A verified copy then
+                // reaches the private archive even when Documents and Library are on different volumes.
+                guard renamex_np(target.path, temporary.path, UInt32(RENAME_EXCL)) == 0 else {
+                    throw Self.failure("无法暂存原数据：\(archive.destination)")
+                }
+                try checkpoint("ordinaryMoved:\(index)")
+            }
+            let input = archive.copyOnly ? target : temporary
+            guard try digest(input) == archive.digest else { throw Self.failure("原数据暂存校验失败") }
+            try fm.createDirectory(at: saved.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let copying = state.appendingPathComponent(archive.copying)
+            if try exists(copying) { try fm.removeItem(at: copying) }
+            try fm.copyItem(at: input, to: copying)
+            try checkpoint("ordinaryCopied:\(index)")
+            guard try digest(copying) == archive.digest, try digest(input) == archive.digest else {
+                throw Self.failure("复制期间原数据发生变化")
+            }
+            guard renamex_np(copying.path, saved.path, UInt32(RENAME_EXCL)) == 0 else {
+                throw Self.failure("无法发布原数据归档")
+            }
+            try checkpoint("ordinaryArchived:\(index)")
+        }
+        if try !archive.copyOnly && exists(temporary) {
+            guard try digest(temporary) == archive.digest else { throw Self.failure("原数据暂存已改变") }
+            // Record cleanup by an atomic rename before recursive deletion. If SIGKILL interrupts
+            // deletion, recovery can finish deleting a partial duplicate without rejecting its digest.
+            guard renamex_np(temporary.path, retired.path, UInt32(RENAME_EXCL)) == 0 else {
+                throw Self.failure("无法整理已归档的原数据暂存")
+            }
+            try checkpoint("ordinaryRetired:\(index)")
+        }
+        if try !archive.copyOnly && exists(retired) {
+            // The complete verified archive is retained; only its redundant staging copy is removed.
+            try fm.removeItem(at: retired)
+        }
+    }
+
+    private func plan(snapshot: URL) throws -> ([Unit], [Archive]) {
+        var units: [Unit] = []
+        var archives: [Archive] = []
+        var archivedPaths = Set<String>()
+        func archive(_ destination: String, copyOnly: Bool = false) throws {
+            let target = home.appendingPathComponent(destination)
+            guard try exists(target), archivedPaths.insert(destination).inserted else { return }
+            if try isDirectory(target), try children(target).isEmpty { return }
+            archives.append(Archive(destination: destination, digest: try digest(target),
+                                    temporary: destination + ".nipa-archive-" + UUID().uuidString,
+                                    copying: "ordinary-copy-" + UUID().uuidString,
+                                    retired: destination + ".nipa-retired-" + UUID().uuidString,
+                                    copyOnly: copyOnly))
+        }
+        func add(_ input: URL, _ destination: String) throws {
+            let family = sqliteFamily(input.lastPathComponent)
+            if try family.count > 1 && !isDirectory(input) {
+                for member in family {
+                    let relative = (destination as NSString).deletingLastPathComponent + "/" + member
+                    try archive(relative)
+                }
+            } else { try archive(destination) }
+            let canonicalInput = input.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(input.lastPathComponent)
+            units.append(Unit(source: String(canonicalInput.path.dropFirst(state.path.count + 1)),
+                              destination: destination, digest: try digest(input),
+                              temporary: destination + ".nipa-migration-" + UUID().uuidString))
+        }
+        let documents = snapshot.appendingPathComponent("Documents")
+        if try isDirectory(documents) {
+            // Current storage is Documents/nipaplay. Older Classic versions used Documents itself.
+            let active = state.appendingPathComponent("active-documents")
+            if try exists(active) { try fm.removeItem(at: active) }
+            let current = documents.appendingPathComponent("nipaplay")
+            if try isDirectory(current) { try fm.copyItem(at: current, to: active) }
+            else { try fm.createDirectory(at: active, withIntermediateDirectories: true) }
+            for entry in try children(documents) where entry.lastPathComponent != "nipaplay" {
+                let target = active.appendingPathComponent(entry.lastPathComponent)
+                // Keep a database and its sidecars from the same generation.
+                let currentFamily = sqliteFamily(entry.lastPathComponent)
+                let hasCurrentFamily = try currentFamily.contains { try exists(current.appendingPathComponent($0)) }
+                if try !exists(target) && !hasCurrentFamily {
+                    try fm.copyItem(at: entry, to: target)
+                }
+            }
+            try add(active, "Documents/nipaplay")
+        }
+        let library = snapshot.appendingPathComponent("Library")
+        if try isDirectory(library) {
+            for category in try children(library) {
+                // Preferences go through cfprefsd; Keychain stays with the OS and its existing service identity.
+                if ["Preferences", "Keychains"].contains(category.lastPathComponent) { continue }
+                // Containers have links to shared system directories. Archive those links, never traverse them.
+                guard try isDirectory(category) else { continue }
+                for entry in try children(category) {
+                    let relative = "Library/\(category.lastPathComponent)/\(entry.lastPathComponent)"
+                    try add(entry, relative)
+                }
+            }
+        }
+        // Data/tmp and every other container entry remain in the verified, private archive.
+        // path_provider's macOS getTemporaryDirectory actually uses Library/Caches, covered above.
+        try archive("Library/Preferences/\(bundleID).plist", copyOnly: true)
+        return (units, archives)
+    }
+
+    private func sqliteFamily(_ name: String) -> [String] {
+        let suffix = ["-wal", "-shm", "-journal"].first { name.hasSuffix($0) }
+        let candidate = suffix.map { String(name.dropLast($0.count)) } ?? name
+        guard ["db", "sqlite", "sqlite3"].contains(URL(fileURLWithPath: candidate).pathExtension) else { return [name] }
+        return [candidate, candidate + "-wal", candidate + "-shm", candidate + "-journal"]
+    }
+
+    private func exists(_ url: URL) throws -> Bool {
+        var info = stat()
+        if lstat(url.path, &info) == 0 { return true }
+        if errno == ENOENT { return false }
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    private func isDirectory(_ url: URL) throws -> Bool {
+        guard try exists(url) else { return false }
+        return try fm.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType == .typeDirectory
+    }
+    private func children(_ url: URL) throws -> [URL] {
+        try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil).sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+    private func digest(_ root: URL) throws -> String {
+        var hash = SHA256()
+        func token(_ value: String) { hash.update(data: Data((value + "\0").utf8)) }
+        func visit(_ url: URL, _ relative: String) throws {
+            let attributes = try fm.attributesOfItem(atPath: url.path)
+            let type = attributes[.type] as! FileAttributeType
+            if type == .typeSocket {
+                if root == source { omittedSockets.insert(relative) }
+                return
+            }
+            token(relative)
+            token(type.rawValue)
+            if type == .typeDirectory {
+                for child in try children(url) { try visit(child, relative + "/" + child.lastPathComponent) }
+            } else if type == .typeSymbolicLink {
+                token(try fm.destinationOfSymbolicLink(atPath: url.path))
+            } else if type == .typeRegular {
+                token(String((attributes[.size] as! NSNumber).uint64Value))
+                let file = try FileHandle(forReadingFrom: url)
+                defer { try? file.close() }
+                while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty { hash.update(data: data) }
+            } else {
+                throw Self.failure("容器中存在无法复制的文件类型：\(relative)")
+            }
+        }
+        try visit(root, "")
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+    private func save(_ journal: Journal, to url: URL) throws {
+        try PropertyListEncoder().encode(journal).write(to: url, options: .atomic)
+    }
+    private static func plist(_ values: [String: Any]) throws -> Data {
+        try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
+    }
+    private static func preferences(at url: URL) throws -> [String: Any] {
+        guard let values = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any] else {
+            throw failure("偏好设置不是有效的 plist 字典")
+        }
+        return values
+    }
+    private static func failure(_ message: String) -> NSError {
+        NSError(domain: "NipaPlaySandboxMigration", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+}

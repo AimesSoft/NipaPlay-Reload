@@ -31,6 +31,7 @@ class LabsSettingsContent extends StatelessWidget {
               AdaptiveSettingsSection(children: [
                 AdaptiveSettingsTile.button(
                   title: '平台登录',
+                  enabled: labsSettings.nextAvailable,
                   subtitle: '优酷、B 站登录会话与注销（仅 macOS）',
                   icon: Ionicons.key_outline,
                   phoneIcon: cupertino.CupertinoIcons.lock,
@@ -118,6 +119,12 @@ class LabsSettingsContent extends StatelessWidget {
                     '在本機開放 MCP 介面，可在 Codex 中用對話操作 NipaPlay',
                     'Expose a local MCP endpoint to control NipaPlay through conversation in Codex.',
                   );
+                  if (labsSettings.isLoaded && !labsSettings.nextAvailable) {
+                    subtitle = _text(context,
+                        '此 macOS 应用处于 App Sandbox 中，无法提供 NipaPlay Next。请使用 GitHub 完整版。',
+                        '此 macOS 應用處於 App Sandbox 中，無法提供 NipaPlay Next。請使用 GitHub 完整版。',
+                        'This macOS app runs in App Sandbox. NipaPlay Next requires the full GitHub release.');
+                  }
                   if (labsSettings.enableAgentEndpoint) {
                     final trustHint = _text(
                       context,
@@ -146,6 +153,7 @@ class LabsSettingsContent extends StatelessWidget {
                         icon: Ionicons.flask_outline,
                         phoneIcon: cupertino.CupertinoIcons.lab_flask,
                         value: labsSettings.enableAgentEndpoint,
+                        enabled: labsSettings.nextAvailable,
                         onChanged: (enabled) async {
                           if (enabled) {
                             final confirmed = await _confirmNext(context);

@@ -200,6 +200,8 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "isSandboxed":
+            result(MacOSProcessEnvironment.isSandboxed)
         case "createBookmark":
             guard let args = call.arguments as? [String: Any],
                   let path = args["path"] as? String else {
@@ -234,7 +236,7 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
         
         do {
             let bookmarkData = try url.bookmarkData(
-                options: [.withSecurityScope],
+                options: MacOSProcessEnvironment.isSandboxed ? [.withSecurityScope] : [],
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
@@ -254,19 +256,20 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
             var isStale = false
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope],
+                options: MacOSProcessEnvironment.isSandboxed ? [.withSecurityScope] : [.withoutUI],
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
             
             // 开始访问安全作用域资源
-            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            let sandboxed = MacOSProcessEnvironment.isSandboxed
+            let didStartAccessing = sandboxed && url.startAccessingSecurityScopedResource()
             
-            if didStartAccessing {
+            if !sandboxed || didStartAccessing {
                 result([
                     "path": url.path,
                     "isStale": isStale,
-                    "didStartAccessing": true
+                    "didStartAccessing": didStartAccessing
                 ])
             } else {
                 result(FlutterError(
@@ -1643,6 +1646,16 @@ class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
 
   override func awakeFromNib() {
+    do {
+      try SandboxMigration.runBeforeEngine()
+    } catch {
+      let alert = NSAlert()
+      alert.messageText = "NipaPlay 数据迁移未完成"
+      alert.informativeText = "\(error.localizedDescription)\n原容器数据保持原样。应用不会启动，下次打开会继续迁移。"
+      alert.addButton(withTitle: "退出")
+      alert.runModal()
+      exit(EXIT_FAILURE)
+    }
     // macOS must enter multiview mode before its first FlutterViewController
     // is attached. The Dart-side window fork then reuses this same engine.
     let flutterEngine = FlutterEngine(
