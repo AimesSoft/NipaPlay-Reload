@@ -7,7 +7,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
 import 'classic_projection.dart';
-import 'filename_parser.dart';
+import 'media_probe.dart';
 import 'identity_store.dart';
 import 'metadata_provider.dart';
 
@@ -17,7 +17,7 @@ final class MediaService {
       required Iterable<MetadataProvider> providers,
       required this.classic,
       required this.authorizedRoots,
-      this.parser = const RuleFilenameParser()})
+      this.durationProbe = probeMediaDuration})
       : providers = {for (final provider in providers) provider.id: provider},
         projection = ClassicProjection(store, classic);
   final IdentityStore store;
@@ -25,7 +25,7 @@ final class MediaService {
   final ClassicMetadataPort classic;
   final ClassicProjection projection;
   final Iterable<String> Function() authorizedRoots;
-  final FilenameParserPort parser;
+  final Future<int?> Function(String path) durationProbe;
   String? Function()? currentPath;
   Future<String> resolveEntity(JsonMap input,
       {String idField = 'entityId'}) async {
@@ -95,7 +95,7 @@ final class MediaService {
     }
   }
 
-  Future<JsonMap> probe(String locator) async {
+  Future<JsonMap> probe(String locator, {bool includeDuration = true}) async {
     try {
       final path = await authorizedPath(locator);
       final file = File(path);
@@ -107,6 +107,7 @@ final class MediaService {
       } finally {
         await stream.close();
       }
+      final duration = includeDuration ? await durationProbe(path) : null;
       final after = await file.stat();
       if (before.size != after.size || before.modified != after.modified) {
         throw const Failure(
@@ -115,7 +116,8 @@ final class MediaService {
       return {
         'size': after.size,
         'modifiedAt': after.modified.toUtc().toIso8601String(),
-        'headMd5': md5.convert(bytes).toString()
+        'headMd5': md5.convert(bytes).toString(),
+        'durationMs': duration
       };
     } on FileSystemException catch (error) {
       throw _fileFailure(error);
@@ -138,34 +140,6 @@ final class MediaService {
     });
   }
 
-  Future<void> validateFile(String fileId) async {
-    final file = await store.entity(fileId);
-    final local = (await store.locations(fileId))
-        .where((l) =>
-            l['source'] == 'local' &&
-            l['owner_device_id'] == store.ownerDeviceId)
-        .toList();
-    if (local.isEmpty) {
-      throw const Failure(
-          FailureCode.unavailable, 'No accessible local file location.');
-    }
-    final info = await probe(local.first['locator'] as String);
-    final previous = (file['attributes'] as JsonMap)['probe'] as JsonMap;
-    if (isLocationOnlyMediaProbe(previous)) {
-      await mutate(
-          () => store.registerFile(local.first['locator'] as String, info));
-      return;
-    }
-    if (info['size'] != previous['size'] ||
-        info['modifiedAt'] != previous['modifiedAt'] ||
-        info['headMd5'] != previous['headMd5']) {
-      await mutate(
-          () => store.registerFile(local.first['locator'] as String, info));
-      throw const Failure(FailureCode.conflict,
-          'File content changed. Start a new identification.');
-    }
-  }
-
   Future<Job> submit(String type, JsonMap input, {String? key}) async {
     final previous = _submissions;
     final done = Completer<void>();
@@ -180,9 +154,7 @@ final class MediaService {
           type: type,
           title: switch (type) {
             'media.scan' => 'Scan media folder',
-            'media.identify' => 'Identify media file',
             'media.project' => 'Deliver Classic metadata',
-            'media.apply_release' => 'Apply release to media folder',
             _ => 'Refresh media metadata'
           },
           input: input,
@@ -200,192 +172,356 @@ final class MediaService {
     }
   }
 
-  Future<Job> identify(String fileId,
-      {List<String>? sources,
-      int? expectedRevision,
-      String? releaseId,
-      String? requestId}) async {
-    final file = await store.entity(fileId);
-    if (file['kind'] != 'file') {
-      throw const Failure(
-          FailureCode.invalidInput, 'Identification requires a file entity.');
+  Future<List<String>> directoryFiles(String locator) async {
+    final root = await authorizedPath(locator, directory: true);
+    final paths = <String>[];
+    try {
+      await for (final entry
+          in Directory(root).list(recursive: true, followLinks: false)) {
+        if (entry is File &&
+            {
+              '.mkv',
+              '.mp4',
+              '.avi',
+              '.mov',
+              '.m4v',
+              '.ts',
+              '.webm',
+              '.wmv',
+              '.flv'
+            }.contains(p.extension(entry.path).toLowerCase())) {
+          paths.add(entry.path);
+        }
+      }
+    } on FileSystemException catch (error) {
+      throw _fileFailure(error);
     }
-    if (expectedRevision != null && file['revision'] != expectedRevision) {
-      throw const Failure(FailureCode.conflict, 'Stale file revision.');
-    }
-    final selected = List<String>.of(sources ?? providers.keys);
-    for (final source in selected) {
-      provider(source);
-    }
-    if (selected.isEmpty) {
-      throw const Failure(
-          FailureCode.invalidInput, 'Choose at least one metadata source.');
-    }
-    selected.sort();
-    final key = stableMediaId('identify', [
-      fileId,
-      file['revision'],
-      (file['attributes'] as JsonMap)['bindingRevision'],
-      selected,
-      releaseId,
-      requestId,
-      'rules-2'
-    ]);
-    return submit(
-        'media.identify',
-        {
-          'fileId': fileId,
-          'fileRevision': file['revision'],
-          'sources': selected,
-          if (releaseId != null) 'releaseId': releaseId,
-        },
-        key: key);
+    paths.sort();
+    return paths;
   }
 
-  Future<JsonMap> accept(
-      String jobId, String candidateId, String actor, Invocation invocation,
-      {Future<void> Function()? committed}) async {
-    final identification = await store.identification(jobId);
-    if (identification['state'] != 'accepted') {
-      await validateFile(identification['file_id'] as String);
-    }
-    return mutate(() async {
-      final result =
-          await store.acceptCandidate(jobId, candidateId, actor, invocation);
-      await committed?.call();
-      await projection.drain(fileId: identification['file_id'] as String);
-      return result;
-    });
-  }
-
-  Future<JsonMap> candidate(MetadataRecord work, FilenameSignals signals,
-      {ExternalRef? releaseRef,
-      MetadataRecord? confirmedRelease,
-      List<String>? episodeIds,
-      String? workId,
-      String reason = 'Filename search requires confirmation.',
-      String? url}) async {
-    var detail = work;
-    var release = confirmedRelease ?? work;
-    if (confirmedRelease != null) {
-      detail = work;
-    } else if (releaseRef != null) {
-      if (releaseRef.provider != work.ref.provider) {
-        throw const Failure(FailureCode.invalidInput,
-            'Work and release must come from the same source.');
+  Future<({String path, String? fileId, JsonMap probe})> readFile(JsonMap input,
+      {bool includeDuration = true}) async {
+    String path;
+    String? id = input['entityId'] as String?;
+    if (id != null) {
+      final entity = await store.entity(id);
+      if (entity['kind'] != 'file') {
+        throw const Failure(
+            FailureCode.invalidInput, 'entityId must reference a file.');
       }
-      detail = await provider(work.ref.provider).get(work.ref);
-      if (work.ref.provider == 'tmdb' &&
-          !detail.episodes.any((ep) =>
-              ep.ref.externalId == releaseRef.externalId &&
-              ep.ref.scope == releaseRef.scope)) {
-        throw const Failure(FailureCode.invalidInput,
-            'Selected release does not belong to the work.');
-      }
-      release = await provider(work.ref.provider).get(releaseRef);
-    } else if (work.ref.objectType == 'tv') {
-      detail = await provider(work.ref.provider).get(work.ref);
-      final matches = detail.episodes
-          .where((s) => s.season == (signals.season ?? 1))
+      final local = (await store.locations(id))
+          .where((row) =>
+              row['source'] == 'local' &&
+              row['owner_device_id'] == store.ownerDeviceId)
           .toList();
-      if (matches.length != 1) {
-        throw const Failure(FailureCode.notFound,
-            'No unique TMDB season corresponds to the filename.');
+      if (local.isEmpty) {
+        throw const Failure(FailureCode.unavailable,
+            'File has no local location on this device.');
       }
-      release = await provider(work.ref.provider).get(matches.single.ref);
-    } else if (work.ref.objectType != 'movie' && work.episodes.isEmpty) {
-      detail = await provider(work.ref.provider).get(work.ref);
-      release = detail;
-    }
-    var episodes = release.episodes;
-    if (work.ref.objectType == 'movie') episodes = [release];
-    List<MetadataRecord> selected;
-    if (episodeIds != null) {
-      if (episodeIds.isEmpty ||
-          episodeIds.toSet().length != episodeIds.length) {
-        throw const Failure(
-            FailureCode.invalidInput, 'Select distinct catalogue episodes.');
-      }
-      selected = [
-        for (final id in episodeIds)
-          ...episodes.where((ep) => ep.ref.externalId == id)
-      ];
-      if (selected.length != episodeIds.length) {
-        throw const Failure(FailureCode.invalidInput,
-            'Episode selection is outside the verified release catalogue.');
-      }
-    } else if (work.ref.objectType == 'movie') {
-      selected = episodes;
+      path = local.first['locator'] as String;
     } else {
-      final start = double.tryParse(signals.number ?? ''),
-          end = double.tryParse(signals.endNumber ?? '');
-      selected = episodes.where((ep) {
-        final n = double.tryParse(ep.number ?? '');
-        return n != null &&
-            start != null &&
-            (end == null ? n == start : n >= start && n <= end) &&
-            (signals.episodeType == 'regular'
-                ? ep.episodeType == 'regular'
-                : ep.episodeType != 'regular');
-      }).toList();
-      if (selected.isEmpty) {
-        throw const Failure(FailureCode.notFound,
-            'No catalogue episode corresponds to the parsed number and type.');
+      path = await authorizedPath(input['path'] as String);
+      final locations = await store.database.query('media_locations',
+          where: 'owner_device_id=? AND locator=?',
+          whereArgs: [store.ownerDeviceId, path]);
+      if (locations.isNotEmpty) id = locations.first['file_id'] as String;
+    }
+    return (
+      path: path,
+      fileId: id,
+      probe: await probe(path, includeDuration: includeDuration)
+    );
+  }
+
+  Future<JsonMap> listFiles(JsonMap input) async {
+    final result = <JsonMap>[];
+    if (input['root'] case final String root) {
+      for (final path in await directoryFiles(root)) {
+        final info = await readFile({'path': path});
+        result.add(await _fileDescription(info.fileId, path, info.probe));
       }
-      if (end == null && selected.length != 1) {
+    } else {
+      final workId = input['workId'] as String;
+      if ((await store.entity(workId))['kind'] != 'work') {
         throw const Failure(
-            FailureCode.conflict, 'Episode numbering is ambiguous.');
+            FailureCode.invalidInput, 'workId must reference a work.');
+      }
+      final rows = await store.database.rawQuery(
+          'SELECT DISTINCT f.id FROM media_entities f JOIN media_file_episodes fe ON fe.file_id=f.id '
+          'JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE r.parent_id=? ORDER BY f.id',
+          [workId]);
+      for (final row in rows) {
+        final id = row['id'] as String;
+        final file = await store.entity(id);
+        final locations = await store.locations(id);
+        for (final location in locations) {
+          result.add(await _fileDescription(id, location['locator'] as String,
+              (file['attributes'] as JsonMap)['probe'] as JsonMap));
+        }
       }
     }
+    return {'files': result, 'total': result.length};
+  }
+
+  Future<JsonMap> _fileDescription(
+      String? id, String path, JsonMap probe) async {
+    final identity = id == null ? null : await store.identity(id);
     return {
-      'work': detail.toJson(),
-      'release': release.toJson(),
-      'episodes': [for (final ep in selected) ep.toJson()],
-      'workId': workId,
-      'relation': selected.length > 1 ? 'combined' : 'exact',
-      'scope': {
-        'order': release.order,
-        'season': release.season,
-        'cour': signals.cour,
-        'numbers': [for (final ep in selected) ep.number],
-        'startMs': null,
-        'endMs': null
-      },
-      'evidence': {'reason': reason, 'url': url}
+      'fileId': id,
+      'path': path,
+      'size': probe['size'],
+      'durationMs': probe['durationMs'],
+      'headMd5': probe['headMd5'],
+      'modifiedAt': probe['modifiedAt'],
+      'bindings': [
+        for (final row in (identity?['bindings'] as List<JsonMap>?) ?? [])
+          if (row['status'] == 'accepted')
+            {
+              'bindingId': row['id'],
+              'ref': {
+                'provider': row['provider'],
+                'objectType': row['object_type'],
+                'externalId': row['external_id'],
+                'scope': row['object_scope']
+              },
+              'relation': row['relation'],
+              'scope': row['scope'],
+              'boundBy': row['bound_by'],
+              'source': row['source']
+            }
+      ],
+      'episodes': [
+        for (final row in (identity?['episodes'] as List<JsonMap>?) ?? [])
+          {
+            'episodeId': row['episode_id'],
+            'relation': row['relation'],
+            'ordinal': row['ordinal'],
+            'startMs': row['start_ms'],
+            'endMs': row['end_ms']
+          }
+      ]
     };
   }
 
-  Future<JsonMap> releaseCandidate(
-      String releaseId, FilenameSignals signals) async {
-    final records = await releaseRecords(releaseId);
-    return candidate(records.work, signals,
-        confirmedRelease: records.release,
-        workId: records.workId,
-        reason:
-            'Accepted local release with a unique catalogue number and matching episode type.');
+  Future<JsonMap> matchHashes(List<JsonMap> files) async {
+    final source = provider('dandanplay');
+    if (source is! HashMetadataProvider) {
+      throw const Failure(
+          FailureCode.unavailable, 'Dandanplay hash matching is unavailable.');
+    }
+    final results = <JsonMap>[];
+    for (var index = 0; index < files.length; index++) {
+      try {
+        final info = await readFile(files[index], includeDuration: false);
+        final matches = await source.matchHash(p.basename(info.path),
+            info.probe['headMd5'] as String, info.probe['size'] as int);
+        results.add({
+          'index': index,
+          'fileId': info.fileId,
+          'path': info.path,
+          'headMd5': info.probe['headMd5'],
+          'candidates': [for (final record in matches) record.toJson()]
+        });
+      } on Failure catch (error) {
+        results.add({'index': index, 'error': error.toJson()});
+      } on ProviderRetry catch (error) {
+        results.add({
+          'index': index,
+          'error': Failure(FailureCode.unavailable,
+                  '${error.provider}: ${error.reason} Retry after ${error.at.toUtc().toIso8601String()}.',
+                  retryable: true)
+              .toJson()
+        });
+      }
+    }
+    return {'files': results};
   }
 
-  Future<({MetadataRecord work, MetadataRecord release, String workId})>
-      releaseRecords(String releaseId) async {
-    final release = await store.entity(releaseId);
-    if (release['kind'] != 'release') {
-      throw const Failure(
-          FailureCode.invalidInput, 'releaseId must identify a local release.');
-    }
-    Future<MetadataRecord> record(String id) async {
-      final rows = await store.database.rawQuery(
-          'SELECT s.fields FROM media_snapshots s JOIN media_bindings b ON b.object_id=s.object_id WHERE b.entity_id = ? AND b.status = ? ORDER BY b.created_at DESC, s.fetched_at DESC LIMIT 1',
-          [id, 'accepted']);
-      if (rows.isEmpty) {
-        throw const Failure(FailureCode.unavailable,
-            'Release context requires accepted identity and a cached catalogue.');
-      }
-      return MetadataRecord.fromJson(decodeMediaJson(rows.single['fields']));
-    }
+  Future<JsonMap> bindBatch(JsonMap input, Invocation invocation) =>
+      mutate(() async {
+        final key = stableMediaId(
+            'bind-operation', [invocation.origin, input['requestId']]);
+        final fingerprint = stableMediaId('input', input);
+        final existing = await store.operation(key, fingerprint);
+        if (existing != null) {
+          await _deliverBindings(existing);
+          return existing;
+        }
+        final records = <String, Future<MetadataRecord>>{};
+        Future<MetadataRecord> get(ExternalRef ref) => records.putIfAbsent(
+            stableMediaId('ref', ref.toJson()),
+            () => provider(ref.provider).get(ref));
+        ExternalRef ref(Object? json) =>
+            ExternalRef.fromJson(Map<String, Object?>.from(json as Map));
+        bool same(ExternalRef a, ExternalRef b) =>
+            stableMediaId('ref', a.toJson()) ==
+            stableMediaId('ref', b.toJson());
+        final entries = (input['entries'] as List).cast<JsonMap>();
+        if (entries.isEmpty) {
+          throw const Failure(
+              FailureCode.invalidInput, 'entries must not be empty.');
+        }
+        final prepared = <JsonMap>[];
+        for (var index = 0; index < entries.length; index++) {
+          final entry = entries[index];
+          try {
+            final kind = entry['kind'] as String;
+            if ((kind == 'file' &&
+                    (entry.containsKey('entityId') ==
+                        entry.containsKey('path'))) ||
+                kind != 'file' && entry.containsKey('path')) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Files require exactly one entityId or path; other entities cannot use path.');
+            }
+            final workRef = ref(entry['workRef']);
+            if (!{'tv', 'movie', 'subject', 'anime'}
+                .contains(workRef.objectType)) {
+              throw const Failure(FailureCode.invalidInput,
+                  'workRef must identify a work catalogue.');
+            }
+            final work = await get(workRef);
+            final releaseRef = entry['releaseRef'] == null
+                ? workRef
+                : ref(entry['releaseRef']);
+            if (kind != 'work' &&
+                workRef.objectType == 'tv' &&
+                entry['releaseRef'] == null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'TMDB TV bindings require an explicit releaseRef.');
+            }
+            if (kind != 'work' &&
+                (workRef.objectType == 'tv'
+                    ? releaseRef.objectType != 'season'
+                    : !same(releaseRef, workRef))) {
+              throw const Failure(FailureCode.invalidInput,
+                  'TV releaseRef must identify a season; other catalogues use workRef as their release.');
+            }
+            if (kind != 'work' &&
+                !same(releaseRef, workRef) &&
+                !work.episodes.any((record) => same(record.ref, releaseRef))) {
+              throw const Failure(FailureCode.invalidInput,
+                  'releaseRef does not belong to workRef.');
+            }
+            final release = kind == 'work' || same(workRef, releaseRef)
+                ? work
+                : await get(releaseRef);
+            final refs =
+                ((entry['episodeRefs'] as List?) ?? []).map(ref).toList();
+            if ((kind == 'file' && refs.isEmpty) ||
+                (kind == 'episode' && refs.length != 1) ||
+                {'work', 'release'}.contains(kind) && refs.isNotEmpty ||
+                refs
+                        .map((r) => stableMediaId('ref', r.toJson()))
+                        .toSet()
+                        .length !=
+                    refs.length) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Files require distinct episodeRefs; episode requires one; work/release requires none.');
+            }
+            final catalogue =
+                workRef.objectType == 'movie' ? [work] : release.episodes;
+            final selected = <MetadataRecord>[];
+            for (final episodeRef in refs) {
+              if (episodeRef.objectType !=
+                  (workRef.objectType == 'movie' ? 'movie' : 'episode')) {
+                throw const Failure(FailureCode.invalidInput,
+                    'episodeRefs must identify episodes, or the selected movie.');
+              }
+              final members =
+                  catalogue.where((ep) => same(ep.ref, episodeRef)).toList();
+              if (members.length != 1) {
+                throw Failure(FailureCode.invalidInput,
+                    'Episode ${episodeRef.externalId} is not a member of the selected release catalogue.');
+              }
+              selected.add(members.single);
+            }
+            if (entry['localEpisodeIds'] case final List ids
+                when ids.length != refs.length) {
+              throw const Failure(FailureCode.invalidInput,
+                  'localEpisodeIds must correspond one-to-one to episodeRefs.');
+            }
+            final start = entry['startMs'] as num?,
+                end = entry['endMs'] as num?;
+            if (start != null && end != null && end <= start) {
+              throw const Failure(FailureCode.invalidInput,
+                  'endMs must be greater than startMs.');
+            }
+            final info = kind == 'file' ? await readFile(entry) : null;
+            final id = info == null ? entry['entityId'] : info.fileId;
+            prepared.add({
+              ...entry,
+              'entityId': id,
+              'work': work.toJson(),
+              'release': release.toJson(),
+              'episodes': [for (final ep in selected) ep.toJson()],
+              if (info != null) ...{
+                'probe': info.probe,
+                'verifiedPath': info.path
+              }
+            });
+          } on Failure catch (error) {
+            throw Failure(error.code, 'Entry $index: ${error.message}',
+                violations: [
+                  SchemaViolation('/entries/$index', error.message)
+                ]);
+          }
+        }
+        for (var index = 0; index < prepared.length; index++) {
+          final entry = prepared[index];
+          if (entry['kind'] != 'file') continue;
+          try {
+            final fresh = await probe(entry['verifiedPath'] as String,
+                includeDuration: false);
+            final previous = entry['probe'] as JsonMap;
+            if (['size', 'modifiedAt', 'headMd5']
+                .any((key) => fresh[key] != previous[key])) {
+              throw const Failure(FailureCode.conflict,
+                  'File changed during batch validation.');
+            }
+          } on Failure catch (error) {
+            throw Failure(error.code, 'Entry $index: ${error.message}',
+                violations: [
+                  SchemaViolation('/entries/$index', error.message)
+                ]);
+          }
+        }
+        final result =
+            await store.bindBatch(prepared, key, fingerprint, invocation);
+        await _deliverBindings(result);
+        return result;
+      });
 
-    final workId = release['parent_id'] as String;
-    final work = await record(workId);
-    final catalogue = await record(releaseId);
-    return (work: work, release: catalogue, workId: workId);
+  Future<JsonMap> unbindBatch(JsonMap input, Invocation invocation) =>
+      mutate(() async {
+        final key = stableMediaId(
+            'unbind-operation', [invocation.origin, input['requestId']]);
+        final fingerprint = stableMediaId('input', input);
+        final entries = (input['entries'] as List).cast<JsonMap>();
+        if (entries.isEmpty) {
+          throw const Failure(
+              FailureCode.invalidInput, 'entries must not be empty.');
+        }
+        final result =
+            await store.unbindBatch(entries, key, fingerprint, invocation);
+        await _deliverBindings(result);
+        return result;
+      });
+
+  Future<void> _deliverBindings(JsonMap result) async {
+    for (final row in (result['entries'] as List).cast<JsonMap>()) {
+      final id = (row['fileId'] ?? row['entityId']) as String?;
+      if (id == null || (await store.entity(id))['kind'] != 'file') continue;
+      try {
+        await projection.drain(fileId: id);
+      } on Failure catch (error) {
+        throw Failure(error.code,
+            'Entry ${row['index']}: Identity committed; Classic projection is pending: ${error.message}',
+            retryable: true,
+            violations: [
+              SchemaViolation('/entries/${row['index']}', error.message)
+            ]);
+      }
+    }
   }
 }

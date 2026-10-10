@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/media/filename_parser.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/media/provider_transport.dart';
 import 'package:nipaplay/next/media/providers.dart';
@@ -133,7 +132,8 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('next-credentials-');
     try {
-      final resolver = VaultCredentialResolver(root, store: CredentialStore(MemoryVault(), desktop: true));
+      final resolver = VaultCredentialResolver(root,
+          store: CredentialStore(MemoryVault(), desktop: true));
       await resolver.initialize();
       expect(await File('${root.path}/credentials.json').exists(), false);
       await expectLater(
@@ -143,30 +143,5 @@ void main() {
     } finally {
       await root.delete(recursive: true);
     }
-  });
-  test(
-      'filename rules retain season, cour, fractional/range numbers, long series and special type',
-      () {
-    const parser = RuleFilenameParser();
-    final season =
-        parser.parse('[Group] 长安十二时辰 (2019) S02E301.5-E302 [1080p HEVC].mkv');
-    expect(season.title, '长安十二时辰');
-    expect(season.season, 2);
-    expect(season.year, 2019);
-    expect(season.number, '301.5');
-    expect(season.endNumber, '302');
-    expect(season.releaseGroup, 'Group');
-    expect(season.technical, ['1080p', 'HEVC']);
-    final cour = parser.parse('Cour Sample Part 2 - 13.mkv');
-    expect(cour.cour, 2);
-    expect(cour.number, '13');
-    final special = parser.parse('Anime OVA 1.mkv');
-    expect(special.episodeType, 'ova');
-    expect(special.number, '1');
-    expect(parser.parse('86.mkv').title, '86');
-    expect(parser.parse('86.mkv').number, isNull);
-    final spy = parser.parse('SPY x FAMILY S01E01.mkv');
-    expect(spy.title, 'SPY x FAMILY');
-    expect(spy.episodeType, 'regular');
   });
 }

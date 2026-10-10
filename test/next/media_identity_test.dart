@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -64,7 +62,7 @@ void main() {
     expect(
         (await upgraded.get(job.jobId))!.toStorageJson(), job.toStorageJson());
     expect(await upgraded.events(job.jobId), hasLength(1));
-    expect(await upgraded.database.getVersion(), 4);
+    expect(await upgraded.database.getVersion(), 5);
     expect(await upgraded.database.query('media_entities'), isEmpty);
     await upgraded.close();
     await root.delete(recursive: true);
@@ -100,604 +98,528 @@ void main() {
     expect(await f.jobs.database.query('media_legacy_history'), hasLength(1));
   });
 
-  test(
-      'TMDB-only identification yields a durable executable Decision and a Next library work with a complete catalogue',
+  test('binding persists agent reasoning, scope and evidence for all levels',
       () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    final accepted = await f.service.identify(fileId, sources: ['tmdb']);
-    final decision =
-        await waitForJob(f.engine, accepted.jobId, JobState.needsDecision);
-    final queried =
-        await f.call('media.identification.get', {'jobId': decision.jobId});
-    expect(queried['candidates'], hasLength(1));
-    expect(await f.jobs.database.query('media_bindings'), isEmpty);
-    for (final option in decision.decision!.options) {
-      expect(
-          f.harness
-              .lookup(option.call.actionId)!
-              .spec
-              .input
-              .validate(option.call.input),
-          isEmpty);
-    }
-    await f.reopen(sources: ['tmdb', 'bangumi', 'dandanplay']);
-    final persisted = await f.engine.get(decision.jobId);
-    expect(persisted.decision!.toJson(), decision.decision!.toJson());
-    await f.choose(persisted);
-    final result = await f.call('media.library.works', {'query': '长安'});
-    final work = (result['works'] as List).single as Map;
-    final release = (work['releases'] as List).single as Map;
-    expect(release['episodes'], hasLength(2));
-    expect(
-        ((release['episodes'] as List).first['files'] as List).single['fileId'],
-        fileId);
-    expect((release['episodes'] as List).last['files'], isEmpty);
-    expect(
-        (work['metadata'] as List).any((field) => field['field'] == 'imageUrl'),
-        isTrue);
-    await f.call('media.library.work', {'workId': work['workId']});
+    final id = await f.file('E99.2160p arbitrary.mkv');
+    final input = {
+      'requestId': 'explicit',
+      'entries': [tmdbBinding(id)]
+    };
+    final result = await f.call('media.identity.bind_batch', input);
+    final entry = (result['entries'] as List).single as JsonMap;
+    final workId = entry['workId'] as String;
+    final work =
+        (await f.call('media.library.work', {'workId': workId}))['work'] as Map;
+    expect((work['releases'] as List).single['episodes'], hasLength(1));
     final identity = (await f
-        .call('media.identity.get', {'entityId': fileId}))['identity'] as Map;
+        .call('media.identity.get', {'entityId': id}))['identity'] as Map;
     expect((identity['bindings'] as List).single['boundBy'], 'agent');
-    expect((identity['bindings'] as List).single['ref']['provider'], 'tmdb');
-    expect(f.classic.applications, 0);
-    expect((await f.engine.get(decision.jobId)).receipt!.verification,
-        VerificationLevel.verified);
-  });
-
-  test(
-      'host provenance cannot be supplied as an input and GUI choices record user independently of confidence',
-      () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    final queued = await f.service.identify(fileId, sources: ['tmdb']);
-    final job =
-        await waitForJob(f.engine, queued.jobId, JobState.needsDecision);
-    final call = job.decision!.options.first.call;
-    final forged = await f.harness.invokeJson(
-        call.actionId,
-        {...call.input, 'boundBy': 'user'},
-        Invocation(origin: 'mcp')) as Failed;
-    expect(forged.failure.code, FailureCode.invalidInput);
-    await f.choose(job, origin: 'gui');
-    final identity = (await f
-        .call('media.identity.get', {'entityId': fileId}))['identity'] as Map;
-    expect((identity['bindings'] as List).single['boundBy'], 'user');
-    expect((identity['evidence'] as List).single['reason'],
-        contains('confirmation'));
-    final stale = await f.harness.invokeJson(
-        call.actionId, call.input, Invocation(origin: 'mcp')) as Failed;
-    expect(stale.failure.code, FailureCode.conflict);
-  });
-
-  test(
-      'Agent evidence explicitly maps absolute 13 to Bangumi subject episode 1 and cannot bypass catalogue membership',
-      () async {
-    final fileId = await f.file('Cour Sample Part 2 - 13.mkv');
-    final queued = await f.service.identify(fileId, sources: ['bangumi']);
-    var job = await waitForJob(f.engine, queued.jobId, JobState.needsDecision);
-    final evidence = {
-      'jobId': job.jobId,
-      'revision': job.revision,
-      'workRef': const ExternalRef('bangumi', 'subject', '8001').toJson(),
-      'episodeIds': ['8101'],
-      'reason':
-          'Release is the second cour; filename absolute 13 maps to subject sort 1.',
-      'url': 'https://example.invalid/verified-cour-map'
-    };
-    final bad = await f.harness.invokeJson(
-        'media.identification.add_evidence',
-        {
-          ...evidence,
-          'episodeIds': ['forged']
-        },
-        Invocation(origin: 'mcp')) as Failed;
-    expect(bad.failure.code, FailureCode.invalidInput);
-    final added = await f.call('media.identification.add_evidence', evidence);
-    expect(await f.jobs.database.query('media_bindings'), isEmpty);
-    await f.call(
-        'media.identification.reconsider', added['reconsider'] as JsonMap);
-    job = await waitForJob(f.engine, job.jobId, JobState.needsDecision);
-    await f.choose(job, candidateId: added['candidateId'] as String);
-    final identity = (await f
-        .call('media.identity.get', {'entityId': fileId}))['identity'] as Map;
-    final binding = (identity['bindings'] as List).single;
-    expect(binding['ref']['externalId'], '8101');
-    expect(binding['source'], 'agent_evidence');
-    expect((identity['evidence'] as List).single['url'], evidence['url']);
-    final library = await f.call('media.library.works', {});
-    final episodes = ((library['works'] as List).single['releases'] as List)
-        .single['episodes'] as List;
-    expect(episodes, hasLength(3));
-    expect(
-        episodes
-            .where((ep) => ep['number'] == '1')
-            .map((ep) => ep['type'])
-            .toSet(),
-        {'regular', 'special'});
-  });
-
-  test('file revision changes reject old choices without writing identities',
-      () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    final queued = await f.service.identify(fileId, sources: ['tmdb']);
-    final job =
-        await waitForJob(f.engine, queued.jobId, JobState.needsDecision);
-    final location = (await f.identities.locations(fileId)).single;
-    await File(location['locator'] as String).writeAsString('changed content');
-    await f.service.index(location['locator'] as String);
-    final call = job.decision!.options.first.call;
-    final stale = await f.harness.invokeJson(
-        call.actionId, call.input, Invocation(origin: 'mcp')) as Failed;
-    expect(stale.failure.code, FailureCode.conflict);
-    expect(await f.jobs.database.query('media_bindings'), isEmpty);
-    final replacement = await f.service.identify(fileId, sources: ['tmdb']);
-    expect(replacement.jobId, isNot(job.jobId));
-    await waitForJob(f.engine, replacement.jobId, JobState.needsDecision);
-  });
-
-  test(
-      'one file may cover multiple episodes and each episode may have multiple files',
-      () async {
-    final combined = await f.file('长安十二时辰 S01E01-E02.mkv');
-    final q = await f.service.identify(combined, sources: ['tmdb']);
-    await f.choose(await waitForJob(f.engine, q.jobId, JobState.needsDecision));
-    final alternate = await f.file('长安十二时辰 S01E01 [alternate].mkv');
-    final q2 = await f.service.identify(alternate, sources: ['tmdb']);
-    await f
-        .choose(await waitForJob(f.engine, q2.jobId, JobState.needsDecision));
-    final combinedIdentity = (await f
-        .call('media.identity.get', {'entityId': combined}))['identity'] as Map;
-    expect(combinedIdentity['episodes'], hasLength(2));
-    expect(
-        (combinedIdentity['episodes'] as List)
-            .every((ep) => ep['relation'] == 'combined'),
-        isTrue);
-    final library = await f.call('media.library.works', {});
-    final episodes = ((library['works'] as List).single['releases'] as List)
-        .single['episodes'] as List;
-    expect(episodes.firstWhere((ep) => ep['number'] == '1')['files'],
-        hasLength(2));
-  });
-
-  test(
-      'unique hashOnly automatically binds and verifies Classic projection without changing progress',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    final path =
-        (await f.identities.locations(fileId)).single['locator'] as String;
-    f.classic.rows[path] = {
-      'filePath': path,
-      'lastPosition': 9000,
-      'watchProgress': 0.9
-    };
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    final completed = await waitForJob(f.engine, q.jobId, JobState.succeeded);
-    expect(completed.receipt!.details['identified'], true);
-    final identity = (await f
-        .call('media.identity.get', {'entityId': fileId}))['identity'] as Map;
-    expect((identity['bindings'] as List).single['boundBy'], 'automatic');
-    expect((identity['bindings'] as List).single['source'], 'hashOnly');
-    expect(f.classic.rows[path]!['animeId'], 7001);
-    expect(f.classic.rows[path]!['episodeId'], 7101);
-    expect(f.classic.rows[path]!['lastPosition'], 9000);
-    expect(
-        (await f.jobs.database.query('media_projection_outbox'))
-            .single['state'],
-        'delivered');
-    expect(f.dandanplay.requests, hasLength(1));
-  });
-
-  test(
-      'an accepted identity is reused without searching and duplicate submissions converge',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    final jobs = await Future.wait([
-      f.service.identify(fileId, sources: ['dandanplay']),
-      f.service.identify(fileId, sources: ['dandanplay'])
-    ]);
-    expect(jobs[0].jobId, jobs[1].jobId);
-    await waitForJob(f.engine, jobs.first.jobId, JobState.succeeded);
-    final requestCount = f.dandanplay.requests.length;
-    final reused = await f.service.identify(fileId, sources: ['dandanplay']);
-    await waitForJob(f.engine, reused.jobId, JobState.succeeded);
-    expect(f.dandanplay.requests.length, requestCount);
-  });
-
-  test(
-      'Classic projection failure remains pending and reboot repairs the committed identity',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    f.classic.rejectReadback = true;
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    final failed = await waitForJob(f.engine, q.jobId, JobState.failed);
-    expect(failed.receipt!.verification, VerificationLevel.unverified);
-    expect(await f.identities.pendingProjections(), hasLength(1));
-    final bindings = await f.jobs.database
-        .query('media_bindings', where: 'entity_id = ?', whereArgs: [fileId]);
-    expect(bindings, hasLength(1));
-    f.classic.rejectReadback = false;
+    expect((identity['bindings'] as List).single['ref'], mediaEpisodeRef(1));
+    expect((identity['evidence'] as List).single['reason'], contains('Agent'));
+    expect((identity['evidence'] as List).single['evidence'], isNotEmpty);
+    final db = f.jobs.database;
+    for (final binding in await db.query('media_bindings')) {
+      expect(binding['bound_by'], 'agent');
+      expect(binding['source'], 'explicit_binding');
+      expect(
+          await db.query('media_evidence',
+              where: 'binding_id=?', whereArgs: [binding['id']]),
+          isNotEmpty);
+    }
+    final before = await db.query('media_bindings');
     await f.reopen(sources: ['tmdb', 'bangumi', 'dandanplay']);
-    await f.service.recoverProjections();
-    final repair = (await f.engine.list(type: 'media.project')).single;
-    await waitForJob(f.engine, repair.jobId, JobState.succeeded);
-    expect(await f.identities.pendingProjections(), isEmpty);
-    expect(
-        await f.jobs.database.query('media_bindings',
-            where: 'entity_id = ?', whereArgs: [fileId]),
-        hasLength(1));
-  });
-
-  test(
-      'metadata refresh updates fields and keeps user overrides and accepted identity untouched',
-      () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    final q = await f.service.identify(fileId, sources: ['tmdb']);
-    await f.choose(await waitForJob(f.engine, q.jobId, JobState.needsDecision));
-    final work = (await f.jobs.database
-            .query('media_entities', where: 'kind = ?', whereArgs: ['work']))
-        .single['id'] as String;
-    final before = await f.jobs.database.query('media_bindings');
-    await f.call('media.metadata.override',
-        {'entityId': work, 'field': 'title', 'value': '我的标题'},
-        origin: 'gui');
-    final forbidden = await f.harness.invokeJson(
-        'media.metadata.override',
-        {'entityId': work, 'field': 'title', 'value': 'spoof'},
-        Invocation(origin: 'mcp')) as Failed;
-    expect(forbidden.failure.code, FailureCode.unavailable);
-    (f.tmdb.responses['/3/tv/9001'] as Map)['overview'] =
-        'Updated source overview';
-    final refreshed = await f.call('media.metadata.refresh', {
-      'ref': const ExternalRef('tmdb', 'tv', '9001').toJson(),
-      'requestId': 'refresh-once'
-    });
-    final duplicate = await f.call('media.metadata.refresh', {
-      'ref': const ExternalRef('tmdb', 'tv', '9001').toJson(),
-      'requestId': 'refresh-once'
-    });
-    expect(
-        (duplicate['job'] as Map)['jobId'], (refreshed['job'] as Map)['jobId']);
-    await waitForJob(f.engine, (refreshed['job'] as Map)['jobId'] as String,
-        JobState.succeeded);
-    final metadata = await f.identities.mergedMetadata(work);
-    expect((metadata['fields'] as Map)['title'], '我的标题');
-    expect((metadata['fields'] as Map)['overview'], 'Updated source overview');
+    expect(await f.call('media.identity.bind_batch', input), result);
     expect(await f.jobs.database.query('media_bindings'), before);
   });
 
-  test(
-      'scan acceptance returns promptly, enumerates all files and schedules independent ambiguity jobs',
+  test('GUI provenance is host derived and cannot be supplied by an Agent',
       () async {
-    await File('${f.media.path}/长安十二时辰 S01E01.mkv').writeAsString('one');
-    await File('${f.media.path}/长安十二时辰 S01E02.mkv').writeAsString('two');
-    await File('${f.media.path}/skip.txt').writeAsString('ignore');
-    final input = {
-      'root': f.media.path,
-      'requestId': 'scan-once',
-      'sources': ['tmdb']
+    final id = await f.file('user.mkv');
+    await f.call(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'user',
+          'entries': [tmdbBinding(id)]
+        },
+        origin: 'gui');
+    expect(
+        (await f.jobs.database.query('media_bindings'))
+            .every((row) => row['bound_by'] == 'user'),
+        isTrue);
+    final invalid = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'spoof',
+          'entries': [
+            {...tmdbBinding(id), 'boundBy': 'user'}
+          ]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(invalid.failure.code, FailureCode.invalidInput);
+    expect(invalid.failure.violations.first.path, '/entries/0/boundBy');
+  });
+
+  test(
+      'wrong catalogue member reports its batch index and leaves no accepted bindings',
+      () async {
+    final first = await f.file('one.mkv'), second = await f.file('two.mkv');
+    final bad = {...mediaEpisodeRef(2), 'scope': 'tv/9001/season/2/episode/2'};
+    final result = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'bad',
+          'entries': [
+            tmdbBinding(first),
+            {
+              ...tmdbBinding(second),
+              'episodeRefs': [bad]
+            }
+          ]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(result.failure.code, FailureCode.invalidInput);
+    expect(result.failure.violations.single.path, '/entries/1');
+    expect(result.failure.message, contains('not a member'));
+    expect(await f.jobs.database.query('media_bindings'), isEmpty);
+    expect(await f.jobs.database.query('media_binding_operations'), isEmpty);
+  });
+
+  test(
+      'conflicting binding rolls back earlier entries and can be corrected explicitly',
+      () async {
+    final first = await f.file('first.mkv'),
+        second = await f.file('second.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'initial',
+      'entries': [tmdbBinding(second)]
+    });
+    final before = await f.jobs.database.query('media_bindings');
+    final result = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'conflict',
+          'entries': [
+            tmdbBinding(first),
+            tmdbBinding(second, episodes: [2])
+          ]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(result.failure.code, FailureCode.conflict);
+    expect(result.failure.violations.single.path, '/entries/1');
+    expect(await f.jobs.database.query('media_bindings'), before);
+    final unbind = {
+      'requestId': 'unbind',
+      'entries': [
+        {'entityId': second, 'reason': 'Correct previous episode'}
+      ]
     };
-    final accepted = await f.call('media.library.scan', input);
-    final again = await f.call('media.library.scan', input);
-    expect((again['job'] as Map)['jobId'], (accepted['job'] as Map)['jobId']);
-    final job = await waitForJob(f.engine,
-        (accepted['job'] as Map)['jobId'] as String, JobState.succeeded);
-    expect(job.receipt!.details['discovered'], 2);
-    expect(job.receipt!.details['identificationComplete'], false);
-    for (final id in job.receipt!.details['identificationJobIds'] as List) {
-      await waitForJob(f.engine, id as String, JobState.needsDecision);
-    }
+    final revoked = await f.call('media.identity.unbind_batch', unbind);
+    expect(await f.call('media.identity.unbind_batch', unbind), revoked);
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'corrected',
+      'entries': [
+        tmdbBinding(first),
+        tmdbBinding(second, episodes: [2])
+      ]
+    });
+    final identity = await f.identities.identity(second);
     expect(
-        await f.jobs.database
-            .query('media_entities', where: 'kind = ?', whereArgs: ['file']),
-        hasLength(2));
+        (identity['bindings'] as List)
+            .where((b) => b['status'] == 'accepted')
+            .single['external_id'],
+        '9202');
+    expect(
+        (identity['evidence'] as List)
+            .any((e) => jsonDecode(e['payload'])['event'] == 'unbind'),
+        true);
   });
 
-  test('filesystem access rejects unconfigured roots and escaping symlinks',
-      () async {
-    final outside = await Directory.systemTemp.createTemp('next-outside-');
-    try {
-      final denied = await f.harness.invokeJson(
-          'media.library.scan',
-          {'root': outside.path, 'requestId': 'outside'},
-          Invocation(origin: 'mcp')) as Failed;
-      expect(denied.failure.code, FailureCode.unavailable);
-      final file =
-          await File('${outside.path}/outside.mkv').writeAsString('outside');
-      await Link('${f.media.path}/escape.mkv').create(file.path);
-      await expectLater(f.service.index('${f.media.path}/escape.mkv'),
-          throwsA(isA<Failure>()));
-      expect(await f.engine.list(type: 'media.scan'), isEmpty);
-    } finally {
-      await outside.delete(recursive: true);
-    }
-  });
-
-  test('skip and defer receipts explicitly retain unidentified status',
-      () async {
-    for (final disposition in ['skip', 'defer']) {
-      final fileId = await f.file('Unknown $disposition.mkv');
-      final q = await f.service.identify(fileId, sources: ['tmdb']);
-      final job = await waitForJob(f.engine, q.jobId, JobState.needsDecision);
-      final call = job.decision!.options
-          .singleWhere((option) =>
-              option.call.actionId == 'media.identification.$disposition')
-          .call;
-      await f.call(call.actionId, call.input);
-      final completed =
-          await waitForJob(f.engine, job.jobId, JobState.succeeded);
-      expect(completed.receipt!.details['identified'], false);
-      expect(completed.receipt!.details['disposition'], disposition);
-    }
+  test('missing file and stale content are explicit indexed errors', () async {
+    final id = await f.file('missing.mkv');
+    await File('${f.media.path}/missing.mkv').delete();
+    final missing = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'missing',
+          'entries': [tmdbBinding(id)]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(missing.failure.code, FailureCode.notFound);
+    expect(missing.failure.violations.single.path, '/entries/0');
+    final staleId = await f.file('stale.mkv');
+    await File('${f.media.path}/stale.mkv')
+        .writeAsString('changed content with another size');
+    final stale = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'stale',
+          'entries': [tmdbBinding(staleId)]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(stale.failure.code, FailureCode.conflict);
+    expect(await f.jobs.database.query('media_bindings'), isEmpty);
   });
 
   test(
-      'retry deadlines and candidate checkpoints survive reboot without duplicate bindings',
+      'one file can contain multiple episodes and an episode can have multiple files',
       () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    f.tmdb.retry = ProviderRetry(
-        'tmdb',
-        DateTime.now().toUtc().add(const Duration(milliseconds: 500)),
-        'Fixture 429');
-    final q = await f.service.identify(fileId, sources: ['tmdb']);
-    await waitForJob(f.engine, q.jobId, JobState.waitingRetry);
-    await f.reopen(sources: ['tmdb', 'bangumi', 'dandanplay']);
-    final decision =
-        await waitForJob(f.engine, q.jobId, JobState.needsDecision);
-    expect(await f.identities.candidates(q.jobId), hasLength(1));
-    await f.choose(decision);
+    final combined = await f.file('combined.mkv'),
+        alternate = await f.file('alternate.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'many',
+      'entries': [
+        {
+          ...tmdbBinding(combined, episodes: [1, 2]),
+          'startMs': 0,
+          'endMs': 1440000
+        },
+        tmdbBinding(alternate)
+      ]
+    });
+    final links = await f.jobs.database.query('media_file_episodes');
+    expect(links, hasLength(3));
     expect(
-        await f.jobs.database.query('media_bindings',
-            where: 'entity_id = ?', whereArgs: [fileId]),
+        links
+            .where((l) => l['file_id'] == combined)
+            .every((l) => l['relation'] == 'combined'),
+        true);
+    final partial =
+        (await f.identities.identity(combined))['bindings'] as List<JsonMap>;
+    await f.call('media.identity.unbind_batch', {
+      'requestId': 'partial',
+      'entries': [
+        {
+          'entityId': combined,
+          'bindingIds': [partial.first['id']],
+          'reason': 'Remove one external association'
+        }
+      ]
+    });
+    expect(
+        await f.jobs.database.query('media_file_episodes',
+            where: 'file_id=?', whereArgs: [combined]),
         hasLength(1));
   });
 
   test(
-      'cancellation while a provider is pending produces no identity or post-cancel writes',
+      'work season and episode can be bound and unbound in batches without file cascade',
       () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    f.tmdb.entered = Completer<void>();
-    f.tmdb.release = Completer<void>();
-    final q = await f.service.identify(fileId, sources: ['tmdb']);
-    await f.tmdb.entered!.future;
-    await f.engine.cancel(q.jobId);
-    f.tmdb.release!.complete();
-    final cancelled = await waitForJob(f.engine, q.jobId, JobState.cancelled);
-    expect(cancelled.receipt!.details['identified'], false);
-    expect(await f.jobs.database.query('media_bindings'), isEmpty);
-    expect(await f.identities.candidates(q.jobId), isEmpty);
+    final result = await f.call('media.identity.bind_batch', {
+      'requestId': 'levels',
+      'entries': [
+        {'kind': 'work', 'workRef': mediaWorkRef, 'reason': 'Work chosen'},
+        {
+          'kind': 'release',
+          'workRef': mediaWorkRef,
+          'releaseRef': mediaReleaseRef,
+          'reason': 'Season chosen'
+        },
+        {
+          'kind': 'episode',
+          'workRef': mediaWorkRef,
+          'releaseRef': mediaReleaseRef,
+          'episodeRefs': [mediaEpisodeRef(2)],
+          'reason': 'Episode chosen'
+        }
+      ]
+    });
+    final entries = (result['entries'] as List).cast<JsonMap>();
+    expect(await f.jobs.database.query('media_file_episodes'), isEmpty);
+    expect(
+        await f.jobs.database
+            .query('media_entities', where: 'kind=?', whereArgs: ['episode']),
+        hasLength(1));
+    await f.call('media.identity.unbind_batch', {
+      'requestId': 'levels-unbind',
+      'entries': [
+        {
+          'entityId': entries[0]['workId'],
+          'reason': 'Withdraw work association'
+        },
+        {
+          'entityId': entries[1]['releaseId'],
+          'reason': 'Withdraw season association'
+        },
+        {
+          'entityId': (entries[2]['episodeIds'] as List).single,
+          'reason': 'Withdraw episode association'
+        }
+      ]
+    });
+    expect(
+        (await f.jobs.database.query('media_bindings'))
+            .every((b) => b['status'] == 'revoked'),
+        true);
+  });
+
+  test('requestId cannot silently accept different contents', () async {
+    final id = await f.file('dedup.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'same',
+      'entries': [tmdbBinding(id)]
+    });
+    final result = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'same',
+          'entries': [
+            tmdbBinding(id, episodes: [2])
+          ]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(result.failure.code, FailureCode.conflict);
+    expect(result.failure.message, contains('requestId'));
   });
 
   test(
-      'unbind revokes identity, repairs Classic fields and preserves evidence and progress',
+      'projection failure remains durable and retries do not duplicate identity',
       () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    final path =
-        (await f.identities.locations(fileId)).single['locator'] as String;
-    f.classic.rows[path] = {'filePath': path, 'lastPosition': 9000};
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    await waitForJob(f.engine, q.jobId, JobState.succeeded);
-    final result = await f.call(
-        'media.identity.unbind', {'fileId': fileId, 'bindingRevision': 1});
-    final identity = result['identity'] as Map;
-    expect((identity['bindings'] as List).single['status'], 'revoked');
-    expect(identity['evidence'], hasLength(1));
-    expect(identity['episodes'], isEmpty);
-    expect(f.classic.rows[path]!['animeName'], '');
-    expect(f.classic.rows[path]!['lastPosition'], 9000);
+    final id = await f.file('hash.mkv');
+    final input = {
+      'requestId': 'projection',
+      'entries': [dandanplayBinding(id)]
+    };
+    f.classic.rejectReadback = true;
+    final result = await f.harness.invokeJson(
+            'media.identity.bind_batch', input, Invocation(origin: 'mcp'))
+        as Failed;
+    expect(result.failure.code, FailureCode.unavailable);
+    expect(await f.identities.pendingProjections(), hasLength(1));
+    final bindings = await f.jobs.database.query('media_bindings');
+    f.classic.rejectReadback = false;
+    await f.call('media.identity.bind_batch', input);
+    expect(await f.jobs.database.query('media_bindings'), bindings);
+    expect(await f.identities.pendingProjections(), isEmpty);
+    final locator =
+        (await f.identities.locations(id)).single['locator'] as String;
+    expect(f.classic.rows[locator]!['episodeId'], 7101);
+    await f.call('media.identity.unbind_batch', {
+      'requestId': 'clear',
+      'entries': [
+        {'entityId': id, 'reason': 'Withdraw hash match'}
+      ]
+    });
+    expect(f.classic.rows[locator]!['animeName'], '');
   });
 
-  test('read actions never persist snapshots, candidates, bindings or jobs',
-      () async {
-    await f
-        .call('media.metadata.search', {'provider': 'tmdb', 'query': '长安十二时辰'});
-    await f.call('media.metadata.get',
-        {'ref': const ExternalRef('tmdb', 'tv', '9001').toJson()});
-    await f
-        .call('media.metadata.search', {'provider': 'bangumi', 'query': '季度'});
-    await f.call('media.metadata.get',
-        {'ref': const ExternalRef('bangumi', 'subject', '8001').toJson()});
-    await f.call(
-        'media.metadata.search', {'provider': 'dandanplay', 'query': '动画'});
-    await f.call('media.metadata.get',
-        {'ref': const ExternalRef('dandanplay', 'anime', '7001').toJson()});
+  test('metadata refresh preserves bindings and GUI field overrides', () async {
+    final id = await f.file('override.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'override-bind',
+      'entries': [tmdbBinding(id)]
+    });
+    final agent = await f.harness.invokeJson(
+        'media.metadata.override',
+        {'entityId': id, 'field': 'title', 'value': 'User title'},
+        Invocation(origin: 'mcp')) as Failed;
+    expect(agent.failure.code, FailureCode.unavailable);
+    await f.call('media.metadata.override',
+        {'entityId': id, 'field': 'title', 'value': 'User title'},
+        origin: 'gui');
+    final before = await f.jobs.database.query('media_bindings');
+    final refresh = await f.call('media.metadata.refresh',
+        {'ref': mediaEpisodeRef(1), 'requestId': 'refresh'});
+    await waitForJob(
+        f.engine, (refresh['job'] as Map)['jobId'], JobState.succeeded);
+    expect(await f.jobs.database.query('media_bindings'), before);
+    expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
+        'User title');
+  });
+
+  test('read primitives never create bindings snapshots or jobs', () async {
+    await File('${f.media.path}/arbitrary.mkv')
+        .writeAsString('read-only bytes');
+    await f.call('media.files.list', {'root': f.media.path});
+    await f.call('media.hash.match', {
+      'files': [
+        {'path': '${f.media.path}/arbitrary.mkv'}
+      ]
+    });
+    await f.call('media.metadata.search_batch', {
+      'queries': [
+        {'provider': 'tmdb', 'query': '长安'},
+        {'provider': 'bangumi', 'query': 'title'},
+        {'provider': 'dandanplay', 'query': 'sample'}
+      ]
+    });
+    await f.call('media.metadata.get_batch', {
+      'refs': [mediaWorkRef, mediaReleaseRef, mediaEpisodeRef(1)]
+    });
     for (final table in [
+      'media_entities',
       'media_snapshots',
-      'media_candidates',
       'media_bindings',
-      'jobs'
+      'jobs',
+      'media_binding_operations'
     ]) {
       expect(await f.jobs.database.query(table), isEmpty, reason: table);
     }
   });
 
   test(
-      'an explicit accepted release enables unique filename-number binding without new provider queries',
+      'read batch errors preserve successful neighbours and duplicate refs are fetched once',
       () async {
-    final first = await f.file('长安十二时辰 S01E01.mkv');
-    final q = await f.service.identify(first, sources: ['tmdb']);
-    await f.choose(await waitForJob(f.engine, q.jobId, JobState.needsDecision));
-    final release = (await f.jobs.database
-            .query('media_entities', where: 'kind = ?', whereArgs: ['release']))
-        .single['id'] as String;
-    final next = await f.file('长安十二时辰 S01E02.mkv');
-    final revision = (await f.identities.entity(next))['revision'];
-    final before = f.tmdb.requests.length;
-    final result = await f.call('media.identification.start', {
-      'fileId': next,
-      'fileRevision': revision,
-      'sources': ['tmdb'],
-      'releaseId': release
+    final result = await f.call('media.metadata.get_batch', {
+      'refs': [
+        mediaEpisodeRef(1),
+        {...mediaWorkRef, 'provider': 'unknown'},
+        mediaEpisodeRef(1)
+      ]
     });
-    final job = await waitForJob(f.engine,
-        (result['job'] as Map)['jobId'] as String, JobState.succeeded);
-    expect(job.receipt!.details['identified'], true);
-    expect(f.tmdb.requests.length, before);
-    final identity = (await f
-        .call('media.identity.get', {'entityId': next}))['identity'] as Map;
-    expect((identity['bindings'] as List).single['source'], 'accepted_release');
-    expect((identity['bindings'] as List).single['boundBy'], 'automatic');
+    final rows = result['results'] as List;
+    expect(rows[0]['record'], rows[2]['record']);
+    expect(rows[1]['error']['code'], 'invalid_input');
+    expect(f.tmdb.requests, hasLength(1));
+    final hashes = await f.call('media.hash.match', {
+      'files': [
+        {'path': '${f.media.path}/absent.mkv'},
+        {'path': '${f.media.path}/also-absent.mkv'}
+      ]
+    });
+    expect((hashes['files'] as List).map((row) => row['error']['code']),
+        ['not_found', 'not_found']);
   });
 
-  test(
-      'explicit requestId opens a new decision after defer without changing file content',
-      () async {
-    final fileId = await f.file('Unknown.mkv');
-    final q = await f.service.identify(fileId, sources: ['tmdb']);
-    final pending = await waitForJob(f.engine, q.jobId, JobState.needsDecision);
-    final defer = pending.decision!.options
-        .singleWhere(
-            (option) => option.call.actionId == 'media.identification.defer')
-        .call;
-    await f.call(defer.actionId, defer.input);
-    await waitForJob(f.engine, pending.jobId, JobState.succeeded);
-    final resumed = await f.call('media.identification.start', {
-      'fileId': fileId,
-      'fileRevision': 0,
-      'sources': ['tmdb'],
-      'requestId': 'new-evidence'
-    });
-    expect((resumed['job'] as Map)['jobId'], isNot(pending.jobId));
-    await waitForJob(f.engine, (resumed['job'] as Map)['jobId'] as String,
-        JobState.needsDecision);
-  });
-
-  test(
-      'hash conflicts remain proposals and cannot overwrite imported unknown-provenance matching',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    final path =
-        (await f.identities.locations(fileId)).single['locator'] as String;
-    f.classic.rows[path] = {
-      'filePath': path,
-      'animeId': 6001,
-      'episodeId': 6101,
-      'animeName': 'Other animation',
-      'episodeTitle': 'Other episode',
-      'videoHash': null
-    };
-    await f.call('media.library.import_history', {});
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    final job = await waitForJob(f.engine, q.jobId, JobState.needsDecision);
-    final context =
-        await f.call('media.identification.get', {'jobId': job.jobId});
-    expect(
-        (context['candidates'] as List).any(
-            (candidate) => candidate['evidence']['reason'].contains('legacy')),
-        isTrue);
+  test('scan only indexes files and never queries metadata or binds', () async {
+    await File('${f.media.path}/S99E999.whatever.mp4').writeAsString('video');
+    await File('${f.media.path}/notes.txt').writeAsString('not video');
+    final input = {'root': f.media.path, 'requestId': 'infrastructure'};
+    final scan = await f.call('media.library.scan', input);
+    expect(await f.call('media.library.scan', input), scan);
+    final job = await waitForJob(
+        f.engine, (scan['job'] as Map)['jobId'], JobState.succeeded);
+    expect(job.receipt!.details['indexed'], 1);
+    expect((await f.engine.list()).map((j) => j.type), ['media.scan']);
+    expect(f.tmdb.requests, isEmpty);
+    expect(f.dandanplay.requests, isEmpty);
     expect(await f.jobs.database.query('media_bindings'), isEmpty);
-    expect(f.classic.applications, 0);
   });
 
   test(
-      'pause fences candidate writes and resume reconciles the stored identification',
+      'same content with richer duration probe does not revoke existing bindings',
       () async {
-    final fileId = await f.file('长安十二时辰 S01E01.mkv');
-    f.tmdb.entered = Completer<void>();
-    f.tmdb.release = Completer<void>();
-    final q = await f.service.identify(fileId, sources: ['tmdb']);
-    await f.tmdb.entered!.future;
-    await f.engine.pause(q.jobId);
-    f.tmdb.release!.complete();
-    await f.engine.resume(q.jobId);
-    final decision =
-        await waitForJob(f.engine, q.jobId, JobState.needsDecision);
-    expect(await f.identities.candidates(q.jobId), hasLength(1));
-    await f.choose(decision);
-  });
-
-  test(
-      'file content revision invalidates Dandanplay binding and clears its obsolete Classic projection',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    await waitForJob(f.engine, q.jobId, JobState.succeeded);
-    final path =
-        (await f.identities.locations(fileId)).single['locator'] as String;
-    await File(path).writeAsString('replaced content');
-    await f.service.index(path);
-    final identity = (await f
-        .call('media.identity.get', {'entityId': fileId}))['identity'] as Map;
-    expect(identity['revision'], 1);
-    expect((identity['bindings'] as List).single['status'], 'revoked');
-    expect(f.classic.rows[path]!['animeName'], '');
-    expect(await f.identities.pendingProjections(), isEmpty);
-  });
-
-  test(
-      'read provider retries are unavailable and retryable without leaking transport exceptions',
-      () async {
-    f.tmdb.retry =
-        ProviderRetry('tmdb', DateTime.utc(2027), 'Fixture throttled');
-    final outcome = await f.harness.invokeJson(
-        'media.metadata.search',
-        {'provider': 'tmdb', 'query': '长安'},
-        Invocation(origin: 'mcp')) as Failed;
-    expect(outcome.failure.code, FailureCode.unavailable);
-    expect(outcome.failure.retryable, true);
-  });
-
-  test('restart reconciles committed identity despite a pending cancellation',
-      () async {
-    final fileId = await f.file('Hash Sample S01E01.mkv');
-    f.classic.rejectReadback = true;
-    final q = await f.service.identify(fileId, sources: ['dandanplay']);
-    final failed = await waitForJob(f.engine, q.jobId, JobState.failed);
-    expect(failed.sideEffectCommitted, true);
-    final now = DateTime.now().toUtc();
-    final interrupted = Job.fromJson({
-      ...failed.toStorageJson(),
-      'state': 'cancelling',
-      'revision': failed.revision + 1,
-      'updatedAt': now.toIso8601String(),
-      'error': null,
-      'receipt': null,
-      'cancelRequestedAt': now.toIso8601String(),
-      'cancelRequestedPhase': 'project',
-      'cancelAfterCommit': true
+    final id = await f.file('enriched.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'enriched',
+      'entries': [tmdbBinding(id)]
     });
-    await f.jobs.commit(
-        interrupted,
-        JobEvent(
-            jobId: interrupted.jobId,
-            revision: interrupted.revision,
-            kind: 'fixture_crash',
-            at: now,
-            snapshot: interrupted.toJson()),
-        expectedRevision: failed.revision);
-    f.classic.rejectReadback = false;
-    await f.reopen(sources: ['tmdb', 'bangumi', 'dandanplay']);
-    final recovered = await waitForJob(f.engine, q.jobId, JobState.succeeded);
-    expect(recovered.receipt!.details['identified'], true);
-    expect(recovered.sideEffectCommitted, true);
-    expect(recovered.cancelRequestedAt, isNotNull);
-    expect(await f.identities.pendingProjections(), isEmpty);
-    expect(
-        await f.jobs.database.query('media_bindings',
-            where: 'entity_id = ?', whereArgs: [fileId]),
-        hasLength(1));
+    final before = await f.jobs.database.query('media_bindings');
+    final file = await f.identities.entity(id);
+    final probe = (file['attributes'] as JsonMap)['probe'] as JsonMap;
+    await f.identities.registerFile(
+        '${f.media.path}/enriched.mkv', {...probe, 'durationMs': 1500000});
+    expect(await f.jobs.database.query('media_bindings'), before);
+    expect((await f.identities.entity(id))['revision'], file['revision']);
   });
 
   test(
-      'queued identification cancellation does not start more provider requests',
+      'explicit local IDs combine metadata sources without dropping links or Classic projection',
       () async {
-    f.tmdb.release = Completer<void>();
-    final jobs = <Job>[];
-    for (var i = 0; i < 8; i++) {
-      final fileId = await f.file('长安十二时辰 S01E01 [$i].mkv');
-      jobs.add(await f.service.identify(fileId, sources: ['tmdb']));
+    final id = await f.file('multiple-sources.mkv');
+    final original = await f.call('media.identity.bind_batch', {
+      'requestId': 'tmdb-source',
+      'entries': [tmdbBinding(id)]
+    });
+    final local = (original['entries'] as List).single as JsonMap;
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'dandan-source',
+      'entries': [
+        {
+          ...dandanplayBinding(id),
+          'workId': local['workId'],
+          'releaseId': local['releaseId'],
+          'localEpisodeIds': local['episodeIds']
+        }
+      ]
+    });
+    final identity = await f.identities.identity(id);
+    expect(
+        (identity['bindings'] as List).where((b) => b['status'] == 'accepted'),
+        hasLength(2));
+    expect(identity['episodes'], hasLength(1));
+    expect(await f.identities.pendingProjections(), isEmpty);
+    final tmdb = (identity['bindings'] as List)
+        .singleWhere((b) => b['provider'] == 'tmdb');
+    await f.call('media.identity.unbind_batch', {
+      'requestId': 'only-tmdb',
+      'entries': [
+        {
+          'entityId': id,
+          'bindingIds': [tmdb['id']],
+          'reason': 'Keep Dandanplay identity'
+        }
+      ]
+    });
+    expect((await f.identities.identity(id))['episodes'], hasLength(1));
+    expect(await f.identities.pendingProjections(), isEmpty);
+    final locator =
+        (await f.identities.locations(id)).single['locator'] as String;
+    expect(f.classic.rows[locator]!['episodeId'], 7101);
+  });
+
+  test(
+      'new file indexing and all identity writes roll back when a later row conflicts',
+      () async {
+    final file =
+        await File('${f.media.path}/atomic-new.mkv').writeAsString('new bytes');
+    final first = {...tmdbBinding('')..remove('entityId'), 'path': file.path};
+    final second = {
+      ...tmdbBinding('', episodes: [2])..remove('entityId'),
+      'path': file.path
+    };
+    final failed = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'atomic-new',
+          'entries': [first, second]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(failed.failure.code, FailureCode.conflict);
+    expect(failed.failure.violations.single.path, '/entries/1');
+    for (final table in [
+      'media_entities',
+      'media_locations',
+      'media_bindings',
+      'media_snapshots',
+      'media_evidence',
+      'media_projection_outbox',
+      'media_binding_operations'
+    ]) {
+      expect(await f.jobs.database.query(table), isEmpty, reason: table);
     }
-    for (var i = 0; i < 100 && f.tmdb.requests.length < 4; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    expect(f.tmdb.requests, hasLength(4));
-    for (final job in jobs.skip(4)) {
-      await f.engine.cancel(job.jobId);
-      await waitForJob(f.engine, job.jobId, JobState.cancelled);
-    }
-    expect(f.tmdb.requests, hasLength(4));
-    f.tmdb.release!.complete();
-    for (final job in jobs.take(4)) {
-      await waitForJob(f.engine, job.jobId, JobState.needsDecision);
-    }
+  });
+
+  test('a TV work cannot stand in for a season or an episode', () async {
+    final id = await f.file('invalid-level.mkv');
+    final failed = await f.harness.invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'invalid-level',
+          'entries': [
+            {...tmdbBinding(id), 'releaseRef': mediaWorkRef}
+          ]
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(failed.failure.code, FailureCode.invalidInput);
+    expect(failed.failure.message, contains('must identify a season'));
+    expect(await f.jobs.database.query('media_bindings'), isEmpty);
+  });
+
+  test('hash misses remain empty signals without fallback or decisions',
+      () async {
+    final id = await f.file('garbage.S99E12345.mkv');
+    f.dandanplay.responses['/api/v2/match'] = {
+      'isMatched': false,
+      'matches': []
+    };
+    final result = await f.call('media.hash.match', {
+      'files': [
+        {'entityId': id}
+      ]
+    });
+    expect((result['files'] as List).single['candidates'], isEmpty);
+    expect(f.dandanplay.requests.map((row) => row['path']), ['/api/v2/match']);
+    expect(await f.engine.list(), isEmpty);
+    expect(await f.jobs.database.query('media_bindings'), isEmpty);
   });
 }

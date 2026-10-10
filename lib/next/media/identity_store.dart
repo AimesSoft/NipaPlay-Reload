@@ -31,32 +31,37 @@ final class IdentityStore {
   final String ownerDeviceId;
 
   /// Location-only registration never changes content revisions or infers identity.
-  Future<String> ensureFile(String locator) => database.transaction((tx) async {
-        if (locator.trim().isEmpty) {
-          throw const Failure(FailureCode.invalidInput, 'File path is empty.');
-        }
-        final rows = await tx.query('media_locations',
-            where: 'owner_device_id = ? AND locator = ?',
-            whereArgs: [ownerDeviceId, locator]);
-        if (rows.isNotEmpty) return rows.first['file_id'] as String;
-        final id = newMediaId('file');
-        await tx.insert('media_entities', {
-          'id': id,
-          'kind': 'file',
-          'revision': 0,
-          'attributes':
-              jsonEncode({'probe': <String, Object?>{}, 'bindingRevision': 0})
-        });
-        await tx.insert('media_locations', {
-          'id': newMediaId('location'),
-          'file_id': id,
-          'source': locator.contains('://') ? 'remote' : 'local',
-          'owner_device_id': ownerDeviceId,
-          'locator': locator,
-          'available': 1
-        });
-        return id;
-      });
+  Future<String> ensureFile(String locator, {DatabaseExecutor? db}) =>
+      db == null
+          ? database.transaction((tx) => _ensureFile(tx, locator))
+          : _ensureFile(db, locator);
+
+  Future<String> _ensureFile(DatabaseExecutor tx, String locator) async {
+    if (locator.trim().isEmpty) {
+      throw const Failure(FailureCode.invalidInput, 'File path is empty.');
+    }
+    final rows = await tx.query('media_locations',
+        where: 'owner_device_id = ? AND locator = ?',
+        whereArgs: [ownerDeviceId, locator]);
+    if (rows.isNotEmpty) return rows.first['file_id'] as String;
+    final id = newMediaId('file');
+    await tx.insert('media_entities', {
+      'id': id,
+      'kind': 'file',
+      'revision': 0,
+      'attributes':
+          jsonEncode({'probe': <String, Object?>{}, 'bindingRevision': 0})
+    });
+    await tx.insert('media_locations', {
+      'id': newMediaId('location'),
+      'file_id': id,
+      'source': locator.contains('://') ? 'remote' : 'local',
+      'owner_device_id': ownerDeviceId,
+      'locator': locator,
+      'available': 1
+    });
+    return id;
+  }
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
     final rows = await (db ?? database)
@@ -88,7 +93,8 @@ final class IdentityStore {
                 },
                 where: 'id = ?',
                 whereArgs: [fileId]);
-          } else if (jsonEncode(attrs['probe']) != jsonEncode(probe)) {
+          } else if (['size', 'modifiedAt', 'headMd5']
+              .any((key) => (attrs['probe'] as JsonMap)[key] != probe[key])) {
             final dandanplay = await tx.rawQuery(
                 'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
                 [fileId, 'accepted', 'dandanplay']);
@@ -127,6 +133,16 @@ final class IdentityStore {
               });
             }
           }
+          await tx.update(
+              'media_entities',
+              {
+                'attributes': jsonEncode({
+                  ...(await entity(fileId, db: tx))['attributes'] as JsonMap,
+                  'probe': probe
+                })
+              },
+              where: 'id=?',
+              whereArgs: [fileId]);
           await tx.update('media_locations', {'available': 1},
               where: 'id = ?', whereArgs: [locations.single['id']]);
           return fileId;
@@ -193,109 +209,6 @@ final class IdentityStore {
     return history.length;
   }
 
-  Future<void> beginIdentification(
-      String jobId, String fileId, JsonMap context) async {
-    final file = await entity(fileId);
-    await database.insert(
-        'media_identifications',
-        {
-          'job_id': jobId,
-          'file_id': fileId,
-          'file_revision': file['revision'],
-          'binding_revision':
-              (file['attributes'] as JsonMap)['bindingRevision'],
-          'state': 'pending',
-          'context': jsonEncode(context)
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
-
-  Future<JsonMap> identification(String jobId, {DatabaseExecutor? db}) async {
-    final rows = await (db ?? database).query('media_identifications',
-        where: 'job_id = ?', whereArgs: [jobId]);
-    if (rows.isEmpty) {
-      throw const Failure(FailureCode.notFound, 'Identification not found.');
-    }
-    return {...rows.single, 'context': decodeMediaJson(rows.single['context'])};
-  }
-
-  Future<void> setIdentificationState(String jobId, String state) =>
-      database.update('media_identifications', {'state': state},
-          where: 'job_id = ?', whereArgs: [jobId]);
-
-  Future<void> checkContext(String jobId, {DatabaseExecutor? db}) async {
-    final identification = await this.identification(jobId, db: db);
-    final file = await entity(identification['file_id'] as String, db: db);
-    if (file['revision'] != identification['file_revision'] ||
-        (file['attributes'] as JsonMap)['bindingRevision'] !=
-            identification['binding_revision']) {
-      throw const Failure(FailureCode.conflict,
-          'File or binding changed. Start identification for the current revision.');
-    }
-  }
-
-  Future<String> addCandidate(
-      String jobId, JsonMap payload, String source) async {
-    final work = Map<String, Object?>.from(payload['work'] as Map);
-    final release = Map<String, Object?>.from(payload['release'] as Map);
-    final id = stableMediaId('candidate', [
-      jobId,
-      work['ref'],
-      release['ref'],
-      [for (final ep in payload['episodes'] as List) (ep as Map)['ref']],
-      payload['workId'],
-      payload['scope'],
-      payload['evidence']
-    ]);
-    await database.transaction((tx) async {
-      await checkContext(jobId, db: tx);
-      final identification = await this.identification(jobId, db: tx);
-      final evidence = {
-        ...Map<String, Object?>.from(payload['evidence'] as Map),
-        'fileRevision': identification['file_revision'],
-        'probe': (identification['context'] as JsonMap)['probe']
-      };
-      final persisted = {...payload, 'evidence': evidence};
-      await tx.insert(
-          'media_candidates',
-          {
-            'id': id,
-            'job_id': jobId,
-            'file_id': identification['file_id'],
-            'file_revision': identification['file_revision'],
-            'binding_revision': identification['binding_revision'],
-            'payload': jsonEncode(persisted),
-            'source': source,
-            'state': 'proposed'
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
-      await tx.insert(
-          'media_evidence',
-          {
-            'id': stableMediaId('evidence', id),
-            'job_id': jobId,
-            'source': source,
-            'payload': jsonEncode(evidence),
-            'created_at': _now
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
-    });
-    return id;
-  }
-
-  Future<List<JsonMap>> candidates(String jobId) async => [
-        for (final row in await database.query('media_candidates',
-            where: 'job_id = ?', whereArgs: [jobId], orderBy: 'id'))
-          {...row, 'payload': decodeMediaJson(row['payload'])}
-      ];
-
-  Future<void> updateIdentificationContext(
-      String jobId, JsonMap context) async {
-    await database.update(
-        'media_identifications', {'context': jsonEncode(context)},
-        where: 'job_id = ?', whereArgs: [jobId]);
-  }
-
   Future<String> _object(DatabaseExecutor tx, ExternalRef ref) async {
     final id = stableMediaId('object', ref.toJson());
     await tx.insert(
@@ -347,34 +260,36 @@ final class IdentityStore {
       String actor,
       String source,
       Invocation invocation,
-      String jobId,
+      String requestKey,
       int revision) async {
     final objectId = await _object(tx, record.ref);
-    final id = stableMediaId('binding', [jobId, entityId, objectId]);
-    final previous = await tx.query('media_bindings',
-        columns: ['id'],
-        where: 'entity_id = ? AND id != ?',
-        whereArgs: [entityId, id],
-        orderBy: 'created_at DESC, id DESC',
-        limit: 1);
-    await tx.insert(
-        'media_bindings',
-        {
-          'id': id,
-          'entity_id': entityId,
-          'object_id': objectId,
-          'relation': relation,
-          'scope': jsonEncode(scope),
-          'status': 'accepted',
-          'source': source,
-          'bound_by': actor,
-          'revision': revision,
-          'supersedes': previous.isEmpty ? null : previous.single['id'],
-          'invocation_id': invocation.id,
-          'job_id': jobId,
-          'created_at': _now
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore);
+    final accepted = await tx.query('media_bindings',
+        where: 'entity_id = ? AND object_id = ? AND status = ?',
+        whereArgs: [entityId, objectId, 'accepted']);
+    if (accepted.isNotEmpty) {
+      final binding = accepted.single;
+      if (binding['relation'] != relation ||
+          stableMediaId('scope', decodeMediaJson(binding['scope'])) !=
+              stableMediaId('scope', scope)) {
+        throw const Failure(FailureCode.conflict,
+            'Existing binding has different relation or scope; unbind it explicitly.');
+      }
+      return binding['id'] as String;
+    }
+    final id = stableMediaId('binding', [requestKey, entityId, objectId]);
+    await tx.insert('media_bindings', {
+      'id': id,
+      'entity_id': entityId,
+      'object_id': objectId,
+      'relation': relation,
+      'scope': jsonEncode(scope),
+      'status': 'accepted',
+      'source': source,
+      'bound_by': actor,
+      'revision': revision,
+      'invocation_id': invocation.id,
+      'created_at': _now
+    });
     await _snapshot(tx, objectId, record);
     return id;
   }
@@ -398,225 +313,6 @@ final class IdentityStore {
 
   Future<String> saveSnapshot(MetadataRecord record) => database.transaction(
       (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
-
-  Future<({String workId, String releaseId})> acceptRelease(
-          JsonMap payload, String jobId, String actor, Invocation invocation) =>
-      database.transaction((tx) async {
-        final work = MetadataRecord.fromJson(
-            Map<String, Object?>.from(payload['work'] as Map));
-        final release = MetadataRecord.fromJson(
-            Map<String, Object?>.from(payload['release'] as Map));
-        final workId = payload['workId'] as String? ??
-            await _materialize(tx, 'work', work, null);
-        if ((await entity(workId, db: tx))['kind'] != 'work') {
-          throw const Failure(
-              FailureCode.invalidInput, 'workId must reference a work.');
-        }
-        final releaseId = await _materialize(tx, 'release', release, workId);
-        final scope = Map<String, Object?>.from(payload['scope'] as Map);
-        for (final entry in [(workId, work), (releaseId, release)]) {
-          final binding = await _bindRecord(tx, entry.$1, entry.$2, 'contains',
-              scope, actor, 'release_judgment', invocation, jobId, 0);
-          await tx.insert(
-              'media_evidence',
-              {
-                'id': stableMediaId('evidence', binding),
-                'binding_id': binding,
-                'job_id': jobId,
-                'source': 'release_judgment',
-                'payload': jsonEncode(payload['evidence']),
-                'created_at': _now
-              },
-              conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-        for (final episode in release.episodes) {
-          final epId = await _materialize(tx, 'episode', episode, releaseId);
-          await _bindRecord(tx, epId, episode, 'exact', scope, actor,
-              'release_judgment', invocation, jobId, 0);
-        }
-        return (workId: workId, releaseId: releaseId);
-      });
-
-  /// The checkpoint choice is durable before this transaction; recovery can safely repeat it.
-  Future<JsonMap> acceptCandidate(String jobId, String candidateId,
-          String actor, Invocation invocation) =>
-      database.transaction((tx) async {
-        final identification = await this.identification(jobId, db: tx);
-        if (identification['state'] == 'accepted') {
-          final accepted = await tx.query('media_candidates',
-              where: 'job_id = ? AND state = ?',
-              whereArgs: [jobId, 'accepted']);
-          if (accepted.single['id'] != candidateId) {
-            throw const Failure(
-                FailureCode.conflict, 'A different candidate was accepted.');
-          }
-          return {'fileId': identification['file_id'], 'accepted': true};
-        }
-        await checkContext(jobId, db: tx);
-        final rows = await tx.query('media_candidates',
-            where: 'id = ? AND job_id = ? AND state = ?',
-            whereArgs: [candidateId, jobId, 'proposed']);
-        if (rows.isEmpty) {
-          throw const Failure(FailureCode.conflict,
-              'Candidate does not belong to this pending identification.');
-        }
-        final candidate = rows.single;
-        final payload = decodeMediaJson(candidate['payload']);
-        final work = MetadataRecord.fromJson(
-            Map<String, Object?>.from(payload['work'] as Map));
-        final release = MetadataRecord.fromJson(
-            Map<String, Object?>.from(payload['release'] as Map));
-        final selected = [
-          for (final ep in payload['episodes'] as List)
-            MetadataRecord.fromJson(Map<String, Object?>.from(ep as Map))
-        ];
-        final workId = payload['workId'] as String? ??
-            await _materialize(tx, 'work', work, null);
-        if ((await entity(workId, db: tx))['kind'] != 'work') {
-          throw const Failure(
-              FailureCode.invalidInput, 'workId must reference a work.');
-        }
-        final releaseId = await _materialize(tx, 'release', release, workId);
-        final fileId = identification['file_id'] as String;
-        final file = await entity(fileId, db: tx);
-        final attrs = file['attributes'] as JsonMap;
-        final revision = (attrs['bindingRevision'] as int) + 1;
-        final scope = Map<String, Object?>.from(payload['scope'] as Map);
-        final source = candidate['source'] as String;
-        if (source != 'accepted_release') {
-          await _bindRecord(tx, workId, work, 'contains', scope, actor, source,
-              invocation, jobId, revision);
-          await _bindRecord(
-              tx,
-              releaseId,
-              release,
-              payload['relation'] as String,
-              scope,
-              actor,
-              source,
-              invocation,
-              jobId,
-              revision);
-        }
-        final previousDandanplay = await tx.rawQuery(
-            'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
-            [fileId, 'accepted', 'dandanplay']);
-        await tx.update('media_bindings', {'status': 'revoked'},
-            where: 'entity_id = ? AND status = ?',
-            whereArgs: [fileId, 'accepted']);
-        await tx.delete('media_file_episodes',
-            where: 'file_id = ?', whereArgs: [fileId]);
-        var ordinal = 0;
-        for (final episode in selected) {
-          final epId = await _materialize(tx, 'episode', episode, releaseId);
-          await _bindRecord(tx, epId, episode, 'exact', scope, actor, source,
-              invocation, jobId, revision);
-          final bindingId = await _bindRecord(
-              tx,
-              fileId,
-              episode,
-              payload['relation'] as String,
-              scope,
-              actor,
-              source,
-              invocation,
-              jobId,
-              revision);
-          await tx.insert(
-              'media_evidence',
-              {
-                'id': stableMediaId('evidence', bindingId),
-                'binding_id': bindingId,
-                'job_id': jobId,
-                'source': source,
-                'payload': jsonEncode(payload['evidence']),
-                'created_at': _now
-              },
-              conflictAlgorithm: ConflictAlgorithm.ignore);
-          await tx.insert('media_file_episodes', {
-            'file_id': fileId,
-            'episode_id': epId,
-            'relation': payload['relation'],
-            'ordinal': ordinal++,
-            'start_ms': null,
-            'end_ms': null
-          });
-        }
-        // Persist the complete selected release catalogue, independently of file coverage.
-        for (final episode in source == 'accepted_release'
-            ? const <MetadataRecord>[]
-            : release.episodes) {
-          final epId = await _materialize(tx, 'episode', episode, releaseId);
-          await _bindRecord(tx, epId, episode, 'exact', scope, actor, source,
-              invocation, jobId, revision);
-        }
-        for (final binding in await tx
-            .query('media_bindings', where: 'job_id = ?', whereArgs: [jobId])) {
-          await tx.insert(
-              'media_evidence',
-              {
-                'id': stableMediaId('evidence', binding['id'] as String),
-                'binding_id': binding['id'],
-                'job_id': jobId,
-                'source': source,
-                'payload': jsonEncode(payload['evidence']),
-                'created_at': _now
-              },
-              conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-        await tx.update(
-            'media_entities',
-            {
-              'attributes': jsonEncode({...attrs, 'bindingRevision': revision})
-            },
-            where: 'id = ?',
-            whereArgs: [fileId]);
-        await tx.update('media_candidates', {'state': 'rejected'},
-            where: 'job_id = ?', whereArgs: [jobId]);
-        await tx.update('media_candidates', {'state': 'accepted'},
-            where: 'id = ?', whereArgs: [candidateId]);
-        await tx.update('media_identifications', {'state': 'accepted'},
-            where: 'job_id = ?', whereArgs: [jobId]);
-        if (work.ref.provider == 'dandanplay' && selected.length == 1) {
-          await tx.insert('media_projection_outbox', {
-            'id': stableMediaId('projection', [fileId, revision]),
-            'file_id': fileId,
-            'file_revision': file['revision'],
-            'binding_revision': revision,
-            'state': 'pending',
-            'payload': jsonEncode({
-              'animeId': int.parse(work.ref.externalId),
-              'episodeId': int.parse(selected.single.ref.externalId),
-              'animeName': work.title,
-              'episodeTitle': selected.single.title
-            })
-          });
-        } else if (previousDandanplay.length == 1) {
-          await tx.insert('media_projection_outbox', {
-            'id': stableMediaId('projection', [fileId, revision]),
-            'file_id': fileId,
-            'file_revision': file['revision'],
-            'binding_revision': revision,
-            'state': 'pending',
-            'payload': jsonEncode({
-              'clear': true,
-              'expectedAnimeId': int.parse(
-                  (previousDandanplay.single['scope'] as String)
-                      .split('/')
-                      .last),
-              'expectedEpisodeId':
-                  int.parse(previousDandanplay.single['external_id'] as String)
-            })
-          });
-        }
-        return {
-          'fileId': fileId,
-          'workId': workId,
-          'releaseId': releaseId,
-          'bindingRevision': revision,
-          'accepted': true
-        };
-      });
 
   Future<List<JsonMap>> pendingProjections({String? fileId}) =>
       database.query('media_projection_outbox',
@@ -769,49 +465,430 @@ final class IdentityStore {
     ];
   }
 
-  Future<void> unbindFile(String fileId, int revision, Invocation invocation) =>
+  Future<JsonMap?> operation(String key, String fingerprint,
+      {DatabaseExecutor? db}) async {
+    final rows = await (db ?? database)
+        .query('media_binding_operations', where: 'id = ?', whereArgs: [key]);
+    if (rows.isEmpty) return null;
+    if (rows.single['fingerprint'] != fingerprint) {
+      throw const Failure(FailureCode.conflict,
+          'requestId was already used with different input.');
+    }
+    return decodeMediaJson(rows.single['result']);
+  }
+
+  Future<void> _audit(DatabaseExecutor tx, String bindingId, JsonMap input,
+      Invocation invocation,
+      {String event = 'bind', JsonMap? file}) async {
+    await tx.insert('media_evidence', {
+      'id': newMediaId('evidence'),
+      'binding_id': bindingId,
+      'source': 'explicit_binding',
+      'created_at': _now,
+      'payload': jsonEncode({
+        'event': event,
+        'reason': input['reason'],
+        'evidence': input['evidence'] ?? [],
+        'boundBy': invocation.origin == 'gui' ? 'user' : 'agent',
+        'invocationId': invocation.id,
+        'origin': invocation.origin,
+        if (file != null) ...{
+          'fileRevision': file['revision'],
+          'probe': (file['attributes'] as JsonMap)['probe']
+        }
+      })
+    });
+  }
+
+  Future<void> _checkObjects(
+      DatabaseExecutor tx, String id, List<MetadataRecord> records) async {
+    final kind = (await entity(id, db: tx))['kind'];
+    if (kind != 'file') {
+      for (final record in records) {
+        final owners = await tx.rawQuery(
+            'SELECT b.entity_id FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
+            'WHERE b.object_id=? AND b.status=? AND e.kind=? AND b.entity_id!=?',
+            [
+              stableMediaId('object', record.ref.toJson()),
+              'accepted',
+              kind,
+              id
+            ]);
+        if (owners.isNotEmpty) {
+          throw Failure(FailureCode.conflict,
+              'External object is already bound to local $kind ${owners.first['entity_id']}.');
+        }
+      }
+    }
+    final rows = await tx.rawQuery(
+        'SELECT o.* FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id '
+        'WHERE b.entity_id=? AND b.status=? AND o.provider=?',
+        [id, 'accepted', records.first.ref.provider]);
+    final expected = {
+      for (final r in records) stableMediaId('object', r.ref.toJson())
+    };
+    if (rows.any((row) => !expected.contains(row['id']))) {
+      throw const Failure(FailureCode.conflict,
+          'Conflicting accepted identity from this source; unbind it explicitly.');
+    }
+  }
+
+  Future<String> _local(DatabaseExecutor tx, String? id, String kind,
+      MetadataRecord record, String? parent) async {
+    if (id == null) return _materialize(tx, kind, record, parent);
+    final existing = await entity(id, db: tx);
+    if (existing['kind'] != kind || existing['parent_id'] != parent) {
+      throw Failure(FailureCode.conflict,
+          '$id is not a $kind under the selected parent.');
+    }
+    return id;
+  }
+
+  Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
+          String fingerprint, Invocation invocation) =>
       database.transaction((tx) async {
-        final file = await entity(fileId, db: tx);
-        if (file['kind'] != 'file') {
-          throw const Failure(FailureCode.invalidInput,
-              'Only file identity can be unbound here.');
+        final saved = await operation(key, fingerprint, db: tx);
+        if (saved != null) return saved;
+        final results = <JsonMap>[];
+        for (var index = 0; index < entries.length; index++) {
+          final entry = entries[index];
+          try {
+            final kind = entry['kind'] as String;
+            final work = MetadataRecord.fromJson(entry['work'] as JsonMap);
+            final release =
+                MetadataRecord.fromJson(entry['release'] as JsonMap);
+            final selected = (entry['episodes'] as List)
+                .cast<JsonMap>()
+                .map(MetadataRecord.fromJson)
+                .toList();
+            final workId = await _local(
+                tx,
+                kind == 'work'
+                    ? entry['entityId'] as String?
+                    : entry['workId'] as String?,
+                'work',
+                work,
+                null);
+            final scope = <String, Object?>{
+              'order': release.order,
+              'season': release.season,
+              'cour': null,
+              'numbers': [for (final ep in selected) ep.number],
+              'startMs': entry['startMs'],
+              'endMs': entry['endMs']
+            };
+            final bindings = <String>[];
+            final actor = invocation.origin == 'gui' ? 'user' : 'agent';
+            Future<void> bind(String id, MetadataRecord record, String relation,
+                JsonMap bindingScope,
+                {JsonMap? file}) async {
+              final binding = await _bindRecord(
+                  tx,
+                  id,
+                  record,
+                  relation,
+                  bindingScope,
+                  actor,
+                  'explicit_binding',
+                  invocation,
+                  key,
+                  ((await entity(id, db: tx))['attributes']
+                          as JsonMap)['bindingRevision'] as int? ??
+                      0);
+              if (!bindings.contains(binding)) {
+                bindings.add(binding);
+                await _audit(tx, binding, entry, invocation, file: file);
+              }
+            }
+
+            final parentScope = {
+              ...scope,
+              'numbers': <String>[],
+              'startMs': null,
+              'endMs': null
+            };
+            await _checkObjects(tx, workId, [work]);
+            await bind(workId, work, 'contains',
+                {...parentScope, 'season': work.season, 'order': work.order});
+            String? releaseId;
+            final episodeIds = <String>[];
+            if (kind != 'work') {
+              releaseId = await _local(
+                  tx,
+                  kind == 'release'
+                      ? entry['entityId'] as String?
+                      : entry['releaseId'] as String?,
+                  'release',
+                  release,
+                  workId);
+              await _checkObjects(tx, releaseId, [release]);
+              await bind(releaseId, release, 'contains', parentScope);
+              for (var i = 0; i < selected.length; i++) {
+                final ep = selected[i];
+                final localIds =
+                    (entry['localEpisodeIds'] as List?)?.cast<String>();
+                final id = await _local(
+                    tx,
+                    kind == 'episode'
+                        ? entry['entityId'] as String?
+                        : localIds?[i],
+                    'episode',
+                    ep,
+                    releaseId);
+                await _checkObjects(tx, id, [ep]);
+                await bind(id, ep, 'exact', {
+                  ...parentScope,
+                  'numbers': [ep.number]
+                });
+                episodeIds.add(id);
+              }
+            }
+            String? fileId;
+            if (kind == 'file') {
+              fileId = entry['entityId'] as String? ??
+                  await ensureFile(entry['verifiedPath'] as String, db: tx);
+              final file = await entity(fileId, db: tx);
+              final attrs = file['attributes'] as JsonMap;
+              final links = await tx.query('media_file_episodes',
+                  where: 'file_id=?', whereArgs: [fileId], orderBy: 'ordinal');
+              if (links.isNotEmpty &&
+                  stableMediaId('links',
+                          links.map((row) => row['episode_id']).toList()) !=
+                      stableMediaId('links', episodeIds)) {
+                throw const Failure(FailureCode.conflict,
+                    'File is already linked to different local episodes; unbind it explicitly.');
+              }
+              final previousBindings = await tx.query('media_bindings',
+                  where: 'entity_id=? AND status=?',
+                  whereArgs: [fileId, 'accepted']);
+              await _checkObjects(tx, fileId, selected);
+              final relation = selected.length == 1 ? 'exact' : 'combined';
+              for (var i = 0; i < selected.length; i++) {
+                await bind(fileId, selected[i], relation, scope, file: {
+                  ...file,
+                  'attributes': {...attrs, 'probe': entry['probe']}
+                });
+                final link = {
+                  'file_id': fileId,
+                  'episode_id': episodeIds[i],
+                  'relation': relation,
+                  'ordinal': i,
+                  'start_ms': entry['startMs'],
+                  'end_ms': entry['endMs']
+                };
+                final same =
+                    links.where((row) => row['episode_id'] == episodeIds[i]);
+                if (same.isNotEmpty &&
+                    (same.single['relation'] != relation ||
+                        same.single['start_ms'] != entry['startMs'] ||
+                        same.single['end_ms'] != entry['endMs'])) {
+                  throw const Failure(FailureCode.conflict,
+                      'Existing file episode relation or interval differs.');
+                }
+                await tx.insert('media_file_episodes', link,
+                    conflictAlgorithm: ConflictAlgorithm.ignore);
+              }
+              final probe = entry['probe'] as JsonMap;
+              final oldProbe = attrs['probe'] as JsonMap;
+              if (!isLocationOnlyMediaProbe(oldProbe) &&
+                  ['size', 'modifiedAt', 'headMd5']
+                      .any((key) => probe[key] != oldProbe[key])) {
+                throw const Failure(FailureCode.conflict,
+                    'File changed since indexing; scan again.');
+              }
+              final fileBindings = await tx.query('media_bindings',
+                  where: 'entity_id=? AND status=?',
+                  whereArgs: [fileId, 'accepted']);
+              final added = fileBindings.any(
+                  (b) => !previousBindings.any((old) => old['id'] == b['id']));
+              final revision =
+                  (attrs['bindingRevision'] as int) + (added ? 1 : 0);
+              for (final binding in fileBindings.where((b) =>
+                  !previousBindings.any((old) => old['id'] == b['id']))) {
+                await tx.update('media_bindings', {'revision': revision},
+                    where: 'id=?', whereArgs: [binding['id']]);
+              }
+              await tx.update(
+                  'media_entities',
+                  {
+                    'attributes': jsonEncode(
+                        {...attrs, 'probe': probe, 'bindingRevision': revision})
+                  },
+                  where: 'id=?',
+                  whereArgs: [fileId]);
+              if (added) {
+                await _queueFileProjection(
+                    tx, fileId, file['revision'] as int, revision);
+              }
+            }
+            results.add({
+              'index': index,
+              'workId': workId,
+              'releaseId': releaseId,
+              'episodeIds': episodeIds,
+              'fileId': fileId,
+              'bindingIds': bindings
+            });
+          } on Failure catch (error) {
+            throw Failure(error.code, 'Entry $index: ${error.message}',
+                violations: [
+                  SchemaViolation('/entries/$index', error.message)
+                ]);
+          }
         }
-        final attrs = file['attributes'] as JsonMap;
-        if (attrs['bindingRevision'] != revision) {
-          throw const Failure(FailureCode.conflict, 'Stale binding revision.');
-        }
-        final dandanplay = await tx.rawQuery(
-            'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
-            [fileId, 'accepted', 'dandanplay']);
-        await tx.update('media_bindings',
-            {'status': 'revoked', 'invocation_id': invocation.id},
-            where: 'entity_id = ? AND status = ?',
-            whereArgs: [fileId, 'accepted']);
-        await tx.delete('media_file_episodes',
-            where: 'file_id = ?', whereArgs: [fileId]);
-        await tx.update(
-            'media_entities',
-            {
-              'attributes':
-                  jsonEncode({...attrs, 'bindingRevision': revision + 1})
-            },
-            where: 'id = ?',
-            whereArgs: [fileId]);
-        if (dandanplay.length == 1) {
-          await tx.insert('media_projection_outbox', {
-            'id': stableMediaId('projection', [fileId, revision + 1]),
-            'file_id': fileId,
-            'file_revision': file['revision'],
-            'binding_revision': revision + 1,
-            'payload': jsonEncode({
-              'clear': true,
-              'expectedAnimeId': int.parse(
-                  (dandanplay.single['scope'] as String).split('/').last),
-              'expectedEpisodeId':
-                  int.parse(dandanplay.single['external_id'] as String)
-            }),
-            'state': 'pending'
-          });
-        }
+        final result = <String, Object?>{'entries': results};
+        await tx.insert('media_binding_operations', {
+          'id': key,
+          'fingerprint': fingerprint,
+          'result': jsonEncode(result)
+        });
+        return result;
       });
+
+  Future<JsonMap> unbindBatch(List<JsonMap> entries, String key,
+          String fingerprint, Invocation invocation) =>
+      database.transaction((tx) async {
+        final saved = await operation(key, fingerprint, db: tx);
+        if (saved != null) return saved;
+        final results = <JsonMap>[];
+        for (var index = 0; index < entries.length; index++) {
+          final entry = entries[index];
+          try {
+            final id = entry['entityId'] as String;
+            final entityRow = await entity(id, db: tx);
+            final bindings = await tx.rawQuery(
+                'SELECT b.*,o.provider,o.external_id,o.scope AS object_scope FROM media_bindings b '
+                'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=?',
+                [id, 'accepted']);
+            final requested = (entry['bindingIds'] as List?)?.cast<String>();
+            if (requested != null &&
+                requested.any((bid) => !bindings.any((b) => b['id'] == bid))) {
+              throw const Failure(FailureCode.conflict,
+                  'bindingIds must belong to this entity and be accepted.');
+            }
+            if (requested != null &&
+                (requested.isEmpty ||
+                    requested.toSet().length != requested.length)) {
+              throw const Failure(FailureCode.invalidInput,
+                  'bindingIds must be nonempty and distinct.');
+            }
+            final selected = bindings
+                .where((b) => requested == null || requested.contains(b['id']))
+                .toList();
+            for (final binding in selected) {
+              await tx.update('media_bindings', {'status': 'revoked'},
+                  where: 'id=?', whereArgs: [binding['id']]);
+              await _audit(tx, binding['id'] as String, entry, invocation,
+                  event: 'unbind');
+            }
+            if (entityRow['kind'] == 'file' && selected.isNotEmpty) {
+              final remaining = await tx.query('media_bindings',
+                  where: 'entity_id=? AND status=?',
+                  whereArgs: [id, 'accepted']);
+              final links = await tx.query('media_file_episodes',
+                  where: 'file_id=?', whereArgs: [id]);
+              for (final link in links) {
+                final identities = await tx.query('media_bindings',
+                    where: 'entity_id=? AND status=?',
+                    whereArgs: [link['episode_id'], 'accepted']);
+                if (!remaining.any((b) => identities
+                    .any((ep) => ep['object_id'] == b['object_id']))) {
+                  await tx.delete('media_file_episodes',
+                      where: 'file_id=? AND episode_id=?',
+                      whereArgs: [id, link['episode_id']]);
+                }
+              }
+              final attrs = entityRow['attributes'] as JsonMap;
+              final revision = (attrs['bindingRevision'] as int) + 1;
+              await tx.update(
+                  'media_entities',
+                  {
+                    'attributes':
+                        jsonEncode({...attrs, 'bindingRevision': revision})
+                  },
+                  where: 'id=?',
+                  whereArgs: [id]);
+              await _queueFileProjection(
+                  tx, id, entityRow['revision'] as int, revision,
+                  removed: selected
+                      .where((b) => b['provider'] == 'dandanplay')
+                      .toList());
+            }
+            results.add({
+              'index': index,
+              'entityId': id,
+              'bindingIds': [for (final b in selected) b['id']]
+            });
+          } on Failure catch (error) {
+            throw Failure(error.code, 'Entry $index: ${error.message}',
+                violations: [
+                  SchemaViolation('/entries/$index', error.message)
+                ]);
+          }
+        }
+        final result = <String, Object?>{'entries': results};
+        await tx.insert('media_binding_operations', {
+          'id': key,
+          'fingerprint': fingerprint,
+          'result': jsonEncode(result)
+        });
+        return result;
+      });
+
+  Future<void> _queueFileProjection(
+      DatabaseExecutor tx, String fileId, int fileRevision, int bindingRevision,
+      {List<JsonMap> removed = const []}) async {
+    final current = await tx.rawQuery(
+        'SELECT b.relation,o.external_id,o.scope AS object_scope,o.id FROM media_bindings b '
+        'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND o.provider=?',
+        [fileId, 'accepted', 'dandanplay']);
+    JsonMap? payload;
+    if (current.length == 1 && current.single['relation'] == 'exact') {
+      final row = current.single;
+      final animeId =
+          int.parse((row['object_scope'] as String).split('/').last);
+      final animeObjects = await tx.query('media_external_objects',
+          where: 'provider=? AND object_type=? AND external_id=? AND scope=?',
+          whereArgs: ['dandanplay', 'anime', '$animeId', '']);
+      if (animeObjects.isEmpty) {
+        throw const Failure(FailureCode.conflict,
+            'Dandanplay work metadata is missing for projection.');
+      }
+      Future<String> title(String objectId) async {
+        final snapshots = await tx.query('media_snapshots',
+            where: 'object_id=?',
+            whereArgs: [objectId],
+            orderBy: 'fetched_at DESC',
+            limit: 1);
+        if (snapshots.isEmpty) {
+          throw const Failure(FailureCode.conflict,
+              'Dandanplay metadata snapshot is missing for projection.');
+        }
+        return decodeMediaJson(snapshots.single['fields'])['title'] as String;
+      }
+
+      payload = {
+        'animeId': animeId,
+        'episodeId': int.parse(row['external_id'] as String),
+        'animeName': await title(animeObjects.single['id'] as String),
+        'episodeTitle': await title(row['id'] as String)
+      };
+    } else if (removed.length == 1 && removed.single['relation'] == 'exact') {
+      payload = {
+        'clear': true,
+        'expectedAnimeId': int.parse(
+            (removed.single['object_scope'] as String).split('/').last),
+        'expectedEpisodeId': int.parse(removed.single['external_id'] as String)
+      };
+    }
+    if (payload == null) return;
+    await tx.insert('media_projection_outbox', {
+      'id': stableMediaId('projection', [fileId, bindingRevision]),
+      'file_id': fileId,
+      'file_revision': fileRevision,
+      'binding_revision': bindingRevision,
+      'state': 'pending',
+      'payload': jsonEncode(payload)
+    });
+  }
 }

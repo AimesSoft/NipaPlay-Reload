@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/danmaku/source.dart';
@@ -30,6 +29,7 @@ void main() {
         downloadRefreshInterval: const Duration(milliseconds: 20),
         classic: classic,
         authorizedRoots: () => [mediaFolder.path],
+        mediaDurationProbe: (_) async => 1440000,
         mediaProviders: [
           TmdbMetadataProvider(tmdb),
           DandanplayMetadataProvider(dandanplay),
@@ -71,7 +71,7 @@ void main() {
     expect(core.danmaku.service.store.db,
         same((core.engine.store as SqliteJobStore).database));
     final db = core.media.service.store.database;
-    expect(await db.getVersion(), 4);
+    expect(await db.getVersion(), 5);
     expect(await db.query('settings_changes'), isEmpty);
     expect(await db.query('danmaku_bindings'), isEmpty);
     expect((await db.rawQuery('PRAGMA foreign_key_check')), isEmpty);
@@ -94,25 +94,20 @@ void main() {
     final scan = await call(harness, 'media.library.scan', {
       'root': mediaFolder.path,
       'requestId': 'core-scan',
-      'sources': ['tmdb']
     });
     final scanned = await waitForJob(core.engine,
         (scan['job'] as JsonMap)['jobId'] as String, JobState.succeeded);
-    final identification = await waitForJob(
-        core.engine,
-        (scanned.receipt!.details['identificationJobIds'] as List).single
-            as String,
-        JobState.needsDecision);
-    final choice = identification.decision!.options
-        .firstWhere((option) => option.call.actionId == 'media.identity.bind')
-        .call;
-    await call(harness, choice.actionId, choice.input);
-    await waitForJob(core.engine, identification.jobId, JobState.succeeded);
+    final fileId =
+        (scanned.receipt!.details['fileIds'] as List).single as String;
+    await call(harness, 'media.identity.bind_batch', {
+      'requestId': 'core-bind',
+      'entries': [tmdbBinding(fileId)]
+    });
     expect((await call(harness, 'media.library.works', {}))['works'],
         hasLength(1));
     final listed = (await call(harness, 'task.list', {}))['jobs'] as List;
     expect(listed.map((job) => (job as JsonMap)['type']),
-        containsAll(['download', 'media.scan', 'media.identify']));
+        containsAll(['download', 'media.scan']));
     expect(
         listed
             .every((job) => (job as JsonMap)['ownerDeviceId'] == core.deviceId),
@@ -130,13 +125,12 @@ void main() {
     final file = await File('${mediaFolder.path}/长安十二时辰 S01E01.mkv')
         .writeAsString('offline media');
     final fileId = await core.media.service.index(file.path);
-    tmdb.retry = ProviderRetry(
-        'tmdb',
-        DateTime.now().toUtc().add(const Duration(seconds: 1)),
-        'offline retry');
-    final identification =
-        await core.media.service.identify(fileId, sources: ['tmdb']);
-    await waitForJob(core.engine, identification.jobId, JobState.waitingRetry);
+    await call(Harness(core.capabilities), 'media.identity.bind_batch', {
+      'requestId': 'restart-bind',
+      'entries': [tmdbBinding(fileId)]
+    });
+    final bindings =
+        await core.media.service.store.database.query('media_bindings');
     await core.close();
     await backend.finish();
 
@@ -144,9 +138,10 @@ void main() {
     await core.ready;
     expect(core.deviceId, deviceId);
     await waitForJob(core.engine, download.jobId, JobState.succeeded);
-    await waitForJob(core.engine, identification.jobId, JobState.needsDecision);
+    expect(await core.media.service.store.database.query('media_bindings'),
+        bindings);
     expect(await core.engine.list(type: 'download'), hasLength(1));
-    expect(await core.engine.list(type: 'media.identify'), hasLength(1));
+    expect(await core.engine.list(type: 'media.identify'), isEmpty);
     expect(library.scans, hasLength(1));
     expect(backend.additions, 0);
     expect((await core.engine.store.events(download.jobId)).map((e) => e.kind),
@@ -205,9 +200,14 @@ void main() {
         .writeAsString('offline media');
     final fileId = await core.media.service.index(file.path);
     classic.rejectReadback = true;
-    final identification =
-        await core.media.service.identify(fileId, sources: ['dandanplay']);
-    await waitForJob(core.engine, identification.jobId, JobState.failed);
+    final outcome = await Harness(core.capabilities).invokeJson(
+        'media.identity.bind_batch',
+        {
+          'requestId': 'projection-bind',
+          'entries': [dandanplayBinding(fileId)]
+        },
+        Invocation(origin: 'mcp'));
+    expect(outcome, isA<Failed>());
     expect(await core.media.service.store.pendingProjections(), hasLength(1));
     final bindings =
         await core.media.service.store.database.query('media_bindings');

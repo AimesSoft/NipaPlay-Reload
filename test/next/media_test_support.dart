@@ -22,6 +22,7 @@ final class FixtureTransport implements MetadataTransport {
                 .readAsStringSync()) as Map);
   final Map<String, Object?> responses;
   final List<JsonMap> requests = [];
+  final Map<String, JsonMap Function(JsonMap? body)> handlers = {};
   Completer<void>? entered, release;
   ProviderRetry? retry;
   @override
@@ -34,6 +35,7 @@ final class FixtureTransport implements MetadataTransport {
       retry = null;
       throw error;
     }
+    if (handlers[path] case final handler?) return handler(body);
     final response = responses[path];
     if (response == null) throw StateError('Unrecorded fixture request: $path');
     return Map<String, Object?>.from(jsonDecode(jsonEncode(response)) as Map);
@@ -103,7 +105,8 @@ final class MediaFixture {
         store: identities,
         providers: providers.where((provider) => sources.contains(provider.id)),
         classic: classic,
-        authorizedRoots: () => [media.path]);
+        authorizedRoots: () => [media.path],
+        durationProbe: (_) async => 1440000);
     engine = TaskEngine(
         store: jobs,
         ownerDeviceId: 'fixture-device',
@@ -124,12 +127,6 @@ final class MediaFixture {
     return service.index(file.path);
   }
 
-  Future<Job> identify(String fileId,
-      {JobState state = JobState.needsDecision}) async {
-    final job = await service.identify(fileId);
-    return waitForJob(engine, job.jobId, state);
-  }
-
   Future<JsonMap> call(String id, JsonMap input,
       {String origin = 'mcp'}) async {
     final outcome =
@@ -139,16 +136,6 @@ final class MediaFixture {
     expect(harness.lookup(id)!.spec.output.validate(result), isEmpty,
         reason: 'Output schema for $id');
     return result;
-  }
-
-  Future<void> choose(Job job,
-      {String? candidateId, String origin = 'mcp'}) async {
-    final option = job.decision!.options.firstWhere((option) =>
-        option.call.actionId == 'media.identity.bind' &&
-        (candidateId == null ||
-            option.call.input['candidateId'] == candidateId));
-    await call(option.call.actionId, option.call.input, origin: origin);
-    await waitForJob(engine, job.jobId, JobState.succeeded);
   }
 
   Future<void> close() async {
@@ -170,3 +157,52 @@ Future<Job> waitForJob(TaskEngine engine, String id, JobState target) async {
   }
   throw StateError('Timed out waiting for $id to reach $target');
 }
+
+const mediaWorkRef = {
+  'provider': 'tmdb',
+  'objectType': 'tv',
+  'externalId': '9001',
+  'scope': ''
+};
+const mediaReleaseRef = {
+  'provider': 'tmdb',
+  'objectType': 'season',
+  'externalId': '9101',
+  'scope': 'tv/9001/season/1'
+};
+JsonMap mediaEpisodeRef(int number) => {
+      'provider': 'tmdb',
+      'objectType': 'episode',
+      'externalId': '${9200 + number}',
+      'scope': 'tv/9001/season/1/episode/$number'
+    };
+JsonMap tmdbBinding(String fileId, {List<int> episodes = const [1]}) => {
+      'kind': 'file',
+      'entityId': fileId,
+      'workRef': mediaWorkRef,
+      'releaseRef': mediaReleaseRef,
+      'episodeRefs': [for (final number in episodes) mediaEpisodeRef(number)],
+      'reason': 'Agent explicitly selected catalogue episodes',
+      'evidence': [
+        {'source': 'fixture', 'detail': 'Offline explicit mapping'}
+      ]
+    };
+JsonMap dandanplayBinding(String fileId) => {
+      'kind': 'file',
+      'entityId': fileId,
+      'workRef': {
+        'provider': 'dandanplay',
+        'objectType': 'anime',
+        'externalId': '7001',
+        'scope': ''
+      },
+      'episodeRefs': [
+        {
+          'provider': 'dandanplay',
+          'objectType': 'episode',
+          'externalId': '7101',
+          'scope': 'anime/7001'
+        }
+      ],
+      'reason': 'Agent accepted hash signal'
+    };

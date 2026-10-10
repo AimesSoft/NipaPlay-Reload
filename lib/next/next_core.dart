@@ -12,6 +12,7 @@ import 'downloads/download_backend.dart';
 import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
 import 'media/media_runtime.dart';
+import 'media/media_probe.dart';
 import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
@@ -32,6 +33,7 @@ final class NextCore {
     Directory? root,
     DatabaseFactory? databaseFactory,
     Iterable<MetadataProvider>? mediaProviders,
+    Future<int?> Function(String) mediaDurationProbe = probeMediaDuration,
     Duration downloadRefreshInterval = const Duration(seconds: 5),
   }) : downloads = DownloadRuntime(
             backend: downloadBackend,
@@ -39,8 +41,8 @@ final class NextCore {
             isEnabled: isDownloaderEnabled,
             loadImportedKeys: loadImportedKeys,
             refreshInterval: downloadRefreshInterval) {
-    ready = _initialize(
-        root, databaseFactory, classic, authorizedRoots, mediaProviders);
+    ready = _initialize(root, databaseFactory, classic, authorizedRoots,
+        mediaProviders, mediaDurationProbe);
   }
 
   late final Future<void> ready;
@@ -60,7 +62,8 @@ final class NextCore {
       DatabaseFactory? databaseFactory,
       ClassicMetadataPort classic,
       Iterable<String> Function() authorizedRoots,
-      Iterable<MetadataProvider>? mediaProviders) async {
+      Iterable<MetadataProvider>? mediaProviders,
+      Future<int?> Function(String) mediaDurationProbe) async {
     root = suppliedRoot ??
         Directory(
             '${(await StorageService.getAppStorageDirectory()).path}/next');
@@ -70,7 +73,8 @@ final class NextCore {
     media = await MediaRuntime.create(root, jobs.database, deviceId,
         classic: classic,
         authorizedRoots: authorizedRoots,
-        providers: mediaProviders);
+        providers: mediaProviders,
+        durationProbe: mediaDurationProbe);
     settings = SettingsRegistry(database, ApplicationSettings.entries());
     SettingsAccess.registry = settings;
     ApplicationSettings.authorizePath = (path, {directory = false}) =>

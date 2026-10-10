@@ -5,17 +5,23 @@ import 'package:nipaplay/next/danmaku/migration.dart';
 import 'package:nipaplay/next/media/media_migration.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/tasks/job_migration.dart';
+import 'package:nipaplay/next/settings/migration.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   sqfliteFfiInit();
-  for (final oldVersion in [0, 1, 2, 3, 4]) {
+  for (final oldVersion in [0, 1, 2, 3, 4, 5]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
       addTearDown(() => root.delete(recursive: true));
-      const migrations = [migrateJobs, migrateMediaIdentity, migrateDanmaku];
-      if (oldVersion > 0 && oldVersion < 4) {
+      const migrations = [
+        migrateJobs,
+        migrateMediaIdentity,
+        migrateDanmaku,
+        migrateSettings
+      ];
+      if (oldVersion > 0 && oldVersion < 5) {
         final old =
             await databaseFactoryFfi.openDatabase('${root.path}/next.db',
                 options: OpenDatabaseOptions(
@@ -29,12 +35,12 @@ void main() {
         await old.close();
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
-      if (oldVersion == 4) {
+      if (oldVersion == 5) {
         await db.close();
         db = await openNextDatabase(root, factory: databaseFactoryFfi);
       }
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 4);
+      expect(await db.getVersion(), 5);
       for (final table in [
         'jobs',
         'media_entities',

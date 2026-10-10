@@ -91,7 +91,7 @@ void main() {
   });
 
   test(
-      'first identification hydrates the current file inside the task without a preceding scan',
+      'batch binding hydrates a location-only file without invalidating its danmaku binding',
       () async {
     final media = MediaFixture();
     await media.open();
@@ -114,12 +114,10 @@ void main() {
     final danmaku = DanmakuStore(media.identities);
     final binding = await danmaku.attach(
         fileId, biliVideo, '合成证据', null, Invocation(origin: 'mcp'));
-    final started = await media.call('media.identification.start', {
-      'current': true,
-      'sources': ['tmdb']
+    await media.call('media.identity.bind_batch', {
+      'requestId': 'on-demand',
+      'entries': [tmdbBinding(fileId)]
     });
-    final jobId = (started['job'] as JsonMap)['jobId'] as String;
-    await waitForJob(media.engine, jobId, JobState.needsDecision);
     expect((await media.identities.entity(fileId))['revision'], 0);
     expect((await danmaku.binding(binding))['status'], 'accepted');
     expect(

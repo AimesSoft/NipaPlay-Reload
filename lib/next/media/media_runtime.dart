@@ -11,6 +11,7 @@ import 'identity_store.dart';
 import 'media_service.dart';
 import 'media_capability.dart';
 import 'media_executors.dart';
+import 'media_probe.dart';
 import 'metadata_provider.dart';
 import 'provider_transport.dart';
 import 'providers.dart';
@@ -28,7 +29,8 @@ final class MediaRuntime {
       Directory root, Database db, String deviceId,
       {required ClassicMetadataPort classic,
       required Iterable<String> Function() authorizedRoots,
-      Iterable<MetadataProvider>? providers}) async {
+      Iterable<MetadataProvider>? providers,
+      Future<int?> Function(String) durationProbe = probeMediaDuration}) async {
     final clients = <http.Client>[];
     if (providers == null) {
       final credentials = VaultCredentialResolver(root);
@@ -43,8 +45,8 @@ final class MediaRuntime {
             baseUri: Uri.parse('https://api.themoviedb.org'),
             client: tmdb,
             privateQuery: () async => {
-                  'api_key':
-                      await credentials.resolve(const CredentialRef('metadata', 'tmdb'))
+                  'api_key': await credentials
+                      .resolve(const CredentialRef('metadata', 'tmdb'))
                 })),
         BangumiMetadataProvider(HttpMetadataTransport(
             provider: 'bangumi',
@@ -76,7 +78,8 @@ final class MediaRuntime {
         store: store,
         classic: classic,
         authorizedRoots: authorizedRoots,
-        providers: providers);
+        providers: providers,
+        durationProbe: durationProbe);
     await service.mutate(() async {
       await store.importLegacy(await classic.history());
     });

@@ -31,26 +31,6 @@ const _scopeSchema = ObjectSchema({
   'startMs',
   'endMs'
 ]);
-const _probeSchema = ObjectSchema({
-  'size': IntegerSchema(),
-  'modifiedAt': StringSchema(),
-  'headMd5': StringSchema()
-}, required: [
-  'size',
-  'modifiedAt',
-  'headMd5'
-]);
-const _evidenceSchema = ObjectSchema({
-  'reason': StringSchema(),
-  'url': StringSchema(nullable: true),
-  'fileRevision': IntegerSchema(),
-  'probe': _probeSchema
-}, required: [
-  'reason',
-  'url',
-  'fileRevision',
-  'probe'
-]);
 ObjectSchema _recordSchema(int depth) => ObjectSchema({
       'ref': _refSchema,
       'title': const StringSchema(),
@@ -83,60 +63,6 @@ ObjectSchema _recordSchema(int depth) => ObjectSchema({
       'fetchedAt',
       'episodes'
     ]);
-final _candidateSchema = ObjectSchema({
-  'candidateId': const StringSchema(),
-  'state': const StringSchema(),
-  'source': const StringSchema(),
-  'fileRevision': const IntegerSchema(),
-  'bindingRevision': const IntegerSchema(),
-  'work': _recordSchema(2),
-  'release': _recordSchema(1),
-  'episodes': ArraySchema(_recordSchema(0)),
-  'workId': const StringSchema(nullable: true),
-  'relation': const StringSchema(),
-  'scope': _scopeSchema,
-  'evidence': _evidenceSchema
-}, required: [
-  'candidateId',
-  'state',
-  'source',
-  'fileRevision',
-  'bindingRevision',
-  'work',
-  'release',
-  'episodes',
-  'workId',
-  'relation',
-  'scope',
-  'evidence'
-]);
-const _signalsSchema = ObjectSchema({
-  'raw': StringSchema(),
-  'title': StringSchema(),
-  'year': IntegerSchema(nullable: true),
-  'season': IntegerSchema(nullable: true),
-  'cour': IntegerSchema(nullable: true),
-  'number': StringSchema(nullable: true),
-  'endNumber': StringSchema(nullable: true),
-  'episodeType': StringSchema(),
-  'releaseGroup': StringSchema(nullable: true),
-  'version': StringSchema(nullable: true),
-  'technical': ArraySchema(StringSchema()),
-  'parserVersion': StringSchema()
-}, required: [
-  'raw',
-  'title',
-  'year',
-  'season',
-  'cour',
-  'number',
-  'endNumber',
-  'episodeType',
-  'releaseGroup',
-  'version',
-  'technical',
-  'parserVersion'
-]);
 const _fieldSchema = ObjectSchema({
   'field': StringSchema(),
   'value': StringSchema(nullable: true),
@@ -215,21 +141,7 @@ const _entitySchema = ObjectSchema({
   'bindings': ArraySchema(_bindingSchema),
   'locations': ArraySchema(_locationSchema),
   'episodes': ArraySchema(_fileEpisodeSchema),
-  'evidence': ArraySchema(ObjectSchema({
-    'evidenceId': StringSchema(),
-    'bindingId': StringSchema(nullable: true),
-    'source': StringSchema(),
-    'reason': StringSchema(),
-    'fileRevision': IntegerSchema(),
-    'probe': _probeSchema,
-    'url': StringSchema(nullable: true)
-  }, required: [
-    'evidenceId',
-    'bindingId',
-    'source',
-    'reason',
-    'url'
-  ])),
+  'evidence': ArraySchema(ObjectSchema({}, additionalProperties: true)),
   'legacyEvidence': ArraySchema(ObjectSchema({
     'locationId': StringSchema(),
     'animeId': IntegerSchema(nullable: true),
@@ -339,9 +251,6 @@ ActionSpec _spec(String id, String description, Effect effect,
         effect: effect,
         input: input,
         output: output);
-const _decisionInput = ObjectSchema(
-    {'jobId': _text, 'revision': IntegerSchema(minimum: 0)},
-    required: ['jobId', 'revision']);
 final _specs = [
   _spec(
       'media.metadata.search',
@@ -398,147 +307,205 @@ final _specs = [
           required: ['imported'])),
   _spec(
       'media.library.scan',
-      'Schedule a scan of an already configured native media folder. Returns immediately; the verified scan receipt confirms enumeration and child scheduling, while identification results live in child jobs. requestId deduplicates acceptance.',
+      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. requestId deduplicates submission.',
       Effect.write,
-      const ObjectSchema(
-          {'root': _text, 'requestId': _text, 'sources': ArraySchema(_text)},
+      const ObjectSchema({'root': _text, 'requestId': _text},
           required: ['root', 'requestId']),
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
-      'media.identification.start',
-      'Start identification by fileId, path or current (default); paths are indexed and probed within configured media folders. Optional fileRevision checks freshness. Repeated submissions reuse the same job until content or binding revision changes.',
-      Effect.write,
-      const ObjectSchema({
-        'fileId': _text,
-        'path': _text,
-        'current': BooleanSchema(),
-        'fileRevision': IntegerSchema(minimum: 0),
-        'releaseId': _text,
-        'requestId': _text,
-        'sources': ArraySchema(_text)
-      }),
-      const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
-  _spec(
-      'media.identification.apply_release',
-      'Accept or correct a work/release for every video under root in one task. Choose an accepted local releaseId or workRef with releaseRef (required for TMDB TV). Bind unique matching episode numbers using sxxeyy or filename; uncertain files get individual executable Decisions. Replaces existing file identities within root. requestId deduplicates the batch; receipts list bound files, unresolved jobs and failures.',
-      Effect.write,
+      'media.files.list',
+      'Return the complete recursive video file list for root, or every indexed file location for workId. Includes size, durationMs (null when unavailable), 16 MiB headMd5 and current bindings. Read-only: no indexing or identity judgment.',
+      Effect.read,
       const ObjectSchema({
         'root': _text,
-        'releaseId': _text,
-        'workRef': _refSchema,
-        'releaseRef': _refSchema,
-        'workId': _text,
-        'numberSource': StringSchema(values: ['sxxeyy', 'filename']),
-        'requestId': _text,
-        'reason': _text,
-        'url': _text
-      }, required: [
-        'root',
-        'numberSource',
-        'requestId',
-        'reason'
+        'workId': _text
+      }, oneOfRequired: [
+        ['root'],
+        ['workId']
       ]),
-      const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
-  _spec(
-      'media.identification.get',
-      'Read identification progress including queued/probing jobs before parsed context exists. Signals and probe appear after probing; task errors are explicit. Follow task.wait once, then task.get for executable option calls.',
-      Effect.read,
-      const ObjectSchema({'jobId': _text}, required: ['jobId']),
-      ObjectSchema({
-        'job': _jobRefSchema,
-        'fileId': const StringSchema(),
-        'fileRevision': const IntegerSchema(),
-        'bindingRevision': const IntegerSchema(),
-        'state': const StringSchema(),
-        'error': const ObjectSchema({
-          'code': StringSchema(),
-          'message': StringSchema(),
-          'retryable': BooleanSchema()
+      const ObjectSchema({
+        'files': ArraySchema(ObjectSchema({
+          'fileId': StringSchema(nullable: true),
+          'path': StringSchema(),
+          'size': IntegerSchema(nullable: true),
+          'durationMs': IntegerSchema(nullable: true),
+          'headMd5': StringSchema(nullable: true),
+          'modifiedAt': StringSchema(nullable: true),
+          'bindings': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+          'episodes': ArraySchema(ObjectSchema({}, additionalProperties: true))
         }, required: [
-          'code',
-          'message',
-          'retryable'
-        ]),
-        'signals': _signalsSchema,
-        'probe': _probeSchema,
-        'attempts': const ArraySchema(ObjectSchema({
-          'provider': StringSchema(),
-          'status': StringSchema(),
-          'detail': StringSchema()
-        }, required: [
-          'provider',
-          'status',
-          'detail'
+          'fileId',
+          'path',
+          'size',
+          'durationMs',
+          'headMd5',
+          'modifiedAt',
+          'bindings',
+          'episodes'
         ])),
-        'candidates': ArraySchema(_candidateSchema)
-      }, required: const [
-        'job',
-        'fileId',
-        'fileRevision',
-        'bindingRevision',
-        'state',
-        'attempts',
-        'candidates'
+        'total': IntegerSchema()
+      }, required: [
+        'files',
+        'total'
       ])),
   _spec(
-      'media.identification.add_evidence',
-      'Add a verified external catalogue candidate to a pending Decision. The host fetches the objects and validates episode membership. Use reconsider to publish a new executable Decision; adding evidence does not accept identity.',
+      'media.hash.match',
+      'Match multiple native files against Dandanplay using the MD5 of their first 16 MiB. Returns per-file candidates or explicit errors; an empty candidate list means no hash match. No fallback search, cache, tasks or bindings.',
+      Effect.read,
+      const ObjectSchema({
+        'files': ArraySchema(ObjectSchema({
+          'entityId': _text,
+          'path': _text
+        }, oneOfRequired: [
+          ['entityId'],
+          ['path']
+        ]))
+      }, required: [
+        'files'
+      ]),
+      ObjectSchema({
+        'files': ArraySchema(ObjectSchema({
+          'index': const IntegerSchema(),
+          'fileId': const StringSchema(nullable: true),
+          'path': const StringSchema(),
+          'headMd5': const StringSchema(),
+          'candidates': ArraySchema(_recordSchema(2)),
+          'error': const ObjectSchema({}, additionalProperties: true)
+        }, required: const [
+          'index'
+        ]))
+      }, required: const [
+        'files'
+      ])),
+  _spec(
+      'media.identity.bind_batch',
+      'Atomically accept explicit work, release, episode or file bindings. Files require entityId or path and episodeRefs; TMDB TV requires releaseRef. Validates catalogue membership and existing identity conflicts. Optional workId/releaseId/localEpisodeIds explicitly connect another source to local entities. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input. No filename interpretation or release cascade.',
       Effect.write,
       const ObjectSchema({
-        'jobId': _text,
-        'revision': IntegerSchema(minimum: 0),
-        'workRef': _refSchema,
-        'releaseRef': _refSchema,
-        'episodeIds': ArraySchema(_text),
-        'workId': _text,
-        'reason': _text,
-        'url': _text
+        'requestId': _text,
+        'entries': ArraySchema(ObjectSchema({
+          'kind': StringSchema(values: ['work', 'release', 'episode', 'file']),
+          'entityId': _text,
+          'path': _text,
+          'workId': _text,
+          'releaseId': _text,
+          'localEpisodeIds': ArraySchema(_text),
+          'workRef': _refSchema,
+          'releaseRef': _refSchema,
+          'episodeRefs': ArraySchema(_refSchema),
+          'reason': _text,
+          'evidence': ArraySchema(ObjectSchema(
+              {'source': _text, 'detail': _text, 'url': StringSchema()},
+              required: ['source', 'detail'])),
+          'startMs': IntegerSchema(minimum: 0),
+          'endMs': IntegerSchema(minimum: 0)
+        }, required: [
+          'kind',
+          'workRef',
+          'reason'
+        ]))
       }, required: [
-        'jobId',
-        'revision',
-        'workRef',
-        'episodeIds',
-        'reason'
+        'requestId',
+        'entries'
       ]),
-      const ObjectSchema(
-          {'candidateId': StringSchema(), 'reconsider': _decisionInput},
-          required: ['candidateId', 'reconsider'])),
+      const ObjectSchema({
+        'entries': ArraySchema(ObjectSchema({
+          'index': IntegerSchema(),
+          'workId': StringSchema(),
+          'releaseId': StringSchema(nullable: true),
+          'episodeIds': ArraySchema(StringSchema()),
+          'fileId': StringSchema(nullable: true),
+          'bindingIds': ArraySchema(StringSchema())
+        }, required: [
+          'index',
+          'workId',
+          'releaseId',
+          'episodeIds',
+          'fileId',
+          'bindingIds'
+        ]))
+      }, required: [
+        'entries'
+      ])),
   _spec(
-      'media.identity.bind',
-      'Accept a stored candidate from the current Decision. boundBy comes from the host invocation origin. Returns an acknowledged task snapshot; recovery commits identity, delivers Classic projection and verifies it before task success.',
+      'media.identity.unbind_batch',
+      'Atomically revoke bindings on files, episodes, releases or works and retain provenance. Optional bindingIds selects accepted bindings on that entity; omitted revokes all. Clears file episode links when no accepted file identity remains and uses the durable Classic outbox. reason is audited; requestId makes retries idempotent.',
       Effect.write,
       const ObjectSchema({
-        'jobId': _text,
-        'revision': IntegerSchema(minimum: 0),
-        'candidateId': _text
+        'requestId': _text,
+        'entries': ArraySchema(ObjectSchema({
+          'entityId': _text,
+          'bindingIds': ArraySchema(_text),
+          'reason': _text,
+          'evidence': ArraySchema(ObjectSchema(
+              {'source': _text, 'detail': _text, 'url': StringSchema()},
+              required: ['source', 'detail']))
+        }, required: [
+          'entityId',
+          'reason'
+        ]))
       }, required: [
-        'jobId',
-        'revision',
-        'candidateId'
+        'requestId',
+        'entries'
       ]),
-      const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
-  for (final op in ['reconsider', 'skip', 'defer'])
-    _spec(
-        'media.identification.$op',
-        switch (op) {
-          'reconsider' =>
-            'Publish a new Decision from stored candidates and evidence; preserves file/binding revision checks.',
-          'skip' =>
-            'Record this identification as skipped. The verified receipt explicitly reports identified=false.',
-          _ =>
-            'Record this identification as deferred for more evidence. Does not report identification success.'
-        },
-        Effect.write,
-        _decisionInput,
-        const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
+      const ObjectSchema({
+        'entries': ArraySchema(ObjectSchema({
+          'index': IntegerSchema(),
+          'entityId': StringSchema(),
+          'bindingIds': ArraySchema(StringSchema())
+        }, required: [
+          'index',
+          'entityId',
+          'bindingIds'
+        ]))
+      }, required: [
+        'entries'
+      ])),
   _spec(
-      'media.identity.unbind',
-      'Revoke accepted file bindings, retain evidence and repair Classic metadata through the durable outbox. Does not delete files or progress.',
-      Effect.write,
-      const ObjectSchema(
-          {'fileId': _text, 'bindingRevision': IntegerSchema(minimum: 0)},
-          required: ['fileId', 'bindingRevision']),
-      const ObjectSchema({'identity': _entitySchema}, required: ['identity'])),
+      'media.metadata.get_batch',
+      'Read multiple external works, seasons or episodes in one call; identical refs are fetched once. Results preserve input order and per-item errors. Does not persist metadata or identities.',
+      Effect.read,
+      const ObjectSchema({'refs': ArraySchema(_refSchema), 'language': _text},
+          required: ['refs']),
+      ObjectSchema({
+        'results': ArraySchema(ObjectSchema({
+          'index': const IntegerSchema(),
+          'record': _recordSchema(2),
+          'error': const ObjectSchema({}, additionalProperties: true)
+        }, required: const [
+          'index'
+        ]))
+      }, required: const [
+        'results'
+      ])),
+  _spec(
+      'media.metadata.search_batch',
+      'Search multiple metadata sources or queries in one call. Returns per-query results or explicit errors without cache, tasks or bindings.',
+      Effect.read,
+      const ObjectSchema({
+        'queries': ArraySchema(ObjectSchema({
+          'provider': _text,
+          'query': _text,
+          'kind': StringSchema(values: ['tv', 'movie']),
+          'year': IntegerSchema(minimum: 1800, maximum: 2200)
+        }, required: [
+          'provider',
+          'query'
+        ]))
+      }, required: [
+        'queries'
+      ]),
+      ObjectSchema({
+        'results': ArraySchema(ObjectSchema({
+          'index': const IntegerSchema(),
+          'records': ArraySchema(_recordSchema(0)),
+          'error': const ObjectSchema({}, additionalProperties: true)
+        }, required: const [
+          'index'
+        ]))
+      }, required: const [
+        'results'
+      ])),
   _spec(
       'media.metadata.override',
       'Override one metadata field as the user. Requires a GUI invocation; Agent calls cannot claim a user override. Refresh preserves this value.',
@@ -645,153 +612,65 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         };
       case 'media.library.scan':
         await service.authorizedPath(json['root'] as String, directory: true);
-        for (final source in (json['sources'] as List?)?.cast<String>() ??
-            service.providers.keys) {
-          service.provider(source);
-        }
         final key = stableMediaId('scan', [json]);
         result = {
           'job': _job(await service.submit('media.scan', json, key: key))
         };
-      case 'media.identification.start':
-        final fileId = await service.resolveEntity(json, idField: 'fileId');
-        result = {
-          'job': _job(await service.identify(fileId,
-              expectedRevision: (json['fileRevision'] as num?)?.toInt(),
-              releaseId: json['releaseId'] as String?,
-              requestId: json['requestId'] as String?,
-              sources: (json['sources'] as List?)?.cast<String>()))
-        };
-      case 'media.identification.get':
-        final id = json['jobId'] as String;
-        final job = await service.engine.get(id);
-        if (job.type != 'media.identify') {
-          throw const Failure(FailureCode.invalidInput,
-              'jobId must reference a media.identify task.');
-        }
-        final rows = await store.database.query('media_identifications',
-            where: 'job_id = ?', whereArgs: [id]);
-        final identification = rows.isEmpty ? null : rows.single;
-        final file = await store.entity(job.input['fileId'] as String);
-        result = {
-          'job': _job(job),
-          'fileId': job.input['fileId'],
-          'fileRevision':
-              identification?['file_revision'] ?? job.input['fileRevision'],
-          'bindingRevision': identification?['binding_revision'] ??
-              (file['attributes'] as JsonMap)['bindingRevision'],
-          'state': identification?['state'] ??
-              (job.state == JobState.running ? 'probing' : job.state.wireName),
-          if (job.error != null) 'error': job.error!.toJson(),
-          'attempts': <JsonMap>[],
-          if (identification != null)
-            ...decodeMediaJson(identification['context']),
-          'candidates': [
-            for (final row in await store.candidates(id))
-              {
-                'candidateId': row['id'],
-                'state': row['state'],
-                'source': row['source'],
-                'fileRevision': row['file_revision'],
-                'bindingRevision': row['binding_revision'],
-                ...row['payload'] as JsonMap
+      case 'media.files.list':
+        result = await service.listFiles(json);
+      case 'media.hash.match':
+        result =
+            await service.matchHashes((json['files'] as List).cast<JsonMap>());
+      case 'media.identity.bind_batch':
+        result = await service.bindBatch(json, invocation);
+      case 'media.identity.unbind_batch':
+        result = await service.unbindBatch(json, invocation);
+      case 'media.metadata.get_batch':
+      case 'media.metadata.search_batch':
+        final items =
+            (json[spec.id == 'media.metadata.get_batch' ? 'refs' : 'queries']
+                    as List)
+                .cast<JsonMap>();
+        final results = <JsonMap>[];
+        final cache = <String, Future<JsonMap>>{};
+        for (var index = 0; index < items.length; index++) {
+          final item = items[index];
+          try {
+            final value =
+                await cache.putIfAbsent(stableMediaId('query', item), () async {
+              if (spec.id == 'media.metadata.get_batch') {
+                final ref = ExternalRef.fromJson(item);
+                return {
+                  'record': (await service.provider(ref.provider).get(ref,
+                          language: json['language'] as String? ?? 'zh-CN'))
+                      .toJson()
+                };
               }
-          ]
-        };
-      case 'media.identification.apply_release':
-        final local = json['releaseId'] != null;
-        if (local == (json['workRef'] != null) ||
-            local && (json['releaseRef'] != null || json['workId'] != null)) {
-          throw const Failure(FailureCode.invalidInput,
-              'Choose releaseId or workRef with an optional releaseRef/workId.');
-        }
-        if (local) {
-          await service.releaseRecords(json['releaseId'] as String);
-        } else {
-          final ref = ExternalRef.fromJson(
-              Map<String, Object?>.from(json['workRef'] as Map));
-          service.provider(ref.provider);
-          if (!{'tv', 'movie', 'subject', 'anime'}.contains(ref.objectType) ||
-              ref.objectType == 'tv' && json['releaseRef'] == null) {
-            throw const Failure(FailureCode.invalidInput,
-                'Choose a work catalogue and an explicit releaseRef for TV.');
+              return {
+                'records': [
+                  for (final record in await service
+                      .provider(item['provider'] as String)
+                      .search(item['query'] as String,
+                          kind: item['kind'] as String? ?? 'tv',
+                          year: (item['year'] as num?)?.toInt()))
+                    record.toJson()
+                ]
+              };
+            });
+            results.add({'index': index, ...value});
+          } on Failure catch (error) {
+            results.add({'index': index, 'error': error.toJson()});
+          } on ProviderRetry catch (error) {
+            results.add({
+              'index': index,
+              'error': Failure(FailureCode.unavailable,
+                      '${error.provider}: ${error.reason} Retry after ${error.at.toUtc().toIso8601String()}.',
+                      retryable: true)
+                  .toJson()
+            });
           }
         }
-        await service.authorizedPath(json['root'] as String, directory: true);
-        result = {
-          'job': _job(await service.submit(
-              'media.apply_release',
-              {
-                ...json,
-                'boundBy': invocation.origin == 'gui' ? 'user' : 'agent',
-                'invocationId': invocation.id
-              },
-              key: stableMediaId('apply-release', json)))
-        };
-      case 'media.identification.add_evidence':
-        final job = await _pending(json);
-        final identification = await store.identification(job.jobId);
-        final location =
-            (await store.locations(identification['file_id'] as String)).first;
-        final ref = ExternalRef.fromJson(
-            Map<String, Object?>.from(json['workRef'] as Map));
-        if (!{'tv', 'movie', 'subject', 'anime'}.contains(ref.objectType)) {
-          throw const Failure(FailureCode.invalidInput,
-              'workRef must reference a work catalogue.');
-        }
-        final record = await service.provider(ref.provider).get(ref);
-        final payload = await service.candidate(
-            record, service.parser.parse(location['locator'] as String),
-            releaseRef: json['releaseRef'] == null
-                ? null
-                : ExternalRef.fromJson(
-                    Map<String, Object?>.from(json['releaseRef'] as Map)),
-            episodeIds: (json['episodeIds'] as List).cast<String>(),
-            workId: json['workId'] as String?,
-            reason: json['reason'] as String,
-            url: json['url'] as String?);
-        await _pending(json);
-        final id = await service.mutate(() => store.addCandidate(
-            job.jobId,
-            payload,
-            invocation.origin == 'gui' ? 'user_evidence' : 'agent_evidence'));
-        result = {
-          'candidateId': id,
-          'reconsider': {'jobId': job.jobId, 'revision': job.revision}
-        };
-      case 'media.identity.bind':
-      case 'media.identification.reconsider':
-      case 'media.identification.skip':
-      case 'media.identification.defer':
-        final job = await _pending(json);
-        final choice =
-            spec.id == 'media.identity.bind' ? 'bind' : spec.id.split('.').last;
-        if (choice == 'bind' &&
-            !(await store.candidates(job.jobId)).any((row) =>
-                row['id'] == json['candidateId'] &&
-                row['state'] == 'proposed')) {
-          throw const Failure(
-              FailureCode.conflict, 'Candidate is not in this Decision.');
-        }
-        final checkpoint = {
-          'choice': choice,
-          if (choice == 'bind') 'candidateId': json['candidateId'],
-          'boundBy': invocation.origin == 'gui' ? 'user' : 'agent',
-          'invocationId': invocation.id
-        };
-        result = {
-          'job': _job(await service.engine.resolveDecision(job.jobId,
-              revision: (json['revision'] as num).toInt(),
-              call: ActionCall(spec.id, json),
-              checkpoint: checkpoint))
-        };
-      case 'media.identity.unbind':
-        await service.mutate(() async {
-          await store.unbindFile(json['fileId'] as String,
-              (json['bindingRevision'] as num).toInt(), invocation);
-          await service.projection.drain(fileId: json['fileId'] as String);
-        });
-        result = {'identity': await _identity(store, json['fileId'] as String)};
+        result = {'results': results};
       case 'media.metadata.override':
         if (invocation.origin != 'gui') {
           throw const Failure(FailureCode.unavailable,
@@ -823,18 +702,6 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         throw StateError('Unimplemented media action ${spec.id}');
     }
     return Completed(_JsonValue(result));
-  }
-
-  Future<Job> _pending(JsonMap json) async {
-    final job = await service.engine.get(json['jobId'] as String);
-    if (job.type != 'media.identify' ||
-        job.state != JobState.needsDecision ||
-        job.revision != (json['revision'] as num).toInt()) {
-      throw const Failure(FailureCode.conflict,
-          'Decision is stale. Read the current identification.');
-    }
-    await service.store.checkContext(job.jobId);
-    return job;
   }
 }
 
