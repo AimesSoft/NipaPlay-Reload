@@ -423,6 +423,12 @@ download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能
    - **前置条件：凭据保险库。** Codex 的 `read-only` 沙箱不阻止读取工作区以外的文件（实测）。在 Next Shell 之前，NipaPlay 的令牌与密码必须从 SharedPreferences 迁入系统钥匙串，Agent 只拿到凭据引用。
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。
+   - **发现来源（`ReleaseSource`）** 是与 `MetadataProvider`、`DanmakuSource` 并列的第三类来源能力：搜索、RSS、详情，输出发布候选（标题、磁链或种子、大小、做种数、推断属性、来源）。
+     - 沿用 download-harness 的语义：“找一下”只推荐，“你来选并下载”才授权执行；站点文本是数据；选定后交给 `download.add`。
+     - 需要登录的站点，其会话与弹幕源走同一条通道：内置 WebView 登录，会话存入凭据保险库。
+   - **分发边界**（2026-10-10 决定）：NipaPlay 内核与默认分发只包含来源契约与宿主机制，**不内置任何站点适配器**。站点适配器都是用户安装、或由 Agent 生成的能力，存放在用户工作区中。媒体领域以外的站点（游戏、电子书）不在范围内。
+   - **首个验收用例**：由 Agent 把用户 download-harness 中 `discovery.py` 的适配器迁移为 `ReleaseSource` 能力，走完“生成 → 测试 → 审批 → 注册”的流程。
+   - 承载方式待验证：macOS App Sandbox 可能限制直接执行外部脚本；插件 JS 运行时加上“宿主代为发请求、域名白名单”的分步协议（现有 URL 解析插件即此模式）更适合沙箱。
 6. **Mesh**：Harness 通过新的 transport 跨设备调用；`playback.handoff`。
    - **信任根是同一账号**（2026-10-10 决定）。登录同一账号（当前为经 NipaPlay 网关验证的弹弹play 账号）的设备自动互信；每个安装另有一对 Ed25519 设备密钥，公钥登记在账号下，设备之间用设备密钥双向认证，可逐台吊销，新设备加入时通知已有设备。
    - **NipaPlay 服务器只做控制面，不做数据面。**
