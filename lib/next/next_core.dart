@@ -14,6 +14,9 @@ import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
+import 'settings/application_settings.dart';
+import 'settings/registry.dart';
+import 'settings/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -45,6 +48,7 @@ final class NextCore {
   final DownloadRuntime downloads;
   late final MediaRuntime media;
   late final DanmakuRuntime danmaku;
+  late final SettingsRegistry settings;
   late final List<Capability> capabilities;
 
   Future<void> _initialize(
@@ -63,18 +67,19 @@ final class NextCore {
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders);
+    settings = SettingsRegistry(database, ApplicationSettings.entries());
+    SettingsAccess.registry = settings;
+    ApplicationSettings.authorizePath = (path, {directory = false}) =>
+        media.service.authorizedPath(path, directory: directory);
     danmaku = await DanmakuRuntime.create(media.service.store,
         authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
-    engine = TaskEngine(
-        store: jobs,
-        ownerDeviceId: deviceId,
-        executors: [
-          downloads.executor,
-          ...media.executors,
-          ...danmaku.executors
-        ]);
+    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
+      downloads.executor,
+      ...media.executors,
+      ...danmaku.executors
+    ]);
     downloads.attach(engine, root);
     media.attach(engine);
     danmaku.attach(engine);
@@ -82,7 +87,8 @@ final class NextCore {
       TaskCapability(engine),
       downloads.capability,
       media.capability,
-      danmaku.capability
+      danmaku.capability,
+      SettingsCapability(settings),
     ]);
     await engine.start();
     await downloads.start();
@@ -91,6 +97,11 @@ final class NextCore {
 
   Future<void> close() async {
     await ready;
+    if (identical(SettingsAccess.registry, settings)) {
+      SettingsAccess.registry = null;
+      ApplicationSettings.authorizePath = null;
+    }
+    await settings.drain();
     await downloads.stop();
     await danmaku.stopRestoring();
     final jobs = await engine.list(type: 'download');

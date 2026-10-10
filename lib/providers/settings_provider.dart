@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
@@ -33,6 +35,7 @@ class SettingsProvider with ChangeNotifier {
 
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
+  bool _defaultDanmakuConvertToSimplified = true;
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
   bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
 
@@ -60,6 +63,7 @@ class SettingsProvider with ChangeNotifier {
   double get blurPower => _blurPower;
   bool get isBlurEnabled => _blurPower > 0;
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
+  bool get defaultDanmakuConvertToSimplified => _defaultDanmakuConvertToSimplified;
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
   DanmakuAutoLoadStrategy get danmakuAutoLoadStrategy =>
@@ -78,6 +82,10 @@ class SettingsProvider with ChangeNotifier {
   double get danmakuSupersample => _danmakuSupersample;
 
   SettingsProvider() {
+    ApplicationSettings.settings = this;
+    _defaultDanmakuConvertToSimplified =
+        !AppLocaleUtils.isTraditionalChineseLocale(
+            WidgetsBinding.instance.platformDispatcher.locale);
     // SharedPreferences loads asynchronously. Expose the correct platform
     // default immediately so iPad does not create a transient 2x texture and
     // rebuild it at 1.5x moments later during player startup.
@@ -92,21 +100,14 @@ class SettingsProvider with ChangeNotifier {
       _prefs.getDouble(_blurPowerKey) ?? _defaultBlur,
     );
     // 当用户仍为“自动语言”且系统为繁中时，首次默认关闭“弹幕转简体”。
-    final savedDanmakuConvert =
-        _prefs.getBool(SettingsKeys.danmakuConvertToSimplified);
-    if (savedDanmakuConvert != null) {
-      _danmakuConvertToSimplified = savedDanmakuConvert;
-    } else {
-      final languageMode =
-          _prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
-      if (languageMode == 'auto') {
-        final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
-        _danmakuConvertToSimplified =
-            !AppLocaleUtils.isTraditionalChineseLocale(systemLocale);
-      } else {
-        _danmakuConvertToSimplified = true;
-      }
-    }
+    final languageMode =
+        _prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
+    _defaultDanmakuConvertToSimplified = languageMode != 'auto' ||
+        !AppLocaleUtils.isTraditionalChineseLocale(
+            WidgetsBinding.instance.platformDispatcher.locale);
+    _danmakuConvertToSimplified =
+        _prefs.getBool(SettingsKeys.danmakuConvertToSimplified) ??
+            _defaultDanmakuConvertToSimplified;
     _autoMatchDanmakuFirstSearchResultOnHashFail = _prefs.getBool(
             SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
         true;
@@ -123,16 +124,16 @@ class SettingsProvider with ChangeNotifier {
     _fastPlaybackStartup =
         _prefs.getBool(SettingsKeys.fastPlaybackStartup) ?? false;
     if (persistedStrategy != _danmakuAutoLoadStrategy.prefsValue) {
-      await _prefs.setString(
+      await SettingsAccess.persist(SettingsKeys.danmakuAutoLoadStrategy, () => _prefs.setString(
         SettingsKeys.danmakuAutoLoadStrategy,
         _danmakuAutoLoadStrategy.prefsValue,
-      );
+      ), migration: true);
     }
     if (!_prefs.containsKey(SettingsKeys.skipDanmakuMatching)) {
-      await _prefs.setBool(
+      await SettingsAccess.persist(SettingsKeys.skipDanmakuMatching, () => _prefs.setBool(
         SettingsKeys.skipDanmakuMatching,
         _skipDanmakuMatching,
-      );
+      ), migration: true);
     }
     _useExternalPlayer =
         _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
@@ -144,10 +145,10 @@ class SettingsProvider with ChangeNotifier {
       _externalPlayerType = _externalPlayerPath.isEmpty
           ? ExternalPlayerType.unset
           : detectExternalPlayerType(_externalPlayerPath);
-      await _prefs.setString(
+      await SettingsAccess.persist(SettingsKeys.externalPlayerType, () => _prefs.setString(
         SettingsKeys.externalPlayerType,
         _externalPlayerType.name,
-      );
+      ), migration: true);
     } else {
       _externalPlayerType = ExternalPlayerType.values.firstWhere(
         (type) => type.name == savedExternalPlayerType,
@@ -172,12 +173,20 @@ class SettingsProvider with ChangeNotifier {
                 _prefs.get(SettingsKeys.danmakuSupersample));
     _danmakuSupersample = savedSupersample ?? _defaultDanmakuSupersample();
     if (savedSupersample != null) {
-      await _prefs.setString(
+      await SettingsAccess.persist(SettingsKeys.danmakuSupersampleV2, () => _prefs.setString(
         SettingsKeys.danmakuSupersampleV2,
         savedSupersample.toStringAsFixed(1),
-      );
+      ), migration: true);
     }
     notifyListeners();
+  }
+
+  Future<void> get ready => _settingsLoaded;
+
+  @override
+  void dispose() {
+    if (identical(ApplicationSettings.settings, this)) ApplicationSettings.settings = null;
+    super.dispose();
   }
 
   // --- Setters ---
@@ -235,18 +244,18 @@ class SettingsProvider with ChangeNotifier {
   /// Sets the danmaku convert to simplified Chinese setting.
   Future<void> setDanmakuConvertToSimplified(bool enable) async {
     _danmakuConvertToSimplified = enable;
-    await _prefs.setBool(
-        SettingsKeys.danmakuConvertToSimplified, _danmakuConvertToSimplified);
+    await SettingsAccess.persist(SettingsKeys.danmakuConvertToSimplified, () => _prefs.setBool(
+        SettingsKeys.danmakuConvertToSimplified, _danmakuConvertToSimplified));
     notifyListeners();
   }
 
   Future<void> setAutoMatchDanmakuFirstSearchResultOnHashFail(
       bool enable) async {
     _autoMatchDanmakuFirstSearchResultOnHashFail = enable;
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail, () => _prefs.setBool(
       SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail,
       _autoMatchDanmakuFirstSearchResultOnHashFail,
-    );
+    ));
     notifyListeners();
   }
 
@@ -258,59 +267,59 @@ class SettingsProvider with ChangeNotifier {
     }
     if (_danmakuAutoLoadStrategy == strategy) return;
     _danmakuAutoLoadStrategy = strategy;
-    await _prefs.setString(
+    await SettingsAccess.persist(SettingsKeys.danmakuAutoLoadStrategy, () => _prefs.setString(
       SettingsKeys.danmakuAutoLoadStrategy,
       _danmakuAutoLoadStrategy.prefsValue,
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> setSkipDanmakuMatching(bool skip) async {
     if (_skipDanmakuMatching == skip) return;
     _skipDanmakuMatching = skip;
-    await _prefs.setBool(SettingsKeys.skipDanmakuMatching, skip);
+    await SettingsAccess.persist(SettingsKeys.skipDanmakuMatching, () => _prefs.setBool(SettingsKeys.skipDanmakuMatching, skip));
     notifyListeners();
   }
 
   Future<void> setFastPlaybackStartup(bool enable) async {
     if (_fastPlaybackStartup == enable) return;
     _fastPlaybackStartup = enable;
-    await _prefs.setBool(SettingsKeys.fastPlaybackStartup, enable);
+    await SettingsAccess.persist(SettingsKeys.fastPlaybackStartup, () => _prefs.setBool(SettingsKeys.fastPlaybackStartup, enable));
     notifyListeners();
   }
 
   Future<void> setUseExternalPlayer(bool enable) async {
     _useExternalPlayer = enable;
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.useExternalPlayer, () => _prefs.setBool(
       SettingsKeys.useExternalPlayer,
       _useExternalPlayer,
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> setExternalPlayerPath(String path) async {
     _externalPlayerPath = path.trim();
-    await _prefs.setString(
+    await SettingsAccess.persist(SettingsKeys.externalPlayerPath, () => _prefs.setString(
       SettingsKeys.externalPlayerPath,
       _externalPlayerPath,
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> setExternalPlayerType(ExternalPlayerType type) async {
     if (_externalPlayerType == type) return;
     _externalPlayerType = type;
-    await _prefs.setString(SettingsKeys.externalPlayerType, type.name);
+    await SettingsAccess.persist(SettingsKeys.externalPlayerType, () => _prefs.setString(SettingsKeys.externalPlayerType, type.name));
     notifyListeners();
   }
 
   Future<void> setExternalPlayerDanmakuOverlay(bool enable) async {
     if (_externalPlayerDanmakuOverlay == enable) return;
     _externalPlayerDanmakuOverlay = enable;
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.externalPlayerDanmakuOverlay, () => _prefs.setBool(
       SettingsKeys.externalPlayerDanmakuOverlay,
       _externalPlayerDanmakuOverlay,
-    );
+    ));
     notifyListeners();
   }
 
@@ -318,10 +327,10 @@ class SettingsProvider with ChangeNotifier {
     if (_externalPlayerAutoSwitchToDanmakuConsole == enable) return;
     _externalPlayerAutoSwitchToDanmakuConsole = enable;
 
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.externalPlayerAutoSwitchToDanmakuConsole, () => _prefs.setBool(
       SettingsKeys.externalPlayerAutoSwitchToDanmakuConsole,
       _externalPlayerAutoSwitchToDanmakuConsole,
-    );
+    ));
 
     notifyListeners();
   }
@@ -329,20 +338,20 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setExternalPlayerShrinkWindow(bool enable) async {
     if (_externalPlayerShrinkWindow == enable) return;
     _externalPlayerShrinkWindow = enable;
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.externalPlayerShrinkWindow, () => _prefs.setBool(
       SettingsKeys.externalPlayerShrinkWindow,
       _externalPlayerShrinkWindow,
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> setExternalPlayerConsoleWindowMode(bool enable) async {
     if (_externalPlayerConsoleWindowMode == enable) return;
     _externalPlayerConsoleWindowMode = enable;
-    await _prefs.setBool(
+    await SettingsAccess.persist(SettingsKeys.externalPlayerConsoleWindowMode, () => _prefs.setBool(
       SettingsKeys.externalPlayerConsoleWindowMode,
       _externalPlayerConsoleWindowMode,
-    );
+    ));
     notifyListeners();
   }
 
@@ -360,10 +369,10 @@ class SettingsProvider with ChangeNotifier {
     // 等待首轮加载，避免设置尚未初始化或后到的默认值覆盖用户选择。
     await _settingsLoaded;
     _danmakuSupersample = value;
-    await _prefs.setString(
+    await SettingsAccess.persist(SettingsKeys.danmakuSupersampleV2, () => _prefs.setString(
       SettingsKeys.danmakuSupersampleV2,
       value.toStringAsFixed(1),
-    );
+    ));
     await _prefs.setDouble(SettingsKeys.danmakuSupersample, value);
     notifyListeners();
   }

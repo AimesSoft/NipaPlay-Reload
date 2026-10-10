@@ -4,6 +4,8 @@ export 'video_aspect_geometry.dart' show VideoAspectMode;
 export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
@@ -34,7 +36,6 @@ import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/player_event_log.dart';
@@ -907,7 +908,7 @@ int _exactEndStreak = 0;
     applyPlayerVolume();
     _notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('player_volume_boost', _volumeBoost);
+    await SettingsAccess.persist('player_volume_boost', () => prefs.setDouble('player_volume_boost', _volumeBoost));
   }
 
   void applyPlayerVolume() {
@@ -1018,6 +1019,7 @@ int _exactEndStreak = 0;
       !kIsWeb && Platform.isWindows && player.getPlayerKernelName() == 'Media Kit';
 
   VideoPlayerState() {
+    ApplicationSettings.video = this;
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
     player = Player();
     _ensurePlayerVolumeMatchesPlatformPolicy();
@@ -1032,6 +1034,16 @@ int _exactEndStreak = 0;
         _initialDanmakuSettingsReady.complete();
       }
     }));
+  }
+
+  @visibleForTesting
+  VideoPlayerState.forSettings(Player suppliedPlayer) {
+    player = suppliedPlayer;
+    _subtitleManager = SubtitleManager(player: player);
+    _audioTrackManager = AudioTrackManager(player: player);
+    _decoderManager = DecoderManager(player: player);
+    ApplicationSettings.video = this;
+    PlayerRemoteControlBridge.instance.attach(this);
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
@@ -1066,7 +1078,7 @@ int _exactEndStreak = 0;
   Future<void> _saveDanmakuFontSizePreference(double fontSize) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(SettingsKeys.danmakuFontSize, fontSize);
+      await SettingsAccess.persist(SettingsKeys.danmakuFontSize, () => prefs.setDouble(SettingsKeys.danmakuFontSize, fontSize));
     } catch (e) {
       debugPrint('[VideoPlayerState] 保存弹幕字号失败: $e');
     }
@@ -1093,10 +1105,10 @@ int _exactEndStreak = 0;
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
+      await SettingsAccess.persist(SettingsKeys.titanDanmakuSettings, () => prefs.setString(
         SettingsKeys.titanDanmakuSettings,
         jsonEncode(settings.toJson()),
-      );
+      ));
     } catch (e) {
       debugPrint('[VideoPlayerState] 保存 Titan 弹幕设置失败: $e');
     }
@@ -1832,7 +1844,9 @@ int _exactEndStreak = 0;
     if ((_manualDanmakuOffset - offset).abs() < 0.0001) {
       return;
     }
+    final previous = _manualDanmakuOffset;
     _manualDanmakuOffset = offset;
+    unawaited(SettingsAccess.recordRuntime('danmaku.manualOffset', previous, offset));
     _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }
@@ -1913,13 +1927,13 @@ int _exactEndStreak = 0;
     }
 
     PlayerRemoteControlBridge.instance.detach(this);
+    if (identical(ApplicationSettings.video, this)) ApplicationSettings.video = null;
     _detachPluginDanmakuFilter();
 
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
     if (_currentVideoPath != null &&
         _currentVideoPath!.startsWith('jellyfin://')) {
       try {
-        final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
         final syncService = JellyfinPlaybackSyncService();
         // 注意：dispose方法不能是async，所以这里使用同步方式处理
         // 在dispose中我们只清理同步服务状态，不发送网络请求
@@ -1932,7 +1946,6 @@ int _exactEndStreak = 0;
     // Emby同步：如果是Emby流媒体，停止同步
     if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
       try {
-        final itemId = _currentVideoPath!.replaceFirst('emby://', '');
         final syncService = EmbyPlaybackSyncService();
         // 注意：dispose方法不能是async，所以这里使用同步方式处理
         // 在dispose中我们只清理同步服务状态，不发送网络请求
@@ -2108,7 +2121,6 @@ int _exactEndStreak = 0;
   @override
   void onWindowRestore() {}
 
-  @override
   void onWindowUnDocked() {}
 
   @override

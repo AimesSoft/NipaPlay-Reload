@@ -5,9 +5,15 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'danmaku/migration.dart';
 import 'media/media_migration.dart';
 import 'tasks/job_migration.dart';
+import 'settings/migration.dart';
 
 // Each position is a released database version. Append new domain migrations.
-const _migrations = [migrateJobs, migrateMediaIdentity, migrateDanmaku];
+const _migrations = [
+  migrateJobs,
+  migrateMediaIdentity,
+  migrateDanmaku,
+  migrateSettings
+];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
   for (var version = oldVersion; version < newVersion; version++) {

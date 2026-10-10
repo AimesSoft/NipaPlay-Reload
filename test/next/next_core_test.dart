@@ -71,7 +71,8 @@ void main() {
     expect(core.danmaku.service.store.db,
         same((core.engine.store as SqliteJobStore).database));
     final db = core.media.service.store.database;
-    expect(await db.getVersion(), 3);
+    expect(await db.getVersion(), 4);
+    expect(await db.query('settings_changes'), isEmpty);
     expect(await db.query('danmaku_bindings'), isEmpty);
     expect((await db.rawQuery('PRAGMA foreign_key_check')), isEmpty);
 

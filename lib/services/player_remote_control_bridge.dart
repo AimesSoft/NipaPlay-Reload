@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:nipaplay/next/settings/application_settings.dart';
 
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
@@ -228,6 +229,23 @@ class PlayerRemoteControlBridge {
 
     final params = <Map<String, dynamic>>[];
 
+    void addSetting(
+        {required PlayerMenuPaneId paneId,
+        required String key,
+        required Object? value,
+        num? min,
+        num? max}) {
+      if (!paneVisible(paneId)) return;
+      params.add({
+        'paneId': paneId.name,
+        'key': key,
+        ...ApplicationSettings.remoteParameter(key),
+        'value': value,
+        if (min != null) 'min': min,
+        if (max != null) 'max': max,
+      });
+    }
+
     void addBool({
       required PlayerMenuPaneId paneId,
       required String key,
@@ -241,28 +259,6 @@ class PlayerRemoteControlBridge {
         'label': label,
         'type': 'bool',
         'value': value,
-      });
-    }
-
-    void addDouble({
-      required PlayerMenuPaneId paneId,
-      required String key,
-      required String label,
-      required double value,
-      double? min,
-      double? max,
-      double? step,
-    }) {
-      if (!paneVisible(paneId)) return;
-      params.add({
-        'paneId': paneId.name,
-        'key': key,
-        'label': label,
-        'type': 'double',
-        'value': value,
-        if (min != null) 'min': min,
-        if (max != null) 'max': max,
-        if (step != null) 'step': step,
       });
     }
 
@@ -304,22 +300,6 @@ class PlayerRemoteControlBridge {
       });
     }
 
-    void addString({
-      required PlayerMenuPaneId paneId,
-      required String key,
-      required String label,
-      required String value,
-    }) {
-      if (!paneVisible(paneId)) return;
-      params.add({
-        'paneId': paneId.name,
-        'key': key,
-        'label': label,
-        'type': 'string',
-        'value': value,
-      });
-    }
-
     void addReadOnly({
       required PlayerMenuPaneId paneId,
       required String key,
@@ -337,141 +317,78 @@ class PlayerRemoteControlBridge {
     }
 
     if (paneVisible(PlayerMenuPaneId.subtitleSettings)) {
-      addEnum(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.overrideMode',
-        label: '字幕样式接管',
-        value: state.subtitleOverrideMode.name,
-        options: SubtitleStyleOverrideMode.values
-            .map((item) => {'value': item.name, 'label': item.name})
-            .toList(growable: false),
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.scale',
-        label: '字幕大小',
-        value: state.subtitleScale,
-        min: VideoPlayerState.minSubtitleScale,
-        max: VideoPlayerState.maxSubtitleScale,
-        step: 0.05,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.delaySeconds',
-        label: '字幕时间偏移',
-        value: state.subtitleDelaySeconds,
-        min: state.subtitleDelaySliderMinSeconds,
-        max: state.subtitleDelaySliderMaxSeconds,
-        step: VideoPlayerState.subtitleDelayStep,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.position',
-        label: '字幕垂直位置',
-        value: state.subtitlePosition,
-        min: 0,
-        max: 100,
-        step: 1,
-      );
-      addEnum(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.alignX',
-        label: '字幕水平对齐',
-        value: state.subtitleAlignX.name,
-        options: SubtitleAlignX.values
-            .map((item) => {'value': item.name, 'label': item.name})
-            .toList(growable: false),
-      );
-      addEnum(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.alignY',
-        label: '字幕垂直对齐',
-        value: state.subtitleAlignY.name,
-        options: SubtitleAlignY.values
-            .map((item) => {'value': item.name, 'label': item.name})
-            .toList(growable: false),
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.marginX',
-        label: '字幕横向边距',
-        value: state.subtitleMarginX,
-        min: -500,
-        max: 500,
-        step: 1,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.marginY',
-        label: '字幕纵向边距',
-        value: state.subtitleMarginY,
-        min: -500,
-        max: 500,
-        step: 1,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.opacity',
-        label: '字幕透明度',
-        value: state.subtitleOpacity,
-        min: 0,
-        max: 1,
-        step: 0.01,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.borderSize',
-        label: '字幕描边粗细',
-        value: state.subtitleBorderSize,
-        min: 0,
-        max: 20,
-        step: 0.1,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.shadowOffset',
-        label: '字幕阴影偏移',
-        value: state.subtitleShadowOffset,
-        min: 0,
-        max: 20,
-        step: 0.1,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.bold',
-        label: '字幕加粗',
-        value: state.subtitleBold,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.italic',
-        label: '字幕斜体',
-        value: state.subtitleItalic,
-      );
-      addString(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.color',
-        label: '字幕颜色',
-        value: _toHexColor(state.subtitleColor),
-      );
-      addString(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.borderColor',
-        label: '字幕描边颜色',
-        value: _toHexColor(state.subtitleBorderColor),
-      );
-      addString(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.shadowColor',
-        label: '字幕阴影颜色',
-        value: _toHexColor(state.subtitleShadowColor),
-      );
-      addString(
-        paneId: PlayerMenuPaneId.subtitleSettings,
-        key: 'subtitle.fontName',
-        label: '字幕字体',
-        value: state.subtitleFontName,
-      );
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.overrideMode',
+          value: state.subtitleOverrideMode.name);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.scale',
+          value: state.subtitleScale,
+          min: VideoPlayerState.minSubtitleScale,
+          max: VideoPlayerState.maxSubtitleScale);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.delaySeconds',
+          value: state.subtitleDelaySeconds,
+          min: state.subtitleDelaySliderMinSeconds,
+          max: state.subtitleDelaySliderMaxSeconds);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.position',
+          value: state.subtitlePosition);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.alignX',
+          value: state.subtitleAlignX.name);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.alignY',
+          value: state.subtitleAlignY.name);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.marginX',
+          value: state.subtitleMarginX);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.marginY',
+          value: state.subtitleMarginY);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.opacity',
+          value: state.subtitleOpacity);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.borderSize',
+          value: state.subtitleBorderSize);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.shadowOffset',
+          value: state.subtitleShadowOffset);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.bold',
+          value: state.subtitleBold);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.italic',
+          value: state.subtitleItalic);
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.color',
+          value: _toHexColor(state.subtitleColor));
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.borderColor',
+          value: _toHexColor(state.subtitleBorderColor));
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.shadowColor',
+          value: _toHexColor(state.subtitleShadowColor));
+      addSetting(
+          paneId: PlayerMenuPaneId.subtitleSettings,
+          key: 'subtitle.fontName',
+          value: state.subtitleFontName);
       addReadOnly(
         paneId: PlayerMenuPaneId.subtitleSettings,
         key: 'subtitle.fontDir',
@@ -566,121 +483,72 @@ class PlayerRemoteControlBridge {
     }
 
     if (paneVisible(PlayerMenuPaneId.danmakuSettings)) {
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.visible',
-        label: '显示弹幕',
-        value: state.danmakuVisible,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.showDensityChart',
-        label: '显示弹幕密度图',
-        value: state.showDanmakuDensityChart,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.randomColor',
-        label: '弹幕随机染色',
-        value: state.danmakuRandomColorEnabled,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.opacity',
-        label: '弹幕透明度',
-        value: state.danmakuOpacity,
-        min: 0,
-        max: 1,
-        step: 0.01,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.fontSize',
-        label: '弹幕字体大小',
-        value: state.danmakuFontSize <= 0
-            ? state.actualDanmakuFontSize
-            : state.danmakuFontSize,
-        min: 8,
-        max: 100,
-        step: 1,
-      );
-      addEnum(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.outlineStyle',
-        label: '弹幕描边样式',
-        value: state.danmakuOutlineStyle.name,
-        options: DanmakuOutlineStyle.values
-            .map((item) => {'value': item.name, 'label': item.name})
-            .toList(growable: false),
-      );
-      addEnum(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.shadowStyle',
-        label: '弹幕阴影样式',
-        value: state.danmakuShadowStyle.name,
-        options: DanmakuShadowStyle.values
-            .map((item) => {'value': item.name, 'label': item.name})
-            .toList(growable: false),
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.speedMultiplier',
-        label: '弹幕速度倍率',
-        value: state.danmakuSpeedMultiplier,
-        min: 0.5,
-        max: 3,
-        step: 0.01,
-      );
-      addDouble(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.displayArea',
-        label: '弹幕显示区域',
-        value: state.danmakuDisplayArea,
-        min: 0.1,
-        max: 1,
-        step: 0.1,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.stacking',
-        label: '启用弹幕堆叠',
-        value: state.danmakuStacking,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.merge',
-        label: '合并弹幕',
-        value: state.mergeDanmaku,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.blockTop',
-        label: '屏蔽顶部弹幕',
-        value: state.blockTopDanmaku,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.blockBottom',
-        label: '屏蔽底部弹幕',
-        value: state.blockBottomDanmaku,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.blockScroll',
-        label: '屏蔽滚动弹幕',
-        value: state.blockScrollDanmaku,
-      );
-      addBool(
-        paneId: PlayerMenuPaneId.danmakuSettings,
-        key: 'danmaku.timelineEnabled',
-        label: '时间轴告知弹幕',
-        value: state.isTimelineDanmakuEnabled,
-      );
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.visible',
+          value: state.danmakuVisible);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.showDensityChart',
+          value: state.showDanmakuDensityChart);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.randomColor',
+          value: state.danmakuRandomColorEnabled);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.opacity',
+          value: state.danmakuOpacity);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.fontSize',
+          value: state.danmakuFontSize <= 0
+              ? state.actualDanmakuFontSize
+              : state.danmakuFontSize);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.outlineStyle',
+          value: state.danmakuOutlineStyle.name);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.shadowStyle',
+          value: state.danmakuShadowStyle.name);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.speedMultiplier',
+          value: state.danmakuSpeedMultiplier);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.displayArea',
+          value: state.danmakuDisplayArea);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.stacking',
+          value: state.danmakuStacking);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.merge',
+          value: state.mergeDanmaku);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.blockTop',
+          value: state.blockTopDanmaku);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.blockBottom',
+          value: state.blockBottomDanmaku);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.blockScroll',
+          value: state.blockScrollDanmaku);
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuSettings,
+          key: 'danmaku.timelineEnabled',
+          value: state.isTimelineDanmakuEnabled);
       params.add({
         'paneId': PlayerMenuPaneId.danmakuSettings.name,
         'key': 'danmaku.blockWords',
-        'label': '弹幕屏蔽词',
-        'type': 'string_list',
+        ...ApplicationSettings.remoteParameter('danmaku.blockWords'),
         'value': List<String>.from(state.danmakuBlockWords),
       });
       addReadOnly(
@@ -698,15 +566,10 @@ class PlayerRemoteControlBridge {
     }
 
     if (paneVisible(PlayerMenuPaneId.danmakuOffset)) {
-      addDouble(
-        paneId: PlayerMenuPaneId.danmakuOffset,
-        key: 'danmaku.manualOffset',
-        label: '弹幕手动偏移',
-        value: state.manualDanmakuOffset,
-        min: -30,
-        max: 30,
-        step: 0.1,
-      );
+      addSetting(
+          paneId: PlayerMenuPaneId.danmakuOffset,
+          key: 'danmaku.manualOffset',
+          value: state.manualDanmakuOffset);
       addReadOnly(
         paneId: PlayerMenuPaneId.danmakuOffset,
         key: 'danmaku.autoOffset',
@@ -753,15 +616,12 @@ class PlayerRemoteControlBridge {
     }
 
     if (paneVisible(PlayerMenuPaneId.playbackRate)) {
-      addDouble(
-        paneId: PlayerMenuPaneId.playbackRate,
-        key: 'playback.rate',
-        label: '播放速度',
-        value: state.playbackRate,
-        min: VideoPlayerState.minPlaybackRate,
-        max: VideoPlayerState.maxPlaybackRate,
-        step: 0.05,
-      );
+      addSetting(
+          paneId: PlayerMenuPaneId.playbackRate,
+          key: 'playback.rate',
+          value: state.playbackRate,
+          min: VideoPlayerState.minPlaybackRate,
+          max: VideoPlayerState.maxPlaybackRate);
     }
 
     if (paneVisible(PlayerMenuPaneId.jellyfinQuality)) {

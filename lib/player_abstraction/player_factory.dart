@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import './abstract_player.dart';
 import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
@@ -27,6 +28,9 @@ bool supportsPlayerHttpProxy(PlayerKernelType type) {
 }
 
 class PlayerFactory {
+  static PlayerKernelType get defaultKernelType => _defaultKernelType;
+  static List<PlayerKernelType> get supportedKernelTypes =>
+      PlayerKernelType.values.where(_isKernelSupportedOnCurrentPlatform).toList();
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _precacheBufferSizeKey = 'player_precache_buffer_size_mb';
   static const String _macOSNativeVideoEnabledKey =
@@ -100,10 +104,10 @@ class PlayerFactory {
 
       if (globals.isTvOS) {
         _cachedKernelType = PlayerKernelType.erika;
-        await prefs.setInt(
+        await SettingsAccess.persist(_playerKernelTypeKey, () => prefs.setInt(
           _playerKernelTypeKey,
           PlayerKernelType.erika.index,
-        );
+        ));
       } else if (kernelTypeIndex != null &&
           kernelTypeIndex < PlayerKernelType.values.length &&
           _isKernelSupportedOnCurrentPlatform(
@@ -311,7 +315,7 @@ class PlayerFactory {
     final resolved = _clampPrecacheBufferSizeMb(value);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_precacheBufferSizeKey, resolved);
+      await SettingsAccess.persist(_precacheBufferSizeKey, () => prefs.setInt(_precacheBufferSizeKey, resolved));
       _cachedPrecacheBufferSizeMb = resolved;
     } catch (e) {
       debugPrint('[PlayerFactory] 保存预缓存大小设置出错: $e');
@@ -321,13 +325,13 @@ class PlayerFactory {
   static Future<void> saveMacOSNativeVideoEnabled(bool enabled) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_macOSNativeVideoEnabledKey, enabled);
+      await SettingsAccess.persist(_macOSNativeVideoEnabledKey, () => prefs.setBool(_macOSNativeVideoEnabledKey, enabled));
       final previous = _cachedMacOSNativeVideoEnabled;
       _cachedMacOSNativeVideoEnabled = enabled;
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(enabled);
       if (previous != enabled &&
           (_cachedKernelType ?? getKernelType()) == PlayerKernelType.mediaKit) {
-        _kernelChangeController.add(PlayerKernelType.mediaKit);
+        if (!SettingsAccess.deferReload) _kernelChangeController.add(PlayerKernelType.mediaKit);
       }
     } catch (e) {
       debugPrint('[PlayerFactory] 保存 macOS 原生视频设置出错: $e');
@@ -345,7 +349,7 @@ class PlayerFactory {
     final resolved = (output == 'audiotrack') ? 'audiotrack' : 'opensles';
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_androidAudioOutputKey, resolved);
+      await SettingsAccess.persist(_androidAudioOutputKey, () => prefs.setString(_androidAudioOutputKey, resolved));
       _cachedAndroidAudioOutput = resolved;
     } catch (e) {
       debugPrint('[PlayerFactory] 保存 Android 音频后端设置出错: $e');
@@ -364,12 +368,12 @@ class PlayerFactory {
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_erikaAndroidOutputModeKey, mode.index);
+      await SettingsAccess.persist(_erikaAndroidOutputModeKey, () => prefs.setInt(_erikaAndroidOutputModeKey, mode.index));
       final previous = _cachedErikaAndroidOutputMode;
       _cachedErikaAndroidOutputMode = mode;
       if (previous != mode &&
           (_cachedKernelType ?? getKernelType()) == PlayerKernelType.erika) {
-        _kernelChangeController.add(PlayerKernelType.erika);
+        if (!SettingsAccess.deferReload) _kernelChangeController.add(PlayerKernelType.erika);
       }
     } catch (e) {
       debugPrint(
@@ -395,7 +399,7 @@ class PlayerFactory {
     final resolved = ua.trim();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(SettingsKeys.customPlayerUA, resolved);
+      await SettingsAccess.persist(SettingsKeys.customPlayerUA, () => prefs.setString(SettingsKeys.customPlayerUA, resolved));
       _cachedCustomPlayerUA = resolved;
       debugPrint(
         '[PlayerFactory] 已保存自定义播放器 UA: '
@@ -420,7 +424,7 @@ class PlayerFactory {
     AppHttpProxy.set(resolved);
     final kernelType = _cachedKernelType ?? PlayerKernelType.mdk;
     if (changed && !kIsWeb && supportsPlayerHttpProxy(kernelType)) {
-      _kernelChangeController.add(kernelType);
+      if (!SettingsAccess.deferReload) _kernelChangeController.add(kernelType);
     }
   }
 
@@ -477,7 +481,7 @@ class PlayerFactory {
     }
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_playerKernelTypeKey, type.index);
+      await SettingsAccess.persist(_playerKernelTypeKey, () => prefs.setInt(_playerKernelTypeKey, type.index));
       _cachedKernelType = type;
       debugPrint('[PlayerFactory] 保存内核设置: ${type.toString()}');
 
@@ -505,7 +509,7 @@ class PlayerFactory {
       SystemResourceMonitor().updatePlayerKernelType();
 
       // 广播内核切换事件
-      _kernelChangeController.add(type);
+      if (!SettingsAccess.deferReload) _kernelChangeController.add(type);
     } catch (e) {
       debugPrint('[PlayerFactory] 保存内核设置出错: $e');
     }
