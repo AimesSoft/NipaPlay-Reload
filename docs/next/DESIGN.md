@@ -391,7 +391,19 @@ NipaPlay 在应用支持目录下生成一个 Codex 项目目录（download-harn
 用户在 Codex App 中把该目录添加为项目，即可用自然语言操作 NipaPlay。
 令牌只保存在 `<AppSupport>/next/endpoint.json`（权限 0600），不进入 SharedPreferences，因此不会被备份或同步。
 
-## 8. 演进路线（M1 之后）
+## 8. 后端与节点服务：download-harness 的超集
+
+download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能力：
+
+| 能力 | 可选实现 |
+|---|---|
+| 下载后端（`DownloadBackend`） | 应用内 rqbit（M2）、Seedbox 上的 qBittorrent WebUI API、Mesh 中的其他 NipaPlay 节点、Agent 生成的新协议适配器（如 Transmission、aria2） |
+| 传输（`sync.transfer` 任务） | 把完成的文件从后端搬到存储节点：SFTP 续传（harness worker 的做法）、NipaPlay 节点间的 HTTP Range、SMB 等，同样是可替换的能力 |
+| 节点服务 | 存储节点、播放节点、转码节点（例如工位机为电视转码），由设备能力决定角色 |
+
+每个任务都记录它的后端与执行设备（`ownerDeviceId`）。由谁执行先按规则决定，规则无法决定时交给 Agent 判断。
+
+## 9. 演进路线（M1 之后）
 
 1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；只在需要判断时唤醒 Agent。M2 先做任务内核与应用内 BT 下载，Classic 下载页一同受益（`M2_TASKBOOK.md`）。
    - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB……），一个文件或剧集挂多个外部 ID；弹弹play 的 episodeId 仍是弹幕匹配的根基。调研见 `research/METADATA_IDENTIFICATION.md`。
@@ -400,6 +412,12 @@ NipaPlay 在应用支持目录下生成一个 Codex 项目目录（download-harn
 3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。
-6. **Mesh**：设备身份、配对后，Harness 通过新的 transport 跨设备调用；`playback.handoff`。
+6. **Mesh**：Harness 通过新的 transport 跨设备调用；`playback.handoff`。
+   - **信任根是同一账号**（2026-10-10 决定）。登录同一账号（当前为经 NipaPlay 网关验证的弹弹play 账号）的设备自动互信。
+     - 每个安装仍有一对 Ed25519 设备密钥，公钥登记在账号下；设备之间用设备密钥双向认证，可逐台吊销；新设备加入时通知已有设备。
+     - 协调服务部署在现有 NipaPlay 服务器上（与网关、`nipaplay-relay` 同处），提供账号下的设备列表与可达地址候选。设备优先直连，不可达时走 relay；经过 relay 的流量用设备密钥端到端加密。
+     - 本地优先：设备互认后缓存设备列表，服务器不可用时局域网内照常工作。
+     - 二维码 / PIN 配对（`research/LAN_SECURITY.md` 的 B 档）降级为无账号时的备选方案。
+     - 原因：校园网等环境常禁止广播、隔离客户端、跨网段，纯局域网发现与配对不可靠。
    - 现有局域网 API（`0.0.0.0:1180`，遥控接收端默认开启时就会启动）没有统一鉴权，存在凭据泄露、SSRF、任意文件读取等问题，详见 `research/LAN_SECURITY.md`。
    - 2026-10-10 决定：这些问题不单独热修，随设备身份与配对（该报告的 B 档）一起解决，作为 Mesh 的第一步。

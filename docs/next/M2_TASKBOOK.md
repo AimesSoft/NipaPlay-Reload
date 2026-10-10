@@ -84,7 +84,18 @@
 - 下载目录、并发等沿用现有下载设置，不新增配置项。
 - 若同一内容（infoHash）已在下载或已完成，`download.add` 返回已有任务，不重复添加。
 
-### 6. 分层
+### 6. 下载后端端口
+
+- 下载执行器通过 `DownloadBackend` 端口工作，不得与 librqbit 绑死。
+- 端口必须能自然承载三类后端：应用内 rqbit（本阶段实现）、Seedbox 上的 qBittorrent WebUI API（阶段 C），以及 Mesh 中的远端 NipaPlay 节点（将来）。
+- 端口要表达的差异：
+  - 完成的文件可能不在本机；
+  - 后端可能离线；
+  - 后端可能需要凭据（只通过凭据引用传递）。
+- Job 快照增加 `backend` 字段，例如 `{kind: 'builtin'}`，或 `{kind: 'qbittorrent', id}`。
+- `download.add` 可选指定后端，默认使用应用内后端。
+
+### 7. 分层
 
 - Task Engine 内核（Job 模型、状态机、存储端口、执行器接口、`task.*` Action）放在 **`packages/nipa_harness`**，保持纯 Dart。
 - SQLite 存储与下载执行器放在 `lib/next/`，接入现有的 `TorrentDownloadService` / Rust librqbit。
@@ -133,3 +144,18 @@
 
 - 执行器测试：用假的会话端口覆盖添加、去重、进度、暂停与恢复、完成后验证、入库、重启恢复、取消时机、删除边界。
 - 主控做端到端验收：上面的三个验收场景，外加 Classic 下载页的回归（列表、暂停、恢复、删除、自动入库），由主控在真机上完成。
+
+## 阶段 C：Seedbox 后端与传输任务（download-harness 的接管）
+
+**目标**：NipaPlay 直接接管用户现有的 Seedbox 工作流。
+
+- qBittorrent WebUI API 成为第二个 `DownloadBackend`，可以添加、查看、暂停、恢复、移除，以及读取已完成文件的清单。
+  - 参考 download-harness 的 `common.py` 与 `manage.py`，只参考其行为，凭据不进入仓库。
+- 新增 `sync.transfer` 任务：把完成的文件从后端拉到本机或指定的存储位置。
+  - 先下载为 `.part`，可续传，大小一致后再发布到正式位置，并生成回执；
+  - 首个传输协议是 SFTP。
+- 后端的连接配置与凭据走设置与凭据引用，不进入 Agent 可读的位置。
+
+**验收**：在 Codex 工作区说“用 Seedbox 下这个，下完拉回来”，Agent 编排 `download.add {backend}` → `task.wait` → `sync.transfer` → 入库，最终回执为 `verified`。
+
+阶段 C 的详细任务书在阶段 B 合入后编写。
