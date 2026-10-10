@@ -172,6 +172,9 @@ final class MediaService {
     }
   }
 
+  Future<int> syncClassicHistory() =>
+      mutate(() async => store.importLegacy(await classic.history()));
+
   Future<List<String>> directoryFiles(String locator) async {
     final root = await authorizedPath(locator, directory: true);
     final paths = <String>[];
@@ -221,10 +224,16 @@ final class MediaService {
       }
       path = local.first['locator'] as String;
     } else {
-      path = await authorizedPath(input['path'] as String);
-      final locations = await store.database.query('media_locations',
+      final locator = input['path'] as String;
+      path = await authorizedPath(locator);
+      var locations = await store.database.query('media_locations',
           where: 'owner_device_id=? AND locator=?',
-          whereArgs: [store.ownerDeviceId, path]);
+          whereArgs: [store.ownerDeviceId, locator]);
+      if (locations.isEmpty && locator != path) {
+        locations = await store.database.query('media_locations',
+            where: 'owner_device_id=? AND locator=?',
+            whereArgs: [store.ownerDeviceId, path]);
+      }
       if (locations.isNotEmpty) id = locations.first['file_id'] as String;
     }
     return (
@@ -340,6 +349,7 @@ final class MediaService {
 
   Future<JsonMap> bindBatch(JsonMap input, Invocation invocation) =>
       mutate(() async {
+        await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'bind-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -494,6 +504,7 @@ final class MediaService {
 
   Future<JsonMap> unbindBatch(JsonMap input, Invocation invocation) =>
       mutate(() async {
+        await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'unbind-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -516,7 +527,7 @@ final class MediaService {
         await projection.drain(fileId: id);
       } on Failure catch (error) {
         throw Failure(error.code,
-            'Entry ${row['index']}: Identity committed; Classic projection is pending: ${error.message}',
+            'Entry ${row['index']}: Identity committed; Classic projection is ${error.code == FailureCode.conflict ? 'in conflict' : 'pending'}: ${error.message}',
             retryable: true,
             violations: [
               SchemaViolation('/entries/${row['index']}', error.message)

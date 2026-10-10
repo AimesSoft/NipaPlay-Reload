@@ -67,6 +67,7 @@ const _fieldSchema = ObjectSchema({
   'field': StringSchema(),
   'value': StringSchema(nullable: true),
   'provider': StringSchema(),
+  'source': StringSchema(nullable: true),
   'language': StringSchema(nullable: true),
   'fetchedAt': StringSchema(nullable: true),
   'invocationId': StringSchema(nullable: true),
@@ -153,6 +154,9 @@ const _entitySchema = ObjectSchema({
   'locations': ArraySchema(_locationSchema),
   'episodes': ArraySchema(_fileEpisodeSchema),
   'evidence': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+  'classicObservations':
+      ArraySchema(ObjectSchema({}, additionalProperties: true)),
+  'conflicts': ArraySchema(ObjectSchema({}, additionalProperties: true)),
   'legacyEvidence': ArraySchema(ObjectSchema({
     'locationId': StringSchema(),
     'animeId': IntegerSchema(nullable: true),
@@ -311,7 +315,7 @@ final _specs = [
       const ObjectSchema({'work': _libraryWorkSchema}, required: ['work'])),
   _spec(
       'media.library.import_history',
-      'Import current Classic history as a side index with unknown legacy provenance; never infer confirmation or overwrite progress.',
+      'Synchronize Classic paths and visible Dandanplay matches into the shared library, preserving source observations and conflicts. Retained IDs of cleared matches remain evidence; progress is never overwritten.',
       Effect.write,
       const ObjectSchema({}),
       const ObjectSchema({'imported': IntegerSchema()},
@@ -440,7 +444,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.unbind_batch',
-      'Atomically revoke bindings on files, episodes, releases or works and retain provenance. Optional bindingIds selects accepted bindings on that entity; omitted revokes all. Clears file episode links when no accepted file identity remains and uses the durable Classic outbox. reason is audited; requestId makes retries idempotent.',
+      'Atomically revoke Agent/user bindings on files, episodes, releases or works and retain provenance. Optional bindingIds selects accepted bindings on that entity; omitted revokes all explicit bindings. Classic source facts are changed through Classic matching operations. Clears file episode links when no accepted file identity remains and uses the durable Classic outbox. reason is audited; requestId makes retries idempotent.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,
@@ -731,6 +735,7 @@ List<JsonMap> _fields(JsonMap metadata) {
         'field': field,
         'value': fields[field]?.toString(),
         'provider': (provenance[field] as Map)['provider'],
+        'source': (provenance[field] as Map)['source'],
         'language': (provenance[field] as Map)['language'],
         'fetchedAt': (provenance[field] as Map)['fetchedAt'],
         'invocationId': (provenance[field] as Map)['invocationId'],
@@ -809,7 +814,9 @@ Future<JsonMap> _identity(IdentityStore store, String id) async {
     'legacyEvidence': [
       for (final row in legacy)
         {'locationId': row['location_id'], ...decodeMediaJson(row['payload'])}
-    ]
+    ],
+    'classicObservations': await store.classicObservations(id),
+    'conflicts': await store.identityConflicts(id)
   };
 }
 
@@ -821,13 +828,13 @@ JsonMap _work(JsonMap work) => {
         for (final release in work['releases'] as List<JsonMap>)
           {
             'releaseId': release['id'],
-            'title': (release['attributes'] as JsonMap)['title'],
+            'title': _displayTitle(release),
             'metadata': _fields(release['metadata'] as JsonMap),
             'episodes': [
               for (final episode in release['episodes'] as List<JsonMap>)
                 {
                   'episodeId': episode['id'],
-                  'title': (episode['attributes'] as JsonMap)['title'],
+                  'title': _displayTitle(episode),
                   'number': (episode['attributes'] as JsonMap)['number'],
                   'order': (episode['attributes'] as JsonMap)['order'],
                   'type': (episode['attributes'] as JsonMap)['type'],
@@ -849,3 +856,7 @@ JsonMap _work(JsonMap work) => {
           }
       ]
     };
+
+Object? _displayTitle(JsonMap entity) =>
+    ((entity['metadata'] as JsonMap)['fields'] as JsonMap)['title'] ??
+    (entity['attributes'] as JsonMap)['title'];

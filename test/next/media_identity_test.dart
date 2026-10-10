@@ -62,14 +62,14 @@ void main() {
     expect(
         (await upgraded.get(job.jobId))!.toStorageJson(), job.toStorageJson());
     expect(await upgraded.events(job.jobId), hasLength(1));
-    expect(await upgraded.database.getVersion(), 7);
+    expect(await upgraded.database.getVersion(), 8);
     expect(await upgraded.database.query('media_entities'), isEmpty);
     await upgraded.close();
     await root.delete(recursive: true);
   });
 
   test(
-      'history imports remain unknown-provenance evidence and never become accepted identities',
+      'cleared history IDs remain unknown-provenance evidence without accepted identities',
       () async {
     final path = '${f.media.path}/legacy.mkv';
     f.classic.rows[path] = {
