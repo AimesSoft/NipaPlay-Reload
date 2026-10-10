@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/dandanplay_comments.dart';
 import 'dart:convert';
 import 'source.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -184,35 +185,26 @@ final class DandanplayDanmakuSource extends _Source {
     }
     final result = <DanmakuEntry>[];
     for (final raw in array(data['comments'])) {
-      final row = object(raw), p = string(object(raw)['p']).split(',');
-      if (p.length < 4) schemaChanged();
-      final time = double.tryParse(p[0]);
-      if (time == null || !time.isFinite || time < 0) schemaChanged();
-      // Only explicit item-level origin evidence identifies an aggregated platform.
-      final origin = row['source'];
-      if (origin != null && origin is! String && origin is! int) {
+      final row = object(raw);
+      Map<String, dynamic> parsed;
+      try {
+        parsed = parseDandanplayComment(row);
+      } on FormatException {
         schemaChanged();
       }
-      final platform =
-          origin is String && RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(origin)
-              ? origin
-              : 'unknown';
       result.add(DanmakuEntry(
           sourceId: 'dandanplay',
           videoId: video.videoId,
-          platform: platform,
-          originSource: origin?.toString(),
-          sourceEntryId: row['cid'] == null ? null : identifier(row['cid']),
-          sourceTimeMs: (time * 1000).round(),
-          text: string(row['m']),
-          mode: integer(p[1]),
-          colorRgb: integer(p[2]),
-          sender: p[3].isEmpty || p[3] == '0' ? null : p[3],
-          platformId:
-              row['originalId'] == null ? null : identifier(row['originalId']),
-          originVideoId: row['sourceVideoId'] == null
-              ? null
-              : identifier(row['sourceVideoId'])));
+          platform: parsed['source'] as String,
+          originSource: parsed['originSource'] as String?,
+          sourceEntryId: parsed['sourceEntryId'] as String?,
+          sourceTimeMs: parsed['sourceTimeMs'] as int,
+          text: parsed['content'] as String,
+          mode: parsed['originalMode'] as int,
+          colorRgb: parsed['colorRgb'] as int,
+          sender: parsed['senderId'] as String?,
+          platformId: parsed['platformDanmakuId'] as String?,
+          originVideoId: parsed['platformVideoId'] as String?));
     }
     return DanmakuChunkResult(result, coverage: 'relatedPool');
   }
@@ -225,8 +217,14 @@ final class BilibiliDanmakuSource extends _Source {
       id: 'bilibili',
       platform: 'bilibili',
       hosts: ['api.bilibili.com'],
-      profiles: ['bilibili.view', 'bilibili.season', 'bilibili.segment'],
+      profiles: [
+        'bilibili.view',
+        'bilibili.season',
+        'bilibili.segment',
+        'bilibili.search'
+      ],
       access: 'anonymous',
+      search: true,
       segmentMs: 360000);
   JsonMap data(JsonMap root) {
     final code = integer(root['code']);
@@ -237,6 +235,26 @@ final class BilibiliDanmakuSource extends _Source {
     if (code == -412) throw const SourceFailure(SourceStatus.rateLimited);
     if (code != 0) throw const SourceFailure(SourceStatus.accessDenied);
     return object(root['data'] ?? root['result']);
+  }
+
+  @override
+  Future<List<DanmakuVideo>> search(
+      String query, DanmakuCancellation cancel) async {
+    final root =
+        data(await requestJson('bilibili.search', {'query': query}, cancel));
+    return [
+      for (final raw in array(root['result']).take(20))
+        DanmakuVideo(
+            sourceId: 'bilibili',
+            videoId: identifier(object(raw)['bvid']),
+            title: string(object(raw)['title'])
+                .replaceAll(RegExp(r'<[^>]*>'), '')
+                .replaceAll('&amp;', '&')
+                .replaceAll('&quot;', '"')
+                .replaceAll('&#39;', "'"),
+            durationMs: 0,
+            objectType: 'bvid')
+    ];
   }
 
   @override
@@ -270,7 +288,20 @@ final class BilibiliDanmakuSource extends _Source {
         throw const Failure(
             FailureCode.invalidInput, 'Expected a public Bilibili URL.');
       }
-      id = uri.pathSegments.last;
+      final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      if (segments.isEmpty) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Expected a Bilibili video page.');
+      }
+      id = segments.last;
+      final episode = uri.queryParameters['ep_id'];
+      if (episode != null) {
+        if (!RegExp(r'^\d+$').hasMatch(episode)) {
+          throw const Failure(
+              FailureCode.invalidInput, 'Invalid episode selector.');
+        }
+        id = 'ep$episode';
+      }
     }
     if (RegExp(r'^ss\d+$').hasMatch(id)) {
       return listEpisodes(id.substring(2), 1, cancel);
@@ -314,6 +345,9 @@ final class BilibiliDanmakuSource extends _Source {
     var pages = array(root['pages']);
     final part = uri?.queryParameters['p'];
     if (part != null) {
+      if (!RegExp(r'^[1-9]\d*$').hasMatch(part)) {
+        throw const Failure(FailureCode.invalidInput, 'Invalid part selector.');
+      }
       pages = pages.where((p) => '${object(p)['page']}' == part).toList();
     }
     return [

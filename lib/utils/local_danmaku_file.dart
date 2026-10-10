@@ -4,6 +4,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';
 import 'package:nipaplay/utils/legacy_charset_decoder.dart';
+import 'package:xml/xml.dart';
+import 'package:nipaplay/utils/dandanplay_comments.dart';
 
 List<XTypeGroup> get localDanmakuFileTypes => [
       const XTypeGroup(
@@ -25,7 +27,10 @@ List<XTypeGroup> get localDanmakuFileTypes => [
 
 Future<Map<String, dynamic>> readLocalDanmakuFile(XFile file) async {
   final bytes = await file.readAsBytes();
-  return compute(parseLocalDanmakuBytes, bytes);
+  return {
+    ...await compute(parseLocalDanmakuBytes, bytes),
+    'filePath': file.path
+  };
 }
 
 /// 手动导入与同名自动加载共用的解析入口，不依赖文件扩展名或本地路径。
@@ -57,13 +62,42 @@ Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes) {
   }
   content = content.replaceFirst(RegExp(r'^\uFEFF'), '').trimLeft();
   dynamic comments;
+  String platform = 'unknown';
+  String? platformVideoId;
   if (content.startsWith('<')) {
+    final document = XmlDocument.parse(content);
+    final server = document
+        .findAllElements('chatserver')
+        .firstOrNull
+        ?.innerText
+        .trim()
+        .toLowerCase();
+    platform = switch (server) {
+      'comment.bilibili.com' || 'bilibili' || 'api.bilibili.com' => 'bilibili',
+      'youku' || 'acs.youku.com' => 'youku',
+      'dandanplay' || 'api.dandanplay.net' => 'dandanplay',
+      _ => 'unknown'
+    };
+    final chatid =
+        document.findAllElements('chatid').firstOrNull?.innerText.trim();
+    platformVideoId = chatid == null || chatid.isEmpty ? null : chatid;
     comments = parseBilibiliXmlDanmakuComments(content);
+    comments = [
+      for (final row in comments as List)
+        {
+          ...row as Map,
+          'source': platform,
+          'platformVideoId': platformVideoId,
+          'platformDanmakuId': row['cid']?.toString()
+        }
+    ];
   } else {
     final decoded = jsonDecode(content);
     if (decoded is List) {
       comments = decoded;
     } else if (decoded is Map) {
+      platform = decoded['platform'] as String? ?? 'unknown';
+      platformVideoId = decoded['platformVideoId'] as String?;
       comments = decoded['comments'] ?? decoded['data'];
       if (comments is String) comments = jsonDecode(comments);
     }
@@ -72,5 +106,17 @@ Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes) {
     throw const FormatException('弹幕文件必须包含 comments/data 数组或 XML 弹幕');
   }
   if (comments.isEmpty) throw const FormatException('弹幕文件中没有弹幕数据');
-  return {'comments': comments, 'count': comments.length};
+  comments = [
+    for (final row in comments)
+      if (row is Map && row.containsKey('p') && row.containsKey('m'))
+        parseDandanplayComment(Map<String, dynamic>.from(row))
+      else
+        row
+  ];
+  return {
+    'comments': comments,
+    'count': comments.length,
+    'platform': platform,
+    'platformVideoId': platformVideoId
+  };
 }

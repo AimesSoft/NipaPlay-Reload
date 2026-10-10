@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'source.dart';
@@ -51,12 +53,71 @@ final class HttpDanmakuHost implements DanmakuHost {
   final Duration timeout;
   final Map<String, Future<void>> _tails = {};
   final Map<String, DateTime> _next = {};
+  String? _wbiKey;
+  DateTime? _wbiUntil;
   @override
   bool sessionAvailable(String sourceId) =>
       sourceId == 'youku' && (youkuSession?.available ?? false);
   @override
   Future<List<int>> request(String profile, JsonMap parameters,
       DanmakuAccess? access, DanmakuCancellation cancel) async {
+    if (profile == 'bilibili.search' &&
+        (_wbiUntil == null || DateTime.now().isAfter(_wbiUntil!))) {
+      final bytes = await request('bilibili.wbi', {}, null, cancel);
+      try {
+        final root = jsonDecode(utf8.decode(bytes)) as Map;
+        final images = (root['data'] as Map)['wbi_img'] as Map;
+        final keys = [
+          for (final field in ['img_url', 'sub_url'])
+            Uri.parse(images[field] as String)
+                .pathSegments
+                .last
+                .split('.')
+                .first
+        ].join();
+        const order = [
+          46,
+          47,
+          18,
+          2,
+          53,
+          8,
+          23,
+          32,
+          15,
+          50,
+          10,
+          31,
+          58,
+          3,
+          45,
+          35,
+          27,
+          43,
+          5,
+          49,
+          33,
+          9,
+          42,
+          19,
+          29,
+          28,
+          14,
+          39,
+          12,
+          38,
+          41,
+          13
+        ];
+        if (keys.length != 64) throw const FormatException('Invalid WBI keys');
+        _wbiKey = [for (final i in order) keys[i]].join();
+        _wbiUntil = DateTime.now().add(const Duration(hours: 1));
+      } on FormatException {
+        throw const SourceFailure(SourceStatus.schemaChanged);
+      } on TypeError {
+        throw const SourceFailure(SourceStatus.schemaChanged);
+      }
+    }
     final source = profile.split('.').first;
     final requestCancellation = DanmakuCancellation();
     final previous = _tails[source] ?? Future<void>.value();
@@ -114,6 +175,10 @@ final class HttpDanmakuHost implements DanmakuHost {
             : 'application/json';
       if (source == 'dandanplay') {
         request.headers.addAll(await dandanplayHeaders(uri.path));
+      }
+      if (source == 'bilibili') {
+        request.headers['User-Agent'] = 'Mozilla/5.0 NipaPlay';
+        request.headers['Referer'] = 'https://www.bilibili.com/';
       }
       cancel.check();
       final bytes = await (() async {
@@ -191,6 +256,8 @@ final class HttpDanmakuHost implements DanmakuHost {
       'bilibili.season' =>
         p.containsKey('seasonId') ? {'seasonId'} : {'episodeId'},
       'bilibili.segment' => {'videoId', 'segmentIndex'},
+      'bilibili.wbi' => <String>{},
+      'bilibili.search' => {'query'},
       'youku.video' => {'videoId'},
       'youku.episodes' => {'workId', 'page'},
       _ => throw const Failure(
@@ -213,6 +280,34 @@ final class HttpDanmakuHost implements DanmakuHost {
     Uri uri(String host, String path, Map<String, String> query) =>
         Uri.https(host, path, query);
     switch (profile) {
+      case 'bilibili.wbi':
+        return uri('api.bilibili.com', '/x/web-interface/nav', {});
+      case 'bilibili.search':
+        final query = p['query'];
+        if (query is! String || query.trim().isEmpty || query.length > 200) {
+          throw const Failure(
+              FailureCode.invalidInput, 'Invalid search query.');
+        }
+        final params = <String, String>{
+          'keyword': query.replaceAll(RegExp(r"[!'()*]"), ''),
+          'page': '1',
+          'search_type': 'video',
+          'wts': '${DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000}'
+        };
+        final keys = params.keys.toList()..sort();
+        String encode(String v) => Uri.encodeComponent(v)
+            .replaceAll("'", '%27')
+            .replaceAll('!', '%21')
+            .replaceAll('(', '%28')
+            .replaceAll(')', '%29')
+            .replaceAll('*', '%2A');
+        final signed = keys
+            .map((key) => '${encode(key)}=${encode(params[key]!)}')
+            .join('&');
+        params['w_rid'] =
+            md5.convert(utf8.encode('$signed$_wbiKey')).toString();
+        return uri(
+            'api.bilibili.com', '/x/web-interface/wbi/search/type', params);
       case 'dandanplay.search':
         if (p['query'] is! String ||
             (p['query'] as String).isEmpty ||

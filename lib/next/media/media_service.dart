@@ -26,6 +26,24 @@ final class MediaService {
   final ClassicProjection projection;
   final Iterable<String> Function() authorizedRoots;
   final FilenameParserPort parser;
+  String? Function()? currentPath;
+  Future<String> resolveEntity(JsonMap input,
+      {String idField = 'entityId'}) async {
+    final id = input[idField] as String?;
+    final path = input['path'] as String?;
+    if (id != null && path != null ||
+        input['current'] == true && (id != null || path != null)) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Choose ID, path or current.');
+    }
+    if (id != null && id != 'current') return id;
+    final locator = path ?? currentPath?.call();
+    if (locator == null) {
+      throw const Failure(FailureCode.notFound, 'No current video.');
+    }
+    return store.ensureFile(locator);
+  }
+
   late TaskEngine engine;
   Future<void> _tail = Future.value();
   Future<void> _submissions = Future.value();
@@ -118,6 +136,11 @@ final class MediaService {
     }
     final info = await probe(local.first['locator'] as String);
     final previous = (file['attributes'] as JsonMap)['probe'] as JsonMap;
+    if (isLocationOnlyMediaProbe(previous)) {
+      await mutate(
+          () => store.registerFile(local.first['locator'] as String, info));
+      return;
+    }
     if (info['size'] != previous['size'] ||
         info['modifiedAt'] != previous['modifiedAt'] ||
         info['headMd5'] != previous['headMd5']) {

@@ -1,3 +1,4 @@
+import 'package:nipaplay/utils/dandanplay_comments.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -6,7 +7,6 @@ import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -2533,34 +2533,8 @@ class DandanplayService {
     if (data['comments'] != null) {
       final comments = data['comments'] as List;
 
-      final formattedComments = comments.map((comment) {
-        // 将 comment 转换为 Map<String, dynamic>
-        final raw = Map<String, dynamic>.from(comment as Map);
-        final pParts = (raw['p'] as String).split(',');
-
-        final time = double.tryParse(pParts[0]) ?? 0.0; // 弹幕出现时间 (秒)
-        final mode = DanmakuMode.fromCode(int.tryParse(pParts[1])); // 弹幕模式
-        final color = int.tryParse(pParts[2]) ?? 16777215; // 弹幕颜色 (十进制 RGB)
-        final content = raw['m'] as String; // 弹幕内容
-        final senderId = resolveDanmakuSenderId(raw); // 发送者ID
-
-        // 将十进制颜色值转换为 RGB 格式
-        final r = (color >> 16) & 0xFF;
-        final g = (color >> 8) & 0xFF;
-        final b = color & 0xFF;
-        final colorValue = 'rgb($r,$g,$b)';
-
-        return {
-          'time': time,
-          'content': content,
-          'type': mode.typeName,
-          'color': colorValue,
-          'isMe': false,
-          if (senderId != null) 'senderId': senderId,
-          if (raw['cid'] != null) 'cid': raw['cid'],
-          'source': 'dandanplay',
-        };
-      }).toList();
+      final formattedComments = comments.map((comment) =>
+          parseDandanplayComment(Map<String, dynamic>.from(comment as Map))).toList();
 
       return {
         'comments': formattedComments,

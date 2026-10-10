@@ -152,15 +152,16 @@ final class DanmakuStore {
             where: 'id = ?',
             whereArgs: [id]);
       });
-  String cacheKey(
-          DanmakuVideo v, DanmakuSource source, DanmakuAccess? access) =>
+  String cacheKey(DanmakuVideo v, DanmakuSource source, DanmakuAccess? access,
+          {String? refreshJobId}) =>
       stableMediaId('danmaku-cache', [
         v.sourceId,
         v.videoId,
         source.describe.version,
         source.describe.hosts,
         access?.credentialRef ?? 'public',
-        'related=true'
+        'related=true',
+        if (refreshJobId != null) {'refreshJobId': refreshJobId}
       ]);
   Future<DanmakuChunkResult?> chunk(String key, DanmakuChunk c,
       {bool fresh = true}) async {

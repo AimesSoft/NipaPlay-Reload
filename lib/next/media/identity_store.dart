@@ -22,11 +22,41 @@ String newMediaId(String prefix) => '$prefix-${const Uuid().v4()}';
 JsonMap decodeMediaJson(Object? value) =>
     Map<String, Object?>.from(jsonDecode(value as String) as Map);
 String get _now => DateTime.now().toUtc().toIso8601String();
+bool isLocationOnlyMediaProbe(JsonMap probe) =>
+    probe.keys.every((key) => key == 'legacy');
 
 final class IdentityStore {
   const IdentityStore(this.database, this.ownerDeviceId);
   final Database database;
   final String ownerDeviceId;
+
+  /// Location-only registration never changes content revisions or infers identity.
+  Future<String> ensureFile(String locator) => database.transaction((tx) async {
+        if (locator.trim().isEmpty) {
+          throw const Failure(FailureCode.invalidInput, 'File path is empty.');
+        }
+        final rows = await tx.query('media_locations',
+            where: 'owner_device_id = ? AND locator = ?',
+            whereArgs: [ownerDeviceId, locator]);
+        if (rows.isNotEmpty) return rows.first['file_id'] as String;
+        final id = newMediaId('file');
+        await tx.insert('media_entities', {
+          'id': id,
+          'kind': 'file',
+          'revision': 0,
+          'attributes':
+              jsonEncode({'probe': <String, Object?>{}, 'bindingRevision': 0})
+        });
+        await tx.insert('media_locations', {
+          'id': newMediaId('location'),
+          'file_id': id,
+          'source': locator.contains('://') ? 'remote' : 'local',
+          'owner_device_id': ownerDeviceId,
+          'locator': locator,
+          'available': 1
+        });
+        return id;
+      });
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
     final rows = await (db ?? database)
@@ -50,7 +80,15 @@ final class IdentityStore {
           final fileId = locations.single['file_id'] as String;
           final file = await entity(fileId, db: tx);
           final attrs = file['attributes'] as JsonMap;
-          if (jsonEncode(attrs['probe']) != jsonEncode(probe)) {
+          if (isLocationOnlyMediaProbe(attrs['probe'] as JsonMap)) {
+            await tx.update(
+                'media_entities',
+                {
+                  'attributes': jsonEncode({...attrs, 'probe': probe})
+                },
+                where: 'id = ?',
+                whereArgs: [fileId]);
+          } else if (jsonEncode(attrs['probe']) != jsonEncode(probe)) {
             final dandanplay = await tx.rawQuery(
                 'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
                 [fileId, 'accepted', 'dandanplay']);

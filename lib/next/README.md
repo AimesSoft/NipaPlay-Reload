@@ -1,7 +1,7 @@
 # 应用组合点
 
 `ServiceProvider.initialize` 在原生应用启动时创建唯一的 `NextCore`，等待
-`core.ready`。Core 暴露 `root`、`deviceId`、`engine`、`downloads`、`media`
+`core.ready`。Core 暴露 `root`、`deviceId`、`engine`、`downloads`、`media`、`danmaku`
 和 `capabilities`；Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `core.capabilities` 注册到 Harness。Labs 只启停 Agent 端点，销毁
 `NextRuntime` 也不关闭 Core。应用宿主结束 Core 生命周期时调用 `core.close()`。

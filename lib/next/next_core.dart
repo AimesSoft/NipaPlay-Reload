@@ -63,7 +63,8 @@ final class NextCore {
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders);
-    danmaku = await DanmakuRuntime.create(media.service.store);
+    danmaku = await DanmakuRuntime.create(media.service.store,
+        authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
     engine = TaskEngine(

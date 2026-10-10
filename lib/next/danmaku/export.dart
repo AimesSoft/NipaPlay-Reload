@@ -30,11 +30,15 @@ final class DanmakuExporter {
     }
     final entries = await store.entries(key);
     final bytes = utf8.encode(jsonEncode({
+      'platform': (b['video'] as JsonMap)['sourceId'],
+      'platformVideoId': (b['video'] as JsonMap)['videoId'],
       'video': b['video'],
       'view': view,
       'offsetMs': b['offset_ms'],
       'comments': view == 'raw'
-          ? [for (final e in entries) e.toJson()]
+          ? [
+              for (final e in entries) {...e.toJson(), ...e.toPlayer()}
+            ]
           : [
               for (final e in entries)
                 {

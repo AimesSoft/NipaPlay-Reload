@@ -147,6 +147,17 @@ final class DanmakuEntry implements JsonEncodable {
       };
 }
 
+JsonMap localDanmakuProvenance(List<DanmakuEntry> entries) {
+  final first = entries.firstOrNull;
+  if (first == null ||
+      entries.any((entry) =>
+          entry.platform != first.platform ||
+          entry.originVideoId != first.originVideoId)) {
+    return {'platform': 'unknown', 'platformVideoId': null};
+  }
+  return {'platform': first.platform, 'platformVideoId': first.originVideoId};
+}
+
 final class DanmakuChunk implements JsonEncodable {
   const DanmakuChunk(this.index, this.startMs, this.endMs);
   final int index, startMs, endMs;

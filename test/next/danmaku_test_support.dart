@@ -104,6 +104,7 @@ final class FixtureDanmakuHost implements DanmakuHost {
   Completer<void>? entered, release;
   String? blockedKey;
   SourceFailure? failure;
+  final Map<String, SourceFailure> failures = {};
   bool session = true;
   @override
   bool sessionAvailable(String sourceId) => sourceId == 'youku' && session;
@@ -130,13 +131,57 @@ final class FixtureDanmakuHost implements DanmakuHost {
       failure = null;
       throw e;
     }
+    if (failures[key] case final error?) {
+      throw error;
+    }
     final result = responses[key];
     if (result == null) throw StateError('Unrecorded synthetic request $key');
     return result;
   }
 }
 
-final class MemoryDanmakuPlayer implements DanmakuPlayerPort {
+final class MemoryDanmakuPlayer
+    implements DanmakuPlayerPort, DanmakuTrackRegistry {
+  final List<JsonMap> classicTracks = [];
+  final Map<String, JsonMap> classicCache = {};
+  int reuseCount = 0;
+  int installCount = 0;
+  @override
+  Future<bool> restoreClassic(
+      DanmakuPlaybackTarget target, JsonMap binding) async {
+    final video = binding['video'] as JsonMap;
+    final cached = classicCache[video['videoId']];
+    if (cached != null && classicTracks.isEmpty) classicTracks.add({...cached});
+    return reuse(target, binding);
+  }
+
+  @override
+  List<JsonMap> get registry => classicTracks;
+  @override
+  bool reuse(DanmakuPlaybackTarget expected, JsonMap binding) {
+    if (target?.path != expected.path ||
+        target?.generation != expected.generation) {
+      return false;
+    }
+    final video = binding['video'] as JsonMap;
+    final track = classicTracks
+        .where((t) =>
+            t['platform'] == video['sourceId'] &&
+            t['platformVideoId'] == video['videoId'])
+        .firstOrNull;
+    if (track == null) return false;
+    reuseCount++;
+    track['bindingId'] = binding['id'];
+    tracks[binding['id'] as String] = {
+      'revision': binding['revision'],
+      'cacheRevision': binding['cache_revision'],
+      'cacheKey': binding['cache_key'],
+      'startMs': 0,
+      'endMs': null
+    };
+    return true;
+  }
+
   @override
   DanmakuPlaybackTarget? target;
   final Map<String, JsonMap> tracks = {};
@@ -154,6 +199,7 @@ final class MemoryDanmakuPlayer implements DanmakuPlayerPort {
       return false;
     }
     final id = binding['id'] as String;
+    installCount++;
     tracks[id] = {
       'revision': binding['revision'],
       'cacheKey': binding['cache_key'],

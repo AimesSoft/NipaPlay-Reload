@@ -7,6 +7,13 @@ HTTP clients 的关闭由 NextCore 负责。完整接入顺序见 [应用组合�
 
 ## 存储与合并
 
+当前播放和 Classic 列表中的文件可按需登记 File/FileLocation。`media.identity.get`
+和 `media.identification.start` 支持 path/current（默认当前文件）；后者仍在授权媒体
+目录中探测内容。位置登记不读取文件内容、不建立作品身份、不修改已有修订或绑定。
+首次补充空 probe 或仅有 legacy 标记的 probe 只丰富文件信息；已有内容证据发生变化时
+才递增修订并使绑定失效。探测和补充证据在识别任务中完成。
+Classic Action 的文件列表与播放回执共用 `FileIndexingCapability` 登记位置，保持原输出。
+
 `next_database.dart` 按顺序执行 v1 任务表和 v2 媒体身份表迁移；v1 的 jobs
 和 job_events SQL、数据与公开 Task Engine API 都未修改。身份迁移独立位于
 `media_migration.dart`，后续领域在统一序列中追加版本，新库执行全部迁移。

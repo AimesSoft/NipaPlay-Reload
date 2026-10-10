@@ -21,6 +21,7 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
+import 'media/file_indexing.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -78,10 +79,15 @@ final class NextRuntime extends ChangeNotifier {
     final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
     final packageInfo = await PackageInfo.fromPlatform();
     _harness = Harness(
-      [...capabilities, ...core.capabilities],
+      [
+        for (final capability in capabilities)
+          FileIndexingCapability(capability, core.media.service.store),
+        ...core.capabilities
+      ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
     core.danmaku.startRestoring(_harness, _player);
+    core.media.service.currentPath = () => _player.currentVideoPath;
     _endpoint = AgentEndpoint(
       harness: _harness,
       root: root,
@@ -117,7 +123,6 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _endpoint.stop();
-      await ServiceProvider.nextCore.danmaku.stopRestoring();
     });
     super.dispose();
   }

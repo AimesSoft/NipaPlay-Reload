@@ -61,7 +61,16 @@ const _coverage = ObjectSchema({
   'fetched_at'
 ]);
 const _track = ObjectSchema({
-  'bindingId': _text,
+  'trackId': StringSchema(),
+  'origin': StringSchema(),
+  'platform': StringSchema(),
+  'platformVideoId': StringSchema(nullable: true),
+  'filePath': StringSchema(nullable: true),
+  'source': StringSchema(),
+  'name': StringSchema(),
+  'count': IntegerSchema(),
+  'bindingId': StringSchema(nullable: true),
+  'bindingIds': ArraySchema(StringSchema()),
   'entityId': _text,
   'revision': IntegerSchema(),
   'status': StringSchema(),
@@ -77,21 +86,11 @@ const _track = ObjectSchema({
   'loaded': BooleanSchema(),
   'coverage': ArraySchema(_coverage)
 }, required: [
-  'bindingId',
   'entityId',
-  'revision',
-  'status',
-  'stale',
-  'video',
-  'enabled',
-  'deduplicate',
-  'offsetMs',
-  'alignment',
-  'evidence',
-  'boundBy',
-  'cacheKey',
   'loaded',
-  'coverage'
+  'origin',
+  'platform',
+  'platformVideoId'
 ]);
 const _descriptor = ObjectSchema({
   'sourceId': _text,
@@ -149,7 +148,9 @@ const _fetchFields = {
   'credentialRef': _text,
   'requestId': _text,
   'startMs': IntegerSchema(minimum: 0),
-  'endMs': IntegerSchema(minimum: 1)
+  'endMs': IntegerSchema(minimum: 1),
+  'localDurationMs': IntegerSchema(minimum: 1, maximum: 7200000),
+  'refresh': BooleanSchema()
 };
 ActionSpec _spec(String id, Effect effect, ObjectSchema input,
         ObjectSchema output, String description) =>
@@ -175,7 +176,7 @@ final _specs = [
           required: ['sourceId', 'query']),
       const ObjectSchema({'results': ArraySchema(_video)},
           required: ['results']),
-      'Bounded transient title search. Unsupported sources report unavailable; no binding or task is created.'),
+      'Bounded transient title search. Bilibili returns bvid candidates: resolve the BV ID to an exact cid before attaching. Unsupported sources report unavailable; no binding or task is created.'),
   _spec(
       'danmaku.episodes',
       Effect.read,
@@ -219,23 +220,33 @@ final _specs = [
         'credentialRef': _text,
         'requestId': _text,
         'entityId': _text,
+        'path': _text,
+        'current': BooleanSchema(),
+        'refresh': BooleanSchema(),
         'reason': _text,
         'url': StringSchema(nullable: true)
       }, required: [
         'video',
-        'entityId',
         'reason',
         'requestId'
       ]),
-      const ObjectSchema({'bindingId': _text, 'jobId': _text},
-          required: ['bindingId', 'jobId']),
-      'Bind an explicit platform video to an MA file/episode with provenance and create its acquisition task. Whole requested pool must validate before mounting. Credentials are opaque host references.'),
+      const ObjectSchema({
+        'bindingId': StringSchema(nullable: true),
+        'jobId': StringSchema(nullable: true),
+        'status': StringSchema(),
+        'trackId': StringSchema()
+      }, required: [
+        'bindingId',
+        'jobId'
+      ]),
+      'Bind a platform video to entityId, path or the current file (default). Reuse an existing platform/video track; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true explicitly fetches and replaces. Required local range must validate before mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
   _spec(
       'danmaku.tracks',
       Effect.read,
-      const ObjectSchema({'entityId': _text}, required: ['entityId']),
+      const ObjectSchema(
+          {'entityId': _text, 'path': _text, 'current': BooleanSchema()}),
       const ObjectSchema({'tracks': ArraySchema(_track)}, required: ['tracks']),
-      'Read persistent bindings, revision, source coverage and current loaded state, without restoring or fetching.'),
+      'List bindings and all current player tracks, including Classic and local pools with origin/platform/platformVideoId. Accept entityId, path or current (default). Missing file locations are indexed without inferring work identity; no fetch or binding is created.'),
   for (final field in ['enabled', 'deduplicate'])
     _spec(
         field == 'enabled' ? 'danmaku.set_enabled' : 'danmaku.set_dedup',
@@ -429,20 +440,23 @@ final class _Action extends Action<_Data, _Data> {
               access: access(),
               startMs: j['startMs'] as int? ?? 0,
               endMs: j['endMs'] as int?,
+              localDurationMs: j['localDurationMs'] as int?,
+              refresh: j['refresh'] == true,
               requestId: j['requestId'] as String);
           return result({'jobId': job.jobId});
         case 'danmaku.attach':
           return result(await service.attach(
-              j['entityId'] as String,
+              await service.resolveEntity(j),
               DanmakuVideo.fromJson(
                   Map<String, Object?>.from(j['video'] as Map)),
               j['reason'] as String,
               j['url'] as String?,
               access(),
               j['requestId'] as String,
-              invocation));
+              invocation,
+              refresh: j['refresh'] == true));
         case 'danmaku.tracks':
-          return result(await service.tracks(j['entityId'] as String));
+          return result(await service.tracks(await service.resolveEntity(j)));
         case 'danmaku.align':
           final anchors = [
             for (final a in j['anchors'] as List)

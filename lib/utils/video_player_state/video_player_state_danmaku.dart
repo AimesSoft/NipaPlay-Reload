@@ -240,6 +240,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         try {
           await loadDanmakuFromLocal(
             jsonData,
+            origin: 'local_file',
             trackName: trackName,
             sourceFilePath: filePath,
             setStatusMessage: false,
@@ -364,21 +365,30 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
 
-        // 解析弹幕数据并添加到弹弹play轨道（优先 C++ 解析器）
-        final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
-            cachedDanmaku as List<dynamic>?,
-            (data) => compute(parseDanmakuListInBackground, data));
+        // 解析弹幕数据并保留原平台来源。
+        final parsedDanmaku = await compute(
+            parseDanmakuListInBackground, restoreDandanplayOrigins(cachedDanmaku));
         if (!canContinue()) return;
 
-        _danmakuTracks['dandanplay'] = {
+        registerDanmakuSourceTrack(
+            _danmakuTracks, _danmakuTrackEnabled, 'dandanplay', {
+          if (_danmakuTracks['dandanplay']?['platformVideoId'] == episodeId)
+            ..._danmakuTracks['dandanplay']!,
           'name': '弹弹play',
+          'cacheKey': null,
+          'cacheRevision': null,
+          'usesMediaTimeline': false,
           'source': 'dandanplay',
+          'origin': 'auto_remote',
+          'platform': 'dandanplay',
+          'platformVideoId': episodeId,
           'episodeId': episodeId,
           'animeId': animeIdStr,
           'danmakuList': parsedDanmaku,
           'count': parsedDanmaku.length,
-        };
-        _danmakuTrackEnabled['dandanplay'] = true;
+        }, _danmakuTracks['dandanplay']?['platformVideoId'] == episodeId &&
+            _danmakuTracks['dandanplay']?['bindingId'] != null
+                ? _danmakuTrackEnabled['dandanplay'] ?? true : true);
 
         // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
         if (!canContinue()) return;
@@ -448,21 +458,30 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           danmakuController?.loadDanmaku(filteredDanmaku);
         }
 
-        // 解析弹幕数据并添加到弹弹play轨道（优先 C++ 解析器）
-        final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
-            danmakuData['comments'] as List<dynamic>?,
-            (data) => compute(parseDanmakuListInBackground, data));
+        // 解析弹幕数据并保留原平台来源。
+        final parsedDanmaku = await compute(
+            parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>);
         if (!canContinue()) return;
 
-        _danmakuTracks['dandanplay'] = {
+        registerDanmakuSourceTrack(
+            _danmakuTracks, _danmakuTrackEnabled, 'dandanplay', {
+          if (_danmakuTracks['dandanplay']?['platformVideoId'] == episodeId)
+            ..._danmakuTracks['dandanplay']!,
           'name': '弹弹play',
+          'cacheKey': null,
+          'cacheRevision': null,
+          'usesMediaTimeline': false,
           'source': 'dandanplay',
+          'origin': 'auto_remote',
+          'platform': 'dandanplay',
+          'platformVideoId': episodeId,
           'episodeId': episodeId,
           'animeId': animeId.toString(),
           'danmakuList': parsedDanmaku,
           'count': parsedDanmaku.length,
-        };
-        _danmakuTrackEnabled['dandanplay'] = true;
+        }, _danmakuTracks['dandanplay']?['platformVideoId'] == episodeId &&
+            _danmakuTracks['dandanplay']?['bindingId'] != null
+                ? _danmakuTrackEnabled['dandanplay'] ?? true : true);
 
         // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
         if (!canContinue()) return;
@@ -522,6 +541,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData,
       {String? trackName,
       String? sourceFilePath,
+      String origin = 'manual_import',
       bool setStatusMessage = true}) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
@@ -569,26 +589,31 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         throw Exception('弹幕文件中没有弹幕数据');
       }
 
-      // 解析弹幕数据（优先 C++ 解析器）
-      final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
-          comments, (data) => compute(parseDanmakuListInBackground, data));
+      // 解析弹幕数据并保留文件来源。
+      final parsedDanmaku = await compute(parseDanmakuListInBackground, comments);
       if (!canContinue()) return;
 
       // 生成轨道名称
       final String finalTrackName =
           trackName ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
+      final platform = jsonData['platform'] as String? ?? 'unknown';
+      final videoId = jsonData['platformVideoId'] as String?;
 
       // 添加到本地轨道
       if (!canContinue()) return;
-      _danmakuTracks[finalTrackName] = {
+      registerDanmakuSourceTrack(
+          _danmakuTracks, _danmakuTrackEnabled, finalTrackName, {
         'name': trackName ?? '本地轨道${_danmakuTracks.length}',
         'source': 'local',
-        if (sourceFilePath != null) 'filePath': sourceFilePath,
+        'origin': origin,
+        'platform': platform,
+        'platformVideoId': videoId,
+        if (sourceFilePath != null || jsonData['filePath'] != null)
+          'filePath': sourceFilePath ?? jsonData['filePath'],
         'danmakuList': parsedDanmaku,
         'count': parsedDanmaku.length,
         'loadTime': DateTime.now(),
-      };
-      _danmakuTrackEnabled[finalTrackName] = true;
+      }, true);
 
       // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
       if (!canContinue()) return;
@@ -629,7 +654,28 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
   }
 
-  /// Installs host-validated platform data, including legitimate empty pools.
+  /// Attaches persistent controls to an existing Classic or local track.
+  bool bindExistingDanmakuTrack(String id,
+      {required String expectedPath,
+      required int expectedGeneration,
+      required Map<String, dynamic> metadata,
+      required bool enabled,
+      required double offsetSeconds,
+      Future<void> Function(String operation, Object? value)? requestChange}) {
+    if (_isDisposed || _currentVideoPath != expectedPath ||
+        _playbackGeneration != expectedGeneration || !_danmakuTracks.containsKey(id)) {
+      return false;
+    }
+    _danmakuTracks[id]!.addAll({
+      ...metadata, 'timeOffset': offsetSeconds,
+      if (requestChange != null) 'requestChange': requestChange,
+    });
+    _danmakuTrackEnabled[id] = enabled;
+    _updateMergedDanmakuList();
+    _notifyListeners();
+    return true;
+  }
+
   /// A playback generation prevents an old acquisition from loading into a new video.
   bool installSourceDanmakuTrack({required String trackId,
     required String expectedPath, required int expectedGeneration,
@@ -641,13 +687,12 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _playbackGeneration != expectedGeneration) {
       return false;
     }
-    _danmakuTracks[trackId] = {...metadata, 'name': metadata['name'],
-      'danmakuList': entries, 'count': entries.length, 'loadTime': DateTime.now(),
-      'timeOffset': offsetSeconds, 'usesMediaTimeline': true};
-    if (requestChange != null) {
-      _danmakuTracks[trackId]!['requestChange'] = requestChange;
-    }
-    _danmakuTrackEnabled[trackId] = enabled;
+    registerDanmakuSourceTrack(_danmakuTracks, _danmakuTrackEnabled, trackId, {
+      ...metadata, 'danmakuList': entries, 'count': entries.length,
+      'loadTime': DateTime.now(), 'timeOffset': offsetSeconds,
+      'usesMediaTimeline': true,
+      if (requestChange != null) 'requestChange': requestChange,
+    }, enabled);
     _updateMergedDanmakuList();
     _notifyListeners();
     return true;
@@ -680,7 +725,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
                   'aggregation': trackData['aggregation'] == true}
               : hasManagedTracks && trackId == 'dandanplay'
                   ? {...DanmakuTrackTiming.shift(comment, offset),
-                      'source': 'unknown', 'nextTrackId': trackId,
+                      'source': comment['source'] ?? 'unknown', 'nextTrackId': trackId,
                       'foldEnabled': true, 'aggregation': true}
                   : DanmakuTrackTiming.shift(comment, offset),
         ));
@@ -1417,7 +1462,15 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
   void removeSourceDanmakuTrack(String trackId) {
     final track = _danmakuTracks[trackId];
-    if (track == null || track['usesMediaTimeline'] != true) return;
+    if (track == null) return;
+    if (track['origin'] == 'auto_remote' || track['source'] == 'local') {
+      for (final key in ['bindingId', 'bindingRevision', 'cacheKey', 'cacheRevision', 'requestChange']) {
+        track.remove(key);
+      }
+      _notifyListeners();
+      return;
+    }
+    if (track['usesMediaTimeline'] != true) return;
     _danmakuTracks.remove(trackId);
     _danmakuTrackEnabled.remove(trackId);
     _updateMergedDanmakuList();

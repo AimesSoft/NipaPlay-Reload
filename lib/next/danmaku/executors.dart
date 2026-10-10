@@ -57,8 +57,13 @@ final class _Fetch implements JobExecutor {
         video, c.job.input['startMs'] as int, c.job.input['endMs'] as int);
     final credential = c.job.input['credentialRef'] as String?;
     final access = credential == null ? null : DanmakuAccess(credential);
-    final cacheKey = service.store.cacheKey(video, source, access);
+    final cacheKey = service.store.cacheKey(video, source, access,
+        refreshJobId: c.job.input['refresh'] == true ? c.job.jobId : null);
     final completed = <int>{};
+    final localDuration = c.job.input['localDurationMs'] as int?;
+    final requiredPlan = localDuration == null
+        ? plan
+        : plan.where((chunk) => chunk.startMs < localDuration).toList();
     if (c.job.cancelRequestedAt != null) {
       for (final chunk in plan) {
         if (await service.store.chunk(cacheKey, chunk, fresh: false) != null) {
@@ -84,6 +89,13 @@ final class _Fetch implements JobExecutor {
           'cacheKey': cacheKey,
           'status': status,
           'complete': source.validate(plan, completed),
+          'localRangeComplete': source.validate(requiredPlan,
+              completed.intersection(requiredPlan.map((c) => c.index).toSet())),
+          'localDurationMs': localDuration,
+          'outOfRangeFailures': [
+            for (final failure in missing)
+              if (failure['outsideLocalRange'] == true) failure
+          ],
           'loaded': loaded,
           'requestedRange': {
             'startMs': c.job.input['startMs'],
@@ -114,10 +126,27 @@ final class _Fetch implements JobExecutor {
       var acquiredCount = 0;
       for (final chunk in plan) {
         if (await control.stop(details())) return;
-        var result = await service.store.chunk(cacheKey, chunk);
+        var result =
+            c.job.input['refresh'] == true && !completed.contains(chunk.index)
+                ? null
+                : await service.store.chunk(cacheKey, chunk);
         if (result == null) {
-          result = await source.fetchChunk(
-              video, chunk, access, control.cancellation);
+          try {
+            result = await source.fetchChunk(
+                video, chunk, access, control.cancellation);
+          } on SourceFailure catch (error) {
+            if (localDuration == null ||
+                chunk.startMs < localDuration ||
+                error.status == SourceStatus.cancelled) {
+              rethrow;
+            }
+            missing.add({
+              ...chunk.toJson(),
+              'status': error.status.name,
+              'outsideLocalRange': true
+            });
+            continue;
+          }
           if (acquiredCount + result.entries.length > 100000) {
             throw const SourceFailure(SourceStatus.schemaChanged);
           }
@@ -148,7 +177,8 @@ final class _Fetch implements JobExecutor {
       if (await control.stop(details())) return;
       await c.report(phase: 'verify');
       var rawCount = 0;
-      for (final chunk in plan) {
+      for (final chunk
+          in plan.where((chunk) => completed.contains(chunk.index))) {
         final cached = await service.store.chunk(cacheKey, chunk, fresh: false);
         if (cached == null) {
           throw const Failure(
@@ -156,7 +186,8 @@ final class _Fetch implements JobExecutor {
         }
         rawCount += cached.entries.length;
       }
-      if (!source.validate(plan, completed)) {
+      if (!source.validate(requiredPlan,
+          completed.intersection(requiredPlan.map((c) => c.index).toSet()))) {
         throw const Failure(FailureCode.conflict, 'Incomplete chunk plan.');
       }
       var loaded = false;
@@ -164,14 +195,22 @@ final class _Fetch implements JobExecutor {
         if (await control.stop(details())) return;
         await service.store.assignCache(bindingId, cacheKey, c.job.jobId);
         await c.markSideEffectCommitted();
-        await service.refreshCurrent();
+        await service.refreshCurrent(
+            replaceBindingId:
+                c.job.input['refresh'] == true ? bindingId : null);
         loaded = service.player.loaded(bindingId)?['cacheKey'] == cacheKey;
       }
       final count = (await service.store.entries(cacheKey)).length;
       await c.succeed(
           JobReceipt(verification: VerificationLevel.verified, details: {
         ...details(
-            status: rawCount == 0 ? 'validEmpty' : 'complete', loaded: loaded),
+            status: missing.isNotEmpty
+                ? 'localRangeComplete'
+                : rawCount == 0
+                    ? 'validEmpty'
+                    : 'complete',
+            loaded: loaded),
+        'partial': missing.isNotEmpty,
         'rawCount': rawCount,
         'cachedUniqueCount': count,
         'bindingId': bindingId

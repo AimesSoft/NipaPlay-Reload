@@ -17,8 +17,9 @@
 | 来源 | 定位与目录 | 获取与身份 |
 |---|---|---|
 | 弹弹play | episode ID、标题搜索、作品目录；未知时长由调用者依据本地媒体补齐 | 原始 comment JSON，withRelated=true；保留条目级 source、sourceVideoId、originalId，cid 单独记为 sourceEntryId |
-| B 站 | BV/av 的分 P、ep、ss、cid；分 P 歧义返回可执行 Decision | 360 秒 protobuf 段；专用有界 wire 解码，不新增库；ID 字符串化 |
+| B 站 | 匿名 WBI 标题搜索返回 BV 候选；BV/av 的分 P、ep、ss、cid；URL 尾斜杠、`p` 和 `ep_id` 选集；歧义返回可执行 Decision | 360 秒 protobuf 段；专用有界 wire 解码，不新增库；ID 字符串化 |
 | 优酷 | vid/公开视频 URL、show 的正片分页目录 | 60 秒段；宿主会话 profile 返回响应，严格检查 ret、data.result 和内层 data.result |
+| local | 授权媒体目录中的明确 XML/JSON 路径；同名/相似名自动发现仍沿用 Classic | 共用 Classic 文件解析入口；从 chatserver/chatid 读取平台与视频身份；未知平台保持 unknown |
 
 弹弹play 未提供条目级来源时保存 `platform=unknown`，不根据格式、cid 或用户 ID
 猜平台。未识别的原始 source 仍保留在 originSource；没有原视频/原弹幕 ID 时，
@@ -35,8 +36,13 @@
 宿主使用固定 URI 模板，拒绝跨域重定向及额外业务参数，逐来源串行限流；HTTP
 响应最大 8 MiB，每次计划最多 120 段、两小时、100000 条。超时只取消本次 HTTP，
 不会冒充任务取消。429 尊重有界 Retry-After；任务只对限流/传输失败重试三次。
-结构变化、登录失效和访问拒绝立即停止。B 站和优酷不声明标题搜索，调用者用明确
-URL/ID 或目录定位；未实现 WBI、验证码、会员/地区限制绕过、全站抓取或历史查询。
+正片范围内的结构变化、登录失效和访问拒绝立即停止。优酷不声明标题搜索，调用者用明确
+URL/ID 或目录定位。B 站使用 `/x/web-interface/nav` 返回的公开 WBI 图像键签名
+`/x/web-interface/wbi/search/type`；键缓存一小时，查询限第一页、20 个 BV 候选，
+候选必须 resolve 到 cid 后获取。2026-10-11 的两次无 Cookie/Authorization 请求探测中，
+nav 返回 `code=-101,isLogin=false` 且包含 WBI 键，搜索返回 `code=0`、空结果；这证明
+匿名接口可用，不证明特定标题能搜到或所有网络均不触发限流。未实现验证码、会员/地区
+限制绕过、全站抓取或历史查询。测试只使用合成响应，不重复线上探测。
 
 ## 追加存储
 
@@ -56,8 +62,11 @@ FileEpisode 关系挂到播放器；一文件多集缺少明确 start/end 时不
 
 每段落盘后回读验证。获取完成只证明指定范围的当前弹幕池结构和缓存覆盖，
 不证明完整历史、平台是否筛掉弹幕或身份语义正确。失败/取消回执列出已完成和缺失段。
-只有整个请求计划验证后才给绑定赋已提交缓存并加载轨道；失败来源保留可恢复缓存，
-不把空字段当成功，也不加载半轨。不同来源各自有 Job 和回执。
+整个正片范围验证后才给绑定赋已提交缓存并加载轨道。attach 自动记录当前本地视频时长，
+fetch 也可明确传 `localDurationMs`。起点超出该时长的段失败时继续获取，其错误保留在
+`outOfRangeFailures`；成功回执为 `status=localRangeComplete,localRangeComplete=true,
+complete=false,partial=true`。与正片相交的段仍必须完整成功；未提供本地时长时仍要求
+整个计划成功。失败来源保留可恢复缓存，不把空字段当成功。不同来源各自有 Job 和回执。
 
 Task Engine 禁止提交副作用后进入 cancelled。MB 在取消前尚无提交时以 cancelled
 结束；已有缓存/候选提交时停止调度，回读已提交部分，以 failed + verified receipt
@@ -72,7 +81,17 @@ Task Engine 禁止提交副作用后进入 cancelled。MB 在取消前尚无提�
 原子保存选择、映射和审计事件。首期只实现固定平移，不宣称自动音画/字幕对齐或
 分段/比例映射已完成。
 
-轨道 ID 为 `next:<bindingId>`，与受保护的 Classic `dandanplay` 轨道分开。
+只使用播放器现有多轨注册表：Classic 与 Next 共用唯一的 `dandanplay` 轨道，
+其余在线轨道使用 `next:<bindingId>`。每条来源轨道记录 origin、platform、
+platformVideoId、文件路径或 bindingId。tracks 同时返回 Classic、本地和持久绑定；
+同一平台/视频的 File 与 Episode 绑定也合为一条轨道，`bindingIds` 保留关联绑定 ID。
+输入可以是 entityId、path 或 current，默认当前文件。缺少身份索引时只登记 File 与
+FileLocation，不猜作品或剧集。同一平台/视频复用已有轨道，本地池存在时不重复在线获取；
+弹弹play 复用会写入绑定，返回 `status=reused,jobId=null`。`refresh=true` 才获取并替换。
+显式刷新使用独立的任务缓存，验证成功后才替换绑定的已提交缓存；失败不覆盖旧池。
+自动加载策略仍由 Classic 设置决定，持久在线绑定在播放时从缓存恢复。
+复用的弹弹play 绑定没有 Next 缓存时，可从现有 Classic 弹幕缓存恢复同一轨道，
+不发网络请求、不重新触发识别或自动匹配。
 装载校验播放路径与代次，接受合法空池；GUI 的轨道开关、偏移和删除通过宿主
 调用相同 Harness Action，持久化成功后重建轨道。源专属映射抵消 Classic 全局
 自动匹配偏移，只继续受用户全局手动偏移影响。
@@ -81,8 +100,9 @@ Task Engine 禁止提交副作用后进入 cancelled。MB 在取消前尚无提�
 条目不删除。跨轨显示只按可靠原身份折叠；未知 related 重叠对至少八个字符的
 完全相同文本，在对齐后 100 ms 窗口内保守折叠。一个显示组最多接收同一轨道
 的一条成员，保留成员与数量；可以用 set_dedup 关闭，原始缓存始终不变。
-Classic 单独播放时仍走原合并逻辑。既有 Classic 聚合轨道丢失来源信息，加入
-Next 轨道时只作为未知来源做显示折叠。
+Classic 与 Next 的弹弹play 原始响应共用 `dandanplay_comments.dart` 解析；Classic
+缓存和后续播放器解析保留 related 的平台、视频与原弹幕 ID。没有这些证据的旧缓存
+仍按 unknown 处理，不猜平台。Classic 单独播放时仍走原合并逻辑。
 
 ## Action 目录
 
@@ -92,9 +112,9 @@ videoId、objectType、title、durationMs；durationMs=0 可以出现在定位�
 
 | Action | Effect | 结果 |
 |---|---|---|
-| sources / search / episodes / resolve / tracks | read | 瞬时声明/候选/目录/明确视频/持久绑定与覆盖；不建任务或缓存 |
+| sources / search / episodes / resolve / tracks | read | 瞬时声明/候选/目录/明确视频/全部轨道与覆盖；tracks 可登记缺失文件位置，不建绑定、任务或弹幕缓存 |
 | fetch | write | 立即返回 jobId；只获取缓存，不改播放轨道 |
-| attach | write | 明确绑定及全片池获取任务，返回 bindingId + jobId |
+| attach | write | 明确绑定及获取任务，或复用已有轨道；复用/已存在时 jobId=null，回执带 status/trackId |
 | set_enabled / set_dedup / offset / detach | write | 绑定修订 CAS；绝对设置；解绑保留缓存 |
 | align / align_apply / align_keep | write | 持久对齐任务和可直接执行的选择 |
 | export | write | 授权媒体目录中的新 JSON 文件；raw 或 mapped，按 bytes/SHA-256 回读；不覆盖现有文件 |

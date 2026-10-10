@@ -7,9 +7,17 @@ import 'store.dart';
 import 'export.dart';
 
 final class DanmakuPlaybackTarget {
-  const DanmakuPlaybackTarget(this.path, this.generation);
+  const DanmakuPlaybackTarget(this.path, this.generation,
+      {this.durationMs = 0});
   final String path;
   final int generation;
+  final int durationMs;
+}
+
+abstract interface class DanmakuTrackRegistry {
+  List<JsonMap> get registry;
+  bool reuse(DanmakuPlaybackTarget target, JsonMap binding);
+  Future<bool> restoreClassic(DanmakuPlaybackTarget target, JsonMap binding);
 }
 
 abstract interface class DanmakuPlayerPort {
@@ -33,6 +41,68 @@ final class DanmakuService {
   final Map<String, DanmakuSource> sources;
   final DanmakuHost host;
   final DanmakuPlayerPort player;
+  final Map<String, JsonMap> _localCacheProvenance = {};
+  Future<JsonMap> _provenance(JsonMap binding) async {
+    final video = binding['video'] as JsonMap;
+    if (video['sourceId'] == 'local') {
+      if (binding['cache_key'] == null) {
+        return {'platform': 'unknown', 'platformVideoId': null};
+      }
+      final key = '${binding['cache_key']}:${binding['cache_revision']}';
+      final cached = _localCacheProvenance[key];
+      if (cached != null) return cached;
+      return _localCacheProvenance[key] = localDanmakuProvenance(
+          await store.entries(binding['cache_key'] as String));
+    }
+    return {'platform': video['sourceId'], 'platformVideoId': video['videoId']};
+  }
+
+  Future<String> _trackIdentity(JsonMap binding) async {
+    final provenance = await _provenance(binding);
+    if (provenance['platform'] == 'dandanplay') {
+      return jsonEncode(['dandanplay', null]);
+    }
+    if (provenance['platform'] != 'unknown' &&
+        provenance['platformVideoId'] != null) {
+      return jsonEncode([
+        provenance['platform'],
+        provenance['platform'] == 'dandanplay'
+            ? null
+            : provenance['platformVideoId']
+      ]);
+    }
+    final video = binding['video'] as JsonMap;
+    return jsonEncode([video['sourceId'], video['videoId']]);
+  }
+
+  List<JsonMap> get registry => player is DanmakuTrackRegistry
+      ? (player as DanmakuTrackRegistry).registry
+      : const [];
+  Future<String> resolveEntity(JsonMap input) async {
+    final id = input['entityId'] as String?;
+    final path = input['path'] as String?;
+    if (path != null && id != null ||
+        input['current'] == true && (path != null || id != null)) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Choose entityId, path or current.');
+    }
+    if (id != null && id != 'current') return id;
+    final locator = path ?? player.target?.path;
+    if (locator == null) {
+      throw const Failure(FailureCode.notFound, 'No current video.');
+    }
+    return store.identities.ensureFile(locator);
+  }
+
+  Future<bool> _isCurrentEntity(String id) async {
+    final path = player.target?.path;
+    if (path == null) return false;
+    final rows = await store.db.rawQuery(
+        'SELECT l.id FROM media_locations l LEFT JOIN media_file_episodes e ON e.file_id=l.file_id WHERE l.owner_device_id=? AND l.locator=? AND (l.file_id=? OR e.episode_id=?)',
+        [store.identities.ownerDeviceId, path, id, id]);
+    return rows.isNotEmpty;
+  }
+
   late TaskEngine engine;
   DanmakuExporter? exporter;
   Future<void> _submissions = Future.value();
@@ -50,6 +120,8 @@ final class DanmakuService {
       DanmakuAccess? access,
       int startMs = 0,
       int? endMs,
+      int? localDurationMs,
+      bool refresh = false,
       required String requestId}) async {
     final src = source(video.sourceId);
     final end = endMs ?? video.durationMs;
@@ -64,7 +136,9 @@ final class DanmakuService {
       bindingId,
       access?.credentialRef,
       startMs,
-      end
+      end,
+      if (localDurationMs != null || refresh)
+        {'localDurationMs': localDurationMs, 'refresh': refresh}
     ]);
     final previous = _submissions;
     final done = Completer<void>();
@@ -89,7 +163,9 @@ final class DanmakuService {
             'bindingId': bindingId,
             'credentialRef': access?.credentialRef,
             'startMs': startMs,
-            'endMs': end
+            'endMs': end,
+            'localDurationMs': localDurationMs,
+            'refresh': refresh
           });
     } finally {
       done.complete();
@@ -103,7 +179,38 @@ final class DanmakuService {
       String? url,
       DanmakuAccess? access,
       String requestId,
-      Invocation invocation) async {
+      Invocation invocation,
+      {bool refresh = false}) async {
+    source(video.sourceId);
+    final target = player.target;
+    if (await _isCurrentEntity(entityId) &&
+        target?.path == player.target?.path &&
+        target?.generation == player.target?.generation) {
+      final existing = registry.where((t) =>
+          (t['platform'] == video.sourceId &&
+              t['platformVideoId'] == video.videoId) ||
+          video.sourceId == 'local' && t['filePath'] == video.videoId);
+      if (existing.isNotEmpty && !refresh) {
+        final track = existing.first;
+        if (video.sourceId != 'dandanplay') {
+          return {
+            'bindingId': track['bindingId'],
+            'jobId': null,
+            'status': 'alreadyExists',
+            'trackId': track['trackId']
+          };
+        }
+        final id = await store.attach(entityId, video, reason, url, invocation);
+        final reused = (player as DanmakuTrackRegistry)
+            .reuse(target!, await store.binding(id));
+        return {
+          'bindingId': id,
+          'jobId': null,
+          'status': reused ? 'reused' : 'recorded',
+          'trackId': track['trackId']
+        };
+      }
+    }
     source(video.sourceId).planFetch(video, 0, video.durationMs);
     if (source(video.sourceId).describe.access == 'requiredSession' &&
         access == null) {
@@ -111,8 +218,15 @@ final class DanmakuService {
           'authenticationRequired: this source needs a host session reference.');
     }
     final id = await store.attach(entityId, video, reason, url, invocation);
-    final job =
-        await fetch(video, bindingId: id, access: access, requestId: requestId);
+    final job = await fetch(video,
+        bindingId: id,
+        access: access,
+        requestId: requestId,
+        refresh: refresh,
+        localDurationMs:
+            await _isCurrentEntity(entityId) && player.target!.durationMs > 0
+                ? player.target!.durationMs
+                : null);
     return {'bindingId': id, 'jobId': job.jobId};
   }
 
@@ -167,7 +281,8 @@ final class DanmakuService {
             Map<String, Object?>.from(job.input['video'] as Map));
         final ref = job.input['credentialRef'] as String?;
         final jobKey = store.cacheKey(video, source(video.sourceId),
-            ref == null ? null : DanmakuAccess(ref));
+            ref == null ? null : DanmakuAccess(ref),
+            refreshJobId: job.input['refresh'] == true ? job.jobId : null);
         if (jobKey == key) {
           throw const Failure(FailureCode.conflict,
               'Stop active fetch tasks before deleting their cache.');
@@ -181,9 +296,10 @@ final class DanmakuService {
   }
 
   /// Rebuild from committed cache, never start network work on a player callback.
-  Future<void> refreshCurrent() async {
+  Future<void> refreshCurrent({String? replaceBindingId}) async {
     final target = player.target;
     if (target == null) return;
+    await store.identities.ensureFile(target.path);
     final locations = await store.db.query('media_locations',
         where: 'locator = ? AND owner_device_id = ? AND available = ?',
         whereArgs: [target.path, store.identities.ownerDeviceId, 1]);
@@ -194,7 +310,8 @@ final class DanmakuService {
       for (final b in await store.bindings(fileId)) {
         if (b['status'] == 'accepted' &&
             b['entity_revision'] == file['revision'] &&
-            b['cache_key'] != null) {
+            (b['cache_key'] != null ||
+                (b['video'] as JsonMap)['sourceId'] == 'dandanplay')) {
           mounts[b['id'] as String] = (binding: b, start: 0, end: null);
         }
       }
@@ -211,7 +328,8 @@ final class DanmakuService {
               await store.identities.entity(link['episode_id'] as String);
           if (b['status'] == 'accepted' &&
               b['entity_revision'] == entity['revision'] &&
-              b['cache_key'] != null) {
+              (b['cache_key'] != null ||
+                  (b['video'] as JsonMap)['sourceId'] == 'dandanplay')) {
             mounts[b['id'] as String] = (
               binding: b,
               start: link['start_ms'] as int? ?? 0,
@@ -219,6 +337,30 @@ final class DanmakuService {
             );
           }
         }
+      }
+    }
+    if (player.target?.path != target.path ||
+        player.target?.generation != target.generation) {
+      return;
+    }
+    final loadedIds = registry.map((track) => track['bindingId']).toSet();
+    final ordered = mounts.keys.toList();
+    final positions = {for (var i = 0; i < ordered.length; i++) ordered[i]: i};
+    int priority(String id) => id == replaceBindingId
+        ? 0
+        : loadedIds.contains(id)
+            ? 1
+            : (mounts[id]!.binding['video'] as JsonMap)['sourceId'] == 'local'
+                ? 2
+                : 3;
+    ordered.sort((a, b) {
+      final order = priority(a).compareTo(priority(b));
+      return order == 0 ? positions[a]!.compareTo(positions[b]!) : order;
+    });
+    final seenVideos = <String>{};
+    for (final id in ordered) {
+      if (!seenVideos.add(await _trackIdentity(mounts[id]!.binding))) {
+        mounts.remove(id);
       }
     }
     if (player.target?.path != target.path ||
@@ -236,6 +378,28 @@ final class DanmakuService {
           loaded?['cacheKey'] == b['cache_key'] &&
           loaded?['startMs'] == mount.start &&
           loaded?['endMs'] == mount.end) {
+        continue;
+      }
+      final video = b['video'] as JsonMap;
+      final existing = registry
+          .where((t) =>
+              t['platform'] == video['sourceId'] &&
+              t['platformVideoId'] == video['videoId'])
+          .firstOrNull;
+      if (id != replaceBindingId &&
+          existing != null &&
+          existing['origin'] != 'binding' &&
+          (existing['source'] == 'local' || b['cache_key'] == null) &&
+          mount.start == 0) {
+        (player as DanmakuTrackRegistry).reuse(target, b);
+        continue;
+      }
+      if (b['cache_key'] == null) {
+        if (player is DanmakuTrackRegistry) {
+          if (!(player as DanmakuTrackRegistry).reuse(target, b)) {
+            await (player as DanmakuTrackRegistry).restoreClassic(target, b);
+          }
+        }
         continue;
       }
       final entries = await store.entries(b['cache_key'] as String);
@@ -259,28 +423,65 @@ final class DanmakuService {
   Future<JsonMap> tracks(String entityId) async {
     final entity = await store.identities.entity(entityId);
     final rows = await store.bindings(entityId);
+    final currentTracks =
+        await _isCurrentEntity(entityId) ? registry : <JsonMap>[];
+    final candidates = <JsonMap>[
+      for (final track in currentTracks)
+        if (!rows.any((b) => b['id'] == track['bindingId']))
+            {...track, 'entityId': track['entityId'] ?? entityId, 'loaded': true},
+      for (final b in rows)
+        {
+          'origin': (b['video'] as JsonMap)['sourceId'] == 'local'
+              ? 'manual_import'
+              : 'binding',
+          'source': (b['video'] as JsonMap)['sourceId'],
+          if ((b['video'] as JsonMap)['sourceId'] == 'local')
+            'filePath': (b['video'] as JsonMap)['videoId'],
+          ...await _provenance(b),
+          ...?currentTracks.where((t) => t['bindingId'] == b['id']).firstOrNull,
+          'bindingId': b['id'],
+          'entityId': b['entity_id'],
+          'revision': b['revision'],
+          'status': b['status'],
+          'stale': b['entity_revision'] != entity['revision'],
+          'video': b['video'],
+          'enabled': b['enabled'] == 1,
+          'deduplicate': b['deduplicate'] == 1,
+          'offsetMs': b['offset_ms'],
+          'alignment': b['alignment'],
+          'evidence': b['evidence'],
+          'boundBy': b['bound_by'],
+          'cacheKey': b['cache_key'],
+          'loaded': player.loaded(b['id'] as String) != null,
+          'coverage': b['cache_key'] == null
+              ? <JsonMap>[]
+              : await store.coverage(b['cache_key'] as String)
+        }
+    ];
+    final groups = <String, JsonMap>{};
+    final bindingIds = <String, Set<String>>{};
+    int priority(JsonMap track) => track['loaded'] == true
+        ? 0
+        : track['status'] == 'accepted' && track['stale'] == false
+            ? 1
+            : 2;
+    for (final track in candidates) {
+      final key = track['platform'] == 'dandanplay'
+          ? 'dandanplay'
+          : track['platform'] != 'unknown' && track['platformVideoId'] != null
+              ? jsonEncode([track['platform'], track['platformVideoId']])
+              : '${track['trackId'] ?? track['bindingId']}';
+      final ids = bindingIds[key] ??= {};
+      if (track['bindingId'] case final String id) ids.add(id);
+      final previous = groups[key];
+      if (previous == null || priority(track) < priority(previous)) {
+        groups[key] = track;
+      }
+    }
     return {
       'tracks': [
-        for (final b in rows)
-          {
-            'bindingId': b['id'],
-            'entityId': b['entity_id'],
-            'revision': b['revision'],
-            'status': b['status'],
-            'stale': b['entity_revision'] != entity['revision'],
-            'video': b['video'],
-            'enabled': b['enabled'] == 1,
-            'deduplicate': b['deduplicate'] == 1,
-            'offsetMs': b['offset_ms'],
-            'alignment': b['alignment'],
-            'evidence': b['evidence'],
-            'boundBy': b['bound_by'],
-            'cacheKey': b['cache_key'],
-            'loaded': player.loaded(b['id'] as String) != null,
-            'coverage': b['cache_key'] == null
-                ? <JsonMap>[]
-                : await store.coverage(b['cache_key'] as String)
-          }
+        for (final group in groups.entries)
+          {...group.value, 'bindingIds': bindingIds[group.key]!.toList()}
       ]
     };
   }

@@ -367,9 +367,10 @@ final _specs = [
       ObjectSchema({'record': _recordSchema(2)}, required: const ['record'])),
   _spec(
       'media.identity.get',
-      'Read a local identity, binding audit, evidence and composed metadata. IDs are local; legacy IDs remain unaccepted evidence.',
+      'Read identity by entityId, path or current (default). Register missing File/FileLocation only; never infer work identity. Includes binding audit, evidence and metadata; legacy IDs remain unaccepted evidence.',
       Effect.read,
-      const ObjectSchema({'entityId': _text}, required: ['entityId']),
+      const ObjectSchema(
+          {'entityId': _text, 'path': _text, 'current': BooleanSchema()}),
       const ObjectSchema({'identity': _entitySchema}, required: ['identity'])),
   _spec(
       'media.library.works',
@@ -405,18 +406,17 @@ final _specs = [
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
       'media.identification.start',
-      'Start identification of an indexed file at its current content revision. Repeated submissions reuse the same job until content or binding revision changes.',
+      'Start identification by fileId, path or current (default); paths are indexed and probed within configured media folders. Optional fileRevision checks freshness. Repeated submissions reuse the same job until content or binding revision changes.',
       Effect.write,
       const ObjectSchema({
         'fileId': _text,
+        'path': _text,
+        'current': BooleanSchema(),
         'fileRevision': IntegerSchema(minimum: 0),
         'releaseId': _text,
         'requestId': _text,
         'sources': ArraySchema(_text)
-      }, required: [
-        'fileId',
-        'fileRevision'
-      ]),
+      }),
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
       'media.identification.get',
@@ -587,7 +587,7 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         };
       case 'media.identity.get':
         result = {
-          'identity': await _identity(store, json['entityId'] as String)
+          'identity': await _identity(store, await service.resolveEntity(json))
         };
       case 'media.library.works':
         final works = await store.library(query: json['query'] as String?);
@@ -625,9 +625,10 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
           'job': _job(await service.submit('media.scan', json, key: key))
         };
       case 'media.identification.start':
+        final fileId = await service.resolveEntity(json, idField: 'fileId');
         result = {
-          'job': _job(await service.identify(json['fileId'] as String,
-              expectedRevision: (json['fileRevision'] as num).toInt(),
+          'job': _job(await service.identify(fileId,
+              expectedRevision: (json['fileRevision'] as num?)?.toInt(),
               releaseId: json['releaseId'] as String?,
               requestId: json['requestId'] as String?,
               sources: (json['sources'] as List?)?.cast<String>()))

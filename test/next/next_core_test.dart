@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/next_core.dart';
+import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -149,6 +150,50 @@ void main() {
     expect(backend.additions, 0);
     expect((await core.engine.store.events(download.jobId)).map((e) => e.kind),
         contains('interrupted'));
+  });
+
+  test(
+      'Core registers and resumes persisted danmaku execution before a player is bound',
+      () async {
+    core = createCore();
+    await core.ready;
+    final fileId = await core.media.service.store
+        .ensureFile('${mediaFolder.path}/fixture.mkv');
+    final bindingId = await core.danmaku.service.store.attach(
+        fileId,
+        const DanmakuVideo(
+            sourceId: 'bilibili',
+            videoId: '101',
+            title: '合成',
+            durationMs: 720000,
+            objectType: 'cid'),
+        '合成证据',
+        null,
+        Invocation(origin: 'mcp'));
+    final job = await core.danmaku.service.align(
+        bindingId,
+        [
+          {'sourceTimeMs': 1000, 'mediaTimeMs': 500, 'evidence': '合成锚点'}
+        ],
+        'core-danmaku-align');
+    await waitForJob(core.engine, job.jobId, JobState.needsDecision);
+    expect(core.danmaku.service.player.target, isNull);
+    await core.close();
+    core = createCore();
+    await core.ready;
+    final pending = await core.engine.get(job.jobId);
+    expect(pending.state, JobState.needsDecision);
+    final option = pending.decision!.options
+        .firstWhere((option) => option.call.actionId == 'danmaku.align_apply')
+        .call;
+    await call(Harness(core.capabilities), option.actionId, option.input);
+    await waitForJob(core.engine, job.jobId, JobState.succeeded);
+    expect((await core.danmaku.service.store.binding(bindingId))['offset_ms'],
+        500);
+    final catalog =
+        await call(Harness(core.capabilities), 'danmaku.sources', {});
+    expect((catalog['sources'] as List).map((source) => source['sourceId']),
+        contains('local'));
   });
 
   test('startup delivers pending Classic media projections without an Agent',

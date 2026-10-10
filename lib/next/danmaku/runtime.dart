@@ -15,11 +15,22 @@ import 'service.dart';
 import 'source.dart';
 import 'sources.dart';
 import 'store.dart';
+import 'local_source.dart';
 
 /// Forwards track operations to the host player once the widget tree created it.
-final class _HostPlayerPort implements DanmakuPlayerPort {
+final class _HostPlayerPort implements DanmakuPlayerPort, DanmakuTrackRegistry {
   VideoDanmakuPort? _delegate;
   void attach(VideoDanmakuPort delegate) => _delegate = delegate;
+  void detach() => _delegate = null;
+  @override
+  List<JsonMap> get registry => _delegate?.registry ?? const [];
+  @override
+  bool reuse(DanmakuPlaybackTarget target, JsonMap binding) =>
+      _delegate?.reuse(target, binding) ?? false;
+  @override
+  Future<bool> restoreClassic(
+          DanmakuPlaybackTarget target, JsonMap binding) async =>
+      await _delegate?.restoreClassic(target, binding) ?? false;
   @override
   DanmakuPlaybackTarget? get target => _delegate?.target;
   @override
@@ -28,8 +39,7 @@ final class _HostPlayerPort implements DanmakuPlayerPort {
   JsonMap? loaded(String bindingId) => _delegate?.loaded(bindingId);
   @override
   bool install(DanmakuPlaybackTarget target, JsonMap binding,
-          List<DanmakuEntry> entries,
-          {int startMs = 0, int? endMs}) =>
+          List<DanmakuEntry> entries, {int startMs = 0, int? endMs}) =>
       _delegate?.install(target, binding, entries,
           startMs: startMs, endMs: endMs) ??
       false;
@@ -57,7 +67,8 @@ final class DanmakuRuntime {
   VideoPlayerState? _player;
   Future<void> _controls = Future.value();
   static Future<DanmakuRuntime> create(IdentityStore identities,
-      {YoukuSessionBridge? youkuSession}) async {
+      {YoukuSessionBridge? youkuSession,
+      Future<String> Function(String path)? authorizeLocalFile}) async {
     final public = http.Client(), ddp = DandanplayHttpClient();
     Future<Uri> base() async =>
         Uri.parse(await DandanplayService.getApiBaseUrl());
@@ -90,10 +101,11 @@ final class DanmakuRuntime {
         host: host,
         player: port,
         sources: [
-          scoped((h) =>
-              DandanplayDanmakuSource(h, allowedHosts: _gatewayHosts)),
+          scoped(
+              (h) => DandanplayDanmakuSource(h, allowedHosts: _gatewayHosts)),
           scoped(BilibiliDanmakuSource.new),
-          scoped(YoukuDanmakuSource.new)
+          scoped(YoukuDanmakuSource.new),
+          if (authorizeLocalFile != null) LocalDanmakuSource(authorizeLocalFile)
         ]);
     return DanmakuRuntime._(service, port, [public, ddp]);
   }
@@ -131,6 +143,8 @@ final class DanmakuRuntime {
 
   /// Binds the host player and follows playback state. Call after `engine.start()`.
   void startRestoring(Harness harness, VideoPlayerState player) {
+    _player?.removeListener(_changed);
+    _stopped = false;
     _harness = harness;
     _player = player;
     _port.attach(VideoDanmakuPort(player,
@@ -165,6 +179,9 @@ final class DanmakuRuntime {
     _player?.removeListener(_changed);
     await _restoring;
     await _controls;
+    _port.detach();
+    _player = null;
+    _harness = null;
   }
 
   void close() {
