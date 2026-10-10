@@ -315,18 +315,6 @@ runs:
           # 首先尝试 Developer ID Application 证书（用于分发和公证）
           CERT_NAME=$(echo "$CERT_LIST" | grep "Developer ID Application" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/' || true)
 
-          if [ -z "$CERT_NAME" ]; then
-            echo "⚠️ 未找到Developer ID Application证书，查找Apple Development证书..."
-            # 备选：查找 Apple Development 证书
-            CERT_NAME=$(echo "$CERT_LIST" | grep "Apple Development" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/' || true)
-          fi
-
-          if [ -z "$CERT_NAME" ]; then
-            echo "⚠️ 未找到Apple Development证书，查找其他可用证书..."
-            # 最后备选：查找任何可用证书
-            CERT_NAME=$(echo "$CERT_LIST" | grep -E "(Developer|Apple)" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/' || true)
-          fi
-
           if [ -n "$CERT_NAME" ]; then
             echo "使用证书: $CERT_NAME"
 
@@ -393,13 +381,14 @@ runs:
                 # 显示签名信息
                 echo "签名信息："
                 codesign -dv --verbose=4 "$APP_PATH"
+                bash .github/workflows/scripts/verify-macos-entitlements.sh "$APP_PATH"
               else
                 echo "❌ 应用签名验证失败"
                 exit 1
               fi
             done < "$MACOS_VARIANTS_FILE"
           else
-            echo "❌ 未找到有效的签名证书"
+            echo "❌ GitHub 发布需要 Developer ID Application 证书"
             exit 1
           fi
         else

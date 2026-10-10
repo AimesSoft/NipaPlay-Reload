@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay/services/macos_process_environment.dart';
 
 class LabsSettingsProvider extends ChangeNotifier {
-  LabsSettingsProvider() {
+  LabsSettingsProvider({Future<bool> Function()? sandboxStatus}) {
+    _sandboxStatus = sandboxStatus ?? MacOSProcessEnvironment.isSandboxed;
     ready = _loadSettings();
   }
 
@@ -18,13 +20,17 @@ class LabsSettingsProvider extends ChangeNotifier {
   bool _enableImmersiveAnimeDetail = false;
   bool _enableAgentEndpoint = false;
   bool _isLoaded = false;
+  bool _nextAvailable = false;
+  late final Future<bool> Function() _sandboxStatus;
 
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableImmersiveAnimeDetail => _enableImmersiveAnimeDetail;
-  bool get enableAgentEndpoint => _enableAgentEndpoint;
+  bool get nextAvailable => _nextAvailable;
+  bool get enableAgentEndpoint => _nextAvailable && _enableAgentEndpoint;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
+    _nextAvailable = !await _sandboxStatus();
     _enableErikaPlayerKernel = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableErikaPlayerKernel,
       defaultValue: false,
@@ -65,6 +71,9 @@ class LabsSettingsProvider extends ChangeNotifier {
 
   Future<void> setEnableAgentEndpoint(bool enabled) async {
     await ready;
+    if (enabled && !_nextAvailable) {
+      throw StateError('NipaPlay Next is unavailable in an App Sandbox process');
+    }
     if (_enableAgentEndpoint == enabled) return;
     _enableAgentEndpoint = enabled;
     notifyListeners();

@@ -10,5 +10,8 @@ PRODUCT_NAME = NipaPlay
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay
 
+ENABLE_APP_SANDBOX = NO
+ENABLE_HARDENED_RUNTIME = YES
+
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 com.Aimes-soft. All rights reserved.

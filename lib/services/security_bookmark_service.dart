@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'macos_process_environment.dart';
 import 'dart:convert';
 
 /// macOS 沙盒安全书签服务
@@ -70,10 +71,13 @@ class SecurityBookmarkService {
         final didStartAccessing = result['didStartAccessing'] as bool? ?? false;
         final isStale = result['isStale'] as bool? ?? false;
         
-        if (resolvedPath != null && didStartAccessing) {
+        if (resolvedPath != null &&
+            (didStartAccessing || !await MacOSProcessEnvironment.isSandboxed())) {
           // 记录活跃的安全作用域资源
-          _activeResources.add(resolvedPath);
-          await _saveActiveResources();
+          if (didStartAccessing) {
+            _activeResources.add(resolvedPath);
+            await _saveActiveResources();
+          }
           
           //print('[SecurityBookmark] 解析书签成功: $resolvedPath (stale: $isStale)');
           
