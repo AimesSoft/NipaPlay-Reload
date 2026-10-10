@@ -313,6 +313,9 @@ final class McpEndpoint {
   /// 只绑定 127.0.0.1。port 为 0 时由系统分配。
   Future<HttpServer> serve({required int port});
 }
+
+/// action id → MCP 工具名（`.` → `_`）。端点与工作区审批配置共用这一规则。
+String mcpToolName(String actionId);
 ```
 
 协议要点（MCP Streamable HTTP，无状态，不发 `Mcp-Session-Id`）：
