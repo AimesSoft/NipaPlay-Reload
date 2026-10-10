@@ -16,6 +16,7 @@ librqbit-dualstack-sockets = { path = "third_party/librqbit-dualstack-sockets" }
 
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
+nipaplay-mesh = { path = "mesh" }
 libc = "0.2"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 serde = "1"

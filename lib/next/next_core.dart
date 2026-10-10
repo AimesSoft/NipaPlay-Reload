@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_capability.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'danmaku/export.dart';
 import 'danmaku/runtime.dart';
@@ -19,6 +20,8 @@ import 'tasks/sqlite_job_store.dart';
 import 'settings/application_settings.dart';
 import 'settings/registry.dart';
 import 'settings/capability.dart';
+import 'mesh/runtime.dart';
+import 'mesh/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -53,6 +56,7 @@ final class NextCore {
   late final MediaRuntime media;
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
+  late final MeshRuntime mesh;
   late final List<Capability> capabilities;
 
   Future<void> _initialize(
@@ -71,7 +75,13 @@ final class NextCore {
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders);
-    settings = SettingsRegistry(database, ApplicationSettings.entries());
+    mesh = MeshRuntime(
+        root: root,
+        vault: credentialVault,
+        token: () async => credentials.read(
+            await SharedPreferences.getInstance(), 'dandanplay_token'));
+    settings = SettingsRegistry(
+        database, [...ApplicationSettings.entries(), meshAddressSetting(mesh)]);
     SettingsAccess.registry = settings;
     ApplicationSettings.authorizePath = (path, {directory = false}) =>
         media.service.authorizedPath(path, directory: directory);
@@ -94,11 +104,16 @@ final class NextCore {
       media.capability,
       danmaku.capability,
       SettingsCapability(settings),
+      MeshCapability(mesh),
     ]);
     await engine.start();
     await downloads.start();
     await media.start();
+    mesh.attach(Harness(capabilities));
+    await mesh.startConfigured();
   }
+
+  void attachHarness(Harness harness) => mesh.attach(harness);
 
   Future<void> close() async {
     await ready;
@@ -107,6 +122,7 @@ final class NextCore {
       ApplicationSettings.authorizePath = null;
     }
     await settings.drain();
+    await mesh.close();
     await downloads.stop();
     await danmaku.stopRestoring();
     final jobs = await engine.list(type: 'download');

@@ -14,11 +14,13 @@ import 'api/file_scan.dart';
 import 'api/incremental_sync.dart';
 import 'api/media_metadata.dart';
 import 'api/media_probe.dart';
+import 'api/mesh.dart';
 import 'api/next2.dart';
 import 'api/performance.dart';
 import 'api/remote_directory.dart';
 import 'api/startup_commands.dart';
 import 'api/torrent.dart';
+import 'api/vault.dart';
 import 'api/webdav_multistatus.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -200,6 +202,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<RustWebDavEntry> dco_decode_list_rust_web_dav_entry(dynamic raw);
 
   @protected
+  MeshIncoming dco_decode_mesh_incoming(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
@@ -306,6 +311,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StartupCommand dco_decode_startup_command(dynamic raw);
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -510,6 +518,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  MeshIncoming sse_decode_mesh_incoming(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -636,6 +647,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StartupCommand sse_decode_startup_command(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -847,6 +861,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<RustWebDavEntry> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_mesh_incoming(MeshIncoming self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -981,6 +998,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_startup_command(
       StartupCommand self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

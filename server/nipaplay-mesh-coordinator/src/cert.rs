@@ -235,6 +235,16 @@ impl CertificateAuthority {
                 .try_into()
                 .map_err(|error| format!("invalid SAN URI: {error}"))?,
         ));
+        let dns_hash = format!("{:x}", Sha256::digest(device_public_key));
+        params.subject_alt_names.push(SanType::DnsName(
+            format!(
+                "d-{}.{}.mesh.nipaplay.invalid",
+                &dns_hash[..32],
+                &dns_hash[32..]
+            )
+            .try_into()
+            .map_err(|e| format!("invalid device DNS name: {e}"))?,
+        ));
         let metadata = serde_json::json!({
             "v": 1,
             "accountId": account_id,

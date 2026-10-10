@@ -48,6 +48,7 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_TRUST_PROXY_HEADERS` | `true` | 仅当 socket 对端为回环代理时信任 `X-Real-IP` / `X-Forwarded-For` |
 | `DANDANPLAY_UPSTREAM_BASE` | `https://api.dandanplay.net` | 上游 API |
 | `DANDANPLAY_APP_ID` | `nipaplayv1` | 应用 ID |
+| `MESH_ACCOUNT_CLAIM_POINTER` | `/userId` | 已验证 JWT 中稳定用户标识的 JSON Pointer；默认声明名尚待真实令牌验收确认 |
 | `DANDANPLAY_APP_SECRET` / `DANDANPLAY_APP_SECRET_URLS` | 见网关 | 应用密钥，复用网关的加载逻辑 |
 
 ## 认证
@@ -58,10 +59,17 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 Authorization: Bearer <弹弹play token>
 ```
 
-服务先用只读的 `/api/v2/playhistory` 验证令牌（有效缓存 10 分钟，无效 30 秒），再调用
-`POST /api/v2/login/renew` 取稳定的正整数 `userId` 作为 `accountId`（仅在 `405` 且
-`Allow` 包含 `GET` 时改用 GET，与现有 App 相同）。令牌无效返回 `401`；
-上游不可达返回 `503`。请求体中的任何账号字段都被忽略。
+服务先用只读的 `/api/v2/playhistory` 验证令牌（有效缓存 10 分钟，无效 30 秒），
+上游接受后才解析该 JWT 的 payload，按 `MESH_ACCOUNT_CLAIM_POINTER` 提取稳定用户标识。
+接受正整数或 1–128 字节的字母、数字、`-._` 标识字符串；不使用用户名。
+协调服务不会调用上游 renew。令牌无效返回 `401`；上游不可达返回 `503`；
+JWT 无法解析、声明缺失或类型不符返回 `422 invalid_identity`。客户端自报账号字段被忽略。
+
+正式端到端验收先确认真实 JWT 的声明名。启动配置相同，运行
+`nipaplay-mesh-coordinator --inspect-account-claim-names`，从 stdin 提供令牌。
+它先请求只读验证接口，再输出声明名的 JSON Pointer 数组，绝不输出声明值或令牌。
+不要把令牌放进命令行、仓库或 shell 历史；从私有宿主流程或关闭回显的终端输入。
+若没有稳定用户 ID 声明，停止验收并交主控裁定；不得恢复 renew。
 
 IP 限流在解析请求体前执行；令牌限流在上游验证前执行。已解析过的账号也在再次验证前
 检查账号额度；新令牌必须先核实身份才能归入账号桶，同账号的不同令牌共用账号额度。
@@ -81,6 +89,7 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 |---|---|---|
 | `missing_token` | 401 | 缺少 `Authorization: Bearer` |
 | `invalid_token` | 401 | 令牌无效或过期 |
+| `invalid_identity` | 422 | 已验证 JWT 无法解析、缺少配置声明或声明类型错误 |
 | `upstream_unavailable` | 503 | 无法访问上游核实身份，可重试 |
 | `invalid_input` | 400 | 请求体或参数不合法 |
 | `device_not_found` | 404 | 设备不存在或不属于本账号 |
@@ -121,7 +130,8 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
   "device_public_key": "<base64url(32 字节 Ed25519 公钥)>",
   "device_name": "工位机",
   "platform": "macos",
-  "app_version": "1.0.0"
+  "app_version": "1.0.0",
+  "proof": { "timestamp": 1760000000, "nonce": "<至少 22 字符 base64url>", "signature": "<base64url Ed25519 签名>" }
 }
 ```
 
@@ -129,6 +139,11 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 1–32 字节，不接受控制字符。
 `deviceId` 由服务从公钥派生：`base64url(SHA-256(公钥))`。
 已吊销公钥不能再次注册；要重新加入需生成新的设备密钥。同一公钥不能转移到其他账号。
+
+持钥证明使用设备私钥签名以下无空白 UTF-8 JSON 字符串数组（签名覆盖未 trim 的请求值）：
+`["nipaplay-mesh-possession-v1", timestamp的十进制字符串, nonce, "register", device_public_key, device_name, platform, app_version]`。
+timestamp 与服务器时间差不得超过 300 秒。nonce 为 22–128 字符 base64url；
+同一公钥的 nonce 在 SQLite 事务中一次性消费，并保留 600 秒。缺失、错误、过期、重放证明均不签发证书。
 
 响应：
 
@@ -147,11 +162,13 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 ### `POST /mesh/v1/devices/renew`
 
 ```json
-{ "device_id": "<device_id>", "device_public_key": "<base64url(公钥)>" }
+{ "device_id": "<device_id>", "device_public_key": "<base64url(公钥)>",
+  "proof": { "timestamp": 1760000000, "nonce": "<base64url>", "signature": "<base64url>" } }
 ```
 
 公钥必须与注册时一致；已吊销设备返回 `device_revoked`。响应与 `register` 的
 `certificate`/`revocation_epoch` 字段一致。
+续期签名数组为 `["nipaplay-mesh-possession-v1", timestamp字符串, nonce, "renew", device_public_key, device_id]`。
 
 ### `GET /mesh/v1/devices`
 
@@ -193,7 +210,8 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 - `host` 只接受 IPv4、IPv6 或 ASCII DNS 主机名（≤255 字节），不接受 URL、端口或路径；
 - `port` 为 1–65535；重复的 `(kind, host, port)` 返回 `400`，保留已有候选；
 - 每次上报**替换**该设备全部候选；`expires_in` 会被夹到 `[60, 2 小时]`（服务端硬上限，配置再大也不超过）；
-- 响应 `{ "success": true, "accepted": <n> }`。
+- 响应 `{ "success": true, "accepted": <n>, "revocation_epoch": <本账号计数>, "heartbeat_interval_seconds": 900 }`。
+  客户端在每次心跳同步计数；变化时立即拉取设备快照、关闭已吊销设备的 TLS 会话并拒绝其新连接。
 
 ### `GET /mesh/v1/addresses?device_id=<id>`
 
@@ -223,9 +241,9 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 | `basicConstraints` | `CA:FALSE`（critical） |
 | `keyUsage` | `digitalSignature`（critical） |
 | `extendedKeyUsage` | `clientAuth`、`serverAuth` |
-| `subjectAltName` | `URI:nipaplay-mesh://device?account=<accountId>&device=<deviceId>` |
+| `subjectAltName` | 身份 URI `nipaplay-mesh://device?account=<accountId>&device=<deviceId>`；DNS `d-<SHA256公钥摘要十六进制前32字符>.<后32字符>.mesh.nipaplay.invalid` 供标准 TLS 验证器核对目标设备（不解析 DNS） |
 | `authorityKeyIdentifier` | 由 CA 公钥派生 |
-| 私有扩展 `1.3.6.1.4.1.61086.1.1` | DER `UTF8String`，内容为 `{"v":1,"accountId":...,"deviceId":...,"publicKey":...}`。**该 OID 使用的 PEN 归属尚未核实，正式发布前由主控确定合法的 OID；客户端解析器需与最终 OID 同步。** |
+| 私有扩展 `1.3.6.1.4.1.61086.1.1` | DER `UTF8String`，内容为 `{"v":1,"accountId":...,"deviceId":...,"publicKey":...}`。**该 OID 使用的 PEN 归属尚未核实，正式发布前由主控确定合法的 OID。阶段 M 使用标准 SAN 验证身份，不依赖这个私有 OID。** |
 | 有效期 | `not_before = 签发时刻 - 5 分钟`，`not_after = 签发时刻 + MESH_CERT_VALIDITY_SECONDS`，两端均限制在 CA 有效期内 |
 
 客户端以 **App 内置的签发者证书**为信任根，校验链、`accountId` 与自身一致、公钥与
@@ -240,12 +258,13 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 
 ## 存储
 
-SQLite（WAL）单文件，四张表：
+SQLite（WAL）单文件：
 
 - `devices(device_id, account_id, public_key, name, platform, app_version, created_at, last_seen_at, revoked_at)`
 - `addresses(device_id, kind, host, port, priority, expires_at, updated_at)`
 - `certificates(device_id, issued_at, expires_at)`
 - `accounts(account_id, revocation_epoch)` —— 每个账号一行，保存该账号自己的吊销版本
+- `possession_proofs(public_key, nonce, seen_at)` —— 注册/续期持钥证明防重放
 
 吊销设备时在同一个事务里删除它的地址候选。过期的地址候选每小时清理一次。
 
