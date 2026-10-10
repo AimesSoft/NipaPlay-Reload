@@ -65,6 +65,31 @@ external object 与 evidence，再追加它自己的偏移/对齐存储；本阶
 - 仅弹弹play 的明确单集关系投影到 Classic；合集不自动选择单个弹幕库。
   Next 库通过 media.library.works/work 暴露，M1 Action 与 Classic 展示维持原语义。
 
+## 整季识别与纠正
+
+`media.identification.apply_release`（write）把一次作品/季判断作用于 `root`
+目录下全部视频，包含子目录。输入必须选择已接受的本地 `releaseId`，或外部
+`workRef`（TMDB TV 还必须给 `releaseRef`）；可用 `workId` 归入已有作品。
+`numberSource` 必填：`sxxeyy` 只接受文件名中的明确季集标记，`filename` 也
+允许 `[Group] Title - 01 [1080p]` 等明确编号。`reason` 与 `requestId` 必填，
+`url` 可选。此 Action 表示接受或纠正该目录的作品/季身份，可替换已有文件绑定。
+
+一次调用返回一个 `media.apply_release` 任务。外部作品和季目录各读取一次，
+使用已接受的本地 Release 时不请求来源。任务保存目录快照和逐文件结果，恢复
+时复用已提交绑定。作品/季判断的 `boundBy` 由调用来源写为 agent/user；
+确定性级联的文件绑定写为 automatic，并保留同一调用 ID 和文件内容证据。
+文件名解析为 `rules-2`；SxxEyy 优先，分辨率和编码标记不能成为小数集号。
+
+季号不符、缺少编号、同号目录项、合集或 cour 不确定时，只为这些文件创建
+独立 `media.identify` Decision，不逐文件搜索外部来源。任务回执包含
+`discovered`、`bound`、`needsDecision`、`failed`、`complete` 和 `files`；
+每个待决项有 `jobId`，失败项有明确错误码。`succeeded` 表示批处理及成功项
+回读完成，只有 `complete=true` 才表示整个目录全部绑定。
+
+`media.identification.get` 对尚未建立解析上下文的识别任务返回 queued/probing
+等状态、空 attempts/candidates；探测后才出现 signals/probe。失败任务返回
+原任务错误；未知 jobId 为 not_found，其他任务类型为 invalid_input。
+
 ## 凭据与测试
 
 TMDB 的 v3 API key 由宿主 `CredentialRef('metadata', 'tmdb')` 读取保险库。

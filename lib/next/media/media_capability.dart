@@ -419,8 +419,29 @@ final _specs = [
       }),
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
+      'media.identification.apply_release',
+      'Accept or correct a work/release for every video under root in one task. Choose an accepted local releaseId or workRef with releaseRef (required for TMDB TV). Bind unique matching episode numbers using sxxeyy or filename; uncertain files get individual executable Decisions. Replaces existing file identities within root. requestId deduplicates the batch; receipts list bound files, unresolved jobs and failures.',
+      Effect.write,
+      const ObjectSchema({
+        'root': _text,
+        'releaseId': _text,
+        'workRef': _refSchema,
+        'releaseRef': _refSchema,
+        'workId': _text,
+        'numberSource': StringSchema(values: ['sxxeyy', 'filename']),
+        'requestId': _text,
+        'reason': _text,
+        'url': _text
+      }, required: [
+        'root',
+        'numberSource',
+        'requestId',
+        'reason'
+      ]),
+      const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
+  _spec(
       'media.identification.get',
-      'Read persisted parsed signals, provider attempts, candidates and the current Decision revision. Follow task.get for executable option calls.',
+      'Read identification progress including queued/probing jobs before parsed context exists. Signals and probe appear after probing; task errors are explicit. Follow task.wait once, then task.get for executable option calls.',
       Effect.read,
       const ObjectSchema({'jobId': _text}, required: ['jobId']),
       ObjectSchema({
@@ -429,6 +450,15 @@ final _specs = [
         'fileRevision': const IntegerSchema(),
         'bindingRevision': const IntegerSchema(),
         'state': const StringSchema(),
+        'error': const ObjectSchema({
+          'code': StringSchema(),
+          'message': StringSchema(),
+          'retryable': BooleanSchema()
+        }, required: [
+          'code',
+          'message',
+          'retryable'
+        ]),
         'signals': _signalsSchema,
         'probe': _probeSchema,
         'attempts': const ArraySchema(ObjectSchema({
@@ -447,7 +477,6 @@ final _specs = [
         'fileRevision',
         'bindingRevision',
         'state',
-        'signals',
         'attempts',
         'candidates'
       ])),
@@ -635,14 +664,28 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         };
       case 'media.identification.get':
         final id = json['jobId'] as String;
-        final identification = await store.identification(id);
+        final job = await service.engine.get(id);
+        if (job.type != 'media.identify') {
+          throw const Failure(FailureCode.invalidInput,
+              'jobId must reference a media.identify task.');
+        }
+        final rows = await store.database.query('media_identifications',
+            where: 'job_id = ?', whereArgs: [id]);
+        final identification = rows.isEmpty ? null : rows.single;
+        final file = await store.entity(job.input['fileId'] as String);
         result = {
-          'job': _job(await service.engine.get(id)),
-          'fileId': identification['file_id'],
-          'fileRevision': identification['file_revision'],
-          'bindingRevision': identification['binding_revision'],
-          'state': identification['state'],
-          ...identification['context'] as JsonMap,
+          'job': _job(job),
+          'fileId': job.input['fileId'],
+          'fileRevision':
+              identification?['file_revision'] ?? job.input['fileRevision'],
+          'bindingRevision': identification?['binding_revision'] ??
+              (file['attributes'] as JsonMap)['bindingRevision'],
+          'state': identification?['state'] ??
+              (job.state == JobState.running ? 'probing' : job.state.wireName),
+          if (job.error != null) 'error': job.error!.toJson(),
+          'attempts': <JsonMap>[],
+          if (identification != null)
+            ...decodeMediaJson(identification['context']),
           'candidates': [
             for (final row in await store.candidates(id))
               {
@@ -654,6 +697,36 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
                 ...row['payload'] as JsonMap
               }
           ]
+        };
+      case 'media.identification.apply_release':
+        final local = json['releaseId'] != null;
+        if (local == (json['workRef'] != null) ||
+            local && (json['releaseRef'] != null || json['workId'] != null)) {
+          throw const Failure(FailureCode.invalidInput,
+              'Choose releaseId or workRef with an optional releaseRef/workId.');
+        }
+        if (local) {
+          await service.releaseRecords(json['releaseId'] as String);
+        } else {
+          final ref = ExternalRef.fromJson(
+              Map<String, Object?>.from(json['workRef'] as Map));
+          service.provider(ref.provider);
+          if (!{'tv', 'movie', 'subject', 'anime'}.contains(ref.objectType) ||
+              ref.objectType == 'tv' && json['releaseRef'] == null) {
+            throw const Failure(FailureCode.invalidInput,
+                'Choose a work catalogue and an explicit releaseRef for TV.');
+          }
+        }
+        await service.authorizedPath(json['root'] as String, directory: true);
+        result = {
+          'job': _job(await service.submit(
+              'media.apply_release',
+              {
+                ...json,
+                'boundBy': invocation.origin == 'gui' ? 'user' : 'agent',
+                'invocationId': invocation.id
+              },
+              key: stableMediaId('apply-release', json)))
         };
       case 'media.identification.add_evidence':
         final job = await _pending(json);

@@ -399,6 +399,44 @@ final class IdentityStore {
   Future<String> saveSnapshot(MetadataRecord record) => database.transaction(
       (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
 
+  Future<({String workId, String releaseId})> acceptRelease(
+          JsonMap payload, String jobId, String actor, Invocation invocation) =>
+      database.transaction((tx) async {
+        final work = MetadataRecord.fromJson(
+            Map<String, Object?>.from(payload['work'] as Map));
+        final release = MetadataRecord.fromJson(
+            Map<String, Object?>.from(payload['release'] as Map));
+        final workId = payload['workId'] as String? ??
+            await _materialize(tx, 'work', work, null);
+        if ((await entity(workId, db: tx))['kind'] != 'work') {
+          throw const Failure(
+              FailureCode.invalidInput, 'workId must reference a work.');
+        }
+        final releaseId = await _materialize(tx, 'release', release, workId);
+        final scope = Map<String, Object?>.from(payload['scope'] as Map);
+        for (final entry in [(workId, work), (releaseId, release)]) {
+          final binding = await _bindRecord(tx, entry.$1, entry.$2, 'contains',
+              scope, actor, 'release_judgment', invocation, jobId, 0);
+          await tx.insert(
+              'media_evidence',
+              {
+                'id': stableMediaId('evidence', binding),
+                'binding_id': binding,
+                'job_id': jobId,
+                'source': 'release_judgment',
+                'payload': jsonEncode(payload['evidence']),
+                'created_at': _now
+              },
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+        for (final episode in release.episodes) {
+          final epId = await _materialize(tx, 'episode', episode, releaseId);
+          await _bindRecord(tx, epId, episode, 'exact', scope, actor,
+              'release_judgment', invocation, jobId, 0);
+        }
+        return (workId: workId, releaseId: releaseId);
+      });
+
   /// The checkpoint choice is durable before this transaction; recovery can safely repeat it.
   Future<JsonMap> acceptCandidate(String jobId, String candidateId,
           String actor, Invocation invocation) =>
@@ -445,10 +483,24 @@ final class IdentityStore {
         final revision = (attrs['bindingRevision'] as int) + 1;
         final scope = Map<String, Object?>.from(payload['scope'] as Map);
         final source = candidate['source'] as String;
-        await _bindRecord(tx, workId, work, 'contains', scope, actor, source,
-            invocation, jobId, revision);
-        await _bindRecord(tx, releaseId, release, payload['relation'] as String,
-            scope, actor, source, invocation, jobId, revision);
+        if (source != 'accepted_release') {
+          await _bindRecord(tx, workId, work, 'contains', scope, actor, source,
+              invocation, jobId, revision);
+          await _bindRecord(
+              tx,
+              releaseId,
+              release,
+              payload['relation'] as String,
+              scope,
+              actor,
+              source,
+              invocation,
+              jobId,
+              revision);
+        }
+        final previousDandanplay = await tx.rawQuery(
+            'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
+            [fileId, 'accepted', 'dandanplay']);
         await tx.update('media_bindings', {'status': 'revoked'},
             where: 'entity_id = ? AND status = ?',
             whereArgs: [fileId, 'accepted']);
@@ -491,7 +543,9 @@ final class IdentityStore {
           });
         }
         // Persist the complete selected release catalogue, independently of file coverage.
-        for (final episode in release.episodes) {
+        for (final episode in source == 'accepted_release'
+            ? const <MetadataRecord>[]
+            : release.episodes) {
           final epId = await _materialize(tx, 'episode', episode, releaseId);
           await _bindRecord(tx, epId, episode, 'exact', scope, actor, source,
               invocation, jobId, revision);
@@ -535,6 +589,23 @@ final class IdentityStore {
               'episodeId': int.parse(selected.single.ref.externalId),
               'animeName': work.title,
               'episodeTitle': selected.single.title
+            })
+          });
+        } else if (previousDandanplay.length == 1) {
+          await tx.insert('media_projection_outbox', {
+            'id': stableMediaId('projection', [fileId, revision]),
+            'file_id': fileId,
+            'file_revision': file['revision'],
+            'binding_revision': revision,
+            'state': 'pending',
+            'payload': jsonEncode({
+              'clear': true,
+              'expectedAnimeId': int.parse(
+                  (previousDandanplay.single['scope'] as String)
+                      .split('/')
+                      .last),
+              'expectedEpisodeId':
+                  int.parse(previousDandanplay.single['external_id'] as String)
             })
           });
         }

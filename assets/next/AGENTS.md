@@ -59,12 +59,20 @@ NipaPlay 必须在本机运行，并已在「设置 → 实验室」中开启 Ag
 ## 识别与刮削
 
 - 作品身份可以来自弹弹play、Bangumi、TMDB 等多个来源。**弹弹play 没有收录不等于无法识别**，电视剧、电影常常只有 TMDB 身份。
-- 扫描与识别是任务：`media_library_scan`、`media_identification_start` 返回 job，用 `task_wait` 等待结果。
-- 确定性程序只自动绑定高置信度的结果；遇到歧义，任务或识别会进入 `needs_decision`。
-  - 用户的话、目录名、年份、集数已经能确定答案时，执行对应选项的 `call`；需要查证时可以联网核对，并用 `media_identification_add_evidence` 记录证据。
+- **单个文件**用 `media_identification_start`。用户说“整部剧”“整季”“整个目录”，或者纠正一整个目录的作品或季时，**用 `media_identification_apply_release` 一次处理整个目录**：
+  - 传入目录（root）、已接受的本地 releaseId，或者核实过的作品或季引用；TMDB 电视剧必须明确是哪一季；
+  - 文件名带 `SxxEyy` 时，集号来源选 `sxxeyy`；`[Group] Title - 01 [1080p]` 这类明确的动画编号可以选 `filename`；同时写上 reason。
+- 作品、年份、季确定之后，由 NipaPlay 按集号自动绑定。**不要逐集重复“补证据 → 重新判断 → 绑定”，也不要逐集轮询识别状态。**
+- 扫描和识别都是任务，用 `task_wait` 等待。`media_library_scan` 成功只代表枚举和调度完成，不代表子识别都完成了。
+- 批量回执里看 `bound`、`needsDecision`、`failed` 和 `complete`：
+  - 只有 `complete=true` 才能说整季完成；
+  - 有待决或失败项时，如实说明部分完成，只单独处理回执里列出的那几个文件。
+- 遇到 `needs_decision`：
+  - 用户的话、目录名、年份、集数已经能确定答案时，执行对应选项的 `call`；
+  - 需要查证时可以联网核对，用 `media_identification_add_evidence` 记录证据后再重新判断；
   - 仍然不能确定时，把候选告诉用户，不要硬选。
-- 一个目录对应的作品或季确定之后，其下各集会自动按集号绑定，不需要逐集确认。
-- 用户纠正识别结果时，用 `media_identity_bind` / `media_identity_unbind`；用户修改标题、海报等，用 `media_metadata_override`。
+- `media_identification_get` 在排队或探测中可能还没有结果，这是正常状态，不要把“还没探测”说成“无法识别”。
+- 用户纠正单个文件时用 `media_identity_bind` / `media_identity_unbind`；纠正整个目录用 `media_identification_apply_release`；修改标题、海报等用 `media_metadata_override`。
 
 ## 弹幕
 

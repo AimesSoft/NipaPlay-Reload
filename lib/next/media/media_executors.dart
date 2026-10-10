@@ -13,9 +13,304 @@ import 'metadata_provider.dart';
 List<JobExecutor> mediaExecutors(MediaService service) => [
       _ScanExecutor(service),
       _IdentificationExecutor(service),
+      _ApplyReleaseExecutor(service),
       _RefreshExecutor(service),
       _ProjectionExecutor(service)
     ];
+
+const _videoExtensions = {
+  '.mkv',
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.m4v',
+  '.ts',
+  '.webm',
+  '.wmv',
+  '.flv'
+};
+
+final class _ApplyReleaseExecutor implements JobExecutor {
+  const _ApplyReleaseExecutor(this.service);
+  final MediaService service;
+  @override
+  String get type => 'media.apply_release';
+  @override
+  Future<void> execute(JobContext context) async {
+    try {
+      await _run(context);
+    } on FileSystemException catch (error) {
+      throw Failure(
+          error.osError?.errorCode == 2
+              ? FailureCode.notFound
+              : FailureCode.unavailable,
+          'Media directory is inaccessible: ${error.message}');
+    }
+  }
+
+  @override
+  Future<void> recover(JobContext context) => execute(context);
+
+  Future<void> _run(JobContext context) async {
+    final control = _Control(context);
+    final results = List<JsonMap>.from(
+        context.job.checkpoint['results'] as List? ?? const []);
+    JsonMap details() => {
+          'bound': results.where((r) => r['state'] == 'bound').length,
+          'needsDecision':
+              results.where((r) => r['state'] == 'needs_decision').length,
+          'failed': results.where((r) => r['state'] == 'failed').length,
+          'files': results,
+          'complete': false
+        };
+    if (await control.stop(details())) return;
+    await context.running(phase: 'release');
+    var selection = context.job.checkpoint['selection'] as JsonMap?;
+    if (selection == null) {
+      try {
+        selection =
+            await _selection(context.job.input, () => control.stop(details()));
+      } on ProviderRetry catch (error) {
+        if (await control.stop(details())) return;
+        final retries = context.job.checkpoint['retries'] as int? ?? 0;
+        if (retries >= 3) {
+          throw Failure(FailureCode.unavailable,
+              '${error.provider} retry budget exhausted: ${error.reason}');
+        }
+        await context.retryAt(
+            error.at,
+            Failure(
+                FailureCode.unavailable, '${error.provider}: ${error.reason}',
+                retryable: true),
+            checkpoint: {...context.job.checkpoint, 'retries': retries + 1});
+        return;
+      }
+      if (selection == null || await control.stop(details())) return;
+      await context.report(
+          checkpoint: {...context.job.checkpoint, 'selection': selection});
+    }
+    final invocation = Invocation(
+        origin: context.job.input['boundBy'] == 'user' ? 'gui' : 'mcp',
+        id: context.job.input['invocationId'] as String);
+    final accepted = await service.mutate(() => service.store.acceptRelease(
+        selection!,
+        context.job.jobId,
+        context.job.input['boundBy'] as String,
+        invocation));
+    await context.markSideEffectCommitted();
+    if (await control.stop(details())) return;
+    final work = MetadataRecord.fromJson(
+        Map<String, Object?>.from(selection['work'] as Map));
+    final release = MetadataRecord.fromJson(
+        Map<String, Object?>.from(selection['release'] as Map));
+    var paths = (context.job.checkpoint['paths'] as List?)?.cast<String>();
+    if (paths == null) {
+      await context.report(phase: 'enumerate');
+      final root = await service
+          .authorizedPath(context.job.input['root'] as String, directory: true);
+      paths = [];
+      await for (final entry
+          in Directory(root).list(recursive: true, followLinks: false)) {
+        if (await control.stop(details())) return;
+        if (entry is File &&
+            _videoExtensions.contains(p.extension(entry.path).toLowerCase())) {
+          paths.add(entry.path);
+        }
+      }
+      paths.sort();
+      await context
+          .report(checkpoint: {...context.job.checkpoint, 'paths': paths});
+    }
+    await context.report(phase: 'bind');
+    for (final path in paths) {
+      if (await control.stop(details())) return;
+      if (results.any((r) => r['path'] == path)) continue;
+      String? fileId;
+      try {
+        fileId = await service.index(path);
+        final file = await service.store.entity(fileId);
+        final signals = service.parser.parse(path);
+        final identificationId =
+            stableMediaId('release-file', [context.job.jobId, fileId]);
+        final saved = await service.store.database.query(
+            'media_identifications',
+            where: 'job_id = ?',
+            whereArgs: [identificationId]);
+        final alreadyCommitted =
+            saved.isNotEmpty && saved.single['state'] == 'accepted';
+        JsonMap? payload;
+        Failure? uncertainty;
+        if (!alreadyCommitted) {
+          try {
+            if (context.job.input['numberSource'] == 'sxxeyy' &&
+                    signals.season == null ||
+                signals.number == null ||
+                signals.endNumber != null ||
+                signals.cour != null ||
+                signals.season != null && signals.season != release.season) {
+              throw const Failure(FailureCode.conflict,
+                  'No unique single episode matching the selected numbering source and release season.');
+            }
+            payload = await service.candidate(work, signals,
+                confirmedRelease: release,
+                workId: accepted.workId,
+                reason: context.job.input['reason'] as String,
+                url: context.job.input['url'] as String?);
+          } on Failure catch (error) {
+            if (error.code != FailureCode.notFound &&
+                error.code != FailureCode.conflict) {
+              rethrow;
+            }
+            uncertainty = error;
+          }
+          if (await control.stop(details())) return;
+        }
+        if (uncertainty != null) {
+          final child = await service.submit(
+              'media.identify',
+              {
+                'fileId': fileId,
+                'fileRevision': file['revision'],
+                'sources': <String>[],
+                'releaseId': accepted.releaseId,
+                'releaseIssue': uncertainty.toJson()
+              },
+              key: stableMediaId(
+                  'release-decision', [context.job.jobId, fileId]));
+          results.add({
+            'path': path,
+            'fileId': fileId,
+            'state': 'needs_decision',
+            'jobId': child.jobId,
+            'error': uncertainty.toJson()
+          });
+        } else {
+          if (!alreadyCommitted) {
+            await service.store.beginIdentification(identificationId, fileId, {
+              'signals': signals.toJson(),
+              'probe': (file['attributes'] as JsonMap)['probe'],
+              'attempts': <JsonMap>[]
+            });
+          }
+          final candidateId = alreadyCommitted
+              ? (await service.store.candidates(identificationId))
+                  .singleWhere((r) => r['state'] == 'accepted')['id'] as String
+              : await service.store
+                  .addCandidate(identificationId, payload!, 'accepted_release');
+          await service.accept(
+              identificationId, candidateId, 'automatic', invocation);
+          final committedFile = await service.store.entity(fileId);
+          results.add({
+            'path': path,
+            'fileId': fileId,
+            'state': 'bound',
+            'identificationId': identificationId,
+            'fileRevision': file['revision'],
+            'bindingRevision':
+                (committedFile['attributes'] as JsonMap)['bindingRevision']
+          });
+        }
+      } on FileSystemException catch (error) {
+        results.add({
+          'path': path,
+          'state': 'failed',
+          'error': Failure(FailureCode.unavailable, error.message).toJson()
+        });
+      } on Failure catch (error) {
+        results.add({
+          'path': path,
+          if (fileId != null) 'fileId': fileId,
+          'state': 'failed',
+          'error': error.toJson()
+        });
+      }
+      await context.markSideEffectCommitted(
+          checkpoint: {...context.job.checkpoint, 'results': results});
+      await context.report(
+          progress: JobProgress(
+              completed: results.length, total: paths.length, unit: 'files'));
+    }
+    await context.report(phase: 'verify');
+    for (final result in results.where((r) => r['state'] == 'bound')) {
+      final fileId = result['fileId'] as String;
+      final file = await service.store.entity(fileId);
+      final bindings = await service.store.database.query('media_bindings',
+          where: 'entity_id = ? AND status = ? AND job_id = ?',
+          whereArgs: [fileId, 'accepted', result['identificationId']]);
+      if (file['revision'] != result['fileRevision'] ||
+          (file['attributes'] as JsonMap)['bindingRevision'] !=
+              result['bindingRevision'] ||
+          bindings.isEmpty ||
+          (await service.store.pendingProjections(fileId: fileId)).isNotEmpty) {
+        throw const Failure(
+            FailureCode.conflict, 'Batch identity readback changed.');
+      }
+    }
+    for (final result in results.where((r) => r['state'] == 'needs_decision')) {
+      await service.engine.get(result['jobId'] as String);
+    }
+    if (await control.stop(details())) return;
+    final receipt = details();
+    await context
+        .succeed(JobReceipt(verification: VerificationLevel.verified, details: {
+      ...receipt,
+      'workId': accepted.workId,
+      'releaseId': accepted.releaseId,
+      'complete': receipt['needsDecision'] == 0 && receipt['failed'] == 0,
+      'discovered': paths.length
+    }));
+  }
+
+  Future<JsonMap?> _selection(
+      JsonMap input, Future<bool> Function() stopped) async {
+    MetadataRecord work, release;
+    String? workId = input['workId'] as String?;
+    if (input['releaseId'] case final String id) {
+      final records = await service.releaseRecords(id);
+      work = records.work;
+      release = records.release;
+      workId = records.workId;
+    } else {
+      final ref = ExternalRef.fromJson(
+          Map<String, Object?>.from(input['workRef'] as Map));
+      work = await service.provider(ref.provider).get(ref);
+      if (await stopped()) return null;
+      if (input['releaseRef'] case final Map releaseJson) {
+        final releaseRef =
+            ExternalRef.fromJson(Map<String, Object?>.from(releaseJson));
+        if (releaseRef.provider != ref.provider ||
+            ref.objectType != 'tv' &&
+                stableMediaId('ref', ref.toJson()) !=
+                    stableMediaId('ref', releaseRef.toJson()) ||
+            ref.objectType == 'tv' &&
+                !work.episodes.any((ep) =>
+                    ep.ref.objectType == releaseRef.objectType &&
+                    ep.ref.externalId == releaseRef.externalId &&
+                    ep.ref.scope == releaseRef.scope)) {
+          throw const Failure(FailureCode.invalidInput,
+              'Release does not belong to the selected work.');
+        }
+        release = await service.provider(ref.provider).get(releaseRef);
+      } else {
+        release = work;
+      }
+    }
+    return {
+      'work': work.toJson(),
+      'release': release.toJson(),
+      'workId': workId,
+      'scope': {
+        'order': release.order,
+        'season': release.season,
+        'cour': null,
+        'numbers': <String>[],
+        'startMs': null,
+        'endMs': null
+      },
+      'evidence': {'reason': input['reason'], 'url': input['url']}
+    };
+  }
+}
 
 final class _ProjectionExecutor implements JobExecutor {
   const _ProjectionExecutor(this.service);
@@ -96,17 +391,7 @@ final class _ScanExecutor implements JobExecutor {
           return;
         }
         if (entry is! File ||
-            !{
-              '.mkv',
-              '.mp4',
-              '.avi',
-              '.mov',
-              '.m4v',
-              '.ts',
-              '.webm',
-              '.wmv',
-              '.flv'
-            }.contains(p.extension(entry.path).toLowerCase())) {
+            !_videoExtensions.contains(p.extension(entry.path).toLowerCase())) {
           continue;
         }
         final fileId = await service.index(entry.path);
@@ -288,6 +573,25 @@ final class _IdentificationExecutor implements JobExecutor {
       'attempts': <JsonMap>[]
     });
     await service.store.checkContext(jobId);
+    if (choice == 'reconsider') {
+      await _decide(context);
+      return;
+    }
+    if (context.job.input['releaseIssue'] case final Map issue) {
+      await service.store.updateIdentificationContext(jobId, {
+        'signals': signals.toJson(),
+        'probe': (file['attributes'] as JsonMap)['probe'],
+        'attempts': [
+          {
+            'provider': 'accepted_release',
+            'status': issue['code'],
+            'detail': issue['message']
+          }
+        ]
+      });
+      await _decide(context);
+      return;
+    }
     if (links.isNotEmpty) {
       await service.mutate(() => service.projection.drain(fileId: fileId));
       await service.store.setIdentificationState(jobId, 'accepted');
@@ -304,10 +608,6 @@ final class _IdentificationExecutor implements JobExecutor {
       });
       if (await control.retired()) return;
       await _verify(context, fileId);
-      return;
-    }
-    if (choice == 'reconsider') {
-      await _decide(context);
       return;
     }
     final sources = (context.job.input['sources'] as List).cast<String>();

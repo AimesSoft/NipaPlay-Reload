@@ -24,6 +24,7 @@
     "download.resume": "write",
     "history.continue_watching": "read",
     "media.identification.add_evidence": "write",
+    "media.identification.apply_release": "write",
     "media.identification.defer": "write",
     "media.identification.get": "read",
     "media.identification.reconsider": "write",

@@ -31,7 +31,7 @@ final class FilenameSignals implements JsonEncodable {
         'releaseGroup': releaseGroup,
         'version': version,
         'technical': technical,
-        'parserVersion': 'rules-1'
+        'parserVersion': 'rules-2'
       };
 }
 
@@ -41,28 +41,42 @@ abstract interface class FilenameParserPort {
 
 final class RuleFilenameParser implements FilenameParserPort {
   const RuleFilenameParser();
+  static const numberPattern =
+      r'\d+(?:\.(?!(?:4320|2160|1440|1080|720|576|480)(?:[pi]?\b))\d+(?![\dA-Za-z]))?(?![\dA-Za-z])';
   @override
   FilenameSignals parse(String path) {
     final raw = p.basename(path);
     var title = p.basenameWithoutExtension(path);
     final group = RegExp(r'^\[([^\]]+)\]').firstMatch(title);
     final technical = RegExp(
-            r'\b(?:\d{3,4}p|WEB[- .]?DL|BluRay|HEVC|AVC|x26[45]|AAC|FLAC)\b',
+            r'\b(?:\d{3,4}[pi]|[48]K|WEB[- .]?DL|WEBRip|BluRay|HEVC|AVC|x26[45]|H[ .]?26[45]|AAC|FLAC|HDR(?:10)?|DV)\b',
             caseSensitive: false)
         .allMatches(title)
         .map((m) => m[0]!)
         .toList();
-    final year = RegExp(r'[\[(]((?:19|20)\d{2})[\])]').firstMatch(title);
+    final year = RegExp(r'(?:^|[\s.\[(])((?:19|20)\d{2})(?=$|[\s.\])])')
+        .firstMatch(title);
     final se = RegExp(
-            r'\bS(\d+)\s*E(\d+(?:\.\d+)?)(?:\s*[-~]\s*(?:E)?(\d+(?:\.\d+)?))?',
+            r'(?:^|[\s._\[-])S(\d+)\s*E(' +
+                numberPattern +
+                r')(?:\s*[-~]\s*(?:E)?(' +
+                numberPattern +
+                r'))?',
             caseSensitive: false)
         .firstMatch(title);
     final explicit = se ??
-        RegExp(r'(?:\s[-_]\s|\bEP?\s*|第)(\d+(?:\.\d+)?)(?:\s*[-~]\s*(\d+(?:\.\d+)?))?(?:[话話集]|\b)',
+        RegExp(
+                r'(?:\s[-_]\s|\bEP?\s*|第)(' +
+                    numberPattern +
+                    r')(?:\s*[-~]\s*(' +
+                    numberPattern +
+                    r'))?(?:[话話集]|\b)',
                 caseSensitive: false)
             .firstMatch(title);
     final special = RegExp(
-            r'\b(SP|OVA|OAD|NCOP|NCED)(?=$|[\s_.-]|\d)(?:\s*[-_.]?\s*(\d+(?:\.\d+)?))?',
+            r'\b(SP|OVA|OAD|NCOP|NCED)(?=$|[\s_.-]|\d)(?:\s*[-_.]?\s*(' +
+                numberPattern +
+                r'))?',
             caseSensitive: false)
         .firstMatch(title);
     final part = RegExp(r'\b(?:Part|Cour)\s*(\d+)', caseSensitive: false)
@@ -90,7 +104,9 @@ final class RuleFilenameParser implements FilenameParserPort {
         cour: part == null ? null : int.parse(part[1]!),
         number: number,
         endNumber: end,
-        episodeType: special == null ? 'regular' : special[1]!.toLowerCase(),
+        episodeType: se != null || special == null
+            ? 'regular'
+            : special[1]!.toLowerCase(),
         releaseGroup: group?[1],
         version: version?[0],
         technical: technical);

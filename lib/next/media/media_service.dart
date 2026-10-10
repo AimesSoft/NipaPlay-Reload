@@ -71,47 +71,62 @@ final class MediaService {
 
   Future<String> authorizedPath(String locator,
       {bool directory = false}) async {
-    if (!p.isAbsolute(locator) || Uri.tryParse(locator)?.hasScheme == true) {
-      throw const Failure(FailureCode.unavailable,
-          'MA filesystem scanning requires a native local path.');
+    try {
+      if (!p.isAbsolute(locator) || Uri.tryParse(locator)?.hasScheme == true) {
+        throw const Failure(FailureCode.unavailable,
+            'MA filesystem scanning requires a native local path.');
+      }
+      final path = await (directory
+          ? Directory(locator).resolveSymbolicLinks()
+          : File(locator).resolveSymbolicLinks());
+      var allowed = false;
+      for (final root in authorizedRoots()) {
+        if (!p.isAbsolute(root)) continue;
+        final canonical = await Directory(root).resolveSymbolicLinks();
+        if (path == canonical || p.isWithin(canonical, path)) allowed = true;
+      }
+      if (!allowed) {
+        throw const Failure(FailureCode.unavailable,
+            'Path is outside the configured media folders.');
+      }
+      return path;
+    } on FileSystemException catch (error) {
+      throw _fileFailure(error);
     }
-    final path = await (directory
-        ? Directory(locator).resolveSymbolicLinks()
-        : File(locator).resolveSymbolicLinks());
-    var allowed = false;
-    for (final root in authorizedRoots()) {
-      if (!p.isAbsolute(root)) continue;
-      final canonical = await Directory(root).resolveSymbolicLinks();
-      if (path == canonical || p.isWithin(canonical, path)) allowed = true;
-    }
-    if (!allowed) {
-      throw const Failure(FailureCode.unavailable,
-          'Path is outside the configured media folders.');
-    }
-    return path;
   }
 
   Future<JsonMap> probe(String locator) async {
-    final path = await authorizedPath(locator);
-    final file = File(path);
-    final before = await file.stat();
-    final stream = await file.open();
-    final List<int> bytes;
     try {
-      bytes = await stream.read(math.min(before.size, 16 * 1024 * 1024));
-    } finally {
-      await stream.close();
+      final path = await authorizedPath(locator);
+      final file = File(path);
+      final before = await file.stat();
+      final stream = await file.open();
+      final List<int> bytes;
+      try {
+        bytes = await stream.read(math.min(before.size, 16 * 1024 * 1024));
+      } finally {
+        await stream.close();
+      }
+      final after = await file.stat();
+      if (before.size != after.size || before.modified != after.modified) {
+        throw const Failure(
+            FailureCode.conflict, 'File changed during probing.');
+      }
+      return {
+        'size': after.size,
+        'modifiedAt': after.modified.toUtc().toIso8601String(),
+        'headMd5': md5.convert(bytes).toString()
+      };
+    } on FileSystemException catch (error) {
+      throw _fileFailure(error);
     }
-    final after = await file.stat();
-    if (before.size != after.size || before.modified != after.modified) {
-      throw const Failure(FailureCode.conflict, 'File changed during probing.');
-    }
-    return {
-      'size': after.size,
-      'modifiedAt': after.modified.toUtc().toIso8601String(),
-      'headMd5': md5.convert(bytes).toString()
-    };
   }
+
+  Failure _fileFailure(FileSystemException error) => Failure(
+      error.osError?.errorCode == 2
+          ? FailureCode.notFound
+          : FailureCode.unavailable,
+      'Media path is inaccessible: ${error.message}');
 
   Future<String> index(String locator) async {
     final path = await authorizedPath(locator);
@@ -167,6 +182,7 @@ final class MediaService {
             'media.scan' => 'Scan media folder',
             'media.identify' => 'Identify media file',
             'media.project' => 'Deliver Classic metadata',
+            'media.apply_release' => 'Apply release to media folder',
             _ => 'Refresh media metadata'
           },
           input: input,
@@ -213,7 +229,7 @@ final class MediaService {
       selected,
       releaseId,
       requestId,
-      'rules-1'
+      'rules-2'
     ]);
     return submit(
         'media.identify',
@@ -249,7 +265,6 @@ final class MediaService {
       String? workId,
       String reason = 'Filename search requires confirmation.',
       String? url}) async {
-    final source = provider(work.ref.provider);
     var detail = work;
     var release = confirmedRelease ?? work;
     if (confirmedRelease != null) {
@@ -259,7 +274,7 @@ final class MediaService {
         throw const Failure(FailureCode.invalidInput,
             'Work and release must come from the same source.');
       }
-      detail = await source.get(work.ref);
+      detail = await provider(work.ref.provider).get(work.ref);
       if (work.ref.provider == 'tmdb' &&
           !detail.episodes.any((ep) =>
               ep.ref.externalId == releaseRef.externalId &&
@@ -267,9 +282,9 @@ final class MediaService {
         throw const Failure(FailureCode.invalidInput,
             'Selected release does not belong to the work.');
       }
-      release = await source.get(releaseRef);
+      release = await provider(work.ref.provider).get(releaseRef);
     } else if (work.ref.objectType == 'tv') {
-      detail = await source.get(work.ref);
+      detail = await provider(work.ref.provider).get(work.ref);
       final matches = detail.episodes
           .where((s) => s.season == (signals.season ?? 1))
           .toList();
@@ -277,9 +292,9 @@ final class MediaService {
         throw const Failure(FailureCode.notFound,
             'No unique TMDB season corresponds to the filename.');
       }
-      release = await source.get(matches.single.ref);
+      release = await provider(work.ref.provider).get(matches.single.ref);
     } else if (work.ref.objectType != 'movie' && work.episodes.isEmpty) {
-      detail = await source.get(work.ref);
+      detail = await provider(work.ref.provider).get(work.ref);
       release = detail;
     }
     var episodes = release.episodes;
@@ -342,6 +357,16 @@ final class MediaService {
 
   Future<JsonMap> releaseCandidate(
       String releaseId, FilenameSignals signals) async {
+    final records = await releaseRecords(releaseId);
+    return candidate(records.work, signals,
+        confirmedRelease: records.release,
+        workId: records.workId,
+        reason:
+            'Accepted local release with a unique catalogue number and matching episode type.');
+  }
+
+  Future<({MetadataRecord work, MetadataRecord release, String workId})>
+      releaseRecords(String releaseId) async {
     final release = await store.entity(releaseId);
     if (release['kind'] != 'release') {
       throw const Failure(
@@ -361,10 +386,6 @@ final class MediaService {
     final workId = release['parent_id'] as String;
     final work = await record(workId);
     final catalogue = await record(releaseId);
-    return candidate(work, signals,
-        confirmedRelease: catalogue,
-        workId: workId,
-        reason:
-            'Accepted local release with a unique catalogue number and matching episode type.');
+    return (work: work, release: catalogue, workId: workId);
   }
 }
