@@ -31,12 +31,14 @@ RTT 高且丢包严重，表现为弹幕/番剧信息加载慢、随机推荐超
 | `nipaplay-next` | `127.0.0.1:3010` | 官方站点、随机推荐、日志分享等 Next.js 接口 |
 | `nipaplay-region` | `127.0.0.1:18100` | 归属地判定（内置中国 IP 段库） |
 | `nipaplay-relay` | `0.0.0.0:18080` | 远程访问中继 |
+| `nipaplay-mesh-coordinator` | `127.0.0.1:18082` | Mesh 控制面（设备注册与证书签发、地址候选、吊销） |
 | `nginx` | `0.0.0.0:80` | 唯一入口，按路径反代到上面各服务 |
 
 nginx 路由：
 
 - `GET /region` → `nipaplay-region`（归属地接口）
 - `/dandanplay/*` → `nipaplay-dandanplay-gateway`
+- `/mesh/*` → `nipaplay-mesh-coordinator`
 - `/*` → `nipaplay-next`
 
 关键文件：
@@ -44,6 +46,8 @@ nginx 路由：
 ```
 /opt/nipaplay-dandanplay-gateway/nipaplay-dandanplay-gateway   # 网关二进制
 /etc/nipaplay-dandanplay-gateway.env                           # 网关配置（含密钥，640 root）
+/opt/nipaplay-mesh-coordinator/nipaplay-mesh-coordinator       # Mesh 控制面二进制
+/etc/nipaplay-mesh-coordinator.env                             # Mesh 控制面配置（含密钥，640 root）
 /opt/nipaplay-region/region_service.py                         # 归属地服务
 /opt/nipaplay-region/cn_ranges.json                            # 中国 IP 段（APNIC 生成）
 /www/wwwroot/nipaplay.aimes-soft.com/                          # 站点与兼容接口
@@ -113,12 +117,13 @@ HTTPS 页面（Web 版）无法直接请求明文 HTTP 的备用服务器（浏�
 
 ```bash
 # 状态
-systemctl status nipaplay-dandanplay-gateway nipaplay-next nipaplay-region nipaplay-relay nginx
+systemctl status nipaplay-dandanplay-gateway nipaplay-next nipaplay-region nipaplay-relay nipaplay-mesh-coordinator nginx
 
 # 日志
 journalctl -u nipaplay-dandanplay-gateway -f
 journalctl -u nipaplay-next -f
 journalctl -u nipaplay-region -f
+journalctl -u nipaplay-mesh-coordinator -f
 
 # 自检
 curl -s http://43.142.85.190/region

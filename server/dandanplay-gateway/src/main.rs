@@ -1,24 +1,23 @@
 use std::{
-    collections::HashMap,
-    env,
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    sync::{Arc, Mutex},
+    net::SocketAddr,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use axum::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request, State},
-    http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
+    http::{header, HeaderName, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{any, get},
     Json, Router,
 };
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use nipaplay_auth::{
+    app_signature, bearer_token, client_ip, env_bool, env_number, env_value, load_app_secret,
+    token_identity, unix_timestamp, DandanplayUpstream, RateLimiter, UpstreamConfig,
+};
 use reqwest::redirect::Policy;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -28,7 +27,7 @@ struct AppState {
     config: Arc<Config>,
     client: reqwest::Client,
     limiter: RateLimiter,
-    token_validation_cache: TokenValidationCache,
+    upstream: DandanplayUpstream,
 }
 
 struct Config {
@@ -71,125 +70,6 @@ impl Config {
     }
 }
 
-#[derive(Clone)]
-struct RateLimiter {
-    buckets: Arc<Mutex<HashMap<String, WindowBucket>>>,
-}
-
-struct WindowBucket {
-    started_at: Instant,
-    last_seen: Instant,
-    count: u32,
-}
-
-#[derive(Clone)]
-struct TokenValidationCache {
-    entries: Arc<Mutex<HashMap<String, TokenValidationEntry>>>,
-}
-
-struct TokenValidationEntry {
-    valid: bool,
-    expires_at: Instant,
-}
-
-impl TokenValidationCache {
-    fn new() -> Self {
-        Self {
-            entries: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    fn get(&self, identity: &str) -> Option<bool> {
-        let now = Instant::now();
-        let mut entries = self
-            .entries
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        match entries.get(identity) {
-            Some(entry) if entry.expires_at > now => Some(entry.valid),
-            Some(_) => {
-                entries.remove(identity);
-                None
-            }
-            None => None,
-        }
-    }
-
-    fn put(&self, identity: String, valid: bool) {
-        let ttl = if valid {
-            Duration::from_secs(600)
-        } else {
-            Duration::from_secs(30)
-        };
-        let now = Instant::now();
-        let mut entries = self
-            .entries
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if entries.len() > 50_000 {
-            entries.retain(|_, entry| entry.expires_at > now);
-        }
-        entries.insert(
-            identity,
-            TokenValidationEntry {
-                valid,
-                expires_at: now + ttl,
-            },
-        );
-    }
-}
-
-impl RateLimiter {
-    fn new() -> Self {
-        Self {
-            buckets: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    fn check(&self, keys: &[(&str, u32)]) -> bool {
-        let now = Instant::now();
-        let mut buckets = self
-            .buckets
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-
-        if buckets.len() > 50_000 {
-            buckets.retain(|_, bucket| {
-                now.duration_since(bucket.last_seen) < Duration::from_secs(600)
-            });
-        }
-
-        for (key, limit) in keys {
-            if *limit == 0 {
-                continue;
-            }
-            let bucket = buckets.entry((*key).to_owned()).or_insert(WindowBucket {
-                started_at: now,
-                last_seen: now,
-                count: 0,
-            });
-            if now.duration_since(bucket.started_at) >= Duration::from_secs(60) {
-                bucket.started_at = now;
-                bucket.count = 0;
-            }
-            bucket.last_seen = now;
-            if bucket.count >= *limit {
-                return false;
-            }
-        }
-
-        for (key, limit) in keys {
-            if *limit == 0 {
-                continue;
-            }
-            if let Some(bucket) = buckets.get_mut(*key) {
-                bucket.count += 1;
-            }
-        }
-        true
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -202,11 +82,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .timeout(Duration::from_secs(25))
         .redirect(Policy::none())
         .build()?;
+    let upstream = DandanplayUpstream::new(UpstreamConfig {
+        base_url: config.upstream_base.clone(),
+        app_id: config.app_id.clone(),
+        app_secret: config.app_secret.clone(),
+        user_agent: config.user_agent.clone(),
+    })
+    .map_err(std::io::Error::other)?;
     let state = AppState {
         config: Arc::clone(&config),
         client,
         limiter: RateLimiter::new(),
-        token_validation_cache: TokenValidationCache::new(),
+        upstream,
     };
 
     let app = app_router(state);
@@ -281,7 +168,7 @@ async fn proxy(
         );
     }
 
-    let client_ip = forwarded_ip(&headers).unwrap_or(peer.ip());
+    let client_ip = client_ip(&headers, peer);
     let identity = authorization
         .or(web_token.as_deref())
         .map(token_identity)
@@ -309,7 +196,7 @@ async fn proxy(
     // token needs renewing. It is not an anonymous entry point.
     if !account_entry && web_token.is_none() && path != "/api/v2/login/renew" {
         let token = authorization.expect("API authorization checked above");
-        match validate_account_token(&state, token, &identity).await {
+        match state.upstream.validate_token(token, &identity).await {
             Ok(true) => {}
             Ok(false) => {
                 return json_error(StatusCode::UNAUTHORIZED, "弹弹play登录已失效，请重新登录");
@@ -416,54 +303,6 @@ async fn proxy(
         .unwrap_or_else(|_| json_error(StatusCode::INTERNAL_SERVER_ERROR, "构造响应失败"))
 }
 
-async fn validate_account_token(
-    state: &AppState,
-    token: &str,
-    identity: &str,
-) -> Result<bool, String> {
-    if let Some(valid) = state.token_validation_cache.get(identity) {
-        return Ok(valid);
-    }
-
-    const VALIDATION_PATH: &str = "/api/v2/playhistory";
-    let timestamp = unix_timestamp();
-    let signature = app_signature(
-        &state.config.app_id,
-        timestamp,
-        VALIDATION_PATH,
-        &state.config.app_secret,
-    );
-    let url = format!(
-        "{}{}?withRelatedBangumi=false&pageIndex=0&pageSize=1",
-        state.config.upstream_base, VALIDATION_PATH
-    );
-    let response = state
-        .client
-        .get(url)
-        .header(header::ACCEPT, "application/json")
-        .header(header::USER_AGENT, &state.config.user_agent)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header("x-appid", &state.config.app_id)
-        .header("x-timestamp", timestamp.to_string())
-        .header("x-signature", signature)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-
-    let status = response.status();
-    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
-        state.token_validation_cache.put(identity.to_owned(), false);
-        return Ok(false);
-    }
-    if !status.is_success() {
-        return Err(format!("token validation returned HTTP {status}"));
-    }
-    let payload: Value = response.json().await.map_err(|error| error.to_string())?;
-    let valid = payload.get("success").and_then(Value::as_bool) == Some(true);
-    state.token_validation_cache.put(identity.to_owned(), valid);
-    Ok(valid)
-}
-
 fn is_account_entry(method: &Method, path: &str) -> bool {
     method == Method::POST && matches!(path, "/api/v2/login" | "/api/v2/register")
 }
@@ -558,38 +397,6 @@ fn string_field<'a>(
         .ok_or("登录或注册请求缺少必要字段")
 }
 
-fn app_signature(app_id: &str, timestamp: i64, path: &str, secret: &str) -> String {
-    let source = format!("{app_id}{timestamp}{path}{secret}");
-    BASE64.encode(Sha256::digest(source.as_bytes()))
-}
-
-fn bearer_token(headers: &HeaderMap) -> Option<&str> {
-    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let (scheme, token) = value.split_once(' ')?;
-    (scheme.eq_ignore_ascii_case("bearer"))
-        .then_some(token.trim())
-        .filter(|token| !token.is_empty())
-}
-
-fn token_identity(token: &str) -> String {
-    let digest = Sha256::digest(token.as_bytes());
-    format!("{:x}", digest)[..16].to_owned()
-}
-
-fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    for name in ["x-real-ip", "x-forwarded-for"] {
-        let Some(raw) = headers.get(name).and_then(|value| value.to_str().ok()) else {
-            continue;
-        };
-        if let Some(value) = raw.split(',').next() {
-            if let Ok(ip) = IpAddr::from_str(value.trim()) {
-                return Some(ip);
-            }
-        }
-    }
-    None
-}
-
 fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
     let message = message.into();
     let mut response = Json(json!({
@@ -603,118 +410,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
         .headers_mut()
         .insert("x-nipaplay-gateway", HeaderValue::from_static("rust"));
     response
-}
-
-async fn load_app_secret(user_agent: &str) -> Result<String, String> {
-    if let Ok(secret) = env::var("DANDANPLAY_APP_SECRET") {
-        let secret = secret.trim().to_owned();
-        if !secret.is_empty() {
-            return Ok(secret);
-        }
-    }
-
-    let urls = env_value(
-        "DANDANPLAY_APP_SECRET_URLS",
-        "https://kurisu.aimes-soft.com/nipaplay.php,https://nipaplay.aimes-soft.com/nipaplay.php",
-    );
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(10))
-        .user_agent(user_agent)
-        .build()
-        .map_err(|error| format!("failed to create bootstrap client: {error}"))?;
-
-    for url in urls.split(',').map(str::trim).filter(|url| !url.is_empty()) {
-        let result = async {
-            let response = client
-                .get(url)
-                .send()
-                .await
-                .map_err(|error| error.to_string())?
-                .error_for_status()
-                .map_err(|error| error.to_string())?;
-            let payload: Value = response.json().await.map_err(|error| error.to_string())?;
-            let encrypted = payload
-                .get("encryptedAppSecret")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| "missing encryptedAppSecret".to_owned())?;
-            Ok::<String, String>(decode_legacy_secret(encrypted))
-        }
-        .await;
-
-        match result {
-            Ok(secret) if !secret.is_empty() => return Ok(secret),
-            Ok(_) => warn!(url, "legacy AppSecret endpoint returned an empty secret"),
-            Err(error) => warn!(url, %error, "failed to load AppSecret from legacy endpoint"),
-        }
-    }
-
-    Err("DANDANPLAY_APP_SECRET is missing and all legacy secret endpoints failed".to_owned())
-}
-
-fn decode_legacy_secret(input: &str) -> String {
-    let mut chars: Vec<char> = input
-        .chars()
-        .map(|character| match character {
-            'A'..='Z' => char::from_u32('A' as u32 + 25 - (character as u32 - 'A' as u32)).unwrap(),
-            'a'..='z' => char::from_u32('a' as u32 + 25 - (character as u32 - 'a' as u32)).unwrap(),
-            _ => character,
-        })
-        .collect();
-
-    if chars.len() >= 5 {
-        let first = chars.remove(0);
-        let insertion = chars.len().saturating_sub(4);
-        chars.insert(insertion, first);
-    }
-
-    chars
-        .into_iter()
-        .map(|character| {
-            if let Some(digit) = character.to_digit(10) {
-                char::from_u32('0' as u32 + (10 - digit)).unwrap_or(character)
-            } else if character.is_ascii_lowercase() {
-                character.to_ascii_uppercase()
-            } else if character.is_ascii_uppercase() {
-                character.to_ascii_lowercase()
-            } else {
-                character
-            }
-        })
-        .collect()
-}
-
-fn unix_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
-
-fn env_value(name: &str, default: &str) -> String {
-    env::var(name).unwrap_or_else(|_| default.to_owned())
-}
-
-fn env_bool(name: &str, default: bool) -> bool {
-    env::var(name)
-        .ok()
-        .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => Some(true),
-            "0" | "false" | "no" | "off" => Some(false),
-            _ => None,
-        })
-        .unwrap_or(default)
-}
-
-fn env_number<T>(name: &str, default: T) -> T
-where
-    T: FromStr + Copy,
-{
-    env::var(name)
-        .ok()
-        .and_then(|value| value.trim().parse().ok())
-        .unwrap_or(default)
 }
 
 async fn shutdown_signal() {
@@ -743,7 +438,7 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::routing::post;
+    use axum::{http::HeaderMap, routing::post};
 
     fn config(secret: &str) -> Config {
         Config {
@@ -830,7 +525,10 @@ mod tests {
             "x-forwarded-for",
             HeaderValue::from_static("203.0.113.9, 127.0.0.1"),
         );
-        assert_eq!(forwarded_ip(&headers), Some("203.0.113.9".parse().unwrap()));
+        assert_eq!(
+            nipaplay_auth::forwarded_ip(&headers),
+            Some("203.0.113.9".parse().unwrap())
+        );
     }
 
     #[tokio::test]
@@ -862,11 +560,18 @@ mod tests {
 
         let mut config = config("secret");
         config.upstream_base = format!("http://{upstream_addr}");
+        let upstream = DandanplayUpstream::new(UpstreamConfig {
+            base_url: config.upstream_base.clone(),
+            app_id: config.app_id.clone(),
+            app_secret: config.app_secret.clone(),
+            user_agent: config.user_agent.clone(),
+        })
+        .unwrap();
         let state = AppState {
             config: Arc::new(config),
             client: reqwest::Client::new(),
             limiter: RateLimiter::new(),
-            token_validation_cache: TokenValidationCache::new(),
+            upstream,
         };
         let gateway_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let gateway_addr = gateway_listener.local_addr().unwrap();

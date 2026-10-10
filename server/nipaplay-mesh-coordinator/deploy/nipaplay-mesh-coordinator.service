@@ -1,0 +1,21 @@
+[Unit]
+Description=NipaPlay Mesh Coordinator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nipaplay-mesh
+Group=nipaplay-mesh
+EnvironmentFile=/etc/nipaplay-mesh-coordinator.env
+ExecStart=/opt/nipaplay-mesh-coordinator/nipaplay-mesh-coordinator
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/nipaplay-mesh-coordinator
+
+[Install]
+WantedBy=multi-user.target

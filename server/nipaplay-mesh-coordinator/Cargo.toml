@@ -1,0 +1,30 @@
+[package]
+name = "nipaplay-mesh-coordinator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axum = "0.8"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+nipaplay-auth = { path = "../nipaplay-auth" }
+rcgen = { version = "0.14", features = ["x509-parser"] }
+ring = "0.17"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+time = "0.3"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+x509-parser = { version = "0.18", features = ["verify"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[profile.release]
+lto = "thin"
+strip = true
