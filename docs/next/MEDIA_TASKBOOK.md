@@ -112,3 +112,22 @@ MB 依赖 MA 的身份实体。实现者可以在 MA 定下存储结构之后开
 
 - **按需建立身份索引**：应用播放过或列出过的任何文件，在需要时自动登记进身份存储（至少建立 File 与 FileLocation）。对当前播放文件执行弹幕或媒体操作，不得因为“尚未索引”而失败；不需要用户或 Agent 先触发扫描。
 - 来源能力如实声明是否支持搜索。不支持搜索时，Agent 可以联网找到平台页面的 URL，再交给 `danmaku_resolve` 解析。
+
+## 弹幕来源统一（2026-10-10 决定）
+
+NipaPlay 已有三条弹幕路径：Classic 自动加载弹弹play；手动导入本地文件；自动发现视频旁的同名弹幕文件（例如用户用 download-harness 为《长安十二时辰》准备的优酷 XML）。它们与 Next 的在线来源合为一套机制：
+
+1. **单一轨道注册表**：只使用播放器现有的多轨机制。
+   - 每条轨道带统一的来源信息：`origin`（`auto_remote` / `local_file` / `manual_import` / `binding`）、`platform`（`dandanplay` / `bilibili` / `youku` / … / `unknown`）、`platformVideoId`，以及文件路径或绑定 ID；
+   - `danmaku.tracks` 列出全部轨道，包括 Classic 加载的。
+2. **弹弹play 只有一条轨道**：Classic 按用户自动加载策略加载的 `dandanplay` 轨道就是唯一的弹弹play 轨道。
+   - 对同一 episodeId 执行 `danmaku.attach`（弹弹play）时，只记录绑定并复用现有轨道，不新建重复轨道；
+   - related 条目的原始平台来源在 Classic 的加载路径中同样保留：两者共用同一条解析路径。
+3. **本地弹幕文件是一等来源 `local`**：
+   - 沿用 Classic 现有的同名 / 相似名发现规则，不另写第二套；
+   - 从文件内容识别平台来源：B 站标准 XML 的 `chatserver` / `chatid`，例如 `<chatserver>youku</chatserver>`。识别不到时记为 `unknown`。
+4. **去重与优先级**：同一平台、同一视频只保留一条轨道。
+   - 本地文件已经提供某平台的弹幕时，请求“加该平台弹幕”应说明已存在，不重复获取；
+   - 用户明确要求刷新时，才在线获取并替换；
+   - 在线获取的结果可以用 `danmaku.export` 保存为本地文件。
+5. **自动加载策略仍由 Classic 设置决定**（之后迁入设置注册表），Next 不改变默认行为。已持久化的在线绑定在播放时自动恢复。
