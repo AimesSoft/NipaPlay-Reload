@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart';
@@ -16,9 +17,13 @@ import 'package:nipaplay/player_abstraction/mdk_player_adapter.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/player_remote_control_bridge.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../security/memory_vault.dart';
 
 class SettingsPlayer extends Fake
     implements MdkPlayerAdapter, BufferingAwarePlayer, AsyncDisposablePlayer {
@@ -83,9 +88,14 @@ void main() {
   late harness.Harness api;
   late VideoPlayerState video;
   late SettingsProvider preferences;
+  late CredentialStore previousCredentials;
+  late MemoryVault vault;
 
   setUp(() async {
     sqfliteFfiInit();
+    previousCredentials = CredentialStore.instance;
+    vault = MemoryVault();
+    CredentialStore.instance = CredentialStore(vault, desktop: true);
     root = await Directory.systemTemp.createTemp('nipa-settings-');
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -112,6 +122,7 @@ void main() {
     ApplicationSettings.authorizePath = null;
     await db.close();
     await root.delete(recursive: true);
+    CredentialStore.instance = previousCredentials;
   });
 
   Future<Map<String, Object?>> call(
@@ -129,6 +140,81 @@ void main() {
         isEmpty);
     return value;
   }
+
+  test('Classic AI secrets use the vault while public settings retain history',
+      () async {
+    const secret = 'settings-vault-offline-test-key';
+    const ref = CredentialRef('preferences', 'spoiler_ai_api_key');
+    final prefs = await SharedPreferences.getInstance();
+    await video.setSpoilerAiApiKey(secret);
+    expect(await vault.read(ref), secret);
+    expect(jsonDecode(prefs.getString(SettingsKeys.spoilerAiApiKey)!),
+        ref.placeholder);
+    expect(
+        await CredentialStore.instance
+            .read(prefs, SettingsKeys.spoilerAiApiKey),
+        secret);
+    await call('settings.set', {
+      'key': 'danmaku.spoilerAiModel',
+      'value': 'offline-model',
+    });
+    final history = await registry.history();
+    expect(history.single['key'], 'danmaku.spoilerAiModel');
+    expect(history.single['changedBy'], 'agent');
+    expect(jsonEncode(await db.query('settings_changes')),
+        isNot(contains(secret)));
+  });
+
+  test('all vault preference keys and composites are forbidden settings',
+      () async {
+    final denied = {
+      ...CredentialStore.scalarKeys,
+      ...CredentialStore.compositeKeys.keys,
+      'plugin_text_setting_fixture::key',
+      'plugin_fixture_custom_value',
+      'credential_vault_private_ref',
+      'tmdb',
+      'metadata.tmdb',
+      'agent.token',
+      'credentials.custom',
+      'next/credentials.json',
+      'next/endpoint.json',
+    };
+    final exposed = (await registry.describe()).map((entry) => entry['key']);
+    for (final key in denied) {
+      expect(isSettingDenied(key), isTrue, reason: key);
+      expect(exposed, isNot(contains(key)));
+      for (final action in ['settings.get', 'settings.set', 'settings.reset']) {
+        final outcome = await api.invokeJson(
+          action,
+          {'key': key, if (action == 'settings.set') 'value': 'blocked'},
+          harness.Invocation(origin: 'mcp'),
+        );
+        expect((outcome as harness.Failed).failure.code,
+            harness.FailureCode.notFound,
+            reason: '$action $key');
+      }
+      final allowed = registry.entries.first;
+      SettingEntry entry({required String key, required String storageKey}) =>
+          SettingEntry(
+            key: key,
+            title: 'Forbidden candidate',
+            description: 'Forbidden candidate',
+            schema: allowed.schema,
+            defaultValue: allowed.defaultValue,
+            storageKey: storageKey,
+            reader: allowed.reader,
+            writer: allowed.writer,
+            read: allowed.read,
+            write: allowed.write,
+            decodeStorage: allowed.decodeStorage,
+          );
+      expect(() => SettingsRegistry(db, [entry(key: key, storageKey: 'safe')]),
+          throwsArgumentError);
+      expect(() => SettingsRegistry(db, [entry(key: 'safe', storageKey: key)]),
+          throwsArgumentError);
+    }
+  });
 
   test('conversion defaults and reset follow Classic language selection',
       () async {

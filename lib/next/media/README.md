@@ -67,8 +67,8 @@ external object 与 evidence，再追加它自己的偏移/对齐存储；本阶
 
 ## 凭据与测试
 
-TMDB 的 v3 API key 由宿主 `CredentialRef('tmdb')` 读取
-`<AppStorage>/next/credentials.json` 的 tmdb 项。只在宿主 HTTP 请求中使用，
+TMDB 的 v3 API key 由宿主 `CredentialRef('metadata', 'tmdb')` 读取保险库。
+首次启动逐项迁移 `<AppStorage>/next/credentials.json`，回读核对后只保留引用。只在宿主 HTTP 请求中使用，
 不进入 Action 输入、快照、事件、工作区或日志。POSIX 创建临时空文件后先
 chmod 0600 再写入；Windows 用当前用户独占 ACL（PowerShell FileSecurity）。Windows
 ACL 路径未在本机验证。Bangumi 使用公共接口；弹弹play 复用现有宿主签名与账号

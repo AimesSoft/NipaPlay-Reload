@@ -1,10 +1,11 @@
 part of 'kernel.dart';
 
 sealed class Schema {
-  const Schema({this.description, this.nullable = false});
+  const Schema({this.description, this.nullable = false, this.secret = false});
 
   final String? description;
   final bool nullable;
+  final bool secret;
 
   JsonMap toJsonSchema() {
     final type = switch (this) {
@@ -19,6 +20,8 @@ sealed class Schema {
     return {
       'type': nullable ? [type, 'null'] : type,
       if (description != null) 'description': description,
+      if (secret) 'writeOnly': true,
+      if (secret) 'x-secret': true,
       ...switch (this) {
         StringSchema(:final values, :final minLength) => {
             if (values != null) 'enum': values,
@@ -181,6 +184,7 @@ final class StringSchema extends Schema {
   const StringSchema({
     super.description,
     super.nullable,
+    super.secret,
     this.values,
     this.minLength,
   });
@@ -193,6 +197,7 @@ final class IntegerSchema extends Schema {
   const IntegerSchema({
     super.description,
     super.nullable,
+    super.secret,
     this.minimum,
     this.maximum,
   });
@@ -205,6 +210,7 @@ final class NumberSchema extends Schema {
   const NumberSchema({
     super.description,
     super.nullable,
+    super.secret,
     this.minimum,
     this.maximum,
   });
@@ -214,11 +220,12 @@ final class NumberSchema extends Schema {
 }
 
 final class BooleanSchema extends Schema {
-  const BooleanSchema({super.description, super.nullable});
+  const BooleanSchema({super.description, super.nullable, super.secret});
 }
 
 final class ArraySchema extends Schema {
-  const ArraySchema(this.items, {super.description, super.nullable});
+  const ArraySchema(this.items,
+      {super.description, super.nullable, super.secret});
 
   final Schema items;
 }
@@ -231,6 +238,7 @@ final class ObjectSchema extends Schema {
     this.additionalProperties = false,
     super.description,
     super.nullable,
+    super.secret,
   });
 
   final Map<String, Schema> properties;

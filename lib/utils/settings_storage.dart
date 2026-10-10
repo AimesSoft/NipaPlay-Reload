@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/security/credential_store.dart';
 
 class SettingsStorage {
   static Future<void> saveBool(String key, bool value) async {
@@ -13,13 +14,13 @@ class SettingsStorage {
 
   static Future<void> saveString(String key, String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
+    await CredentialStore.instance.write(prefs, key, value);
   }
 
   static Future<String> loadString(String key,
       {String defaultValue = ""}) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(key) ?? defaultValue;
+    return (await CredentialStore.instance.read(prefs, key)) ?? defaultValue;
   }
 
   static Future<void> saveStringList(String key, List<String> value) async {

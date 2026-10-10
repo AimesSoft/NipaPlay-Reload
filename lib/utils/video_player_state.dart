@@ -28,6 +28,7 @@ import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import '../player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:window_manager/window_manager.dart';

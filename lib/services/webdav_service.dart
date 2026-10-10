@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -211,7 +212,7 @@ class WebDAVService {
   Future<void> _loadConnections() async {
     final prefs = await SharedPreferences.getInstance();
     try {
-      final connectionsJson = prefs.getString(_connectionsKey);
+      final connectionsJson = (await CredentialStore.instance.read(prefs, _connectionsKey));
       if (connectionsJson != null) {
         final List<dynamic> decoded = json.decode(connectionsJson);
         final needsIdMigration = decoded.whereType<Map>().any(
@@ -248,7 +249,7 @@ class WebDAVService {
       final prefs = await SharedPreferences.getInstance();
       final connectionsJson =
           json.encode(_connections.map((e) => e.toJson()).toList());
-      await prefs.setString(_connectionsKey, connectionsJson);
+      await CredentialStore.instance.write(prefs, _connectionsKey, connectionsJson);
     } catch (e) {
       print('保存WebDAV连接失败: $e');
     }

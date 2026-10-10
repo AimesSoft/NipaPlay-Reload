@@ -31,7 +31,7 @@ final class MediaRuntime {
       Iterable<MetadataProvider>? providers}) async {
     final clients = <http.Client>[];
     if (providers == null) {
-      final credentials = FileCredentialResolver(root);
+      final credentials = VaultCredentialResolver(root);
       await credentials.initialize();
       final tmdb = http.Client(),
           bangumi = http.Client(),
@@ -44,7 +44,7 @@ final class MediaRuntime {
             client: tmdb,
             privateQuery: () async => {
                   'api_key':
-                      await credentials.resolve(const CredentialRef('tmdb'))
+                      await credentials.resolve(const CredentialRef('metadata', 'tmdb'))
                 })),
         BangumiMetadataProvider(HttpMetadataTransport(
             provider: 'bangumi',

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/security/secret_redactor.dart';
 
 /// 日志条目模型
 class LogEntry {
@@ -97,6 +98,7 @@ class DebugLogService extends ChangeNotifier {
 
   /// 拦截debugPrint调用
   void _interceptDebugPrint(String? message, {int? wrapWidth}) {
+    if (message != null) message = SecretRedactor.text(message);
     // 调用原始的debugPrint
     _originalDebugPrint?.call(message, wrapWidth: wrapWidth);
 
@@ -165,6 +167,7 @@ class DebugLogService extends ChangeNotifier {
 
   /// 手动添加日志
   void addLog(String message, {String level = 'INFO', String tag = 'App'}) {
+    message = SecretRedactor.text(message);
     if (_isCollecting) {
       _addLogEntry(LogEntry(
         timestamp: DateTime.now(),
@@ -200,10 +203,7 @@ class DebugLogService extends ChangeNotifier {
       addLog('日志收集即将停止', level: 'INFO', tag: 'LogService');
       _isCollecting = false;
 
-      // 恢复原始的debugPrint
-      if (_originalDebugPrint != null) {
-        debugPrint = _originalDebugPrint!;
-      }
+      // Keep the diagnostic redactor active while collection is disabled.
     }
   }
 

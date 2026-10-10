@@ -2,7 +2,8 @@
 
 `ServiceProvider.initialize` 在原生应用启动时创建唯一的 `NextCore`，等待
 `core.ready`。Core 暴露 `root`、`deviceId`、`engine`、`downloads`、`media`、
-`danmaku`、`settings` 和 `capabilities`；Classic 下载页使用 `core.downloads`，`NextRuntime` 把
+`danmaku`、`settings`、`credentials`、`credentialVault` 和 `capabilities`；
+Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `core.capabilities` 注册到 Harness。Labs 只启停 Agent 端点，销毁
 `NextRuntime` 也不关闭 Core。应用宿主结束 Core 生命周期时调用 `core.close()`。
 
@@ -26,6 +27,10 @@ SharedPreferences 物理键。Classic setter 通过 `SettingsAccess.persist` 记
 来源，页面和播放器菜单继续调用原 setter；遥控桥从条目读取原协议参数描述。
 设置与播放器 provider 在生命周期内接入绑定，关闭 Core 前排空来源写入。
 非 immediate 的 Action 仅保存偏好并返回生效方式，Classic 原有重载行为保留。
+
+Core 同时组合 `credentials.status`。凭据读写经宿主保险库，设置注册表禁止
+保险库的标量键、含秘密的连接列表及插件字符串存储键；密钥不进入设置变更表。
+保险库不新增数据库迁移，最新 `next.db` 版本仍为 v4。
 
 `test/next/capability_coverage_baseline.json` 保存 Action id/effect 与设置
 key/effect/scope。覆盖率测试从真实 Core 和运行时能力生成目录，断言包含基线。

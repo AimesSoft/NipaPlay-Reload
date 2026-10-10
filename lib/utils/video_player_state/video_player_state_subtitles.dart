@@ -439,7 +439,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _spoilerAiApiFormat =
         _parseSpoilerAiApiFormat(prefs.getString(SettingsKeys.spoilerAiApiFormat));
     _spoilerAiApiUrl = prefs.getString(SettingsKeys.spoilerAiApiUrl) ?? '';
-    _spoilerAiApiKey = prefs.getString(SettingsKeys.spoilerAiApiKey) ?? '';
+    _spoilerAiApiKey = (await CredentialStore.instance.read(prefs, SettingsKeys.spoilerAiApiKey)) ?? '';
     _spoilerAiModel = prefs.getString(SettingsKeys.spoilerAiModel) ?? 'gpt-5';
     final temp = prefs.getDouble(SettingsKeys.spoilerAiTemperature) ?? 0.5;
     _spoilerAiTemperature = temp.clamp(0.0, 2.0).toDouble();
@@ -491,7 +491,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
     if (apiKey != null && _spoilerAiApiKey != apiKey) {
       _spoilerAiApiKey = apiKey;
-      await prefs.setString(SettingsKeys.spoilerAiApiKey, apiKey);
+      await CredentialStore.instance.write(prefs, SettingsKeys.spoilerAiApiKey, apiKey);
       changed = true;
       shouldRestartAnalysis = true;
     }

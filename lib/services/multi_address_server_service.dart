@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +32,7 @@ class MultiAddressServerService {
   Future<void> loadProfiles() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final profilesJson = prefs.getString(_profilesKey);
+      final profilesJson = (await CredentialStore.instance.read(prefs, _profilesKey));
       
       if (profilesJson != null) {
         final List<dynamic> profilesList = json.decode(profilesJson);
@@ -52,7 +53,7 @@ class MultiAddressServerService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final profilesJson = json.encode(_profiles.map((p) => p.toJson()).toList());
-      await prefs.setString(_profilesKey, profilesJson);
+      await CredentialStore.instance.write(prefs, _profilesKey, profilesJson);
       
       DebugLogService().addLog('MultiAddressServer: 保存了 ${_profiles.length} 个服务器配置');
     } catch (e) {

@@ -1,5 +1,6 @@
 {
   "actions": {
+    "credentials.status": "read",
     "danmaku.align": "write",
     "danmaku.align_apply": "write",
     "danmaku.align_keep": "write",

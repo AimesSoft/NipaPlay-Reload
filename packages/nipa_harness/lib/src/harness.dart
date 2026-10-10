@@ -144,7 +144,7 @@ final class Harness {
       actionId: spec.id,
       origin: invocation.origin,
       effect: spec.effect,
-      input: input,
+      input: _journalInput(spec.input, input, invocation.id, ''),
       status: switch (outcome) {
         Completed<O>() => 'completed',
         NeedsDecision<O>() => 'needs_decision',
@@ -166,4 +166,55 @@ final class Harness {
     }
     return outcome;
   }
+}
+
+Object? _journalInput(Schema? schema, Object? value, String id, String path) {
+  final reference = {
+    'credentialRef': {'namespace': 'invocation', 'key': '$id$path'}
+  };
+  if (schema?.secret == true && value != null) return reference;
+  if (value is Map) {
+    final result = {
+      for (final entry in value.entries)
+        entry.key:
+            RegExp(r'^(password|secret|token|access_?token|api_?key|authorization)$',
+                            caseSensitive: false)
+                        .hasMatch(entry.key.toString()) &&
+                    entry.value != null
+                ? {
+                    'credentialRef': {
+                      'namespace': 'invocation',
+                      'key': '$id$path/${entry.key}'
+                    }
+                  }
+                : _journalInput(
+                    schema is ObjectSchema
+                        ? schema.properties[entry.key]
+                        : null,
+                    entry.value,
+                    id,
+                    '$path/${entry.key}')
+    };
+    return value.keys.every((key) => identical(value[key], result[key]))
+        ? value
+        : result;
+  }
+  if (value is List) {
+    final result = [
+      for (var index = 0; index < value.length; index++)
+        _journalInput(schema is ArraySchema ? schema.items : null, value[index],
+            id, '$path/$index')
+    ];
+    return List.generate(value.length, (index) => index)
+            .every((index) => identical(value[index], result[index]))
+        ? value
+        : result;
+  }
+  if (value is String &&
+      (RegExp(r'(?:[?&](?:token|api_?key|access_?token)=|\w+://[^/\s]+:[^/\s]+@)',
+              caseSensitive: false)
+          .hasMatch(value))) {
+    return reference;
+  }
+  return value;
 }

@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -284,7 +285,7 @@ class SearchService {
       // 如果已登录，添加Authorization头
       if (DandanplayService.isLoggedIn) {
         final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('dandanplay_token');
+        final token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
         if (token != null) {
           headers['Authorization'] = 'Bearer $token';
         }

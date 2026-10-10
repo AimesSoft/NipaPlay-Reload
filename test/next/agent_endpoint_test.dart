@@ -1,3 +1,6 @@
+import '../security/memory_vault.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -58,6 +61,7 @@ void main() {
   late Directory root;
   late AgentEndpoint endpoint;
   late Harness harness;
+  late CredentialStore credentials;
   late HttpClient client;
   const agentsMd = '# NipaPlay\nQuery before acting.\n';
 
@@ -65,8 +69,10 @@ void main() {
     temporary = await Directory.systemTemp.createTemp('agent-endpoint-');
     root = Directory('${temporary.path}/next');
     harness = Harness([_TestCapability()]);
+    credentials = CredentialStore(MemoryVault(), desktop: true);
     endpoint = AgentEndpoint(
       harness: harness,
+      credentials: credentials,
       root: root,
       appVersion: '1.2.3',
       agentsMd: agentsMd,
@@ -78,22 +84,16 @@ void main() {
     addTearDown(() => client.close(force: true));
   });
 
-  test('creates a 32-byte token, private token file, and workspace', () async {
+  test('creates a 32-byte vault token, reference file, and workspace', () async {
     final running = await endpoint.start() as AgentEndpointRunning;
     final file = File('${root.path}/endpoint.json');
     final contents = jsonDecode(await file.readAsString()) as JsonMap;
-    final token = contents['token'] as String;
+    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    expect(contents['token'], const CredentialRef('agent', 'token').placeholder);
+    expect(await file.readAsString(), isNot(contains(token)));
     expect(contents.keys, ['token']);
     expect(token, matches(RegExp(r'^[A-Za-z0-9_-]{43}$')));
     expect(base64Url.decode(base64Url.normalize(token)), hasLength(32));
-    if (!Platform.isWindows) {
-      final stat = await Process.run('stat', [
-        if (Platform.isMacOS) ...['-f', '%Lp'] else ...['-c', '%a'],
-        file.path,
-      ]);
-      expect(stat.exitCode, 0, reason: stat.stderr.toString());
-      expect(stat.stdout.toString().trim(), '600');
-    }
     expect(running.url.scheme, 'http');
     expect(running.url.host, '127.0.0.1');
     expect(running.url.port, greaterThan(0));
@@ -114,9 +114,7 @@ default_tools_approval_mode = "auto"
 
   test('authenticates initialize and invokes the fake capability', () async {
     final running = await endpoint.start() as AgentEndpointRunning;
-    final token =
-        (jsonDecode(await File('${root.path}/endpoint.json').readAsString())
-            as JsonMap)['token'] as String;
+    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
     final initialized = await _rpc(client, running.url, token, 'initialize',
         params: {'protocolVersion': '2025-11-25'});
     expect(initialized['protocolVersion'], '2025-11-25');
@@ -161,6 +159,7 @@ default_tools_approval_mode = "auto"
 
     final restarted = AgentEndpoint(
       harness: harness,
+      credentials: credentials,
       root: root,
       appVersion: '1.2.3',
       agentsMd: agentsMd,
@@ -169,7 +168,7 @@ default_tools_approval_mode = "auto"
     addTearDown(restarted.stop);
     final running = await restarted.start() as AgentEndpointRunning;
     expect(await file.readAsString(), original);
-    final token = (jsonDecode(original) as JsonMap)['token'] as String;
+    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
     expect(await _rpc(client, running.url, token, 'ping'), isEmpty);
   });
 
@@ -180,6 +179,7 @@ default_tools_approval_mode = "auto"
     addTearDown(() => occupied.close(force: true));
     final blocked = AgentEndpoint(
       harness: harness,
+      credentials: credentials,
       root: root,
       appVersion: '1.2.3',
       agentsMd: agentsMd,

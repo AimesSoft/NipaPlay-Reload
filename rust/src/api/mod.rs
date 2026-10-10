@@ -13,3 +13,4 @@ pub mod simple;
 pub mod startup_commands;
 pub mod torrent;
 pub mod webdav_multistatus;
+pub mod vault;

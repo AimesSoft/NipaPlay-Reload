@@ -1,3 +1,5 @@
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/portable_credentials.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -370,20 +372,20 @@ class AutoSyncService extends ChangeNotifier {
     final selectedRemoteStateRaw =
         _selectCategories(remoteState, selectedNames);
     final selectedRemoteState = _selectCategories(
-      IncrementalSyncDataFilter.sanitizeState(remoteState),
+      IncrementalSyncDataFilter.sanitizeState(await _sealCredentialState(remoteState)),
       selectedNames,
     );
     final mergedSelectedState = synchronizationBase == null
         ? _mergeFirstSync(selectedRemoteState, localState)
         : await _mergeChangedStates(
             base: _selectCategories(
-              IncrementalSyncDataFilter.sanitizeState(synchronizationBase),
+              IncrementalSyncDataFilter.sanitizeState(await _sealCredentialState(synchronizationBase)),
               selectedNames,
             ),
             remote: selectedRemoteState,
             local: localState,
           );
-    final mergedState = IncrementalSyncCodec.cloneState(remoteState);
+    final mergedState = await _sealCredentialState(remoteState);
     for (final category in selectedNames) {
       mergedState[category] = Map<String, dynamic>.from(
         mergedSelectedState[category] ?? const {},
@@ -638,7 +640,7 @@ class AutoSyncService extends ChangeNotifier {
       'repositoryId': manifest.repositoryId,
       'snapshotVersion': nextVersion,
       'createdAt': now.toIso8601String(),
-      'state': state,
+      'state': await _sealCredentialState(state),
     });
     final snapshotBytes = snapshotBlob.bytes;
     final snapshotHash = snapshotBlob.sha256;
@@ -903,12 +905,12 @@ class AutoSyncService extends ChangeNotifier {
     )) {
       if (operation.key == 'dandanplay') {
         await prefs.setBool('dandanplay_logged_in', false);
-        await prefs.remove('dandanplay_token');
+        await CredentialStore.instance.delete(prefs, 'dandanplay_token');
         await prefs.remove('dandanplay_username');
         await prefs.remove('dandanplay_screenname');
       } else if (operation.key == 'bangumi') {
         await prefs.setBool('bangumi_logged_in', false);
-        await prefs.remove('bangumi_access_token');
+        await CredentialStore.instance.delete(prefs, 'bangumi_access_token');
         await prefs.remove('bangumi_user_info');
       }
     }
@@ -1039,8 +1041,10 @@ class AutoSyncService extends ChangeNotifier {
     final file = await _cacheFile(serverUrl, username, remoteRoot);
     await file.parent.create(recursive: true);
     final temporary = File('${file.path}.tmp');
+    final safeCache = cache.toJson();
+    safeCache['state'] = await _sealCredentialState(cache.state);
     final encoded =
-        await IncrementalSyncNativeCodec.canonicalizeMap(cache.toJson());
+        await IncrementalSyncNativeCodec.canonicalizeMap(safeCache);
     await temporary.writeAsBytes(encoded.bytes);
     await temporary.rename(file.path);
   }
@@ -1057,6 +1061,11 @@ class AutoSyncService extends ChangeNotifier {
         .substring(0, 24);
     return File(
         path.join(directory.path, 'incremental_sync', '$key.index.json'));
+  }
+
+  Future<IncrementalSyncState> _sealCredentialState(IncrementalSyncState state) async {
+    final sealed = await sealPortableCredentials(Map<String, dynamic>.from(state), CredentialStore.instance);
+    return sealed.map((key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)));
   }
 
   static IncrementalSyncState _selectCategories(

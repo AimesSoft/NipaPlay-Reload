@@ -1,10 +1,17 @@
+import 'package:nipaplay/security/credential_store.dart';
+
 /// Both stable registry keys and verified legacy storage names are blocked.
 const settingsDenylist = <String>{
-  'spoiler_ai_api_key',
+  ...CredentialStore.scalarKeys,
   'danmaku.spoilerAiApiKey',
-  'bangumi_access_token',
-  'dandanplay_token',
-  'incremental_sync_webdav_password',
+  'webdav_connections',
+  'smb_connections',
+  'server_profiles',
+  'tmdb',
+  'metadata.tmdb',
+  'agent.token',
+  'next/credentials.json',
+  'next/endpoint.json',
   'labs_enable_agent_endpoint',
   'labs.enableAgentEndpoint',
   'agent.endpointEnabled',
@@ -47,7 +54,8 @@ bool isSettingDenied(String key) {
   final segmented = key
       .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]}_${m[2]}')
       .toLowerCase();
-  return settingsDenylist.any((v) => v.toLowerCase() == normalized) ||
+  return CredentialStore.isSecretKey(normalized) ||
+      settingsDenylist.any((v) => v.toLowerCase() == normalized) ||
       settingsDeniedPrefixes
           .any((v) => normalized.startsWith(v.toLowerCase())) ||
       RegExp(r'(^|[._])(password|passwd|token|secret|api_?key|credential)([._]|$)')

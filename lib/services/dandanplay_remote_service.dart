@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -56,7 +57,7 @@ class DandanplayRemoteService {
   Future<void> loadSavedSettings({bool backgroundRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final savedBase = prefs.getString(_baseUrlKey);
-    final savedToken = prefs.getString(_tokenKey);
+    final savedToken = (await CredentialStore.instance.read(prefs, _tokenKey));
     final savedTokenRequired = prefs.getBool(_tokenRequiredKey) ?? false;
 
     if (savedBase == null || savedBase.isEmpty) {
@@ -132,7 +133,7 @@ class DandanplayRemoteService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_baseUrlKey);
-    await prefs.remove(_tokenKey);
+    await CredentialStore.instance.delete(prefs, _tokenKey);
     await prefs.remove(_tokenRequiredKey);
 
     _notifyConnectionState(false);
@@ -371,9 +372,9 @@ class DandanplayRemoteService {
       await prefs.setString(_baseUrlKey, _baseUrl!);
     }
     if (_apiToken?.isNotEmpty == true) {
-      await prefs.setString(_tokenKey, _apiToken!);
+      await CredentialStore.instance.write(prefs, _tokenKey, _apiToken!);
     } else {
-      await prefs.remove(_tokenKey);
+      await CredentialStore.instance.delete(prefs, _tokenKey);
     }
     await prefs.setBool(_tokenRequiredKey, _tokenRequired);
   }

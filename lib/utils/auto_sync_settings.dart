@@ -1,3 +1,5 @@
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/secret_redactor.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -91,7 +93,7 @@ class AutoSyncSettings {
 
   static Future<String> getPassword() async {
     await _ensureInitialized();
-    return _prefs!.getString(_passwordKey) ?? '';
+    return (await CredentialStore.instance.read(_prefs!, _passwordKey)) ?? '';
   }
 
   static Future<String> getRemotePath() async {
@@ -140,7 +142,7 @@ class AutoSyncSettings {
     await Future.wait([
       _prefs!.setString(_serverUrlKey, serverUrl.trim()),
       _prefs!.setString(_usernameKey, username.trim()),
-      _prefs!.setString(_passwordKey, password),
+      CredentialStore.instance.write(_prefs!, _passwordKey, password),
       _prefs!.setString(_remotePathKey, _normalizeRemotePath(remotePath)),
       _prefs!.setInt(
         _intervalMinutesKey,
@@ -194,7 +196,7 @@ class AutoSyncSettings {
 
   static Future<void> recordSyncError(Object error) async {
     await _ensureInitialized();
-    await _prefs!.setString(_lastSyncErrorKey, error.toString());
+    await _prefs!.setString(_lastSyncErrorKey, SecretRedactor.text(error.toString()));
   }
 
   static String _normalizeRemotePath(String value) {

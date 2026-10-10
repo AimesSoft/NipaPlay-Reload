@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -281536625;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1224259226;
 
 // Section: executor
 
@@ -2249,6 +2249,110 @@ fn wire__crate__api__torrent__torrent_stream_url_impl(
         },
     )
 }
+fn wire__crate__api__vault__vault_delete_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "vault_delete",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_namespace = <String>::sse_decode(&mut deserializer);
+            let api_key = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::vault::vault_delete(api_namespace, api_key)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__vault_read_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "vault_read",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_namespace = <String>::sse_decode(&mut deserializer);
+            let api_key = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::vault::vault_read(api_namespace, api_key)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__vault_write_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "vault_write",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_namespace = <String>::sse_decode(&mut deserializer);
+            let api_key = <String>::sse_decode(&mut deserializer);
+            let api_secret = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::vault::vault_write(api_namespace, api_key, api_secret)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -3610,6 +3714,9 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         60 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
         61 => wire__crate__api__torrent__torrent_stream_url_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__vault__vault_delete_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__vault__vault_read_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__vault__vault_write_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5494,27 +5601,3 @@ mod io {
 }
 #[cfg(not(target_family = "wasm"))]
 pub use io::*;
-
-/// cbindgen:ignore
-#[cfg(target_family = "wasm")]
-mod web {
-    // This file is automatically generated, so please do not edit it.
-    // @generated by `flutter_rust_bridge`@ 2.12.0.
-
-    // Section: imports
-
-    use super::*;
-    use flutter_rust_bridge::for_generated::byteorder::{
-        NativeEndian, ReadBytesExt, WriteBytesExt,
-    };
-    use flutter_rust_bridge::for_generated::wasm_bindgen;
-    use flutter_rust_bridge::for_generated::wasm_bindgen::prelude::*;
-    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
-    use flutter_rust_bridge::{Handler, IntoIntoDart};
-
-    // Section: boilerplate
-
-    flutter_rust_bridge::frb_generated_boilerplate_web!();
-}
-#[cfg(target_family = "wasm")]
-pub use web::*;

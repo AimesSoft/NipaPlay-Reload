@@ -10,20 +10,22 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   sqfliteFfiInit();
   for (final oldVersion in [0, 1, 2, 3, 4]) {
-    test('database v$oldVersion upgrades to the complete shared schema', () async {
+    test('database v$oldVersion upgrades to the complete shared schema',
+        () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
       addTearDown(() => root.delete(recursive: true));
       const migrations = [migrateJobs, migrateMediaIdentity, migrateDanmaku];
       if (oldVersion > 0 && oldVersion < 4) {
-        final old = await databaseFactoryFfi.openDatabase('${root.path}/next.db',
-            options: OpenDatabaseOptions(
-              version: oldVersion,
-              onCreate: (db, version) async {
-                for (var i = 0; i < version; i++) {
-                  await migrations[i](db);
-                }
-              },
-            ));
+        final old =
+            await databaseFactoryFfi.openDatabase('${root.path}/next.db',
+                options: OpenDatabaseOptions(
+                  version: oldVersion,
+                  onCreate: (db, version) async {
+                    for (var i = 0; i < version; i++) {
+                      await migrations[i](db);
+                    }
+                  },
+                ));
         await old.close();
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
