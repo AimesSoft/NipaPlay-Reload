@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -94,6 +95,7 @@ final class NextRuntime extends ChangeNotifier {
       ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
+    core.attachHarness(_harness);
     core.danmaku.startRestoring(_harness, _player);
     core.media.service.currentPath = () => _player.currentVideoPath;
     _endpoint = AgentEndpoint(
@@ -101,6 +103,9 @@ final class NextRuntime extends ChangeNotifier {
       root: root,
       appVersion: packageInfo.version,
       agentsMd: agentsMd,
+      port: kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
+          ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
+          : 47811,
     );
     if (_disposed) return;
     _labs.addListener(_queueEndpointUpdate);

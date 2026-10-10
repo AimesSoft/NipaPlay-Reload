@@ -282,6 +282,11 @@ class SingleInstanceService {
   }
 
   static Future<Directory> _instanceDirectory() async {
+    final isolated = kDebugMode ? Platform.environment['NIPAPLAY_DATA_DIR'] : null;
+    if (isolated != null) {
+      return Directory(path.join(isolated, 'single_instance'))
+          .create(recursive: true);
+    }
     if (!Platform.isMacOS) {
       return Directory.systemTemp;
     }

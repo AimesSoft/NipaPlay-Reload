@@ -17,6 +17,7 @@ const INVALID_TTL: Duration = Duration::from_secs(30);
 #[derive(Clone)]
 pub struct AccountResolver {
     upstream: DandanplayUpstream,
+    claim_pointer: String,
     cache: Arc<Mutex<HashMap<String, CachedAccount>>>,
 }
 
@@ -32,9 +33,10 @@ enum CachedAccount {
 }
 
 impl AccountResolver {
-    pub fn new(upstream: DandanplayUpstream) -> Self {
+    pub fn new(upstream: DandanplayUpstream, claim_pointer: String) -> Self {
         Self {
             upstream,
+            claim_pointer,
             cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -53,7 +55,7 @@ impl AccountResolver {
     /// Verifies a bearer token and returns the upstream account id.
     ///
     /// A token must both pass the read-only validation endpoint and yield a
-    /// numeric `userId` from the renewal endpoint. Any other outcome is an
+    /// stable identity claim from the accepted JWT. Any other outcome is an
     /// authentication failure; a network/upstream fault is reported separately
     /// so clients can retry instead of treating the token as invalid.
     pub async fn resolve(&self, token: &str, identity: &str) -> Result<String, ApiError> {
@@ -79,7 +81,11 @@ impl AccountResolver {
             ));
         }
 
-        let account = match self.upstream.resolve_account(token).await {
+        let account = match self
+            .upstream
+            .resolve_account(token, &self.claim_pointer)
+            .await
+        {
             Ok(account) => account,
             Err(error) => {
                 return Err(match error {
@@ -91,6 +97,9 @@ impl AccountResolver {
                         ErrorCode::UpstreamUnavailable,
                         format!("无法获取账号身份：{message}"),
                     ),
+                    AccountLookupError::InvalidIdentity(message) => {
+                        ApiError::new(ErrorCode::InvalidIdentity, message)
+                    }
                 })
             }
         };

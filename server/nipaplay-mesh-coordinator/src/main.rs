@@ -39,6 +39,9 @@ struct Cli {
     /// Generate a development CA at the given certificate/key paths and exit.
     #[arg(long, num_args = 2, value_names = ["CERT_PEM", "KEY_PEM"])]
     generate_dev_ca: Option<Vec<PathBuf>>,
+    /// Read a token from stdin, validate it, print only JWT claim JSON pointers.
+    #[arg(long)]
+    inspect_account_claim_names: bool,
 }
 
 #[tokio::main]
@@ -61,6 +64,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let config = Arc::new(Config::from_env().await.map_err(std::io::Error::other)?);
+    if cli.inspect_account_claim_names {
+        use std::io::Read;
+        let mut token = String::new();
+        std::io::stdin().take(4097).read_to_string(&mut token)?;
+        let upstream =
+            DandanplayUpstream::new(config.upstream.clone()).map_err(std::io::Error::other)?;
+        let names = upstream
+            .account_claim_names(token.trim())
+            .await
+            .map_err(std::io::Error::other)?;
+        println!("{}", serde_json::to_string(&names)?);
+        return Ok(());
+    }
     let store = Store::open(&config.database_path).map_err(std::io::Error::other)?;
     let ca = Arc::new(
         CertificateAuthority::load(&config.ca_cert_file, &config.ca_key_file)
@@ -72,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: Arc::clone(&config),
         store: store.clone(),
         ca,
-        accounts: AccountResolver::new(upstream),
+        accounts: AccountResolver::new(upstream, config.account_claim_pointer.clone()),
         limiter: RateLimiter::new(),
     };
 

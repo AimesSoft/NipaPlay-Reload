@@ -30,10 +30,17 @@ SharedPreferences 物理键。Classic setter 通过 `SettingsAccess.persist` 记
 
 Core 同时组合 `credentials.status`。凭据读写经宿主保险库，设置注册表禁止
 保险库的标量键、含秘密的连接列表及插件字符串存储键；密钥不进入设置变更表。
-保险库不新增数据库迁移，最新 `next.db` 版本仍为 v4。
+保险库不新增数据库迁移。媒体能力原语在 v4 后追加迁移 v5；现有版本位置保持不变。
+
+Core 同时创建 `mesh`、注册三个 `mesh.*` Action 与 `mesh.addressCandidates` 设置，
+在领域恢复完成后启动宿主配置的 Mesh。`NextRuntime` 将应用 Harness 交回 Core，
+Mesh 与回环 MCP 共用分派器；Mesh 生命周期由 Core 管理，不依赖 Labs 开关。
+Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁移。
 
 `test/next/capability_coverage_baseline.json` 保存 Action id/effect 与设置
-key/effect/scope。覆盖率测试从真实 Core 和运行时能力生成目录，断言包含基线。
+key/effect/scope，并同时维护 `capabilities`、`primaryActions` 契约、
+`compatibility` 映射与 `behaviorScenarios`。覆盖率测试从真实 Core 和运行时能力
+生成目录，断言包含基线；旧任务恢复与新只读分析分别保留真实 Effect。
 新增能力时运行 `NIPA_EXPORT_COVERAGE=1 ~/development/flutter-3.44.6/bin/flutter
 test --no-pub test/next/capability_coverage_test.dart`，快照导出到系统临时目录的
-`nipa-capability-coverage.json`；核对后替换基线，已有项不得删除或降权。
+`nipa-capability-coverage.json`；核对后合入新增能力、契约与映射，已有项不得删除或降权。

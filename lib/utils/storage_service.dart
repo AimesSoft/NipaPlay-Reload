@@ -141,6 +141,12 @@ class StorageService {
 
   // 主应用存储目录
   static Future<Directory> getAppStorageDirectory() async {
+    final isolated = kDebugMode ? Platform.environment['NIPAPLAY_DATA_DIR'] : null;
+    if (isolated != null) {
+      final directory = Directory(isolated);
+      await directory.create(recursive: true);
+      return directory;
+    }
     if (debugAppStorageDirectoryOverride != null) {
       return debugAppStorageDirectoryOverride!;
     }

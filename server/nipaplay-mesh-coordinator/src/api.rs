@@ -93,6 +93,63 @@ struct RegisterRequest {
     device_name: String,
     platform: String,
     app_version: String,
+    #[serde(default)]
+    proof: Option<PossessionProof>,
+}
+
+#[derive(Deserialize)]
+struct PossessionProof {
+    timestamp: i64,
+    nonce: String,
+    signature: String,
+}
+
+fn verify_proof(
+    state: &AppState,
+    key: &[u8],
+    proof: Option<&PossessionProof>,
+    fields: Vec<String>,
+) -> Result<(), ApiError> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    let proof = proof.ok_or_else(|| {
+        ApiError::new(ErrorCode::InvalidInput, "device possession proof required")
+    })?;
+    let now = nipaplay_auth::unix_timestamp();
+    if proof.timestamp.abs_diff(now) > 300
+        || proof.nonce.len() < 22
+        || proof.nonce.len() > 128
+        || !proof
+            .nonce
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+    {
+        return Err(ApiError::new(
+            ErrorCode::InvalidInput,
+            "invalid or expired possession proof",
+        ));
+    }
+    let mut message = vec![
+        "nipaplay-mesh-possession-v1".to_owned(),
+        proof.timestamp.to_string(),
+        proof.nonce.clone(),
+    ];
+    message.extend(fields);
+    let signature = URL_SAFE_NO_PAD
+        .decode(&proof.signature)
+        .map_err(|_| ApiError::new(ErrorCode::InvalidInput, "invalid possession signature"))?;
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+        .verify(
+            &serde_json::to_vec(&message).map_err(|e| ApiError::internal(e.to_string()))?,
+            &signature,
+        )
+        .map_err(|_| ApiError::new(ErrorCode::InvalidInput, "invalid possession signature"))?;
+    if !state.store.consume_proof(key, &proof.nonce, now)? {
+        return Err(ApiError::new(
+            ErrorCode::InvalidInput,
+            "replayed possession proof",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -134,6 +191,20 @@ async fn register(
     };
     if let Err(message) = validate_device_metadata(&body) {
         return ApiError::new(ErrorCode::InvalidInput, message).into_response();
+    }
+    if let Err(error) = verify_proof(
+        &state,
+        &public_key,
+        body.proof.as_ref(),
+        vec![
+            "register".to_owned(),
+            body.device_public_key.clone(),
+            body.device_name.clone(),
+            body.platform.clone(),
+            body.app_version.clone(),
+        ],
+    ) {
+        return error.into_response();
     }
     let device_id = cert::device_id_from_public_key(&public_key);
 
@@ -203,6 +274,8 @@ async fn register(
 struct RenewRequest {
     device_id: String,
     device_public_key: String,
+    #[serde(default)]
+    proof: Option<PossessionProof>,
 }
 
 async fn renew(
@@ -248,6 +321,18 @@ async fn renew(
     if device.public_key != public_key {
         return ApiError::new(ErrorCode::InvalidInput, "device_public_key 与注册时不一致")
             .into_response();
+    }
+    if let Err(error) = verify_proof(
+        &state,
+        &public_key,
+        body.proof.as_ref(),
+        vec![
+            "renew".to_owned(),
+            body.device_public_key.clone(),
+            device_id.clone(),
+        ],
+    ) {
+        return error.into_response();
     }
 
     let now = nipaplay_auth::unix_timestamp();
@@ -492,7 +577,15 @@ async fn report_addresses(
     {
         return error.into_response();
     }
-    Json(json!({ "success": true, "accepted": records.len() })).into_response()
+    let epoch = match state.store.revocation_epoch(&auth.account_id) {
+        Ok(epoch) => epoch,
+        Err(error) => return ApiError::internal(error).into_response(),
+    };
+    Json(
+        json!({ "success": true, "accepted": records.len(), "revocation_epoch": epoch,
+        "heartbeat_interval_seconds": state.config.heartbeat_interval_seconds }),
+    )
+    .into_response()
 }
 
 #[derive(Deserialize)]

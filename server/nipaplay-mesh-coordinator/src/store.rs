@@ -128,6 +128,12 @@ impl Store {
                 account_id       TEXT PRIMARY KEY,
                 revocation_epoch INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS possession_proofs (
+                public_key BLOB NOT NULL,
+                nonce TEXT NOT NULL,
+                seen_at INTEGER NOT NULL,
+                PRIMARY KEY (public_key, nonce)
+            );
             "#,
         )
         .map_err(|error| error.to_string())?;
@@ -140,6 +146,27 @@ impl Store {
         self.conn
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn consume_proof(
+        &self,
+        public_key: &[u8],
+        nonce: &str,
+        now: i64,
+    ) -> Result<bool, ApiError> {
+        let mut conn = self.lock();
+        let tx = conn
+            .transaction()
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+        tx.execute(
+            "DELETE FROM possession_proofs WHERE seen_at < ?1",
+            params![now - 600],
+        )
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+        let changed = tx.execute("INSERT OR IGNORE INTO possession_proofs (public_key, nonce, seen_at) VALUES (?1, ?2, ?3)",
+            params![public_key, nonce, now]).map_err(|e| ApiError::internal(e.to_string()))?;
+        tx.commit().map_err(|e| ApiError::internal(e.to_string()))?;
+        Ok(changed == 1)
     }
 
     /// Current revocation epoch for an account (0 when the account has never

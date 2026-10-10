@@ -614,22 +614,423 @@
       "effect": "write"
     },
     "media.files.list": {
-      "effect": "read"
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "root"
+            ]
+          },
+          {
+            "required": [
+              "workId"
+            ]
+          }
+        ]
+      },
+      "outputContract": "media.files.list"
     },
     "media.hash.match": {
-      "effect": "read"
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "entityId"
+                  ]
+                },
+                {
+                  "required": [
+                    "path"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "media.hash.match"
     },
     "media.identity.bind_batch": {
-      "effect": "write"
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "work",
+                    "release",
+                    "episode",
+                    "file"
+                  ]
+                },
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "workId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "releaseId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "localEpisodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "workRef": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "objectType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "externalId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "objectType",
+                    "externalId",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                },
+                "releaseRef": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "objectType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "externalId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "objectType",
+                    "externalId",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                },
+                "episodeRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "objectType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scope": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "objectType",
+                      "externalId",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "detail": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "detail"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "startMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "endMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "workRef",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "requestId",
+          "entries"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "media.identity.bind_batch"
     },
     "media.identity.unbind_batch": {
-      "effect": "write"
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entityId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "bindingIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "detail": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "detail"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "entityId",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "requestId",
+          "entries"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "media.identity.unbind_batch"
     },
     "media.metadata.get_batch": {
-      "effect": "read"
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "objectType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "externalId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "scope": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "objectType",
+                "externalId",
+                "scope"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "refs"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "media.metadata.get_batch"
     },
     "media.metadata.search_batch": {
-      "effect": "read"
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "query": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "tv",
+                    "movie"
+                  ]
+                },
+                "year": {
+                  "type": "integer",
+                  "minimum": 1800,
+                  "maximum": 2200
+                }
+              },
+              "required": [
+                "provider",
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "media.metadata.search_batch"
     },
     "danmaku.analyze_alignment": {
       "effect": "read",
@@ -737,6 +1138,71 @@
         "additionalProperties": false
       },
       "outputContract": "danmaku.update"
+    },
+    "mesh.devices": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputContract": "mesh.devices"
+    },
+    "mesh.invoke": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "deviceId",
+          "action",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "mesh.invoke"
+    },
+    "mesh.invoke_destructive": {
+      "effect": "destructive",
+      "input": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "deviceId",
+          "action",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "mesh.invoke_destructive"
     }
   },
   "compatibility": {
@@ -940,6 +1406,24 @@
     },
     "media.metadata.search_batch": {
       "action": "media.metadata.search_batch"
+    },
+    "danmaku.analyze_alignment": {
+      "action": "danmaku.analyze_alignment"
+    },
+    "danmaku.update": {
+      "action": "danmaku.update"
+    },
+    "download.set_paused": {
+      "action": "download.set_paused"
+    },
+    "mesh.devices": {
+      "action": "mesh.devices"
+    },
+    "mesh.invoke": {
+      "action": "mesh.invoke"
+    },
+    "mesh.invoke_destructive": {
+      "action": "mesh.invoke_destructive"
     }
   },
   "behaviorScenarios": {
@@ -1468,6 +1952,10 @@
     "player.screenshotDirectory": {
       "effect": "write",
       "scope": "device"
+    },
+    "mesh.addressCandidates": {
+      "effect": "write",
+      "scope": "user"
     }
   },
   "capabilities": {
@@ -1702,6 +2190,18 @@
     "danmaku.update": {
       "action": "danmaku.update",
       "effect": "write"
+    },
+    "mesh.devices": {
+      "action": "mesh.devices",
+      "effect": "read"
+    },
+    "mesh.invoke": {
+      "action": "mesh.invoke",
+      "effect": "write"
+    },
+    "mesh.invoke_destructive": {
+      "action": "mesh.invoke_destructive",
+      "effect": "destructive"
     }
   },
   "outputContracts": {
@@ -2965,6 +3465,1055 @@
         "results"
       ],
       "additionalProperties": false
+    },
+    "media.files.list": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fileId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "size": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "durationMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "headMd5": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "modifiedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                }
+              },
+              "episodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": [
+              "fileId",
+              "path",
+              "size",
+              "durationMs",
+              "headMd5",
+              "modifiedAt",
+              "bindings",
+              "episodes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "files",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "media.hash.match": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer"
+              },
+              "fileId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "headMd5": {
+                "type": "string"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "objectType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "externalId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "scope": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "objectType",
+                        "externalId",
+                        "scope"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "originalTitle": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "overview": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imageUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "number": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "season": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "episodeType": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "fetchedAt": {
+                      "type": "string"
+                    },
+                    "episodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "objectType": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "externalId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "scope": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "objectType",
+                              "externalId",
+                              "scope"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "originalTitle": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "overview": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "imageUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "year": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "number": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "season": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "episodeType": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "type": "string"
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "fetchedAt": {
+                            "type": "string"
+                          },
+                          "episodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "ref": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "objectType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "externalId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "scope": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "provider",
+                                    "objectType",
+                                    "externalId",
+                                    "scope"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "type": "string"
+                                },
+                                "originalTitle": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "overview": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "imageUrl": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "year": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "number": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "season": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "episodeType": {
+                                  "type": "string"
+                                },
+                                "order": {
+                                  "type": "string"
+                                },
+                                "language": {
+                                  "type": "string"
+                                },
+                                "fetchedAt": {
+                                  "type": "string"
+                                },
+                                "episodes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {},
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "title",
+                                "kind",
+                                "originalTitle",
+                                "overview",
+                                "imageUrl",
+                                "year",
+                                "number",
+                                "season",
+                                "episodeType",
+                                "order",
+                                "language",
+                                "fetchedAt",
+                                "episodes"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "title",
+                          "kind",
+                          "originalTitle",
+                          "overview",
+                          "imageUrl",
+                          "year",
+                          "number",
+                          "season",
+                          "episodeType",
+                          "order",
+                          "language",
+                          "fetchedAt",
+                          "episodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "title",
+                    "kind",
+                    "originalTitle",
+                    "overview",
+                    "imageUrl",
+                    "year",
+                    "number",
+                    "season",
+                    "episodeType",
+                    "order",
+                    "language",
+                    "fetchedAt",
+                    "episodes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "error": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "media.identity.bind_batch": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer"
+              },
+              "workId": {
+                "type": "string"
+              },
+              "releaseId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "episodeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fileId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "bindingIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "index",
+              "workId",
+              "releaseId",
+              "episodeIds",
+              "fileId",
+              "bindingIds"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "media.identity.unbind_batch": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer"
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "bindingIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "index",
+              "entityId",
+              "bindingIds"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "media.metadata.get_batch": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer"
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "objectType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scope": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "objectType",
+                      "externalId",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "originalTitle": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "overview": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "imageUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "year": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "number": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "season": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "episodeType": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "fetchedAt": {
+                    "type": "string"
+                  },
+                  "episodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "ref": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "objectType": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "externalId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "scope": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "objectType",
+                            "externalId",
+                            "scope"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "originalTitle": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "overview": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "imageUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "year": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "number": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "season": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "episodeType": {
+                          "type": "string"
+                        },
+                        "order": {
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "fetchedAt": {
+                          "type": "string"
+                        },
+                        "episodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "objectType": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "externalId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "objectType",
+                                  "externalId",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "originalTitle": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "overview": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "imageUrl": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "year": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "number": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "season": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "episodeType": {
+                                "type": "string"
+                              },
+                              "order": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "fetchedAt": {
+                                "type": "string"
+                              },
+                              "episodes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {},
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "ref",
+                              "title",
+                              "kind",
+                              "originalTitle",
+                              "overview",
+                              "imageUrl",
+                              "year",
+                              "number",
+                              "season",
+                              "episodeType",
+                              "order",
+                              "language",
+                              "fetchedAt",
+                              "episodes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "ref",
+                        "title",
+                        "kind",
+                        "originalTitle",
+                        "overview",
+                        "imageUrl",
+                        "year",
+                        "number",
+                        "season",
+                        "episodeType",
+                        "order",
+                        "language",
+                        "fetchedAt",
+                        "episodes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "ref",
+                  "title",
+                  "kind",
+                  "originalTitle",
+                  "overview",
+                  "imageUrl",
+                  "year",
+                  "number",
+                  "season",
+                  "episodeType",
+                  "order",
+                  "language",
+                  "fetchedAt",
+                  "episodes"
+                ],
+                "additionalProperties": false
+              },
+              "error": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "results"
+      ],
+      "additionalProperties": false
+    },
+    "media.metadata.search_batch": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer"
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "objectType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "externalId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "scope": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "objectType",
+                        "externalId",
+                        "scope"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "originalTitle": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "overview": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imageUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "year": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "number": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "season": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "episodeType": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "fetchedAt": {
+                      "type": "string"
+                    },
+                    "episodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "title",
+                    "kind",
+                    "originalTitle",
+                    "overview",
+                    "imageUrl",
+                    "year",
+                    "number",
+                    "season",
+                    "episodeType",
+                    "order",
+                    "language",
+                    "fetchedAt",
+                    "episodes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "error": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "results"
+      ],
+      "additionalProperties": false
+    },
+    "mesh.devices": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
+    },
+    "mesh.invoke": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
+    },
+    "mesh.invoke_destructive": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
     }
   }
 }

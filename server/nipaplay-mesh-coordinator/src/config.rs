@@ -26,6 +26,7 @@ pub struct Config {
     pub ip_requests_per_minute: u32,
     pub trust_proxy_headers: bool,
     pub upstream: UpstreamConfig,
+    pub account_claim_pointer: String,
 }
 
 impl Config {
@@ -56,6 +57,7 @@ impl Config {
             .clamp(60, address_max_ttl_seconds);
 
         Ok(Self {
+            account_claim_pointer: env_value("MESH_ACCOUNT_CLAIM_POINTER", "/userId"),
             listen,
             database_path,
             ca_cert_file,

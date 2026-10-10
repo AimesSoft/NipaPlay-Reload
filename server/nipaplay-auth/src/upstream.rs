@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use reqwest::redirect::Policy;
 use serde_json::Value;
 
@@ -99,8 +100,7 @@ impl TokenValidationCache {
 
 /// Client for the Dandanplay upstream API.
 ///
-/// Exposes play-history validation and renewal-based account identification.
-/// The coordinator never proxies user traffic; renewal may rotate a token.
+/// Exposes read-only token validation and identity from the accepted JWT.
 #[derive(Clone)]
 pub struct DandanplayUpstream {
     config: Arc<UpstreamConfig>,
@@ -122,6 +122,7 @@ pub enum AccountLookupError {
     InvalidToken,
     /// The upstream was unreachable or returned an unexpected response.
     Transport(String),
+    InvalidIdentity(String),
 }
 
 impl std::fmt::Display for AccountLookupError {
@@ -129,9 +130,11 @@ impl std::fmt::Display for AccountLookupError {
         match self {
             AccountLookupError::InvalidToken => formatter.write_str("invalid account token"),
             AccountLookupError::Transport(message) => formatter.write_str(message),
+            AccountLookupError::InvalidIdentity(message) => formatter.write_str(message),
         }
     }
 }
+impl std::error::Error for AccountLookupError {}
 
 impl DandanplayUpstream {
     pub fn new(config: UpstreamConfig) -> Result<Self, String> {
@@ -213,74 +216,98 @@ impl DandanplayUpstream {
         Ok(valid)
     }
 
-    /// Resolves the stable upstream account identity for a token.
-    ///
-    /// Uses `POST /api/v2/login/renew`, with GET fallback on 405 + Allow: GET,
-    /// matching the application client's renewal policy. It returns `LoginResponse`
-    /// shape as a fresh login (including the numeric `userId`). The upstream
-    /// derives the identity from the token itself, so the coordinator never
-    /// trusts a client-supplied account id.
+    /// Validates the exact bearer token upstream before reading its JWT identity.
     pub async fn resolve_account(
         &self,
         token: &str,
+        claim_pointer: &str,
     ) -> Result<AccountIdentity, AccountLookupError> {
-        let mut response = self
-            .signed_request(reqwest::Method::POST, "/api/v2/login/renew", token)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .send()
+        use sha2::Digest;
+        let identity = format!("{:x}", sha2::Sha256::digest(token.as_bytes()));
+        if !self
+            .validate_token(token, &identity)
             .await
-            .map_err(|error| AccountLookupError::Transport(error.to_string()))?;
-        if response.status() == reqwest::StatusCode::METHOD_NOT_ALLOWED
-            && response
-                .headers()
-                .get(reqwest::header::ALLOW)
-                .and_then(|value| value.to_str().ok())
-                .is_some_and(|allow| {
-                    allow
-                        .split(',')
-                        .any(|method| method.trim().eq_ignore_ascii_case("GET"))
-                })
+            .map_err(AccountLookupError::Transport)?
         {
-            response = self
-                .signed_get("/api/v2/login/renew", token)
-                .send()
-                .await
-                .map_err(|error| AccountLookupError::Transport(error.to_string()))?;
-        }
-
-        let status = response.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(AccountLookupError::InvalidToken);
         }
-        if !status.is_success() {
-            return Err(AccountLookupError::Transport(format!(
-                "account lookup returned HTTP {status}"
-            )));
+        let payload = jwt_payload(token)?;
+        let claim = payload.pointer(claim_pointer).ok_or_else(|| {
+            AccountLookupError::InvalidIdentity(
+                "account identity claim is missing; configure MESH_ACCOUNT_CLAIM_POINTER"
+                    .to_owned(),
+            )
+        })?;
+        let account_id = match claim {
+            Value::Number(number) => number
+                .as_u64()
+                .filter(|id| *id > 0)
+                .map(|id| id.to_string()),
+            Value::String(value)
+                if !value.is_empty()
+                    && value.len() <= 128
+                    && value
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"-._".contains(&b))
+                    && value != "0" =>
+            {
+                Some(value.clone())
+            }
+            _ => None,
         }
-        let payload: Value = response
-            .json()
-            .await
-            .map_err(|error| AccountLookupError::Transport(error.to_string()))?;
-        if payload.get("success").and_then(Value::as_bool) != Some(true) {
-            return Err(AccountLookupError::InvalidToken);
-        }
-        let account_id = payload
-            .get("userId")
-            .and_then(Value::as_i64)
-            .filter(|id| *id > 0)
-            .map(|id| id.to_string())
-            .ok_or_else(|| {
-                AccountLookupError::Transport("upstream response is missing userId".to_owned())
-            })?;
-        let user_name = payload
-            .get("userName")
-            .and_then(Value::as_str)
-            .map(str::to_owned);
+        .ok_or_else(|| {
+            AccountLookupError::InvalidIdentity(
+                "account identity claim must be a positive integer or a nonempty identifier"
+                    .to_owned(),
+            )
+        })?;
         Ok(AccountIdentity {
             account_id,
-            user_name,
+            user_name: None,
         })
     }
+
+    /// For operator diagnostics: verifies upstream first, returns names only.
+    pub async fn account_claim_names(
+        &self,
+        token: &str,
+    ) -> Result<Vec<String>, AccountLookupError> {
+        if !self
+            .validate_token(token, &crate::token_identity(token))
+            .await
+            .map_err(AccountLookupError::Transport)?
+        {
+            return Err(AccountLookupError::InvalidToken);
+        }
+        let payload = jwt_payload(token)?;
+        let mut names = Vec::new();
+        fn walk(value: &Value, path: &str, names: &mut Vec<String>) {
+            if let Value::Object(fields) = value {
+                for (key, value) in fields {
+                    let pointer = format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"));
+                    names.push(pointer.clone());
+                    walk(value, &pointer, names);
+                }
+            }
+        }
+        walk(&payload, "", &mut names);
+        names.sort();
+        Ok(names)
+    }
+}
+
+fn jwt_payload(token: &str) -> Result<Value, AccountLookupError> {
+    let invalid = || AccountLookupError::InvalidIdentity("invalid JWT payload".to_owned());
+    let parts: Vec<_> = token.split('.').collect();
+    if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+        return Err(invalid());
+    }
+    let bytes = URL_SAFE_NO_PAD.decode(parts[1]).map_err(|_| invalid())?;
+    let payload: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if !payload.is_object() {
+        return Err(invalid());
+    }
+    Ok(payload)
 }
 
 #[cfg(test)]

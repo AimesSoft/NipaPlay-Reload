@@ -12,6 +12,7 @@ use serde_json::json;
 pub enum ErrorCode {
     MissingToken,
     InvalidToken,
+    InvalidIdentity,
     UpstreamUnavailable,
     InvalidInput,
     InputTooLarge,
@@ -27,6 +28,7 @@ impl ErrorCode {
         match self {
             ErrorCode::MissingToken => "missing_token",
             ErrorCode::InvalidToken => "invalid_token",
+            ErrorCode::InvalidIdentity => "invalid_identity",
             ErrorCode::UpstreamUnavailable => "upstream_unavailable",
             ErrorCode::InvalidInput => "invalid_input",
             ErrorCode::InputTooLarge => "invalid_input",
@@ -41,6 +43,7 @@ impl ErrorCode {
     pub fn status(self) -> StatusCode {
         match self {
             ErrorCode::MissingToken | ErrorCode::InvalidToken => StatusCode::UNAUTHORIZED,
+            ErrorCode::InvalidIdentity => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::UpstreamUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::InvalidInput => StatusCode::BAD_REQUEST,
             ErrorCode::InputTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
