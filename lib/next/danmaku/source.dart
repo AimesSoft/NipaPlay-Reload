@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
+const platformSessionLoginHint = '在 NipaPlay「设置 → 实验室 → 平台登录」中登录（仅 macOS）；'
+    'Agent 可用 ui.open_platform_login 打开登录页，密码由用户输入。';
+
 enum SourceStatus {
   validEmpty,
   complete,

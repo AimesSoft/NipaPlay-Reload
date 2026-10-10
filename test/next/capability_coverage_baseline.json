@@ -1,5 +1,8 @@
 {
   "actions": {
+    "sessions.status": "read",
+    "sessions.logout": "write",
+    "ui.open_platform_login": "write",
     "credentials.status": "read",
     "danmaku.align": "write",
     "danmaku.align_apply": "write",
@@ -57,6 +60,9 @@
     "ui.navigate": "write"
   },
   "primaryActions": {
+    "sessions.status": {"effect": "read"},
+    "sessions.logout": {"effect": "write"},
+    "ui.open_platform_login": {"effect": "write"},
     "credentials.status": {
       "effect": "read"
     },
@@ -1206,6 +1212,9 @@
     }
   },
   "compatibility": {
+    "sessions.status": {"action": "sessions.status"},
+    "sessions.logout": {"action": "sessions.logout"},
+    "ui.open_platform_login": {"action": "ui.open_platform_login"},
     "credentials.status": {
       "action": "credentials.status"
     },
@@ -1959,6 +1968,9 @@
     }
   },
   "capabilities": {
+    "sessions.status": {"action": "sessions.status", "effect": "read"},
+    "sessions.logout": {"action": "sessions.logout", "effect": "write"},
+    "ui.open_platform_login": {"action": "ui.open_platform_login", "effect": "write"},
     "credentials.status": {
       "action": "credentials.status",
       "effect": "read"

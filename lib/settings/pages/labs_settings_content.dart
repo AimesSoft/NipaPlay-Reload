@@ -4,6 +4,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/next_runtime.dart';
+import 'package:nipaplay/next/sessions/page.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/folder_opener.dart';
@@ -25,6 +27,25 @@ class LabsSettingsContent extends StatelessWidget {
       builder: (context, labsSettings, child) {
         return AdaptiveSettingsPage(
           children: [
+            if (globals.isDesktop)
+              AdaptiveSettingsSection(children: [
+                AdaptiveSettingsTile.button(
+                  title: '平台登录',
+                  subtitle: '优酷、B 站登录会话与注销（仅 macOS）',
+                  icon: Ionicons.key_outline,
+                  phoneIcon: cupertino.CupertinoIcons.lock,
+                  trailingIcon: Ionicons.chevron_forward,
+                  onTap: () async {
+                    final core = ServiceProvider.nextCore;
+                    await core.ready;
+                    if (!context.mounted) return;
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) =>
+                          PlatformSessionsPage(sessions: core.sessions),
+                    ));
+                  },
+                ),
+              ]),
             AdaptiveSettingsSection(
               dividerIndent: 56,
               children: [
