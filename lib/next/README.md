@@ -42,6 +42,10 @@ Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁�
 开启 Next 时，`AgentEndpoint` 从 `assets/next/harness/` 创建用户仓库，默认
 `~/nipaplay-harness`；`next.harnessPath` 设置和实验室共用 `HarnessLocation`。
 已有路径不写入任何文件。初次种子包含无令牌的 Codex 配置、`nipa`、hooks 说明。
+应用在 `next/harness-seed` 维护本地 git 历史，种子内容变化时提交一次。
+新 harness 从它克隆，远端名为 `nipaplay`，分支为 `main`；Agent 自行 fetch 与合并。
+已有 harness 的工作区和 git 配置都不改写。CLI 默认列能力索引与任务概况，
+`list/status --full` 取完整内容，`describe ACTION` 取单项契约。
 令牌每次开启轮换，写到仓库外的用户私有 `endpoint.json`；MCP `/mcp` 与 CLI
 `/harness` 共用认证和 Harness，CLI 调用来源为 `harness_cli`。
 

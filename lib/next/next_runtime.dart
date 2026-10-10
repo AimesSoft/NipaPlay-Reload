@@ -143,6 +143,7 @@ final class NextRuntime extends ChangeNotifier {
       harness: _harness,
       appVersion: packageInfo.version,
       seed: seed,
+      seedRepository: Directory('${root.path}/harness-seed'),
       port: kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
           ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
           : 47811,

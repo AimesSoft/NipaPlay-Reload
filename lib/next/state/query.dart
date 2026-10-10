@@ -67,19 +67,18 @@ const stateQueryInput = ObjectSchema({
   'include': ObjectSchema({},
       additionalProperties: true,
       description:
-          'Declared relation names mapped to query options (filter, select, orderBy, limit, include). Maximum two relation levels.'),
+          'Declared relation names mapped to query options (filter, select, orderBy, limit, include).'),
   'limit': IntegerSchema(
       minimum: 1,
-      maximum: 200,
       description:
-          'Root page size. Defaults to 50. At most 200 rows including relations.'),
+          'Root page size. Defaults to 50. Relations have their own page sizes.'),
   'cursor': StringSchema(
       description:
           'Opaque continuation for the same query over live data; it is not a transaction snapshot.'),
   'timeoutMs': IntegerSchema(
       minimum: 1,
-      maximum: 1000,
-      description: 'Execution budget in milliseconds, default 1000.'),
+      description:
+          'Optional caller-selected execution budget in milliseconds. No deadline by default.'),
 }, required: [
   'view'
 ]);
@@ -110,7 +109,7 @@ const stateQueryOutput = ObjectSchema({
       description: 'True when pagination or a resource limit omitted data.'),
   'warnings': ArraySchema(StringSchema(),
       description:
-          'Resource limits: time_limit, scan_limit, row_limit, byte_limit, field_limit, relation_limit, sort_within_scan_window.'),
+          'Omissions: time_limit (only with explicit timeoutMs), relation_limit, sort_within_scan_window (only after an explicit timeout).'),
 }, required: [
   'schemaVersion',
   'snapshotId',
@@ -131,8 +130,6 @@ final class StateCapability implements Capability {
   final Map<String, StateView> views;
   @override
   late final List<Action> actions;
-  int _activeReads = 0;
-  static const maxScanRows = 5000, maxRows = 200, maxBytes = 256 * 1024;
 
   StateView _view(String name) {
     final view = views[name];
@@ -140,8 +137,7 @@ final class StateCapability implements Capability {
     return view!;
   }
 
-  void _validate(StateView view, JsonMap query, int depth) {
-    if (depth > 2) _invalid('depth_limit', 'At most two relation levels.');
+  void _validate(StateView view, JsonMap query) {
     final violations = stateQueryInput.validate({'view': view.name, ...query});
     if (violations.isNotEmpty) {
       throw Failure(FailureCode.invalidInput, 'invalid_query',
@@ -174,9 +170,8 @@ final class StateCapability implements Capability {
         }
         final schema = view.fields.properties[e.key]!;
         if (predicate.key == 'in') {
-          if (predicate.value is! List ||
-              (predicate.value as List).length > 200) {
-            _invalid('invalid_filter', 'in expects at most 200 values.');
+          if (predicate.value is! List) {
+            _invalid('invalid_filter', 'in expects an array.');
           }
           for (final value in predicate.value as List) {
             if (value != null && schema.validate(value).isNotEmpty) {
@@ -212,13 +207,13 @@ final class StateCapability implements Capability {
         _invalid('invalid_query',
             'Relation options cannot override view, cursor or timeout.');
       }
-      _validate(_view(relation!.view), child, depth + 1);
+      _validate(_view(relation!.view), child);
     }
   }
 
   Future<JsonMap> query(JsonMap input) async {
     final view = _view(input['view'] as String);
-    _validate(view, input, 0);
+    _validate(view, input);
     if (utf8.encode(jsonEncode(input)).length > 64 * 1024) {
       _invalid('input_limit', 'Query input exceeds 64 KiB.');
     }
@@ -246,26 +241,18 @@ final class StateCapability implements Capability {
         _invalid('invalid_cursor', 'Malformed continuation.');
       }
     }
-    final context = _ReadContext(this, input['timeoutMs'] as int? ?? 1000);
+    final context = _ReadContext(this, input['timeoutMs'] as int?);
     final source = await context.rows(view, startOffset: sourceOffset);
     final matched = _match(source, input);
     final rows = <JsonMap>[];
     var index = offset;
     final limit = input['limit'] as int? ?? 50;
     while (index < matched.length && rows.length < limit) {
-      if (context.expired || context.returned >= maxRows) {
-        context.warnings.add(context.expired ? 'time_limit' : 'row_limit');
+      if (context.expired) {
+        context.warnings.add('time_limit');
         break;
       }
       final row = await context.expand(view, matched[index], input);
-      if (utf8.encode(jsonEncode([...rows, row])).length > maxBytes - 8192) {
-        context.warnings.add('byte_limit');
-        if (rows.isEmpty) {
-          throw const Failure(
-              FailureCode.unavailable, 'row_exceeds_output_budget');
-        }
-        break;
-      }
       rows.add(row);
       index++;
     }
@@ -353,21 +340,11 @@ int _compare(Object? a, Object? b) => a == b
                 ? a.compareTo(b)
                 : a.toString().compareTo(b.toString());
 
-bool _hasLargeArray(Object? value, Schema schema) {
-  if (schema is ArraySchema && value is List) {
-    return value.length > StateCapability.maxRows ||
-        value.any((v) => _hasLargeArray(v, schema.items));
-  }
-  if (schema is ObjectSchema && value is Map) {
-    return schema.properties.entries
-        .any((e) => _hasLargeArray(value[e.key], e.value));
-  }
-  return false;
-}
-
 // Public objects are closed projections, including every nested object.
 Object? publicValue(Object? value, Schema schema) {
   if (schema.secret || value == null) return null;
+  // JSON cannot represent non-finite measurements; null denotes unknown.
+  if (value is num && !value.isFinite) return null;
   if (schema is ObjectSchema && value is! Map ||
       schema is ArraySchema && value is! List ||
       schema is StringSchema && value is! String ||
@@ -382,15 +359,9 @@ Object? publicValue(Object? value, Schema schema) {
     };
   }
   if (schema is ArraySchema && value is List) {
-    return [
-      for (final v in value.take(StateCapability.maxRows))
-        publicValue(v, schema.items)
-    ];
+    return [for (final v in value) publicValue(v, schema.items)];
   }
   if (value is String) {
-    if (value.length > StateCapability.maxBytes) {
-      throw const Failure(FailureCode.unavailable, 'row_exceeds_output_budget');
-    }
     if (!value.contains('://')) return value;
     // Public locator URLs contain no userinfo, query parameters or fragments.
     return value.replaceAllMapped(
@@ -430,14 +401,14 @@ JsonMap publicSchema(Schema schema) => {
 final class _ReadContext {
   _ReadContext(this.capability, this.timeoutMs) : clock = Stopwatch()..start();
   final StateCapability capability;
-  final int timeoutMs;
+  final int? timeoutMs;
   final Stopwatch clock;
-  bool get expired => clock.elapsedMilliseconds >= timeoutMs;
+  bool get expired =>
+      timeoutMs != null && clock.elapsedMilliseconds >= timeoutMs!;
   final cache = <String, List<JsonMap>>{};
   final observed = <String, Object?>{};
   final warnings = <String>{};
   final incomplete = <String>{};
-  int scanned = 0, returned = 0;
   Future<List<JsonMap>> _read(StateView view, int offset, int size) async {
     try {
       return await view.read(offset, size);
@@ -448,8 +419,6 @@ final class _ReadContext {
       }
       throw Failure(failure.code, 'state_source_failed',
           retryable: failure.retryable);
-    } finally {
-      capability._activeReads--;
     }
   }
 
@@ -458,26 +427,22 @@ final class _ReadContext {
     final result = <JsonMap>[];
     var offset = startOffset;
     var complete = false;
-    while (!expired && scanned < StateCapability.maxScanRows) {
-      final size = (StateCapability.maxScanRows - scanned).clamp(1, 200);
-      if (capability._activeReads >= 2) {
-        throw const Failure(FailureCode.unavailable, 'query_concurrency_limit');
-      }
-      capability._activeReads++;
+    while (!expired) {
+      const size = 500;
       final pending = _read(view, offset, size);
-      final page = await pending.timeout(
-          Duration(
-              milliseconds: (timeoutMs - clock.elapsedMilliseconds)
-                  .clamp(1, timeoutMs)), onTimeout: () {
-        warnings.add('time_limit');
-        return [];
-      });
+      final page = timeoutMs == null
+          ? await pending
+          : await pending.timeout(
+              Duration(
+                  milliseconds: (timeoutMs! - clock.elapsedMilliseconds)
+                      .clamp(1, timeoutMs!)), onTimeout: () {
+              warnings.add('time_limit');
+              return [];
+            });
       observed[view.name] = DateTime.now().toUtc().toIso8601String();
       for (final row in page) {
-        if (_hasLargeArray(row, view.fields)) warnings.add('field_limit');
         result.add(publicValue(row, view.fields) as JsonMap);
       }
-      scanned += page.length;
       offset += page.length;
       if (page.length < size && !warnings.contains('time_limit')) {
         complete = true;
@@ -485,13 +450,11 @@ final class _ReadContext {
       }
     }
     if (expired) warnings.add('time_limit');
-    if (scanned >= StateCapability.maxScanRows) warnings.add('scan_limit');
     if (!complete) incomplete.add(view.name);
     return cache[view.name] = result;
   }
 
   Future<JsonMap> expand(StateView view, JsonMap row, JsonMap query) async {
-    returned++;
     final select = (query['select'] as List?)?.cast<String>() ??
         view.fields.properties.entries
             .where((e) => !e.value.secret)
@@ -511,7 +474,7 @@ final class _ReadContext {
           options);
       final nested = <JsonMap>[];
       for (final child in children.take(options['limit'] as int? ?? 50)) {
-        if (expired || returned >= StateCapability.maxRows) break;
+        if (expired) break;
         nested.add(await expand(target, child, options));
       }
       result[e.key as String] = {
@@ -552,7 +515,7 @@ final class _StateAction extends Action<_StateJson, _StateJson> {
         id: isQuery ? 'state.query' : 'state.describe',
         title: isQuery ? 'Query public state' : 'Describe public state',
         description: isQuery
-            ? 'Read registered public state with filters, projections, sorting, pagination and declared relations. No scan, source refresh, network requests or business writes. Secrets and authentication data are excluded. Limits: 200 output rows, 5000 scanned rows, two relation levels, 256 KiB and 1000 ms. Results report truncation and per-source observations; unknown fields/views and invalid cursors return invalid_input.'
+            ? 'Read registered public state with filters, projections, sorting, pagination and declared relations. No filesystem scan, source refresh, network requests or business writes. Secrets and authentication data are excluded. Default page size 50; use limit and select for output size. No default deadline or scan/concurrency ceiling. Results report pagination and per-source observations; unknown fields/views and invalid cursors return invalid_input.'
             : 'Describe registered public views, field schemas, units, namespaces, relations and query limits. Contracts are generated from the same registrations that project query results. No business writes or network requests.',
         effect: Effect.read,
         input: isQuery
@@ -583,11 +546,8 @@ final class _StateAction extends Action<_StateJson, _StateJson> {
       'views': [for (final view in views) view.describe()],
       'limits': {
         'defaultLimit': 50,
-        'maxRows': 200,
-        'maxScanRows': 5000,
-        'maxDepth': 2,
-        'maxBytes': StateCapability.maxBytes,
-        'maxTimeoutMs': 1000
+        'defaultTimeoutMs': null,
+        'maxInputBytes': 64 * 1024
       }
     }));
   }

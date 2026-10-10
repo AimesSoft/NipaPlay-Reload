@@ -38,17 +38,23 @@ final class AgentEndpoint {
       required this.seed,
       required String appVersion,
       File? credentialFile,
+      Directory? seedRepository,
       int port = 47811})
       : _harness = harness,
         _appVersion = appVersion,
         _port = port,
-        credentialFile = credentialFile ?? defaultEndpointFile;
+        credentialFile = credentialFile ?? defaultEndpointFile,
+        seedRepository = seedRepository ??
+            Directory(p.join(
+                (credentialFile ?? defaultEndpointFile).parent.path,
+                'harness-seed'));
 
   final Harness _harness;
   final Map<String, List<int>> seed;
   final String _appVersion;
   final int _port;
   final File credentialFile;
+  final Directory seedRepository;
   HttpServer? _server;
   AgentEndpointRunning? _running;
 
@@ -88,6 +94,12 @@ final class AgentEndpoint {
     if (p.equals(repoPath, secretPath) || p.isWithin(repoPath, secretPath)) {
       throw ArgumentError('Endpoint credentials must be outside the harness.');
     }
+    final seedPath = await realPath(seedRepository.absolute.path);
+    if (p.equals(repoPath, seedPath) ||
+        p.isWithin(repoPath, seedPath) ||
+        p.isWithin(seedPath, repoPath)) {
+      throw ArgumentError('Seed repository must be separate from the harness.');
+    }
     final random = Random.secure();
     final token = base64Url
         .encode(List.generate(32, (_) => random.nextInt(256)))
@@ -110,7 +122,8 @@ final class AgentEndpoint {
     }
     final url = Uri.parse('http://127.0.0.1:${_server!.port}/mcp');
     try {
-      await createHarnessRepository(repository, seed);
+      final upstream = await maintainHarnessSeed(seedRepository, seed);
+      await createHarnessRepository(repository, seed, upstream: upstream);
       if (!await repository.exists()) {
         throw StateError('Harness is not a directory.');
       }
@@ -148,20 +161,32 @@ final class AgentEndpoint {
       return _response({'error': 'Expected a JSON object.'}, 400);
     }
     final operation = decoded['operation'];
+    if (decoded.containsKey('full') && decoded['full'] is! bool) {
+      return _response({'error': 'Expected boolean full.'}, 400);
+    }
+    // Older seed clients expect the complete wire format.
+    final full = decoded['full'] != false;
     if (operation == 'status') {
+      final tasks = (await _harness.invokeJson(
+              'task.list', {}, Invocation(origin: 'harness_cli')))
+          .toEnvelope();
       return _response({
         'status': 'running',
         'version': _appVersion,
         'repository': _running?.repository.path,
         'actions': _harness.catalog.length,
-        'tasks': (await _harness.invokeJson(
-                'task.list', {}, Invocation(origin: 'harness_cli')))
-            .toEnvelope()
+        'tasks': full ? tasks : _taskSummary(tasks)
       });
     }
     if (operation == 'list') {
       return _response({
-        'actions': [for (final spec in _harness.catalog) _describe(spec)]
+        'actions': [
+          for (final spec in _harness.catalog)
+            if (full)
+              _describe(spec)
+            else
+              {'id': spec.id, 'effect': spec.effect.name, 'title': spec.title}
+        ]
       }, 200, false);
     }
     if ((operation != 'call' && operation != 'describe') ||
@@ -197,6 +222,30 @@ final class AgentEndpoint {
     return _response((await _harness.invokeJson(
             action.spec.id, input, Invocation(origin: 'harness_cli')))
         .toEnvelope());
+  }
+
+  JsonMap _taskSummary(JsonMap envelope) {
+    if (envelope['status'] != 'completed') return envelope;
+    final jobs = (envelope['result'] as JsonMap)['jobs'] as List;
+    final counts = <String, int>{};
+    final active = <JsonMap>[];
+    for (final raw in jobs) {
+      final job = raw as JsonMap;
+      final state = job['state'] as String;
+      counts[state] = (counts[state] ?? 0) + 1;
+      if (!{'succeeded', 'failed', 'cancelled'}.contains(state)) {
+        active.add({
+          for (final key in ['jobId', 'title', 'state', 'phase', 'progress'])
+            key: job[key]
+        });
+      }
+    }
+    return {
+      'total': jobs.length,
+      'byState': counts,
+      'activeTotal': active.length,
+      'active': active.take(10).toList()
+    };
   }
 
   Future<void> stop() async {

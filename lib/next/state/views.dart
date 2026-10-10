@@ -198,8 +198,7 @@ List<StateView> publicStateViews(
       final details = receipt['details'] as JsonMap;
       details['outputDirectory'] =
           await visibleLocator(details['outputDirectory'] as String?, media);
-      for (final file in ((details['files'] as List?) ?? [])
-          .take(StateCapability.maxRows)) {
+      for (final file in ((details['files'] as List?) ?? [])) {
         final data = file as JsonMap;
         data['path'] = await visibleLocator(data['path'] as String?, media);
       }
@@ -245,8 +244,8 @@ List<StateView> publicStateViews(
   JsonMap binding(JsonMap row) =>
       {...row, 'episodeScope': decodeMediaJson(row['episodeScope'])};
   Future<List<JsonMap>> bindings(String id) async => [
-        for (final row in await db.rawQuery(
-            '$bindingSql WHERE b.entity_id=? ORDER BY b.id LIMIT 201', [id]))
+        for (final row in await db
+            .rawQuery('$bindingSql WHERE b.entity_id=? ORDER BY b.id', [id]))
           binding(row)
       ];
   final entities = ObjectSchema({
@@ -276,8 +275,7 @@ List<StateView> publicStateViews(
         }),
         description: 'Merged field values and provenance.'),
     'bindings': ArraySchema(_bindingFields,
-        description:
-            'Public identity bindings for this entity; limited to 200.'),
+        description: 'Public identity bindings for this entity.'),
   });
   Future<JsonMap> entity(JsonMap row) async {
     final attrs = decodeMediaJson(row['attributes']);

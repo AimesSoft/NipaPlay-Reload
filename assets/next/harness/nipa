@@ -95,12 +95,16 @@ class Client:
         if not self.device["online"]:
             raise ValueError("Mesh device is offline; its cached catalog is not live")
 
-    def catalog(self):
+    def catalog(self, full=True):
         if self.device:
-            return {"actions": self.device["actions"]}
-        return self.request("list")
+            catalog = {"actions": self.device["actions"]}
+            return catalog if full else catalog_summary(catalog)
+        catalog = self.request("list", full=full)
+        return catalog if full else catalog_summary(catalog)
 
     def describe(self, action):
+        if not self.device:
+            return self.request("describe", action=action)
         matches = [a for a in self.catalog()["actions"] if a["id"] == action]
         if not matches:
             raise ValueError("Unknown Action: " + action)
@@ -137,12 +141,35 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise SystemExit(2)
 
 
+def catalog_summary(catalog):
+    return {"actions": [{k: a[k] for k in ("id", "effect", "title")}
+                        for a in catalog["actions"]]}
+
+
+def task_summary(envelope):
+    if envelope.get("status") != "completed":
+        return envelope
+    jobs = envelope["result"]["jobs"]
+    counts = {}
+    active = []
+    for job in jobs:
+        state = job["state"]
+        counts[state] = counts.get(state, 0) + 1
+        if state not in {"succeeded", "failed", "cancelled"}:
+            active.append({k: job.get(k) for k in
+                           ("jobId", "title", "state", "phase", "progress")})
+    return {"total": len(jobs), "byState": counts,
+            "activeTotal": len(active), "active": active[:10]}
+
+
 def main():
     parser = JsonArgumentParser(description=__doc__)
     parser.add_argument("--device", help="Exact Mesh device name or ID")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("status")
-    commands.add_parser("list")
+    commands.add_parser("status").add_argument(
+        "--full", action="store_true", help="Include full task snapshots and receipts")
+    commands.add_parser("list").add_argument(
+        "--full", action="store_true", help="Include all descriptions and schemas")
     commands.add_parser("describe").add_argument("action")
     call = commands.add_parser("call")
     call.add_argument("action")
@@ -161,10 +188,19 @@ def main():
         if args.device:
             client.select_device(args.device)
         if args.command == "status":
-            data = ({"device": client.device, "tasks": client.call("task.list", {})}
-                    if client.device else client.request("status"))
+            if client.device:
+                data = {"device": client.device, "tasks": client.call("task.list", {})}
+                if not args.full:
+                    data = {"device": {k: client.device.get(k) for k in
+                                       ("deviceId", "device_name", "online")},
+                            "actions": len(client.device["actions"]),
+                            "tasks": task_summary(data["tasks"])}
+            else:
+                data = client.request("status", full=args.full)
+                if not args.full:
+                    data["tasks"] = task_summary(data["tasks"])
         elif args.command == "list":
-            data = client.catalog()
+            data = client.catalog(full=args.full)
         elif args.command == "describe":
             data = client.describe(args.action)
         elif args.command == "call":

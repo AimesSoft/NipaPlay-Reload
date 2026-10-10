@@ -339,7 +339,7 @@ void main() {
     });
   });
 
-  group('query budgets and validation', () {
+  group('query pagination and validation', () {
     Harness fixture(List<JsonMap> rows,
             {ObjectSchema? fields,
             Map<String, StateRelation> relations = const {},
@@ -395,7 +395,7 @@ void main() {
       expect(failure.failure.code, FailureCode.invalidInput);
     });
     test(
-        'unknown views fields relations operators and deep joins fail before reading',
+        'unknown views fields relations operators and invalid limits fail before reading',
         () async {
       var reads = 0;
       final api = Harness([
@@ -433,19 +433,7 @@ void main() {
           'view': 'items',
           'include': {'unknown': {}}
         },
-        {
-          'view': 'items',
-          'include': {
-            'self': {
-              'include': {
-                'self': {
-                  'include': {'self': {}}
-                }
-              }
-            }
-          }
-        },
-        {'view': 'items', 'limit': 201},
+        {'view': 'items', 'limit': 0},
         {'view': 'items', 'cursor': 'not a cursor'},
       ]) {
         final outcome = await api.invokeJson(
@@ -481,7 +469,7 @@ void main() {
       expect(jsonEncode(await call(api, 'state.describe', {})),
           isNot(contains('"token":')));
     });
-    test('scan budget continuation reaches rows beyond the first 5000',
+    test('filtering and sorting reach rows beyond the former scan window',
         () async {
       final api = fixture([
         for (var i = 0; i < 5005; i++) {'id': i, 'title': 'row'}
@@ -493,15 +481,20 @@ void main() {
         }
       };
       final first = await call(api, 'state.query', input);
-      expect(first['rows'], isEmpty);
-      expect(first['warnings'], contains('scan_limit'));
-      expect(first['nextCursor'], isNotNull);
-      final second = await call(
-          api, 'state.query', {...input, 'cursor': first['nextCursor']});
-      expect(second['rows'], hasLength(5));
-      expect(second['truncated'], false);
+      expect(first['rows'], hasLength(5));
+      expect(first['nextCursor'], null);
+      expect(first['truncated'], false);
+      final sorted = await call(api, 'state.query', {
+        'view': 'items',
+        'limit': 1,
+        'orderBy': [
+          {'field': 'id', 'direction': 'desc'}
+        ]
+      });
+      expect((sorted['rows'] as List).single, {'id': 5004, 'title': 'row'});
     });
-    test('row relation array and byte limits report omissions', () async {
+    test('relations page independently and public data is not silently cut',
+        () async {
       final children = StateView(
           name: 'children',
           description: 'fixture',
@@ -525,7 +518,7 @@ void main() {
       });
       final relation =
           ((result['rows'] as List).single as Map)['children'] as Map;
-      expect(relation['rows'], hasLength(199));
+      expect(relation['rows'], hasLength(200));
       expect(relation['truncated'], true);
       expect(relation['nextQuery'], isNotNull);
       expect(result['warnings'], contains('relation_limit'));
@@ -534,22 +527,20 @@ void main() {
         {'id': 2, 'title': 'b' * 130000}
       ]);
       final bytes = await call(large, 'state.query', {'view': 'items'});
-      expect(bytes['rows'], hasLength(1));
-      expect(bytes['warnings'], contains('byte_limit'));
-      expect(utf8.encode(jsonEncode(bytes)).length,
-          lessThanOrEqualTo(StateCapability.maxBytes));
+      expect(bytes['rows'], hasLength(2));
+      expect(bytes['warnings'], isEmpty);
       final array = fixture([
         {'id': 1, 'names': List.filled(201, 'item')}
       ],
           fields: const ObjectSchema(
               {'id': IntegerSchema(), 'names': ArraySchema(StringSchema())}));
       final arrayResult = await call(array, 'state.query', {'view': 'items'});
-      expect(arrayResult['warnings'], contains('field_limit'));
+      expect(arrayResult['warnings'], isEmpty);
       expect(((arrayResult['rows'] as List).single as Map)['names'],
-          hasLength(200));
+          hasLength(201));
     });
     test(
-        'timeout and concurrent readers are bounded and do not cancel unrelated tasks',
+        'caller-selected timeouts do not block subsequent or concurrent readers',
         () async {
       final gate = Completer<void>();
       final api = Harness([
@@ -568,17 +559,37 @@ void main() {
           {'view': 'slow', 'timeoutMs': 20}, Invocation(origin: 'mcp'));
       final second = api.invokeJson('state.query',
           {'view': 'slow', 'timeoutMs': 20}, Invocation(origin: 'mcp'));
-      final third = await api.invokeJson(
-          'state.query',
-          {'view': 'slow', 'timeoutMs': 20},
-          Invocation(origin: 'mcp')) as Failed;
-      expect(third.failure.message, 'query_concurrency_limit');
+      final third = api.invokeJson('state.query',
+          {'view': 'slow', 'timeoutMs': 20}, Invocation(origin: 'mcp'));
       final result = ((await first) as Completed).value.toJson();
       expect(result['truncated'], true);
       expect(result['warnings'], contains('time_limit'));
       expect(result['nextCursor'], isNotNull);
       await second;
+      expect(await third, isA<Completed>());
       gate.complete();
+    });
+    test('non-finite recorded measurements are JSON null without losing rows',
+        () async {
+      final values = [
+        double.infinity,
+        double.negativeInfinity,
+        double.nan,
+        0.85
+      ];
+      final api = fixture([
+        for (var i = 0; i < values.length; i++) {'id': i, 'progress': values[i]}
+      ],
+          fields: const ObjectSchema({
+            'id': IntegerSchema(),
+            'progress': NumberSchema(nullable: true)
+          }));
+      final response = await call(api, 'state.query', {'view': 'items'});
+      final rows = response['rows'] as List;
+      expect(rows.map((r) => (r as Map)['progress']).toList(),
+          [null, null, null, 0.85]);
+      expect(jsonDecode(jsonEncode(response))['rows'], hasLength(4));
+      expect(values.first, double.infinity);
     });
     test('source failures return a stable error without raw secrets or paths',
         () async {

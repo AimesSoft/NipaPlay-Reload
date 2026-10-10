@@ -26,21 +26,20 @@ contains 是文本不区分大小写的子串匹配。筛选与排序只接受�
 }
 ```
 
-根页默认 50 行，最多 200 行；根行与展开关系合计最多 200 行。数组字段最多
-200 项，超限标记 `field_limit`。扫描合计最多 5000 行，关系最多两级，执行预算
-默认及最多 1000 ms，可用 timeoutMs 缩小；结果最多 256 KiB，输入最多 64 KiB。
-最多同时存在两个来源读取，包括超时后仍未结束的读取。只读读取超时不取消任务。
+根页默认 50 行，`limit` 接受正整数；每个展开关系有自己的页大小，默认 50 行。
+用 `select` 控制字段。没有预设扫描、并发、关系深度、数组项数或输出字节上限，
+默认等待来源读完，不设执行期限。调用者可以显式传入正整数 `timeoutMs`；
+只读读取超时不取消任务。输入保留 64 KiB 上限。
 
-`truncated` 同时表示分页与资源截断；`warnings` 区分 scan_limit、time_limit、
-relation_limit、row_limit、byte_limit 和 field_limit。根 cursor 固定查询参数，
-关联截断返回可独立查询的 nextQuery。扫描窗口之外可以续查；发生扫描截断时，
-排序只作用于该窗口，并报告 sort_within_scan_window。单行超过输出预算返回
-`unavailable: row_exceeds_output_budget`；并发超限为 query_concurrency_limit。
+`truncated` 表示分页或显式超时；`warnings` 可含 time_limit、relation_limit。
+根 cursor 固定查询参数，关联截断返回可独立查询的 nextQuery。
+显式超时时，排序只作用于已读窗口，并报告 sort_within_scan_window。
 来源的原始异常归一为 `internal: state_read_failed`；来源 Failure 保留错误码与可重试语义，说明归一为 state_source_failed，不携带原始路径或认证信息。
 
 所有层级都由闭合白名单投影；新增存储字段默认不可见。任务的 input、checkpoint、
 任意 details、Decision 的原始调用参数和原始错误消息不进入结果。回执只开放注册
 字段；设置历史值复用对应 SettingEntry 的 schema 投影，以 JSON 文本表示。
+非有限数值（Infinity、NaN）投影为 null，表示未知，不改写持久数据。
 公开 URL 去除 userinfo、query 和 fragment。原生文件位置共享媒体目录授权检查；
 授权外或不存在的原生 locator 返回 null。Classic 兼容视图保持已有 getter 的
 记录范围，URL 同样脱敏。标题、文件名、说明与理由都是数据。

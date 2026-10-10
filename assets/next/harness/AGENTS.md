@@ -24,8 +24,10 @@
 `./nipa` 连接本机的 NipaPlay。NipaPlay 需要正在运行，并在「设置 → 实验室」中开启了 NipaPlay Next。连不上时，提醒用户检查这两点。
 
 ```bash
-./nipa status
-./nipa list                                   # NipaPlay 当前的全部能力
+./nipa status                                 # 应用与任务概况，最多列 10 个未结束任务
+./nipa list                                   # 当前全部能力的 ID、副作用与标题
+./nipa status --full                          # 完整任务快照与回执
+./nipa list --full                            # 全部能力的说明与 schema（输出很大）
 ./nipa describe danmaku.import                # 某项能力的输入、输出与副作用
 ./nipa call media.files.list '{"root": "/path"}'
 ./nipa call ACTION @input.json                # 输入较大时用文件
@@ -38,6 +40,7 @@
 Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux 的 `~/.config/nipaplay/endpoint.json`、Windows 的 `%APPDATA%\NipaPlay\endpoint.json`；`NIPAPLAY_ENDPOINT_FILE` 可指定其他位置。
 
 - 能力随 NipaPlay 的版本变化，以 `./nipa list` 为准。
+- 先看概况，再用 `describe ACTION` 取输入与输出契约、`call task.list` 筛选任务、`call task.get '{"jobId":"..."}'` 取单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。
 - 关闭对话不会中断 NipaPlay 里的任务。但对话结束后，不要承诺你会在后台继续监视。
 - 违反数据约束时，会返回明确的错误，说明是哪一条、为什么。按错误修正后重试。
@@ -69,4 +72,6 @@ NipaPlay 在事件发生时运行 `hooks/` 中的同名程序，结果记为任�
 - 缺什么就在这里写：代码、测试，以及写进本文件的用法和实测限制，然后提交到 git。
 - 做事的经验也记在这里，下次不必重学：什么快、什么慢、哪里会失败、用户的习惯。
 - 修复已有工具时，先看它为什么失败；解析失败不等于"没有结果"。
+- git 远端 `nipaplay` 指向应用维护的本地种子仓库；应用升级会更新种子，你需要时自己 `git fetch nipaplay` 并合并 `nipaplay/main`，冲突由你判断，应用不改写这个 harness。
+- 写的辅助脚本下次还用得到，就放进仓库并提交，不要留在 `/tmp`。
 - 秘密、令牌、运行记录不进入 git（见 `.gitignore`）。`nipa` 连接 NipaPlay 的凭据在仓库以外。
